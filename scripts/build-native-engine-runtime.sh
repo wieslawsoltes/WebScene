@@ -6,11 +6,12 @@ rid=
 output_dir="$repo_root/artifacts/native-engine-runtime"
 package_version=
 v8_root=
+v8_output_root=
 v8_workspace=
 v8_revision=14.7.173.23
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-workspace DIR]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR]" >&2
 }
 
 while (($# > 0)); do
@@ -19,6 +20,7 @@ while (($# > 0)); do
     --output) output_dir="${2:-}"; shift 2 ;;
     --package-version) package_version="${2:-}"; shift 2 ;;
     --v8-root) v8_root="${2:-}"; shift 2 ;;
+    --v8-output-root) v8_output_root="${2:-}"; shift 2 ;;
     --v8-workspace) v8_workspace="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -101,12 +103,19 @@ if [[ -z "$v8_root" ]]; then
     gn gen "out/$cpu/Release" --args="$gn_args"
     ninja -C "out/$cpu/Release" obj/libv8_monolith.a
   )
+  v8_output_root="$v8_root/out/$cpu/Release"
 fi
 
 v8_root="$(cd "$v8_root" && pwd)"
-v8_monolith="$v8_root/out/$cpu/Release/obj/libv8_monolith.a"
-icu_data="$v8_root/out/$cpu/Release/icudtl.dat"
-v8_args="$v8_root/out/$cpu/Release/args.gn"
+v8_output_root="${v8_output_root:-$v8_root/out/$cpu/Release}"
+if [[ ! -d "$v8_output_root" ]]; then
+  echo "V8 output directory is missing: $v8_output_root" >&2
+  exit 1
+fi
+v8_output_root="$(cd "$v8_output_root" && pwd)"
+v8_monolith="$v8_output_root/obj/libv8_monolith.a"
+icu_data="$v8_output_root/icudtl.dat"
+v8_args="$v8_output_root/args.gn"
 v8_license="$v8_root/LICENSE"
 icu_license="$v8_root/third_party/icu/LICENSE"
 for required in "$v8_root/include/v8.h" "$v8_monolith" "$icu_data" "$v8_args" "$v8_license" "$icu_license"; do
@@ -133,6 +142,7 @@ cmake_args=(
   -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON
   -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF
   -DHTMLML_V8_ROOT="$v8_root"
+  -DHTMLML_V8_OUTPUT_ROOT="$v8_output_root"
 )
 if [[ "$expected_kernel" == Linux ]]; then
   # V8 is built with Clang and its Linux archive may contain Clang/LTO

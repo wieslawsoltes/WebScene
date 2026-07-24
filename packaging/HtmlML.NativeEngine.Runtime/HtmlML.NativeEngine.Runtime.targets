@@ -10,15 +10,18 @@
     <Content Include="$(HtmlMlNativeEnginePackageAsset)"
              Link="$(HtmlMlNativeEnginePackagedFileName)"
              CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
     <Content Include="$(HtmlMlNativeEnginePackageManifest)"
              Link="htmlml-native-runtime.json"
              CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
     <Content Include="$(HtmlMlNativeEnginePackageIcuData)"
              Link="$(HtmlMlNativeEnginePackagedIcuFileName)"
              CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
   </ItemGroup>
 
   <Target Name="ValidateHtmlMlNativeRuntimePackage"
