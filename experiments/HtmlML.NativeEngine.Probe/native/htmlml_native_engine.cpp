@@ -2103,6 +2103,27 @@ private:
         resource_cache_bytes_written_.store(runtime_->resource_cache_bytes_written(), std::memory_order_relaxed);
         input_events_dispatched_.store(runtime_->input_events_dispatched(), std::memory_order_relaxed);
         input_callbacks_invoked_.store(runtime_->input_callbacks_invoked(), std::memory_order_relaxed);
+
+        // Heap code/metadata statistics walk V8's code spaces and are orders of
+        // magnitude more expensive than the atomic compilation/resource counters
+        // above. This method runs after animation frames and input dispatch, so
+        // collecting a full memory census on every turn directly reduces interactive
+        // frame cadence (and scales that cost with every active document). Memory
+        // metrics are diagnostic snapshots, not scheduling inputs; keep the cached
+        // ABI view reasonably fresh without placing the census on the hot path.
+        const auto memory_metrics_now = std::chrono::steady_clock::now();
+        const auto has_compiled_code_snapshot =
+            v8_code_and_metadata_bytes_.load(std::memory_order_relaxed) != 0U
+            || v8_bytecode_and_metadata_bytes_.load(
+                std::memory_order_relaxed) != 0U;
+        if (last_memory_metrics_update_
+                != std::chrono::steady_clock::time_point{}
+            && has_compiled_code_snapshot
+            && memory_metrics_now - last_memory_metrics_update_
+                < std::chrono::seconds(1)) {
+            return;
+        }
+        last_memory_metrics_update_ = memory_metrics_now;
         const auto memory = runtime_->read_memory_metrics();
         v8_total_heap_bytes_.store(memory.total_heap_bytes, std::memory_order_relaxed);
         v8_used_heap_bytes_.store(memory.used_heap_bytes, std::memory_order_relaxed);
@@ -2825,6 +2846,7 @@ private:
     std::atomic<uint64_t> native_css_index_storage_bytes_{0};
     std::atomic<uint64_t> process_shared_css_rule_count_{0};
     std::atomic<uint64_t> process_shared_css_rule_storage_bytes_{0};
+    std::chrono::steady_clock::time_point last_memory_metrics_update_{};
     std::atomic<uint64_t> resource_cache_requests_{0};
     std::atomic<uint64_t> resource_cache_hits_{0};
     std::atomic<uint64_t> resource_cache_misses_{0};
