@@ -118,12 +118,15 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         global-json-file: global.json
-    - name: Install Linux linker
+    - name: Build Ubuntu 22.04 Linux runtime image
       if: matrix.rid == 'linux-x64'
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install --yes lld
+        docker build \
+          --platform linux/amd64 \
+          --file packaging/HtmlML.NativeEngine.Runtime/Dockerfile.linux-x64 \
+          --tag htmlml-native-linux-builder:ubuntu-22.04 \
+          packaging/HtmlML.NativeEngine.Runtime
     - id: v8-cache-key
       name: Resolve pinned V8 SDK cache identity
       shell: bash
@@ -142,8 +145,8 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
         key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
-    - name: Build, pack, and test Unix runtime
-      if: matrix.script == 'unix'
+    - name: Build, pack, and test macOS runtime
+      if: matrix.rid == 'osx-arm64'
       shell: bash
       run: |
         v8_root=
@@ -155,6 +158,31 @@ jobs:
           --package-version '${{ needs.metadata.outputs.package-version }}' \
           --v8-root "$v8_root" \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
+    - name: Build, pack, and test Linux runtime
+      if: matrix.rid == 'linux-x64'
+      shell: bash
+      run: |
+        v8_root=
+        if [[ '${{ steps.v8-cache.outputs.cache-hit }}' == true ]]; then
+          v8_root="/workspace/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        fi
+        docker run --rm \
+          --platform linux/amd64 \
+          --user "$(id -u):$(id -g)" \
+          --env HOME=/tmp/htmlml-home \
+          --env DOTNET_CLI_HOME=/tmp/htmlml-home \
+          --env NUGET_PACKAGES=/tmp/htmlml-home/.nuget/packages \
+          --volume "$GITHUB_WORKSPACE:/workspace" \
+          --workdir /workspace \
+          htmlml-native-linux-builder:ubuntu-22.04 \
+          bash -lc "
+            mkdir -p \"\$HOME\"
+            scripts/build-native-engine-runtime-linux-container.sh \
+              --rid '${{ matrix.rid }}' \
+              --package-version '${{ needs.metadata.outputs.package-version }}' \
+              --v8-root '$v8_root' \
+              --output /workspace/artifacts/nuget-packages
+          "
     - name: Build, pack, and test Windows runtime
       if: matrix.script == 'windows'
       shell: pwsh
