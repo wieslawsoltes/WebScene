@@ -95,7 +95,7 @@ if [[ -z "$v8_root" ]]; then
     "$v8_root/build/linux/sysroot_scripts/install-sysroot.py" --arch="$cpu"
   fi
 
-  gn_args="chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"$cpu\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_pointer_compression=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"$cpu\""
+  gn_args="chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"$cpu\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"$cpu\""
   (
     cd "$v8_root"
     gn gen "out/$cpu/Release" --args="$gn_args"
@@ -106,19 +106,30 @@ fi
 v8_root="$(cd "$v8_root" && pwd)"
 v8_monolith="$v8_root/out/$cpu/Release/obj/libv8_monolith.a"
 icu_data="$v8_root/out/$cpu/Release/icudtl.dat"
+v8_args="$v8_root/out/$cpu/Release/args.gn"
 v8_license="$v8_root/LICENSE"
 icu_license="$v8_root/third_party/icu/LICENSE"
-for required in "$v8_root/include/v8.h" "$v8_monolith" "$icu_data" "$v8_license" "$icu_license"; do
+for required in "$v8_root/include/v8.h" "$v8_monolith" "$icu_data" "$v8_args" "$v8_license" "$icu_license"; do
   if [[ ! -f "$required" ]]; then
     echo "Required native runtime input is missing: $required" >&2
     exit 1
   fi
 done
+if ! grep -Eq '^v8_enable_pointer_compression *= *true$' "$v8_args" \
+    || ! grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$v8_args"; then
+  echo "The V8 SDK at '$v8_root' is not the required pointer-compressed shared-cage build." >&2
+  exit 1
+fi
 
 build_dir="$repo_root/artifacts/native-engine-runtime-build/$rid"
 cmake -S "$repo_root/experiments/HtmlML.NativeEngine.Probe" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON \
+  -DHTMLML_V8_POINTER_COMPRESSION=ON \
+  -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON \
+  -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON \
+  -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON \
+  -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF \
   -DHTMLML_V8_ROOT="$v8_root"
 cmake --build "$build_dir" --config Release --parallel
 
@@ -139,6 +150,10 @@ pack_args=(
   "-p:HtmlMlNativeEngineIcuDataPath=$icu_data"
   "-p:HtmlMlNativeEngineV8LicensePath=$v8_license"
   "-p:HtmlMlNativeEngineIcuLicensePath=$icu_license"
+  "-p:HtmlMlNativeEngineV8PointerCompression=true"
+  "-p:HtmlMlNativeEngineV8SharedCage=true"
+  "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true"
+  "-p:HtmlMlNativeEngineDenseLink=true"
 )
 pack_args+=("-p:PackageVersion=$package_version")
 dotnet pack "${pack_args[@]}"

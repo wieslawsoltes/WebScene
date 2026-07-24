@@ -99,6 +99,38 @@ def validate_template_defaults(package: pathlib.Path, version: str) -> None:
                 )
 
 
+def validate_native_runtime(
+    package: pathlib.Path,
+    runtime_identifier: str,
+    version: str,
+) -> None:
+    manifest_name = (
+        f"runtimes/{runtime_identifier}/native/htmlml-native-runtime.json"
+    )
+    with zipfile.ZipFile(package) as archive:
+        if manifest_name not in archive.namelist():
+            raise RuntimeError(f"{package}: missing {manifest_name}")
+        manifest = json.loads(archive.read(manifest_name))
+
+    expected = {
+        "schemaVersion": 1,
+        "packageVersion": version,
+        "runtimeIdentifier": runtime_identifier,
+        "configuration": "Release",
+        "v8PointerCompression": True,
+        "v8SharedCage": True,
+        "v8OptimizeForSizeDefault": True,
+        "denseLink": True,
+        "certificationTelemetry": False,
+    }
+    for name, value in expected.items():
+        if manifest.get(name) != value:
+            raise RuntimeError(
+                f"{package}: native manifest {name} is "
+                f"{manifest.get(name)!r}, expected {value!r}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("package_directory", type=pathlib.Path)
@@ -137,6 +169,14 @@ def main() -> int:
         raise RuntimeError("Missing release packages: " + ", ".join(missing))
 
     validate_template_defaults(packages["HtmlML.Templates"], args.version)
+    if not args.managed_only:
+        for runtime_identifier in sorted(native_rids):
+            package_id = f"HtmlML.NativeEngine.Runtime.{runtime_identifier}"
+            validate_native_runtime(
+                packages[package_id],
+                runtime_identifier,
+                args.version,
+            )
 
     for package_id, package_dependencies in dependencies.items():
         for dependency_id, dependency_version in package_dependencies:

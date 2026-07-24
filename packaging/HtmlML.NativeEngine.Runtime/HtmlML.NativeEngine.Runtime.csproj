@@ -15,6 +15,11 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <HtmlMlNativeEngineAbiVersion>2</HtmlMlNativeEngineAbiVersion>
     <HtmlMlNativeEngineV8Revision>14.7.173.23</HtmlMlNativeEngineV8Revision>
+    <HtmlMlNativeEngineV8PointerCompression Condition="'$(HtmlMlNativeEngineV8PointerCompression)' == ''">false</HtmlMlNativeEngineV8PointerCompression>
+    <HtmlMlNativeEngineV8SharedCage Condition="'$(HtmlMlNativeEngineV8SharedCage)' == ''">false</HtmlMlNativeEngineV8SharedCage>
+    <HtmlMlNativeEngineV8OptimizeForSizeDefault Condition="'$(HtmlMlNativeEngineV8OptimizeForSizeDefault)' == ''">false</HtmlMlNativeEngineV8OptimizeForSizeDefault>
+    <HtmlMlNativeEngineDenseLink Condition="'$(HtmlMlNativeEngineDenseLink)' == ''">false</HtmlMlNativeEngineDenseLink>
+    <HtmlMlNativeEngineCertificationTelemetry>false</HtmlMlNativeEngineCertificationTelemetry>
     <HtmlMlNativeEngineSupportedRids>osx-arm64;osx-x64;linux-arm64;linux-x64;win-arm64;win-x64</HtmlMlNativeEngineSupportedRids>
     <HtmlMlNativeEngineExpectedFileName Condition="$([System.String]::Copy('$(HtmlMlNativeEngineRid)').StartsWith('osx-'))">libhtmlml_native_engine.dylib</HtmlMlNativeEngineExpectedFileName>
     <HtmlMlNativeEngineExpectedFileName Condition="$([System.String]::Copy('$(HtmlMlNativeEngineRid)').StartsWith('linux-'))">libhtmlml_native_engine.so</HtmlMlNativeEngineExpectedFileName>
@@ -71,6 +76,18 @@
            Text="Native engine file '$(HtmlMlNativeEngineActualFileName)' does not match RID '$(HtmlMlNativeEngineRid)'; expected '$(HtmlMlNativeEngineExpectedFileName)'." />
     <Error Condition="'$(HtmlMlNativeEngineActualIcuFileName)' != '$(HtmlMlNativeEngineExpectedIcuFileName)'"
            Text="V8 ICU data file must be named '$(HtmlMlNativeEngineExpectedIcuFileName)', not '$(HtmlMlNativeEngineActualIcuFileName)'." />
+    <Error Condition="'$(HtmlMlNativeEngineV8PointerCompression)' != 'true' and '$(HtmlMlNativeEngineV8PointerCompression)' != 'false'"
+           Text="HtmlMlNativeEngineV8PointerCompression must be the JSON boolean true or false." />
+    <Error Condition="'$(HtmlMlNativeEngineV8SharedCage)' != 'true' and '$(HtmlMlNativeEngineV8SharedCage)' != 'false'"
+           Text="HtmlMlNativeEngineV8SharedCage must be the JSON boolean true or false." />
+    <Error Condition="'$(HtmlMlNativeEngineV8OptimizeForSizeDefault)' != 'true' and '$(HtmlMlNativeEngineV8OptimizeForSizeDefault)' != 'false'"
+           Text="HtmlMlNativeEngineV8OptimizeForSizeDefault must be the JSON boolean true or false." />
+    <Error Condition="'$(HtmlMlNativeEngineDenseLink)' != 'true' and '$(HtmlMlNativeEngineDenseLink)' != 'false'"
+           Text="HtmlMlNativeEngineDenseLink must be the JSON boolean true or false." />
+    <Error Condition="'$(HtmlMlNativeEngineCertificationTelemetry)' != 'false'"
+           Text="Native runtime packages must compile certification telemetry out." />
+    <Error Condition="'$(HtmlMlNativeEngineV8SharedCage)' == 'true' and '$(HtmlMlNativeEngineV8PointerCompression)' != 'true'"
+           Text="A shared V8 compression cage requires pointer compression." />
   </Target>
 
   <Target Name="PrepareHtmlMlNativeEnginePackage"
@@ -92,10 +109,10 @@
       <HtmlMlNativeEngineIcuHash>@(_HtmlMlNativeEngineIcuHash->'%(FileHash)')</HtmlMlNativeEngineIcuHash>
     </PropertyGroup>
     <WriteLinesToFile File="$(HtmlMlNativeManifestPath)"
-                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(HtmlMlNativeEngineRid)&quot;,&quot;fileName&quot;:&quot;$(HtmlMlNativeEngineExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(HtmlMlNativeEngineHash)&quot;,&quot;icuFileName&quot;:&quot;$(HtmlMlNativeEngineExpectedIcuFileName)&quot;,&quot;icuSha256&quot;:&quot;$(HtmlMlNativeEngineIcuHash)&quot;,&quot;abiVersion&quot;:$(HtmlMlNativeEngineAbiVersion),&quot;v8Revision&quot;:&quot;$(HtmlMlNativeEngineV8Revision)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;}"
+                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(HtmlMlNativeEngineRid)&quot;,&quot;fileName&quot;:&quot;$(HtmlMlNativeEngineExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(HtmlMlNativeEngineHash)&quot;,&quot;icuFileName&quot;:&quot;$(HtmlMlNativeEngineExpectedIcuFileName)&quot;,&quot;icuSha256&quot;:&quot;$(HtmlMlNativeEngineIcuHash)&quot;,&quot;abiVersion&quot;:$(HtmlMlNativeEngineAbiVersion),&quot;v8Revision&quot;:&quot;$(HtmlMlNativeEngineV8Revision)&quot;,&quot;v8PointerCompression&quot;:$(HtmlMlNativeEngineV8PointerCompression),&quot;v8SharedCage&quot;:$(HtmlMlNativeEngineV8SharedCage),&quot;v8OptimizeForSizeDefault&quot;:$(HtmlMlNativeEngineV8OptimizeForSizeDefault),&quot;denseLink&quot;:$(HtmlMlNativeEngineDenseLink),&quot;certificationTelemetry&quot;:$(HtmlMlNativeEngineCertificationTelemetry),&quot;configuration&quot;:&quot;$(Configuration)&quot;}"
                       Overwrite="true" />
     <WriteLinesToFile File="$(HtmlMlNativePropsPath)"
-                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;HtmlMlNativeEnginePackagedRid&gt;$(HtmlMlNativeEngineRid)&lt;/HtmlMlNativeEnginePackagedRid&gt;&lt;HtmlMlNativeEnginePackagedFileName&gt;$(HtmlMlNativeEngineExpectedFileName)&lt;/HtmlMlNativeEnginePackagedFileName&gt;&lt;HtmlMlNativeEnginePackagedIcuFileName&gt;$(HtmlMlNativeEngineExpectedIcuFileName)&lt;/HtmlMlNativeEnginePackagedIcuFileName&gt;&lt;HtmlMlNativeEnginePackagedAbi&gt;$(HtmlMlNativeEngineAbiVersion)&lt;/HtmlMlNativeEnginePackagedAbi&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
+                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;HtmlMlNativeEnginePackagedRid&gt;$(HtmlMlNativeEngineRid)&lt;/HtmlMlNativeEnginePackagedRid&gt;&lt;HtmlMlNativeEnginePackagedFileName&gt;$(HtmlMlNativeEngineExpectedFileName)&lt;/HtmlMlNativeEnginePackagedFileName&gt;&lt;HtmlMlNativeEnginePackagedIcuFileName&gt;$(HtmlMlNativeEngineExpectedIcuFileName)&lt;/HtmlMlNativeEnginePackagedIcuFileName&gt;&lt;HtmlMlNativeEnginePackagedAbi&gt;$(HtmlMlNativeEngineAbiVersion)&lt;/HtmlMlNativeEnginePackagedAbi&gt;&lt;HtmlMlNativeEngineV8PointerCompression&gt;$(HtmlMlNativeEngineV8PointerCompression)&lt;/HtmlMlNativeEngineV8PointerCompression&gt;&lt;HtmlMlNativeEngineV8SharedCage&gt;$(HtmlMlNativeEngineV8SharedCage)&lt;/HtmlMlNativeEngineV8SharedCage&gt;&lt;HtmlMlNativeEngineV8OptimizeForSizeDefault&gt;$(HtmlMlNativeEngineV8OptimizeForSizeDefault)&lt;/HtmlMlNativeEngineV8OptimizeForSizeDefault&gt;&lt;HtmlMlNativeEngineDenseLink&gt;$(HtmlMlNativeEngineDenseLink)&lt;/HtmlMlNativeEngineDenseLink&gt;&lt;HtmlMlNativeEngineCertificationTelemetry&gt;$(HtmlMlNativeEngineCertificationTelemetry)&lt;/HtmlMlNativeEngineCertificationTelemetry&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
                       Overwrite="true" />
   </Target>
 </Project>

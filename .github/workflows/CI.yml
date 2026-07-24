@@ -70,6 +70,7 @@ jobs:
         -B artifacts/native-engine-portability
         -DCMAKE_BUILD_TYPE=Release
         -DHTMLML_NATIVE_ENGINE_ENABLE_V8=OFF
+        -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF
     - name: Compile native C++ portability target
       run: cmake --build artifacts/native-engine-portability --config Release --parallel
 

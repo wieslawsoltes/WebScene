@@ -88,7 +88,7 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
 
     # Backslash-escaped quotes survive PowerShell's native argument marshalling
     # and reach GN as string delimiters (the form used by ClearScript itself).
-    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_pointer_compression=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu
+    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu
     Push-Location $V8Root
     try {
         & gn.bat gen "out/$cpu/Release" "--args=$gnArgs"
@@ -101,16 +101,33 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
 
 $v8Monolith = Join-Path $V8Root "out/$cpu/Release/obj/v8_monolith.lib"
 $icuData = Join-Path $V8Root "out/$cpu/Release/icudtl.dat"
+$v8Args = Join-Path $V8Root "out/$cpu/Release/args.gn"
 $v8License = Join-Path $V8Root "LICENSE"
 $icuLicense = Join-Path $V8Root "third_party/icu/LICENSE"
-@((Join-Path $V8Root "include/v8.h"), $v8Monolith, $icuData, $v8License, $icuLicense) | ForEach-Object {
+@((Join-Path $V8Root "include/v8.h"), $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Required native runtime input is missing: $_" }
+}
+$hasPointerCompression = Select-String `
+    -Path $v8Args `
+    -Pattern '^v8_enable_pointer_compression\s*=\s*true$' `
+    -Quiet
+$hasSharedCage = Select-String `
+    -Path $v8Args `
+    -Pattern '^v8_enable_pointer_compression_shared_cage\s*=\s*true$' `
+    -Quiet
+if (-not $hasPointerCompression -or -not $hasSharedCage) {
+    throw "The V8 SDK at '$V8Root' is not the required pointer-compressed shared-cage build."
 }
 
 $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid"
 & cmake -S (Join-Path $repoRoot "experiments/HtmlML.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON `
+    -DHTMLML_V8_POINTER_COMPRESSION=ON `
+    -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
+    -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
+    -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON `
+    -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF `
     "-DHTMLML_V8_ROOT=$V8Root"
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native HtmlML engine." }
 & cmake --build $buildDir --config Release --parallel
@@ -126,7 +143,11 @@ $packArguments = @(
     "-p:HtmlMlNativeEnginePath=$nativePath",
     "-p:HtmlMlNativeEngineIcuDataPath=$icuData",
     "-p:HtmlMlNativeEngineV8LicensePath=$v8License",
-    "-p:HtmlMlNativeEngineIcuLicensePath=$icuLicense"
+    "-p:HtmlMlNativeEngineIcuLicensePath=$icuLicense",
+    "-p:HtmlMlNativeEngineV8PointerCompression=true",
+    "-p:HtmlMlNativeEngineV8SharedCage=true",
+    "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true",
+    "-p:HtmlMlNativeEngineDenseLink=true"
 )
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments

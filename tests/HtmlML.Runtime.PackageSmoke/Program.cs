@@ -51,9 +51,22 @@ try
             $"The native runtime manifest declares ABI {manifestAbiVersion}, " +
             $"but the library exports ABI {abiVersion}.");
     }
+    var buildFeaturesExport = NativeLibrary.GetExport(
+        library,
+        "htmlml_engine_get_build_features");
+    var getBuildFeatures = Marshal.GetDelegateForFunctionPointer<GetBuildFeatures>(
+        buildFeaturesExport);
+    var buildFeatures = getBuildFeatures();
+    if (buildFeatures != 0)
+    {
+        return Fail(
+            $"The packaged native runtime unexpectedly contains build features 0x{buildFeatures:X}; " +
+            "certification telemetry must be compiled out.");
+    }
     Console.WriteLine(
         $"HtmlML package smoke: pass; backend={typeof(AvaloniaBrowserHost).Assembly.GetName().Name}; " +
-        $"runtime={Path.GetFileName(nativePath)}; abi={abiVersion}; manifestAbi={manifestAbiVersion}");
+        $"runtime={Path.GetFileName(nativePath)}; abi={abiVersion}; " +
+        $"manifestAbi={manifestAbiVersion}; buildFeatures={buildFeatures}");
 }
 finally
 {
@@ -70,3 +83,6 @@ static int Fail(string message)
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate uint GetAbiVersion();
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate uint GetBuildFeatures();
