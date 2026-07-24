@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Component manifests, compatibility checks, diagnostics, lifecycle, and host bridge contracts for HtmlML applications.</Description>
     <PackageId>HtmlML.Sdk</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>htmlml;react;typescript;sdk;components;host-bridge</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

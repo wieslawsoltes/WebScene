@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Framework-neutral CSS semantics and layout models for HtmlML.</Description>
     <PackageId>HtmlML.Css</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;css;layout;runtime</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

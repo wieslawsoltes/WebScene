@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Framework-neutral Canvas, SVG, and rendering models for HtmlML.</Description>
     <PackageId>HtmlML.Graphics</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;canvas;svg;graphics;rendering</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

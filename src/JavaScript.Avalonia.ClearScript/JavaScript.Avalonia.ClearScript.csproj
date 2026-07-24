@@ -7,7 +7,6 @@
     <IsPackable>true</IsPackable>
     <Description>Optional ClearScript V8 runtime for JavaScript.Avalonia.</Description>
     <PackageId>JavaScript.Avalonia.ClearScript</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>avalonia;javascript;v8;clearscript</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

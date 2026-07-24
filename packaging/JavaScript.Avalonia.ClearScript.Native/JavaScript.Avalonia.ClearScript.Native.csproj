@@ -7,7 +7,6 @@
     <PackageId Condition="'$(HtmlMlClearScriptNativeRid)' != ''">JavaScript.Avalonia.ClearScript.Native.$(HtmlMlClearScriptNativeRid)</PackageId>
     <PackageId Condition="'$(PackageId)' == ''">JavaScript.Avalonia.ClearScript.Native.Template</PackageId>
     <Description>Reviewed patched ClearScript V8 native runtime for HtmlML trusted same-origin contexts.</Description>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

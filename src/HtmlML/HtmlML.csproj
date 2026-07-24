@@ -10,7 +10,6 @@
   <PropertyGroup>
     <Description>An HTML markup support for Avalonia.</Description>
     <PackageId>HtmlML</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;axaml;xaml;markup;avalonia;avaloniaui</PackageTags>
   </PropertyGroup>
   <PropertyGroup>

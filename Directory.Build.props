@@ -9,6 +9,7 @@
     <Company>Wiesław Šoltés</Company>
     <Copyright>Copyright © Wiesław Šoltés 2025</Copyright>
     <PackageProjectUrl>https://github.com/wieslawsoltes/HtmlML</PackageProjectUrl>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
@@ -21,4 +22,10 @@
   <PropertyGroup>
     <AvaloniaVersion>11.3.4</AvaloniaVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)LICENSE"
+          Pack="true"
+          PackagePath=""
+          Visible="false" />
+  </ItemGroup>
 </Project>

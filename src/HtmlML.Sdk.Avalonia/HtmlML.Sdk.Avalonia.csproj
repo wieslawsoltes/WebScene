@@ -7,7 +7,6 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <Description>Avalonia control host for packaged HtmlML React and TypeScript components.</Description>
     <PackageId>HtmlML.Sdk.Avalonia</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>htmlml;react;typescript;avalonia;component-host</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

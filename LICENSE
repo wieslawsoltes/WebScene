@@ -1,6 +1,11 @@
-MIT License
+MIT License with Restricted Party Clause
 
 Copyright (c) Wiesław Šoltés
+
+This software is provided under the MIT License terms below, subject to the
+Restricted Party Clause at the end of this file.
+
+MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +24,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Restricted Party Clause
+
+Notwithstanding any permission above, no license or rights are granted to:
+
+- AvaloniaUI OÜ, and
+- any entity controlling, controlled by, or under common control with
+  AvaloniaUI OÜ, and
+- their employees, contractors, or agents acting on their behalf.
+
+The restricted parties listed above may not use, copy, modify, merge,
+publish, distribute, sublicense, sell, or otherwise exploit the Software in
+any form.
+
+This clause is a material condition of this license.

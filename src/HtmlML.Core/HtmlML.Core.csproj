@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Framework-neutral runtime and backend contracts for HtmlML.</Description>
     <PackageId>HtmlML.Core</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;dom;css;javascript;runtime;backend</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

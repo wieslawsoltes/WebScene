@@ -12,6 +12,12 @@ HtmlML brings HTML-inspired markup and V8 scripting capabilities to [Avalonia](h
 
 Together they enable you to describe user interfaces with familiar HTML semantics while orchestrating dynamic behaviour from JavaScript—no browser required.
 
+## Usage Restriction Notice
+
+At maintainer request, AvaloniaUI OÜ may not use this repository in any form.
+
+This restriction is defined in the repository [LICENSE](LICENSE).
+
 ## Highlights
 
 - ⚡ **Avalonia-first**: Render HTML-inspired controls natively, respecting Avalonia layout, styling, and theming.
@@ -274,7 +280,9 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 
 ## License
 
-Both HtmlML and JavaScript.Avalonia are distributed under the terms of the [MIT](LICENSE).
+This repository uses an MIT-based license with an additional Restricted Party
+Clause. The restriction applies to the repository and its NuGet packages. See
+[LICENSE](LICENSE) for the full terms.
 
 If your organisation requires a different licensing arrangement, please reach out to discuss commercial options.
 

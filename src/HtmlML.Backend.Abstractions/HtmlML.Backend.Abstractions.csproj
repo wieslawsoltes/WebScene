@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Backend authoring, capability manifests, and profile verification for HtmlML.</Description>
     <PackageId>HtmlML.Backend.Abstractions</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;runtime;backend;capabilities;authoring</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

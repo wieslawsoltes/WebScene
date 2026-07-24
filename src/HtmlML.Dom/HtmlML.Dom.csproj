@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Framework-neutral DOM semantics for HtmlML.</Description>
     <PackageId>HtmlML.Dom</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;dom;events;runtime</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

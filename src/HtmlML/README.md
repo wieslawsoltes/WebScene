@@ -77,7 +77,8 @@ To create a custom tag, inherit from `HtmlElementBase` or an appropriate Avaloni
 
 ## License
 
-HtmlML is licensed under the MIT. See [LICENSE](../../LICENSE).
+HtmlML uses an MIT-based license with an additional Restricted Party Clause.
+See [LICENSE](../../LICENSE) for the full terms.
 
 ## Acknowledgements
 

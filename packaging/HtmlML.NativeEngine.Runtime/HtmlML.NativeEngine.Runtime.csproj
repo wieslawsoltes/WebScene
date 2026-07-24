@@ -7,7 +7,6 @@
     <PackageId Condition="'$(HtmlMlNativeEngineRid)' != ''">HtmlML.NativeEngine.Runtime.$(HtmlMlNativeEngineRid)</PackageId>
     <PackageId Condition="'$(PackageId)' == ''">HtmlML.NativeEngine.Runtime.Template</PackageId>
     <Description>RID-specific native V8 DOM, CSS, layout and immutable-scene engine for HtmlML.</Description>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

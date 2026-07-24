@@ -6,7 +6,6 @@
     <IsPackable>true</IsPackable>
     <Description>Framework-neutral JavaScript runtime, callback, and host contracts for HtmlML.</Description>
     <PackageId>HtmlML.JavaScript</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>html;dom;javascript;runtime;engine</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

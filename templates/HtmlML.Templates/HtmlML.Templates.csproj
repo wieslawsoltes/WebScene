@@ -6,7 +6,6 @@
     <Title>HtmlML React and TypeScript application templates</Title>
     <Description>dotnet new templates for HtmlML component hosts, hybrid Avalonia applications, and TypeScript desktop applications.</Description>
     <PackageTags>dotnet-new;templates;htmlml;react;typescript;avalonia</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
