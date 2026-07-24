@@ -102,7 +102,7 @@ jobs:
           cpu: x64
           monolith: libv8_monolith.a
           script: unix
-          v8_cache_generation: v4-ubuntu22-no-crel
+          v8_cache_generation: v5-ubuntu22-lld-no-crel
         - os: windows-latest
           rid: win-x64
           cpu: x64
@@ -161,7 +161,7 @@ jobs:
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
-              || grep -Eq '^use_lld *= *false$' "$args"; }
+              || grep -Eq '^use_lld *= *true$' "$args"; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
@@ -244,7 +244,7 @@ jobs:
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
-              || grep -Eq '^use_lld *= *false$' "$args"; }
+              || grep -Eq '^use_lld *= *true$' "$args"; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \

@@ -100,6 +100,7 @@ if [[ -z "$v8_root" ]]; then
   apply_patch_once "$v8_root" "$repo_root/third-party/clearscript/V8/V8Patch.txt"
   apply_patch_once "$v8_root" "$repo_root/packaging/HtmlML.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
   apply_patch_once "$v8_root/build" "$repo_root/third-party/clearscript/V8/BuildPatch.txt"
+  apply_patch_once "$v8_root/build" "$repo_root/packaging/HtmlML.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt"
   apply_patch_once "$v8_root/third_party/icu" "$repo_root/third-party/clearscript/V8/ICUPatch.txt"
 
   if [[ "$expected_kernel" == Linux ]]; then
@@ -108,10 +109,9 @@ if [[ -z "$v8_root" ]]; then
 
   gn_args="chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"$cpu\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"$cpu\""
   if [[ "$expected_kernel" == Linux ]]; then
-    # The pinned Chromium Clang emits CREL relocations when use_lld is enabled.
-    # Ubuntu 22.04's LLD 14 cannot consume those objects correctly when linking
-    # the distributable library, so keep the V8 archive on standard ELF RELA.
-    gn_args+=" use_lld=false"
+    # Keep V8's bundled LLD for its host tools. The reviewed build patch above
+    # disables only CREL emission so Ubuntu 22.04 can consume the V8 archive.
+    gn_args+=" use_lld=true"
   fi
   (
     cd "$v8_root"
@@ -145,8 +145,8 @@ if ! grep -Eq '^v8_enable_pointer_compression *= *true$' "$v8_args" \
   exit 1
 fi
 if [[ "$expected_kernel" == Linux ]] \
-    && ! grep -Eq '^use_lld *= *false$' "$v8_args"; then
-  echo "The V8 SDK at '$v8_root' may contain CREL relocations unsupported by the Ubuntu 22.04 linker." >&2
+    && ! grep -Eq '^use_lld *= *true$' "$v8_args"; then
+  echo "The V8 SDK at '$v8_root' was not built with the required patched LLD configuration." >&2
   exit 1
 fi
 
