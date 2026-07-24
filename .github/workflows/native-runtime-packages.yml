@@ -145,6 +145,8 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
         key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        restore-keys: |
+          htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
     - name: Build, pack, and test macOS runtime
       if: matrix.rid == 'osx-arm64'
       shell: bash
