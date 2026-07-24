@@ -126,8 +126,8 @@ engine; for example, an Avalonia host using the native engine on macOS ARM64 use
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="HtmlML.Backend.Avalonia" Version="11.3.4-alpha.4" />
-  <PackageReference Include="HtmlML.NativeEngine.Runtime.osx-arm64" Version="11.3.4-alpha.4" />
+  <PackageReference Include="HtmlML.Backend.Avalonia" Version="11.3.4-alpha.6" />
+  <PackageReference Include="HtmlML.NativeEngine.Runtime.osx-arm64" Version="11.3.4-alpha.6" />
 </ItemGroup>
 ```
 

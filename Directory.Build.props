@@ -4,7 +4,7 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <NoWarn>$(NoWarn);NU1507</NoWarn>
     <VersionPrefix>11.3.4</VersionPrefix>
-    <VersionSuffix>alpha.5</VersionSuffix>
+    <VersionSuffix>alpha.6</VersionSuffix>
     <Authors>Wiesław Šoltés</Authors>
     <Company>Wiesław Šoltés</Company>
     <Copyright>Copyright © Wiesław Šoltés 2025</Copyright>

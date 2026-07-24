@@ -11,7 +11,7 @@
     "htmlmlVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "11.3.4-alpha.4",
+      "defaultValue": "11.3.4-alpha.6",
       "replaces": "HTMLML_PACKAGE_VERSION"
     }
   },
