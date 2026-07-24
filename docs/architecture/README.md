@@ -13,6 +13,7 @@ reviewed against stable constraints rather than inferred from project names.
 - [ADR 0008 — Performance-neutral extraction](adr/0008-performance-neutral-extraction.md)
 - [ADR 0009 — Pre-production package identities](adr/0009-preproduction-package-identities.md)
 - [ADR 0010 — Managed and native engines are first-class modes](adr/0010-dual-managed-native-engines.md)
+- [ADR 0011 — Compositor-driven native scene publication](adr/0011-compositor-driven-native-scene-publication.md)
 
 New decisions supersede old ADRs; accepted ADRs are not silently rewritten when the
 architecture changes.
