@@ -108,7 +108,7 @@ jobs:
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
-          v8_cache_generation: v2
+          v8_cache_generation: v3-pointer-compressed
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -150,13 +150,36 @@ jobs:
         key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
         restore-keys: |
           htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+    - id: restored-v8-sdk
+      name: Validate restored V8 SDK compatibility
+      shell: bash
+      run: |
+        root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        args="$root/out/${{ matrix.cpu }}/Release/args.gn"
+        monolith="$root/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}"
+        if [[ -f "$root/include/v8.h" \
+          && -f "$args" \
+          && -f "$monolith" \
+          && -f "$root/out/${{ matrix.cpu }}/Release/icudtl.dat" \
+          && -f "$root/LICENSE" \
+          && -f "$root/third_party/icu/LICENSE" ]] \
+          && grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
+          && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args"; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          if [[ -d "$root" ]]; then
+            echo "Discarding an incomplete or incompatible restored V8 SDK at '$root'."
+            rm -rf "$root"
+          fi
+        fi
     - name: Build, pack, and test macOS runtime
       if: matrix.rid == 'osx-arm64'
       shell: bash
       run: |
         v8_root=
         restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
-        if [[ -f "$restored_v8/include/v8.h" ]]; then
+        if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
           v8_root="$restored_v8"
         fi
         scripts/build-native-engine-runtime.sh \
@@ -170,7 +193,7 @@ jobs:
       run: |
         v8_root=
         restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
-        if [[ -f "$restored_v8/include/v8.h" ]]; then
+        if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
           v8_root="/workspace/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         fi
         docker run --rm \
@@ -196,7 +219,7 @@ jobs:
       run: |
         $v8Root = ""
         $restoredV8 = "$env:GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
-        if (Test-Path (Join-Path $restoredV8 "include/v8.h")) {
+        if ('${{ steps.restored-v8-sdk.outputs.ready }}' -eq 'true') {
           $v8Root = $restoredV8
         }
         ./scripts/build-native-engine-runtime.ps1 `
@@ -210,13 +233,16 @@ jobs:
       shell: bash
       run: |
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        args="$root/out/${{ matrix.cpu }}/Release/args.gn"
         monolith="$root/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}"
         if [[ -f "$root/include/v8.h" \
-          && -f "$root/out/${{ matrix.cpu }}/Release/args.gn" \
+          && -f "$args" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/Release/icudtl.dat" \
           && -f "$root/LICENSE" \
-          && -f "$root/third_party/icu/LICENSE" ]]; then
+          && -f "$root/third_party/icu/LICENSE" ]] \
+          && grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
+          && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args"; then
           echo "ready=true" >> "$GITHUB_OUTPUT"
         else
           echo "ready=false" >> "$GITHUB_OUTPUT"
