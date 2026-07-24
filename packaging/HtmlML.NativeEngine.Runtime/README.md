@@ -27,6 +27,5 @@ Install the package matching the application's deployment RID, for example:
 <PackageReference Include="HtmlML.NativeEngine.Runtime.osx-arm64" Version="VERSION" />
 ```
 
-The current release workflow builds `osx-arm64`. Linux and Windows RIDs listed by the
-package definition are reserved until their faster, independently validated release
-lanes are re-enabled.
+The release workflow builds `osx-arm64`, `linux-x64`, and `win-x64`. Additional RIDs
+listed by the package definition are reserved until their release lanes are enabled.

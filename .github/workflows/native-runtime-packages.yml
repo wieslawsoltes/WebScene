@@ -9,6 +9,8 @@ on:
         default: false
         type: boolean
   push:
+    branches:
+    - main
     tags:
     - 'v*'
 
@@ -89,13 +91,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        # linux-x64 and win-x64 are temporarily excluded from publishing while
-        # their pinned V8 builds move to faster, independently validated lanes.
         - os: macos-latest
           rid: osx-arm64
           cpu: arm64
           monolith: libv8_monolith.a
           script: unix
+        - os: ubuntu-latest
+          rid: linux-x64
+          cpu: x64
+          monolith: libv8_monolith.a
+          script: unix
+        - os: windows-latest
+          rid: win-x64
+          cpu: x64
+          monolith: v8_monolith.lib
+          script: windows
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -120,11 +130,12 @@ jobs:
       with:
         path: |
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/include
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/args.gn
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v1-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Build, pack, and test Unix runtime
       if: matrix.script == 'unix'
       shell: bash
@@ -159,6 +170,7 @@ jobs:
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         monolith="$root/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}"
         if [[ -f "$root/include/v8.h" \
+          && -f "$root/out/${{ matrix.cpu }}/Release/args.gn" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/Release/icudtl.dat" \
           && -f "$root/LICENSE" \
@@ -173,11 +185,12 @@ jobs:
       with:
         path: |
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/include
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/args.gn
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v1-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
@@ -209,6 +222,8 @@ jobs:
           artifacts/nuget-packages \
           --version '${{ needs.metadata.outputs.package-version }}' \
           --native-rid osx-arm64 \
+          --native-rid linux-x64 \
+          --native-rid win-x64 \
           --output artifacts/nuget-packages/release-packages.json
         shasum -a 256 \
           artifacts/nuget-packages/*.nupkg \
@@ -234,6 +249,10 @@ jobs:
         include:
         - os: macos-latest
           rid: osx-arm64
+        - os: ubuntu-latest
+          rid: linux-x64
+        - os: windows-latest
+          rid: win-x64
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4

@@ -130,9 +130,10 @@ if(MSVC)
     # conformance switch is enabled. V8 checks __cplusplus directly when
     # enforcing its C++20 embedder requirement.
     target_compile_options(htmlml_native_engine PRIVATE
-        /W4 /permissive- /GR- /wd4996 /Zc:__cplusplus)
+        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
     if(TARGET htmlml_native_engine_tests)
-        target_compile_options(htmlml_native_engine_tests PRIVATE /Zc:__cplusplus)
+        target_compile_options(htmlml_native_engine_tests PRIVATE
+            /std:c++20 /Zc:__cplusplus)
     endif()
 else()
     target_compile_options(htmlml_native_engine PRIVATE

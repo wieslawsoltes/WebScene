@@ -122,15 +122,33 @@ if ! grep -Eq '^v8_enable_pointer_compression *= *true$' "$v8_args" \
 fi
 
 build_dir="$repo_root/artifacts/native-engine-runtime-build/$rid"
-cmake -S "$repo_root/experiments/HtmlML.NativeEngine.Probe" -B "$build_dir" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON \
-  -DHTMLML_V8_POINTER_COMPRESSION=ON \
-  -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON \
-  -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON \
-  -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON \
-  -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF \
+cmake_args=(
+  -S "$repo_root/experiments/HtmlML.NativeEngine.Probe"
+  -B "$build_dir"
+  -DCMAKE_BUILD_TYPE=Release
+  -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON
+  -DHTMLML_V8_POINTER_COMPRESSION=ON
+  -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
+  -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON
+  -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON
+  -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF
   -DHTMLML_V8_ROOT="$v8_root"
+)
+if [[ "$expected_kernel" == Linux ]]; then
+  # V8 is built with Clang and its Linux archive may contain Clang/LTO
+  # metadata. Linking it through GCC's GNU ld produces the misleading
+  # "unknown architecture ... i386:x86-64" diagnostics seen in CI.
+  if ! command -v clang++ >/dev/null 2>&1 || ! command -v ld.lld >/dev/null 2>&1; then
+    echo "Linux native runtime builds require clang++ and ld.lld to link the Clang-built V8 monolith." >&2
+    exit 1
+  fi
+  cmake_args+=(
+    -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+    -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld
+  )
+fi
+cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --config Release --parallel
 
 native_path="$build_dir/$native_name"
