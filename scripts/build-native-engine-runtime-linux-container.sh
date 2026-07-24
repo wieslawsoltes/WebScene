@@ -15,6 +15,15 @@ if [[ -f "$icu_data" && -d "$build_dir" ]]; then
   cmake -E copy_if_different "$icu_data" "$build_dir/icudtl.dat"
   ctest --test-dir "$build_dir" -C Release --output-on-failure
   native_test_status=$?
+
+  if ((native_test_status != 0)) && [[ -x "$build_dir/htmlml_native_engine_tests" ]]; then
+    gdb \
+      --batch \
+      -ex "set pagination off" \
+      -ex run \
+      -ex "thread apply all bt" \
+      --args "$build_dir/htmlml_native_engine_tests" || true
+  fi
 fi
 set -e
 

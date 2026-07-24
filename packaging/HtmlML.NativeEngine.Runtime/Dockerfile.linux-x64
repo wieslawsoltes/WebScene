@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0.302-noble-amd64 AS dotnet-sdk
+FROM mcr.microsoft.com/dotnet/runtime:8.0-jammy-amd64 AS dotnet8-runtime
 
 # Build the distributable runtime against Ubuntu 22.04's glibc 2.35 rather
 # than the newer libc provided by the current GitHub-hosted runner image.
@@ -21,6 +22,7 @@ RUN apt-get update \
         clang \
         cmake \
         curl \
+        gdb \
         git \
         lld \
         ninja-build \
@@ -31,5 +33,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dotnet-sdk /usr/share/dotnet /usr/share/dotnet
+COPY --from=dotnet8-runtime /usr/share/dotnet/shared/Microsoft.NETCore.App /usr/share/dotnet/shared/Microsoft.NETCore.App
 
 WORKDIR /workspace

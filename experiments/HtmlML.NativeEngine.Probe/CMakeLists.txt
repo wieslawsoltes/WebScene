@@ -71,8 +71,7 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
         HTMLML_V8_ICU_DATA_FILENAME="icudtl.dat")
     if(HTMLML_V8_POINTER_COMPRESSION)
         target_compile_definitions(htmlml_native_engine PRIVATE
-            V8_COMPRESS_POINTERS
-            V8_31BIT_SMIS_ON_64BIT_ARCH)
+            V8_COMPRESS_POINTERS)
     endif()
     if(HTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE)
         if(NOT HTMLML_V8_POINTER_COMPRESSION)
@@ -98,15 +97,11 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
     message(STATUS "HtmlML native engine: V8 enabled (${HTMLML_V8_MONOLITH})")
 
     if(BUILD_TESTING)
+        # Direct native_document unit fixtures remain local to the test
+        # executable instead of widening the production C ABI export surface.
         add_executable(htmlml_native_engine_tests
-            tests/native_v8_runtime_tests.cpp)
-        if(HTMLML_NATIVE_ENGINE_DENSE_LINK)
-            # The release dylib intentionally exports only the stable C ABI.
-            # Direct native_document unit fixtures remain local to the test
-            # executable instead of widening that production export surface.
-            target_sources(htmlml_native_engine_tests PRIVATE
-                native/htmlml_native_dom.cpp)
-        endif()
+            tests/native_v8_runtime_tests.cpp
+            native/htmlml_native_dom.cpp)
         target_compile_features(htmlml_native_engine_tests PRIVATE cxx_std_20)
         target_link_libraries(htmlml_native_engine_tests PRIVATE htmlml_native_engine)
         add_test(NAME htmlml_native_engine_tests COMMAND htmlml_native_engine_tests)
