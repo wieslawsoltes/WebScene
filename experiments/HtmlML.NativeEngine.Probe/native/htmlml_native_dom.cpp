@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <unordered_set>
 
 namespace htmlml_native {
@@ -54,8 +55,8 @@ std::string resolved_list_style(const dom_node& node, bool position)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
         const auto& value = position
-            ? current->style.list_style_position
-            : current->style.list_style_type;
+            ? current->style.textual().list_style_position
+            : current->style.textual().list_style_type;
         if (!value.empty() && value != "inherit" && value != "unset") return value;
     }
     if (position) return "outside";
@@ -172,7 +173,7 @@ paint_z_index_update update_paint_z_index(dom_node& node) noexcept
 {
     auto descendant_z_index = 0;
     auto contains_retained_canvas =
-        node.tag == "canvas" && !node.canvas_commands.empty();
+        node.tag == "canvas" && !node.canvas().commands.empty();
     for (auto* child : node.children) {
         const auto child_update = update_paint_z_index(*child);
         descendant_z_index = std::max(
@@ -217,7 +218,7 @@ void collect_fixed_positioned_nodes(dom_node& node, std::vector<dom_node*>& resu
 void update_retained_canvas_paint_phase(dom_node& node, bool& retained_canvas_seen)
 {
     node.paints_after_retained_canvas = retained_canvas_seen;
-    if (node.tag == "canvas" && !node.canvas_commands.empty()) {
+    if (node.tag == "canvas" && !node.canvas().commands.empty()) {
         retained_canvas_seen = true;
     }
     auto paint_order = node.children;
@@ -494,12 +495,13 @@ uint8_t parse_hex_pair(char high, char low)
 uint32_t resolved_foreground(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->color_animation_active) {
-            return current->painted_foreground_rgba;
+        const auto* animation = current->animation_runtime();
+        if (animation != nullptr && animation->color_animation_active) {
+            return animation->painted_foreground_rgba;
         }
         if ((current->style.foreground_rgba & 0xFFU) != 0U) {
-            return current->color_animation_initialized
-                ? current->painted_foreground_rgba
+            return animation != nullptr && animation->color_animation_initialized
+                ? animation->painted_foreground_rgba
                 : current->style.foreground_rgba;
         }
     }
@@ -510,7 +512,10 @@ float resolved_transform_rotation(const dom_node& node)
 {
     float result = 0;
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        result += current->painted_transform_rotate_degrees;
+        const auto* animation = current->animation_runtime();
+        result += animation != nullptr && animation->transform_animation_initialized
+            ? animation->painted_transform_rotate_degrees
+            : current->style.transform_rotate_degrees;
     }
     return result;
 }
@@ -577,8 +582,8 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
     bool has_id = false;
     bool has_class = false;
     bool has_color = false;
-    const auto css_fill = node.style.svg_fill;
-    const auto css_stroke = node.style.svg_stroke;
+    const auto css_fill = node.style.textual().svg_fill;
+    const auto css_stroke = node.style.textual().svg_stroke;
     for (const auto& [name, value] : node.attributes) {
         if (name == "xmlns") has_xmlns = true;
         else if (name == "id") has_id = true;
@@ -631,18 +636,24 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
         // when no local presentation attribute or author declaration exists.
         if (css_fill.empty() && !node.attributes.contains("fill")) {
             for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
-                if (ancestor->style.svg_fill.empty()) continue;
+                if (ancestor->style.textual().svg_fill.empty()) continue;
                 output += " fill=\"";
-                append_svg_paint_value(node, ancestor->style.svg_fill, output);
+                append_svg_paint_value(
+                    node,
+                    ancestor->style.textual().svg_fill,
+                    output);
                 output.push_back('"');
                 break;
             }
         }
         if (css_stroke.empty() && !node.attributes.contains("stroke")) {
             for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
-                if (ancestor->style.svg_stroke.empty()) continue;
+                if (ancestor->style.textual().svg_stroke.empty()) continue;
                 output += " stroke=\"";
-                append_svg_paint_value(node, ancestor->style.svg_stroke, output);
+                append_svg_paint_value(
+                    node,
+                    ancestor->style.textual().svg_stroke,
+                    output);
                 output.push_back('"');
                 break;
             }
@@ -680,7 +691,9 @@ float resolved_line_height(const dom_node& node, float font_size)
 std::string resolved_font_family(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (!current->style.font_family.empty()) return current->style.font_family;
+        if (!current->style.textual().font_family.empty()) {
+            return current->style.textual().font_family;
+        }
     }
     return "sans-serif";
 }
@@ -712,7 +725,9 @@ float resolved_word_spacing(const dom_node& node)
 std::string resolved_text_align(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (!current->style.text_align.empty()) return current->style.text_align;
+        if (!current->style.textual().text_align.empty()) {
+            return current->style.textual().text_align;
+        }
     }
     return "start";
 }
@@ -721,8 +736,8 @@ std::string resolved_text_transform(const dom_node& node, std::string value)
 {
     auto transform = std::string{"none"};
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (!current->style.text_transform.empty()) {
-            transform = current->style.text_transform;
+        if (!current->style.textual().text_transform.empty()) {
+            transform = current->style.textual().text_transform;
             break;
         }
     }
@@ -752,9 +767,9 @@ std::string resolved_text_transform(const dom_node& node, std::string value)
 bool resolved_white_space_wraps(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->style.white_space.empty()) continue;
-        return current->style.white_space != "nowrap"
-            && current->style.white_space != "pre";
+        if (current->style.textual().white_space.empty()) continue;
+        return current->style.textual().white_space != "nowrap"
+            && current->style.textual().white_space != "pre";
     }
     return true;
 }
@@ -769,10 +784,10 @@ bool has_visible_text(const std::string& value)
 bool resolved_collapses_whitespace(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->style.white_space.empty()) continue;
-        return current->style.white_space != "pre"
-            && current->style.white_space != "pre-wrap"
-            && current->style.white_space != "break-spaces";
+        if (current->style.textual().white_space.empty()) continue;
+        return current->style.textual().white_space != "pre"
+            && current->style.textual().white_space != "pre-wrap"
+            && current->style.textual().white_space != "break-spaces";
     }
     return true;
 }
@@ -953,7 +968,15 @@ const dom_node& native_document::body() const noexcept
 
 dom_node& native_document::create_element(std::string tag)
 {
-    auto node = std::make_unique<dom_node>();
+    auto* storage = static_cast<dom_node*>(
+        node_pool_.allocate(sizeof(dom_node), alignof(dom_node)));
+    try {
+        std::construct_at(storage);
+    } catch (...) {
+        node_pool_.deallocate(storage, sizeof(dom_node), alignof(dom_node));
+        throw;
+    }
+    node_pointer node(storage, node_deleter{&node_pool_});
     node->id = next_node_id_++;
     node->tag = std::move(tag);
     if (node->tag == "#text") {
@@ -968,7 +991,7 @@ dom_node& native_document::create_element(std::string tag)
     }
     auto* result = node.get();
     nodes_.push_back(std::move(node));
-    dirty_ = true;
+    mark_dirty();
     return *result;
 }
 
@@ -980,7 +1003,7 @@ bool native_document::append_child(dom_node& parent, dom_node& child)
     child.parent = &parent;
     child.visible = true;
     parent.children.push_back(&child);
-    dirty_ = true;
+    mark_dirty();
     return true;
 }
 
@@ -991,7 +1014,7 @@ void native_document::remove_all_children(dom_node& parent)
         child->visible = false;
     }
     parent.children.clear();
-    dirty_ = true;
+    mark_dirty();
 }
 
 size_t native_document::erase_detached_subtree(dom_node& root)
@@ -1007,7 +1030,7 @@ size_t native_document::erase_detached_subtree(dom_node& root)
     collect(collect, root);
     const auto before = nodes_.size();
     std::erase_if(nodes_, [&](const auto& node) { return removed.contains(node.get()); });
-    if (nodes_.size() != before) dirty_ = true;
+    if (nodes_.size() != before) mark_dirty();
     return before - nodes_.size();
 }
 
@@ -1139,14 +1162,23 @@ dom_node* native_document::hit_test_node(
         node.style.transform_origin_y,
         node.layout.height,
         node.layout.height / 2.0F);
+    const auto* animation = node.animation_runtime();
+    const auto painted_scale_x =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_x
+        : node.style.transform_scale_x;
+    const auto painted_scale_y =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_y
+        : node.style.transform_scale_y;
     const auto transformed_left = origin_x
-        + (node.layout.x - origin_x) * node.painted_transform_scale_x;
+        + (node.layout.x - origin_x) * painted_scale_x;
     const auto transformed_right = origin_x
-        + (node.layout.x + node.layout.width - origin_x) * node.painted_transform_scale_x;
+        + (node.layout.x + node.layout.width - origin_x) * painted_scale_x;
     const auto transformed_top = origin_y
-        + (node.layout.y - origin_y) * node.painted_transform_scale_y;
+        + (node.layout.y - origin_y) * painted_scale_y;
     const auto transformed_bottom = origin_y
-        + (node.layout.y + node.layout.height - origin_y) * node.painted_transform_scale_y;
+        + (node.layout.y + node.layout.height - origin_y) * painted_scale_y;
     const auto left = std::min(transformed_left, transformed_right);
     const auto right = std::max(transformed_left, transformed_right);
     const auto top = std::min(transformed_top, transformed_bottom);
@@ -1193,6 +1225,10 @@ dom_node* native_document::hit_test_node(
 void native_document::clear()
 {
     nodes_.clear();
+    // A complete navigation invalidates every node, so no pooled allocation
+    // remains live. Return all node chunks to the upstream allocator instead
+    // of retaining the previous document's high-water mark.
+    node_pool_.release();
     transition_events_.clear();
     last_animation_advance_timestamp_ms_ =
         std::numeric_limits<double>::quiet_NaN();
@@ -1201,14 +1237,18 @@ void native_document::clear()
     body_->style.width = {100, length_unit::percent};
     body_->style.height = {100, length_unit::percent};
     body_->style.background_rgba = 0x131722FFU;
-    dirty_ = true;
+    mark_dirty();
 }
 
 void native_document::layout(float viewport_width, float viewport_height)
 {
     viewport_width_ = std::max(1.0F, viewport_width);
     viewport_height_ = std::max(1.0F, viewport_height);
-    body_->layout = {0, 0, std::max(1.0F, viewport_width), std::max(1.0F, viewport_height)};
+    body_->layout = {
+        0,
+        0,
+        std::max(1.0F, viewport_width),
+        std::max(1.0F, viewport_height)};
     body_->visible = true;
     layout_children(*body_);
     update_paint_z_index(*body_);
@@ -1216,15 +1256,19 @@ void native_document::layout(float viewport_width, float viewport_height)
     update_retained_canvas_paint_phase(*body_, retained_canvas_seen);
     ++layout_passes_;
     dirty_ = false;
+    globally_dirty_ = false;
+    out_of_flow_geometry_dirty_roots_.clear();
 }
 
 void native_document::layout_children(dom_node& parent)
 {
-    parent.style.before.layout = {};
-    parent.style.after.layout = {};
+    if (parent.style.has_pseudo_elements()) {
+        parent.style.mutable_before_pseudo().layout = {};
+        parent.style.mutable_after_pseudo().layout = {};
+    }
     parent.list_marker_layout = {};
-    const auto has_before = pseudo_generates_box(parent.style.before);
-    const auto has_after = pseudo_generates_box(parent.style.after);
+    const auto has_before = pseudo_generates_box(parent.style.before_pseudo());
+    const auto has_after = pseudo_generates_box(parent.style.after_pseudo());
     const auto marker_text = list_marker_text(parent);
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(parent, true) == "inside";
@@ -1405,9 +1449,10 @@ void native_document::layout_children(dom_node& parent)
             for (size_t index = 0; index < row.size(); ++index) {
                 auto* child = row[index];
                 child->visible = parent.visible && child->style.display != display_mode::none;
-                child->table_column_index = index;
-                child->table_column_span = 1;
-                child->table_cell_height = row_height;
+                auto& child_table = child->mutable_table_layout();
+                child_table.column_index = index;
+                child_table.column_span = 1;
+                child_table.cell_height = row_height;
                 layout_child(*child, parent.layout, {
                     cursor_x,
                     cursor_y,
@@ -1428,7 +1473,7 @@ void native_document::layout_children(dom_node& parent)
                 continue;
             }
             if (is_table_row_group(child->style.display)) {
-                child->table_column_widths = explicit_columns;
+                child->mutable_table_layout().column_widths = explicit_columns;
                 layout_child(*child, parent.layout, {
                     content.x,
                     cursor_y,
@@ -1453,7 +1498,7 @@ void native_document::layout_children(dom_node& parent)
                 preceding_non_caption = row.back();
             }
         }
-        parent.table_column_widths = explicit_columns;
+        parent.mutable_table_layout().column_widths = explicit_columns;
         parent.scroll_content_width = table_width;
         parent.scroll_content_height = std::max(0.0F, cursor_y - content.y);
         if (!is_specified(parent.style.height)) {
@@ -1512,9 +1557,10 @@ void native_document::layout_children(dom_node& parent)
                     occupied_rows.resize(column + column_span, 0);
                 }
                 row.cells.push_back({child, column, column_span, row_span});
-                child->table_column_index = column;
-                child->table_column_span = column_span;
-                child->table_row_span = row_span;
+                auto& child_table = child->mutable_table_layout();
+                child_table.column_index = column;
+                child_table.column_span = column_span;
+                child_table.row_span = row_span;
                 for (size_t track = column; track < column + column_span; ++track) {
                     occupied_rows[track] = std::max(occupied_rows[track], row_span);
                 }
@@ -1605,7 +1651,7 @@ void native_document::layout_children(dom_node& parent)
                 std::fill(columns.begin(), columns.end(), share);
             }
         }
-        parent.table_column_widths = columns;
+        parent.mutable_table_layout().column_widths = columns;
 
         for (auto& row : rows) {
             auto height = is_specified(row.row->style.height)
@@ -1618,31 +1664,32 @@ void native_document::layout_children(dom_node& parent)
                         intrinsic_size(*placement.cell, false, content.height));
                 }
             }
-            row.row->table_row_height = height;
+            row.row->mutable_table_layout().row_height = height;
         }
         for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
             for (const auto& placement : rows[row_index].cells) {
                 auto span_height = 0.0F;
                 const auto row_end = std::min(rows.size(), row_index + placement.row_span);
                 for (size_t span_row = row_index; span_row < row_end; ++span_row) {
-                    span_height += rows[span_row].row->table_row_height;
+                    span_height += rows[span_row].row->table_layout().row_height;
                 }
                 const auto required = intrinsic_size(*placement.cell, false, content.height);
                 if (required > span_height && row_end > row_index) {
                     const auto extra = (required - span_height)
                         / static_cast<float>(row_end - row_index);
                     for (size_t span_row = row_index; span_row < row_end; ++span_row) {
-                        rows[span_row].row->table_row_height += extra;
+                        rows[span_row].row->mutable_table_layout().row_height += extra;
                     }
                 }
             }
         }
         for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
             for (const auto& placement : rows[row_index].cells) {
-                placement.cell->table_cell_height = 0;
+                auto& cell_table = placement.cell->mutable_table_layout();
+                cell_table.cell_height = 0;
                 const auto row_end = std::min(rows.size(), row_index + placement.row_span);
                 for (size_t span_row = row_index; span_row < row_end; ++span_row) {
-                    placement.cell->table_cell_height += rows[span_row].row->table_row_height;
+                    cell_table.cell_height += rows[span_row].row->table_layout().row_height;
                 }
             }
         }
@@ -1662,15 +1709,15 @@ void native_document::layout_children(dom_node& parent)
             }
             auto height = 0.0F;
             if (child->style.display == display_mode::table_row) {
-                height = child->table_row_height;
+                height = child->table_layout().row_height;
             } else if (is_table_row_group(child->style.display)) {
                 for (const auto& row : rows) {
-                    if (row.row->parent == child) height += row.row->table_row_height;
+                    if (row.row->parent == child) height += row.row->table_layout().row_height;
                 }
             } else {
                 height = intrinsic_size(*child, false, content.height);
             }
-            child->table_column_widths = columns;
+            child->mutable_table_layout().column_widths = columns;
             layout_child(*child, parent.layout, {content.x, cursor_y, content.width, height});
             cursor_y += child->layout.height;
         }
@@ -1696,7 +1743,7 @@ void native_document::layout_children(dom_node& parent)
                 cells.push_back(child);
             }
         }
-        auto widths = parent.table_column_widths;
+        auto widths = parent.table_layout().column_widths;
         if (widths.size() < cells.size()) widths.resize(cells.size(), 0.0F);
         for (size_t index = 0; index < cells.size(); ++index) {
             if (widths[index] <= 0) {
@@ -1711,9 +1758,10 @@ void native_document::layout_children(dom_node& parent)
         for (size_t index = 0; index < cells.size(); ++index) {
             auto* cell = cells[index];
             cell->visible = parent.visible;
-            cell->table_column_index = index;
-            cell->table_column_span = 1;
-            cell->table_cell_height = row_height;
+            auto& cell_table = cell->mutable_table_layout();
+            cell_table.column_index = index;
+            cell_table.column_span = 1;
+            cell_table.cell_height = row_height;
             layout_child(*cell, parent.layout, {
                 cursor_x,
                 content.y,
@@ -1730,7 +1778,7 @@ void native_document::layout_children(dom_node& parent)
                 cells.empty() ? content.width : cells.back()->layout.width,
                 intrinsic_size(*caption, false, content.height)});
         }
-        parent.table_column_widths = widths;
+        parent.mutable_table_layout().column_widths = widths;
         parent.scroll_content_width = std::max(content.width, cursor_x - content.x);
         parent.scroll_content_height = row_height;
         if (!is_specified(parent.style.height)) {
@@ -1749,12 +1797,12 @@ void native_document::layout_children(dom_node& parent)
                 continue;
             }
             if (child->style.display != display_mode::table_row) continue;
-            child->table_column_widths = parent.table_column_widths;
+            child->mutable_table_layout().column_widths = parent.table_layout().column_widths;
             layout_child(*child, parent.layout, {
                 content.x,
                 cursor_y,
                 content.width,
-                child->table_row_height});
+                child->table_layout().row_height});
             cursor_y += child->layout.height;
         }
         parent.scroll_content_width = content.width;
@@ -1763,9 +1811,10 @@ void native_document::layout_children(dom_node& parent)
     }
 
     if (parent.style.display == display_mode::table_row) {
-        std::vector<float> offsets(parent.table_column_widths.size() + 1, content.x);
-        for (size_t column = 0; column < parent.table_column_widths.size(); ++column) {
-            offsets[column + 1] = offsets[column] + parent.table_column_widths[column];
+        const auto& parent_table = parent.table_layout();
+        std::vector<float> offsets(parent_table.column_widths.size() + 1, content.x);
+        for (size_t column = 0; column < parent_table.column_widths.size(); ++column) {
+            offsets[column + 1] = offsets[column] + parent_table.column_widths[column];
         }
         for (auto* child : parent.children) {
             child->visible = parent.visible && child->style.display != display_mode::none;
@@ -1773,16 +1822,17 @@ void native_document::layout_children(dom_node& parent)
                 child->layout = {};
                 continue;
             }
+            const auto& child_table = child->table_layout();
             if (child->style.display != display_mode::table_cell
-                || child->table_column_index >= parent.table_column_widths.size()) continue;
+                || child_table.column_index >= parent_table.column_widths.size()) continue;
             const auto end = std::min(
-                parent.table_column_widths.size(),
-                child->table_column_index + child->table_column_span);
+                parent_table.column_widths.size(),
+                child_table.column_index + child_table.column_span);
             layout_child(*child, parent.layout, {
-                offsets[child->table_column_index],
+                offsets[child_table.column_index],
                 content.y,
-                offsets[end] - offsets[child->table_column_index],
-                child->table_cell_height > 0 ? child->table_cell_height : content.height});
+                offsets[end] - offsets[child_table.column_index],
+                child_table.cell_height > 0 ? child_table.cell_height : content.height});
             if (parent.style.align_items == align_mode::center && !child->children.empty()) {
                 auto content_top = std::numeric_limits<float>::max();
                 auto content_bottom = std::numeric_limits<float>::lowest();
@@ -1827,7 +1877,7 @@ void native_document::layout_children(dom_node& parent)
             // whitespace text rather than turning it into its own box.
             improper_x += width + 2.0F;
         }
-        if (parent.table_column_widths.empty()) {
+        if (parent.table_layout().column_widths.empty()) {
             parent.layout.height = improper_height;
         }
         parent.scroll_content_width = offsets.empty() ? content.width : offsets.back() - content.x;
@@ -1900,8 +1950,8 @@ void native_document::layout_children(dom_node& parent)
             // DOM text descendants drops child ::before/::after content (for
             // example an authored separator space between adjacent status
             // fragments), so let the general inline-item path place it.
-            if (pseudo_generates_box(node.style.before)
-                || pseudo_generates_box(node.style.after)) {
+            if (pseudo_generates_box(node.style.before_pseudo())
+                || pseudo_generates_box(node.style.after_pseudo())) {
                 return false;
             }
             // Inline flex/grid boxes establish their own formatting contexts. Flattening
@@ -2127,7 +2177,8 @@ void native_document::layout_children(dom_node& parent)
             return;
         }
     }
-    if (is_grid_container(parent.style.display) && parent.style.grid_two_columns) {
+    const auto& parent_grid = parent.style.grid();
+    if (is_grid_container(parent.style.display) && parent_grid.two_columns) {
         struct grid_row final {
             dom_node* first{nullptr};
             dom_node* second{nullptr};
@@ -2142,7 +2193,7 @@ void native_document::layout_children(dom_node& parent)
                 continue;
             }
             if (is_out_of_flow(child->style.position)) continue;
-            if (child->style.grid_span_all) {
+            if (child->style.grid().span_all) {
                 if (pending != nullptr) rows.push_back({pending, nullptr, false});
                 pending = nullptr;
                 rows.push_back({child, nullptr, true});
@@ -2159,11 +2210,11 @@ void native_document::layout_children(dom_node& parent)
             parent, parent.style.column_gap, content.width, 0);
         const auto row_gap = resolve_length(
             parent, parent.style.row_gap, content.height, 0);
-        auto first_column_width = parent.style.grid_template_columns.size() >= 2U
+        auto first_column_width = parent_grid.template_columns.size() >= 2U
             ? resolve_length(
-                parent, parent.style.grid_template_columns[0], content.width, 0)
+                parent, parent_grid.template_columns[0], content.width, 0)
             : 0.0F;
-        if (parent.style.grid_template_columns.size() < 2U) {
+        if (parent_grid.template_columns.size() < 2U) {
             for (const auto& row : rows) {
                 if (row.spanning || row.first == nullptr) continue;
                 const auto margins = resolve_length(
@@ -2179,9 +2230,9 @@ void native_document::layout_children(dom_node& parent)
                 0.0F,
                 content.width * 0.6F);
         }
-        const auto second_column_width = parent.style.grid_template_columns.size() >= 2U
+        const auto second_column_width = parent_grid.template_columns.size() >= 2U
             ? resolve_length(
-                parent, parent.style.grid_template_columns[1], content.width, 0)
+                parent, parent_grid.template_columns[1], content.width, 0)
             : std::max(0.0F, content.width - column_gap - first_column_width);
         auto row_y = content.y;
         for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
@@ -2198,9 +2249,9 @@ void native_document::layout_children(dom_node& parent)
                     : intrinsic_size(*child, false, content.height);
                 return authored + margins;
             };
-            row_height = row_index < parent.style.grid_template_rows.size()
+            row_height = row_index < parent_grid.template_rows.size()
                 ? resolve_length(
-                    parent, parent.style.grid_template_rows[row_index], content.height, 0)
+                    parent, parent_grid.template_rows[row_index], content.height, 0)
                 : std::max(measure_height(row.first), measure_height(row.second));
             const auto arrange = [&](dom_node* child, float x, float available_width) {
                 if (child == nullptr) return;
@@ -2237,7 +2288,7 @@ void native_document::layout_children(dom_node& parent)
         }
         return;
     }
-    if (is_grid_container(parent.style.display) && parent.style.grid_fractional_rows) {
+    if (is_grid_container(parent.style.display) && parent_grid.fractional_rows) {
         std::vector<dom_node*> flow_children;
         for (auto* child : parent.children) {
             child->visible = parent.visible && child->style.display != display_mode::none;
@@ -2296,12 +2347,12 @@ void native_document::layout_children(dom_node& parent)
         layout_items.push_back(&*marker_item);
     }
     if (has_before) {
-        before_item.emplace(make_pseudo_layout_node(parent, parent.style.before));
+        before_item.emplace(make_pseudo_layout_node(parent, parent.style.before_pseudo()));
         layout_items.push_back(&*before_item);
     }
     layout_items.insert(layout_items.end(), parent.children.begin(), parent.children.end());
     if (has_after) {
-        after_item.emplace(make_pseudo_layout_node(parent, parent.style.after));
+        after_item.emplace(make_pseudo_layout_node(parent, parent.style.after_pseudo()));
         layout_items.push_back(&*after_item);
     }
 
@@ -3094,7 +3145,7 @@ void native_document::layout_children(dom_node& parent)
         };
         for (auto* child : ordered_children) {
             if (!participates_in_flow(child) || !child->visible
-                || child->style.vertical_align != "middle") continue;
+                || child->style.textual().vertical_align != "middle") continue;
             const auto margin_top = resolve_length(
                 *child, child->style.margin_top, line_box_height, 0);
             const auto margin_bottom = resolve_length(
@@ -3130,10 +3181,10 @@ void native_document::layout_children(dom_node& parent)
         0.0F,
         std::max(0.0F, parent.scroll_content_height - content.height));
     if (before_item.has_value()) {
-        parent.style.before.layout = before_item->layout;
+        parent.style.mutable_before_pseudo().layout = before_item->layout;
     }
     if (after_item.has_value()) {
-        parent.style.after.layout = after_item->layout;
+        parent.style.mutable_after_pseudo().layout = after_item->layout;
     }
     if (marker_item.has_value()) {
         parent.list_marker_layout = marker_item->layout;
@@ -3261,7 +3312,7 @@ float native_document::intrinsic_size(
             return constrain(resolved_line_height(node, font_size) + padding);
         }
         if (type == "button" || type == "submit" || type == "reset") {
-            auto label = node.form_value;
+            auto label = node.form_control().value;
             if (label.empty()) {
                 if (const auto value = node.attributes.find("value"); value != node.attributes.end()) {
                     label = value->second;
@@ -3304,8 +3355,8 @@ float native_document::intrinsic_size(
             }
         }
     }
-    const auto has_before = pseudo_generates_box(node.style.before);
-    const auto has_after = pseudo_generates_box(node.style.after);
+    const auto has_before = pseudo_generates_box(node.style.before_pseudo());
+    const auto has_after = pseudo_generates_box(node.style.after_pseudo());
     const auto marker_text = list_marker_text(node);
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(node, true) == "inside";
@@ -3326,7 +3377,7 @@ float native_document::intrinsic_size(
             : resolved_line_height(node, font_size)));
     }
 
-    if (is_grid_container(node.style.display) && node.style.grid_two_columns) {
+    if (is_grid_container(node.style.display) && node.style.grid().two_columns) {
         float first_column = 0;
         float second_column = 0;
         float row_height = 0;
@@ -3341,7 +3392,7 @@ float native_document::intrinsic_size(
             const auto child_height = intrinsic_size(*child, false, available)
                 + resolve_length(*child, child->style.margin_top, available, 0)
                 + resolve_length(*child, child->style.margin_bottom, available, 0);
-            if (child->style.grid_span_all) {
+            if (child->style.grid().span_all) {
                 if (awaiting_second) {
                     total_height += row_height;
                     row_height = 0;
@@ -3379,12 +3430,12 @@ float native_document::intrinsic_size(
         intrinsic_items.push_back(&*marker_item);
     }
     if (has_before) {
-        before_item.emplace(make_pseudo_layout_node(node, node.style.before));
+        before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
         intrinsic_items.push_back(&*before_item);
     }
     intrinsic_items.insert(intrinsic_items.end(), node.children.begin(), node.children.end());
     if (has_after) {
-        after_item.emplace(make_pseudo_layout_node(node, node.style.after));
+        after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
         intrinsic_items.push_back(&*after_item);
     }
 
@@ -3432,10 +3483,17 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
     // A CSS transform changes the painted and hit-test box, not the space the
     // element occupies in its parent's flow. Percentage translations resolve
     // against the transformed element's own border box.
-    assigned.x += resolve_length(
-        child, child.painted_transform_translate_x, assigned.width, 0);
-    assigned.y += resolve_length(
-        child, child.painted_transform_translate_y, assigned.height, 0);
+    const auto* animation = child.animation_runtime();
+    const auto painted_translate_x =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_translate_x
+        : child.style.transform_translate_x;
+    const auto painted_translate_y =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_translate_y
+        : child.style.transform_translate_y;
+    assigned.x += resolve_length(child, painted_translate_x, assigned.width, 0);
+    assigned.y += resolve_length(child, painted_translate_y, assigned.height, 0);
     child.text_layout_fragments.clear();
     child.layout = {
         assigned.x,
@@ -3506,7 +3564,7 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
         // estimate, so considering only direct child boxes leaves the grid at
         // that stale estimate and clips later inline reflow. Include in-flow
         // descendants, then perform one definitive layout at the expanded size.
-        if (is_grid_container(child.style.display) && !child.style.grid_two_columns) {
+        if (is_grid_container(child.style.display) && !child.style.grid().two_columns) {
             std::function<float(const dom_node&)> deepest_flow_bottom =
                 [&](const dom_node& node) {
                     auto bottom = node.layout.y;
@@ -3605,10 +3663,11 @@ void native_document::build_canvas_display_lists(
 
     uint32_t z_order = 0;
     for (const auto& node : nodes_) {
+        const auto& canvas = node->canvas();
         if (node->tag != "canvas"
             || !is_connected(*node)
             || !node->visible
-            || node->canvas_commands.empty()) {
+            || canvas.commands.empty()) {
             continue;
         }
 
@@ -3618,9 +3677,9 @@ void native_document::build_canvas_display_lists(
         const auto string_offset = static_cast<uint32_t>(strings.size());
         canvas_commands.insert(
             canvas_commands.end(),
-            node->canvas_commands.begin(),
-            node->canvas_commands.end());
-        for (const auto& value : node->canvas_strings) {
+            canvas.commands.begin(),
+            canvas.commands.end());
+        for (const auto& value : canvas.strings) {
             const auto byte_offset = static_cast<uint32_t>(string_bytes.size());
             string_bytes.insert(string_bytes.end(), value.begin(), value.end());
             strings.push_back(htmlml_scene_string{
@@ -3632,9 +3691,9 @@ void native_document::build_canvas_display_lists(
             node->id,
             z_order++,
             command_offset,
-            static_cast<uint32_t>(node->canvas_commands.size()),
+            static_cast<uint32_t>(canvas.commands.size()),
             string_offset,
-            static_cast<uint32_t>(node->canvas_strings.size()),
+            static_cast<uint32_t>(canvas.strings.size()),
             0U,
             node->layout.x,
             node->layout.y,
@@ -3646,7 +3705,7 @@ void native_document::build_canvas_display_lists(
             static_cast<uint32_t>(std::max(
                 0.0F,
                 height == node->attributes.end() ? 150.0F : parse_number(height->second, 150.0F))),
-            node->canvas_generation});
+            canvas.generation});
     }
 }
 
@@ -3658,8 +3717,11 @@ void native_document::append_scene(
     bool inherited_visibility_hidden,
     bool defer_fixed_descendants) const
 {
+    const auto* animation = node.animation_runtime();
     const auto opacity = std::clamp(
-        node.opacity_animation_initialized ? node.painted_opacity : node.style.opacity,
+        animation != nullptr && animation->opacity_animation_initialized
+            ? animation->painted_opacity
+            : node.style.opacity,
         0.0F,
         1.0F);
     if (!node.visible || opacity <= 0.001F) {
@@ -3695,22 +3757,33 @@ void native_document::append_scene(
         node.style.transform_origin_y,
         node.layout.height,
         node.layout.height * 0.5F);
+    const auto painted_scale_x =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_x
+        : node.style.transform_scale_x;
+    const auto painted_scale_y =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_y
+        : node.style.transform_scale_y;
+    const auto painted_rotation =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_rotate_degrees
+        : node.style.transform_rotate_degrees;
     const auto has_scale_transform =
-        std::abs(node.painted_transform_scale_x - 1.0F) > 0.0001F
-        || std::abs(node.painted_transform_scale_y - 1.0F) > 0.0001F;
+        std::abs(painted_scale_x - 1.0F) > 0.0001F
+        || std::abs(painted_scale_y - 1.0F) > 0.0001F;
     if (has_scale_transform) {
         commands.push_back(htmlml_scene_command{
             15U,
             0U,
             transform_origin_x,
             transform_origin_y,
-            node.painted_transform_scale_x,
-            node.painted_transform_scale_y,
+            painted_scale_x,
+            painted_scale_y,
             0U,
             node.id});
     }
-    const auto has_rotate_transform =
-        std::abs(node.painted_transform_rotate_degrees) > 0.0001F;
+    const auto has_rotate_transform = std::abs(painted_rotation) > 0.0001F;
     if (has_rotate_transform) {
         commands.push_back(htmlml_scene_command{
             19U,
@@ -3725,7 +3798,7 @@ void native_document::append_scene(
             0,
             0,
             0,
-            node.painted_transform_rotate_degrees});
+            painted_rotation});
     }
     const auto with_opacity = [](uint32_t rgba) { return rgba; };
     // Unlike display:none, visibility:hidden does not prune descendants. A child
@@ -3907,12 +3980,13 @@ void native_document::append_scene(
             radii.bottom_left,
             0});
     }
+    const auto& background_image = node.style.background_image();
     if (paint_self
-        && !node.style.background_image_markup.empty()
-        && !node.style.background_image_view_box.empty()
+        && !background_image.image_markup.empty()
+        && !background_image.image_view_box.empty()
         && node.layout.width > 0
         && node.layout.height > 0) {
-        std::istringstream view_box_stream(node.style.background_image_view_box);
+        std::istringstream view_box_stream(background_image.image_view_box);
         float view_x = 0;
         float view_y = 0;
         float view_width = 0;
@@ -3930,20 +4004,20 @@ void native_document::append_scene(
             };
             auto image_width = view_width;
             auto image_height = view_height;
-            if (node.style.background_size_x == "cover"
-                || node.style.background_size_x == "contain") {
+            if (background_image.size_x == "cover"
+                || background_image.size_x == "contain") {
                 const auto scale_x = node.layout.width / view_width;
                 const auto scale_y = node.layout.height / view_height;
-                const auto scale = node.style.background_size_x == "cover"
+                const auto scale = background_image.size_x == "cover"
                     ? std::max(scale_x, scale_y)
                     : std::min(scale_x, scale_y);
                 image_width = view_width * scale;
                 image_height = view_height * scale;
             } else {
                 const auto declared_width = resolve_size(
-                    node.style.background_size_x, node.layout.width);
+                    background_image.size_x, node.layout.width);
                 const auto declared_height = resolve_size(
-                    node.style.background_size_y, node.layout.height);
+                    background_image.size_y, node.layout.height);
                 if (declared_width >= 0 && declared_height >= 0) {
                     image_width = declared_width;
                     image_height = declared_height;
@@ -3969,18 +4043,18 @@ void native_document::append_scene(
                 return native_document::parse_length(token).value;
             };
             const auto image_x = node.layout.x + resolve_position(
-                node.style.background_position_x,
+                background_image.position_x,
                 node.layout.width,
                 image_width,
                 true);
             const auto image_y = node.layout.y + resolve_position(
-                node.style.background_position_y,
+                background_image.position_y,
                 node.layout.height,
                 image_height,
                 false);
             const auto resource_index = append_scene_string(
-                node.style.background_image_view_box + '\t'
-                    + node.style.background_image_markup,
+                background_image.image_view_box + '\t'
+                    + background_image.image_markup,
                 strings,
                 string_bytes);
             commands.push_back(htmlml_scene_command{
@@ -4172,23 +4246,24 @@ void native_document::append_scene(
         marker.layout = node.list_marker_layout;
         append_pseudo(marker);
     }
-    const auto before_paints_after_content = node.style.before.z_index > 0
-        && node.style.before.position != position_mode::normal;
+    const auto before_paints_after_content = node.style.before_pseudo().z_index > 0
+        && node.style.before_pseudo().position != position_mode::normal;
     if (!before_paints_after_content) {
-        append_pseudo(node.style.before);
+        append_pseudo(node.style.before_pseudo());
     }
     // Positioned negative-z pseudo-elements participate behind the element's
     // content. Hosted controls use this for hover/active button surfaces; painting
     // ::after in its ordinary DOM position would cover the button SVG instead.
-    const auto after_paints_behind_content = node.style.after.z_index < 0
-        && node.style.after.position != position_mode::normal;
+    const auto after_paints_behind_content = node.style.after_pseudo().z_index < 0
+        && node.style.after_pseudo().position != position_mode::normal;
     if (after_paints_behind_content) {
-        append_pseudo(node.style.after);
+        append_pseudo(node.style.after_pseudo());
     }
+    const auto& canvas = node.canvas();
     if (paint_self
         && node.tag == "canvas"
-        && node.canvas_commands.empty()
-        && (!node.canvas_rects.empty() || !node.canvas_lines.empty())) {
+        && canvas.commands.empty()
+        && (!canvas.rects.empty() || !canvas.lines.empty())) {
         const auto width_iterator = node.attributes.find("width");
         const auto height_iterator = node.attributes.find("height");
         const auto bitmap_width = width_iterator == node.attributes.end()
@@ -4201,7 +4276,7 @@ void native_document::append_scene(
         const auto display_height = node.layout.height > 0 ? node.layout.height : bitmap_height;
         const auto scale_x = display_width / bitmap_width;
         const auto scale_y = display_height / bitmap_height;
-        for (const auto& rect : node.canvas_rects) {
+        for (const auto& rect : canvas.rects) {
             if ((rect.rgba & 0xFFU) == 0U || rect.width <= 0 || rect.height <= 0) continue;
             commands.push_back(htmlml_scene_command{
                 1U,
@@ -4213,7 +4288,7 @@ void native_document::append_scene(
                 with_opacity(rect.rgba),
                 node.id});
         }
-        for (const auto& line : node.canvas_lines) {
+        for (const auto& line : canvas.lines) {
             if ((line.rgba & 0xFFU) == 0U) continue;
             commands.push_back(htmlml_scene_command{
                 2U,
@@ -4238,11 +4313,11 @@ void native_document::append_scene(
         const auto text_y = node.layout.y + std::max(0.0F, (node.layout.height - line_height) * 0.5F);
         const auto text_width = std::max(
             0.0F, node.layout.width - padding_left - padding_right);
-        if (!node.form_value.empty()) {
+        if (!node.form_control().value.empty()) {
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'
-                << resolved_font_family(node) << '\t' << node.form_value;
+                << resolved_font_family(node) << '\t' << node.form_control().value;
             commands.push_back(htmlml_scene_command{
                 3U,
                 append_scene_string(resource.str(), strings, string_bytes),
@@ -4253,11 +4328,13 @@ void native_document::append_scene(
                 with_opacity(resolved_foreground(node)),
                 node.id});
         }
-        if (node.input_focused && node.caret_visible) {
-            const auto caret_index = std::min(node.selection_end, node.form_value.size());
+        if (node.form_control().input_focused && node.form_control().caret_visible) {
+            const auto caret_index = std::min(
+                node.form_control().selection_end,
+                node.form_control().value.size());
             const auto caret_x = std::min(
                 text_x + measure_text_width(
-                    std::string_view(node.form_value).substr(0, caret_index),
+                    std::string_view(node.form_control().value).substr(0, caret_index),
                     node),
                 node.layout.x + node.layout.width - padding_right);
             commands.push_back(htmlml_scene_command{
@@ -4472,8 +4549,8 @@ void native_document::append_scene(
     if (before_paints_after_content) {
         paint_order.push_back(local_paint_entry{
             nullptr,
-            &node.style.before,
-            node.style.before.z_index,
+            &node.style.before_pseudo(),
+            node.style.before_pseudo().z_index,
             0U});
     }
     for (size_t index = 0; index < node.children.size(); ++index) {
@@ -4487,8 +4564,8 @@ void native_document::append_scene(
     if (!after_paints_behind_content) {
         paint_order.push_back(local_paint_entry{
             nullptr,
-            &node.style.after,
-            node.style.after.z_index,
+            &node.style.after_pseudo(),
+            node.style.after_pseudo().z_index,
             node.children.size() + 1U});
     }
     std::stable_sort(
@@ -4644,6 +4721,212 @@ size_t native_document::node_count() const noexcept
     return nodes_.size();
 }
 
+native_document::allocation_metrics native_document::read_allocation_metrics() const noexcept
+{
+    allocation_metrics result{};
+    result.node_count = nodes_.size();
+    result.node_object_size_bytes = sizeof(dom_node);
+    result.node_object_bytes = nodes_.size() * sizeof(dom_node);
+    result.node_pool_reserved_bytes = node_pool_upstream_.reserved_bytes();
+    result.node_pool_peak_bytes = node_pool_upstream_.peak_bytes();
+    result.text_measurement_cache_entry_count = text_measurement_cache_.size();
+    result.text_measurement_cache_storage_bytes =
+        text_measurement_cache_.bucket_count() * sizeof(void*)
+        + text_measurement_cache_.size()
+            * (sizeof(decltype(text_measurement_cache_)::value_type)
+                + 2U * sizeof(void*));
+    for (const auto& [key, _] : text_measurement_cache_) {
+        result.text_measurement_cache_storage_bytes +=
+            key.text.capacity() + key.family.capacity() + 2U;
+    }
+    std::unordered_set<const node_style::animation_data*> animation_allocations;
+    std::unordered_set<const node_style::background_image_data*> background_allocations;
+    std::unordered_set<const node_style::grid_data*> grid_allocations;
+    std::unordered_set<const node_style::textual_style_data*> textual_allocations;
+    for (const auto& node : nodes_) {
+        if (node != nullptr && node->has_table_layout()) {
+            ++result.table_layout_node_count;
+            result.table_layout_storage_bytes +=
+                sizeof(dom_node::table_layout_data)
+                + node->table_layout().column_widths.capacity() * sizeof(float);
+        }
+        if (node != nullptr && node->has_form_control()) {
+            ++result.form_control_node_count;
+            result.form_control_storage_bytes +=
+                sizeof(dom_node::form_control_data)
+                + node->form_control().value.capacity() + 1U;
+        }
+        if (node != nullptr && !node->attributes.empty()) {
+            ++result.attribute_node_count;
+            result.attribute_entry_count += node->attributes.size();
+            result.attribute_storage_bytes += node->attributes.storage_bytes();
+        }
+        if (node != nullptr && node->style.has_pseudo_elements()) {
+            ++result.pseudo_element_pair_count;
+        }
+        if (node != nullptr && node->style.has_animation_data()) {
+            animation_allocations.insert(node->style.animation_data_identity());
+        }
+        if (node != nullptr && node->style.has_custom_properties()) {
+            const auto& custom = node->style.custom_properties();
+            ++result.custom_property_node_count;
+            result.custom_property_entry_count +=
+                custom.values.size();
+            const auto map_hash_bytes = [](const auto& values) {
+                using value_type = typename std::decay_t<decltype(values)>::value_type;
+                return values.bucket_count() * sizeof(void*)
+                    + values.size() * (sizeof(value_type) + 2U * sizeof(void*));
+            };
+            result.custom_property_storage_bytes +=
+                sizeof(node_style::custom_property_data) + 2U * sizeof(void*)
+                + map_hash_bytes(custom.values)
+                + map_hash_bytes(custom.important);
+            for (const auto& [name, value] : custom.values) {
+                result.custom_property_storage_bytes +=
+                    name.capacity() + value.capacity() + 2U;
+            }
+            for (const auto& name : custom.important) {
+                result.custom_property_storage_bytes += name.capacity() + 1U;
+            }
+        }
+        if (node != nullptr && node->style.has_background_image_data()) {
+            background_allocations.insert(
+                node->style.background_image_data_identity());
+        }
+        if (node != nullptr && node->style.has_grid_data()) {
+            grid_allocations.insert(node->style.grid_data_identity());
+        }
+        if (node != nullptr && node->style.has_textual_data()) {
+            textual_allocations.insert(node->style.textual_data_identity());
+        }
+        if (node != nullptr && node->has_authored_style()) {
+            const auto& authored = node->authored_style();
+            ++result.authored_style_node_count;
+            result.authored_style_entry_count += authored.declarations.size();
+            const auto hash_bytes = [](const auto& values) {
+                using value_type = typename std::decay_t<decltype(values)>::value_type;
+                return values.bucket_count() * sizeof(void*)
+                    + values.size() * (sizeof(value_type) + 2U * sizeof(void*));
+            };
+            result.authored_style_storage_bytes +=
+                sizeof(dom_node::authored_style_data)
+                + hash_bytes(authored.declarations)
+                + hash_bytes(authored.important_declarations);
+            for (const auto& [name, value] : authored.declarations) {
+                result.authored_style_storage_bytes +=
+                    name.capacity() + value.capacity() + 2U;
+            }
+            for (const auto& name : authored.important_declarations) {
+                result.authored_style_storage_bytes += name.capacity() + 1U;
+            }
+        }
+        if (node != nullptr && node->has_animation_runtime()) {
+            const auto* animation = node->animation_runtime();
+            ++result.animation_runtime_count;
+            result.animation_runtime_storage_bytes +=
+                sizeof(dom_node::animation_runtime_data) + 2U * sizeof(void*)
+                + animation->opacity_keyframe_animation_signature.capacity() + 1U
+                + animation->rotation_keyframe_animation_signature.capacity() + 1U;
+        }
+        if (node == nullptr || !node->has_canvas_data()) continue;
+        ++result.canvas_node_count;
+        const auto& canvas = node->canvas();
+        result.canvas_storage_bytes += sizeof(canvas_node_data)
+            + canvas.rects.capacity() * sizeof(canvas_rect_command)
+            + canvas.lines.capacity() * sizeof(canvas_line_command)
+            + canvas.commands.capacity() * sizeof(htmlml_canvas_command)
+            + canvas.strings.capacity() * sizeof(std::string);
+        for (const auto& value : canvas.strings) {
+            result.canvas_storage_bytes += value.capacity() + 1U;
+        }
+        const auto hash_bytes = [](const auto& values) {
+            using value_type = typename std::decay_t<decltype(values)>::value_type;
+            return values.bucket_count() * sizeof(void*)
+                + values.size() * (sizeof(value_type) + 2U * sizeof(void*));
+        };
+        result.canvas_storage_bytes += hash_bytes(canvas.string_indices);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        result.canvas_storage_bytes +=
+            hash_bytes(canvas.probable_volume_by_generation)
+            + hash_bytes(canvas.fill_rect_color_calls);
+#endif
+    }
+    // shared_ptr control blocks are implementation-defined. Two pointers are
+    // the conservative allocator/control-block allowance used by this
+    // diagnostic; the inline shared_ptr itself is already in dom_node.
+    result.pseudo_element_storage_bytes =
+        result.pseudo_element_pair_count
+        * (sizeof(node_style::pseudo_element_pair) + 2U * sizeof(void*));
+    result.animation_data_count = animation_allocations.size();
+    for (const auto* animations : animation_allocations) {
+        result.animation_storage_bytes +=
+            sizeof(node_style::animation_data) + 2U * sizeof(void*);
+        const auto string_bytes = [](const std::string& value) {
+            return value.capacity() + 1U;
+        };
+        result.animation_storage_bytes +=
+            string_bytes(animations->transition_property_value)
+            + string_bytes(animations->transition_duration_value)
+            + string_bytes(animations->transition_delay_value)
+            + string_bytes(animations->transition_timing_function_value)
+            + string_bytes(animations->animation_name_value)
+            + string_bytes(animations->animation_duration_value)
+            + string_bytes(animations->animation_delay_value)
+            + string_bytes(animations->animation_timing_function_value)
+            + string_bytes(animations->animation_iteration_count_value)
+            + string_bytes(animations->opacity_keyframe_animation_signature)
+            + string_bytes(animations->rotation_keyframe_animation_signature)
+            + animations->opacity_keyframes.capacity()
+                * sizeof(node_style::opacity_keyframe)
+            + animations->rotation_keyframes.capacity()
+                * sizeof(node_style::rotation_keyframe);
+    }
+    result.background_image_data_count = background_allocations.size();
+    for (const auto* background : background_allocations) {
+        result.background_image_storage_bytes +=
+            sizeof(node_style::background_image_data) + 2U * sizeof(void*);
+        result.background_image_storage_bytes +=
+            background->image_value.capacity() + 1U
+            + background->image_markup.capacity() + 1U
+            + background->image_view_box.capacity() + 1U
+            + background->repeat.capacity() + 1U
+            + background->position_x.capacity() + 1U
+            + background->position_y.capacity() + 1U
+            + background->size_x.capacity() + 1U
+            + background->size_y.capacity() + 1U;
+    }
+    result.grid_data_count = grid_allocations.size();
+    for (const auto* grid : grid_allocations) {
+        result.grid_storage_bytes +=
+            sizeof(node_style::grid_data) + 2U * sizeof(void*)
+            + grid->template_columns.capacity() * sizeof(css_length)
+            + grid->template_rows.capacity() * sizeof(css_length)
+            + grid->area_value.capacity() + 1U
+            + grid->row_value.capacity() + 1U
+            + grid->row_start_value.capacity() + 1U
+            + grid->row_end_value.capacity() + 1U
+            + grid->column_value.capacity() + 1U
+            + grid->column_start_value.capacity() + 1U
+            + grid->column_end_value.capacity() + 1U;
+    }
+    result.textual_style_data_count = textual_allocations.size();
+    for (const auto* textual : textual_allocations) {
+        result.textual_style_storage_bytes +=
+            sizeof(node_style::textual_style_data) + 2U * sizeof(void*)
+            + textual->font_family.capacity() + 1U
+            + textual->text_align.capacity() + 1U
+            + textual->vertical_align.capacity() + 1U
+            + textual->text_transform.capacity() + 1U
+            + textual->white_space.capacity() + 1U
+            + textual->cursor.capacity() + 1U
+            + textual->svg_fill.capacity() + 1U
+            + textual->svg_stroke.capacity() + 1U
+            + textual->list_style_position.capacity() + 1U
+            + textual->list_style_type.capacity() + 1U;
+    }
+    return result;
+}
+
 size_t native_document::count_tag(const std::string& tag) const noexcept
 {
     return static_cast<size_t>(std::count_if(nodes_.begin(), nodes_.end(), [this, &tag](const auto& node) {
@@ -4678,6 +4961,9 @@ std::string native_document::first_attribute(
 
 std::string native_document::describe_busiest_canvas() const
 {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    return "certification telemetry disabled at compile time";
+#else
     const dom_node* busiest = nullptr;
     size_t maximum_commands = 0;
     size_t attached_rects = 0;
@@ -4704,34 +4990,35 @@ std::string native_document::describe_busiest_canvas() const
     std::vector<std::tuple<uint32_t, uint64_t, uint64_t>> volume_generations;
     for (const auto& node : nodes_) {
         if (node->tag != "canvas") continue;
-        const auto commands = node->canvas_rects.size() + node->canvas_lines.size();
+        const auto& canvas = node->canvas();
+        const auto commands = canvas.rects.size() + canvas.lines.size();
         const auto connected = is_connected(*node);
         auto& rect_count = connected ? attached_rects : detached_rects;
         auto& line_count = connected ? attached_lines : detached_lines;
-        rect_count += node->canvas_rects.size();
-        line_count += node->canvas_lines.size();
-        fill_rect_calls += node->canvas_fill_rect_calls;
-        probable_volume_fill_rect_calls += node->canvas_probable_volume_fill_rect_calls;
-        for (const auto& [generation, count] : node->canvas_probable_volume_by_generation) {
+        rect_count += canvas.rects.size();
+        line_count += canvas.lines.size();
+        fill_rect_calls += canvas.fill_rect_calls;
+        probable_volume_fill_rect_calls += canvas.probable_volume_fill_rect_calls;
+        for (const auto& [generation, count] : canvas.probable_volume_by_generation) {
             volume_generations.emplace_back(node->id, generation, count);
         }
-        fill_calls += node->canvas_fill_calls;
-        path_argument_fill_calls += node->canvas_path_argument_fill_calls;
-        draw_image_calls += node->canvas_draw_image_calls;
-        canvas_draw_image_calls += node->canvas_canvas_draw_image_calls;
-        self_draw_image_calls += node->canvas_self_draw_image_calls;
-        fill_text_calls += node->canvas_fill_text_calls;
-        stroke_text_calls += node->canvas_stroke_text_calls;
-        clear_rect_calls += node->canvas_clear_rect_calls;
-        full_clear_calls += node->canvas_full_clear_calls;
-        full_clear_reset_calls += node->canvas_full_clear_reset_calls;
-        full_clear_current_clip_calls += node->canvas_full_clear_current_clip_calls;
-        full_clear_saved_clip_calls += node->canvas_full_clear_saved_clip_calls;
-        clear_bounds_rejected_calls += node->canvas_clear_bounds_rejected_calls;
+        fill_calls += canvas.fill_calls;
+        path_argument_fill_calls += canvas.path_argument_fill_calls;
+        draw_image_calls += canvas.draw_image_calls;
+        canvas_draw_image_calls += canvas.canvas_draw_image_calls;
+        self_draw_image_calls += canvas.self_draw_image_calls;
+        fill_text_calls += canvas.fill_text_calls;
+        stroke_text_calls += canvas.stroke_text_calls;
+        clear_rect_calls += canvas.clear_rect_calls;
+        full_clear_calls += canvas.full_clear_calls;
+        full_clear_reset_calls += canvas.full_clear_reset_calls;
+        full_clear_current_clip_calls += canvas.full_clear_current_clip_calls;
+        full_clear_saved_clip_calls += canvas.full_clear_saved_clip_calls;
+        clear_bounds_rejected_calls += canvas.clear_bounds_rejected_calls;
         maximum_clear_stack_depth = std::max(
             maximum_clear_stack_depth,
-            node->canvas_max_clear_stack_depth);
-        for (const auto& [color, count] : node->canvas_fill_rect_color_calls) {
+            canvas.max_clear_stack_depth);
+        for (const auto& [color, count] : canvas.fill_rect_color_calls) {
             fill_rect_color_calls[color] += count;
         }
         if (connected && commands > maximum_commands) {
@@ -4928,6 +5215,7 @@ std::string native_document::describe_busiest_canvas() const
     }
     result << " | end-aria";
     return result.str();
+#endif
 }
 
 layout_rect native_document::busiest_canvas_layout() const noexcept
@@ -4936,7 +5224,8 @@ layout_rect native_document::busiest_canvas_layout() const noexcept
     size_t maximum_commands = 0;
     for (const auto& node : nodes_) {
         if (node->tag != "canvas" || !is_connected(*node)) continue;
-        const auto commands = node->canvas_rects.size() + node->canvas_lines.size();
+        const auto& canvas = node->canvas();
+        const auto commands = canvas.rects.size() + canvas.lines.size();
         if (commands > maximum_commands) {
             maximum_commands = commands;
             busiest = node.get();
@@ -4965,6 +5254,62 @@ bool native_document::dirty() const noexcept
 void native_document::mark_dirty() noexcept
 {
     dirty_ = true;
+    globally_dirty_ = true;
+    out_of_flow_geometry_dirty_roots_.clear();
+}
+
+void native_document::mark_out_of_flow_geometry_dirty(dom_node& node) noexcept
+{
+    if (node.parent == nullptr
+        || (node.style.position != position_mode::absolute
+            && node.style.position != position_mode::fixed)) {
+        mark_dirty();
+        return;
+    }
+    dirty_ = true;
+    if (globally_dirty_) return;
+
+    // Keep the smallest non-overlapping set of invalid roots. A descendant of
+    // an already-invalid root adds no information; when the new root contains
+    // an existing one, replace the narrower entry.
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (std::find(
+                out_of_flow_geometry_dirty_roots_.begin(),
+                out_of_flow_geometry_dirty_roots_.end(),
+                current) != out_of_flow_geometry_dirty_roots_.end()) {
+            return;
+        }
+    }
+    std::erase_if(
+        out_of_flow_geometry_dirty_roots_,
+        [&node](const auto* existing) {
+            for (auto* current = existing; current != nullptr; current = current->parent) {
+                if (current == &node) return true;
+            }
+            return false;
+        });
+    out_of_flow_geometry_dirty_roots_.push_back(&node);
+}
+
+bool native_document::can_reuse_client_geometry(const dom_node& node) const noexcept
+{
+    if (!dirty_) return true;
+    if (globally_dirty_ || layout_passes_ == 0
+        || out_of_flow_geometry_dirty_roots_.empty()) {
+        return false;
+    }
+    // Width/height/inset changes on an out-of-flow box do not change the
+    // client box of its ancestors or unrelated branches. Its own box and all
+    // descendants still require the pending layout.
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (std::find(
+                out_of_flow_geometry_dirty_roots_.begin(),
+                out_of_flow_geometry_dirty_roots_.end(),
+                current) != out_of_flow_geometry_dirty_roots_.end()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void native_document::signal_animation_frame(double timestamp_ms) noexcept
@@ -4976,6 +5321,10 @@ void native_document::signal_animation_frame(double timestamp_ms) noexcept
 
 void native_document::update_style_animations(dom_node& node)
 {
+    if (!node.has_animation_runtime() && !node.style.has_animation_data()) {
+        return;
+    }
+    auto& animation = node.mutable_animation_runtime();
     const auto length_equal = [](css_length left, css_length right) {
         return left.unit == right.unit
             && std::abs(left.value - right.value) < 0.001F
@@ -4983,153 +5332,153 @@ void native_document::update_style_animations(dom_node& node)
     };
     const auto transform_target_changed = !length_equal(
             node.style.transform_translate_x,
-            node.transform_animation_target_translate_x)
+            animation.transform_animation_target_translate_x)
         || !length_equal(
             node.style.transform_translate_y,
-            node.transform_animation_target_translate_y)
+            animation.transform_animation_target_translate_y)
         || std::abs(node.style.transform_scale_x
-            - node.transform_animation_target_scale_x) >= 0.001F
+            - animation.transform_animation_target_scale_x) >= 0.001F
         || std::abs(node.style.transform_scale_y
-            - node.transform_animation_target_scale_y) >= 0.001F
+            - animation.transform_animation_target_scale_y) >= 0.001F
         || std::abs(node.style.transform_rotate_degrees
-            - node.transform_animation_target_degrees) >= 0.001F;
-    if (!node.transform_animation_initialized) {
-        node.transform_animation_initialized = true;
-        node.painted_transform_translate_x = node.style.transform_translate_x;
-        node.painted_transform_translate_y = node.style.transform_translate_y;
-        node.painted_transform_scale_x = node.style.transform_scale_x;
-        node.painted_transform_scale_y = node.style.transform_scale_y;
-        node.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
-        node.transform_animation_target_translate_x = node.style.transform_translate_x;
-        node.transform_animation_target_translate_y = node.style.transform_translate_y;
-        node.transform_animation_target_scale_x = node.style.transform_scale_x;
-        node.transform_animation_target_scale_y = node.style.transform_scale_y;
-        node.transform_animation_target_degrees = node.style.transform_rotate_degrees;
+            - animation.transform_animation_target_degrees) >= 0.001F;
+    if (!animation.transform_animation_initialized) {
+        animation.transform_animation_initialized = true;
+        animation.painted_transform_translate_x = node.style.transform_translate_x;
+        animation.painted_transform_translate_y = node.style.transform_translate_y;
+        animation.painted_transform_scale_x = node.style.transform_scale_x;
+        animation.painted_transform_scale_y = node.style.transform_scale_y;
+        animation.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
+        animation.transform_animation_target_translate_x = node.style.transform_translate_x;
+        animation.transform_animation_target_translate_y = node.style.transform_translate_y;
+        animation.transform_animation_target_scale_x = node.style.transform_scale_x;
+        animation.transform_animation_target_scale_y = node.style.transform_scale_y;
+        animation.transform_animation_target_degrees = node.style.transform_rotate_degrees;
     } else if (transform_target_changed) {
-        if (node.transform_animation_active) {
+        if (animation.transform_animation_active) {
             transition_events_.push_back({
                 node.id,
                 "transitioncancel",
                 "transform",
                 std::clamp(
                     static_cast<float>(animation_frame_timestamp_ms_
-                        - node.transform_animation_started_ms
-                        - node.transform_animation_delay_ms),
+                        - animation.transform_animation_started_ms
+                        - animation.transform_animation_delay_ms),
                     0.0F,
-                    node.transform_animation_duration_ms) / 1000.0F});
+                    animation.transform_animation_duration_ms) / 1000.0F});
         }
-        if (node.style.transform_transition.duration_ms <= 0) {
-        node.painted_transform_translate_x = node.style.transform_translate_x;
-        node.painted_transform_translate_y = node.style.transform_translate_y;
-        node.painted_transform_scale_x = node.style.transform_scale_x;
-        node.painted_transform_scale_y = node.style.transform_scale_y;
-        node.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
-        node.transform_animation_target_translate_x = node.style.transform_translate_x;
-        node.transform_animation_target_translate_y = node.style.transform_translate_y;
-        node.transform_animation_target_scale_x = node.style.transform_scale_x;
-        node.transform_animation_target_scale_y = node.style.transform_scale_y;
-        node.transform_animation_target_degrees = node.style.transform_rotate_degrees;
-        node.transform_animation_active = false;
+        if (node.style.animations().transform_transition.duration_ms <= 0) {
+        animation.painted_transform_translate_x = node.style.transform_translate_x;
+        animation.painted_transform_translate_y = node.style.transform_translate_y;
+        animation.painted_transform_scale_x = node.style.transform_scale_x;
+        animation.painted_transform_scale_y = node.style.transform_scale_y;
+        animation.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
+        animation.transform_animation_target_translate_x = node.style.transform_translate_x;
+        animation.transform_animation_target_translate_y = node.style.transform_translate_y;
+        animation.transform_animation_target_scale_x = node.style.transform_scale_x;
+        animation.transform_animation_target_scale_y = node.style.transform_scale_y;
+        animation.transform_animation_target_degrees = node.style.transform_rotate_degrees;
+        animation.transform_animation_active = false;
         } else {
-            node.transform_animation_from_translate_x = node.painted_transform_translate_x;
-            node.transform_animation_from_translate_y = node.painted_transform_translate_y;
-            node.transform_animation_target_translate_x = node.style.transform_translate_x;
-            node.transform_animation_target_translate_y = node.style.transform_translate_y;
-            node.transform_animation_from_scale_x = node.painted_transform_scale_x;
-            node.transform_animation_from_scale_y = node.painted_transform_scale_y;
-            node.transform_animation_target_scale_x = node.style.transform_scale_x;
-            node.transform_animation_target_scale_y = node.style.transform_scale_y;
-            node.transform_animation_from_degrees = node.painted_transform_rotate_degrees;
-            node.transform_animation_target_degrees = node.style.transform_rotate_degrees;
-            node.transform_animation_duration_ms = node.style.transform_transition.duration_ms;
-            node.transform_animation_delay_ms = node.style.transform_transition.delay_ms;
-            node.transform_animation_x1 = node.style.transform_transition.x1;
-            node.transform_animation_y1 = node.style.transform_transition.y1;
-            node.transform_animation_x2 = node.style.transform_transition.x2;
-            node.transform_animation_y2 = node.style.transform_transition.y2;
-            node.transform_animation_started_ms = animation_frame_timestamp_ms_;
-            node.transform_animation_active = true;
-            node.transform_animation_start_event_sent = node.transform_animation_delay_ms <= 0;
+            animation.transform_animation_from_translate_x = animation.painted_transform_translate_x;
+            animation.transform_animation_from_translate_y = animation.painted_transform_translate_y;
+            animation.transform_animation_target_translate_x = node.style.transform_translate_x;
+            animation.transform_animation_target_translate_y = node.style.transform_translate_y;
+            animation.transform_animation_from_scale_x = animation.painted_transform_scale_x;
+            animation.transform_animation_from_scale_y = animation.painted_transform_scale_y;
+            animation.transform_animation_target_scale_x = node.style.transform_scale_x;
+            animation.transform_animation_target_scale_y = node.style.transform_scale_y;
+            animation.transform_animation_from_degrees = animation.painted_transform_rotate_degrees;
+            animation.transform_animation_target_degrees = node.style.transform_rotate_degrees;
+            animation.transform_animation_duration_ms = node.style.animations().transform_transition.duration_ms;
+            animation.transform_animation_delay_ms = node.style.animations().transform_transition.delay_ms;
+            animation.transform_animation_x1 = node.style.animations().transform_transition.x1;
+            animation.transform_animation_y1 = node.style.animations().transform_transition.y1;
+            animation.transform_animation_x2 = node.style.animations().transform_transition.x2;
+            animation.transform_animation_y2 = node.style.animations().transform_transition.y2;
+            animation.transform_animation_started_ms = animation_frame_timestamp_ms_;
+            animation.transform_animation_active = true;
+            animation.transform_animation_start_event_sent = animation.transform_animation_delay_ms <= 0;
             transition_events_.push_back({node.id, "transitionrun", "transform", 0});
-            if (node.transform_animation_start_event_sent) {
+            if (animation.transform_animation_start_event_sent) {
                 transition_events_.push_back({
                     node.id,
                     "transitionstart",
                     "transform",
-                    std::min(-node.transform_animation_delay_ms,
-                        node.transform_animation_duration_ms) / 1000.0F});
+                    std::min(-animation.transform_animation_delay_ms,
+                        animation.transform_animation_duration_ms) / 1000.0F});
             }
         }
     }
 
-    if (node.opacity_keyframe_animation_signature
-        != node.style.opacity_keyframe_animation_signature) {
-        node.opacity_keyframe_animation_signature =
-            node.style.opacity_keyframe_animation_signature;
-        node.opacity_keyframe_animation_started_ms = animation_frame_timestamp_ms_;
-        node.opacity_keyframe_animation_active =
-            !node.opacity_keyframe_animation_signature.empty()
-            && node.style.opacity_keyframes.size() >= 2U
-            && node.style.opacity_keyframe_duration_ms > 0
-            && node.style.opacity_keyframe_iterations != 0;
-        if (!node.opacity_keyframe_animation_active) {
-            node.painted_opacity = node.style.opacity;
+    if (animation.opacity_keyframe_animation_signature
+        != node.style.animations().opacity_keyframe_animation_signature) {
+        animation.opacity_keyframe_animation_signature =
+            node.style.animations().opacity_keyframe_animation_signature;
+        animation.opacity_keyframe_animation_started_ms = animation_frame_timestamp_ms_;
+        animation.opacity_keyframe_animation_active =
+            !animation.opacity_keyframe_animation_signature.empty()
+            && node.style.animations().opacity_keyframes.size() >= 2U
+            && node.style.animations().opacity_keyframe_duration_ms > 0
+            && node.style.animations().opacity_keyframe_iterations != 0;
+        if (!animation.opacity_keyframe_animation_active) {
+            animation.painted_opacity = node.style.opacity;
         }
     }
-    if (node.rotation_keyframe_animation_signature
-        != node.style.rotation_keyframe_animation_signature) {
-        node.rotation_keyframe_animation_signature =
-            node.style.rotation_keyframe_animation_signature;
-        node.rotation_keyframe_animation_started_ms = animation_frame_timestamp_ms_;
-        node.rotation_keyframe_animation_active =
-            !node.rotation_keyframe_animation_signature.empty()
-            && node.style.rotation_keyframes.size() >= 2U
-            && node.style.opacity_keyframe_duration_ms > 0
-            && node.style.opacity_keyframe_iterations != 0;
-        if (!node.rotation_keyframe_animation_active) {
-            node.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
+    if (animation.rotation_keyframe_animation_signature
+        != node.style.animations().rotation_keyframe_animation_signature) {
+        animation.rotation_keyframe_animation_signature =
+            node.style.animations().rotation_keyframe_animation_signature;
+        animation.rotation_keyframe_animation_started_ms = animation_frame_timestamp_ms_;
+        animation.rotation_keyframe_animation_active =
+            !animation.rotation_keyframe_animation_signature.empty()
+            && node.style.animations().rotation_keyframes.size() >= 2U
+            && node.style.animations().opacity_keyframe_duration_ms > 0
+            && node.style.animations().opacity_keyframe_iterations != 0;
+        if (!animation.rotation_keyframe_animation_active) {
+            animation.painted_transform_rotate_degrees = node.style.transform_rotate_degrees;
         }
     }
 
-    if (!node.opacity_animation_initialized) {
-        node.opacity_animation_initialized = true;
-        node.painted_opacity = node.style.opacity;
-        node.opacity_animation_target = node.style.opacity;
-    } else if (std::abs(node.style.opacity - node.opacity_animation_target) >= 0.0001F) {
-        if (node.opacity_animation_active) {
+    if (!animation.opacity_animation_initialized) {
+        animation.opacity_animation_initialized = true;
+        animation.painted_opacity = node.style.opacity;
+        animation.opacity_animation_target = node.style.opacity;
+    } else if (std::abs(node.style.opacity - animation.opacity_animation_target) >= 0.0001F) {
+        if (animation.opacity_animation_active) {
             transition_events_.push_back({
                 node.id,
                 "transitioncancel",
                 "opacity",
                 std::clamp(
                     static_cast<float>(animation_frame_timestamp_ms_
-                        - node.opacity_animation_started_ms - node.opacity_animation_delay_ms),
+                        - animation.opacity_animation_started_ms - animation.opacity_animation_delay_ms),
                     0.0F,
-                    node.opacity_animation_duration_ms) / 1000.0F});
+                    animation.opacity_animation_duration_ms) / 1000.0F});
         }
-        node.opacity_animation_target = node.style.opacity;
-        if (node.style.opacity_transition.duration_ms <= 0) {
-            node.painted_opacity = node.style.opacity;
-            node.opacity_animation_active = false;
+        animation.opacity_animation_target = node.style.opacity;
+        if (node.style.animations().opacity_transition.duration_ms <= 0) {
+            animation.painted_opacity = node.style.opacity;
+            animation.opacity_animation_active = false;
         } else {
-            node.opacity_animation_from = node.painted_opacity;
-            node.opacity_animation_duration_ms = node.style.opacity_transition.duration_ms;
-            node.opacity_animation_delay_ms = node.style.opacity_transition.delay_ms;
-            node.opacity_animation_x1 = node.style.opacity_transition.x1;
-            node.opacity_animation_y1 = node.style.opacity_transition.y1;
-            node.opacity_animation_x2 = node.style.opacity_transition.x2;
-            node.opacity_animation_y2 = node.style.opacity_transition.y2;
-            node.opacity_animation_started_ms = animation_frame_timestamp_ms_;
-            node.opacity_animation_active = true;
-            node.opacity_animation_start_event_sent = node.opacity_animation_delay_ms <= 0;
+            animation.opacity_animation_from = animation.painted_opacity;
+            animation.opacity_animation_duration_ms = node.style.animations().opacity_transition.duration_ms;
+            animation.opacity_animation_delay_ms = node.style.animations().opacity_transition.delay_ms;
+            animation.opacity_animation_x1 = node.style.animations().opacity_transition.x1;
+            animation.opacity_animation_y1 = node.style.animations().opacity_transition.y1;
+            animation.opacity_animation_x2 = node.style.animations().opacity_transition.x2;
+            animation.opacity_animation_y2 = node.style.animations().opacity_transition.y2;
+            animation.opacity_animation_started_ms = animation_frame_timestamp_ms_;
+            animation.opacity_animation_active = true;
+            animation.opacity_animation_start_event_sent = animation.opacity_animation_delay_ms <= 0;
             transition_events_.push_back({node.id, "transitionrun", "opacity", 0});
-            if (node.opacity_animation_start_event_sent) {
+            if (animation.opacity_animation_start_event_sent) {
                 transition_events_.push_back({
                     node.id,
                     "transitionstart",
                     "opacity",
-                    std::min(-node.opacity_animation_delay_ms,
-                        node.opacity_animation_duration_ms) / 1000.0F});
+                    std::min(-animation.opacity_animation_delay_ms,
+                        animation.opacity_animation_duration_ms) / 1000.0F});
             }
         }
     }
@@ -5142,45 +5491,45 @@ void native_document::update_style_animations(dom_node& node)
         }
         return 0xD1D4DCFFU;
     }();
-    if (!node.color_animation_initialized) {
-        node.color_animation_initialized = true;
-        node.painted_foreground_rgba = resolved_color;
-        node.color_animation_target_rgba = resolved_color;
-    } else if (resolved_color != node.color_animation_target_rgba) {
-        if (node.color_animation_active) {
+    if (!animation.color_animation_initialized) {
+        animation.color_animation_initialized = true;
+        animation.painted_foreground_rgba = resolved_color;
+        animation.color_animation_target_rgba = resolved_color;
+    } else if (resolved_color != animation.color_animation_target_rgba) {
+        if (animation.color_animation_active) {
             transition_events_.push_back({
                 node.id,
                 "transitioncancel",
                 "color",
                 std::clamp(
                     static_cast<float>(animation_frame_timestamp_ms_
-                        - node.color_animation_started_ms - node.color_animation_delay_ms),
+                        - animation.color_animation_started_ms - animation.color_animation_delay_ms),
                     0.0F,
-                    node.color_animation_duration_ms) / 1000.0F});
+                    animation.color_animation_duration_ms) / 1000.0F});
         }
-        node.color_animation_target_rgba = resolved_color;
-        if (node.style.color_transition.duration_ms <= 0) {
-            node.painted_foreground_rgba = resolved_color;
-            node.color_animation_active = false;
+        animation.color_animation_target_rgba = resolved_color;
+        if (node.style.animations().color_transition.duration_ms <= 0) {
+            animation.painted_foreground_rgba = resolved_color;
+            animation.color_animation_active = false;
         } else {
-            node.color_animation_from_rgba = node.painted_foreground_rgba;
-            node.color_animation_duration_ms = node.style.color_transition.duration_ms;
-            node.color_animation_delay_ms = node.style.color_transition.delay_ms;
-            node.color_animation_x1 = node.style.color_transition.x1;
-            node.color_animation_y1 = node.style.color_transition.y1;
-            node.color_animation_x2 = node.style.color_transition.x2;
-            node.color_animation_y2 = node.style.color_transition.y2;
-            node.color_animation_started_ms = animation_frame_timestamp_ms_;
-            node.color_animation_active = true;
-            node.color_animation_start_event_sent = node.color_animation_delay_ms <= 0;
+            animation.color_animation_from_rgba = animation.painted_foreground_rgba;
+            animation.color_animation_duration_ms = node.style.animations().color_transition.duration_ms;
+            animation.color_animation_delay_ms = node.style.animations().color_transition.delay_ms;
+            animation.color_animation_x1 = node.style.animations().color_transition.x1;
+            animation.color_animation_y1 = node.style.animations().color_transition.y1;
+            animation.color_animation_x2 = node.style.animations().color_transition.x2;
+            animation.color_animation_y2 = node.style.animations().color_transition.y2;
+            animation.color_animation_started_ms = animation_frame_timestamp_ms_;
+            animation.color_animation_active = true;
+            animation.color_animation_start_event_sent = animation.color_animation_delay_ms <= 0;
             transition_events_.push_back({node.id, "transitionrun", "color", 0});
-            if (node.color_animation_start_event_sent) {
+            if (animation.color_animation_start_event_sent) {
                 transition_events_.push_back({
                     node.id,
                     "transitionstart",
                     "color",
-                    std::min(-node.color_animation_delay_ms,
-                        node.color_animation_duration_ms) / 1000.0F});
+                    std::min(-animation.color_animation_delay_ms,
+                        animation.color_animation_duration_ms) / 1000.0F});
             }
         }
 
@@ -5275,33 +5624,36 @@ bool native_document::advance_animations() noexcept
     auto layout_changed = false;
     for (auto& owner : nodes_) {
         auto& node = *owner;
-        if (node.transform_animation_active) {
-            const auto previous_translate_x = node.painted_transform_translate_x;
-            const auto previous_translate_y = node.painted_transform_translate_y;
+        auto* animation_pointer = node.animation_runtime();
+        if (animation_pointer == nullptr) continue;
+        auto& animation = *animation_pointer;
+        if (animation.transform_animation_active) {
+            const auto previous_translate_x = animation.painted_transform_translate_x;
+            const auto previous_translate_y = animation.painted_transform_translate_y;
             const auto elapsed_ms = static_cast<float>(
-                animation_frame_timestamp_ms_ - node.transform_animation_started_ms
-                - node.transform_animation_delay_ms);
-        if (elapsed_ms >= 0 && !node.transform_animation_start_event_sent) {
-            node.transform_animation_start_event_sent = true;
+                animation_frame_timestamp_ms_ - animation.transform_animation_started_ms
+                - animation.transform_animation_delay_ms);
+        if (elapsed_ms >= 0 && !animation.transform_animation_start_event_sent) {
+            animation.transform_animation_start_event_sent = true;
             transition_events_.push_back({node.id, "transitionstart", "transform", 0});
         }
         const auto progress = std::clamp(
-            elapsed_ms / std::max(0.001F, node.transform_animation_duration_ms),
+            elapsed_ms / std::max(0.001F, animation.transform_animation_duration_ms),
             0.0F,
             1.0F);
         const auto eased = timing_value(
             progress,
-            node.transform_animation_x1,
-            node.transform_animation_y1,
-            node.transform_animation_x2,
-            node.transform_animation_y2);
-        node.painted_transform_translate_x = interpolate_length(
-            node.transform_animation_from_translate_x,
-            node.transform_animation_target_translate_x,
+            animation.transform_animation_x1,
+            animation.transform_animation_y1,
+            animation.transform_animation_x2,
+            animation.transform_animation_y2);
+        animation.painted_transform_translate_x = interpolate_length(
+            animation.transform_animation_from_translate_x,
+            animation.transform_animation_target_translate_x,
             eased);
-        node.painted_transform_translate_y = interpolate_length(
-            node.transform_animation_from_translate_y,
-            node.transform_animation_target_translate_y,
+        animation.painted_transform_translate_y = interpolate_length(
+            animation.transform_animation_from_translate_y,
+            animation.transform_animation_target_translate_y,
             eased);
             const auto translated = [](css_length left, css_length right) {
                 return left.unit != right.unit
@@ -5309,84 +5661,84 @@ bool native_document::advance_animations() noexcept
                     || std::abs(left.pixel_offset - right.pixel_offset) >= 0.001F;
             };
             layout_changed = layout_changed
-                || translated(previous_translate_x, node.painted_transform_translate_x)
-                || translated(previous_translate_y, node.painted_transform_translate_y);
-        node.painted_transform_scale_x = node.transform_animation_from_scale_x
-            + (node.transform_animation_target_scale_x
-                - node.transform_animation_from_scale_x) * eased;
-        node.painted_transform_scale_y = node.transform_animation_from_scale_y
-            + (node.transform_animation_target_scale_y
-                - node.transform_animation_from_scale_y) * eased;
-        node.painted_transform_rotate_degrees =
-            node.transform_animation_from_degrees
-            + (node.transform_animation_target_degrees
-                - node.transform_animation_from_degrees) * eased;
+                || translated(previous_translate_x, animation.painted_transform_translate_x)
+                || translated(previous_translate_y, animation.painted_transform_translate_y);
+        animation.painted_transform_scale_x = animation.transform_animation_from_scale_x
+            + (animation.transform_animation_target_scale_x
+                - animation.transform_animation_from_scale_x) * eased;
+        animation.painted_transform_scale_y = animation.transform_animation_from_scale_y
+            + (animation.transform_animation_target_scale_y
+                - animation.transform_animation_from_scale_y) * eased;
+        animation.painted_transform_rotate_degrees =
+            animation.transform_animation_from_degrees
+            + (animation.transform_animation_target_degrees
+                - animation.transform_animation_from_degrees) * eased;
         advanced = true;
         if (progress >= 1.0F) {
-            node.painted_transform_translate_x = node.transform_animation_target_translate_x;
-            node.painted_transform_translate_y = node.transform_animation_target_translate_y;
-            node.painted_transform_scale_x = node.transform_animation_target_scale_x;
-            node.painted_transform_scale_y = node.transform_animation_target_scale_y;
-            node.painted_transform_rotate_degrees = node.transform_animation_target_degrees;
-            node.transform_animation_active = false;
+            animation.painted_transform_translate_x = animation.transform_animation_target_translate_x;
+            animation.painted_transform_translate_y = animation.transform_animation_target_translate_y;
+            animation.painted_transform_scale_x = animation.transform_animation_target_scale_x;
+            animation.painted_transform_scale_y = animation.transform_animation_target_scale_y;
+            animation.painted_transform_rotate_degrees = animation.transform_animation_target_degrees;
+            animation.transform_animation_active = false;
             transition_events_.push_back({
                 node.id,
                 "transitionend",
                 "transform",
-                node.transform_animation_duration_ms / 1000.0F});
+                animation.transform_animation_duration_ms / 1000.0F});
         }
         }
 
-        if (node.opacity_animation_active) {
+        if (animation.opacity_animation_active) {
             const auto elapsed_ms = static_cast<float>(
-                animation_frame_timestamp_ms_ - node.opacity_animation_started_ms
-                - node.opacity_animation_delay_ms);
-            if (elapsed_ms >= 0 && !node.opacity_animation_start_event_sent) {
-                node.opacity_animation_start_event_sent = true;
+                animation_frame_timestamp_ms_ - animation.opacity_animation_started_ms
+                - animation.opacity_animation_delay_ms);
+            if (elapsed_ms >= 0 && !animation.opacity_animation_start_event_sent) {
+                animation.opacity_animation_start_event_sent = true;
                 transition_events_.push_back({node.id, "transitionstart", "opacity", 0});
             }
             const auto progress = std::clamp(
-                elapsed_ms / std::max(0.001F, node.opacity_animation_duration_ms),
+                elapsed_ms / std::max(0.001F, animation.opacity_animation_duration_ms),
                 0.0F,
                 1.0F);
             const auto eased = timing_value(
                 progress,
-                node.opacity_animation_x1,
-                node.opacity_animation_y1,
-                node.opacity_animation_x2,
-                node.opacity_animation_y2);
-            node.painted_opacity = node.opacity_animation_from
-                + (node.opacity_animation_target - node.opacity_animation_from) * eased;
+                animation.opacity_animation_x1,
+                animation.opacity_animation_y1,
+                animation.opacity_animation_x2,
+                animation.opacity_animation_y2);
+            animation.painted_opacity = animation.opacity_animation_from
+                + (animation.opacity_animation_target - animation.opacity_animation_from) * eased;
             advanced = true;
             if (progress >= 1) {
-                node.painted_opacity = node.opacity_animation_target;
-                node.opacity_animation_active = false;
+                animation.painted_opacity = animation.opacity_animation_target;
+                animation.opacity_animation_active = false;
                 transition_events_.push_back({
                     node.id,
                     "transitionend",
                     "opacity",
-                    node.opacity_animation_duration_ms / 1000.0F});
+                    animation.opacity_animation_duration_ms / 1000.0F});
             }
         }
 
-        if (node.color_animation_active) {
+        if (animation.color_animation_active) {
             const auto elapsed_ms = static_cast<float>(
-                animation_frame_timestamp_ms_ - node.color_animation_started_ms
-                - node.color_animation_delay_ms);
-            if (elapsed_ms >= 0 && !node.color_animation_start_event_sent) {
-                node.color_animation_start_event_sent = true;
+                animation_frame_timestamp_ms_ - animation.color_animation_started_ms
+                - animation.color_animation_delay_ms);
+            if (elapsed_ms >= 0 && !animation.color_animation_start_event_sent) {
+                animation.color_animation_start_event_sent = true;
                 transition_events_.push_back({node.id, "transitionstart", "color", 0});
             }
             const auto progress = std::clamp(
-                elapsed_ms / std::max(0.001F, node.color_animation_duration_ms),
+                elapsed_ms / std::max(0.001F, animation.color_animation_duration_ms),
                 0.0F,
                 1.0F);
             const auto eased = timing_value(
                 progress,
-                node.color_animation_x1,
-                node.color_animation_y1,
-                node.color_animation_x2,
-                node.color_animation_y2);
+                animation.color_animation_x1,
+                animation.color_animation_y1,
+                animation.color_animation_x2,
+                animation.color_animation_y2);
             const auto interpolate_color = [](uint32_t from, uint32_t target, float amount) {
                 uint32_t result = 0;
                 for (auto shift : {24U, 16U, 8U, 0U}) {
@@ -5398,56 +5750,56 @@ bool native_document::advance_animations() noexcept
                 }
                 return result;
             };
-            node.painted_foreground_rgba = interpolate_color(
-                node.color_animation_from_rgba,
-                node.color_animation_target_rgba,
+            animation.painted_foreground_rgba = interpolate_color(
+                animation.color_animation_from_rgba,
+                animation.color_animation_target_rgba,
                 eased);
             advanced = true;
             if (progress >= 1) {
-                node.painted_foreground_rgba = node.color_animation_target_rgba;
-                node.color_animation_active = false;
+                animation.painted_foreground_rgba = animation.color_animation_target_rgba;
+                animation.color_animation_active = false;
                 transition_events_.push_back({
                     node.id,
                     "transitionend",
                     "color",
-                    node.color_animation_duration_ms / 1000.0F});
+                    animation.color_animation_duration_ms / 1000.0F});
             }
         }
 
-        if (node.opacity_keyframe_animation_active) {
+        if (animation.opacity_keyframe_animation_active) {
             const auto elapsed_ms = static_cast<float>(
                 animation_frame_timestamp_ms_
-                - node.opacity_keyframe_animation_started_ms
-                - node.style.opacity_keyframe_delay_ms);
+                - animation.opacity_keyframe_animation_started_ms
+                - node.style.animations().opacity_keyframe_delay_ms);
             if (elapsed_ms < 0) {
-                node.painted_opacity = node.style.opacity;
+                animation.painted_opacity = node.style.opacity;
                 advanced = true;
             } else {
                 const auto duration = std::max(
-                    0.001F, node.style.opacity_keyframe_duration_ms);
-                const auto iterations = node.style.opacity_keyframe_iterations;
+                    0.001F, node.style.animations().opacity_keyframe_duration_ms);
+                const auto iterations = node.style.animations().opacity_keyframe_iterations;
                 const auto finite = std::isfinite(iterations);
                 const auto total_duration = finite
                     ? duration * std::max(0.0F, iterations)
                     : 0.0F;
                 if (finite && elapsed_ms >= total_duration) {
                     // The bounded slice implements the initial fill-mode (`none`).
-                    node.painted_opacity = node.style.opacity;
-                    node.opacity_keyframe_animation_active = false;
+                    animation.painted_opacity = node.style.opacity;
+                    animation.opacity_keyframe_animation_active = false;
                     advanced = true;
                 } else {
                     auto cycle_progress = std::fmod(elapsed_ms, duration) / duration;
                     if (cycle_progress < 0) cycle_progress += 1.0F;
-                    const auto& stops = node.style.opacity_keyframes;
+                    const auto& stops = node.style.animations().opacity_keyframes;
                     auto right = std::lower_bound(
                         stops.begin(), stops.end(), cycle_progress,
                         [](const node_style::opacity_keyframe& stop, float progress) {
                             return stop.offset < progress;
                         });
                     if (right == stops.begin()) {
-                        node.painted_opacity = right->opacity;
+                        animation.painted_opacity = right->opacity;
                     } else if (right == stops.end()) {
-                        node.painted_opacity = stops.back().opacity;
+                        animation.painted_opacity = stops.back().opacity;
                     } else {
                         const auto& from = *(right - 1);
                         const auto span = std::max(
@@ -5456,11 +5808,11 @@ bool native_document::advance_animations() noexcept
                             (cycle_progress - from.offset) / span, 0.0F, 1.0F);
                         const auto eased = timing_value(
                             segment_progress,
-                            node.style.opacity_keyframe_x1,
-                            node.style.opacity_keyframe_y1,
-                            node.style.opacity_keyframe_x2,
-                            node.style.opacity_keyframe_y2);
-                        node.painted_opacity = from.opacity
+                            node.style.animations().opacity_keyframe_x1,
+                            node.style.animations().opacity_keyframe_y1,
+                            node.style.animations().opacity_keyframe_x2,
+                            node.style.animations().opacity_keyframe_y2);
+                        animation.painted_opacity = from.opacity
                             + (right->opacity - from.opacity) * eased;
                     }
                     advanced = true;
@@ -5468,41 +5820,41 @@ bool native_document::advance_animations() noexcept
             }
         }
 
-        if (node.rotation_keyframe_animation_active) {
+        if (animation.rotation_keyframe_animation_active) {
             const auto elapsed_ms = static_cast<float>(
                 animation_frame_timestamp_ms_
-                - node.rotation_keyframe_animation_started_ms
-                - node.style.opacity_keyframe_delay_ms);
+                - animation.rotation_keyframe_animation_started_ms
+                - node.style.animations().opacity_keyframe_delay_ms);
             if (elapsed_ms < 0) {
-                node.painted_transform_rotate_degrees =
+                animation.painted_transform_rotate_degrees =
                     node.style.transform_rotate_degrees;
                 advanced = true;
             } else {
                 const auto duration = std::max(
-                    0.001F, node.style.opacity_keyframe_duration_ms);
-                const auto iterations = node.style.opacity_keyframe_iterations;
+                    0.001F, node.style.animations().opacity_keyframe_duration_ms);
+                const auto iterations = node.style.animations().opacity_keyframe_iterations;
                 const auto finite = std::isfinite(iterations);
                 const auto total_duration = finite
                     ? duration * std::max(0.0F, iterations)
                     : 0.0F;
                 if (finite && elapsed_ms >= total_duration) {
-                    node.painted_transform_rotate_degrees =
+                    animation.painted_transform_rotate_degrees =
                         node.style.transform_rotate_degrees;
-                    node.rotation_keyframe_animation_active = false;
+                    animation.rotation_keyframe_animation_active = false;
                     advanced = true;
                 } else {
                     auto cycle_progress = std::fmod(elapsed_ms, duration) / duration;
                     if (cycle_progress < 0) cycle_progress += 1.0F;
-                    const auto& stops = node.style.rotation_keyframes;
+                    const auto& stops = node.style.animations().rotation_keyframes;
                     auto right = std::lower_bound(
                         stops.begin(), stops.end(), cycle_progress,
                         [](const node_style::rotation_keyframe& stop, float progress) {
                             return stop.offset < progress;
                         });
                     if (right == stops.begin()) {
-                        node.painted_transform_rotate_degrees = right->degrees;
+                        animation.painted_transform_rotate_degrees = right->degrees;
                     } else if (right == stops.end()) {
-                        node.painted_transform_rotate_degrees = stops.back().degrees;
+                        animation.painted_transform_rotate_degrees = stops.back().degrees;
                     } else {
                         const auto& from = *(right - 1);
                         const auto span = std::max(
@@ -5511,11 +5863,11 @@ bool native_document::advance_animations() noexcept
                             (cycle_progress - from.offset) / span, 0.0F, 1.0F);
                         const auto eased = timing_value(
                             segment_progress,
-                            node.style.opacity_keyframe_x1,
-                            node.style.opacity_keyframe_y1,
-                            node.style.opacity_keyframe_x2,
-                            node.style.opacity_keyframe_y2);
-                        node.painted_transform_rotate_degrees = from.degrees
+                            node.style.animations().opacity_keyframe_x1,
+                            node.style.animations().opacity_keyframe_y1,
+                            node.style.animations().opacity_keyframe_x2,
+                            node.style.animations().opacity_keyframe_y2);
+                        animation.painted_transform_rotate_degrees = from.degrees
                             + (right->degrees - from.degrees) * eased;
                     }
                     advanced = true;
@@ -5528,18 +5880,20 @@ bool native_document::advance_animations() noexcept
     // entire document's intrinsic sizing, shaping, and layout. Translation is
     // still reflected in the retained layout coordinates and therefore remains
     // a geometry invalidation until translated boxes are represented separately.
-    if (layout_changed) dirty_ = true;
+    if (layout_changed) mark_dirty();
     return advanced;
 }
 
 bool native_document::has_active_animations() const noexcept
 {
     return std::any_of(nodes_.begin(), nodes_.end(), [](const auto& node) {
-        return node->transform_animation_active
-            || node->opacity_animation_active
-            || node->color_animation_active
-            || node->opacity_keyframe_animation_active
-            || node->rotation_keyframe_animation_active;
+        const auto* animation = node->animation_runtime();
+        return animation != nullptr
+            && (animation->transform_animation_active
+                || animation->opacity_animation_active
+                || animation->color_animation_active
+                || animation->opacity_keyframe_animation_active
+                || animation->rotation_keyframe_animation_active);
     });
 }
 

@@ -114,7 +114,21 @@ struct scene final {
     std::vector<htmlml_damage_rect> damage_rects;
     std::unordered_map<uint32_t, canvas_layer_version> full_layer_versions;
     uint64_t dom_hash{0};
+    uint64_t published_timestamp_nanoseconds{0};
 };
+
+uint64_t retained_scene_bytes(const scene& value)
+{
+    return sizeof(scene)
+        + value.commands.capacity() * sizeof(htmlml_scene_command)
+        + value.canvas_layers.capacity() * sizeof(htmlml_canvas_layer)
+        + value.canvas_commands.capacity() * sizeof(htmlml_canvas_command)
+        + value.canvas_strings.capacity() * sizeof(htmlml_scene_string)
+        + value.canvas_string_bytes.capacity() * sizeof(char)
+        + value.damage_rects.capacity() * sizeof(htmlml_damage_rect)
+        + value.full_layer_versions.size()
+            * (sizeof(uint32_t) + sizeof(canvas_layer_version) + sizeof(void*) * 2U);
+}
 
 struct acknowledgement_state final {
     std::mutex mutex;
@@ -124,6 +138,11 @@ struct acknowledgement_state final {
     float viewport_height{0};
     std::unordered_map<uint32_t, canvas_layer_version> layer_versions;
     std::shared_ptr<const scene> value;
+    std::deque<std::shared_ptr<const scene>> pending_scenes;
+    std::atomic<uint64_t> acknowledged_scenes{0};
+    std::atomic<uint64_t> total_acknowledgement_nanoseconds{0};
+    std::atomic<uint64_t> last_acknowledgement_nanoseconds{0};
+    std::atomic<uint64_t> maximum_acknowledgement_nanoseconds{0};
 };
 
 struct script_request final {
@@ -258,13 +277,17 @@ bool append_localized_dom_damage(
     float viewport_height,
     std::vector<htmlml_damage_rect>& damage)
 {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     const auto trace = std::getenv("HTMLML_PROBE_PROFILE_ANIMATION") != nullptr;
+#endif
     if (previous.commands.size() != next.commands.size()) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace) std::fprintf(
             stderr,
             "[Native Engine Probe] DOM damage fallback: command-count %zu -> %zu\n",
             previous.commands.size(),
             next.commands.size());
+#endif
         return false;
     }
 
@@ -285,6 +308,7 @@ bool append_localized_dom_damage(
         const auto& new_command = next.commands[index];
         if (old_command.kind != new_command.kind
             || old_command.node_id != new_command.node_id) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
             if (trace) std::fprintf(
                 stderr,
                 "[Native Engine Probe] DOM damage fallback: command identity at %zu "
@@ -294,6 +318,7 @@ bool append_localized_dom_damage(
                 new_command.kind,
                 old_command.node_id,
                 new_command.node_id);
+#endif
             return false;
         }
         if (same_dom_command_visual(previous, old_command, next, new_command)) continue;
@@ -311,6 +336,7 @@ bool append_localized_dom_damage(
     const auto height = bottom - top;
     const auto viewport_area = std::max(1.0F, viewport_width * viewport_height);
     if (width <= 0 || height <= 0 || width * height > viewport_area * 0.4F) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace) std::fprintf(
             stderr,
             "[Native Engine Probe] DOM damage fallback: changed bounds %.1f,%.1f %.1fx%.1f "
@@ -320,8 +346,10 @@ bool append_localized_dom_damage(
             width,
             height,
             width * height * 100.0F / viewport_area);
+#endif
         return false;
     }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     if (trace) std::fprintf(
         stderr,
         "[Native Engine Probe] localized DOM damage: %.1f,%.1f %.1fx%.1f\n",
@@ -329,6 +357,7 @@ bool append_localized_dom_damage(
         top,
         width,
         height);
+#endif
     damage.push_back({left, top, width, height});
     return true;
 }
@@ -376,6 +405,10 @@ struct htmlml_engine final {
                 }
                 pending_resize_ = event;
                 ++pending_resize_count_;
+                // A later unpaired viewport supersedes the association between
+                // an older viewport and its host frame. The queued frame records
+                // remain accounted as coalesced when the resize slot is taken.
+                pending_resize_has_frame_ = false;
                 resize_pending_.store(true, std::memory_order_release);
             }
             enqueued_inputs_.fetch_add(1, std::memory_order_relaxed);
@@ -389,6 +422,53 @@ struct htmlml_engine final {
         }
 
         enqueued_inputs_.fetch_add(1, std::memory_order_relaxed);
+        wake_.notify_one();
+        return true;
+    }
+
+    bool enqueue_resize_frame(
+        const htmlml_input_event& resize_event,
+        const htmlml_input_event& frame_event)
+    {
+        if (resize_event.kind != HTMLML_INPUT_RESIZE
+            || frame_event.kind != HTMLML_INPUT_FRAME) {
+            return false;
+        }
+        const auto enqueued_at = std::chrono::steady_clock::now();
+        {
+            std::lock_guard lock(resize_mutex_);
+            if (pending_resize_count_ != 0) {
+                coalesced_resize_inputs_.fetch_add(1, std::memory_order_relaxed);
+            }
+            pending_resize_ = resize_event;
+            ++pending_resize_count_;
+            pending_resize_frame_ = frame_event;
+            ++pending_resize_frame_count_;
+            pending_resize_has_frame_ = true;
+            pending_resize_frame_enqueued_at_ = enqueued_at;
+            resize_pending_.store(true, std::memory_order_release);
+        }
+        submitted_resize_frame_pairs_.fetch_add(1, std::memory_order_relaxed);
+        enqueued_inputs_.fetch_add(2, std::memory_order_relaxed);
+        wake_.notify_one();
+        return true;
+    }
+
+    bool request_low_memory()
+    {
+#if !defined(HTMLML_NATIVE_ENGINE_WITH_V8)
+        return false;
+#else
+        low_memory_requested_.store(true, std::memory_order_release);
+        wake_.notify_one();
+        return true;
+#endif
+    }
+
+    bool set_visible(bool visible)
+    {
+        host_visible_.store(visible, std::memory_order_release);
+        visibility_changed_.store(true, std::memory_order_release);
         wake_.notify_one();
         return true;
     }
@@ -607,6 +687,17 @@ struct htmlml_engine final {
 
     size_t copy_scene_diagnostics(char* destination, size_t capacity) const
     {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        constexpr std::string_view report =
+            "certification telemetry disabled at compile time";
+        const auto required = report.size() + 1U;
+        if (destination != nullptr && capacity > 0) {
+            const auto copy_count = std::min(report.size(), capacity - 1U);
+            std::copy_n(report.data(), copy_count, destination);
+            destination[copy_count] = '\0';
+        }
+        return required;
+#else
         std::lock_guard lock(scene_diagnostics_mutex_);
         const auto required = scene_diagnostics_.size() + 1U;
         if (destination != nullptr && capacity > 0) {
@@ -615,11 +706,14 @@ struct htmlml_engine final {
             destination[copy_count] = '\0';
         }
         return required;
+#endif
     }
 
     size_t copy_feature_use(char* destination, size_t capacity) const
     {
-#if !defined(HTMLML_NATIVE_ENGINE_WITH_V8)
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        const std::string report = R"({"schema":"htmlml-native-feature-use-v2","complete":false,"telemetryEnabled":false,"incompleteCategories":["telemetry-disabled"],"observations":[],"compositionDiscovery":{"schema":"htmlml-native-composition-use-v1","complete":false,"incompleteCategories":["telemetry-disabled"],"detectors":[],"observations":[]}})";
+#elif !defined(HTMLML_NATIVE_ENGINE_WITH_V8)
         const std::string report = R"({"schema":"htmlml-native-feature-use-v2","complete":false,"incompleteCategories":["v8-runtime"],"observations":[],"compositionDiscovery":{"schema":"htmlml-native-composition-use-v1","complete":false,"incompleteCategories":["runtime-not-ready"],"detectors":[],"observations":[]}})";
 #else
         const auto report = runtime_ == nullptr
@@ -637,7 +731,9 @@ struct htmlml_engine final {
 
     size_t copy_event_listener_inventory(char* destination, size_t capacity) const
     {
-#if !defined(HTMLML_NATIVE_ENGINE_WITH_V8)
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        const std::string report = R"({"schema":"htmlml-event-listener-inventory-v1","complete":false,"telemetryEnabled":false,"targets":[]})";
+#elif !defined(HTMLML_NATIVE_ENGINE_WITH_V8)
         const std::string report = R"({"schema":"htmlml-event-listener-inventory-v1","complete":false,"targets":[]})";
 #else
         const auto report = runtime_ == nullptr
@@ -677,6 +773,17 @@ struct htmlml_engine final {
         return result;
     }
 
+    std::shared_ptr<const scene> acquire_next()
+    {
+        ordered_scene_consumer_.store(true, std::memory_order_release);
+        std::lock_guard lock(acknowledgement_->mutex);
+        if (acknowledgement_->pending_scenes.empty()) {
+            return {};
+        }
+        acquired_scenes_.fetch_add(1, std::memory_order_relaxed);
+        return acknowledgement_->pending_scenes.front();
+    }
+
     bool request_scene_checkpoint()
     {
         {
@@ -687,6 +794,7 @@ struct htmlml_engine final {
             acknowledgement_->viewport_height = 0;
             acknowledgement_->layer_versions.clear();
             acknowledgement_->value.reset();
+            acknowledgement_->pending_scenes.clear();
         }
         std::atomic_store_explicit(
             &latest_,
@@ -775,6 +883,96 @@ struct htmlml_engine final {
             maximum_input_dispatch_nanoseconds_.load(std::memory_order_relaxed);
         result.last_dispatch_sequence =
             last_input_dispatch_sequence_.load(std::memory_order_relaxed);
+        if (result.struct_size >= sizeof(htmlml_input_dispatch_metrics)) {
+            result.dispatched_inputs =
+                dispatched_inputs_.load(std::memory_order_relaxed);
+            result.total_dispatch_nanoseconds =
+                total_input_dispatch_nanoseconds_.load(
+                    std::memory_order_relaxed);
+        }
+    }
+
+    void read_animation_frame_metrics(
+        htmlml_animation_frame_metrics& result) const
+    {
+        result.dispatched_frames =
+            dispatched_animation_frames_.load(std::memory_order_relaxed);
+        result.total_dispatch_nanoseconds =
+            total_animation_frame_dispatch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.last_dispatch_nanoseconds =
+            last_animation_frame_dispatch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.maximum_dispatch_nanoseconds =
+            maximum_animation_frame_dispatch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.last_timestamp_microseconds =
+            last_animation_frame_timestamp_microseconds_.load(
+                std::memory_order_relaxed);
+    }
+
+    void read_scene_flow_metrics(htmlml_scene_flow_metrics& result) const
+    {
+        result.publication_attempts =
+            scene_publication_attempts_.load(std::memory_order_relaxed);
+        result.blocked_publications =
+            blocked_scene_publications_.load(std::memory_order_relaxed);
+        result.acknowledged_scenes =
+            acknowledgement_->acknowledged_scenes.load(
+                std::memory_order_relaxed);
+        result.total_acknowledgement_nanoseconds =
+            acknowledgement_->total_acknowledgement_nanoseconds.load(
+                std::memory_order_relaxed);
+        result.last_acknowledgement_nanoseconds =
+            acknowledgement_->last_acknowledgement_nanoseconds.load(
+                std::memory_order_relaxed);
+        result.maximum_acknowledgement_nanoseconds =
+            acknowledgement_->maximum_acknowledgement_nanoseconds.load(
+                std::memory_order_relaxed);
+        std::lock_guard lock(acknowledgement_->mutex);
+        result.acknowledged_revision = acknowledgement_->revision;
+    }
+
+    void read_resize_frame_metrics(htmlml_resize_frame_metrics& result) const
+    {
+        result.submitted_pairs =
+            submitted_resize_frame_pairs_.load(std::memory_order_relaxed);
+        result.applied_pairs =
+            applied_resize_frame_pairs_.load(std::memory_order_relaxed);
+        result.published_pairs =
+            published_resize_frame_pairs_.load(std::memory_order_relaxed);
+        result.total_queue_nanoseconds =
+            total_resize_frame_queue_nanoseconds_.load(std::memory_order_relaxed);
+        result.last_queue_nanoseconds =
+            last_resize_frame_queue_nanoseconds_.load(std::memory_order_relaxed);
+        result.maximum_queue_nanoseconds =
+            maximum_resize_frame_queue_nanoseconds_.load(std::memory_order_relaxed);
+        result.total_dispatch_nanoseconds =
+            total_resize_frame_dispatch_nanoseconds_.load(std::memory_order_relaxed);
+        result.last_dispatch_nanoseconds =
+            last_resize_frame_dispatch_nanoseconds_.load(std::memory_order_relaxed);
+        result.maximum_dispatch_nanoseconds =
+            maximum_resize_frame_dispatch_nanoseconds_.load(std::memory_order_relaxed);
+        result.animation_frame_callbacks =
+            resize_frame_animation_callbacks_.load(std::memory_order_relaxed);
+        result.total_animation_frame_batch_nanoseconds =
+            total_resize_frame_animation_batch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.last_animation_frame_batch_nanoseconds =
+            last_resize_frame_animation_batch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.maximum_animation_frame_batch_nanoseconds =
+            maximum_resize_frame_animation_batch_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.total_to_publication_nanoseconds =
+            total_resize_frame_to_publication_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.last_to_publication_nanoseconds =
+            last_resize_frame_to_publication_nanoseconds_.load(
+                std::memory_order_relaxed);
+        result.maximum_to_publication_nanoseconds =
+            maximum_resize_frame_to_publication_nanoseconds_.load(
+                std::memory_order_relaxed);
     }
 
     void read_resource_cache_metrics(htmlml_resource_cache_metrics& result) const
@@ -787,8 +985,223 @@ struct htmlml_engine final {
         result.bytes_written = resource_cache_bytes_written_.load(std::memory_order_relaxed);
     }
 
+    void read_process_cache_metrics(htmlml_process_cache_metrics& result) const
+    {
+        result.compilation_memory_hits =
+            process_compilation_memory_hits_.load(std::memory_order_relaxed);
+        result.compilation_leaders =
+            process_compilation_leaders_.load(std::memory_order_relaxed);
+        result.compilation_waiters =
+            process_compilation_waiters_.load(std::memory_order_relaxed);
+        result.compilation_shared_bytes =
+            process_compilation_shared_bytes_.load(std::memory_order_relaxed);
+        result.resource_memory_hits =
+            process_resource_memory_hits_.load(std::memory_order_relaxed);
+        result.resource_load_leaders =
+            process_resource_load_leaders_.load(std::memory_order_relaxed);
+        result.resource_load_waiters =
+            process_resource_load_waiters_.load(std::memory_order_relaxed);
+        result.resource_shared_bytes =
+            process_resource_shared_bytes_.load(std::memory_order_relaxed);
+        if (result.struct_size >= sizeof(htmlml_process_cache_metrics)) {
+            result.script_source_memory_hits =
+                process_script_source_memory_hits_.load(std::memory_order_relaxed);
+            result.script_source_shared_bytes =
+                process_script_source_shared_bytes_.load(std::memory_order_relaxed);
+        }
+    }
+
+    void read_memory_metrics(htmlml_engine_memory_metrics& result) const
+    {
+        result.v8_total_heap_bytes =
+            v8_total_heap_bytes_.load(std::memory_order_relaxed);
+        result.v8_used_heap_bytes =
+            v8_used_heap_bytes_.load(std::memory_order_relaxed);
+        result.v8_executable_heap_bytes =
+            v8_executable_heap_bytes_.load(std::memory_order_relaxed);
+        result.v8_physical_heap_bytes =
+            v8_physical_heap_bytes_.load(std::memory_order_relaxed);
+        result.v8_external_bytes =
+            v8_external_bytes_.load(std::memory_order_relaxed);
+        result.v8_malloced_bytes =
+            v8_malloced_bytes_.load(std::memory_order_relaxed);
+        result.v8_peak_malloced_bytes =
+            v8_peak_malloced_bytes_.load(std::memory_order_relaxed);
+        result.latest_scene_bytes =
+            latest_scene_bytes_.load(std::memory_order_relaxed);
+        result.process_compilation_cache_bytes =
+            process_compilation_cache_bytes_.load(std::memory_order_relaxed);
+        result.process_resource_cache_bytes =
+            process_resource_cache_bytes_.load(std::memory_order_relaxed);
+        constexpr auto attributed_memory_metrics_size =
+            offsetof(htmlml_engine_memory_metrics, low_memory_notifications);
+        if (result.struct_size >= attributed_memory_metrics_size) {
+            result.v8_code_and_metadata_bytes =
+                v8_code_and_metadata_bytes_.load(std::memory_order_relaxed);
+            result.v8_bytecode_and_metadata_bytes =
+                v8_bytecode_and_metadata_bytes_.load(std::memory_order_relaxed);
+            result.v8_external_script_source_bytes =
+                v8_external_script_source_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_node_count =
+                native_dom_node_count_.load(std::memory_order_relaxed);
+            result.native_dom_node_size_bytes =
+                native_dom_node_size_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_inline_bytes =
+                native_dom_inline_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_pseudo_storage_bytes =
+                native_dom_pseudo_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_canvas_node_count =
+                native_dom_canvas_node_count_.load(std::memory_order_relaxed);
+            result.native_dom_canvas_storage_bytes =
+                native_dom_canvas_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_animation_count =
+                native_dom_animation_count_.load(std::memory_order_relaxed);
+            result.native_dom_animation_storage_bytes =
+                native_dom_animation_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_custom_property_node_count =
+                native_dom_custom_property_node_count_.load(std::memory_order_relaxed);
+            result.native_dom_custom_property_entry_count =
+                native_dom_custom_property_entry_count_.load(std::memory_order_relaxed);
+            result.native_dom_custom_property_storage_bytes =
+                native_dom_custom_property_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_background_image_count =
+                native_dom_background_image_count_.load(std::memory_order_relaxed);
+            result.native_dom_background_image_storage_bytes =
+                native_dom_background_image_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_grid_count =
+                native_dom_grid_count_.load(std::memory_order_relaxed);
+            result.native_dom_grid_storage_bytes =
+                native_dom_grid_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_authored_style_node_count =
+                native_dom_authored_style_node_count_.load(std::memory_order_relaxed);
+            result.native_dom_authored_style_entry_count =
+                native_dom_authored_style_entry_count_.load(std::memory_order_relaxed);
+            result.native_dom_authored_style_storage_bytes =
+                native_dom_authored_style_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_css_rule_count =
+                native_css_rule_count_.load(std::memory_order_relaxed);
+            result.native_css_rule_storage_bytes =
+                native_css_rule_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_css_index_storage_bytes =
+                native_css_index_storage_bytes_.load(std::memory_order_relaxed);
+            result.process_shared_css_rule_count =
+                process_shared_css_rule_count_.load(std::memory_order_relaxed);
+            result.process_shared_css_rule_storage_bytes =
+                process_shared_css_rule_storage_bytes_.load(std::memory_order_relaxed);
+        }
+        constexpr auto low_memory_metrics_size =
+            offsetof(htmlml_engine_memory_metrics, native_dom_attribute_node_count);
+        if (result.struct_size >= low_memory_metrics_size) {
+            result.low_memory_notifications =
+                low_memory_notifications_.load(std::memory_order_relaxed);
+        }
+        constexpr auto attribute_metrics_size =
+            offsetof(htmlml_engine_memory_metrics, native_wrapper_handle_count);
+        if (result.struct_size >= attribute_metrics_size) {
+            result.native_dom_attribute_node_count =
+                native_dom_attribute_node_count_.load(std::memory_order_relaxed);
+            result.native_dom_attribute_entry_count =
+                native_dom_attribute_entry_count_.load(std::memory_order_relaxed);
+            result.native_dom_attribute_storage_bytes =
+                native_dom_attribute_storage_bytes_.load(std::memory_order_relaxed);
+        }
+        constexpr auto native_registry_metrics_size =
+            offsetof(htmlml_engine_memory_metrics, v8_young_space_used_bytes);
+        if (result.struct_size >= native_registry_metrics_size) {
+            result.native_wrapper_handle_count =
+                native_wrapper_handle_count_.load(std::memory_order_relaxed);
+            result.native_wrapper_storage_bytes =
+                native_wrapper_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_text_measurement_cache_entry_count =
+                native_text_measurement_cache_entry_count_.load(std::memory_order_relaxed);
+            result.native_text_measurement_cache_storage_bytes =
+                native_text_measurement_cache_storage_bytes_.load(std::memory_order_relaxed);
+            result.process_compilation_mapped_cache_bytes =
+                process_compilation_mapped_cache_bytes_.load(std::memory_order_relaxed);
+            result.process_resource_mapped_cache_bytes =
+                process_resource_mapped_cache_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_textual_style_count =
+                native_dom_textual_style_count_.load(std::memory_order_relaxed);
+            result.native_dom_textual_style_storage_bytes =
+                native_dom_textual_style_storage_bytes_.load(
+                    std::memory_order_relaxed);
+            result.native_dom_node_pool_reserved_bytes =
+                native_dom_node_pool_reserved_bytes_.load(
+                    std::memory_order_relaxed);
+            result.native_dom_node_pool_peak_bytes =
+                native_dom_node_pool_peak_bytes_.load(
+                    std::memory_order_relaxed);
+            result.native_dom_table_layout_count =
+                native_dom_table_layout_count_.load(std::memory_order_relaxed);
+            result.native_dom_table_layout_storage_bytes =
+                native_dom_table_layout_storage_bytes_.load(std::memory_order_relaxed);
+            result.native_dom_form_control_count =
+                native_dom_form_control_count_.load(std::memory_order_relaxed);
+            result.native_dom_form_control_storage_bytes =
+                native_dom_form_control_storage_bytes_.load(std::memory_order_relaxed);
+            result.hidden_low_memory_notifications =
+                hidden_low_memory_notifications_.load(std::memory_order_relaxed);
+            result.native_event_listener_count =
+                native_event_listener_count_.load(std::memory_order_relaxed);
+            result.native_event_listener_storage_bytes =
+                native_event_listener_storage_bytes_.load(std::memory_order_relaxed);
+        }
+        constexpr auto v8_space_metrics_size =
+            offsetof(htmlml_engine_memory_metrics, pending_scene_count);
+        if (result.struct_size >= v8_space_metrics_size) {
+            result.v8_young_space_used_bytes =
+                v8_young_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_young_space_physical_bytes =
+                v8_young_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_old_space_used_bytes =
+                v8_old_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_old_space_physical_bytes =
+                v8_old_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_code_space_used_bytes =
+                v8_code_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_code_space_physical_bytes =
+                v8_code_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_map_space_used_bytes =
+                v8_map_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_map_space_physical_bytes =
+                v8_map_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_large_object_space_used_bytes =
+                v8_large_object_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_large_object_space_physical_bytes =
+                v8_large_object_space_physical_bytes_.load(
+                    std::memory_order_relaxed);
+            result.v8_read_only_space_used_bytes =
+                v8_read_only_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_read_only_space_physical_bytes =
+                v8_read_only_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_shared_space_used_bytes =
+                v8_shared_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_shared_space_physical_bytes =
+                v8_shared_space_physical_bytes_.load(std::memory_order_relaxed);
+            result.v8_trusted_space_used_bytes =
+                v8_trusted_space_used_bytes_.load(std::memory_order_relaxed);
+            result.v8_trusted_space_physical_bytes =
+                v8_trusted_space_physical_bytes_.load(std::memory_order_relaxed);
+        }
+        if (result.struct_size >= sizeof(htmlml_engine_memory_metrics)) {
+            std::lock_guard lock(acknowledgement_->mutex);
+            result.pending_scene_count =
+                acknowledgement_->pending_scenes.size();
+            result.pending_scene_bytes = 0;
+            for (const auto& pending : acknowledgement_->pending_scenes) {
+                result.pending_scene_bytes += retained_scene_bytes(*pending);
+            }
+        }
+    }
+
 private:
-    bool take_latest_resize(htmlml_input_event& result, uint64_t& consumed_count)
+    bool take_latest_resize(
+        htmlml_input_event& result,
+        uint64_t& consumed_count,
+        htmlml_input_event& frame,
+        uint64_t& frame_consumed_count,
+        bool& has_frame,
+        std::chrono::steady_clock::time_point& frame_enqueued_at)
     {
         std::lock_guard lock(resize_mutex_);
         if (pending_resize_count_ == 0) {
@@ -797,7 +1210,13 @@ private:
         }
         result = pending_resize_;
         consumed_count = pending_resize_count_;
+        frame = pending_resize_frame_;
+        frame_consumed_count = pending_resize_frame_count_;
+        has_frame = pending_resize_has_frame_;
+        frame_enqueued_at = pending_resize_frame_enqueued_at_;
         pending_resize_count_ = 0;
+        pending_resize_frame_count_ = 0;
+        pending_resize_has_frame_ = false;
         resize_pending_.store(false, std::memory_order_release);
         return true;
     }
@@ -885,22 +1304,131 @@ private:
             + std::chrono::milliseconds(16);
         bool scene_pending = false;
         std::optional<htmlml_input_event> deferred_input;
+        struct pending_resize_frame_publication final {
+            uint64_t sequence;
+            std::chrono::steady_clock::time_point enqueued_at;
+        };
+        std::optional<pending_resize_frame_publication>
+            pending_paired_resize_publication;
+        std::optional<std::chrono::steady_clock::time_point>
+            hidden_low_memory_deadline;
         uint32_t drag_moves_to_preserve = 0;
         while (!token.stop_requested()) {
             htmlml_input_event event{};
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            bool resize_applied = false;
+            bool host_frame_applied = false;
+#if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
+            if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
+                if (host_visible_.load(std::memory_order_acquire)) {
+                    hidden_low_memory_deadline.reset();
+                } else {
+                    // Avoid collecting during a transient reparent/tab switch.
+                    // The worker remains responsive and visibility restoration
+                    // cancels the collection before this deadline.
+                    hidden_low_memory_deadline =
+                        std::chrono::steady_clock::now()
+                        + std::chrono::milliseconds(500);
+                }
+            }
+            if (low_memory_requested_.exchange(false, std::memory_order_acq_rel)
+                && runtime_ != nullptr) {
+                runtime_->notify_low_memory();
+                low_memory_notifications_.fetch_add(1, std::memory_order_relaxed);
+                update_compilation_metrics();
+            }
+            if (hidden_low_memory_deadline.has_value()
+                && std::chrono::steady_clock::now()
+                    >= *hidden_low_memory_deadline
+                && runtime_ != nullptr) {
+                runtime_->notify_low_memory();
+                low_memory_notifications_.fetch_add(1, std::memory_order_relaxed);
+                hidden_low_memory_notifications_.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                update_compilation_metrics();
+                hidden_low_memory_deadline.reset();
+            }
+#endif
             // Treat the latest coalesced viewport as a barrier for pointer work.
             // Avalonia reports pointer coordinates in the newly arranged control,
             // so dispatching queued input against the preceding DOM viewport makes
             // hit testing appear to stop working after a live window resize.
             uint64_t resize_input_count = 0;
-            if (take_latest_resize(event, resize_input_count)) {
+            htmlml_input_event paired_resize_frame{};
+            uint64_t paired_resize_frame_count = 0;
+            bool has_paired_resize_frame = false;
+            std::chrono::steady_clock::time_point paired_resize_frame_enqueued_at;
+            if (take_latest_resize(
+                    event,
+                    resize_input_count,
+                    paired_resize_frame,
+                    paired_resize_frame_count,
+                    has_paired_resize_frame,
+                    paired_resize_frame_enqueued_at)) {
+                const auto paired_dispatch_started =
+                    std::chrono::steady_clock::now();
                 apply(event);
-                consumed_inputs_.fetch_add(resize_input_count, std::memory_order_relaxed);
                 applied_resize_inputs_.fetch_add(1, std::memory_order_relaxed);
+                resize_applied = true;
                 changed = true;
+                if (has_paired_resize_frame) {
+                    // Resize listeners and ResizeObserver delivery may queue RAF.
+                    // Release it before this rendering boundary is published.
+                    apply(paired_resize_frame);
+                    applied_animation_frames_.fetch_add(1, std::memory_order_relaxed);
+                    host_frame_applied = true;
+                    changed = changed || document_.dirty();
+                    if (paired_resize_frame_count > 1) {
+                        coalesced_animation_frames_.fetch_add(
+                            paired_resize_frame_count - 1,
+                            std::memory_order_relaxed);
+                    }
+                    const auto paired_dispatch_completed =
+                        std::chrono::steady_clock::now();
+                    const auto queue_nanoseconds = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            paired_dispatch_started
+                                - paired_resize_frame_enqueued_at).count());
+                    const auto dispatch_nanoseconds = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            paired_dispatch_completed
+                                - paired_dispatch_started).count());
+                    applied_resize_frame_pairs_.fetch_add(
+                        1,
+                        std::memory_order_relaxed);
+                    total_resize_frame_queue_nanoseconds_.fetch_add(
+                        queue_nanoseconds,
+                        std::memory_order_relaxed);
+                    last_resize_frame_queue_nanoseconds_.store(
+                        queue_nanoseconds,
+                        std::memory_order_relaxed);
+                    store_maximum(
+                        maximum_resize_frame_queue_nanoseconds_,
+                        queue_nanoseconds);
+                    total_resize_frame_dispatch_nanoseconds_.fetch_add(
+                        dispatch_nanoseconds,
+                        std::memory_order_relaxed);
+                    last_resize_frame_dispatch_nanoseconds_.store(
+                        dispatch_nanoseconds,
+                        std::memory_order_relaxed);
+                    store_maximum(
+                        maximum_resize_frame_dispatch_nanoseconds_,
+                        dispatch_nanoseconds);
+                    pending_paired_resize_publication =
+                        pending_resize_frame_publication{
+                            event.sequence,
+                            paired_resize_frame_enqueued_at};
+                } else if (paired_resize_frame_count != 0) {
+                    coalesced_animation_frames_.fetch_add(
+                        paired_resize_frame_count,
+                        std::memory_order_relaxed);
+                }
+                consumed_inputs_.fetch_add(
+                    resize_input_count + paired_resize_frame_count,
+                    std::memory_order_relaxed);
             }
 
             const auto input_batch_started = std::chrono::steady_clock::now();
@@ -939,13 +1467,19 @@ private:
                     std::optional<htmlml_input_event> frame;
                     std::optional<htmlml_input_event> pointer_move;
                     std::optional<htmlml_input_event> wheel;
+                    std::optional<uint64_t> frame_order;
+                    std::optional<uint64_t> pointer_move_order;
+                    std::optional<uint64_t> wheel_order;
+                    uint64_t next_aggregate_order = 0;
                     uint64_t frame_count = 0;
                     uint64_t pointer_move_count = 0;
                     uint64_t wheel_count = 0;
                     const auto accumulate = [&](
                         const htmlml_input_event& candidate) -> bool {
+                        const auto order = next_aggregate_order++;
                         if (candidate.kind == HTMLML_INPUT_FRAME) {
                             frame = candidate;
+                            frame_order = order;
                             ++frame_count;
                             return true;
                         }
@@ -955,6 +1489,7 @@ private:
                                 return false;
                             }
                             pointer_move = candidate;
+                            pointer_move_order = order;
                             ++pointer_move_count;
                             return true;
                         }
@@ -985,6 +1520,7 @@ private:
                                 wheel->x = candidate.x;
                                 wheel->y = candidate.y;
                             }
+                            wheel_order = order;
                             ++wheel_count;
                             return true;
                         }
@@ -1002,23 +1538,42 @@ private:
                         ++consumed_count;
                     }
 
-                    std::vector<std::pair<htmlml_input_event, uint64_t>> aggregates;
+                    struct continuous_aggregate final {
+                        htmlml_input_event event;
+                        uint64_t count;
+                        uint64_t order;
+                    };
+                    std::vector<continuous_aggregate> aggregates;
                     if (frame.has_value()) {
-                        aggregates.emplace_back(*frame, frame_count);
+                        aggregates.push_back(
+                            continuous_aggregate{
+                                *frame,
+                                frame_count,
+                                frame_order.value()});
                     }
                     if (pointer_move.has_value()) {
-                        aggregates.emplace_back(*pointer_move, pointer_move_count);
+                        aggregates.push_back(
+                            continuous_aggregate{
+                                *pointer_move,
+                                pointer_move_count,
+                                pointer_move_order.value()});
                     }
                     if (wheel.has_value()) {
-                        aggregates.emplace_back(*wheel, wheel_count);
+                        aggregates.push_back(
+                            continuous_aggregate{
+                                *wheel,
+                                wheel_count,
+                                wheel_order.value()});
                     }
                     std::sort(
                         aggregates.begin(),
                         aggregates.end(),
                         [](const auto& left, const auto& right) {
-                            return left.first.sequence < right.first.sequence;
+                            return left.order < right.order;
                         });
-                    for (const auto& [aggregate, aggregate_count] : aggregates) {
+                    for (const auto& item : aggregates) {
+                        const auto& aggregate = item.event;
+                        const auto aggregate_count = item.count;
                         apply(aggregate);
                         if (aggregate.kind == HTMLML_INPUT_POINTER_MOVE) {
                             applied_pointer_move_inputs_.fetch_add(
@@ -1036,12 +1591,13 @@ private:
                             if (aggregate_count > 1) {
                                 coalesced_wheel_inputs_.fetch_add(
                                     aggregate_count - 1,
-                                    std::memory_order_relaxed);
+                                std::memory_order_relaxed);
                             }
                         } else if (aggregate.kind == HTMLML_INPUT_FRAME) {
                             applied_animation_frames_.fetch_add(
                                 1,
                                 std::memory_order_relaxed);
+                            host_frame_applied = true;
                             if (aggregate_count > 1) {
                                 coalesced_animation_frames_.fetch_add(
                                     aggregate_count - 1,
@@ -1093,13 +1649,62 @@ private:
             }
 
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
-            if (runtime_ != nullptr && runtime_->has_pending_tasks()) {
+            if (runtime_ != nullptr && resize_applied && host_frame_applied) {
+                // `signal_animation_frame` releases the callbacks belonging to
+                // this rendering opportunity; execute that complete RAF batch
+                // before publishing. Do not run unrelated resources/timers here,
+                // and do not release RAF callbacks scheduled by a callback itself:
+                // those retain the sentinel deadline for the next host frame.
+                const auto animation_frame_batch_started =
+                    std::chrono::steady_clock::now();
+                uint64_t animation_frame_callbacks = 0;
+                while (runtime_->has_pending_animation_frame_task()) {
+                    if (!runtime_->pump_animation_frame_task()) {
+                        script_errors_.fetch_add(1, std::memory_order_relaxed);
+                        set_last_error(runtime_->last_error());
+                        break;
+                    }
+                    ++animation_frame_callbacks;
+                    changed = true;
+                }
+                const auto animation_frame_batch_nanoseconds =
+                    static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now()
+                                - animation_frame_batch_started).count());
+                resize_frame_animation_callbacks_.fetch_add(
+                    animation_frame_callbacks,
+                    std::memory_order_relaxed);
+                total_resize_frame_animation_batch_nanoseconds_.fetch_add(
+                    animation_frame_batch_nanoseconds,
+                    std::memory_order_relaxed);
+                last_resize_frame_animation_batch_nanoseconds_.store(
+                    animation_frame_batch_nanoseconds,
+                    std::memory_order_relaxed);
+                store_maximum(
+                    maximum_resize_frame_animation_batch_nanoseconds_,
+                    animation_frame_batch_nanoseconds);
+                frame_scripts_executed_.store(
+                    runtime_->frame_scripts_executed(),
+                    std::memory_order_relaxed);
+                frame_script_errors_.store(
+                    runtime_->frame_script_errors(),
+                    std::memory_order_relaxed);
+                update_compilation_metrics();
+                update_component_readiness();
+            }
+            if (runtime_ != nullptr
+                && runtime_->has_pending_tasks()
+                && !(resize_applied && host_frame_applied)) {
                 // Resource discovery during component startup can produce many
                 // immediately runnable stylesheet/script tasks. Processing one
                 // and then sleeping for 2 ms added hundreds of milliseconds
                 // that browsers do not impose. Drain a bounded batch while no
                 // input/resize work is waiting; the time/count caps preserve a
                 // render opportunity and keep interaction latency bounded.
+                // A paired live-resize RAF is already the current rendering
+                // opportunity. Arbitrary queued macrotasks run after that scene
+                // is published instead of delaying the visual boundary.
                 constexpr uint32_t maximum_task_batch = 32U;
                 constexpr auto maximum_task_batch_time = std::chrono::milliseconds(4);
                 const auto task_batch_started = std::chrono::steady_clock::now();
@@ -1231,9 +1836,38 @@ private:
 
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
-            if (scene_pending && now >= next_scene_publication) {
+            // A resize and its host RAF are one browser rendering opportunity.
+            // Do not defer that completed boundary behind a producer-only phase:
+            // macOS live resize may not deliver another compositor callback until
+            // the following display slot.
+            const auto resize_frame_boundary =
+                resize_applied && host_frame_applied;
+            if (scene_pending
+                && (resize_frame_boundary || now >= next_scene_publication)) {
                 if (publish_scene()) {
                     scene_pending = false;
+                    if (pending_paired_resize_publication.has_value()
+                        && last_input_sequence_
+                            >= pending_paired_resize_publication->sequence) {
+                        const auto elapsed = static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now()
+                                    - pending_paired_resize_publication
+                                        ->enqueued_at).count());
+                        published_resize_frame_pairs_.fetch_add(
+                            1,
+                            std::memory_order_relaxed);
+                        total_resize_frame_to_publication_nanoseconds_.fetch_add(
+                            elapsed,
+                            std::memory_order_relaxed);
+                        last_resize_frame_to_publication_nanoseconds_.store(
+                            elapsed,
+                            std::memory_order_relaxed);
+                        store_maximum(
+                            maximum_resize_frame_to_publication_nanoseconds_,
+                            elapsed);
+                        pending_paired_resize_publication.reset();
+                    }
                     // Keep the producer on a stable 16 ms cadence. Scheduling
                     // from the completion time adds dispatch/layout cost to
                     // every interval and drifts a nominal 60 Hz resize stream
@@ -1246,6 +1880,9 @@ private:
                             * (overdue / scene_interval + 1);
                     } else {
                         next_scene_publication += scene_interval;
+                    }
+                    if (resize_frame_boundary) {
+                        next_scene_publication = now + scene_interval;
                     }
                     continue;
                 }
@@ -1266,7 +1903,9 @@ private:
                 return token.stop_requested()
                     || deferred_input.has_value()
                     || !inputs_.empty()
-                    || resize_pending_.load(std::memory_order_acquire);
+                    || resize_pending_.load(std::memory_order_acquire)
+                    || low_memory_requested_.load(std::memory_order_acquire)
+                    || visibility_changed_.load(std::memory_order_acquire);
             });
         }
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
@@ -1360,13 +1999,38 @@ private:
 #endif
             break;
         case HTMLML_INPUT_FRAME:
-            document_.signal_animation_frame(event.x);
+            {
+                const auto started = std::chrono::steady_clock::now();
+                document_.signal_animation_frame(event.x);
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
-            if (runtime_ != nullptr) {
-                runtime_->signal_animation_frame(event.x);
-                update_compilation_metrics();
-            }
+                if (runtime_ != nullptr) {
+                    runtime_->signal_animation_frame(event.x);
+                    update_compilation_metrics();
+                }
 #endif
+                const auto elapsed = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now() - started).count());
+                dispatched_animation_frames_.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                total_animation_frame_dispatch_nanoseconds_.fetch_add(
+                    elapsed,
+                    std::memory_order_relaxed);
+                last_animation_frame_dispatch_nanoseconds_.store(
+                    elapsed,
+                    std::memory_order_relaxed);
+                store_maximum(
+                    maximum_animation_frame_dispatch_nanoseconds_,
+                    elapsed);
+                const auto timestamp_microseconds = event.x > 0
+                    && std::isfinite(event.x)
+                    ? static_cast<uint64_t>(event.x * 1000.0)
+                    : 0U;
+                last_animation_frame_timestamp_microseconds_.store(
+                    timestamp_microseconds,
+                    std::memory_order_relaxed);
+            }
             break;
         default:
             break;
@@ -1381,6 +2045,10 @@ private:
             last_input_dispatch_sequence_.store(
                 event.sequence,
                 std::memory_order_release);
+            dispatched_inputs_.fetch_add(1, std::memory_order_relaxed);
+            total_input_dispatch_nanoseconds_.fetch_add(
+                elapsed,
+                std::memory_order_relaxed);
             store_maximum(maximum_input_dispatch_nanoseconds_, elapsed);
         }
     }
@@ -1397,6 +2065,36 @@ private:
         compilation_cache_bytes_read_.store(runtime_->compilation_cache_bytes_read(), std::memory_order_relaxed);
         compilation_cache_bytes_written_.store(runtime_->compilation_cache_bytes_written(), std::memory_order_relaxed);
         compilation_time_nanoseconds_.store(runtime_->compilation_time_nanoseconds(), std::memory_order_relaxed);
+        process_compilation_memory_hits_.store(
+            runtime_->process_compilation_memory_hits(),
+            std::memory_order_relaxed);
+        process_compilation_leaders_.store(
+            runtime_->process_compilation_leaders(),
+            std::memory_order_relaxed);
+        process_compilation_waiters_.store(
+            runtime_->process_compilation_waiters(),
+            std::memory_order_relaxed);
+        process_compilation_shared_bytes_.store(
+            runtime_->process_compilation_shared_bytes(),
+            std::memory_order_relaxed);
+        process_resource_memory_hits_.store(
+            runtime_->process_resource_memory_hits(),
+            std::memory_order_relaxed);
+        process_resource_load_leaders_.store(
+            runtime_->process_resource_load_leaders(),
+            std::memory_order_relaxed);
+        process_resource_load_waiters_.store(
+            runtime_->process_resource_load_waiters(),
+            std::memory_order_relaxed);
+        process_resource_shared_bytes_.store(
+            runtime_->process_resource_shared_bytes(),
+            std::memory_order_relaxed);
+        process_script_source_memory_hits_.store(
+            runtime_->process_script_source_memory_hits(),
+            std::memory_order_relaxed);
+        process_script_source_shared_bytes_.store(
+            runtime_->process_script_source_shared_bytes(),
+            std::memory_order_relaxed);
         resource_cache_requests_.store(runtime_->resource_cache_requests(), std::memory_order_relaxed);
         resource_cache_hits_.store(runtime_->resource_cache_hits(), std::memory_order_relaxed);
         resource_cache_misses_.store(runtime_->resource_cache_misses(), std::memory_order_relaxed);
@@ -1405,6 +2103,203 @@ private:
         resource_cache_bytes_written_.store(runtime_->resource_cache_bytes_written(), std::memory_order_relaxed);
         input_events_dispatched_.store(runtime_->input_events_dispatched(), std::memory_order_relaxed);
         input_callbacks_invoked_.store(runtime_->input_callbacks_invoked(), std::memory_order_relaxed);
+        const auto memory = runtime_->read_memory_metrics();
+        v8_total_heap_bytes_.store(memory.total_heap_bytes, std::memory_order_relaxed);
+        v8_used_heap_bytes_.store(memory.used_heap_bytes, std::memory_order_relaxed);
+        v8_executable_heap_bytes_.store(memory.executable_heap_bytes, std::memory_order_relaxed);
+        v8_physical_heap_bytes_.store(memory.physical_heap_bytes, std::memory_order_relaxed);
+        v8_external_bytes_.store(memory.external_bytes, std::memory_order_relaxed);
+        v8_malloced_bytes_.store(memory.malloced_bytes, std::memory_order_relaxed);
+        v8_peak_malloced_bytes_.store(memory.peak_malloced_bytes, std::memory_order_relaxed);
+        v8_code_and_metadata_bytes_.store(
+            memory.code_and_metadata_bytes,
+            std::memory_order_relaxed);
+        v8_bytecode_and_metadata_bytes_.store(
+            memory.bytecode_and_metadata_bytes,
+            std::memory_order_relaxed);
+        v8_external_script_source_bytes_.store(
+            memory.external_script_source_bytes,
+            std::memory_order_relaxed);
+        v8_young_space_used_bytes_.store(
+            memory.young_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_young_space_physical_bytes_.store(
+            memory.young_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_old_space_used_bytes_.store(
+            memory.old_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_old_space_physical_bytes_.store(
+            memory.old_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_code_space_used_bytes_.store(
+            memory.code_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_code_space_physical_bytes_.store(
+            memory.code_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_map_space_used_bytes_.store(
+            memory.map_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_map_space_physical_bytes_.store(
+            memory.map_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_large_object_space_used_bytes_.store(
+            memory.large_object_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_large_object_space_physical_bytes_.store(
+            memory.large_object_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_read_only_space_used_bytes_.store(
+            memory.read_only_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_read_only_space_physical_bytes_.store(
+            memory.read_only_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_shared_space_used_bytes_.store(
+            memory.shared_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_shared_space_physical_bytes_.store(
+            memory.shared_space_physical_bytes,
+            std::memory_order_relaxed);
+        v8_trusted_space_used_bytes_.store(
+            memory.trusted_space_used_bytes,
+            std::memory_order_relaxed);
+        v8_trusted_space_physical_bytes_.store(
+            memory.trusted_space_physical_bytes,
+            std::memory_order_relaxed);
+        process_compilation_cache_bytes_.store(
+            memory.process_compilation_cache_bytes,
+            std::memory_order_relaxed);
+        process_compilation_mapped_cache_bytes_.store(
+            memory.process_compilation_mapped_cache_bytes,
+            std::memory_order_relaxed);
+        process_resource_cache_bytes_.store(
+            memory.process_resource_cache_bytes,
+            std::memory_order_relaxed);
+        process_resource_mapped_cache_bytes_.store(
+            memory.process_resource_mapped_cache_bytes,
+            std::memory_order_relaxed);
+        native_dom_node_count_.store(
+            memory.native_dom_node_count,
+            std::memory_order_relaxed);
+        native_dom_node_size_bytes_.store(
+            memory.native_dom_node_size_bytes,
+            std::memory_order_relaxed);
+        native_dom_inline_bytes_.store(
+            memory.native_dom_inline_bytes,
+            std::memory_order_relaxed);
+        native_dom_node_pool_reserved_bytes_.store(
+            memory.native_dom_node_pool_reserved_bytes,
+            std::memory_order_relaxed);
+        native_dom_node_pool_peak_bytes_.store(
+            memory.native_dom_node_pool_peak_bytes,
+            std::memory_order_relaxed);
+        native_dom_table_layout_count_.store(
+            memory.native_dom_table_layout_count,
+            std::memory_order_relaxed);
+        native_dom_table_layout_storage_bytes_.store(
+            memory.native_dom_table_layout_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_form_control_count_.store(
+            memory.native_dom_form_control_count,
+            std::memory_order_relaxed);
+        native_dom_form_control_storage_bytes_.store(
+            memory.native_dom_form_control_storage_bytes,
+            std::memory_order_relaxed);
+        native_event_listener_count_.store(
+            memory.native_event_listener_count,
+            std::memory_order_relaxed);
+        native_event_listener_storage_bytes_.store(
+            memory.native_event_listener_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_attribute_node_count_.store(
+            memory.native_dom_attribute_node_count,
+            std::memory_order_relaxed);
+        native_dom_attribute_entry_count_.store(
+            memory.native_dom_attribute_entry_count,
+            std::memory_order_relaxed);
+        native_dom_attribute_storage_bytes_.store(
+            memory.native_dom_attribute_storage_bytes,
+            std::memory_order_relaxed);
+        native_wrapper_handle_count_.store(
+            memory.native_wrapper_handle_count,
+            std::memory_order_relaxed);
+        native_wrapper_storage_bytes_.store(
+            memory.native_wrapper_storage_bytes,
+            std::memory_order_relaxed);
+        native_text_measurement_cache_entry_count_.store(
+            memory.native_text_measurement_cache_entry_count,
+            std::memory_order_relaxed);
+        native_text_measurement_cache_storage_bytes_.store(
+            memory.native_text_measurement_cache_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_pseudo_storage_bytes_.store(
+            memory.native_dom_pseudo_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_canvas_node_count_.store(
+            memory.native_dom_canvas_node_count,
+            std::memory_order_relaxed);
+        native_dom_canvas_storage_bytes_.store(
+            memory.native_dom_canvas_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_animation_count_.store(
+            memory.native_dom_animation_count,
+            std::memory_order_relaxed);
+        native_dom_animation_storage_bytes_.store(
+            memory.native_dom_animation_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_custom_property_node_count_.store(
+            memory.native_dom_custom_property_node_count,
+            std::memory_order_relaxed);
+        native_dom_custom_property_entry_count_.store(
+            memory.native_dom_custom_property_entry_count,
+            std::memory_order_relaxed);
+        native_dom_custom_property_storage_bytes_.store(
+            memory.native_dom_custom_property_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_background_image_count_.store(
+            memory.native_dom_background_image_count,
+            std::memory_order_relaxed);
+        native_dom_background_image_storage_bytes_.store(
+            memory.native_dom_background_image_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_grid_count_.store(
+            memory.native_dom_grid_count,
+            std::memory_order_relaxed);
+        native_dom_grid_storage_bytes_.store(
+            memory.native_dom_grid_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_textual_style_count_.store(
+            memory.native_dom_textual_style_count,
+            std::memory_order_relaxed);
+        native_dom_textual_style_storage_bytes_.store(
+            memory.native_dom_textual_style_storage_bytes,
+            std::memory_order_relaxed);
+        native_dom_authored_style_node_count_.store(
+            memory.native_dom_authored_style_node_count,
+            std::memory_order_relaxed);
+        native_dom_authored_style_entry_count_.store(
+            memory.native_dom_authored_style_entry_count,
+            std::memory_order_relaxed);
+        native_dom_authored_style_storage_bytes_.store(
+            memory.native_dom_authored_style_storage_bytes,
+            std::memory_order_relaxed);
+        native_css_rule_count_.store(
+            memory.native_css_rule_count,
+            std::memory_order_relaxed);
+        native_css_rule_storage_bytes_.store(
+            memory.native_css_rule_storage_bytes,
+            std::memory_order_relaxed);
+        native_css_index_storage_bytes_.store(
+            memory.native_css_index_storage_bytes,
+            std::memory_order_relaxed);
+        process_shared_css_rule_count_.store(
+            memory.process_shared_css_rule_count,
+            std::memory_order_relaxed);
+        process_shared_css_rule_storage_bytes_.store(
+            memory.process_shared_css_rule_storage_bytes,
+            std::memory_order_relaxed);
     }
 
     void update_component_readiness()
@@ -1419,6 +2314,7 @@ private:
 
     bool publish_scene()
     {
+        scene_publication_attempts_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_started = std::chrono::steady_clock::now();
         auto next = std::make_shared<scene>();
         next->commands.reserve(command_count_ + 4U);
@@ -1434,23 +2330,40 @@ private:
         std::shared_ptr<const scene> acknowledged_scene;
         {
             std::lock_guard lock(acknowledgement_->mutex);
-            base_revision = acknowledgement_->revision;
-            acknowledged_dom_hash = acknowledgement_->dom_hash;
-            acknowledged_width = acknowledgement_->viewport_width;
-            acknowledged_height = acknowledgement_->viewport_height;
-            acknowledged_layers = acknowledgement_->layer_versions;
-            acknowledged_scene = acknowledgement_->value;
-        }
-        if (base_revision != 0) {
-            const auto published = std::atomic_load_explicit(
-                &latest_,
-                std::memory_order_acquire);
-            if (published != nullptr && published->header.revision > base_revision) {
-                // A latest-only consumer is allowed to skip scenes, but it
-                // cannot apply a new diff based on a revision it has not yet
-                // acknowledged. Keep the newest DOM state pending and publish
-                // it immediately after the outstanding diff is rendered.
-                return false;
+            const auto ordered_consumer =
+                ordered_scene_consumer_.load(std::memory_order_acquire);
+            const auto maximum_pending_scenes = ordered_consumer ? 2U : 1U;
+            if (acknowledgement_->pending_scenes.size()
+                >= maximum_pending_scenes) {
+                if (!ordered_consumer && acknowledgement_->revision == 0U) {
+                    // Preserve the legacy latest-only startup behavior: before
+                    // a renderer establishes its checkpoint base, a newer full
+                    // checkpoint may replace the unacquired initial scene.
+                    acknowledgement_->pending_scenes.clear();
+                } else {
+                    blocked_scene_publications_.fetch_add(
+                        1,
+                        std::memory_order_relaxed);
+                    return false;
+                }
+            }
+            if (!acknowledgement_->pending_scenes.empty()) {
+                const auto& base = acknowledgement_->pending_scenes.back();
+                base_revision = base->header.revision;
+                acknowledged_dom_hash = base->dom_hash;
+                acknowledged_width = base->header.viewport_width;
+                acknowledged_height = base->header.viewport_height;
+                acknowledged_layers = base->full_layer_versions;
+                acknowledged_scene =
+                    (base->header.flags & scene_flag_dom_replacement) != 0U
+                        ? base : acknowledgement_->value;
+            } else {
+                base_revision = acknowledgement_->revision;
+                acknowledged_dom_hash = acknowledgement_->dom_hash;
+                acknowledged_width = acknowledgement_->viewport_width;
+                acknowledged_height = acknowledgement_->viewport_height;
+                acknowledged_layers = acknowledgement_->layer_versions;
+                acknowledged_scene = acknowledgement_->value;
             }
         }
         uint32_t scene_flags = base_revision == 0 ? scene_flag_checkpoint : 0U;
@@ -1503,9 +2416,12 @@ private:
                 std::lock_guard lock(iframe_html_mutex_);
                 iframe_html_ = std::move(frame_html);
             }
-            {
-                std::lock_guard lock(scene_diagnostics_mutex_);
-                scene_diagnostics_ = document_.describe_busiest_canvas();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            const auto diagnostics_now = std::chrono::steady_clock::now();
+            if (!scene_diagnostics_initialized_
+                || diagnostics_now - last_scene_diagnostics_update_
+                    >= std::chrono::milliseconds(250)) {
+                auto next_diagnostics = document_.describe_busiest_canvas();
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
                 if (runtime_ != nullptr) {
                     if (runtime_diagnostics_.empty()
@@ -1513,12 +2429,19 @@ private:
                         runtime_diagnostics_ = runtime_->diagnostics();
                     }
                     if (!runtime_diagnostics_.empty()) {
-                        scene_diagnostics_ += " | runtime=" + runtime_diagnostics_;
+                        next_diagnostics += " | runtime=" + runtime_diagnostics_;
                     }
-                    scene_diagnostics_ += " | " + runtime_->event_diagnostics();
+                    next_diagnostics += " | " + runtime_->event_diagnostics();
                 }
 #endif
+                {
+                    std::lock_guard lock(scene_diagnostics_mutex_);
+                    scene_diagnostics_ = std::move(next_diagnostics);
+                }
+                scene_diagnostics_initialized_ = true;
+                last_scene_diagnostics_update_ = diagnostics_now;
             }
+#endif
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
 #endif
             {
@@ -1679,7 +2602,12 @@ private:
                     horizontal_step * 0.72F,
                     vertical_step * 0.65F,
                     color,
-                    index + 1U});
+                    index + 1U,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0});
                 hash = mix_hash(hash, static_cast<uint64_t>(index) << 32U | color);
             }
             next->dom_hash = hash;
@@ -1699,9 +2627,19 @@ private:
             mix_hash(
                 mix_hash(hash, std::bit_cast<uint32_t>(width)),
                 std::bit_cast<uint32_t>(height))};
+        const auto latest_scene_bytes = retained_scene_bytes(*next);
+        latest_scene_bytes_.store(latest_scene_bytes, std::memory_order_relaxed);
+        next->published_timestamp_nanoseconds = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        auto published_scene = std::shared_ptr<const scene>(std::move(next));
+        {
+            std::lock_guard lock(acknowledgement_->mutex);
+            acknowledgement_->pending_scenes.push_back(published_scene);
+        }
         std::atomic_store_explicit(
             &latest_,
-            std::shared_ptr<const scene>(std::move(next)),
+            std::move(published_scene),
             std::memory_order_release);
         published_scenes_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_nanoseconds =
@@ -1751,8 +2689,15 @@ private:
     input_ring inputs_;
     htmlml_input_event pending_resize_{};
     uint64_t pending_resize_count_{0};
+    htmlml_input_event pending_resize_frame_{};
+    uint64_t pending_resize_frame_count_{0};
+    bool pending_resize_has_frame_{false};
+    std::chrono::steady_clock::time_point pending_resize_frame_enqueued_at_{};
     std::mutex resize_mutex_;
     std::atomic<bool> resize_pending_{false};
+    std::atomic<bool> low_memory_requested_{false};
+    std::atomic<bool> host_visible_{true};
+    std::atomic<bool> visibility_changed_{false};
     htmlml_native::native_document document_;
 #if defined(HTMLML_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<htmlml_native::v8_dom_runtime> runtime_;
@@ -1762,6 +2707,7 @@ private:
     std::vector<evaluation_request> evaluations_;
     std::mutex script_mutex_;
     std::shared_ptr<const scene> latest_{};
+    std::atomic<bool> ordered_scene_consumer_{false};
     std::condition_variable wake_;
     std::mutex wake_mutex_;
     uint64_t next_revision_{1};
@@ -1788,6 +2734,8 @@ private:
     std::atomic<uint64_t> frame_script_errors_{0};
     std::atomic<uint64_t> canvas_nodes_{0};
     std::atomic<uint64_t> component_ready_{0};
+    std::atomic<uint64_t> low_memory_notifications_{0};
+    std::atomic<uint64_t> hidden_low_memory_notifications_{0};
     std::atomic<uint64_t> compilation_requests_{0};
     std::atomic<uint64_t> compilation_memory_hits_{0};
     std::atomic<uint64_t> compilation_persistent_hits_{0};
@@ -1796,6 +2744,87 @@ private:
     std::atomic<uint64_t> compilation_cache_bytes_read_{0};
     std::atomic<uint64_t> compilation_cache_bytes_written_{0};
     std::atomic<uint64_t> compilation_time_nanoseconds_{0};
+    std::atomic<uint64_t> process_compilation_memory_hits_{0};
+    std::atomic<uint64_t> process_compilation_leaders_{0};
+    std::atomic<uint64_t> process_compilation_waiters_{0};
+    std::atomic<uint64_t> process_compilation_shared_bytes_{0};
+    std::atomic<uint64_t> process_resource_memory_hits_{0};
+    std::atomic<uint64_t> process_resource_load_leaders_{0};
+    std::atomic<uint64_t> process_resource_load_waiters_{0};
+    std::atomic<uint64_t> process_resource_shared_bytes_{0};
+    std::atomic<uint64_t> process_script_source_memory_hits_{0};
+    std::atomic<uint64_t> process_script_source_shared_bytes_{0};
+    std::atomic<uint64_t> v8_total_heap_bytes_{0};
+    std::atomic<uint64_t> v8_used_heap_bytes_{0};
+    std::atomic<uint64_t> v8_executable_heap_bytes_{0};
+    std::atomic<uint64_t> v8_physical_heap_bytes_{0};
+    std::atomic<uint64_t> v8_external_bytes_{0};
+    std::atomic<uint64_t> v8_malloced_bytes_{0};
+    std::atomic<uint64_t> v8_peak_malloced_bytes_{0};
+    std::atomic<uint64_t> v8_code_and_metadata_bytes_{0};
+    std::atomic<uint64_t> v8_bytecode_and_metadata_bytes_{0};
+    std::atomic<uint64_t> v8_external_script_source_bytes_{0};
+    std::atomic<uint64_t> v8_young_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_young_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_old_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_old_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_code_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_code_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_map_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_map_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_large_object_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_large_object_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_read_only_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_read_only_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_shared_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_shared_space_physical_bytes_{0};
+    std::atomic<uint64_t> v8_trusted_space_used_bytes_{0};
+    std::atomic<uint64_t> v8_trusted_space_physical_bytes_{0};
+    std::atomic<uint64_t> latest_scene_bytes_{0};
+    std::atomic<uint64_t> process_compilation_cache_bytes_{0};
+    std::atomic<uint64_t> process_compilation_mapped_cache_bytes_{0};
+    std::atomic<uint64_t> process_resource_cache_bytes_{0};
+    std::atomic<uint64_t> process_resource_mapped_cache_bytes_{0};
+    std::atomic<uint64_t> native_dom_node_count_{0};
+    std::atomic<uint64_t> native_dom_node_size_bytes_{0};
+    std::atomic<uint64_t> native_dom_inline_bytes_{0};
+    std::atomic<uint64_t> native_dom_node_pool_reserved_bytes_{0};
+    std::atomic<uint64_t> native_dom_node_pool_peak_bytes_{0};
+    std::atomic<uint64_t> native_dom_table_layout_count_{0};
+    std::atomic<uint64_t> native_dom_table_layout_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_form_control_count_{0};
+    std::atomic<uint64_t> native_dom_form_control_storage_bytes_{0};
+    std::atomic<uint64_t> native_event_listener_count_{0};
+    std::atomic<uint64_t> native_event_listener_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_attribute_node_count_{0};
+    std::atomic<uint64_t> native_dom_attribute_entry_count_{0};
+    std::atomic<uint64_t> native_dom_attribute_storage_bytes_{0};
+    std::atomic<uint64_t> native_wrapper_handle_count_{0};
+    std::atomic<uint64_t> native_wrapper_storage_bytes_{0};
+    std::atomic<uint64_t> native_text_measurement_cache_entry_count_{0};
+    std::atomic<uint64_t> native_text_measurement_cache_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_pseudo_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_canvas_node_count_{0};
+    std::atomic<uint64_t> native_dom_canvas_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_animation_count_{0};
+    std::atomic<uint64_t> native_dom_animation_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_custom_property_node_count_{0};
+    std::atomic<uint64_t> native_dom_custom_property_entry_count_{0};
+    std::atomic<uint64_t> native_dom_custom_property_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_background_image_count_{0};
+    std::atomic<uint64_t> native_dom_background_image_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_grid_count_{0};
+    std::atomic<uint64_t> native_dom_grid_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_textual_style_count_{0};
+    std::atomic<uint64_t> native_dom_textual_style_storage_bytes_{0};
+    std::atomic<uint64_t> native_dom_authored_style_node_count_{0};
+    std::atomic<uint64_t> native_dom_authored_style_entry_count_{0};
+    std::atomic<uint64_t> native_dom_authored_style_storage_bytes_{0};
+    std::atomic<uint64_t> native_css_rule_count_{0};
+    std::atomic<uint64_t> native_css_rule_storage_bytes_{0};
+    std::atomic<uint64_t> native_css_index_storage_bytes_{0};
+    std::atomic<uint64_t> process_shared_css_rule_count_{0};
+    std::atomic<uint64_t> process_shared_css_rule_storage_bytes_{0};
     std::atomic<uint64_t> resource_cache_requests_{0};
     std::atomic<uint64_t> resource_cache_hits_{0};
     std::atomic<uint64_t> resource_cache_misses_{0};
@@ -1820,20 +2849,49 @@ private:
     std::atomic<uint64_t> applied_wheel_inputs_{0};
     std::atomic<uint64_t> applied_animation_frames_{0};
     std::atomic<uint64_t> coalesced_animation_frames_{0};
+    std::atomic<uint64_t> submitted_resize_frame_pairs_{0};
+    std::atomic<uint64_t> applied_resize_frame_pairs_{0};
+    std::atomic<uint64_t> published_resize_frame_pairs_{0};
+    std::atomic<uint64_t> total_resize_frame_queue_nanoseconds_{0};
+    std::atomic<uint64_t> last_resize_frame_queue_nanoseconds_{0};
+    std::atomic<uint64_t> maximum_resize_frame_queue_nanoseconds_{0};
+    std::atomic<uint64_t> total_resize_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> last_resize_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> maximum_resize_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> resize_frame_animation_callbacks_{0};
+    std::atomic<uint64_t> total_resize_frame_animation_batch_nanoseconds_{0};
+    std::atomic<uint64_t> last_resize_frame_animation_batch_nanoseconds_{0};
+    std::atomic<uint64_t> maximum_resize_frame_animation_batch_nanoseconds_{0};
+    std::atomic<uint64_t> total_resize_frame_to_publication_nanoseconds_{0};
+    std::atomic<uint64_t> last_resize_frame_to_publication_nanoseconds_{0};
+    std::atomic<uint64_t> maximum_resize_frame_to_publication_nanoseconds_{0};
     std::atomic<uint64_t> last_animation_advance_nanoseconds_{0};
     std::atomic<uint64_t> last_layout_nanoseconds_{0};
     std::atomic<uint64_t> last_scene_build_nanoseconds_{0};
     std::atomic<uint64_t> maximum_scene_publication_nanoseconds_{0};
+    std::atomic<uint64_t> scene_publication_attempts_{0};
+    std::atomic<uint64_t> blocked_scene_publications_{0};
     std::atomic<uint64_t> last_input_dispatch_nanoseconds_{0};
     std::atomic<uint64_t> maximum_input_dispatch_nanoseconds_{0};
     std::atomic<uint64_t> last_input_dispatch_sequence_{0};
+    std::atomic<uint64_t> dispatched_inputs_{0};
+    std::atomic<uint64_t> total_input_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> dispatched_animation_frames_{0};
+    std::atomic<uint64_t> total_animation_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> last_animation_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> maximum_animation_frame_dispatch_nanoseconds_{0};
+    std::atomic<uint64_t> last_animation_frame_timestamp_microseconds_{0};
     std::atomic<uint32_t> current_cursor_{HTMLML_CURSOR_DEFAULT};
     std::atomic<bool> checkpoint_requested_{false};
     mutable std::mutex iframe_html_mutex_;
     std::string iframe_html_;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     mutable std::mutex scene_diagnostics_mutex_;
     std::string scene_diagnostics_;
+    bool scene_diagnostics_initialized_{false};
+    std::chrono::steady_clock::time_point last_scene_diagnostics_update_{};
     std::string runtime_diagnostics_;
+#endif
     mutable std::mutex canvas_layout_mutex_;
     std::vector<htmlml_canvas_layout> canvas_layouts_;
     mutable std::mutex error_mutex_;
@@ -1888,6 +2946,11 @@ struct htmlml_scene_lease final {
             || (!is_checkpoint && value->header.base_revision != acknowledgement->revision)) {
             return value->header.revision == acknowledgement->revision;
         }
+        if (acknowledgement->pending_scenes.empty()
+            || acknowledgement->pending_scenes.front()->header.revision
+                != value->header.revision) {
+            return false;
+        }
         acknowledgement->revision = value->header.revision;
         acknowledgement->dom_hash = value->dom_hash;
         acknowledgement->viewport_width = value->header.viewport_width;
@@ -1899,6 +2962,28 @@ struct htmlml_scene_lease final {
         if ((value->header.flags & scene_flag_dom_replacement) != 0U) {
             acknowledgement->value = value;
         }
+        if (value->published_timestamp_nanoseconds != 0U) {
+            const auto now_nanoseconds = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            const auto elapsed = now_nanoseconds
+                >= value->published_timestamp_nanoseconds
+                ? now_nanoseconds - value->published_timestamp_nanoseconds
+                : 0U;
+            acknowledgement->acknowledged_scenes.fetch_add(
+                1,
+                std::memory_order_relaxed);
+            acknowledgement->total_acknowledgement_nanoseconds.fetch_add(
+                elapsed,
+                std::memory_order_relaxed);
+            acknowledgement->last_acknowledgement_nanoseconds.store(
+                elapsed,
+                std::memory_order_relaxed);
+            store_maximum(
+                acknowledgement->maximum_acknowledgement_nanoseconds,
+                elapsed);
+        }
+        acknowledgement->pending_scenes.pop_front();
         return true;
     }
 };
@@ -1908,6 +2993,15 @@ extern "C" {
 uint32_t htmlml_engine_get_abi_version(void)
 {
     return 2U;
+}
+
+uint32_t htmlml_engine_get_build_features(void)
+{
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    return HTMLML_ENGINE_BUILD_FEATURE_CERTIFICATION;
+#else
+    return 0U;
+#endif
 }
 
 uint8_t htmlml_engine_prewarm(void)
@@ -1998,6 +3092,19 @@ uint8_t htmlml_engine_load_url(
 uint8_t htmlml_engine_enqueue(htmlml_engine* engine, const htmlml_input_event* event)
 {
     return engine != nullptr && event != nullptr && engine->enqueue(*event) ? 1U : 0U;
+}
+
+uint8_t htmlml_engine_enqueue_resize_frame(
+    htmlml_engine* engine,
+    const htmlml_input_event* resize_event,
+    const htmlml_input_event* frame_event)
+{
+    return engine != nullptr
+        && resize_event != nullptr
+        && frame_event != nullptr
+        && engine->enqueue_resize_frame(*resize_event, *frame_event)
+        ? 1U
+        : 0U;
 }
 
 uint32_t htmlml_engine_get_cursor(const htmlml_engine* engine)
@@ -2133,6 +3240,16 @@ uint8_t htmlml_engine_request_scene_checkpoint(htmlml_engine* engine)
     return engine != nullptr && engine->request_scene_checkpoint() ? 1U : 0U;
 }
 
+uint8_t htmlml_engine_request_low_memory(htmlml_engine* engine)
+{
+    return engine != nullptr && engine->request_low_memory() ? 1U : 0U;
+}
+
+uint8_t htmlml_engine_set_visible(htmlml_engine* engine, uint8_t visible)
+{
+    return engine != nullptr && engine->set_visible(visible != 0) ? 1U : 0U;
+}
+
 const htmlml_scene_view* htmlml_engine_acquire_latest_scene(htmlml_engine* engine)
 {
     if (engine == nullptr) {
@@ -2140,6 +3257,27 @@ const htmlml_scene_view* htmlml_engine_acquire_latest_scene(htmlml_engine* engin
     }
 
     auto scene_value = engine->acquire_latest();
+    if (!scene_value) {
+        return nullptr;
+    }
+
+    try {
+        auto* lease = new htmlml_scene_lease(
+            std::move(scene_value),
+            engine->acknowledgement_state_handle());
+        return &lease->view;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+const htmlml_scene_view* htmlml_engine_acquire_next_scene(htmlml_engine* engine)
+{
+    if (engine == nullptr) {
+        return nullptr;
+    }
+
+    auto scene_value = engine->acquire_next();
     if (!scene_value) {
         return nullptr;
     }
@@ -2201,11 +3339,49 @@ uint8_t htmlml_engine_get_input_dispatch_metrics(
     const htmlml_engine* engine,
     htmlml_input_dispatch_metrics* metrics)
 {
+    constexpr auto original_struct_size =
+        offsetof(htmlml_input_dispatch_metrics, dispatched_inputs);
     if (engine == nullptr || metrics == nullptr
-        || metrics->struct_size < sizeof(htmlml_input_dispatch_metrics)) {
+        || metrics->struct_size < original_struct_size) {
         return 0U;
     }
     engine->read_input_dispatch_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t htmlml_engine_get_animation_frame_metrics(
+    const htmlml_engine* engine,
+    htmlml_animation_frame_metrics* metrics)
+{
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < sizeof(htmlml_animation_frame_metrics)) {
+        return 0U;
+    }
+    engine->read_animation_frame_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t htmlml_engine_get_scene_flow_metrics(
+    const htmlml_engine* engine,
+    htmlml_scene_flow_metrics* metrics)
+{
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < sizeof(htmlml_scene_flow_metrics)) {
+        return 0U;
+    }
+    engine->read_scene_flow_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t htmlml_engine_get_resize_frame_metrics(
+    const htmlml_engine* engine,
+    htmlml_resize_frame_metrics* metrics)
+{
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < sizeof(htmlml_resize_frame_metrics)) {
+        return 0U;
+    }
+    engine->read_resize_frame_metrics(*metrics);
     return 1U;
 }
 
@@ -2218,6 +3394,34 @@ uint8_t htmlml_engine_get_resource_cache_metrics(
         return 0U;
     }
     engine->read_resource_cache_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t htmlml_engine_get_process_cache_metrics(
+    const htmlml_engine* engine,
+    htmlml_process_cache_metrics* metrics)
+{
+    constexpr auto original_struct_size =
+        offsetof(htmlml_process_cache_metrics, script_source_memory_hits);
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < original_struct_size) {
+        return 0U;
+    }
+    engine->read_process_cache_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t htmlml_engine_get_memory_metrics(
+    const htmlml_engine* engine,
+    htmlml_engine_memory_metrics* metrics)
+{
+    constexpr auto original_struct_size =
+        offsetof(htmlml_engine_memory_metrics, v8_code_and_metadata_bytes);
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < original_struct_size) {
+        return 0U;
+    }
+    engine->read_memory_metrics(*metrics);
     return 1U;
 }
 

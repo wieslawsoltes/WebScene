@@ -345,7 +345,52 @@ typedef struct htmlml_input_dispatch_metrics {
     uint64_t last_dispatch_nanoseconds;
     uint64_t maximum_dispatch_nanoseconds;
     uint64_t last_dispatch_sequence;
+    uint64_t dispatched_inputs;
+    uint64_t total_dispatch_nanoseconds;
 } htmlml_input_dispatch_metrics;
+
+typedef struct htmlml_animation_frame_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t dispatched_frames;
+    uint64_t total_dispatch_nanoseconds;
+    uint64_t last_dispatch_nanoseconds;
+    uint64_t maximum_dispatch_nanoseconds;
+    uint64_t last_timestamp_microseconds;
+} htmlml_animation_frame_metrics;
+
+typedef struct htmlml_scene_flow_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t publication_attempts;
+    uint64_t blocked_publications;
+    uint64_t acknowledged_scenes;
+    uint64_t total_acknowledgement_nanoseconds;
+    uint64_t last_acknowledgement_nanoseconds;
+    uint64_t maximum_acknowledgement_nanoseconds;
+    uint64_t acknowledged_revision;
+} htmlml_scene_flow_metrics;
+
+typedef struct htmlml_resize_frame_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t submitted_pairs;
+    uint64_t applied_pairs;
+    uint64_t published_pairs;
+    uint64_t total_queue_nanoseconds;
+    uint64_t last_queue_nanoseconds;
+    uint64_t maximum_queue_nanoseconds;
+    uint64_t total_dispatch_nanoseconds;
+    uint64_t last_dispatch_nanoseconds;
+    uint64_t maximum_dispatch_nanoseconds;
+    uint64_t animation_frame_callbacks;
+    uint64_t total_animation_frame_batch_nanoseconds;
+    uint64_t last_animation_frame_batch_nanoseconds;
+    uint64_t maximum_animation_frame_batch_nanoseconds;
+    uint64_t total_to_publication_nanoseconds;
+    uint64_t last_to_publication_nanoseconds;
+    uint64_t maximum_to_publication_nanoseconds;
+} htmlml_resize_frame_metrics;
 
 typedef struct htmlml_resource_cache_metrics {
     uint32_t struct_size;
@@ -358,11 +403,124 @@ typedef struct htmlml_resource_cache_metrics {
     uint64_t bytes_written;
 } htmlml_resource_cache_metrics;
 
+typedef struct htmlml_process_cache_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t compilation_memory_hits;
+    uint64_t compilation_leaders;
+    uint64_t compilation_waiters;
+    uint64_t compilation_shared_bytes;
+    uint64_t resource_memory_hits;
+    uint64_t resource_load_leaders;
+    uint64_t resource_load_waiters;
+    uint64_t resource_shared_bytes;
+    /* ABI v2 tail; immutable external script-source sharing. */
+    uint64_t script_source_memory_hits;
+    uint64_t script_source_shared_bytes;
+} htmlml_process_cache_metrics;
+
+/*
+ * Last worker-thread snapshot of memory retained by this engine plus the
+ * process-wide immutable caches shared by all engines. Process cache byte
+ * counts must be counted once per process, not once per engine.
+ */
+typedef struct htmlml_engine_memory_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t v8_total_heap_bytes;
+    uint64_t v8_used_heap_bytes;
+    uint64_t v8_executable_heap_bytes;
+    uint64_t v8_physical_heap_bytes;
+    uint64_t v8_external_bytes;
+    uint64_t v8_malloced_bytes;
+    uint64_t v8_peak_malloced_bytes;
+    uint64_t latest_scene_bytes;
+    uint64_t process_compilation_cache_bytes;
+    uint64_t process_resource_cache_bytes;
+    /* ABI v2 tail; callers using the original prefix remain supported. */
+    uint64_t v8_code_and_metadata_bytes;
+    uint64_t v8_bytecode_and_metadata_bytes;
+    uint64_t v8_external_script_source_bytes;
+    /* Optional retained-native-allocation attribution tail. */
+    uint64_t native_dom_node_count;
+    uint64_t native_dom_node_size_bytes;
+    uint64_t native_dom_inline_bytes;
+    uint64_t native_dom_pseudo_storage_bytes;
+    uint64_t native_dom_canvas_node_count;
+    uint64_t native_dom_canvas_storage_bytes;
+    uint64_t native_dom_animation_count;
+    uint64_t native_dom_animation_storage_bytes;
+    uint64_t native_dom_custom_property_node_count;
+    uint64_t native_dom_custom_property_entry_count;
+    uint64_t native_dom_custom_property_storage_bytes;
+    uint64_t native_dom_background_image_count;
+    uint64_t native_dom_background_image_storage_bytes;
+    uint64_t native_dom_grid_count;
+    uint64_t native_dom_grid_storage_bytes;
+    uint64_t native_dom_authored_style_node_count;
+    uint64_t native_dom_authored_style_entry_count;
+    uint64_t native_dom_authored_style_storage_bytes;
+    uint64_t native_css_rule_count;
+    uint64_t native_css_rule_storage_bytes;
+    uint64_t native_css_index_storage_bytes;
+    uint64_t process_shared_css_rule_count;
+    uint64_t process_shared_css_rule_storage_bytes;
+    uint64_t low_memory_notifications;
+    uint64_t native_dom_attribute_node_count;
+    uint64_t native_dom_attribute_entry_count;
+    uint64_t native_dom_attribute_storage_bytes;
+    /* Additive metrics tail; native registries, caches and mapped storage. */
+    uint64_t native_wrapper_handle_count;
+    uint64_t native_wrapper_storage_bytes;
+    uint64_t native_text_measurement_cache_entry_count;
+    uint64_t native_text_measurement_cache_storage_bytes;
+    uint64_t process_compilation_mapped_cache_bytes;
+    uint64_t process_resource_mapped_cache_bytes;
+    uint64_t native_dom_textual_style_count;
+    uint64_t native_dom_textual_style_storage_bytes;
+    uint64_t native_dom_node_pool_reserved_bytes;
+    uint64_t native_dom_node_pool_peak_bytes;
+    uint64_t native_dom_table_layout_count;
+    uint64_t native_dom_table_layout_storage_bytes;
+    uint64_t native_dom_form_control_count;
+    uint64_t native_dom_form_control_storage_bytes;
+    uint64_t hidden_low_memory_notifications;
+    uint64_t native_event_listener_count;
+    uint64_t native_event_listener_storage_bytes;
+    /* ABI additive tail; aggregate V8 heap-space attribution. */
+    uint64_t v8_young_space_used_bytes;
+    uint64_t v8_young_space_physical_bytes;
+    uint64_t v8_old_space_used_bytes;
+    uint64_t v8_old_space_physical_bytes;
+    uint64_t v8_code_space_used_bytes;
+    uint64_t v8_code_space_physical_bytes;
+    uint64_t v8_map_space_used_bytes;
+    uint64_t v8_map_space_physical_bytes;
+    uint64_t v8_large_object_space_used_bytes;
+    uint64_t v8_large_object_space_physical_bytes;
+    uint64_t v8_read_only_space_used_bytes;
+    uint64_t v8_read_only_space_physical_bytes;
+    uint64_t v8_shared_space_used_bytes;
+    uint64_t v8_shared_space_physical_bytes;
+    uint64_t v8_trusted_space_used_bytes;
+    uint64_t v8_trusted_space_physical_bytes;
+    /* ABI additive tail; bounded immutable scene pipeline attribution. */
+    uint64_t pending_scene_count;
+    uint64_t pending_scene_bytes;
+} htmlml_engine_memory_metrics;
+
 /*
  * Pays the process-wide native runtime initialization cost without creating a
  * document, isolate, or chart. This does not read or mutate compilation caches.
  */
+#define HTMLML_ENGINE_BUILD_FEATURE_CERTIFICATION (1U << 0U)
+
 HTMLML_API uint32_t htmlml_engine_get_abi_version(void);
+/*
+ * Reports compile-time features of the loaded native binary. Certification
+ * telemetry and profiling are absent unless the certification bit is present.
+ */
+HTMLML_API uint32_t htmlml_engine_get_build_features(void);
 HTMLML_API uint8_t htmlml_engine_prewarm(void);
 HTMLML_API htmlml_engine* htmlml_engine_create(uint32_t simulated_chart_command_count);
 HTMLML_API htmlml_engine* htmlml_engine_create_with_options(const htmlml_engine_options* options);
@@ -376,6 +534,28 @@ HTMLML_API uint8_t htmlml_engine_load_url(
     const char* url,
     size_t url_length);
 HTMLML_API uint8_t htmlml_engine_enqueue(htmlml_engine* engine, const htmlml_input_event* event);
+/*
+ * Atomically submits a viewport update and its corresponding host rendering
+ * opportunity. The worker applies resize listeners/observers before releasing
+ * requestAnimationFrame callbacks, without racing two independently awakened
+ * enqueue calls. Both records contribute to the ordinary input metrics.
+ */
+HTMLML_API uint8_t htmlml_engine_enqueue_resize_frame(
+    htmlml_engine* engine,
+    const htmlml_input_event* resize_event,
+    const htmlml_input_event* frame_event);
+/*
+ * Requests a V8 low-memory collection on this engine's worker thread. This is
+ * intended for hidden/idle components or host memory-pressure handling; it
+ * queues work and does not block the caller on garbage collection.
+ */
+HTMLML_API uint8_t htmlml_engine_request_low_memory(htmlml_engine* engine);
+/*
+ * Declares whether the host is actively presenting this engine. A transition
+ * to hidden schedules one debounced low-memory collection on the engine
+ * worker; returning visible before the deadline cancels it.
+ */
+HTMLML_API uint8_t htmlml_engine_set_visible(htmlml_engine* engine, uint8_t visible);
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 HTMLML_API uint32_t htmlml_engine_get_cursor(const htmlml_engine* engine);
 HTMLML_API uint8_t htmlml_engine_execute_script(
@@ -458,6 +638,12 @@ HTMLML_API size_t htmlml_engine_copy_canvas_layouts(
  */
 HTMLML_API uint8_t htmlml_engine_request_scene_checkpoint(htmlml_engine* engine);
 HTMLML_API const htmlml_scene_view* htmlml_engine_acquire_latest_scene(htmlml_engine* engine);
+/*
+ * Enables the bounded ordered consumer lane and acquires its oldest pending
+ * diff. Unlike acquire_latest, this preserves every base-revision link while
+ * allowing the producer to publish one additional immutable diff ahead.
+ */
+HTMLML_API const htmlml_scene_view* htmlml_engine_acquire_next_scene(htmlml_engine* engine);
 HTMLML_API uint8_t htmlml_scene_acknowledge(const htmlml_scene_view* scene);
 HTMLML_API void htmlml_scene_release(const htmlml_scene_view* scene);
 HTMLML_API uint8_t htmlml_scene_get_header(
@@ -472,9 +658,24 @@ HTMLML_API void htmlml_engine_get_metrics(
 HTMLML_API uint8_t htmlml_engine_get_input_dispatch_metrics(
     const htmlml_engine* engine,
     htmlml_input_dispatch_metrics* metrics);
+HTMLML_API uint8_t htmlml_engine_get_animation_frame_metrics(
+    const htmlml_engine* engine,
+    htmlml_animation_frame_metrics* metrics);
+HTMLML_API uint8_t htmlml_engine_get_scene_flow_metrics(
+    const htmlml_engine* engine,
+    htmlml_scene_flow_metrics* metrics);
+HTMLML_API uint8_t htmlml_engine_get_resize_frame_metrics(
+    const htmlml_engine* engine,
+    htmlml_resize_frame_metrics* metrics);
 HTMLML_API uint8_t htmlml_engine_get_resource_cache_metrics(
     const htmlml_engine* engine,
     htmlml_resource_cache_metrics* metrics);
+HTMLML_API uint8_t htmlml_engine_get_process_cache_metrics(
+    const htmlml_engine* engine,
+    htmlml_process_cache_metrics* metrics);
+HTMLML_API uint8_t htmlml_engine_get_memory_metrics(
+    const htmlml_engine* engine,
+    htmlml_engine_memory_metrics* metrics);
 
 #ifdef __cplusplus
 }

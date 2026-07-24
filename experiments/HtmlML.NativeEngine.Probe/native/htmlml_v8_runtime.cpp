@@ -24,6 +24,8 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <sstream>
 #include <string_view>
@@ -38,6 +40,9 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -58,6 +63,7 @@ enum class binding_category : size_t {
     count
 };
 
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
 constexpr size_t binding_category_count = static_cast<size_t>(binding_category::count);
 constexpr std::array<const char*, binding_category_count> binding_category_names{
     "canvas-draw",
@@ -70,6 +76,7 @@ constexpr std::array<const char*, binding_category_count> binding_category_names
     "dom-mutation",
     "dom-query",
     "style"};
+#endif
 
 struct binding_callback_stats final {
     uint64_t calls{0};
@@ -96,6 +103,198 @@ public:
 private:
     binding_callback_stats* stats_;
     std::chrono::steady_clock::time_point started_{};
+};
+
+class immutable_byte_buffer final {
+public:
+    immutable_byte_buffer(const immutable_byte_buffer&) = delete;
+    immutable_byte_buffer& operator=(const immutable_byte_buffer&) = delete;
+
+    ~immutable_byte_buffer()
+    {
+#if defined(_WIN32)
+        if (mapped_base_ != nullptr) UnmapViewOfFile(mapped_base_);
+        if (mapping_ != nullptr) CloseHandle(mapping_);
+        if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
+#else
+        if (mapped_base_ != MAP_FAILED) {
+            static_cast<void>(munmap(mapped_base_, mapped_size_));
+        }
+        if (file_ >= 0) static_cast<void>(close(file_));
+#endif
+    }
+
+    static std::shared_ptr<const immutable_byte_buffer> copy(
+        const uint8_t* data,
+        size_t size)
+    {
+        if (data == nullptr || size == 0U) return {};
+        auto result = std::shared_ptr<immutable_byte_buffer>(
+            new immutable_byte_buffer());
+        result->owned_.assign(data, data + size);
+        result->data_ = result->owned_.data();
+        result->size_ = result->owned_.size();
+        return result;
+    }
+
+    static std::shared_ptr<const immutable_byte_buffer> take(
+        std::vector<uint8_t> data)
+    {
+        if (data.empty()) return {};
+        auto result = std::shared_ptr<immutable_byte_buffer>(
+            new immutable_byte_buffer());
+        result->owned_ = std::move(data);
+        result->data_ = result->owned_.data();
+        result->size_ = result->owned_.size();
+        return result;
+    }
+
+    static std::shared_ptr<const immutable_byte_buffer> map_file(
+        const std::filesystem::path& path,
+        size_t payload_offset,
+        size_t payload_size)
+    {
+        if (payload_size == 0U
+            || payload_offset > std::numeric_limits<size_t>::max() - payload_size) {
+            return {};
+        }
+        auto result = std::shared_ptr<immutable_byte_buffer>(
+            new immutable_byte_buffer());
+#if defined(_WIN32)
+        result->file_ = CreateFileW(
+            path.c_str(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (result->file_ == INVALID_HANDLE_VALUE) return {};
+        LARGE_INTEGER file_size{};
+        if (!GetFileSizeEx(result->file_, &file_size)
+            || file_size.QuadPart <= 0
+            || static_cast<uint64_t>(file_size.QuadPart)
+                < static_cast<uint64_t>(payload_offset + payload_size)) {
+            return {};
+        }
+        result->mapping_ = CreateFileMappingW(
+            result->file_,
+            nullptr,
+            PAGE_READONLY,
+            0,
+            0,
+            nullptr);
+        if (result->mapping_ == nullptr) return {};
+        result->mapped_base_ = static_cast<const uint8_t*>(
+            MapViewOfFile(result->mapping_, FILE_MAP_READ, 0, 0, 0));
+        if (result->mapped_base_ == nullptr) return {};
+        result->mapped_size_ = static_cast<size_t>(file_size.QuadPart);
+#else
+        result->file_ = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+        if (result->file_ < 0) return {};
+        struct stat metadata{};
+        if (fstat(result->file_, &metadata) != 0
+            || metadata.st_size <= 0
+            || static_cast<uint64_t>(metadata.st_size)
+                < static_cast<uint64_t>(payload_offset + payload_size)) {
+            return {};
+        }
+        result->mapped_size_ = static_cast<size_t>(metadata.st_size);
+        result->mapped_base_ = mmap(
+            nullptr,
+            result->mapped_size_,
+            PROT_READ,
+            MAP_PRIVATE,
+            result->file_,
+            0);
+        if (result->mapped_base_ == MAP_FAILED) return {};
+#endif
+        result->data_ =
+            static_cast<const uint8_t*>(result->mapped_base_) + payload_offset;
+        result->size_ = payload_size;
+        return result;
+    }
+
+    const uint8_t* data() const noexcept { return data_; }
+    size_t size() const noexcept { return size_; }
+    bool empty() const noexcept { return size_ == 0U; }
+    bool mapped() const noexcept
+    {
+#if defined(_WIN32)
+        return mapped_base_ != nullptr;
+#else
+        return mapped_base_ != MAP_FAILED;
+#endif
+    }
+
+private:
+    immutable_byte_buffer() = default;
+
+    std::vector<uint8_t> owned_;
+    const uint8_t* data_{nullptr};
+    size_t size_{0U};
+#if defined(_WIN32)
+    HANDLE file_{INVALID_HANDLE_VALUE};
+    HANDLE mapping_{nullptr};
+    const uint8_t* mapped_base_{nullptr};
+#else
+    int file_{-1};
+    void* mapped_base_{MAP_FAILED};
+#endif
+    size_t mapped_size_{0U};
+};
+
+class immutable_text_source final {
+public:
+    static std::shared_ptr<const immutable_text_source> from_string(
+        std::shared_ptr<const std::string> source)
+    {
+        if (source == nullptr) return {};
+        auto result = std::shared_ptr<immutable_text_source>(
+            new immutable_text_source());
+        result->string_ = std::move(source);
+        return result;
+    }
+
+    static std::shared_ptr<const immutable_text_source> from_bytes(
+        std::shared_ptr<const immutable_byte_buffer> source)
+    {
+        if (source == nullptr) return {};
+        auto result = std::shared_ptr<immutable_text_source>(
+            new immutable_text_source());
+        result->bytes_ = std::move(source);
+        return result;
+    }
+
+    const char* data() const noexcept
+    {
+        return string_ != nullptr
+            ? string_->data()
+            : reinterpret_cast<const char*>(bytes_->data());
+    }
+
+    size_t size() const noexcept
+    {
+        return string_ != nullptr ? string_->size() : bytes_->size();
+    }
+
+    bool empty() const noexcept { return size() == 0U; }
+
+    bool mapped() const noexcept
+    {
+        return bytes_ != nullptr && bytes_->mapped();
+    }
+
+    std::string_view view() const noexcept
+    {
+        return {data(), size()};
+    }
+
+private:
+    immutable_text_source() = default;
+
+    std::shared_ptr<const std::string> string_;
+    std::shared_ptr<const immutable_byte_buffer> bytes_;
 };
 
 enum inline_style_property : uint64_t {
@@ -151,6 +350,45 @@ enum inline_style_property : uint64_t {
 
 std::once_flag v8_initialize_once;
 std::unique_ptr<v8::Platform> v8_platform;
+
+std::optional<uint64_t> unsigned_environment_value(const char* name)
+{
+    const auto* text = std::getenv(name);
+    if (text == nullptr || *text == '\0') return {};
+    uint64_t value = 0;
+    const auto* end = text + std::strlen(text);
+    const auto parsed = std::from_chars(text, end, value);
+    return parsed.ec == std::errc{} && parsed.ptr == end
+        ? std::optional<uint64_t>{value}
+        : std::optional<uint64_t>{};
+}
+
+std::optional<bool> boolean_environment_value(const char* name)
+{
+    const auto* text = std::getenv(name);
+    if (text == nullptr) return {};
+    const std::string_view value{text};
+    if (value.empty()
+        || value == "1"
+        || value == "true"
+        || value == "TRUE"
+        || value == "yes"
+        || value == "YES"
+        || value == "on"
+        || value == "ON") {
+        return true;
+    }
+    if (value == "0"
+        || value == "false"
+        || value == "FALSE"
+        || value == "no"
+        || value == "NO"
+        || value == "off"
+        || value == "OFF") {
+        return false;
+    }
+    return {};
+}
 
 std::filesystem::path native_module_directory()
 {
@@ -333,7 +571,9 @@ float inherited_font_size(const dom_node& node)
 std::string resolved_font_family(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (!current->style.font_family.empty()) return current->style.font_family;
+        if (!current->style.textual().font_family.empty()) {
+            return current->style.textual().font_family;
+        }
     }
     return "sans-serif";
 }
@@ -693,6 +933,18 @@ std::vector<css_length> parse_simple_grid_tracks(const std::string& value)
 void initialize_v8_process()
 {
     std::call_once(v8_initialize_once, [] {
+        bool optimize_for_size = false;
+#if defined(HTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT)
+        optimize_for_size = true;
+#endif
+        if (const auto configured =
+                boolean_environment_value("HTMLML_V8_OPTIMIZE_FOR_SIZE");
+            configured.has_value()) {
+            optimize_for_size = configured.value();
+        }
+        if (optimize_for_size) {
+            v8::V8::SetFlagsFromString("--optimize-for-size");
+        }
 #if defined(HTMLML_V8_ICU_DATA_FILENAME)
         const auto icu_data_path =
             native_module_directory() / HTMLML_V8_ICU_DATA_FILENAME;
@@ -705,7 +957,15 @@ void initialize_v8_process()
 #else
         throw std::runtime_error("The HtmlML native engine was built without an ICU data filename.");
 #endif
-        v8_platform = v8::platform::NewDefaultPlatform();
+        const auto thread_pool_size = static_cast<int>(std::min<uint64_t>(
+            unsigned_environment_value("HTMLML_V8_PLATFORM_THREADS").value_or(0),
+            16));
+        const auto idle_tasks = std::getenv("HTMLML_V8_IDLE_TASKS") != nullptr
+            ? v8::platform::IdleTaskSupport::kEnabled
+            : v8::platform::IdleTaskSupport::kDisabled;
+        v8_platform = v8::platform::NewDefaultPlatform(
+            thread_pool_size,
+            idle_tasks);
         v8::V8::InitializePlatform(v8_platform.get());
         v8::V8::Initialize();
     });
@@ -949,7 +1209,7 @@ std::string to_hex(const std::array<uint8_t, 32>& digest)
 
 std::array<uint8_t, 32> compilation_key_digest(
     const std::string& document_name,
-    const std::string& source)
+    std::string_view source)
 {
     // Cached V8 data is only reusable under the native embedder contract that
     // produced it. Bump this identity whenever runtime bootstrap semantics or
@@ -1226,15 +1486,40 @@ struct v8_dom_runtime::implementation final {
         std::vector<char> combinators;
     };
 
-    struct css_rule final {
+    struct css_rule_payload final {
         std::string selector;
         compiled_css_selector compiled_selector;
         std::vector<css_declaration> declarations;
         std::vector<std::string> media_queries;
-        uint32_t stylesheet_owner_id{0};
         uint32_t specificity{0};
-        bool media_matches{true};
     };
+
+    struct css_rule final {
+        std::shared_ptr<const css_rule_payload> payload;
+        uint32_t stylesheet_owner_id{0};
+        bool media_matches{true};
+
+        const std::string& selector() const noexcept { return payload->selector; }
+        const compiled_css_selector& compiled_selector() const noexcept
+        {
+            return payload->compiled_selector;
+        }
+        const std::vector<css_declaration>& declarations() const noexcept
+        {
+            return payload->declarations;
+        }
+        const std::vector<std::string>& media_queries() const noexcept
+        {
+            return payload->media_queries;
+        }
+        uint32_t specificity() const noexcept { return payload->specificity; }
+    };
+
+    inline static std::mutex shared_css_rule_payload_mutex;
+    inline static std::unordered_map<
+        uint64_t,
+        std::vector<std::weak_ptr<const css_rule_payload>>>
+        shared_css_rule_payloads;
 
     struct css_opacity_keyframes final {
         std::vector<node_style::opacity_keyframe> opacity_stops;
@@ -1321,8 +1606,82 @@ struct v8_dom_runtime::implementation final {
         size_t source_bytes{0};
     };
 
+    struct event_listener_registration final {
+        v8::Global<v8::Function> callback;
+        v8::Global<v8::Context> context;
+        std::string name;
+        uint64_t registration_sequence{0};
+        uint32_t target{0};
+        bool capture{false};
+        bool once{false};
+    };
+
+    enum class process_compilation_state : uint8_t {
+        producing,
+        ready,
+        failed
+    };
+
+    struct process_compilation_entry final {
+        std::mutex mutex;
+        std::condition_variable condition;
+        process_compilation_state state{process_compilation_state::producing};
+        std::shared_ptr<const immutable_byte_buffer> cached_data;
+        size_t bytes{0U};
+        uint64_t access{0U};
+    };
+
+    struct process_compilation_acquisition final {
+        std::shared_ptr<process_compilation_entry> entry;
+        bool producer{false};
+    };
+
+    class shared_external_one_byte_source final
+        : public v8::String::ExternalOneByteStringResource {
+    public:
+        explicit shared_external_one_byte_source(
+            std::shared_ptr<const immutable_text_source> source)
+            : source_(std::move(source))
+        {
+        }
+
+        const char* data() const override
+        {
+            return source_->data();
+        }
+
+        size_t length() const override
+        {
+            return source_->size();
+        }
+
+        size_t EstimateMemoryUsage() const override
+        {
+            // The character buffer is shared and is attributed separately by
+            // EstimateSharedMemoryUsage. Only this small owner is unique to
+            // the external V8 string in one isolate.
+            return sizeof(*this);
+        }
+
+        void EstimateSharedMemoryUsage(
+            SharedMemoryUsageRecorder* recorder) const override
+        {
+            recorder->RecordSharedMemoryUsage(
+                source_->data(),
+                source_->size());
+        }
+
+    private:
+        std::shared_ptr<const immutable_text_source> source_;
+    };
+
+    struct process_script_source_entry final {
+        std::weak_ptr<const immutable_text_source> source;
+        uint64_t access{0U};
+    };
+
     struct cached_text_resource final {
-        std::string content;
+        std::shared_ptr<const immutable_text_source> content;
         std::string entity_tag;
         int64_t last_modified_unix_seconds{0};
         int64_t fresh_until_unix_seconds{0};
@@ -1331,11 +1690,22 @@ struct v8_dom_runtime::implementation final {
     struct process_resource_cache_entry final {
         cached_text_resource resource;
         size_t bytes{0};
+        size_t mapped_bytes{0};
         uint64_t access{0};
     };
 
+    struct process_resource_load_entry final {
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::atomic<bool> ready{false};
+        bool loaded{false};
+        std::shared_ptr<const resource_response> response;
+        std::chrono::steady_clock::time_point expires_at{};
+        uint64_t access{0U};
+    };
+
     struct prefetched_resource final {
-        resource_response response;
+        std::shared_ptr<const resource_response> response;
         cached_text_resource cached;
         bool loaded{false};
         bool has_cached{false};
@@ -1351,13 +1721,19 @@ struct v8_dom_runtime::implementation final {
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("HTMLML_PROBE_PROFILE_BINDINGS") != nullptr)
+        , profile_resize_cpu(
+            std::getenv("HTMLML_PROBE_PROFILE_RESIZE_CPU") != nullptr)
         , profile_startup(std::getenv("HTMLML_PROBE_PROFILE_STARTUP") != nullptr)
         , profile_css(std::getenv("HTMLML_PROBE_PROFILE_CSS") != nullptr)
+#endif
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             startup_profile_started = std::chrono::steady_clock::now();
         }
+#endif
     }
 
     ~implementation()
@@ -1384,10 +1760,6 @@ struct v8_dom_runtime::implementation final {
         frame_windows.clear();
         frame_load_listeners.clear();
         frame_event_listeners.clear();
-        frame_event_listener_contexts.clear();
-        frame_event_listener_targets.clear();
-        frame_event_listener_captures.clear();
-        frame_event_listener_once.clear();
         actual_frame_windows.clear();
         actual_frame_documents.clear();
         provisional_frame_bodies.clear();
@@ -1412,10 +1784,12 @@ struct v8_dom_runtime::implementation final {
         element_template.Reset();
         frame_context.Reset();
         context.Reset();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (cpu_profiler != nullptr) {
             cpu_profiler->Dispose();
             cpu_profiler = nullptr;
         }
+#endif
         if (isolate != nullptr) {
             isolate->Dispose();
             isolate = nullptr;
@@ -1563,8 +1937,13 @@ struct v8_dom_runtime::implementation final {
 
     void record_composition(std::string_view id, uint32_t node_id)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         std::lock_guard lock(feature_observation_mutex);
         composition_observed_nodes[std::string(id)].insert(node_id);
+#else
+        static_cast<void>(id);
+        static_cast<void>(node_id);
+#endif
     }
 
     static bool nonzero_length(const css_length& value)
@@ -1596,17 +1975,18 @@ struct v8_dom_runtime::implementation final {
 
     void detect_css_compositions(dom_node& node)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (node.style.transform_specified && node.style.transform_origin_specified) {
             record_composition("css-transform-origin-independent-cascade", node.id);
         }
         if (node.style.transform_specified
-            && node.style.transform_transition.duration_ms > 0) {
+            && node.style.animations().transform_transition.duration_ms > 0) {
             record_composition("css-transform-transition", node.id);
         }
-        if (node.style.opacity_transition.duration_ms > 0) {
+        if (node.style.animations().opacity_transition.duration_ms > 0) {
             record_composition("css-opacity-transition", node.id);
         }
-        if (node.style.color_transition.duration_ms > 0) {
+        if (node.style.animations().color_transition.duration_ms > 0) {
             record_composition("css-color-transition", node.id);
         }
         if (node.style.box_shadow_present && has_rounded_corner(node.style)) {
@@ -1628,7 +2008,7 @@ struct v8_dom_runtime::implementation final {
 
         const auto grid_with_gap = [](const dom_node& candidate) {
             return candidate.style.display == display_mode::grid
-                && !candidate.style.grid_template_columns.empty()
+                && !candidate.style.grid().template_columns.empty()
                 && (nonzero_length(candidate.style.row_gap)
                     || nonzero_length(candidate.style.column_gap));
         };
@@ -1645,6 +2025,9 @@ struct v8_dom_runtime::implementation final {
             && node.parent != nullptr && grid_with_gap(*node.parent)) {
             record_composition("css-grid-gap-positioning", node.parent->id);
         }
+#else
+        static_cast<void>(node);
+#endif
     }
 
     static bool is_paint_property(std::string_view name)
@@ -1662,9 +2045,11 @@ struct v8_dom_runtime::implementation final {
     static std::string resolved_cursor(dom_node& node)
     {
         for (auto* current = &node; current != nullptr; current = current->parent) {
-            if (!current->style.cursor.empty()
-                && current->style.cursor != "inherit"
-                && current->style.cursor != "unset") return current->style.cursor;
+            if (!current->style.textual().cursor.empty()
+                && current->style.textual().cursor != "inherit"
+                && current->style.textual().cursor != "unset") {
+                return current->style.textual().cursor;
+            }
         }
         return "auto";
     }
@@ -1690,6 +2075,7 @@ struct v8_dom_runtime::implementation final {
         std::string semantic_slice = {},
         std::string source = {})
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto key = category + '\x1f' + feature + '\x1f' + classification
             + '\x1f' + semantic_slice + '\x1f' + source;
         if (const auto cached = feature_observation_writer_cache.find(key);
@@ -1708,6 +2094,52 @@ struct v8_dom_runtime::implementation final {
         static_cast<void>(inserted);
         feature_observation_writer_cache.emplace(key, &entry->second);
         entry->second.count.fetch_add(1U, std::memory_order_relaxed);
+#else
+        static_cast<void>(category);
+        static_cast<void>(feature);
+        static_cast<void>(classification);
+        static_cast<void>(semantic_slice);
+        static_cast<void>(source);
+#endif
+    }
+
+    void record_canvas_feature(const char* feature)
+    {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        // Canvas methods are an exceptionally hot certification surface: a
+        // chart frame can cross the V8/native boundary thousands of times.
+        // The generic writer deliberately accepts dynamic strings, but paying
+        // for five string copies plus a composite key on every draw call makes
+        // feature telemetry part of the rendering budget. Canvas call sites
+        // pass stable string literals, so cache by literal identity after the
+        // first observation while preserving the exact invocation count.
+        if (const auto cached = canvas_feature_observation_writer_cache.find(feature);
+            cached != canvas_feature_observation_writer_cache.end()) {
+            cached->second->count.fetch_add(1U, std::memory_order_relaxed);
+            return;
+        }
+        auto category = std::string("canvas");
+        auto feature_name =
+            std::string("CanvasRenderingContext2D.") + feature;
+        auto classification = std::string("supported");
+        auto source = std::string("native-binding");
+        const auto key = category + '\x1f' + feature_name + '\x1f'
+            + classification + "\x1f\x1f" + source;
+        std::lock_guard lock(feature_observation_mutex);
+        auto [entry, inserted] = feature_observations.try_emplace(
+            key,
+            std::move(category),
+            std::move(feature_name),
+            std::move(classification),
+            std::string{},
+            std::move(source));
+        static_cast<void>(inserted);
+        feature_observation_writer_cache.emplace(key, &entry->second);
+        canvas_feature_observation_writer_cache.emplace(feature, &entry->second);
+        entry->second.count.fetch_add(1U, std::memory_order_relaxed);
+#else
+        static_cast<void>(feature);
+#endif
     }
 
     static void append_json_string(std::ostringstream& output, std::string_view value)
@@ -1738,6 +2170,9 @@ struct v8_dom_runtime::implementation final {
 
     std::string feature_use_json() const
     {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        return R"({"schema":"htmlml-native-feature-use-v2","complete":false,"telemetryEnabled":false,"incompleteCategories":["telemetry-disabled"],"observations":[],"compositionDiscovery":{"schema":"htmlml-native-composition-use-v1","complete":false,"incompleteCategories":["telemetry-disabled"],"detectors":[],"observations":[]}})";
+#else
         std::lock_guard lock(feature_observation_mutex);
         std::unordered_set<std::string> dispatched_event_features;
         for (const auto& [key, observation] : feature_observations) {
@@ -1834,19 +2269,19 @@ struct v8_dom_runtime::implementation final {
         }
         output << "]}}";
         return std::move(output).str();
+#endif
     }
 
     std::string event_listener_inventory_json() const
     {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        return R"({"schema":"htmlml-event-listener-inventory-v1","complete":false,"telemetryEnabled":false,"targets":[]})";
+#else
         std::unordered_map<uint32_t, std::unordered_set<std::string>> by_target;
-        for (const auto& [type, targets] : frame_event_listener_targets) {
-            const auto callbacks = frame_event_listeners.find(type);
-            for (size_t index = 0; index < targets.size(); ++index) {
-                if (targets[index] == 0U
-                    || callbacks == frame_event_listeners.end()
-                    || index >= callbacks->second.size()
-                    || callbacks->second[index].IsEmpty()) continue;
-                by_target[targets[index]].insert(type);
+        for (const auto& [type, listeners] : frame_event_listeners) {
+            for (const auto& listener : listeners) {
+                if (listener.target == 0U || listener.callback.IsEmpty()) continue;
+                by_target[listener.target].insert(type);
             }
         }
         std::vector<uint32_t> target_ids;
@@ -1874,6 +2309,7 @@ struct v8_dom_runtime::implementation final {
         }
         output << "]}";
         return std::move(output).str();
+#endif
     }
 
     static v8::Intercepted get_window_named_property(
@@ -1948,9 +2384,14 @@ struct v8_dom_runtime::implementation final {
 
     binding_callback_stats* profile(binding_category category) noexcept
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         return profile_bindings
             ? &binding_totals[static_cast<size_t>(category)]
             : nullptr;
+#else
+        static_cast<void>(category);
+        return nullptr;
+#endif
     }
 
     static dom_node* unwrap_node(v8::Local<v8::Object> object)
@@ -1962,6 +2403,51 @@ struct v8_dom_runtime::implementation final {
                 v8::kEmbedderDataTypeTagDefault));
     }
 
+    void compact_retained_native_capacity() noexcept
+    {
+        // This runs only on the owning engine worker. The selected containers
+        // retain stable post-startup state or queued work that remains valid
+        // across a move; no JavaScript callback can observe the reallocation.
+        try {
+            for (auto& [type, listeners] : frame_event_listeners) {
+                static_cast<void>(type);
+                listeners.shrink_to_fit();
+            }
+            resize_listeners.shrink_to_fit();
+            timers.shrink_to_fit();
+            connected_resources.shrink_to_fit();
+            resize_observers.shrink_to_fit();
+            loaded_resource_names.shrink_to_fit();
+            pending_frame_hydrations.shrink_to_fit();
+            detached_dom_roots.shrink_to_fit();
+            pending_promise_rejections.shrink_to_fit();
+            document_cookies.shrink_to_fit();
+            css_rules.shrink_to_fit();
+            for (auto& [name, keyframes] : opacity_keyframes) {
+                static_cast<void>(name);
+                keyframes.opacity_stops.shrink_to_fit();
+                keyframes.rotation_stops.shrink_to_fit();
+            }
+            const auto compact_index = [](auto& index) {
+                for (auto& [key, values] : index) {
+                    static_cast<void>(key);
+                    values.shrink_to_fit();
+                }
+            };
+            compact_index(css_rules_by_class);
+            compact_index(css_rules_by_id);
+            compact_index(css_rules_by_tag);
+            compact_index(css_rules_by_attribute);
+            css_focus_rules.shrink_to_fit();
+            unindexed_css_rules.shrink_to_fit();
+            hover_selector_dependencies.shrink_to_fit();
+        } catch (...) {
+            // Capacity compaction is opportunistic. A failed allocator request
+            // must not suppress V8's low-memory notification or kill the
+            // engine worker.
+        }
+    }
+
     bool initialize()
     {
         prune_persistent_compilation_cache();
@@ -1969,18 +2455,32 @@ struct v8_dom_runtime::implementation final {
         allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
         v8::Isolate::CreateParams params;
         params.array_buffer_allocator = allocator;
+        if (const auto maximum_heap_mib =
+                unsigned_environment_value("HTMLML_V8_MAX_HEAP_MIB");
+            maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
+            const auto initial_heap_mib =
+                unsigned_environment_value("HTMLML_V8_INITIAL_HEAP_MIB").value_or(0);
+            params.constraints.ConfigureDefaultsFromHeapSize(
+                initial_heap_mib * 1024U * 1024U,
+                *maximum_heap_mib * 1024U * 1024U);
+        }
         isolate = v8::Isolate::New(params);
         if (isolate == nullptr) {
             last_error = "V8 isolate creation failed";
             return false;
         }
         isolate->SetData(0, this);
+        if (std::getenv("HTMLML_V8_MEMORY_SAVER") != nullptr) {
+            isolate->SetMemorySaverMode(true);
+        }
         isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kExplicit);
         isolate->SetPromiseRejectCallback(promise_rejected);
-        if (profile_bindings) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (profile_bindings || profile_resize_cpu) {
             cpu_profiler = v8::CpuProfiler::New(isolate);
             cpu_profiler->SetSamplingInterval(250);
         }
+#endif
 
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
@@ -2667,9 +3167,9 @@ struct v8_dom_runtime::implementation final {
             info[0]).Check();
     }
 
-    void install_intersection_observer_polyfill(v8::Local<v8::Context> local_context)
+    static constexpr std::string_view intersection_observer_bootstrap_source()
     {
-        constexpr std::string_view source = R"JS(
+        return R"JS(
           (() => {
             const normalizeThresholds = value => {
               const source = value === undefined ? [0] : Array.isArray(value) ? value : [value];
@@ -2813,6 +3313,11 @@ struct v8_dom_runtime::implementation final {
             });
           })();
         )JS";
+    }
+
+    void install_intersection_observer_polyfill(v8::Local<v8::Context> local_context)
+    {
+        const auto source = intersection_observer_bootstrap_source();
         auto script = v8::Script::Compile(
             local_context,
             js_string(isolate, std::string(source).c_str())).ToLocalChecked();
@@ -3563,6 +4068,7 @@ struct v8_dom_runtime::implementation final {
             for (const auto& script : scripts) {
                 if (script.defer != defer) continue;
                 std::string source = script.code;
+                std::shared_ptr<const immutable_text_source> immutable_source;
                 auto name = resolved_url + "#inline-script-" + std::to_string(script.index + 1U);
                 if (!script.source.empty()) {
                     if (!load_text_resource(
@@ -3570,7 +4076,8 @@ struct v8_dom_runtime::implementation final {
                             document_base_address,
                             HTMLML_RESOURCE_SCRIPT,
                             source,
-                            name)) {
+                            name,
+                            &immutable_source)) {
                         frame_last_error_value = "Unable to load document script: " + script.source;
                         ++frame_script_error_count;
                         report_document_script_error(frame_last_error_value);
@@ -3579,7 +4086,16 @@ struct v8_dom_runtime::implementation final {
                 }
                 set_current_script(local_context, document_object.Get(isolate), name);
                 std::string error;
-                if (!execute_in_context(local_context, source, name, error)) {
+                const auto script_source = immutable_source != nullptr
+                    ? immutable_source->view()
+                    : std::string_view(source);
+                if (!execute_in_context(
+                        local_context,
+                        script_source,
+                        name,
+                        error,
+                        true,
+                        std::move(immutable_source))) {
                     frame_last_error_value = "Document script #" + std::to_string(script.index)
                         + " failed: " + error;
                     ++frame_script_error_count;
@@ -3659,6 +4175,203 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    bool execute_timer_task(
+        timer_task task,
+        std::chrono::steady_clock::time_point now_time)
+    {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (profile_startup) {
+            if (task.animation_frame) ++startup_raf_executed;
+            else ++startup_timer_executed;
+        }
+#endif
+        auto task_context = task.context.Get(isolate);
+        if (task_context.IsEmpty()) return true;
+        v8::Context::Scope task_context_scope(task_context);
+        auto callback = task.callback.Get(isolate);
+        if (callback.IsEmpty()) return true;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        auto task_profile_name = std::string{};
+        auto task_profile_started = std::chrono::steady_clock::time_point{};
+        std::array<binding_callback_stats, binding_category_count>
+            task_binding_profile_before{};
+        if (profile_startup) {
+            const auto origin = callback->GetScriptOrigin().ResourceName();
+            task_profile_name = origin.IsEmpty() || origin->IsUndefined()
+                ? std::string("<anonymous>")
+                : resource_leaf_name(to_utf8(isolate, origin));
+            auto function_name = to_utf8(isolate, callback->GetName());
+            if (function_name.empty()) {
+                function_name = to_utf8(isolate, callback->GetInferredName());
+            }
+            if (!function_name.empty()) task_profile_name += ':' + function_name;
+            else {
+                const auto line = callback->GetScriptLineNumber();
+                const auto column = callback->GetScriptColumnNumber();
+                if (line >= 0) {
+                    task_profile_name += ':' + std::to_string(line + 1);
+                    if (column >= 0) task_profile_name += ':' + std::to_string(column + 1);
+                }
+            }
+            task_profile_started = std::chrono::steady_clock::now();
+        }
+        if (profile_bindings) {
+            task_binding_profile_before = binding_totals;
+        }
+#endif
+        v8::TryCatch try_catch(isolate);
+        std::vector<v8::Local<v8::Value>> arguments;
+        if (task.animation_frame) {
+            const auto timestamp = task.animation_timestamp_ms >= 0
+                ? task.animation_timestamp_ms
+                : std::chrono::duration<double, std::milli>(
+                    now_time.time_since_epoch()).count();
+            arguments.push_back(v8::Number::New(isolate, timestamp));
+        } else {
+            arguments.reserve(task.arguments.size());
+            for (auto& argument : task.arguments) {
+                arguments.push_back(argument.Get(isolate));
+            }
+        }
+        active_timer_id = task.id;
+        active_timer_cancelled = false;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        binding_callback_timer callback_timer(
+            profile_startup ? &startup_task_callbacks : nullptr);
+#endif
+        if (callback->Call(
+                task_context,
+                task_context->Global(),
+                static_cast<int>(arguments.size()),
+                arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
+            active_timer_id = 0;
+            last_error = std::string(task.animation_frame
+                    ? "requestAnimationFrame task failed: "
+                    : "timer task failed: ")
+                + describe_exception(try_catch, task_context);
+            return false;
+        }
+        isolate->PerformMicrotaskCheckpoint();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (profile_startup) {
+            auto& stats = startup_task_profiles[task_profile_name];
+            ++stats.calls;
+            stats.nanoseconds += static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - task_profile_started).count());
+            if (std::getenv("HTMLML_PROBE_TRACE_STARTUP_TASKS") != nullptr) {
+                std::cerr << "[Native Engine Probe] startup-task t=" << std::fixed
+                    << std::setprecision(1)
+                    << std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - startup_profile_started).count()
+                    << "ms elapsed=" << std::fixed << std::setprecision(3)
+                    << std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - task_profile_started).count()
+                    << "ms kind=" << (task.animation_frame ? "raf" : "timer")
+                    << " delay=" << task.interval.count() << "ms"
+                    << " name=" << task_profile_name;
+                if (profile_bindings) {
+                    std::cerr << " bindings=[";
+                    auto wrote_binding = false;
+                    for (size_t index = 0;
+                        index < binding_category_count;
+                        ++index) {
+                        const auto calls =
+                            binding_totals[index].calls
+                                - task_binding_profile_before[index].calls;
+                        const auto nanoseconds =
+                            binding_totals[index].nanoseconds
+                                - task_binding_profile_before[index].nanoseconds;
+                        if (calls == 0) continue;
+                        if (wrote_binding) std::cerr << ',';
+                        wrote_binding = true;
+                        std::cerr << binding_category_names[index]
+                            << ":c" << calls << "/ms" << std::fixed
+                            << std::setprecision(3)
+                            << nanoseconds / 1'000'000.0;
+                    }
+                    std::cerr << ']';
+                }
+                std::cerr << '\n';
+            }
+        }
+#endif
+        const auto cancelled = active_timer_cancelled;
+        active_timer_id = 0;
+        active_timer_cancelled = false;
+        if (task.repeating && !cancelled) {
+            const auto current = std::chrono::steady_clock::now();
+            do {
+                task.deadline +=
+                    std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                        task.interval);
+            } while (task.deadline <= current);
+            timers.push_back(std::move(task));
+        }
+        return true;
+    }
+
+    bool drain_connected_resource_task()
+    {
+        if (connected_resources.empty()) return true;
+        prefetch_connected_resources();
+        prefer_timer_task = true;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (profile_startup) ++startup_connected_resources;
+#endif
+        auto resource = std::move(connected_resources.front());
+        connected_resources.erase(connected_resources.begin());
+        auto resource_context = resource.context.Get(isolate);
+        auto wrapper = resource.wrapper.Get(isolate);
+        if (resource.node == nullptr
+            || resource_context.IsEmpty()
+            || wrapper.IsEmpty()) {
+            return true;
+        }
+        v8::Context::Scope resource_scope(resource_context);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        const auto trace_resource = profile_startup
+            && std::getenv("HTMLML_PROBE_TRACE_STARTUP_TASKS") != nullptr;
+#else
+        constexpr auto trace_resource = false;
+#endif
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        const auto resource_started = trace_resource
+            ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
+#endif
+        auto resource_name = std::string{};
+        if (trace_resource) {
+            const auto attribute_name =
+                resource.node->tag == "script" ? "src" : "href";
+            if (const auto attribute =
+                    resource.node->attributes.find(attribute_name);
+                attribute != resource.node->attributes.end()) {
+                resource_name = resource_leaf_name(attribute->second);
+            }
+        }
+        if (!load_connected_resource(*resource.node, wrapper)) {
+            last_error = frame_last_error_value;
+            return false;
+        }
+        if (trace_resource) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            const auto completed = std::chrono::steady_clock::now();
+            std::cerr << "[Native Engine Probe] startup-resource t="
+                << std::fixed << std::setprecision(1)
+                << std::chrono::duration<double, std::milli>(
+                    completed - startup_profile_started).count()
+                << "ms elapsed="
+                << std::chrono::duration<double, std::milli>(
+                    completed - resource_started).count()
+                << "ms kind=" << resource.node->tag
+                << " name=" << resource_name << '\n';
+#endif
+        }
+        isolate->PerformMicrotaskCheckpoint();
+        return true;
+    }
+
     bool drain_tasks()
     {
         collect_detached_dom_if_requested();
@@ -3684,46 +4397,7 @@ struct v8_dom_runtime::implementation final {
             // Preparing a large warm-cache resource wave can itself take a few
             // milliseconds. Only do that work once this task source has won
             // the fairness decision, so an already-due timer runs promptly.
-            prefetch_connected_resources();
-            prefer_timer_task = true;
-            if (profile_startup) ++startup_connected_resources;
-            auto resource = std::move(connected_resources.front());
-            connected_resources.erase(connected_resources.begin());
-            auto resource_context = resource.context.Get(isolate);
-            auto wrapper = resource.wrapper.Get(isolate);
-            if (resource.node == nullptr || resource_context.IsEmpty() || wrapper.IsEmpty()) return true;
-            v8::Context::Scope resource_scope(resource_context);
-            const auto trace_resource = profile_startup
-                && std::getenv("HTMLML_PROBE_TRACE_STARTUP_TASKS") != nullptr;
-            const auto resource_started = trace_resource
-                ? std::chrono::steady_clock::now()
-                : std::chrono::steady_clock::time_point{};
-            auto resource_name = std::string{};
-            if (trace_resource) {
-                const auto attribute_name = resource.node->tag == "script" ? "src" : "href";
-                if (const auto attribute = resource.node->attributes.find(attribute_name);
-                    attribute != resource.node->attributes.end()) {
-                    resource_name = resource_leaf_name(attribute->second);
-                }
-            }
-            if (!load_connected_resource(*resource.node, wrapper)) {
-                last_error = frame_last_error_value;
-                return false;
-            }
-            if (trace_resource) {
-                const auto completed = std::chrono::steady_clock::now();
-                std::cerr << "[Native Engine Probe] startup-resource t=" << std::fixed
-                    << std::setprecision(1)
-                    << std::chrono::duration<double, std::milli>(
-                        completed - startup_profile_started).count()
-                    << "ms elapsed="
-                    << std::chrono::duration<double, std::milli>(
-                        completed - resource_started).count()
-                    << "ms kind=" << resource.node->tag
-                    << " name=" << resource_name << '\n';
-            }
-            isolate->PerformMicrotaskCheckpoint();
-            return true;
+            return drain_connected_resource_task();
         }
         if (resize_observers_pending) {
             resize_observers_pending = false;
@@ -3739,94 +4413,7 @@ struct v8_dom_runtime::implementation final {
         auto task = std::move(*next);
         timers.erase(next);
         prefer_timer_task = false;
-        if (profile_startup) {
-            if (task.animation_frame) ++startup_raf_executed;
-            else ++startup_timer_executed;
-        }
-        auto task_context = task.context.Get(isolate);
-        if (task_context.IsEmpty()) return true;
-        v8::Context::Scope task_context_scope(task_context);
-        auto callback = task.callback.Get(isolate);
-        if (callback.IsEmpty()) return true;
-        auto task_profile_name = std::string{};
-        auto task_profile_started = std::chrono::steady_clock::time_point{};
-        if (profile_startup) {
-            const auto origin = callback->GetScriptOrigin().ResourceName();
-            task_profile_name = origin.IsEmpty() || origin->IsUndefined()
-                ? std::string("<anonymous>")
-                : resource_leaf_name(to_utf8(isolate, origin));
-            auto function_name = to_utf8(isolate, callback->GetName());
-            if (function_name.empty()) {
-                function_name = to_utf8(isolate, callback->GetInferredName());
-            }
-            if (!function_name.empty()) task_profile_name += ':' + function_name;
-            else {
-                const auto line = callback->GetScriptLineNumber();
-                const auto column = callback->GetScriptColumnNumber();
-                if (line >= 0) {
-                    task_profile_name += ':' + std::to_string(line + 1);
-                    if (column >= 0) task_profile_name += ':' + std::to_string(column + 1);
-                }
-            }
-            task_profile_started = std::chrono::steady_clock::now();
-        }
-        v8::TryCatch try_catch(isolate);
-        std::vector<v8::Local<v8::Value>> arguments;
-        if (task.animation_frame) {
-            const auto timestamp = task.animation_timestamp_ms >= 0
-                ? task.animation_timestamp_ms
-                : std::chrono::duration<double, std::milli>(
-                    now_time.time_since_epoch()).count();
-            arguments.push_back(v8::Number::New(isolate, timestamp));
-        } else {
-            arguments.reserve(task.arguments.size());
-            for (auto& argument : task.arguments) arguments.push_back(argument.Get(isolate));
-        }
-        active_timer_id = task.id;
-        active_timer_cancelled = false;
-        binding_callback_timer callback_timer(
-            profile_startup ? &startup_task_callbacks : nullptr);
-        if (callback->Call(
-                task_context,
-                task_context->Global(),
-                static_cast<int>(arguments.size()),
-                arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
-            active_timer_id = 0;
-            last_error = std::string(task.animation_frame
-                    ? "requestAnimationFrame task failed: "
-                    : "timer task failed: ")
-                + describe_exception(try_catch, task_context);
-            return false;
-        }
-        isolate->PerformMicrotaskCheckpoint();
-        if (profile_startup) {
-            auto& stats = startup_task_profiles[task_profile_name];
-            ++stats.calls;
-            stats.nanoseconds += static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - task_profile_started).count());
-            if (std::getenv("HTMLML_PROBE_TRACE_STARTUP_TASKS") != nullptr) {
-                std::cerr << "[Native Engine Probe] startup-task t=" << std::fixed
-                    << std::setprecision(1)
-                    << std::chrono::duration<double, std::milli>(
-                        std::chrono::steady_clock::now() - startup_profile_started).count()
-                    << "ms kind=" << (task.animation_frame ? "raf" : "timer")
-                    << " delay=" << task.interval.count() << "ms"
-                    << " name=" << task_profile_name << '\n';
-            }
-        }
-        const auto cancelled = active_timer_cancelled;
-        active_timer_id = 0;
-        active_timer_cancelled = false;
-        if (task.repeating && !cancelled) {
-            const auto current = std::chrono::steady_clock::now();
-            do {
-                task.deadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                    task.interval);
-            } while (task.deadline <= current);
-            timers.push_back(std::move(task));
-        }
-        return true;
+        return execute_timer_task(std::move(task), now_time);
     }
 
     bool has_due_timer() const noexcept
@@ -3838,6 +4425,42 @@ struct v8_dom_runtime::implementation final {
             [now](const auto& timer) { return timer.deadline <= now; });
     }
 
+    bool has_due_animation_frame_task() const noexcept
+    {
+        const auto now = std::chrono::steady_clock::now();
+        return std::any_of(
+            timers.begin(),
+            timers.end(),
+            [now](const auto& timer) {
+                return timer.animation_frame && timer.deadline <= now;
+            });
+    }
+
+    bool drain_animation_frame_task()
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const auto next = std::min_element(
+            timers.begin(),
+            timers.end(),
+            [now](const auto& left, const auto& right) {
+                const auto left_due =
+                    left.animation_frame && left.deadline <= now;
+                const auto right_due =
+                    right.animation_frame && right.deadline <= now;
+                if (left_due != right_due) return left_due;
+                return left.deadline < right.deadline;
+            });
+        if (next == timers.end()
+            || !next->animation_frame
+            || next->deadline > now) {
+            return true;
+        }
+        auto task = std::move(*next);
+        timers.erase(next);
+        return execute_timer_task(std::move(task), now);
+    }
+
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     void summarize_resize_cpu_profile(const v8::CpuProfile& profile)
     {
         std::unordered_map<std::string, uint64_t> hits;
@@ -3885,6 +4508,7 @@ struct v8_dom_runtime::implementation final {
         result << '}';
         last_resize_cpu_profile = std::move(result).str();
     }
+#endif
 
     v8::Local<v8::Object> create_event_instance(v8::Local<v8::Context> local_context)
     {
@@ -3926,7 +4550,31 @@ struct v8_dom_runtime::implementation final {
     {
         record_feature(
             "event", "type:resize", "supported", {}, "event-dispatch");
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        struct resize_profile_scope final {
+            implementation& owner;
+
+            explicit resize_profile_scope(implementation& value)
+                : owner(value)
+            {
+                owner.resize_profile_active = owner.profile_bindings;
+                if (owner.resize_profile_active) {
+                    owner.last_resize_style_property_counts.clear();
+                    owner.last_resize_style_target_counts.clear();
+                    owner.last_resize_attribute_counts.clear();
+                    owner.last_resize_geometry_counts.clear();
+                }
+            }
+
+            ~resize_profile_scope()
+            {
+                owner.resize_profile_active = false;
+            }
+        } profile_scope{*this};
+#endif
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto resize_started = std::chrono::steady_clock::now();
+#endif
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         {
@@ -3946,10 +4594,12 @@ struct v8_dom_runtime::implementation final {
             }
             isolate->PerformMicrotaskCheckpoint();
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto outer_listeners_finished = std::chrono::steady_clock::now();
         last_resize_outer_listeners_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 outer_listeners_finished - resize_started).count());
+#endif
 
         // Responsive stylesheet rules depend on the current host viewport.
         // The compact runtime retains the active browsing context's stylesheet
@@ -3977,9 +4627,11 @@ struct v8_dom_runtime::implementation final {
         if (frame_context.IsEmpty()) return true;
         auto local_frame_context = frame_context.Get(isolate);
         v8::Context::Scope frame_scope(local_frame_context);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         v8::Local<v8::String> cpu_profile_title;
         auto cpu_profile_started = false;
-        if (cpu_profiler != nullptr) {
+        if (cpu_profiler != nullptr
+            && (profile_bindings || !resize_cpu_profile_captured)) {
             cpu_profile_title = js_string(isolate, "htmlml-resize-listener");
             cpu_profile_started = cpu_profiler->StartProfiling(cpu_profile_title, true)
                 == v8::CpuProfilingStatus::kStarted;
@@ -3991,15 +4643,25 @@ struct v8_dom_runtime::implementation final {
                 profile->Delete();
             }
             cpu_profile_started = false;
+            resize_cpu_profile_captured = true;
+            // Starting and stopping V8's profiler on every resize is itself
+            // expensive enough to halve an otherwise 60 Hz stream. The
+            // low-overhead mode deliberately captures one representative
+            // callback, then removes the profiler from the live isolate.
+            if (!profile_bindings && cpu_profiler != nullptr) {
+                cpu_profiler->Dispose();
+                cpu_profiler = nullptr;
+            }
         };
         const auto binding_profile_before = binding_totals;
+#endif
         auto listeners = frame_event_listeners.find("resize");
         if (listeners != frame_event_listeners.end()) {
             auto event = create_window_event(local_frame_context, "resize");
             v8::Local<v8::Value> arguments[] = {event};
             ++input_event_dispatch_count;
             for (auto& listener : listeners->second) {
-                auto callback = listener.Get(isolate);
+                auto callback = listener.callback.Get(isolate);
                 if (callback.IsEmpty()) continue;
                 v8::TryCatch try_catch(isolate);
                 if (callback->Call(
@@ -4007,7 +4669,9 @@ struct v8_dom_runtime::implementation final {
                         local_frame_context->Global(),
                         1,
                         arguments).IsEmpty()) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                     stop_cpu_profile();
+#endif
                     last_error = describe_exception(try_catch, local_frame_context);
                     return false;
                 }
@@ -4015,25 +4679,33 @@ struct v8_dom_runtime::implementation final {
             }
         }
         isolate->PerformMicrotaskCheckpoint();
+ #if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         stop_cpu_profile();
         for (size_t index = 0; index < binding_category_count; ++index) {
             last_resize_binding_profile[index] = binding_callback_stats{
                 binding_totals[index].calls - binding_profile_before[index].calls,
                 binding_totals[index].nanoseconds - binding_profile_before[index].nanoseconds};
         }
+#endif
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto frame_listeners_finished = std::chrono::steady_clock::now();
         last_resize_frame_listeners_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 frame_listeners_finished - outer_listeners_finished).count());
+#endif
         ensure_layout();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto layout_finished = std::chrono::steady_clock::now();
         last_resize_layout_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 layout_finished - frame_listeners_finished).count());
+#endif
         const auto result = dispatch_resize_observers();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         last_resize_observers_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - layout_finished).count());
+#endif
         return result;
     }
 
@@ -4257,8 +4929,10 @@ struct v8_dom_runtime::implementation final {
             "supported",
             {},
             "event-dispatch");
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         ++event_dispatch_counts[type];
         ++event_dispatch_target_counts[type][target.id];
+#endif
         const auto callback_count_before = input_callback_invocation_count;
         auto local_context = frame_context.IsEmpty()
             ? context.Get(isolate)
@@ -4425,6 +5099,7 @@ struct v8_dom_runtime::implementation final {
 
         std::vector<uint32_t> ancestry;
         for (auto* node = &target; node != nullptr; node = node->parent) ancestry.push_back(node->id);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (std::string_view(type) == "mousemove") {
             std::ostringstream path;
             for (size_t index = 0; index < ancestry.size(); ++index) {
@@ -4433,13 +5108,10 @@ struct v8_dom_runtime::implementation final {
             }
             last_mousemove_ancestry = path.str();
         }
+#endif
         ++input_event_dispatch_count;
         v8::Local<v8::Value> arguments[] = {event};
         const auto listeners = frame_event_listeners.find(type);
-        const auto listener_contexts = frame_event_listener_contexts.find(type);
-        const auto targets = frame_event_listener_targets.find(type);
-        const auto captures = frame_event_listener_captures.find(type);
-        const auto once_flags = frame_event_listener_once.find(type);
         const auto invoke_listeners = [&](
             uint32_t registered_target,
             v8::Local<v8::Object> current_target,
@@ -4450,23 +5122,18 @@ struct v8_dom_runtime::implementation final {
             set_number("eventPhase", event_phase);
             const auto listener_count = listeners->second.size();
             for (size_t index = 0; index < listener_count; ++index) {
-                if (listener_contexts != frame_event_listener_contexts.end()
-                    && index < listener_contexts->second.size()
-                    && listener_contexts->second[index].Get(isolate) != local_context) continue;
-                const auto listener_target = targets != frame_event_listener_targets.end()
-                    && index < targets->second.size() ? targets->second[index] : 0U;
-                const auto listener_capture = captures != frame_event_listener_captures.end()
-                    && index < captures->second.size() ? captures->second[index] : false;
-                if (listener_target != registered_target || listener_capture != capture) continue;
-                auto callback = listeners->second[index].Get(isolate);
+                auto& listener = listeners->second[index];
+                if (listener.context.Get(isolate) != local_context
+                    || listener.target != registered_target
+                    || listener.capture != capture) continue;
+                auto callback = listener.callback.Get(isolate);
                 if (callback.IsEmpty()) continue;
                 if (callback->Call(local_context, current_target, 1, arguments).IsEmpty()) return false;
                 ++input_callback_invocation_count;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                 ++event_callback_target_counts[type][registered_target];
                 ++event_callback_index_counts[type][index];
-                const auto invoke_once = once_flags != frame_event_listener_once.end()
-                    && index < once_flags->second.size() && once_flags->second[index];
-                if (invoke_once) listeners->second[index].Reset();
+                if (listener.once) listener.callback.Reset();
                 if (std::getenv("HTMLML_PROBE_PROFILE_INPUT") != nullptr
                     && (std::string_view(type) == "pointerdown"
                         || std::string_view(type) == "mousedown"
@@ -4485,6 +5152,9 @@ struct v8_dom_runtime::implementation final {
                         << (immediate_propagation_stopped() ? 1 : 0)
                         << '\n';
                 }
+#else
+                if (listener.once) listener.callback.Reset();
+#endif
                 if (immediate_propagation_stopped()) break;
             }
             return true;
@@ -4502,7 +5172,9 @@ struct v8_dom_runtime::implementation final {
                 return false;
             }
             ++input_callback_invocation_count;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
             ++event_callback_target_counts[type][node.id];
+#endif
             return true;
         };
 
@@ -4593,8 +5265,12 @@ struct v8_dom_runtime::implementation final {
         set_number("eventPhase", 0);
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
         isolate->PerformMicrotaskCheckpoint();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;
+#else
+        static_cast<void>(callback_count_before);
+#endif
         if (default_prevented != nullptr) {
             v8::Local<v8::Value> prevented;
             *default_prevented = event->Get(
@@ -4606,39 +5282,12 @@ struct v8_dom_runtime::implementation final {
 
         // removeEventListener is commonly called by component code from inside
         // its root mouseup callback. Removal tombstones the callback so the
-        // active dispatch remains stable; compact the synchronized metadata
-        // vectors only after every callback for this event has completed.
+        // active dispatch remains stable; compact tombstones only after every
+        // callback for this event has completed.
         if (listeners != frame_event_listeners.end()) {
-            auto& callbacks = listeners->second;
-            auto& listener_contexts = frame_event_listener_contexts[type];
-            auto& listener_targets = frame_event_listener_targets[type];
-            auto& listener_captures = frame_event_listener_captures[type];
-            auto& listener_once = frame_event_listener_once[type];
-            auto& listener_names = frame_event_listener_names[type];
-            auto& listener_sequences = frame_event_listener_registration_sequences[type];
-            for (size_t index = callbacks.size(); index-- > 0;) {
-                if (!callbacks[index].IsEmpty()) continue;
-                callbacks.erase(callbacks.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < listener_contexts.size()) {
-                    listener_contexts.erase(
-                        listener_contexts.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < listener_targets.size()) {
-                    listener_targets.erase(listener_targets.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < listener_captures.size()) {
-                    listener_captures.erase(listener_captures.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < listener_once.size()) {
-                    listener_once.erase(listener_once.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < listener_names.size()) {
-                    listener_names.erase(listener_names.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < listener_sequences.size()) {
-                    listener_sequences.erase(listener_sequences.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-            }
+            std::erase_if(
+                listeners->second,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
         }
         return true;
     }
@@ -4807,8 +5456,8 @@ struct v8_dom_runtime::implementation final {
             ? next
             : nullptr;
         if (previous != nullptr) {
-            previous->input_focused = false;
-            previous->caret_visible = false;
+            previous->mutable_form_control().input_focused = false;
+            previous->mutable_form_control().caret_visible = false;
             // The document regains focus before blur/focusout listeners run.
             // This also allows a listener to focus another element without
             // recursively blurring the element whose transition is in flight.
@@ -4841,8 +5490,8 @@ struct v8_dom_runtime::implementation final {
             recascade_focus_subject(*next, "focus-before-focus");
         }
         if (next != nullptr) {
-            next->input_focused = is_text_control(next);
-            next->caret_visible = next->input_focused;
+            next->mutable_form_control().input_focused = is_text_control(next);
+            next->mutable_form_control().caret_visible = next->mutable_form_control().input_focused;
             caret_blink_epoch_ms = last_animation_frame_timestamp_ms;
             related_target = previous != nullptr
                     && focus_document_owner(previous) == focus_document_owner(next)
@@ -4888,8 +5537,8 @@ struct v8_dom_runtime::implementation final {
         // detached as document.activeElement.
         if (subtree_contains(detached_root, active_element)) {
             auto* detached_active_element = active_element;
-            detached_active_element->input_focused = false;
-            detached_active_element->caret_visible = false;
+            detached_active_element->mutable_form_control().input_focused = false;
+            detached_active_element->mutable_form_control().caret_visible = false;
             active_element = nullptr;
             recascade_focus_subject(
                 *detached_active_element,
@@ -4911,13 +5560,13 @@ struct v8_dom_runtime::implementation final {
 
     void ensure_form_value(dom_node& node)
     {
-        if (node.form_value_initialized) return;
+        if (node.mutable_form_control().value_initialized) return;
         const auto value = node.attributes.find("value");
-        node.form_value = value == node.attributes.end() ? std::string{} : value->second;
-        node.form_value_initialized = true;
-        node.selection_start = node.form_value.size();
-        node.selection_end = node.form_value.size();
-        node.selection_direction = "none";
+        node.mutable_form_control().value = value == node.attributes.end() ? std::string{} : value->second;
+        node.mutable_form_control().value_initialized = true;
+        node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
+        node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
+        node.mutable_form_control().selection_direction = text_selection_direction::none;
     }
 
     static size_t previous_utf8_boundary(const std::string& value, size_t index)
@@ -4956,15 +5605,15 @@ struct v8_dom_runtime::implementation final {
             if (prevented) return true;
             ensure_form_value(*target);
             const auto text = utf8_scalar(static_cast<uint32_t>(input.x));
-            const auto start = std::min(target->selection_start, target->form_value.size());
+            const auto start = std::min(target->mutable_form_control().selection_start, target->mutable_form_control().value.size());
             const auto end = std::min(
-                std::max(target->selection_start, target->selection_end),
-                target->form_value.size());
-            target->form_value.replace(start, end - start, text);
-            target->selection_start = start + text.size();
-            target->selection_end = target->selection_start;
-            target->selection_direction = "none";
-            target->caret_visible = true;
+                std::max(target->mutable_form_control().selection_start, target->mutable_form_control().selection_end),
+                target->mutable_form_control().value.size());
+            target->mutable_form_control().value.replace(start, end - start, text);
+            target->mutable_form_control().selection_start = start + text.size();
+            target->mutable_form_control().selection_end = target->mutable_form_control().selection_start;
+            target->mutable_form_control().selection_direction = text_selection_direction::none;
+            target->mutable_form_control().caret_visible = true;
             caret_blink_epoch_ms = last_animation_frame_timestamp_ms;
             document.mark_dirty();
             return dispatch_input_event_type(input, "input", *target);
@@ -4992,17 +5641,17 @@ struct v8_dom_runtime::implementation final {
         }
         if (prevented || !is_text_control(target)) return true;
         ensure_form_value(*target);
-        auto start = std::min(target->selection_start, target->form_value.size());
+        auto start = std::min(target->mutable_form_control().selection_start, target->mutable_form_control().value.size());
         auto end = std::min(
-            std::max(target->selection_start, target->selection_end),
-            target->form_value.size());
+            std::max(target->mutable_form_control().selection_start, target->mutable_form_control().selection_end),
+            target->mutable_form_control().value.size());
         bool changed = false;
         const auto shift = (input.flags & HTMLML_INPUT_MODIFIER_SHIFT) != 0U;
         if (key_code == 8) {
-            if (start == end) start = previous_utf8_boundary(target->form_value, start);
+            if (start == end) start = previous_utf8_boundary(target->mutable_form_control().value, start);
             changed = end > start;
         } else if (key_code == 46) {
-            if (start == end) end = next_utf8_boundary(target->form_value, end);
+            if (start == end) end = next_utf8_boundary(target->mutable_form_control().value, end);
             changed = end > start;
         } else if (key_code == 37 || key_code == 38
             || key_code == 39 || key_code == 40
@@ -5011,33 +5660,41 @@ struct v8_dom_runtime::implementation final {
             const auto boundary = key_code == 36 || key_code == 38
                 ? size_t{0}
                 : key_code == 35 || key_code == 40
-                    ? target->form_value.size()
+                    ? target->mutable_form_control().value.size()
                     : moving_backward
-                        ? previous_utf8_boundary(target->form_value, start)
-                        : next_utf8_boundary(target->form_value, end);
+                        ? previous_utf8_boundary(target->mutable_form_control().value, start)
+                        : next_utf8_boundary(target->mutable_form_control().value, end);
             if (!shift) {
                 const auto position = start != end && (key_code == 37 || key_code == 38)
                     ? start
                     : start != end && (key_code == 39 || key_code == 40)
                         ? end
                         : boundary;
-                target->selection_start = target->selection_end = position;
-                target->selection_direction = "none";
+                target->mutable_form_control().selection_start = target->mutable_form_control().selection_end = position;
+                target->mutable_form_control().selection_direction = text_selection_direction::none;
             } else {
-                const auto anchor = target->selection_direction == "backward" ? end : start;
-                const auto focus = target->selection_direction == "backward" ? start : end;
+                const auto anchor =
+                    target->mutable_form_control().selection_direction == text_selection_direction::backward
+                    ? end
+                    : start;
+                const auto focus =
+                    target->mutable_form_control().selection_direction == text_selection_direction::backward
+                    ? start
+                    : end;
                 const auto next_focus = key_code == 36 || key_code == 38
                     ? size_t{0}
                     : key_code == 35 || key_code == 40
-                        ? target->form_value.size()
+                        ? target->mutable_form_control().value.size()
                         : moving_backward
-                            ? previous_utf8_boundary(target->form_value, focus)
-                            : next_utf8_boundary(target->form_value, focus);
-                target->selection_start = std::min(anchor, next_focus);
-                target->selection_end = std::max(anchor, next_focus);
-                target->selection_direction = next_focus < anchor
-                    ? "backward"
-                    : next_focus > anchor ? "forward" : "none";
+                            ? previous_utf8_boundary(target->mutable_form_control().value, focus)
+                            : next_utf8_boundary(target->mutable_form_control().value, focus);
+                target->mutable_form_control().selection_start = std::min(anchor, next_focus);
+                target->mutable_form_control().selection_end = std::max(anchor, next_focus);
+                target->mutable_form_control().selection_direction = next_focus < anchor
+                    ? text_selection_direction::backward
+                    : next_focus > anchor
+                        ? text_selection_direction::forward
+                        : text_selection_direction::none;
             }
         }
         if (changed) {
@@ -5046,13 +5703,13 @@ struct v8_dom_runtime::implementation final {
                 return false;
             }
             if (!before_input_prevented) {
-                target->form_value.erase(start, end - start);
-                target->selection_start = target->selection_end = start;
-                target->selection_direction = "none";
+                target->mutable_form_control().value.erase(start, end - start);
+                target->mutable_form_control().selection_start = target->mutable_form_control().selection_end = start;
+                target->mutable_form_control().selection_direction = text_selection_direction::none;
                 if (!dispatch_input_event_type(input, "input", *target)) return false;
             }
         }
-        target->caret_visible = true;
+        target->mutable_form_control().caret_visible = true;
         caret_blink_epoch_ms = last_animation_frame_timestamp_ms;
         document.mark_dirty();
         return true;
@@ -5289,6 +5946,7 @@ struct v8_dom_runtime::implementation final {
         dom_node* context_menu_target = nullptr;
         const auto encoded_button = static_cast<int>((input.flags >> 8U) & 0xffU);
         const auto changed_button = encoded_button == 0 ? 0 : encoded_button - 1;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (std::getenv("HTMLML_PROBE_PROFILE_INPUT") != nullptr
             && (input.kind == HTMLML_INPUT_POINTER_MOVE
                 || input.kind == HTMLML_INPUT_POINTER_DOWN
@@ -5308,6 +5966,7 @@ struct v8_dom_runtime::implementation final {
                 << ", movement-y=" << current_movement_y
                 << '\n';
         }
+#endif
         switch (input.kind) {
         case HTMLML_INPUT_POINTER_MOVE:
             types[type_count++] = "pointermove";
@@ -5610,13 +6269,129 @@ struct v8_dom_runtime::implementation final {
             : lower_html_name(address.substr(0U, separator));
     }
 
+    std::shared_ptr<const resource_response> load_resource_single_flight(
+        uint32_t kind,
+        const std::string& resolved_name,
+        const std::string& entity_tag,
+        int64_t last_modified_unix_seconds,
+        bool& loaded)
+    {
+        loaded = false;
+        if (!load_resource_callback || resolved_name.empty()) return {};
+
+        const auto key = compilation_cache_directory
+            + '\n' + std::to_string(kind)
+            + '\n' + resolved_name
+            + '\n' + entity_tag
+            + '\n' + std::to_string(last_modified_unix_seconds);
+        std::shared_ptr<process_resource_load_entry> entry;
+        auto producer = false;
+        {
+            std::lock_guard lock(process_resource_load_mutex);
+            const auto now = std::chrono::steady_clock::now();
+            std::erase_if(process_resource_loads, [now](const auto& item) {
+                return item.second->ready.load(std::memory_order_acquire)
+                    && item.second->expires_at <= now;
+            });
+            if (const auto known = process_resource_loads.find(key);
+                known != process_resource_loads.end()) {
+                entry = known->second;
+                entry->access = ++process_resource_load_access;
+            } else {
+                entry = std::make_shared<process_resource_load_entry>();
+                entry->access = ++process_resource_load_access;
+                process_resource_loads.emplace(key, entry);
+                producer = true;
+            }
+        }
+
+        if (!producer) {
+            std::unique_lock lock(entry->mutex);
+            if (!entry->ready.load(std::memory_order_acquire)) {
+                ++process_resource_load_waiter_count;
+                entry->condition.wait(lock, [&entry] {
+                    return entry->ready.load(std::memory_order_acquire);
+                });
+            }
+            loaded = entry->loaded;
+            if (loaded && entry->response != nullptr) {
+                ++process_resource_memory_hit_count;
+                process_resource_shared_byte_count += entry->response->content.size();
+            }
+            return entry->response;
+        }
+
+        ++process_resource_load_leader_count;
+        resource_response response;
+        try {
+            loaded = load_resource_callback(
+                kind,
+                resolved_name,
+                entity_tag,
+                last_modified_unix_seconds,
+                response);
+        } catch (...) {
+            loaded = false;
+        }
+        auto shared_response = loaded
+            ? std::make_shared<const resource_response>(std::move(response))
+            : std::shared_ptr<const resource_response>{};
+        {
+            std::lock_guard lock(entry->mutex);
+            entry->loaded = loaded;
+            entry->response = shared_response;
+            entry->expires_at = std::chrono::steady_clock::now()
+                + (loaded && shared_response != nullptr && shared_response->cacheable
+                    ? std::chrono::milliseconds(250)
+                    : std::chrono::milliseconds(0));
+            entry->ready.store(true, std::memory_order_release);
+        }
+        entry->condition.notify_all();
+
+        {
+            std::lock_guard lock(process_resource_load_mutex);
+            while (process_resource_loads.size() > maximum_process_resource_load_entries) {
+                auto oldest = process_resource_loads.end();
+                for (auto candidate = process_resource_loads.begin();
+                    candidate != process_resource_loads.end();
+                    ++candidate) {
+                    if (!candidate->second->ready.load(std::memory_order_acquire)
+                        || candidate->second.get() == entry.get()) {
+                        continue;
+                    }
+                    if (oldest == process_resource_loads.end()
+                        || candidate->second->access < oldest->second->access) {
+                        oldest = candidate;
+                    }
+                }
+                if (oldest == process_resource_loads.end()) break;
+                process_resource_loads.erase(oldest);
+            }
+        }
+        return shared_response;
+    }
+
     bool load_text_resource(
         const std::string& value,
         const std::string& base,
         uint32_t kind,
         std::string& content,
-        std::string& resolved_name)
+        std::string& resolved_name,
+        std::shared_ptr<const immutable_text_source>* immutable_content = nullptr)
     {
+        if (immutable_content != nullptr) immutable_content->reset();
+        const auto assign_content = [&](std::shared_ptr<const immutable_text_source> value) {
+            if (value == nullptr) {
+                content.clear();
+                return;
+            }
+            if (immutable_content != nullptr) {
+                *immutable_content = std::move(value);
+                content.clear();
+            } else {
+                content.assign(value->data(), value->size());
+            }
+        };
         resolved_name = resolve_resource_url(value, base);
         record_feature(
             "resource",
@@ -5647,9 +6422,12 @@ struct v8_dom_runtime::implementation final {
             if (prefetched.from_fresh_cache) {
                 record_feature(
                     "resource", "cache:fresh-prefetch", "supported", {}, "resource-loader");
-                content = std::move(cached.content);
+                assign_content(std::move(cached.content));
                 ++resource_cache_hit_count;
-                resource_cache_bytes_read_count += content.size();
+                resource_cache_bytes_read_count += immutable_content != nullptr
+                    && *immutable_content != nullptr
+                    ? (*immutable_content)->size()
+                    : content.size();
                 return true;
             }
         } else {
@@ -5660,64 +6438,76 @@ struct v8_dom_runtime::implementation final {
         if (has_cached && cached.fresh_until_unix_seconds > now_unix_seconds) {
             record_feature(
                 "resource", "cache:fresh", "supported", {}, "resource-loader");
-            content = std::move(cached.content);
+            assign_content(std::move(cached.content));
             ++resource_cache_hit_count;
-            resource_cache_bytes_read_count += content.size();
+            resource_cache_bytes_read_count += immutable_content != nullptr
+                && *immutable_content != nullptr
+                ? (*immutable_content)->size()
+                : content.size();
             return true;
         }
         if (load_resource_callback && !resolved_name.empty()) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
             binding_callback_timer timer(profile_startup ? &startup_resource_read : nullptr);
-            resource_response response;
+#endif
             auto loaded = false;
+            std::shared_ptr<const resource_response> response;
             if (has_prefetched) {
                 response = std::move(prefetched.response);
                 loaded = prefetched.loaded;
             } else {
-                loaded = load_resource_callback(
+                response = load_resource_single_flight(
                     kind,
                     resolved_name,
                     has_cached ? cached.entity_tag : std::string{},
                     has_cached ? cached.last_modified_unix_seconds : 0,
-                    response);
+                    loaded);
             }
-            if (loaded) {
-                if (response.not_modified && has_cached) {
+            if (loaded && response != nullptr) {
+                if (response->not_modified && has_cached) {
                     record_feature(
                         "resource", "cache:revalidated-304", "supported", {}, "resource-loader");
-                    content = std::move(cached.content);
+                    auto shared_content = std::move(cached.content);
+                    assign_content(shared_content);
                     ++resource_cache_hit_count;
-                    resource_cache_bytes_read_count += content.size();
-                    if (response.cacheable) {
+                    resource_cache_bytes_read_count += shared_content != nullptr
+                        ? shared_content->size()
+                        : 0U;
+                    if (response->cacheable) {
                         write_resource_cache(
                             cache_key,
                             kind,
-                            content,
-                            response.entity_tag.empty() ? cached.entity_tag : response.entity_tag,
-                            response.last_modified_unix_seconds == 0
+                            shared_content,
+                            response->entity_tag.empty() ? cached.entity_tag : response->entity_tag,
+                            response->last_modified_unix_seconds == 0
                                 ? cached.last_modified_unix_seconds
-                                : response.last_modified_unix_seconds,
-                            response.fresh_until_unix_seconds);
+                                : response->last_modified_unix_seconds,
+                            response->fresh_until_unix_seconds);
                     } else {
                         remove_resource_cache(cache_key);
                     }
                     return true;
                 }
-                content = std::move(response.content);
+                auto shared_content = immutable_text_source::from_string(
+                    std::shared_ptr<const std::string>(
+                        response,
+                        &response->content));
+                assign_content(shared_content);
                 record_feature(
                     "resource",
-                    response.cacheable ? "network:cacheable-200" : "network:uncacheable-200",
+                    response->cacheable ? "network:cacheable-200" : "network:uncacheable-200",
                     "supported",
                     {},
                     "resource-loader");
                 ++resource_cache_miss_count;
-                if (response.cacheable) {
+                if (response->cacheable) {
                     write_resource_cache(
                         cache_key,
                         kind,
-                        content,
-                        response.entity_tag,
-                        response.last_modified_unix_seconds,
-                        response.fresh_until_unix_seconds);
+                        shared_content,
+                        response->entity_tag,
+                        response->last_modified_unix_seconds,
+                        response->fresh_until_unix_seconds);
                 } else {
                     remove_resource_cache(cache_key);
                 }
@@ -5726,9 +6516,12 @@ struct v8_dom_runtime::implementation final {
             if (has_cached) {
                 record_feature(
                     "resource", "cache:stale-fallback", "supported", {}, "resource-loader");
-                content = std::move(cached.content);
+                assign_content(std::move(cached.content));
                 ++resource_cache_hit_count;
-                resource_cache_bytes_read_count += content.size();
+                resource_cache_bytes_read_count += immutable_content != nullptr
+                    && *immutable_content != nullptr
+                    ? (*immutable_content)->size()
+                    : content.size();
                 return true;
             }
         }
@@ -5742,7 +6535,10 @@ struct v8_dom_runtime::implementation final {
         record_feature(
             "resource", "filesystem:read", "supported", {}, "resource-loader");
         resolved_name = path.string();
-        write_resource_cache(cache_key, kind, content, {}, 0, 0);
+        auto shared_content = immutable_text_source::from_string(
+            std::make_shared<const std::string>(std::move(content)));
+        write_resource_cache(cache_key, kind, shared_content, {}, 0, 0);
+        assign_content(std::move(shared_content));
         return true;
     }
 
@@ -5781,29 +6577,24 @@ struct v8_dom_runtime::implementation final {
             return;
         }
 
-        auto loader = load_resource_callback;
         auto entity_tag = has_cached ? cached.entity_tag : std::string{};
         const auto last_modified = has_cached ? cached.last_modified_unix_seconds : 0;
         prefetched_resources.emplace(
             key,
             std::async(
                 std::launch::async,
-                [loader = std::move(loader), kind, resolved_name,
+                [this, kind, resolved_name,
                     entity_tag = std::move(entity_tag), last_modified,
                     cached = std::move(cached), has_cached]() mutable {
                     prefetched_resource result;
                     result.cached = std::move(cached);
                     result.has_cached = has_cached;
-                    try {
-                        result.loaded = loader(
-                            kind,
-                            resolved_name,
-                            entity_tag,
-                            last_modified,
-                            result.response);
-                    } catch (...) {
-                        result.loaded = false;
-                    }
+                    result.response = load_resource_single_flight(
+                        kind,
+                        resolved_name,
+                        entity_tag,
+                        last_modified,
+                        result.loaded);
                     return result;
                 }));
     }
@@ -5885,12 +6676,16 @@ struct v8_dom_runtime::implementation final {
                     const auto first_new_rule = add_stylesheet(
                         std::move(stylesheet),
                         stylesheet_name);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                     binding_callback_timer recascade_timer(
                         profile_startup ? &startup_stylesheet_recascade : nullptr);
+#endif
                     const auto custom_properties_changed = appended_css_rules_define_custom_properties(
                         first_new_rule);
                     for (auto* existing : document.query_selector_all(document.body(), "*")) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                         if (profile_startup) ++startup_stylesheet_recascade_nodes;
+#endif
                         apply_appended_css_rules(*existing, first_new_rule);
                     }
                     if (custom_properties_changed) {
@@ -5908,6 +6703,7 @@ struct v8_dom_runtime::implementation final {
             const auto source_iterator = node.attributes.find("src");
             if (source_iterator == node.attributes.end() || source_iterator->second.empty()) return true;
             std::string source;
+            std::shared_ptr<const immutable_text_source> immutable_source;
             std::string script_name;
             const auto& base = in_frame_context() ? frame_base_address : document_base_address;
             if (!load_text_resource(
@@ -5915,7 +6711,8 @@ struct v8_dom_runtime::implementation final {
                     base,
                     HTMLML_RESOURCE_SCRIPT,
                     source,
-                    script_name)) {
+                    script_name,
+                    &immutable_source)) {
                 frame_last_error_value = "Unable to load connected script: " + source_iterator->second;
                 ++frame_script_error_count;
                 return false;
@@ -5925,7 +6722,16 @@ struct v8_dom_runtime::implementation final {
             // browser task. Promise reactions must not run between evaluating
             // the script and dispatching load, otherwise Webpack can re-enter a
             // module graph while an export is still in its TDZ.
-            if (!execute_in_context(local_context, source, script_name, error, false)) {
+            const auto script_source = immutable_source != nullptr
+                ? immutable_source->view()
+                : std::string_view(source);
+            if (!execute_in_context(
+                    local_context,
+                    script_source,
+                    script_name,
+                    error,
+                    false,
+                    std::move(immutable_source))) {
                 frame_last_error_value = "Connected script failed: " + error;
                 ++frame_script_error_count;
                 return false;
@@ -5979,13 +6785,48 @@ struct v8_dom_runtime::implementation final {
         return result.str();
     }
 
-    void ensure_layout()
+    void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
     {
         if (!document.dirty()) return;
+        if (reusable_client_geometry_subject != nullptr
+            && document.can_reuse_client_geometry(
+                *reusable_client_geometry_subject)) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            ++client_geometry_layout_reuse_count;
+#endif
+            return;
+        }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_layout : nullptr);
+#endif
         const auto [width, height, device_scale_factor] = viewport_provider();
         static_cast<void>(device_scale_factor);
         document.layout(width, height);
+    }
+
+    void mark_cssom_layout_dirty(
+        dom_node& node,
+        std::string_view canonical_property_name)
+    {
+        const auto isolated_out_of_flow_geometry =
+            node.style.position == position_mode::absolute
+            || node.style.position == position_mode::fixed;
+        const auto changes_only_positioned_subtree =
+            canonical_property_name == "width"
+            || canonical_property_name == "height"
+            || canonical_property_name == "min-width"
+            || canonical_property_name == "min-height"
+            || canonical_property_name == "max-width"
+            || canonical_property_name == "max-height"
+            || canonical_property_name == "left"
+            || canonical_property_name == "top"
+            || canonical_property_name == "right"
+            || canonical_property_name == "bottom";
+        if (isolated_out_of_flow_geometry && changes_only_positioned_subtree) {
+            document.mark_out_of_flow_geometry_dirty(node);
+        } else {
+            document.mark_dirty();
+        }
     }
 
     dom_node& active_root()
@@ -6267,29 +7108,11 @@ struct v8_dom_runtime::implementation final {
                 frame_base_address.clear();
             }
         }
-        for (auto& [type, targets] : frame_event_listener_targets) {
-            auto& callbacks = frame_event_listeners[type];
-            auto& contexts = frame_event_listener_contexts[type];
-            auto& captures = frame_event_listener_captures[type];
-            auto& once = frame_event_listener_once[type];
-            auto& names = frame_event_listener_names[type];
-            auto& sequences = frame_event_listener_registration_sequences[type];
-            for (size_t index = targets.size(); index-- > 0;) {
-                if (!node_ids.contains(targets[index])) continue;
-                targets.erase(targets.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < callbacks.size()) callbacks.erase(
-                    callbacks.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < contexts.size()) contexts.erase(
-                    contexts.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < captures.size()) captures.erase(
-                    captures.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < once.size()) once.erase(
-                    once.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < names.size()) names.erase(
-                    names.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < sequences.size()) sequences.erase(
-                    sequences.begin() + static_cast<std::ptrdiff_t>(index));
-            }
+        for (auto& [type, listeners] : frame_event_listeners) {
+            static_cast<void>(type);
+            std::erase_if(listeners, [&](const auto& listener) {
+                return node_ids.contains(listener.target);
+            });
         }
         if (nodes.contains(active_element)) active_element = nullptr;
         if (nodes.contains(pointer_capture_target)) pointer_capture_target = nullptr;
@@ -7213,11 +8036,9 @@ struct v8_dom_runtime::implementation final {
             clone.class_name = original.class_name;
             clone.text_content = original.text_content;
             clone.xml_mode = original.xml_mode;
-            clone.selectedness_initialized = original.selectedness_initialized;
-            clone.selectedness = original.selectedness;
-            clone.selection_explicitly_empty = original.selection_explicitly_empty;
-            clone.checkedness_initialized = original.checkedness_initialized;
-            clone.checkedness = original.checkedness;
+            if (original.has_form_control()) {
+                clone.mutable_form_control() = original.form_control();
+            }
             clone.attributes = original.attributes;
             clone.style = original.style;
             clone.visible = true;
@@ -8975,8 +9796,13 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (self->resize_profile_active && node != nullptr) {
+            ++self->last_resize_geometry_counts[
+                "width:" + node->tag + "#" + node->id_attribute + "." + node->class_name];
+        }
+#endif
         const auto is_browsing_context_root = node != nullptr
             && node->tag == "body"
             && (node->parent == nullptr || node->parent->tag == "iframe");
@@ -8984,6 +9810,7 @@ struct v8_dom_runtime::implementation final {
             && node->parent == &self->document.body()) {
             node = &self->document.body();
         }
+        self->ensure_layout(node);
         if (node != nullptr) {
             for (auto* current_node = node; current_node != nullptr;
                  current_node = current_node->parent) {
@@ -9002,8 +9829,13 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (self->resize_profile_active && node != nullptr) {
+            ++self->last_resize_geometry_counts[
+                "height:" + node->tag + "#" + node->id_attribute + "." + node->class_name];
+        }
+#endif
         const auto is_browsing_context_root = node != nullptr
             && node->tag == "body"
             && (node->parent == nullptr || node->parent->tag == "iframe");
@@ -9011,6 +9843,7 @@ struct v8_dom_runtime::implementation final {
             && node->parent == &self->document.body()) {
             node = &self->document.body();
         }
+        self->ensure_layout(node);
         if (node != nullptr) {
             for (auto* current_node = node; current_node != nullptr;
                  current_node = current_node->parent) {
@@ -9323,13 +10156,16 @@ struct v8_dom_runtime::implementation final {
 
     static void advance_canvas_generation(dom_node& node)
     {
-        ++node.canvas_generation;
+        auto& canvas = node.mutable_canvas();
+        ++canvas.generation;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         constexpr uint64_t retained_diagnostic_generations = 64U;
-        if (node.canvas_generation <= retained_diagnostic_generations) return;
-        const auto oldest = node.canvas_generation - retained_diagnostic_generations;
+        if (canvas.generation <= retained_diagnostic_generations) return;
+        const auto oldest = canvas.generation - retained_diagnostic_generations;
         std::erase_if(
-            node.canvas_probable_volume_by_generation,
+            canvas.probable_volume_by_generation,
             [oldest](const auto& entry) { return entry.first < oldest; });
+#endif
     }
 
     static void get_element_width(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -9345,12 +10181,13 @@ struct v8_dom_runtime::implementation final {
     static void reset_canvas_backing_store(implementation& self, dom_node& node)
     {
         if (node.tag != "canvas") return;
-        node.canvas_rects.clear();
-        node.canvas_lines.clear();
+        auto& canvas = node.mutable_canvas();
+        canvas.rects.clear();
+        canvas.lines.clear();
         advance_canvas_generation(node);
-        node.canvas_commands.clear();
-        node.canvas_strings.clear();
-        node.canvas_string_indices.clear();
+        canvas.commands.clear();
+        canvas.strings.clear();
+        canvas.string_indices.clear();
         const auto state = self.canvas_states.find(self.wrapper_key(node));
         if (state == self.canvas_states.end() || state->second == nullptr) return;
         state->second->current_x = 0;
@@ -9633,17 +10470,19 @@ struct v8_dom_runtime::implementation final {
 
     static bool option_is_selected(dom_node& option)
     {
-        if (option.selectedness_initialized) return option.selectedness;
+        if (option.form_control().selectedness_initialized) {
+            return option.form_control().selectedness;
+        }
         auto* select = containing_select(option);
         if (select == nullptr) return option.attributes.contains("selected");
-        if (select->selection_explicitly_empty) return false;
+        if (select->form_control().selection_explicitly_empty) return false;
         std::vector<dom_node*> options;
         collect_descendants_by_tag(*select, "option", options);
         const auto has_live_selection = std::any_of(
             options.begin(), options.end(), [](const auto* candidate) {
                 return candidate != nullptr
-                    && candidate->selectedness_initialized
-                    && candidate->selectedness;
+                    && candidate->form_control().selectedness_initialized
+                    && candidate->form_control().selectedness;
             });
         if (has_live_selection) return false;
         const auto authored = std::find_if(
@@ -9666,10 +10505,10 @@ struct v8_dom_runtime::implementation final {
         std::vector<dom_node*> options;
         collect_descendants_by_tag(select, "option", options);
         const auto valid = selected >= 0 && static_cast<size_t>(selected) < options.size();
-        select.selection_explicitly_empty = !valid;
+        select.mutable_form_control().selection_explicitly_empty = !valid;
         for (uint32_t index = 0; index < options.size(); ++index) {
-            options[index]->selectedness_initialized = true;
-            options[index]->selectedness = valid && static_cast<int32_t>(index) == selected;
+            options[index]->mutable_form_control().selectedness_initialized = true;
+            options[index]->mutable_form_control().selectedness = valid && static_cast<int32_t>(index) == selected;
         }
     }
 
@@ -9790,22 +10629,22 @@ struct v8_dom_runtime::implementation final {
                 && (lower_html_name(type->second) == "checkbox"
                     || lower_html_name(type->second) == "radio")
                 && !node->attributes.contains("value")
-                && !node->form_value_initialized) {
+                && !node->mutable_form_control().value_initialized) {
                 info.GetReturnValue().Set(js_string(info.GetIsolate(), "on"));
                 return;
             }
         }
-        if (!node->form_value_initialized) {
+        if (!node->mutable_form_control().value_initialized) {
             const auto value = node->attributes.find("value");
             if (value != node->attributes.end()) {
-                node->form_value = value->second;
+                node->mutable_form_control().value = value->second;
             }
-            node->form_value_initialized = true;
-            node->selection_start = node->form_value.size();
-            node->selection_end = node->form_value.size();
-            node->selection_direction = "none";
+            node->mutable_form_control().value_initialized = true;
+            node->mutable_form_control().selection_start = node->mutable_form_control().value.size();
+            node->mutable_form_control().selection_end = node->mutable_form_control().value.size();
+            node->mutable_form_control().selection_direction = text_selection_direction::none;
         }
-        info.GetReturnValue().Set(js_string(info.GetIsolate(), node->form_value.c_str()));
+        info.GetReturnValue().Set(js_string(info.GetIsolate(), node->mutable_form_control().value.c_str()));
     }
 
     static void get_form_owner(
@@ -9858,15 +10697,15 @@ struct v8_dom_runtime::implementation final {
             for (uint32_t index = 0; index < options.size(); ++index) {
                 auto* option = options[index];
                 if (!matched && option_value(*option) == expected) {
-                    option->selectedness_initialized = true;
-                    option->selectedness = true;
+                    option->mutable_form_control().selectedness_initialized = true;
+                    option->mutable_form_control().selectedness = true;
                     matched = true;
                 } else {
-                    option->selectedness_initialized = true;
-                    option->selectedness = false;
+                    option->mutable_form_control().selectedness_initialized = true;
+                    option->mutable_form_control().selectedness = false;
                 }
             }
-            node->selection_explicitly_empty = !matched;
+            node->mutable_form_control().selection_explicitly_empty = !matched;
             self->document.mark_dirty();
             return;
         }
@@ -9875,13 +10714,15 @@ struct v8_dom_runtime::implementation final {
             self->document.mark_dirty();
             return;
         }
-        node->form_value = value->IsNullOrUndefined()
+        node->mutable_form_control().value = value->IsNullOrUndefined()
             ? std::string{}
             : to_utf8(info.GetIsolate(), value);
-        node->form_value_initialized = true;
-        node->selection_start = std::min(node->selection_start, node->form_value.size());
-        node->selection_end = std::min(node->selection_end, node->form_value.size());
-        if (node->selection_start == node->selection_end) node->selection_direction = "none";
+        node->mutable_form_control().value_initialized = true;
+        node->mutable_form_control().selection_start = std::min(node->mutable_form_control().selection_start, node->mutable_form_control().value.size());
+        node->mutable_form_control().selection_end = std::min(node->mutable_form_control().selection_end, node->mutable_form_control().value.size());
+        if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
+            node->mutable_form_control().selection_direction = text_selection_direction::none;
+        }
         self->document.mark_dirty();
     }
 
@@ -9892,7 +10733,7 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node != nullptr) {
             info.GetReturnValue().Set(v8::Integer::New(
-                info.GetIsolate(), static_cast<int32_t>(node->selection_start)));
+                info.GetIsolate(), static_cast<int32_t>(node->mutable_form_control().selection_start)));
         }
     }
 
@@ -9904,9 +10745,11 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         const auto index = value->Int32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0);
-        node->selection_start = std::min<size_t>(std::max(0, index), node->form_value.size());
-        node->selection_end = std::max(node->selection_end, node->selection_start);
-        if (node->selection_start == node->selection_end) node->selection_direction = "none";
+        node->mutable_form_control().selection_start = std::min<size_t>(std::max(0, index), node->mutable_form_control().value.size());
+        node->mutable_form_control().selection_end = std::max(node->mutable_form_control().selection_end, node->mutable_form_control().selection_start);
+        if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
+            node->mutable_form_control().selection_direction = text_selection_direction::none;
+        }
     }
 
     static void get_selection_end(
@@ -9916,7 +10759,7 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node != nullptr) {
             info.GetReturnValue().Set(v8::Integer::New(
-                info.GetIsolate(), static_cast<int32_t>(node->selection_end)));
+                info.GetIsolate(), static_cast<int32_t>(node->mutable_form_control().selection_end)));
         }
     }
 
@@ -9928,9 +10771,11 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         const auto index = value->Int32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0);
-        node->selection_end = std::min<size_t>(std::max(0, index), node->form_value.size());
-        node->selection_start = std::min(node->selection_start, node->selection_end);
-        if (node->selection_start == node->selection_end) node->selection_direction = "none";
+        node->mutable_form_control().selection_end = std::min<size_t>(std::max(0, index), node->mutable_form_control().value.size());
+        node->mutable_form_control().selection_start = std::min(node->mutable_form_control().selection_start, node->mutable_form_control().selection_end);
+        if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
+            node->mutable_form_control().selection_direction = text_selection_direction::none;
+        }
     }
 
     static void get_selection_direction(
@@ -9939,8 +10784,14 @@ struct v8_dom_runtime::implementation final {
     {
         auto* node = unwrap_node(info.Holder());
         if (node != nullptr) {
+            const auto* direction =
+                node->mutable_form_control().selection_direction == text_selection_direction::forward
+                ? "forward"
+                : node->mutable_form_control().selection_direction == text_selection_direction::backward
+                    ? "backward"
+                    : "none";
             info.GetReturnValue().Set(js_string(
-                info.GetIsolate(), node->selection_direction.c_str()));
+                info.GetIsolate(), direction));
         }
     }
 
@@ -9952,10 +10803,14 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         const auto direction = to_utf8(info.GetIsolate(), value);
-        node->selection_direction = direction == "forward" || direction == "backward"
-            ? direction
-            : "none";
-        if (node->selection_start == node->selection_end) node->selection_direction = "none";
+        node->mutable_form_control().selection_direction = direction == "forward"
+            ? text_selection_direction::forward
+            : direction == "backward"
+                ? text_selection_direction::backward
+                : text_selection_direction::none;
+        if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
+            node->mutable_form_control().selection_direction = text_selection_direction::none;
+        }
     }
 
     static void get_boolean_attribute(
@@ -9987,8 +10842,8 @@ struct v8_dom_runtime::implementation final {
         if (node == nullptr || node->tag != "input") return;
         info.GetReturnValue().Set(v8::Boolean::New(
             info.GetIsolate(),
-            node->checkedness_initialized
-                ? node->checkedness
+            node->mutable_form_control().checkedness_initialized
+                ? node->mutable_form_control().checkedness
                 : node->attributes.contains("checked")));
     }
 
@@ -10000,8 +10855,8 @@ struct v8_dom_runtime::implementation final {
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || node->tag != "input") return;
-        node->checkedness_initialized = true;
-        node->checkedness = value->BooleanValue(info.GetIsolate());
+        node->mutable_form_control().checkedness_initialized = true;
+        node->mutable_form_control().checkedness = value->BooleanValue(info.GetIsolate());
         self->document.mark_dirty();
     }
 
@@ -10023,12 +10878,12 @@ struct v8_dom_runtime::implementation final {
         if (node == nullptr || node->tag != "option") return;
         auto* select = containing_select(*node);
         if (!value->BooleanValue(info.GetIsolate())) {
-            node->selectedness_initialized = true;
-            node->selectedness = false;
+            node->mutable_form_control().selectedness_initialized = true;
+            node->mutable_form_control().selectedness = false;
             if (select != nullptr) {
                 std::vector<dom_node*> options;
                 collect_descendants_by_tag(*select, "option", options);
-                select->selection_explicitly_empty = std::none_of(
+                select->mutable_form_control().selection_explicitly_empty = std::none_of(
                     options.begin(), options.end(), [](auto* option) {
                         return option != nullptr && option_is_selected(*option);
                     });
@@ -10039,8 +10894,8 @@ struct v8_dom_runtime::implementation final {
         if (select != nullptr && !select->attributes.contains("multiple")) {
             const auto clear_selected = [&](const auto& recurse, dom_node& root) -> void {
                 if (root.tag == "option") {
-                    root.selectedness_initialized = true;
-                    root.selectedness = false;
+                    root.mutable_form_control().selectedness_initialized = true;
+                    root.mutable_form_control().selectedness = false;
                 }
                 for (auto* child : root.children) {
                     if (child != nullptr) recurse(recurse, *child);
@@ -10048,9 +10903,9 @@ struct v8_dom_runtime::implementation final {
             };
             clear_selected(clear_selected, *select);
         }
-        node->selectedness_initialized = true;
-        node->selectedness = true;
-        if (select != nullptr) select->selection_explicitly_empty = false;
+        node->mutable_form_control().selectedness_initialized = true;
+        node->mutable_form_control().selectedness = true;
+        if (select != nullptr) select->mutable_form_control().selection_explicitly_empty = false;
         self->recascade_connected_subtree(*node);
     }
 
@@ -10060,20 +10915,20 @@ struct v8_dom_runtime::implementation final {
         auto* form = unwrap_node(info.This());
         if (form == nullptr || form->tag != "form") return;
         const auto reset_subtree = [&](const auto& recurse, dom_node& node) -> void {
-            if (node.tag == "select") node.selection_explicitly_empty = false;
+            if (node.tag == "select") node.mutable_form_control().selection_explicitly_empty = false;
             if (node.tag == "option") {
-                node.selectedness_initialized = false;
-                node.selectedness = false;
+                node.mutable_form_control().selectedness_initialized = false;
+                node.mutable_form_control().selectedness = false;
             }
             if (node.tag == "input" || node.tag == "textarea") {
                 const auto authored = node.attributes.find("value");
-                node.form_value = authored == node.attributes.end()
+                node.mutable_form_control().value = authored == node.attributes.end()
                     ? std::string{}
                     : authored->second;
-                node.form_value_initialized = true;
+                node.mutable_form_control().value_initialized = true;
                 if (node.tag == "input") {
-                    node.checkedness_initialized = false;
-                    node.checkedness = false;
+                    node.mutable_form_control().checkedness_initialized = false;
+                    node.mutable_form_control().checkedness = false;
                 }
             }
             for (auto* child : node.children) {
@@ -10202,9 +11057,11 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "fillText");
         if (state == nullptr || state->node == nullptr) return;
-        ++state->node->canvas_fill_text_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++state->node->mutable_canvas().fill_text_calls;
+#endif
         if (info.Length() < 3) return;
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_fill_text);
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto text = to_utf8(info.GetIsolate(), info[0]);
         canvas_append_resource_command(
@@ -10221,9 +11078,11 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "strokeText");
         if (state == nullptr || state->node == nullptr) return;
-        ++state->node->canvas_stroke_text_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++state->node->mutable_canvas().stroke_text_calls;
+#endif
         if (info.Length() < 3) return;
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_stroke_text);
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto text = to_utf8(info.GetIsolate(), info[0]);
         canvas_append_resource_command(
@@ -10239,12 +11098,7 @@ struct v8_dom_runtime::implementation final {
         const char* feature = nullptr)
     {
         if (feature != nullptr) {
-            current(info.GetIsolate())->record_feature(
-                "canvas",
-                std::string("CanvasRenderingContext2D.") + feature,
-                "supported",
-                {},
-                "native-binding");
+            current(info.GetIsolate())->record_canvas_feature(feature);
         }
         return info.Data()->IsExternal()
             ? static_cast<canvas_state*>(info.Data().As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault))
@@ -10301,6 +11155,37 @@ struct v8_dom_runtime::implementation final {
         shadow_offset_y = 57
     };
 
+    enum canvas_paint_state_mask : uint32_t {
+        canvas_paint_fill = 1U << 0U,
+        canvas_paint_stroke = 1U << 1U,
+        canvas_paint_line = 1U << 2U,
+        canvas_paint_alpha = 1U << 3U,
+        canvas_paint_dash = 1U << 4U,
+        canvas_paint_text = 1U << 5U,
+        canvas_paint_image = 1U << 6U,
+        canvas_paint_composite = 1U << 7U,
+        canvas_paint_shadow = 1U << 8U,
+        canvas_paint_all = (1U << 9U) - 1U,
+        canvas_paint_fill_rect = canvas_paint_fill
+            | canvas_paint_alpha
+            | canvas_paint_composite
+            | canvas_paint_shadow,
+        canvas_paint_stroke_path = canvas_paint_stroke
+            | canvas_paint_line
+            | canvas_paint_alpha
+            | canvas_paint_dash
+            | canvas_paint_composite
+            | canvas_paint_shadow,
+        canvas_paint_fill_text = canvas_paint_fill_rect
+            | canvas_paint_text,
+        canvas_paint_stroke_text = canvas_paint_stroke_path
+            | canvas_paint_text,
+        canvas_paint_draw_image = canvas_paint_alpha
+            | canvas_paint_image
+            | canvas_paint_composite
+            | canvas_paint_shadow
+    };
+
     static void canvas_append_command(
         dom_node& node,
         canvas_command_kind kind,
@@ -10314,7 +11199,7 @@ struct v8_dom_runtime::implementation final {
             if (index == 8U) break;
             command.data.values[index++] = argument;
         }
-        node.canvas_commands.push_back(command);
+        node.mutable_canvas().commands.push_back(command);
     }
 
     static void canvas_append_resource_command(
@@ -10332,7 +11217,7 @@ struct v8_dom_runtime::implementation final {
             if (index == 8U) break;
             command.data.values[index++] = argument;
         }
-        node.canvas_commands.push_back(command);
+        node.mutable_canvas().commands.push_back(command);
     }
 
     static void canvas_append_line_dash_command(
@@ -10346,18 +11231,19 @@ struct v8_dom_runtime::implementation final {
         for (size_t index = 0; index < segments.size() && index < 7U; ++index) {
             command.data.values[index + 1U] = segments[index];
         }
-        node.canvas_commands.push_back(command);
+        node.mutable_canvas().commands.push_back(command);
     }
 
     static uint32_t canvas_intern_string(dom_node& node, const std::string& value)
     {
-        if (const auto known = node.canvas_string_indices.find(value);
-            known != node.canvas_string_indices.end()) {
+        auto& canvas = node.mutable_canvas();
+        if (const auto known = canvas.string_indices.find(value);
+            known != canvas.string_indices.end()) {
             return known->second;
         }
-        const auto index = static_cast<uint32_t>(node.canvas_strings.size());
-        node.canvas_strings.push_back(value);
-        node.canvas_string_indices.emplace(value, index);
+        const auto index = static_cast<uint32_t>(canvas.strings.size());
+        canvas.strings.push_back(value);
+        canvas.string_indices.emplace(value, index);
         return index;
     }
 
@@ -10368,7 +11254,10 @@ struct v8_dom_runtime::implementation final {
     {
         const auto context = info.GetIsolate()->GetCurrentContext();
         v8::Local<v8::Value> value;
-        if (!info.This()->Get(context, js_string(info.GetIsolate(), name)).ToLocal(&value)) {
+        if (!info.This()->Get(
+                context,
+                js_string(info.GetIsolate(), name))
+                .ToLocal(&value)) {
             return fallback;
         }
         const auto result = value->NumberValue(context).FromMaybe(fallback);
@@ -10383,7 +11272,8 @@ struct v8_dom_runtime::implementation final {
         v8::Local<v8::Value> value;
         return info.This()->Get(
                 info.GetIsolate()->GetCurrentContext(),
-                js_string(info.GetIsolate(), name)).ToLocal(&value)
+                js_string(info.GetIsolate(), name))
+                .ToLocal(&value)
             ? value->BooleanValue(info.GetIsolate())
             : fallback;
     }
@@ -10418,10 +11308,35 @@ struct v8_dom_runtime::implementation final {
         v8::Local<v8::Value> value;
         return info.This()->Get(
                 info.GetIsolate()->GetCurrentContext(),
-                js_string(info.GetIsolate(), name)).ToLocal(&value)
+                js_string(info.GetIsolate(), name))
+                .ToLocal(&value)
             && value->IsString()
             ? to_utf8(info.GetIsolate(), value)
             : std::string(fallback);
+    }
+
+    static bool canvas_v8_string_equals(
+        v8::Isolate* isolate,
+        v8::Local<v8::String> value,
+        std::string_view expected)
+    {
+        constexpr size_t stack_capacity = 128U;
+        if (expected.size() > stack_capacity) return false;
+        const auto utf8_length = value->Utf8LengthV2(isolate);
+        if (utf8_length != expected.size()) {
+            return false;
+        }
+        std::array<char, stack_capacity> buffer{};
+        const auto written = value->WriteUtf8V2(
+            isolate,
+            buffer.data(),
+            utf8_length,
+            v8::String::WriteFlags::kReplaceInvalidUtf8);
+        return written == utf8_length
+            && std::equal(
+                expected.begin(),
+                expected.end(),
+                buffer.begin());
     }
 
     static void canvas_emit_string_property(
@@ -10453,7 +11368,8 @@ struct v8_dom_runtime::implementation final {
 
     static void canvas_emit_paint_state(
         const v8::FunctionCallbackInfo<v8::Value>& info,
-        canvas_state& state)
+        canvas_state& state,
+        uint32_t mask = canvas_paint_all)
     {
         if (state.node == nullptr) return;
         const auto first = !state.has_emitted_paint_state;
@@ -10463,7 +11379,25 @@ struct v8_dom_runtime::implementation final {
             const char* name,
             const char* fallback,
             std::string& previous) {
-            auto value = canvas_string_property(info, name, fallback);
+            v8::Local<v8::Value> property;
+            const auto has_string = info.This()->Get(
+                    info.GetIsolate()->GetCurrentContext(),
+                    js_string(info.GetIsolate(), name))
+                    .ToLocal(&property)
+                && property->IsString();
+            if (!first) {
+                if (has_string
+                    && canvas_v8_string_equals(
+                        info.GetIsolate(),
+                        property.As<v8::String>(),
+                        previous)) {
+                    return;
+                }
+                if (!has_string && previous == fallback) return;
+            }
+            auto value = has_string
+                ? to_utf8(info.GetIsolate(), property)
+                : std::string(fallback);
             if (first || value != previous) {
                 canvas_append_resource_command(
                     *state.node,
@@ -10484,64 +11418,123 @@ struct v8_dom_runtime::implementation final {
             }
         };
 
-        emit_string(canvas_command_kind::fill_style, "fillStyle", "#000000", emitted.fill_style);
-        emit_string(canvas_command_kind::stroke_style, "strokeStyle", "#000000", emitted.stroke_style);
-        emit_number(canvas_command_kind::line_width, "lineWidth", 1, emitted.line_width);
-        emit_string(canvas_command_kind::line_cap, "lineCap", "butt", emitted.line_cap);
-        emit_string(canvas_command_kind::line_join, "lineJoin", "miter", emitted.line_join);
-        emit_number(canvas_command_kind::miter_limit, "miterLimit", 10, emitted.miter_limit);
-        emit_number(canvas_command_kind::global_alpha, "globalAlpha", 1, emitted.global_alpha);
-        emit_number(
-            canvas_command_kind::line_dash_offset,
-            "lineDashOffset",
-            0,
-            emitted.line_dash_offset);
-        if ((first && !state.line_dash.empty()) || state.line_dash != emitted.line_dash) {
-            canvas_append_line_dash_command(*state.node, state.line_dash);
-            emitted.line_dash = state.line_dash;
+        if ((mask & canvas_paint_fill) != 0U) {
+            emit_string(
+                canvas_command_kind::fill_style,
+                "fillStyle",
+                "#000000",
+                emitted.fill_style);
         }
-        emit_string(canvas_command_kind::font, "font", "10px sans-serif", emitted.font);
-        emit_string(canvas_command_kind::text_align, "textAlign", "start", emitted.text_align);
-        emit_string(
-            canvas_command_kind::text_baseline,
-            "textBaseline",
-            "alphabetic",
-            emitted.text_baseline);
-        const auto smoothing = canvas_boolean_property(info, "imageSmoothingEnabled", true);
-        if (first || smoothing != emitted.image_smoothing_enabled) {
-            canvas_append_command(
-                *state.node,
-                canvas_command_kind::image_smoothing_enabled,
-                {smoothing ? 1.0 : 0.0});
-            emitted.image_smoothing_enabled = smoothing;
+        if ((mask & canvas_paint_stroke) != 0U) {
+            emit_string(
+                canvas_command_kind::stroke_style,
+                "strokeStyle",
+                "#000000",
+                emitted.stroke_style);
         }
-        emit_string(
-            canvas_command_kind::image_smoothing_quality,
-            "imageSmoothingQuality",
-            "low",
-            emitted.image_smoothing_quality);
-        emit_string(
-            canvas_command_kind::global_composite_operation,
-            "globalCompositeOperation",
-            "source-over",
-            emitted.global_composite_operation);
-        emit_string(
-            canvas_command_kind::shadow_color,
-            "shadowColor",
-            "rgba(0, 0, 0, 0)",
-            emitted.shadow_color);
-        emit_number(canvas_command_kind::shadow_blur, "shadowBlur", 0, emitted.shadow_blur);
-        emit_number(
-            canvas_command_kind::shadow_offset_x,
-            "shadowOffsetX",
-            0,
-            emitted.shadow_offset_x);
-        emit_number(
-            canvas_command_kind::shadow_offset_y,
-            "shadowOffsetY",
-            0,
-            emitted.shadow_offset_y);
+        if ((mask & canvas_paint_line) != 0U) {
+            emit_number(canvas_command_kind::line_width, "lineWidth", 1, emitted.line_width);
+            emit_string(canvas_command_kind::line_cap, "lineCap", "butt", emitted.line_cap);
+            emit_string(canvas_command_kind::line_join, "lineJoin", "miter", emitted.line_join);
+            emit_number(
+                canvas_command_kind::miter_limit,
+                "miterLimit",
+                10,
+                emitted.miter_limit);
+        }
+        if ((mask & canvas_paint_alpha) != 0U) {
+            emit_number(
+                canvas_command_kind::global_alpha,
+                "globalAlpha",
+                1,
+                emitted.global_alpha);
+        }
+        if ((mask & canvas_paint_dash) != 0U) {
+            emit_number(
+                canvas_command_kind::line_dash_offset,
+                "lineDashOffset",
+                0,
+                emitted.line_dash_offset);
+            if ((first && !state.line_dash.empty())
+                || state.line_dash != emitted.line_dash) {
+                canvas_append_line_dash_command(*state.node, state.line_dash);
+                emitted.line_dash = state.line_dash;
+            }
+        }
+        if ((mask & canvas_paint_text) != 0U) {
+            emit_string(canvas_command_kind::font, "font", "10px sans-serif", emitted.font);
+            emit_string(
+                canvas_command_kind::text_align,
+                "textAlign",
+                "start",
+                emitted.text_align);
+            emit_string(
+                canvas_command_kind::text_baseline,
+                "textBaseline",
+                "alphabetic",
+                emitted.text_baseline);
+        }
+        if ((mask & canvas_paint_image) != 0U) {
+            const auto smoothing = canvas_boolean_property(
+                info,
+                "imageSmoothingEnabled",
+                true);
+            if (first || smoothing != emitted.image_smoothing_enabled) {
+                canvas_append_command(
+                    *state.node,
+                    canvas_command_kind::image_smoothing_enabled,
+                    {smoothing ? 1.0 : 0.0});
+                emitted.image_smoothing_enabled = smoothing;
+            }
+            emit_string(
+                canvas_command_kind::image_smoothing_quality,
+                "imageSmoothingQuality",
+                "low",
+                emitted.image_smoothing_quality);
+        }
+        if ((mask & canvas_paint_composite) != 0U) {
+            emit_string(
+                canvas_command_kind::global_composite_operation,
+                "globalCompositeOperation",
+                "source-over",
+                emitted.global_composite_operation);
+        }
+        if ((mask & canvas_paint_shadow) != 0U) {
+            emit_string(
+                canvas_command_kind::shadow_color,
+                "shadowColor",
+                "rgba(0, 0, 0, 0)",
+                emitted.shadow_color);
+            emit_number(
+                canvas_command_kind::shadow_blur,
+                "shadowBlur",
+                0,
+                emitted.shadow_blur);
+            emit_number(
+                canvas_command_kind::shadow_offset_x,
+                "shadowOffsetX",
+                0,
+                emitted.shadow_offset_x);
+            emit_number(
+                canvas_command_kind::shadow_offset_y,
+                "shadowOffsetY",
+                0,
+                emitted.shadow_offset_y);
+        }
         state.has_emitted_paint_state = true;
+    }
+
+    static uint32_t canvas_snapshot_color(
+        const std::string& value,
+        double global_alpha,
+        uint32_t fallback)
+    {
+        const auto parsed = native_document::parse_color(value);
+        auto color = parsed == 0 ? fallback : parsed;
+        const auto alpha = static_cast<uint32_t>(std::lround(
+            static_cast<double>(color & 0xFFU)
+                * std::clamp(global_alpha, 0.0, 1.0)));
+        return (color & 0xFFFFFF00U) | std::min(255U, alpha);
     }
 
     static void canvas_emit_snapshot_state(dom_node& node, const canvas_snapshot& snapshot)
@@ -10593,12 +11586,13 @@ struct v8_dom_runtime::implementation final {
         canvas_state& state)
     {
         auto& node = *state.node;
-        node.canvas_rects.clear();
-        node.canvas_lines.clear();
+        auto& canvas = node.mutable_canvas();
+        canvas.rects.clear();
+        canvas.lines.clear();
         advance_canvas_generation(node);
-        node.canvas_commands.clear();
-        node.canvas_strings.clear();
-        node.canvas_string_indices.clear();
+        canvas.commands.clear();
+        canvas.strings.clear();
+        canvas.string_indices.clear();
         state.has_emitted_paint_state = false;
 
         // Preserve the command-side save stack after discarding dead pixels.
@@ -11151,7 +12145,12 @@ struct v8_dom_runtime::implementation final {
                     const auto result = value->NumberValue(context).FromMaybe(fallback);
                     return std::isfinite(result) ? result : fallback;
                 };
-                canvas_emit_paint_state(info, state);
+                canvas_emit_paint_state(
+                    info,
+                    state,
+                    kind == canvas_command_kind::fill_svg_path
+                        ? canvas_paint_fill_rect
+                        : canvas_paint_stroke_path);
                 canvas_append_resource_command(
                     *state.node,
                     kind,
@@ -11161,7 +12160,7 @@ struct v8_dom_runtime::implementation final {
                     {number("a", 1), number("b", 0), number("c", 0),
                      number("d", 1), number("e", 0), number("f", 0)});
                 if (even_odd) {
-                    state.node->canvas_commands.back().flags |=
+                    state.node->mutable_canvas().commands.back().flags |=
                         HTMLML_CANVAS_COMMAND_FLAG_EVEN_ODD;
                 }
             }
@@ -11173,14 +12172,19 @@ struct v8_dom_runtime::implementation final {
                 context,
                 js_string(info.GetIsolate(), "__htmlmlSvgPathData")).ToLocal(&path_data)
             && path_data->IsString()) {
-            canvas_emit_paint_state(info, state);
+            canvas_emit_paint_state(
+                info,
+                state,
+                kind == canvas_command_kind::fill_svg_path
+                    ? canvas_paint_fill_rect
+                    : canvas_paint_stroke_path);
             canvas_append_resource_command(
                 *state.node,
                 kind,
                 canvas_intern_string(*state.node, to_utf8(info.GetIsolate(), path_data)),
                 {1, 0, 0, 1, 0, 0});
             if (even_odd) {
-                state.node->canvas_commands.back().flags |=
+                state.node->mutable_canvas().commands.back().flags |=
                     HTMLML_CANVAS_COMMAND_FLAG_EVEN_ODD;
             }
         }
@@ -11194,22 +12198,21 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "stroke");
         if (state == nullptr || state->node == nullptr) return;
-        const auto context = info.GetIsolate()->GetCurrentContext();
         if (canvas_emit_path_2d(
                 info,
                 *state,
                 canvas_command_kind::stroke_svg_path,
                 false)) return;
         if (state->path.empty()) return;
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_stroke_path);
         canvas_append_command(*state->node, canvas_command_kind::stroke);
-        v8::Local<v8::Value> line_width_value;
-        const auto line_width = info.This()->Get(context, js_string(info.GetIsolate(), "lineWidth")).ToLocal(&line_width_value)
-            ? line_width_value->NumberValue(context).FromMaybe(1)
-            : 1;
-        const auto color = canvas_color(info, "strokeStyle", 0x000000FFU);
+        const auto line_width = state->emitted_paint_state.line_width;
+        const auto color = canvas_snapshot_color(
+            state->emitted_paint_state.stroke_style,
+            state->emitted_paint_state.global_alpha,
+            0x000000FFU);
         constexpr size_t maximum_canvas_lines = 200000;
-        auto& lines = state->node->canvas_lines;
+        auto& lines = state->node->mutable_canvas().lines;
         if (lines.size() + state->path.size() > maximum_canvas_lines) lines.clear();
         for (const auto& segment : state->path) {
             lines.push_back(canvas_line_command{
@@ -11248,12 +12251,13 @@ struct v8_dom_runtime::implementation final {
     static void append_canvas_rect(dom_node& node, double x, double y, double width, double height, uint32_t rgba)
     {
         constexpr size_t maximum_canvas_rects = 100000;
-        if (node.canvas_rects.size() >= maximum_canvas_rects) {
-            node.canvas_rects.erase(
-                node.canvas_rects.begin(),
-                node.canvas_rects.begin() + static_cast<std::ptrdiff_t>(maximum_canvas_rects / 2));
+        auto& rects = node.mutable_canvas().rects;
+        if (rects.size() >= maximum_canvas_rects) {
+            rects.erase(
+                rects.begin(),
+                rects.begin() + static_cast<std::ptrdiff_t>(maximum_canvas_rects / 2));
         }
-        node.canvas_rects.push_back(canvas_rect_command{
+        rects.push_back(canvas_rect_command{
             static_cast<float>(x),
             static_cast<float>(y),
             static_cast<float>(width),
@@ -11261,19 +12265,11 @@ struct v8_dom_runtime::implementation final {
             rgba});
     }
 
-    static uint32_t canvas_apply_global_alpha(
-        const v8::FunctionCallbackInfo<v8::Value>& info,
-        uint32_t color)
+    static uint32_t canvas_apply_global_alpha(uint32_t color, double global_alpha)
     {
-        const auto context = info.GetIsolate()->GetCurrentContext();
-        v8::Local<v8::Value> global_alpha_value;
-        const auto global_alpha = info.This()->Get(
-                context,
-                js_string(info.GetIsolate(), "globalAlpha")).ToLocal(&global_alpha_value)
-            ? std::clamp(global_alpha_value->NumberValue(context).FromMaybe(1), 0.0, 1.0)
-            : 1.0;
         const auto alpha = static_cast<uint32_t>(std::lround(
-            static_cast<double>(color & 0xFFU) * global_alpha));
+            static_cast<double>(color & 0xFFU)
+                * std::clamp(global_alpha, 0.0, 1.0)));
         return (color & 0xFFFFFF00U) | std::min(255U, alpha);
     }
 
@@ -11283,17 +12279,23 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "drawImage");
         if (state == nullptr || state->node == nullptr) return;
-        ++state->node->canvas_draw_image_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++state->node->mutable_canvas().draw_image_calls;
+#endif
         if (info.Length() < 3 || !info[0]->IsObject()) {
             return;
         }
         auto* source = unwrap_node(info[0].As<v8::Object>());
         if (source == nullptr || source->tag != "canvas") return;
         if (source == state->node) {
-            ++state->node->canvas_self_draw_image_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            ++state->node->mutable_canvas().self_draw_image_calls;
+#endif
             return;
         }
-        ++state->node->canvas_canvas_draw_image_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++state->node->mutable_canvas().canvas_draw_image_calls;
+#endif
 
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto source_width = element_dimension(*source, "width", 300);
@@ -11326,17 +12328,17 @@ struct v8_dom_runtime::implementation final {
         }
         if (std::abs(source_draw_width) < 0.001 || std::abs(source_draw_height) < 0.001) return;
 
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_draw_image);
         canvas_append_resource_command(
             *state->node,
             canvas_command_kind::draw_canvas,
             source->id,
             {source_x, source_y, source_draw_width, source_draw_height,
              destination_x, destination_y, destination_width, destination_height});
-        state->node->canvas_commands.back().flags =
-            static_cast<uint32_t>(source->canvas_commands.size());
-        state->node->canvas_commands.back().reserved =
-            static_cast<uint32_t>(source->canvas_generation);
+        state->node->mutable_canvas().commands.back().flags =
+            static_cast<uint32_t>(source->canvas().commands.size());
+        state->node->mutable_canvas().commands.back().reserved =
+            static_cast<uint32_t>(source->canvas().generation);
 
         const auto source_left = std::min(source_x, source_x + source_draw_width);
         const auto source_top = std::min(source_y, source_y + source_draw_height);
@@ -11351,7 +12353,7 @@ struct v8_dom_runtime::implementation final {
                 destination_y + (y - source_y) * scale_y);
         };
 
-        for (const auto& rect : source->canvas_rects) {
+        for (const auto& rect : source->canvas().rects) {
             const auto clipped_left = std::max<double>(rect.x, source_left);
             const auto clipped_top = std::max<double>(rect.y, source_top);
             const auto clipped_right = std::min<double>(rect.x + rect.width, source_right);
@@ -11365,12 +12367,14 @@ struct v8_dom_runtime::implementation final {
                 std::min(first.second, second.second),
                 std::abs(second.first - first.first),
                 std::abs(second.second - first.second),
-                canvas_apply_global_alpha(info, rect.rgba));
+                canvas_apply_global_alpha(
+                    rect.rgba,
+                    state->emitted_paint_state.global_alpha));
         }
 
         constexpr size_t maximum_canvas_lines = 200000;
-        auto& destination_lines = state->node->canvas_lines;
-        for (const auto& line : source->canvas_lines) {
+        auto& destination_lines = state->node->mutable_canvas().lines;
+        for (const auto& line : source->canvas().lines) {
             const auto left = std::min<double>(line.x1, line.x2);
             const auto top = std::min<double>(line.y1, line.y2);
             const auto right = std::max<double>(line.x1, line.x2);
@@ -11389,7 +12393,9 @@ struct v8_dom_runtime::implementation final {
                 static_cast<float>(second.second),
                 static_cast<float>(
                     line.line_width * std::max(std::abs(scale_x), std::abs(scale_y))),
-                canvas_apply_global_alpha(info, line.rgba)});
+                canvas_apply_global_alpha(
+                    line.rgba,
+                    state->emitted_paint_state.global_alpha)});
         }
     }
 
@@ -11399,13 +12405,17 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "fill");
         if (state == nullptr || state->node == nullptr) return;
-        ++state->node->canvas_fill_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++state->node->mutable_canvas().fill_calls;
+#endif
         const auto fill_rule_index = info.Length() > 0 && info[0]->IsObject() ? 1 : 0;
         const auto even_odd = info.Length() > fill_rule_index
             && info[fill_rule_index]->IsString()
             && to_utf8(info.GetIsolate(), info[fill_rule_index]) == "evenodd";
         if (info.Length() > 0 && info[0]->IsObject()) {
-            ++state->node->canvas_path_argument_fill_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            ++state->node->mutable_canvas().path_argument_fill_calls;
+#endif
             if (canvas_emit_path_2d(
                     info,
                     *state,
@@ -11413,13 +12423,16 @@ struct v8_dom_runtime::implementation final {
                     even_odd)) return;
         }
         if (state->path.empty()) return;
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_fill_rect);
         canvas_append_command(*state->node, canvas_command_kind::fill);
         if (even_odd) {
-            state->node->canvas_commands.back().flags |=
+            state->node->mutable_canvas().commands.back().flags |=
                 HTMLML_CANVAS_COMMAND_FLAG_EVEN_ODD;
         }
-        const auto color = canvas_color(info, "fillStyle", 0x000000FFU);
+        const auto color = canvas_snapshot_color(
+            state->emitted_paint_state.fill_style,
+            state->emitted_paint_state.global_alpha,
+            0x000000FFU);
         constexpr double epsilon = 0.01;
 
         const auto fill_subpath = [&](size_t begin, size_t end) {
@@ -11525,7 +12538,10 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "fillRect");
         if (state == nullptr || state->node == nullptr || info.Length() < 4) return;
-        ++state->node->canvas_fill_rect_calls;
+        auto& canvas = state->node->mutable_canvas();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++canvas.fill_rect_calls;
+#endif
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto x = info[0]->NumberValue(context).FromMaybe(0);
         const auto y = info[1]->NumberValue(context).FromMaybe(0);
@@ -11539,11 +12555,13 @@ struct v8_dom_runtime::implementation final {
         const auto transformed_bottom = std::max(first.second, second.second);
         const auto bitmap_width = element_dimension(*state->node, "width", 300);
         const auto bitmap_height = element_dimension(*state->node, "height", 150);
-        const auto color = canvas_color(info, "fillStyle", 0x000000FFU);
-        const auto composite = canvas_string_property(
-            info,
-            "globalCompositeOperation",
-            "source-over");
+        canvas_emit_paint_state(info, *state, canvas_paint_fill_rect);
+        const auto color = canvas_snapshot_color(
+            state->emitted_paint_state.fill_style,
+            state->emitted_paint_state.global_alpha,
+            0x000000FFU);
+        const auto& composite =
+            state->emitted_paint_state.global_composite_operation;
         const auto saved_clip = std::any_of(
             state->stack.begin(),
             state->stack.end(),
@@ -11558,27 +12576,28 @@ struct v8_dom_runtime::implementation final {
             && covers_backing_store && replaces_every_pixel) {
             canvas_compact_full_overwrite(info, *state);
         }
-        canvas_emit_paint_state(info, *state);
         canvas_append_command(
             *state->node,
             canvas_command_kind::fill_rect,
             {x, y, width, height});
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (std::abs(second.second - bitmap_height) <= 2
             && std::abs(second.first - first.first) >= 1
             && std::abs(second.first - first.first) <= 12
             && std::abs(second.second - first.second) >= 8) {
-            ++state->node->canvas_probable_volume_fill_rect_calls;
-            ++state->node->canvas_probable_volume_by_generation[state->node->canvas_generation];
+            ++canvas.probable_volume_fill_rect_calls;
+            ++canvas.probable_volume_by_generation[canvas.generation];
         }
-        ++state->node->canvas_fill_rect_color_calls[color];
+        ++canvas.fill_rect_color_calls[color];
+#endif
         if (composite == "copy") {
-            std::erase_if(state->node->canvas_rects, [&](const auto& rect) {
+            std::erase_if(canvas.rects, [&](const auto& rect) {
                 return rect.x < transformed_right
                     && rect.x + rect.width > transformed_left
                     && rect.y < transformed_bottom
                     && rect.y + rect.height > transformed_top;
             });
-            std::erase_if(state->node->canvas_lines, [&](const auto& line) {
+            std::erase_if(canvas.lines, [&](const auto& line) {
                 const auto left = std::min(line.x1, line.x2);
                 const auto right = std::max(line.x1, line.x2);
                 const auto top = std::min(line.y1, line.y2);
@@ -11607,16 +12626,16 @@ struct v8_dom_runtime::implementation final {
         const auto y = info[1]->NumberValue(context).FromMaybe(0);
         const auto width = info[2]->NumberValue(context).FromMaybe(0);
         const auto height = info[3]->NumberValue(context).FromMaybe(0);
-        canvas_emit_paint_state(info, *state);
+        canvas_emit_paint_state(info, *state, canvas_paint_stroke_path);
         canvas_append_command(
             *state->node,
             canvas_command_kind::stroke_rect,
             {x, y, width, height});
-        v8::Local<v8::Value> line_width_value;
-        const auto line_width = info.This()->Get(context, js_string(info.GetIsolate(), "lineWidth")).ToLocal(&line_width_value)
-            ? line_width_value->NumberValue(context).FromMaybe(1)
-            : 1;
-        const auto color = canvas_color(info, "strokeStyle", 0x000000FFU);
+        const auto line_width = state->emitted_paint_state.line_width;
+        const auto color = canvas_snapshot_color(
+            state->emitted_paint_state.stroke_style,
+            state->emitted_paint_state.global_alpha,
+            0x000000FFU);
         const auto top_left = canvas_transform_point(*state, x, y);
         const auto bottom_right = canvas_transform_point(*state, x + width, y + height);
         const auto transformed_x = std::min(top_left.first, bottom_right.first);
@@ -11635,7 +12654,10 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_draw));
         auto* state = canvas_path_state(info, "clearRect");
         if (state == nullptr || state->node == nullptr || info.Length() < 4) return;
-        ++state->node->canvas_clear_rect_calls;
+        auto& canvas = state->node->mutable_canvas();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        ++canvas.clear_rect_calls;
+#endif
         auto* node = state->node;
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto x = info[0]->NumberValue(context).FromMaybe(0);
@@ -11656,18 +12678,22 @@ struct v8_dom_runtime::implementation final {
             state->stack.begin(),
             state->stack.end(),
             [](const canvas_snapshot& snapshot) { return snapshot.has_clip; });
-        node->canvas_max_clear_stack_depth = std::max<uint64_t>(
-            node->canvas_max_clear_stack_depth,
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        canvas.max_clear_stack_depth = std::max<uint64_t>(
+            canvas.max_clear_stack_depth,
             state->stack.size());
         if (covers_backing_store) {
-            ++node->canvas_full_clear_calls;
-            if (state->has_clip) ++node->canvas_full_clear_current_clip_calls;
-            if (saved_clip) ++node->canvas_full_clear_saved_clip_calls;
+            ++canvas.full_clear_calls;
+            if (state->has_clip) ++canvas.full_clear_current_clip_calls;
+            if (saved_clip) ++canvas.full_clear_saved_clip_calls;
         } else {
-            ++node->canvas_clear_bounds_rejected_calls;
+            ++canvas.clear_bounds_rejected_calls;
         }
+#endif
         if (!state->has_clip && !saved_clip && covers_backing_store) {
-            ++node->canvas_full_clear_reset_calls;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+            ++canvas.full_clear_reset_calls;
+#endif
             // Canvas libraries commonly wrap an entire paint pass in save()/restore().
             // A full backing-store clear still makes every earlier draw command dead,
             // even when that save is active. Rebuild the lightweight state stack so
@@ -11685,11 +12711,11 @@ struct v8_dom_runtime::implementation final {
             *node,
             canvas_command_kind::clear_rect,
             {x, y, width, height});
-        std::erase_if(node->canvas_rects, [&](const auto& rect) {
+        std::erase_if(canvas.rects, [&](const auto& rect) {
             return rect.x < clear_right && rect.x + rect.width > clear_left
                 && rect.y < clear_bottom && rect.y + rect.height > clear_top;
         });
-        std::erase_if(node->canvas_lines, [&](const auto& line) {
+        std::erase_if(canvas.lines, [&](const auto& line) {
             const auto left = std::min(line.x1, line.x2);
             const auto right = std::max(line.x1, line.x2);
             const auto top = std::min(line.y1, line.y2);
@@ -12442,14 +13468,14 @@ struct v8_dom_runtime::implementation final {
             const auto origin_y = static_cast<double>(current->layout.y)
                 + resolve_origin(current->style.transform_origin_y, current->layout.height);
             const auto radians = static_cast<double>(
-                current->painted_transform_rotate_degrees) * degrees_to_radians;
+                current->painted_transform_rotation_value()) * degrees_to_radians;
             const auto cosine = std::cos(radians);
             const auto sine = std::sin(radians);
             for (auto& corner : corners) {
                 const auto scaled_x = (corner.x - origin_x)
-                    * current->painted_transform_scale_x;
+                    * current->painted_transform_scale_x_value();
                 const auto scaled_y = (corner.y - origin_y)
-                    * current->painted_transform_scale_y;
+                    * current->painted_transform_scale_y_value();
                 corner.x = origin_x + scaled_x * cosine - scaled_y * sine;
                 corner.y = origin_y + scaled_x * sine + scaled_y * cosine;
             }
@@ -12551,6 +13577,11 @@ struct v8_dom_runtime::implementation final {
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
         const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
         const auto value = to_wtf8(info.GetIsolate(), info[1]);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (self->resize_profile_active) {
+            ++self->last_resize_attribute_counts[name];
+        }
+#endif
         self->record_html_attribute_feature(name, "setAttribute");
         if (name == "class"
             && node->class_name == value
@@ -12561,8 +13592,7 @@ struct v8_dom_runtime::implementation final {
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         else if (name == "style") {
-            node->inline_style_declarations.clear();
-            node->inline_important_declarations.clear();
+            node->clear_authored_style();
             node->style.inline_property_mask = 0U;
             node->style.important_property_mask = 0U;
             for (const auto& declaration : parse_css_declarations(value, true)) {
@@ -12616,8 +13646,7 @@ struct v8_dom_runtime::implementation final {
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
         else if (name == "style") {
-            node->inline_style_declarations.clear();
-            node->inline_important_declarations.clear();
+            node->clear_authored_style();
             node->style.inline_property_mask = 0U;
             node->style.important_property_mask = 0U;
         }
@@ -12904,7 +13933,9 @@ struct v8_dom_runtime::implementation final {
 
     bool profiled_read_text_file(const std::filesystem::path& path, std::string& result)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_resource_read : nullptr);
+#endif
         return read_text_file(path, result);
     }
 
@@ -12988,16 +14019,17 @@ struct v8_dom_runtime::implementation final {
         const css_declaration& declaration)
     {
         const auto existing_important =
-            node.inline_important_declarations.contains(declaration.name);
+            node.authored_style().important_declarations.contains(declaration.name);
         if (existing_important && !declaration.important) {
             return false;
         }
 
-        node.inline_style_declarations[declaration.name] = declaration.value;
+        auto& authored = node.mutable_authored_style();
+        authored.declarations[declaration.name] = declaration.value;
         if (declaration.important) {
-            node.inline_important_declarations.insert(declaration.name);
+            authored.important_declarations.insert(declaration.name);
         } else {
-            node.inline_important_declarations.erase(declaration.name);
+            authored.important_declarations.erase(declaration.name);
         }
         return true;
     }
@@ -13069,7 +14101,7 @@ struct v8_dom_runtime::implementation final {
 
     void index_hover_selector_dependencies(const css_rule& rule)
     {
-        const auto& selector = rule.selector;
+        const auto& selector = rule.selector();
         size_t search = 0U;
         while ((search = selector.find(":hover", search)) != std::string::npos) {
             const auto token_end = search + 6U;
@@ -13180,8 +14212,8 @@ struct v8_dom_runtime::implementation final {
             }
             if (scope == hover_invalidation_scope::subject
                 && std::any_of(
-                    rule.declarations.begin(),
-                    rule.declarations.end(),
+                    rule.declarations().begin(),
+                    rule.declarations().end(),
                     [](const css_declaration& declaration) {
                         return declaration.name.starts_with("--");
                     })) {
@@ -13197,7 +14229,7 @@ struct v8_dom_runtime::implementation final {
     void index_css_rule(size_t index)
     {
         const auto& rule = css_rules[index];
-        const auto& selector = rule.selector;
+        const auto& selector = rule.selector();
         if (selector.find("::-webkit-scrollbar") != std::string::npos
             || selector.find("::selection") != std::string::npos) {
             return;
@@ -13399,9 +14431,92 @@ struct v8_dom_runtime::implementation final {
     bool css_rule_media_matches(const css_rule& rule) const
     {
         return std::all_of(
-            rule.media_queries.begin(),
-            rule.media_queries.end(),
+            rule.media_queries().begin(),
+            rule.media_queries().end(),
             [this](const std::string& query) { return media_query_matches(query); });
+    }
+
+    static uint64_t css_rule_payload_hash(
+        std::string_view selector,
+        const std::vector<css_declaration>& declarations,
+        const std::vector<std::string>& media_queries)
+    {
+        auto hash = uint64_t{1469598103934665603ULL};
+        const auto append = [&](std::string_view value) {
+            for (const auto character : value) {
+                hash ^= static_cast<unsigned char>(character);
+                hash *= 1099511628211ULL;
+            }
+            hash ^= 0xffU;
+            hash *= 1099511628211ULL;
+        };
+        append(selector);
+        for (const auto& declaration : declarations) {
+            append(declaration.name);
+            append(declaration.value);
+            hash ^= declaration.important ? 1U : 0U;
+            hash *= 1099511628211ULL;
+        }
+        for (const auto& query : media_queries) append(query);
+        return hash;
+    }
+
+    static bool css_rule_payload_matches(
+        const css_rule_payload& payload,
+        std::string_view selector,
+        const std::vector<css_declaration>& declarations,
+        const std::vector<std::string>& media_queries)
+    {
+        if (payload.selector != selector
+            || payload.declarations.size() != declarations.size()
+            || payload.media_queries != media_queries) {
+            return false;
+        }
+        for (size_t index = 0; index < declarations.size(); ++index) {
+            const auto& left = payload.declarations[index];
+            const auto& right = declarations[index];
+            if (left.name != right.name || left.value != right.value
+                || left.important != right.important) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static std::shared_ptr<const css_rule_payload> intern_css_rule_payload(
+        std::string selector,
+        const std::vector<css_declaration>& declarations,
+        const std::vector<std::string>& media_queries)
+    {
+        const auto hash = css_rule_payload_hash(
+            selector,
+            declarations,
+            media_queries);
+        std::lock_guard lock(shared_css_rule_payload_mutex);
+        auto& candidates = shared_css_rule_payloads[hash];
+        for (auto iterator = candidates.begin(); iterator != candidates.end();) {
+            auto candidate = iterator->lock();
+            if (candidate == nullptr) {
+                iterator = candidates.erase(iterator);
+                continue;
+            }
+            if (css_rule_payload_matches(
+                    *candidate,
+                    selector,
+                    declarations,
+                    media_queries)) {
+                return candidate;
+            }
+            ++iterator;
+        }
+        auto payload = std::make_shared<css_rule_payload>();
+        payload->specificity = css_selector_specificity(selector);
+        payload->selector = std::move(selector);
+        payload->compiled_selector = compile_css_selector(payload->selector);
+        payload->declarations = declarations;
+        payload->media_queries = media_queries;
+        candidates.emplace_back(payload);
+        return payload;
     }
 
     void append_css_rule(
@@ -13412,11 +14527,10 @@ struct v8_dom_runtime::implementation final {
         const auto index = css_rules.size();
         css_rule rule;
         rule.stylesheet_owner_id = active_stylesheet_owner_id;
-        rule.specificity = css_selector_specificity(selector);
-        rule.selector = std::move(selector);
-        rule.compiled_selector = compile_css_selector(rule.selector);
-        rule.declarations = declarations;
-        rule.media_queries = media_queries;
+        rule.payload = intern_css_rule_payload(
+            std::move(selector),
+            declarations,
+            media_queries);
         rule.media_matches = css_rule_media_matches(rule);
         css_rules.push_back(std::move(rule));
         index_css_rule(index);
@@ -13889,8 +15003,8 @@ struct v8_dom_runtime::implementation final {
             candidates.begin(),
             candidates.end(),
             [this](size_t left, size_t right) {
-                const auto left_specificity = css_rules[left].specificity;
-                const auto right_specificity = css_rules[right].specificity;
+                const auto left_specificity = css_rules[left].specificity();
+                const auto right_specificity = css_rules[right].specificity();
                 return left_specificity != right_specificity
                     ? left_specificity < right_specificity
                     : left < right;
@@ -14211,7 +15325,9 @@ struct v8_dom_runtime::implementation final {
         const std::string& stylesheet_address = {},
         uint32_t stylesheet_owner_id = 0)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_css_parse : nullptr);
+#endif
         const auto first_new_rule = css_rules.size();
         size_t comment = 0;
         while ((comment = css.find("/*", comment)) != std::string::npos) {
@@ -14229,8 +15345,8 @@ struct v8_dom_runtime::implementation final {
         for (auto index = first_new_rule; index < css_rules.size(); ++index) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
-            if (rule.selector != ":root" && rule.selector != "html") continue;
-            for (const auto& declaration : rule.declarations) {
+            if (rule.selector() != ":root" && rule.selector() != "html") continue;
+            for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")) continue;
                 if (!declaration.important
                     && important_css_variables.contains(declaration.name)) continue;
@@ -14275,8 +15391,9 @@ struct v8_dom_runtime::implementation final {
             const auto name = trim_css(std::string_view(content).substr(0, comma));
             const std::string* known_value = nullptr;
             for (auto* current = &node; current != nullptr; current = current->parent) {
-                const auto known = current->style.custom_properties.find(name);
-                if (known != current->style.custom_properties.end()) {
+                const auto& custom = current->style.custom_properties().values;
+                const auto known = custom.find(name);
+                if (known != custom.end()) {
                     known_value = &known->second;
                     break;
                 }
@@ -14709,12 +15826,12 @@ struct v8_dom_runtime::implementation final {
                     && input_type != node.attributes.end()
                     && (input_type->second == "checkbox" || input_type->second == "radio");
                 const auto checked_input = checkable_input
-                    && (node.checkedness_initialized
-                        ? node.checkedness
+                    && (node.form_control().checkedness_initialized
+                        ? node.form_control().checkedness
                         : node.attributes.contains("checked"));
                 const auto selected_option = node.tag == "option"
-                    && (node.selectedness_initialized
-                        ? node.selectedness
+                    && (node.form_control().selectedness_initialized
+                        ? node.form_control().selectedness
                         : node.attributes.contains("selected"));
                 if (!checked_input
                     && !selected_option) return false;
@@ -14967,11 +16084,11 @@ struct v8_dom_runtime::implementation final {
         const css_rule& rule,
         const dom_node* scope_root = nullptr) const
     {
-        return !rule.compiled_selector.compounds.empty()
+        return !rule.compiled_selector().compounds.empty()
             && compiled_css_selector_matches(
                 node,
-                rule.compiled_selector,
-                rule.compiled_selector.compounds.size() - 1U,
+                rule.compiled_selector(),
+                rule.compiled_selector().compounds.size() - 1U,
                 scope_root);
     }
 
@@ -15419,6 +16536,7 @@ struct v8_dom_runtime::implementation final {
 
     static void apply_background_position(node_style& style, const std::string& value)
     {
+        auto& background = style.mutable_background_image();
         std::istringstream stream(value);
         std::string first;
         std::string second;
@@ -15431,11 +16549,11 @@ struct v8_dom_runtime::implementation final {
             return token == "left" || token == "right";
         };
         if (vertical(first)) {
-            style.background_position_y = first;
-            style.background_position_x = second.empty() ? "center" : second;
+            background.position_y = first;
+            background.position_x = second.empty() ? "center" : second;
         } else {
-            style.background_position_x = first;
-            style.background_position_y = second.empty()
+            background.position_x = first;
+            background.position_y = second.empty()
                 ? (horizontal(first) ? "center" : "0%")
                 : second;
         }
@@ -15843,11 +16961,13 @@ struct v8_dom_runtime::implementation final {
 
     static void configure_style_transitions(node_style& style)
     {
-        const auto properties = split_css_component_list(style.transition_property_value, ',');
-        const auto durations = split_css_component_list(style.transition_duration_value, ',');
-        const auto delays = split_css_component_list(style.transition_delay_value, ',');
+        if (!style.has_animation_data()) return;
+        auto& animations = style.mutable_animations();
+        const auto properties = split_css_component_list(animations.transition_property_value, ',');
+        const auto durations = split_css_component_list(animations.transition_duration_value, ',');
+        const auto delays = split_css_component_list(animations.transition_delay_value, ',');
         const auto timings = split_css_component_list(
-            style.transition_timing_function_value, ',');
+            animations.transition_timing_function_value, ',');
         const auto resolve = [&](std::string_view property) {
             node_style::transition_timing result;
             for (size_t index = 0; index < properties.size(); ++index) {
@@ -15867,9 +16987,9 @@ struct v8_dom_runtime::implementation final {
             }
             return result;
         };
-        style.transform_transition = resolve("transform");
-        style.opacity_transition = resolve("opacity");
-        style.color_transition = resolve("color");
+        animations.transform_transition = resolve("transform");
+        animations.opacity_transition = resolve("opacity");
+        animations.color_transition = resolve("color");
     }
 
     static void apply_transition_shorthand(node_style& style, const std::string& value)
@@ -15911,10 +17031,11 @@ struct v8_dom_runtime::implementation final {
             }
             return result;
         };
-        style.transition_property_value = join(properties);
-        style.transition_duration_value = join(durations);
-        style.transition_delay_value = join(delays);
-        style.transition_timing_function_value = join(timings);
+        auto& animations = style.mutable_animations();
+        animations.transition_property_value = join(properties);
+        animations.transition_duration_value = join(durations);
+        animations.transition_delay_value = join(delays);
+        animations.transition_timing_function_value = join(timings);
         configure_style_transitions(style);
     }
 
@@ -15924,40 +17045,43 @@ struct v8_dom_runtime::implementation final {
         const std::string& value)
     {
         const auto name = canonical_css_property_name(raw_name);
+        if (name != "grid-area" && name != "grid-row"
+            && name != "grid-row-start" && name != "grid-row-end"
+            && name != "grid-column" && name != "grid-column-start"
+            && name != "grid-column-end") {
+            return false;
+        }
+        auto& grid = style.mutable_grid();
         const auto update_column_layout = [&] {
-            style.grid_column_value = style.grid_column_start_value == "auto"
-                && style.grid_column_end_value == "auto"
+            grid.column_value = grid.column_start_value == "auto"
+                && grid.column_end_value == "auto"
                 ? "auto"
-                : style.grid_column_start_value + " / " + style.grid_column_end_value;
-            style.grid_span_all = style.grid_column_end_value != "auto";
-            const auto& start = style.grid_column_start_value;
-            style.grid_column_start = !start.empty()
+                : grid.column_start_value + " / " + grid.column_end_value;
+            grid.span_all = grid.column_end_value != "auto";
+            const auto& start = grid.column_start_value;
+            grid.column_start = !start.empty()
                 && std::all_of(start.begin(), start.end(), [](unsigned char character) {
                     return std::isdigit(character) != 0;
                 }) ? std::atoi(start.c_str()) : 0;
         };
         if (name == "grid-row-start") {
-            style.grid_row_start_value = value;
+            grid.row_start_value = value;
             return true;
         }
         if (name == "grid-row-end") {
-            style.grid_row_end_value = value;
+            grid.row_end_value = value;
             return true;
         }
         if (name == "grid-column-start") {
-            style.grid_column_start_value = value;
+            grid.column_start_value = value;
             update_column_layout();
             return true;
         }
         if (name == "grid-column-end") {
-            style.grid_column_end_value = value;
+            grid.column_end_value = value;
             update_column_layout();
             return true;
         }
-        if (name != "grid-area" && name != "grid-row" && name != "grid-column") {
-            return false;
-        }
-
         const auto components = split_css_component_list(value, '/');
         const auto maximum = name == "grid-area" ? 4U : 2U;
         if (components.empty() || components.size() > maximum) return true;
@@ -15965,29 +17089,29 @@ struct v8_dom_runtime::implementation final {
             return index < components.size() ? components[index] : std::string{"auto"};
         };
         if (name == "grid-area") {
-            style.grid_area_value = value;
-            style.grid_row_start_value = component(0);
-            style.grid_column_start_value = component(1);
-            style.grid_row_end_value = component(2);
-            style.grid_column_end_value = component(3);
-            style.grid_row_value =
-                style.grid_row_start_value + " / " + style.grid_row_end_value;
+            grid.area_value = value;
+            grid.row_start_value = component(0);
+            grid.column_start_value = component(1);
+            grid.row_end_value = component(2);
+            grid.column_end_value = component(3);
+            grid.row_value =
+                grid.row_start_value + " / " + grid.row_end_value;
             update_column_layout();
             return true;
         }
         if (name == "grid-row") {
-            style.grid_row_value = value;
-            style.grid_row_start_value = component(0);
-            style.grid_row_end_value = component(1);
+            grid.row_value = value;
+            grid.row_start_value = component(0);
+            grid.row_end_value = component(1);
             return true;
         }
 
-        style.grid_column_start_value = component(0);
-        style.grid_column_end_value = component(1);
+        grid.column_start_value = component(0);
+        grid.column_end_value = component(1);
         update_column_layout();
         // Preserve the authored one-component shorthand serialization rather
         // than inflating `2` to `2 / auto`.
-        style.grid_column_value = value;
+        grid.column_value = value;
         return true;
     }
 
@@ -16024,85 +17148,90 @@ struct v8_dom_runtime::implementation final {
                 name = token;
             }
         }
-        style.animation_name_value = name;
-        style.animation_duration_value = duration;
-        style.animation_delay_value = delay;
-        style.animation_timing_function_value = timing;
-        style.animation_iteration_count_value = iterations;
+        auto& animations = style.mutable_animations();
+        animations.animation_name_value = name;
+        animations.animation_duration_value = duration;
+        animations.animation_delay_value = delay;
+        animations.animation_timing_function_value = timing;
+        animations.animation_iteration_count_value = iterations;
     }
 
     void configure_style_keyframe_animation(dom_node& node)
     {
         auto& style = node.style;
-        style.opacity_keyframes.clear();
-        style.opacity_keyframe_animation_signature.clear();
-        style.rotation_keyframes.clear();
-        style.rotation_keyframe_animation_signature.clear();
-        if (style.animation_name_value == "none") return;
-        const auto names = split_css_component_list(style.animation_name_value, ',');
+        if (!style.has_animation_data()) return;
+        auto& animations = style.mutable_animations();
+        animations.opacity_keyframes.clear();
+        animations.opacity_keyframe_animation_signature.clear();
+        animations.rotation_keyframes.clear();
+        animations.rotation_keyframe_animation_signature.clear();
+        if (animations.animation_name_value == "none") return;
+        const auto names = split_css_component_list(animations.animation_name_value, ',');
         if (names.empty()) return;
         const auto name = lower_html_name(trim_css(names.front()));
         const auto definition = opacity_keyframes.find(name);
         if (name == "none" || definition == opacity_keyframes.end()) return;
-        const auto durations = split_css_component_list(style.animation_duration_value, ',');
-        const auto delays = split_css_component_list(style.animation_delay_value, ',');
+        const auto durations = split_css_component_list(animations.animation_duration_value, ',');
+        const auto delays = split_css_component_list(animations.animation_delay_value, ',');
         const auto timings = split_css_component_list(
-            style.animation_timing_function_value, ',');
+            animations.animation_timing_function_value, ',');
         const auto iteration_counts = split_css_component_list(
-            style.animation_iteration_count_value, ',');
-        style.opacity_keyframe_duration_ms = durations.empty()
+            animations.animation_iteration_count_value, ',');
+        animations.opacity_keyframe_duration_ms = durations.empty()
             ? 0 : std::max(0.0F, parse_css_time_ms(durations.front()));
-        style.opacity_keyframe_delay_ms = delays.empty()
+        animations.opacity_keyframe_delay_ms = delays.empty()
             ? 0 : parse_css_time_ms(delays.front());
         const auto iteration = iteration_counts.empty()
             ? std::string("1") : lower_html_name(trim_css(iteration_counts.front()));
-        style.opacity_keyframe_iterations = iteration == "infinite"
+        animations.opacity_keyframe_iterations = iteration == "infinite"
             ? std::numeric_limits<float>::infinity()
             : std::max(0.0F, std::strtof(iteration.c_str(), nullptr));
         node_style::transition_timing animation_timing;
         if (!timings.empty()) parse_transition_timing(timings.front(), animation_timing);
-        style.opacity_keyframe_x1 = animation_timing.x1;
-        style.opacity_keyframe_y1 = animation_timing.y1;
-        style.opacity_keyframe_x2 = animation_timing.x2;
-        style.opacity_keyframe_y2 = animation_timing.y2;
-        style.opacity_keyframes = definition->second.opacity_stops;
-        style.rotation_keyframes = definition->second.rotation_stops;
-        if (style.opacity_keyframe_duration_ms <= 0
-            || style.opacity_keyframe_iterations == 0
-            || (style.opacity_keyframes.size() < 2U
-                && style.rotation_keyframes.size() < 2U)) return;
+        animations.opacity_keyframe_x1 = animation_timing.x1;
+        animations.opacity_keyframe_y1 = animation_timing.y1;
+        animations.opacity_keyframe_x2 = animation_timing.x2;
+        animations.opacity_keyframe_y2 = animation_timing.y2;
+        animations.opacity_keyframes = definition->second.opacity_stops;
+        animations.rotation_keyframes = definition->second.rotation_stops;
+        if (animations.opacity_keyframe_duration_ms <= 0
+            || animations.opacity_keyframe_iterations == 0
+            || (animations.opacity_keyframes.size() < 2U
+                && animations.rotation_keyframes.size() < 2U)) return;
         std::ostringstream signature;
-        signature << name << '|' << style.opacity_keyframe_duration_ms << '|'
-            << style.opacity_keyframe_delay_ms << '|'
-            << style.opacity_keyframe_iterations << '|'
-            << style.opacity_keyframe_x1 << ',' << style.opacity_keyframe_y1 << ','
-            << style.opacity_keyframe_x2 << ',' << style.opacity_keyframe_y2;
+        signature << name << '|' << animations.opacity_keyframe_duration_ms << '|'
+            << animations.opacity_keyframe_delay_ms << '|'
+            << animations.opacity_keyframe_iterations << '|'
+            << animations.opacity_keyframe_x1 << ',' << animations.opacity_keyframe_y1 << ','
+            << animations.opacity_keyframe_x2 << ',' << animations.opacity_keyframe_y2;
         const auto base_signature = signature.str();
-        if (style.opacity_keyframes.size() >= 2U) {
+        if (animations.opacity_keyframes.size() >= 2U) {
             signature.str(base_signature);
             signature.clear();
-            for (const auto& stop : style.opacity_keyframes) {
+            for (const auto& stop : animations.opacity_keyframes) {
                 signature << '|' << stop.offset << ':' << stop.opacity;
             }
-            style.opacity_keyframe_animation_signature = signature.str();
+            animations.opacity_keyframe_animation_signature = signature.str();
             record_composition("css-opacity-keyframe-animation", node.id);
         }
-        if (style.rotation_keyframes.size() >= 2U) {
+        if (animations.rotation_keyframes.size() >= 2U) {
             signature.str(base_signature);
             signature.clear();
-            for (const auto& stop : style.rotation_keyframes) {
+            for (const auto& stop : animations.rotation_keyframes) {
                 signature << '|' << stop.offset << ':' << stop.degrees;
             }
-            style.rotation_keyframe_animation_signature = signature.str();
+            animations.rotation_keyframe_animation_signature = signature.str();
             record_composition("css-rotation-keyframe-animation", node.id);
         }
     }
 
     void apply_css_declaration(dom_node& node, const css_declaration& declaration)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (profile_css) {
             ++css_profile_declaration_applications;
         }
+#endif
         const auto& name = declaration.name;
         if (name == "-moz-transform" || name == "-webkit-transform"
             || name == "grid-gap") {
@@ -16117,14 +17246,15 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         if (name.starts_with("--")) {
+            const auto& custom = node.style.custom_properties();
             const auto existing_is_important =
-                node.style.important_custom_properties.contains(name);
+                custom.important.contains(name);
             const auto existing_is_inline =
-                node.inline_style_declarations.contains(name)
-                && node.style.custom_properties.contains(name);
+                node.authored_style().declarations.contains(name)
+                && custom.values.contains(name);
             const auto inline_is_important =
                 existing_is_inline
-                && node.inline_important_declarations.contains(name);
+                && node.authored_style().important_declarations.contains(name);
             if (inline_is_important
                 || (!declaration.important && existing_is_important)
                 || (!declaration.important && existing_is_inline)) {
@@ -16136,9 +17266,10 @@ struct v8_dom_runtime::implementation final {
                     "style-application");
                 return;
             }
-            node.style.custom_properties[name] = declaration.value;
-            if (declaration.important) node.style.important_custom_properties.insert(name);
-            else node.style.important_custom_properties.erase(name);
+            auto& mutable_custom = node.style.mutable_custom_properties();
+            mutable_custom.values[name] = declaration.value;
+            if (declaration.important) mutable_custom.important.insert(name);
+            else mutable_custom.important.erase(name);
             record_feature(
                 "css",
                 "custom-property",
@@ -16196,14 +17327,13 @@ struct v8_dom_runtime::implementation final {
             reset.display = default_display_for_node(node);
             reset.inline_property_mask = previous.inline_property_mask;
             reset.important_property_mask = previous.important_property_mask;
-            reset.custom_properties = std::move(previous.custom_properties);
-            reset.important_custom_properties = std::move(previous.important_custom_properties);
-            reset.before = std::move(previous.before);
-            reset.after = std::move(previous.after);
+            reset.move_custom_properties_from(previous);
+            reset.move_pseudo_elements_from(previous);
 
             const auto has_inline = [&](std::initializer_list<std::string_view> names) {
                 return std::any_of(names.begin(), names.end(), [&](std::string_view candidate) {
-                    return node.inline_style_declarations.contains(std::string(candidate));
+                    return node.authored_style().declarations.contains(
+                        std::string(candidate));
                 });
             };
             if (is_inline(inline_width)) reset.width = previous.width;
@@ -16301,7 +17431,10 @@ struct v8_dom_runtime::implementation final {
             if (is_inline(inline_opacity)) reset.opacity = previous.opacity;
             if (is_inline(inline_color)) reset.foreground_rgba = previous.foreground_rgba;
             if (is_inline(inline_font_size)) reset.font_size = previous.font_size;
-            if (is_inline(inline_font_family)) reset.font_family = previous.font_family;
+            if (is_inline(inline_font_family)) {
+                reset.mutable_textual().font_family =
+                    previous.textual().font_family;
+            }
             if (is_inline(inline_font_weight)) reset.font_weight = previous.font_weight;
             if (is_inline(inline_line_height)) reset.line_height = previous.line_height;
             if (is_inline(inline_letter_spacing)) {
@@ -16312,21 +17445,20 @@ struct v8_dom_runtime::implementation final {
                 reset.word_spacing = previous.word_spacing;
                 reset.word_spacing_specified = previous.word_spacing_specified;
             }
-            if (is_inline(inline_text_align)) reset.text_align = previous.text_align;
-            if (is_inline(inline_white_space)) reset.white_space = previous.white_space;
+            if (is_inline(inline_text_align)) {
+                reset.mutable_textual().text_align =
+                    previous.textual().text_align;
+            }
+            if (is_inline(inline_white_space)) {
+                reset.mutable_textual().white_space =
+                    previous.textual().white_space;
+            }
 
             // These modeled properties do not yet have dedicated inline-mask
             // bits, so preserve their applied values by authored declaration.
             if (has_inline({"background-image", "background-repeat",
                     "background-position", "background-size"})) {
-                reset.background_image_value = previous.background_image_value;
-                reset.background_image_markup = std::move(previous.background_image_markup);
-                reset.background_image_view_box = std::move(previous.background_image_view_box);
-                reset.background_repeat = previous.background_repeat;
-                reset.background_position_x = previous.background_position_x;
-                reset.background_position_y = previous.background_position_y;
-                reset.background_size_x = previous.background_size_x;
-                reset.background_size_y = previous.background_size_y;
+                reset.mutable_background_image() = previous.background_image();
             }
             if (has_inline({"border", "border-top", "border-right", "border-bottom",
                     "border-left", "border-width", "border-color",
@@ -16348,11 +17480,12 @@ struct v8_dom_runtime::implementation final {
             }
             if (has_inline({"transition", "transition-property", "transition-duration",
                     "transition-delay", "transition-timing-function"})) {
-                reset.transition_property_value = previous.transition_property_value;
-                reset.transition_duration_value = previous.transition_duration_value;
-                reset.transition_delay_value = previous.transition_delay_value;
-                reset.transition_timing_function_value =
-                    previous.transition_timing_function_value;
+                auto& reset_animations = reset.mutable_animations();
+                reset_animations.transition_property_value = previous.animations().transition_property_value;
+                reset_animations.transition_duration_value = previous.animations().transition_duration_value;
+                reset_animations.transition_delay_value = previous.animations().transition_delay_value;
+                reset_animations.transition_timing_function_value =
+                    previous.animations().transition_timing_function_value;
                 configure_style_transitions(reset);
             }
             if (has_inline({"z-index"})) {
@@ -16363,26 +17496,22 @@ struct v8_dom_runtime::implementation final {
             if (has_inline({"grid-template-columns", "grid-template-rows",
                     "grid-area", "grid-row", "grid-row-start", "grid-row-end",
                     "grid-column", "grid-column-start", "grid-column-end"})) {
-                reset.grid_template_columns = std::move(previous.grid_template_columns);
-                reset.grid_template_rows = std::move(previous.grid_template_rows);
-                reset.grid_two_columns = previous.grid_two_columns;
-                reset.grid_fractional_rows = previous.grid_fractional_rows;
-                reset.grid_span_all = previous.grid_span_all;
-                reset.grid_area_value = std::move(previous.grid_area_value);
-                reset.grid_row_value = std::move(previous.grid_row_value);
-                reset.grid_row_start_value = std::move(previous.grid_row_start_value);
-                reset.grid_row_end_value = std::move(previous.grid_row_end_value);
-                reset.grid_column_value = std::move(previous.grid_column_value);
-                reset.grid_column_start_value = std::move(previous.grid_column_start_value);
-                reset.grid_column_end_value = std::move(previous.grid_column_end_value);
-                reset.grid_column_start = previous.grid_column_start;
+                reset.mutable_grid() = previous.grid();
             }
             if (has_inline({"table-layout"})) reset.table_layout_fixed = previous.table_layout_fixed;
-            if (has_inline({"text-transform"})) reset.text_transform = previous.text_transform;
-            if (has_inline({"cursor"})) reset.cursor = previous.cursor;
+            if (has_inline({"text-transform"})) {
+                reset.mutable_textual().text_transform =
+                    previous.textual().text_transform;
+            }
+            if (has_inline({"cursor"})) {
+                reset.mutable_textual().cursor =
+                    previous.textual().cursor;
+            }
             if (has_inline({"list-style", "list-style-position", "list-style-type"})) {
-                reset.list_style_position = previous.list_style_position;
-                reset.list_style_type = previous.list_style_type;
+                reset.mutable_textual().list_style_position =
+                    previous.textual().list_style_position;
+                reset.mutable_textual().list_style_type =
+                    previous.textual().list_style_type;
             }
 
             node.style = std::move(reset);
@@ -16525,19 +17654,19 @@ struct v8_dom_runtime::implementation final {
             apply_transition_shorthand(node.style, value);
             return;
         } else if (name == "transition-property") {
-            node.style.transition_property_value = value;
+            node.style.mutable_animations().transition_property_value = value;
             configure_style_transitions(node.style);
             return;
         } else if (name == "transition-duration") {
-            node.style.transition_duration_value = value;
+            node.style.mutable_animations().transition_duration_value = value;
             configure_style_transitions(node.style);
             return;
         } else if (name == "transition-delay") {
-            node.style.transition_delay_value = value;
+            node.style.mutable_animations().transition_delay_value = value;
             configure_style_transitions(node.style);
             return;
         } else if (name == "transition-timing-function") {
-            node.style.transition_timing_function_value = value;
+            node.style.mutable_animations().transition_timing_function_value = value;
             configure_style_transitions(node.style);
             return;
         } else if (name == "animation") {
@@ -16546,21 +17675,21 @@ struct v8_dom_runtime::implementation final {
             decision.semantic_slice = "first animation; opacity @keyframes";
             return;
         } else if (name == "animation-name") {
-            node.style.animation_name_value = value;
+            node.style.mutable_animations().animation_name_value = value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "first animation; opacity @keyframes";
             return;
         } else if (name == "animation-duration") {
-            node.style.animation_duration_value = value;
+            node.style.mutable_animations().animation_duration_value = value;
             return;
         } else if (name == "animation-delay") {
-            node.style.animation_delay_value = value;
+            node.style.mutable_animations().animation_delay_value = value;
             return;
         } else if (name == "animation-timing-function") {
-            node.style.animation_timing_function_value = value;
+            node.style.mutable_animations().animation_timing_function_value = value;
             return;
         } else if (name == "animation-iteration-count") {
-            node.style.animation_iteration_count_value = value;
+            node.style.mutable_animations().animation_iteration_count_value = value;
             return;
         } else if (inline_style_mask(name) == inline_border
             && is_inline(inline_border)) {
@@ -16811,13 +17940,15 @@ struct v8_dom_runtime::implementation final {
                 decision.semantic_slice = "auto and fixed keywords";
             }
         } else if (name == "grid-template-columns") {
-            node.style.grid_two_columns = has_multiple_grid_columns(value);
-            node.style.grid_template_columns = parse_simple_grid_tracks(value);
+            auto& grid = node.style.mutable_grid();
+            grid.two_columns = has_multiple_grid_columns(value);
+            grid.template_columns = parse_simple_grid_tracks(value);
             decision.classification = "partially-supported";
             decision.semantic_slice = "two-column component grids and explicit fixed track lengths";
         } else if (name == "grid-template-rows") {
-            node.style.grid_fractional_rows = value.find("1fr") != std::string::npos;
-            node.style.grid_template_rows = parse_simple_grid_tracks(value);
+            auto& grid = node.style.mutable_grid();
+            grid.fractional_rows = value.find("1fr") != std::string::npos;
+            grid.template_rows = parse_simple_grid_tracks(value);
             decision.classification = "partially-supported";
             decision.semantic_slice = "fractional component rows and explicit fixed track lengths";
         } else if (apply_grid_placement_declaration(node.style, name, value)) {
@@ -16874,7 +18005,7 @@ struct v8_dom_runtime::implementation final {
             && !is_inline(inline_align_items)) {
             // A flex-backed row uses cross-axis alignment to preserve the table-row
             // meaning of vertical-align: middle for its cells.
-            node.style.vertical_align = value;
+            node.style.mutable_textual().vertical_align = value;
             node.style.align_items = align_mode::center;
         } else if (name == "align-self" && !is_inline(inline_align_self)) {
             node.style.align_self_specified = value != "auto";
@@ -16933,9 +18064,10 @@ struct v8_dom_runtime::implementation final {
                 decision.semantic_slice = "first outer shadow with pixel lengths";
             }
         } else if (name == "background-image") {
-            node.style.background_image_value = value;
-            node.style.background_image_markup.clear();
-            node.style.background_image_view_box.clear();
+            auto& background = node.style.mutable_background_image();
+            background.image_value = value;
+            background.image_markup.clear();
+            background.image_view_box.clear();
             if (value == "none") return;
             const auto url = first_css_url(value);
             if (!url.has_value()) {
@@ -16964,14 +18096,14 @@ struct v8_dom_runtime::implementation final {
                     "SVG images with an explicit viewBox or numeric width and height";
                 return;
             }
-            node.style.background_image_value = "url(\"" + resolved_url + "\")";
-            node.style.background_image_markup = std::move(markup);
-            node.style.background_image_view_box = view_box;
+            background.image_value = "url(\"" + resolved_url + "\")";
+            background.image_markup = std::move(markup);
+            background.image_view_box = view_box;
             decision.classification = "partially-supported";
             decision.semantic_slice =
                 "first URL-backed SVG layer with explicit viewBox or numeric width and height";
         } else if (name == "background-repeat") {
-            node.style.background_repeat = value;
+            node.style.mutable_background_image().repeat = value;
             if (value != "no-repeat") {
                 decision.classification = "partially-supported";
                 decision.semantic_slice = "no-repeat";
@@ -16981,13 +18113,14 @@ struct v8_dom_runtime::implementation final {
             decision.classification = "partially-supported";
             decision.semantic_slice = "two-value keywords, percentages, and pixel lengths";
         } else if (name == "background-size") {
+            auto& background = node.style.mutable_background_image();
             std::istringstream stream(value);
-            stream >> node.style.background_size_x >> node.style.background_size_y;
-            if (node.style.background_size_x.empty()) node.style.background_size_x = "auto";
-            if (node.style.background_size_y.empty()) {
-                node.style.background_size_y = node.style.background_size_x == "cover"
-                    || node.style.background_size_x == "contain"
-                    ? node.style.background_size_x : "auto";
+            stream >> background.size_x >> background.size_y;
+            if (background.size_x.empty()) background.size_x = "auto";
+            if (background.size_y.empty()) {
+                background.size_y = background.size_x == "cover"
+                    || background.size_x == "contain"
+                    ? background.size_x : "auto";
             }
             decision.classification = "partially-supported";
             decision.semantic_slice = "cover, contain, auto, percentages, and pixel lengths";
@@ -17035,17 +18168,20 @@ struct v8_dom_runtime::implementation final {
             const auto parsed = native_document::parse_color(value);
             if (parsed != 0U || value == "transparent") node.style.foreground_rgba = parsed;
         } else if (name == "fill" && !is_inline(inline_svg_fill)) {
-            node.style.svg_fill = value == "inherit" || value == "unset"
+            node.style.mutable_textual().svg_fill =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "solid SVG paint, none, and currentColor";
         } else if (name == "stroke" && !is_inline(inline_svg_stroke)) {
-            node.style.svg_stroke = value == "inherit" || value == "unset"
+            node.style.mutable_textual().svg_stroke =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "solid SVG paint, none, and currentColor";
         } else if (name == "cursor" && !is_inline(inline_cursor)) {
-            node.style.cursor = value == "initial" ? "auto" : value;
+            node.style.mutable_textual().cursor =
+                value == "initial" ? "auto" : value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "host cursor projection for common keyword cursors";
         } else if (name == "font") {
@@ -17053,7 +18189,7 @@ struct v8_dom_runtime::implementation final {
                 node.style.font_size = -1;
                 node.style.line_height = -1;
                 node.style.font_weight = 0;
-                node.style.font_family.clear();
+                node.style.mutable_textual().font_family.clear();
                 decision.classification = "partially-supported";
                 decision.semantic_slice =
                     "inherit/unset for size, line-height, weight, and family";
@@ -17061,7 +18197,10 @@ struct v8_dom_runtime::implementation final {
                 if (!is_inline(inline_font_size)) node.style.font_size = font->font_size;
                 if (!is_inline(inline_line_height)) node.style.line_height = font->line_height;
                 if (!is_inline(inline_font_weight)) node.style.font_weight = font->font_weight;
-                if (!is_inline(inline_font_family)) node.style.font_family = font->font_family;
+                if (!is_inline(inline_font_family)) {
+                    node.style.mutable_textual().font_family =
+                        font->font_family;
+                }
                 decision.classification = "partially-supported";
                 decision.semantic_slice = font->complete
                     ? "font-size, line-height, weight, and family"
@@ -17073,7 +18212,8 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "font-size" && !is_inline(inline_font_size)) {
             node.style.font_size = resolved_declared_font_size(node, value);
         } else if (name == "font-family" && !is_inline(inline_font_family)) {
-            node.style.font_family = value == "inherit" || value == "unset"
+            node.style.mutable_textual().font_family =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
         } else if (name == "font-weight" && !is_inline(inline_font_weight)) {
             node.style.font_weight = value == "inherit" || value == "unset" ? 0
@@ -17104,9 +18244,10 @@ struct v8_dom_runtime::implementation final {
                 ? node.style.font_size : inherited_font_size(node);
             node.style.line_height = resolved_declared_line_height(node, value, font_size);
         } else if (name == "text-align" && !is_inline(inline_text_align)) {
-            node.style.text_align = value;
+            node.style.mutable_textual().text_align = value;
         } else if (name == "text-transform") {
-            node.style.text_transform = value == "inherit" || value == "unset"
+            node.style.mutable_textual().text_transform =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
             if (value != "none" && value != "uppercase" && value != "lowercase"
                 && value != "capitalize" && value != "inherit" && value != "unset") {
@@ -17117,29 +18258,30 @@ struct v8_dom_runtime::implementation final {
                 decision.semantic_slice = "ASCII none, uppercase, lowercase, and capitalize";
             }
         } else if (name == "white-space" && !is_inline(inline_white_space)) {
-            node.style.white_space = value == "inherit" || value == "unset"
+            node.style.mutable_textual().white_space =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
         } else if (name == "list-style-position") {
-            node.style.list_style_position = value;
+            node.style.mutable_textual().list_style_position = value;
         } else if (name == "list-style-type") {
-            node.style.list_style_type = value;
+            node.style.mutable_textual().list_style_type = value;
         } else if (name == "list-style") {
             std::istringstream stream(value);
             std::string token;
             while (stream >> token) {
                 if (token == "inside" || token == "outside") {
-                    node.style.list_style_position = token;
+                    node.style.mutable_textual().list_style_position = token;
                 } else if (token == "none" || token == "decimal"
                     || token == "decimal-leading-zero" || token == "disc"
                     || token == "circle" || token == "square") {
-                    node.style.list_style_type = token;
+                    node.style.mutable_textual().list_style_type = token;
                 }
             }
         } else if (name == "border-style") {
             decision.classification = "partially-supported";
             decision.semantic_slice = "none";
         } else if (name == "vertical-align") {
-            node.style.vertical_align = value;
+            node.style.mutable_textual().vertical_align = value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "middle on table rows and inline line boxes";
         } else if (property_mask == 0U) {
@@ -17149,11 +18291,13 @@ struct v8_dom_runtime::implementation final {
 
     void apply_css_rules(dom_node& node)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_css_apply : nullptr);
         const auto trace_css = profile_css;
         const auto css_apply_started = trace_css
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+#endif
         // Text nodes generate anonymous inline boxes and are not CSS selector
         // subjects. Their inherited values are resolved from their ancestors.
         if (node.tag == "#text") {
@@ -17172,11 +18316,7 @@ struct v8_dom_runtime::implementation final {
             node.style.z_index = 0;
             node.style.z_index_auto = true;
         }
-        node.style.grid_two_columns = false;
-        node.style.grid_fractional_rows = false;
-        node.style.grid_template_columns.clear();
-        node.style.grid_template_rows.clear();
-        node.style.grid_span_all = false;
+        node.style.clear_grid();
         if ((node.style.inline_property_mask & inline_width) == 0U) node.style.width = {};
         if ((node.style.inline_property_mask & inline_height) == 0U) node.style.height = {};
         if ((node.style.inline_property_mask & inline_min_width) == 0U) node.style.min_width = {};
@@ -17237,22 +18377,7 @@ struct v8_dom_runtime::implementation final {
             node.style.transform_origin_y = {50, length_unit::percent};
             node.style.transform_origin_specified = false;
         }
-        node.style.transition_property_value = "all";
-        node.style.transition_duration_value = "0s";
-        node.style.transition_delay_value = "0s";
-        node.style.transition_timing_function_value = "ease";
-        node.style.transform_transition = {};
-        node.style.opacity_transition = {};
-        node.style.color_transition = {};
-        node.style.animation_name_value = "none";
-        node.style.animation_duration_value = "0s";
-        node.style.animation_delay_value = "0s";
-        node.style.animation_timing_function_value = "ease";
-        node.style.animation_iteration_count_value = "1";
-        node.style.opacity_keyframe_animation_signature.clear();
-        node.style.opacity_keyframes.clear();
-        node.style.rotation_keyframe_animation_signature.clear();
-        node.style.rotation_keyframes.clear();
+        node.style.clear_animations();
         if ((node.style.inline_property_mask & inline_flex_direction) == 0U) {
             node.style.direction = flex_direction::row;
             node.style.flex_reverse = false;
@@ -17287,14 +18412,7 @@ struct v8_dom_runtime::implementation final {
             node.style.box_shadow_present = false;
         }
         if ((node.style.inline_property_mask & inline_background) == 0U) node.style.background_rgba = 0;
-        node.style.background_image_value = "none";
-        node.style.background_image_markup.clear();
-        node.style.background_image_view_box.clear();
-        node.style.background_repeat = "repeat";
-        node.style.background_position_x = "0%";
-        node.style.background_position_y = "0%";
-        node.style.background_size_x = "auto";
-        node.style.background_size_y = "auto";
+        node.style.clear_background_image();
         if ((node.style.inline_property_mask & inline_overflow) == 0U) {
             node.style.overflow_x = overflow_mode::visible;
             node.style.overflow_y = overflow_mode::visible;
@@ -17307,7 +18425,20 @@ struct v8_dom_runtime::implementation final {
         if ((node.style.inline_property_mask & inline_opacity) == 0U) node.style.opacity = 1;
         if ((node.style.inline_property_mask & inline_color) == 0U) node.style.foreground_rgba = 0;
         if ((node.style.inline_property_mask & inline_font_size) == 0U) node.style.font_size = -1;
-        if ((node.style.inline_property_mask & inline_font_family) == 0U) node.style.font_family.clear();
+        if (auto* textual = node.style.mutable_textual_if_present();
+            textual != nullptr) {
+            if ((node.style.inline_property_mask & inline_font_family) == 0U) {
+                textual->font_family.clear();
+            }
+            textual->list_style_position.clear();
+            textual->list_style_type.clear();
+            if ((node.style.inline_property_mask & inline_text_align) == 0U) {
+                textual->text_align.clear();
+            }
+            if ((node.style.inline_property_mask & inline_white_space) == 0U) {
+                textual->white_space.clear();
+            }
+        }
         if ((node.style.inline_property_mask & inline_font_weight) == 0U) node.style.font_weight = 0;
         if ((node.style.inline_property_mask & inline_line_height) == 0U) node.style.line_height = -1;
         if ((node.style.inline_property_mask & inline_letter_spacing) == 0U) {
@@ -17318,21 +18449,16 @@ struct v8_dom_runtime::implementation final {
             node.style.word_spacing = 0;
             node.style.word_spacing_specified = false;
         }
-        node.style.list_style_position.clear();
-        node.style.list_style_type.clear();
-        if ((node.style.inline_property_mask & inline_text_align) == 0U) node.style.text_align.clear();
-        if ((node.style.inline_property_mask & inline_white_space) == 0U) node.style.white_space.clear();
-        node.style.custom_properties.clear();
-        node.style.important_custom_properties.clear();
-        for (const auto& [name, value] : node.inline_style_declarations) {
+        node.style.clear_custom_properties();
+        for (const auto& [name, value] : node.authored_style().declarations) {
             if (!name.starts_with("--")) continue;
-            node.style.custom_properties[name] = value;
-            if (node.inline_important_declarations.contains(name)) {
-                node.style.important_custom_properties.insert(name);
+            auto& custom = node.style.mutable_custom_properties();
+            custom.values[name] = value;
+            if (node.authored_style().important_declarations.contains(name)) {
+                custom.important.insert(name);
             }
         }
-        node.style.before = {};
-        node.style.after = {};
+        node.style.clear_pseudo_elements();
         // Recompute stylesheet visibility from the current class/selector set.
         // React reuses toolbar nodes while replacing their responsive classes;
         // retaining an earlier `visibility:hidden` makes the new variant stale.
@@ -17340,9 +18466,11 @@ struct v8_dom_runtime::implementation final {
             node.style.visibility_hidden = false;
             node.style.visibility_specified = false;
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto reset_completed = trace_css
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+#endif
         std::vector<size_t> candidates = unindexed_css_rules;
         const auto append_candidates = [&](const auto& index, const std::string& key) {
             const auto match = index.find(key);
@@ -17387,17 +18515,21 @@ struct v8_dom_runtime::implementation final {
         }
         sort_css_candidates(candidates);
         candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) css_profile_candidate_checks += candidates.size();
+#endif
         std::vector<const css_rule*> matched_rules;
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
             std::string pseudo_origin;
-            const auto pseudo_kind = split_pseudo_element_selector(rule.selector, pseudo_origin);
+            const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
                 if (!pseudo_origin.empty() && css_selector_matches(node, pseudo_origin)) {
-                    auto& pseudo = pseudo_kind == 1 ? node.style.before : node.style.after;
-                    for (const auto& declaration : rule.declarations) {
+                    auto& pseudo = pseudo_kind == 1
+                        ? node.style.mutable_before_pseudo()
+                        : node.style.mutable_after_pseudo();
+                    for (const auto& declaration : rule.declarations()) {
                         apply_pseudo_css_declaration(node, pseudo, declaration);
                     }
                 }
@@ -17406,34 +18538,39 @@ struct v8_dom_runtime::implementation final {
             if (!css_rule_matches(node, rule)) continue;
             matched_rules.push_back(&rule);
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) css_profile_matched_rules += matched_rules.size();
         const auto matching_completed = trace_css
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+#endif
         // CSS custom properties are cascaded before dependent declarations are
         // computed. Applying each rule eagerly made a base button height resolve
         // with the default medium size before its later `.small-*` rule set the
         // size token.
         for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations) {
+            for (const auto& declaration : rule->declarations()) {
                 if (declaration.name.starts_with("--")) {
                     apply_css_declaration(node, declaration);
                 }
             }
         }
         for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations) {
+            for (const auto& declaration : rule->declarations()) {
                 if (declaration.name.starts_with("--")) continue;
                 apply_css_declaration(node, declaration);
             }
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto declarations_completed = trace_css
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+#endif
         configure_style_keyframe_animation(node);
         document.update_style_animations(node);
         detect_css_compositions(node);
         document.mark_dirty();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) {
             const auto completed = std::chrono::steady_clock::now();
             css_profile_reset_nanoseconds +=
@@ -17449,12 +18586,15 @@ struct v8_dom_runtime::implementation final {
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     completed - declarations_completed).count();
         }
+#endif
     }
 
     void apply_appended_css_rules(dom_node& node, size_t first_new_rule)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(
             profile_startup ? &startup_css_incremental_apply : nullptr);
+#endif
         if (node.tag == "#text" || first_new_rule >= css_rules.size()) return;
 
         std::vector<size_t> candidates = unindexed_css_rules;
@@ -17506,11 +18646,13 @@ struct v8_dom_runtime::implementation final {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
             std::string pseudo_origin;
-            const auto pseudo_kind = split_pseudo_element_selector(rule.selector, pseudo_origin);
+            const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
                 if (!pseudo_origin.empty() && css_selector_matches(node, pseudo_origin)) {
-                    auto& pseudo = pseudo_kind == 1 ? node.style.before : node.style.after;
-                    for (const auto& declaration : rule.declarations) {
+                    auto& pseudo = pseudo_kind == 1
+                        ? node.style.mutable_before_pseudo()
+                        : node.style.mutable_after_pseudo();
+                    for (const auto& declaration : rule.declarations()) {
                         apply_pseudo_css_declaration(node, pseudo, declaration);
                     }
                 }
@@ -17519,12 +18661,12 @@ struct v8_dom_runtime::implementation final {
             if (css_rule_matches(node, rule)) matched_rules.push_back(&rule);
         }
         for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations) {
+            for (const auto& declaration : rule->declarations()) {
                 if (declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
         for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations) {
+            for (const auto& declaration : rule->declarations()) {
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
@@ -17537,7 +18679,7 @@ struct v8_dom_runtime::implementation final {
     bool appended_css_rules_define_custom_properties(size_t first_new_rule) const
     {
         for (auto index = first_new_rule; index < css_rules.size(); ++index) {
-            for (const auto& declaration : css_rules[index].declarations) {
+            for (const auto& declaration : css_rules[index].declarations()) {
                 if (declaration.name.starts_with("--")) return true;
             }
         }
@@ -17580,7 +18722,7 @@ struct v8_dom_runtime::implementation final {
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches || !css_rule_matches(node, rule)) continue;
-            for (const auto& declaration : rule.declarations) {
+            for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")
                     && declaration.value.find("var(") != std::string::npos) {
                     apply_css_declaration(node, declaration);
@@ -17617,6 +18759,7 @@ struct v8_dom_runtime::implementation final {
     {
         if (!is_connected(node)) return;
         retain_connected_subtree_wrappers(node);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto trace = profile_css;
         const auto candidate_checks_before = css_profile_candidate_checks;
         const auto matched_rules_before = css_profile_matched_rules;
@@ -17633,14 +18776,18 @@ struct v8_dom_runtime::implementation final {
             for (const auto index : unindexed_css_rules) {
                 if (index < css_rules.size()) {
                     std::cerr << "[Native Engine Probe] CSS unindexed rule="
-                        << index << ", selector=" << css_rules[index].selector << '\n';
+                        << index << ", selector=" << css_rules[index].selector() << '\n';
                 }
             }
         }
         const auto started = trace ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
         binding_callback_timer timer(profile_startup ? &startup_subtree_recascade : nullptr);
+#else
+        static_cast<void>(reason);
+#endif
         apply_css_rules_subtree(node);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace) {
             const auto elapsed = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -17682,6 +18829,7 @@ struct v8_dom_runtime::implementation final {
                     << ", class=" << node.class_name.substr(0, 180) << '\n';
             }
         }
+#endif
     }
 
     void recascade_hover_transition(
@@ -17766,25 +18914,32 @@ struct v8_dom_runtime::implementation final {
             }
         }
 
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         const auto trace = profile_css;
         const auto started = trace
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
         size_t recalculated_nodes = 0U;
+#endif
         for (const auto& request : requests) {
             if (request.root == nullptr) continue;
             if (request.subtree) {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                 if (trace) {
                     visit_subtree(*request.root, [&](const dom_node&) {
                         ++recalculated_nodes;
                     });
                 }
+#endif
                 recascade_connected_subtree(*request.root, reason);
             } else {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                 if (trace) ++recalculated_nodes;
+#endif
                 apply_css_rules(*request.root);
             }
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (trace) {
             const auto elapsed = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -17796,6 +18951,7 @@ struct v8_dom_runtime::implementation final {
                 << ", nodes=" << recalculated_nodes
                 << ", reason=" << reason << '\n';
         }
+#endif
     }
 
     void rebuild_css_rule_indexes_and_root_variables()
@@ -17813,8 +18969,8 @@ struct v8_dom_runtime::implementation final {
             index_css_rule(index);
             const auto& rule = css_rules[index];
             if (!rule.media_matches
-                || (rule.selector != ":root" && rule.selector != "html")) continue;
-            for (const auto& declaration : rule.declarations) {
+                || (rule.selector() != ":root" && rule.selector() != "html")) continue;
+            for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")) continue;
                 if (!declaration.important
                     && important_css_variables.contains(declaration.name)) continue;
@@ -17930,20 +19086,29 @@ struct v8_dom_runtime::implementation final {
         cached_text_resource resource)
     {
         const auto memory_key = path.generic_string();
-        const auto bytes = resource.content.size() + resource.entity_tag.size();
+        const auto bytes =
+            (resource.content == nullptr ? 0U : resource.content->size())
+            + resource.entity_tag.size();
+        const auto mapped_bytes = resource.content != nullptr
+                && resource.content->mapped()
+            ? resource.content->size()
+            : 0U;
         if (memory_key.empty() || bytes > maximum_process_resource_cache_bytes) return;
         std::lock_guard lock(process_resource_cache_mutex);
         if (const auto known = process_resource_cache.find(memory_key);
             known != process_resource_cache.end()) {
             process_resource_cache_bytes -= known->second.bytes;
+            process_resource_mapped_cache_bytes -= known->second.mapped_bytes;
             process_resource_cache.erase(known);
         }
         process_resource_cache_bytes += bytes;
+        process_resource_mapped_cache_bytes += mapped_bytes;
         process_resource_cache.emplace(
             memory_key,
             process_resource_cache_entry{
                 std::move(resource),
                 bytes,
+                mapped_bytes,
                 ++process_resource_cache_access});
         while (process_resource_cache.size() > maximum_process_resource_cache_entries
             || process_resource_cache_bytes > maximum_process_resource_cache_bytes) {
@@ -17955,6 +19120,7 @@ struct v8_dom_runtime::implementation final {
                 });
             if (oldest == process_resource_cache.end()) break;
             process_resource_cache_bytes -= oldest->second.bytes;
+            process_resource_mapped_cache_bytes -= oldest->second.mapped_bytes;
             process_resource_cache.erase(oldest);
         }
     }
@@ -17966,6 +19132,7 @@ struct v8_dom_runtime::implementation final {
         const auto known = process_resource_cache.find(memory_key);
         if (known == process_resource_cache.end()) return;
         process_resource_cache_bytes -= known->second.bytes;
+        process_resource_mapped_cache_bytes -= known->second.mapped_bytes;
         process_resource_cache.erase(known);
     }
 
@@ -18014,21 +19181,52 @@ struct v8_dom_runtime::implementation final {
         if (!resource.entity_tag.empty()) {
             stream.read(resource.entity_tag.data(), static_cast<std::streamsize>(resource.entity_tag.size()));
         }
-        resource.content.resize(static_cast<size_t>(content_length));
-        if (!resource.content.empty()) {
-            stream.read(resource.content.data(), static_cast<std::streamsize>(resource.content.size()));
-        }
-        if (!stream || stream.peek() != std::ifstream::traits_type::eof()
-            || sha256(
-                reinterpret_cast<const uint8_t*>(resource.content.data()),
-                resource.content.size())
-                != stored_content_hash) {
+        const auto content_offset_position = stream.tellg();
+        std::error_code size_error;
+        const auto file_size = std::filesystem::file_size(path, size_error);
+        const auto content_offset = content_offset_position < 0
+            ? 0U
+            : static_cast<uint64_t>(content_offset_position);
+        if (!stream || size_error
+            || content_offset > std::numeric_limits<uint64_t>::max() - content_length
+            || file_size != content_offset + content_length) {
             resource = {};
             ++resource_cache_rejection_count;
             std::error_code error;
             std::filesystem::remove(path, error);
             return false;
         }
+
+        std::shared_ptr<const immutable_byte_buffer> bytes;
+        if (content_length >= minimum_mapped_cache_body_bytes) {
+            bytes = immutable_byte_buffer::map_file(
+                path,
+                static_cast<size_t>(content_offset),
+                static_cast<size_t>(content_length));
+        }
+        if (bytes == nullptr && content_length > 0U) {
+            std::vector<uint8_t> owned(static_cast<size_t>(content_length));
+            stream.seekg(static_cast<std::streamoff>(content_offset), std::ios::beg);
+            stream.read(
+                reinterpret_cast<char*>(owned.data()),
+                static_cast<std::streamsize>(owned.size()));
+            if (stream) bytes = immutable_byte_buffer::take(std::move(owned));
+        }
+        if ((content_length > 0U && bytes == nullptr)
+            || (bytes != nullptr
+                && sha256(bytes->data(), bytes->size()) != stored_content_hash)
+            || (content_length == 0U
+                && sha256(nullptr, 0U) != stored_content_hash)) {
+            resource = {};
+            ++resource_cache_rejection_count;
+            std::error_code error;
+            std::filesystem::remove(path, error);
+            return false;
+        }
+        resource.content = bytes != nullptr
+            ? immutable_text_source::from_bytes(std::move(bytes))
+            : immutable_text_source::from_string(
+                std::make_shared<const std::string>());
         resource.last_modified_unix_seconds = last_modified_unix_seconds;
         resource.fresh_until_unix_seconds = fresh_until_unix_seconds;
         std::error_code access_error;
@@ -18043,13 +19241,16 @@ struct v8_dom_runtime::implementation final {
     void write_resource_cache(
         const std::array<uint8_t, 32>& key,
         uint32_t kind,
-        const std::string& content,
+        std::shared_ptr<const immutable_text_source> content,
         const std::string& entity_tag,
         int64_t last_modified_unix_seconds,
         int64_t fresh_until_unix_seconds)
     {
         const auto path = resource_cache_path(key);
-        if (path.empty() || content.size() > maximum_resource_cache_entry_bytes) return;
+        if (path.empty() || content == nullptr
+            || content->size() > maximum_resource_cache_entry_bytes) {
+            return;
+        }
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
         if (error) return;
@@ -18064,9 +19265,9 @@ struct v8_dom_runtime::implementation final {
         constexpr std::array<char, 8> magic{'H', 'M', 'L', 'R', 'E', 'S', '0', '1'};
         constexpr uint32_t schema = 3U;
         const auto content_hash = sha256(
-            reinterpret_cast<const uint8_t*>(content.data()),
-            content.size());
-        const auto content_length = static_cast<uint64_t>(content.size());
+            reinterpret_cast<const uint8_t*>(content->data()),
+            content->size());
+        const auto content_length = static_cast<uint64_t>(content->size());
         const auto entity_tag_length = static_cast<uint32_t>(std::min(
             entity_tag.size(),
             static_cast<size_t>(maximum_resource_entity_tag_bytes)));
@@ -18086,7 +19287,12 @@ struct v8_dom_runtime::implementation final {
         if (entity_tag_length > 0U) {
             stream.write(entity_tag.data(), static_cast<std::streamsize>(entity_tag_length));
         }
-        if (!content.empty()) stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+        const auto content_offset = static_cast<size_t>(stream.tellp());
+        if (!content->empty()) {
+            stream.write(
+                content->data(),
+                static_cast<std::streamsize>(content->size()));
+        }
         stream.close();
         if (!stream) {
             std::filesystem::remove(temporary, error);
@@ -18097,14 +19303,25 @@ struct v8_dom_runtime::implementation final {
             std::filesystem::remove(temporary, error);
             return;
         }
+        auto retained_content = content;
+        if (content_length >= minimum_mapped_cache_body_bytes) {
+            if (auto mapped = immutable_byte_buffer::map_file(
+                    path,
+                    content_offset,
+                    static_cast<size_t>(content_length));
+                mapped != nullptr) {
+                retained_content =
+                    immutable_text_source::from_bytes(std::move(mapped));
+            }
+        }
         remember_process_resource_cache(
             path,
             cached_text_resource{
-                content,
+                std::move(retained_content),
                 entity_tag.substr(0U, entity_tag_length),
                 last_modified_unix_seconds,
                 fresh_until_unix_seconds});
-        resource_cache_bytes_written_count += content.size();
+        resource_cache_bytes_written_count += content_length;
         if (++resource_writes_since_prune >= 64U) {
             resource_writes_since_prune = 0U;
             prune_resource_cache();
@@ -18204,16 +19421,16 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
-    bool read_compilation_cache(
+    std::shared_ptr<const immutable_byte_buffer> read_compilation_cache(
         const std::array<uint8_t, 32>& key,
-        std::vector<uint8_t>& payload)
+        bool record_access = true)
     {
         const auto path = compilation_cache_path(key);
-        if (path.empty()) return false;
+        if (path.empty()) return {};
         std::ifstream stream(path, std::ios::binary);
         if (!stream) {
-            ++compilation_persistent_miss_count;
-            return false;
+            if (record_access) ++compilation_persistent_miss_count;
+            return {};
         }
 
         constexpr std::array<char, 8> magic{'H', 'M', 'L', 'N', 'V', '8', '0', '1'};
@@ -18236,25 +19453,60 @@ struct v8_dom_runtime::implementation final {
             ++compilation_cache_rejection_count;
             std::error_code error;
             std::filesystem::remove(path, error);
-            return false;
+            return {};
         }
-        payload.resize(static_cast<size_t>(payload_length));
-        stream.read(reinterpret_cast<char*>(payload.data()), static_cast<std::streamsize>(payload.size()));
-        if (!stream || stream.peek() != std::ifstream::traits_type::eof()
-            || sha256(payload.data(), payload.size()) != stored_payload_hash) {
-            payload.clear();
+        constexpr size_t payload_offset =
+            magic.size()
+            + sizeof(schema)
+            + sizeof(version_tag)
+            + stored_key.size()
+            + stored_payload_hash.size()
+            + sizeof(payload_length);
+        std::error_code size_error;
+        const auto file_size = std::filesystem::file_size(path, size_error);
+        if (size_error
+            || file_size != payload_offset + payload_length) {
             ++compilation_cache_rejection_count;
             std::error_code error;
             std::filesystem::remove(path, error);
-            return false;
+            return {};
         }
-        compilation_cache_bytes_read_count += payload.size();
-        std::error_code access_error;
-        std::filesystem::last_write_time(
-            path,
-            std::filesystem::file_time_type::clock::now(),
-            access_error);
-        return true;
+        std::shared_ptr<const immutable_byte_buffer> payload;
+        if (payload_length >= minimum_mapped_cache_body_bytes) {
+            stream.close();
+            payload = immutable_byte_buffer::map_file(
+                path,
+                payload_offset,
+                static_cast<size_t>(payload_length));
+        } else {
+            std::vector<uint8_t> owned(static_cast<size_t>(payload_length));
+            stream.read(
+                reinterpret_cast<char*>(owned.data()),
+                static_cast<std::streamsize>(owned.size()));
+            if (!stream || stream.peek() != std::ifstream::traits_type::eof()) {
+                ++compilation_cache_rejection_count;
+                std::error_code error;
+                std::filesystem::remove(path, error);
+                return {};
+            }
+            payload = immutable_byte_buffer::take(std::move(owned));
+        }
+        if (payload == nullptr
+            || sha256(payload->data(), payload->size()) != stored_payload_hash) {
+            ++compilation_cache_rejection_count;
+            std::error_code error;
+            std::filesystem::remove(path, error);
+            return {};
+        }
+        if (record_access) {
+            compilation_cache_bytes_read_count += payload->size();
+            std::error_code access_error;
+            std::filesystem::last_write_time(
+                path,
+                std::filesystem::file_time_type::clock::now(),
+                access_error);
+        }
+        return payload;
     }
 
     void write_compilation_cache(
@@ -18304,6 +19556,110 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    static process_compilation_acquisition acquire_process_compilation(
+        const std::string& key)
+    {
+        std::lock_guard lock(process_compilation_cache_mutex);
+        if (const auto known = process_compilation_cache.find(key);
+            known != process_compilation_cache.end()) {
+            known->second->access = ++process_compilation_cache_access;
+            return {known->second, false};
+        }
+
+        auto entry = std::make_shared<process_compilation_entry>();
+        entry->access = ++process_compilation_cache_access;
+        process_compilation_cache.emplace(key, entry);
+        return {std::move(entry), true};
+    }
+
+    static void publish_process_compilation(
+        const std::string& key,
+        const std::shared_ptr<process_compilation_entry>& entry,
+        std::shared_ptr<const immutable_byte_buffer> cached_data)
+    {
+        {
+            std::lock_guard lock(entry->mutex);
+            entry->cached_data = std::move(cached_data);
+            entry->bytes = entry->cached_data == nullptr
+                ? 0U
+                : entry->cached_data->size();
+            entry->state = process_compilation_state::ready;
+        }
+        entry->condition.notify_all();
+
+        std::lock_guard lock(process_compilation_cache_mutex);
+        const auto known = process_compilation_cache.find(key);
+        if (known == process_compilation_cache.end()
+            || known->second.get() != entry.get()) {
+            return;
+        }
+        process_compilation_cache_bytes += entry->bytes;
+        if (entry->cached_data != nullptr && entry->cached_data->mapped()) {
+            process_compilation_mapped_cache_bytes += entry->bytes;
+        }
+        while (process_compilation_cache.size() > maximum_process_compilation_cache_entries
+            || process_compilation_cache_bytes > maximum_process_compilation_cache_bytes) {
+            auto oldest = process_compilation_cache.end();
+            for (auto candidate = process_compilation_cache.begin();
+                candidate != process_compilation_cache.end();
+                ++candidate) {
+                if (candidate->second->bytes == 0U
+                    || candidate->second.get() == entry.get()) {
+                    continue;
+                }
+                if (oldest == process_compilation_cache.end()
+                    || candidate->second->access < oldest->second->access) {
+                    oldest = candidate;
+                }
+            }
+            if (oldest == process_compilation_cache.end()) break;
+            process_compilation_cache_bytes -= oldest->second->bytes;
+            if (oldest->second->cached_data != nullptr
+                && oldest->second->cached_data->mapped()) {
+                process_compilation_mapped_cache_bytes -= oldest->second->bytes;
+            }
+            process_compilation_cache.erase(oldest);
+        }
+    }
+
+    static void fail_process_compilation(
+        const std::string& key,
+        const std::shared_ptr<process_compilation_entry>& entry)
+    {
+        {
+            std::lock_guard lock(entry->mutex);
+            entry->state = process_compilation_state::failed;
+        }
+        entry->condition.notify_all();
+
+        std::lock_guard lock(process_compilation_cache_mutex);
+        const auto known = process_compilation_cache.find(key);
+        if (known != process_compilation_cache.end()
+            && known->second.get() == entry.get()) {
+            process_compilation_cache.erase(known);
+        }
+    }
+
+    std::shared_ptr<const immutable_byte_buffer> await_process_compilation(
+        const std::shared_ptr<process_compilation_entry>& entry)
+    {
+        std::unique_lock lock(entry->mutex);
+        if (entry->state == process_compilation_state::producing) {
+            ++process_compilation_waiter_count;
+            entry->condition.wait(lock, [&entry] {
+                return entry->state != process_compilation_state::producing;
+            });
+        }
+        if (entry->state != process_compilation_state::ready
+            || entry->cached_data == nullptr
+            || entry->cached_data->empty()) {
+            return {};
+        }
+        ++process_compilation_memory_hit_count;
+        process_compilation_shared_byte_count += entry->cached_data->size();
+        return entry->cached_data;
+    }
+
     void retain_compiled_script(
         const std::string& key,
         const std::array<uint8_t, 32>& key_digest,
@@ -18329,10 +19685,109 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    static bool is_ascii_script_source(std::string_view source) noexcept
+    {
+        return std::all_of(source.begin(), source.end(), [](char value) {
+            return static_cast<unsigned char>(value) < 0x80U;
+        });
+    }
+
+    std::shared_ptr<const immutable_text_source> acquire_process_script_source(
+        const std::string& key,
+        std::string_view source,
+        const std::shared_ptr<const immutable_text_source>& preferred_source = {})
+    {
+        if (source.size() < minimum_shared_script_source_bytes
+            || !is_ascii_script_source(source)) {
+            return {};
+        }
+
+        std::lock_guard lock(process_script_source_mutex);
+        if (const auto known = process_script_sources.find(key);
+            known != process_script_sources.end()) {
+            if (auto shared = known->second.source.lock();
+                shared != nullptr
+                    && shared->size() == source.size()) {
+                // `key` is the SHA-256 compilation digest of document name
+                // and source bytes, so a second full multi-megabyte comparison
+                // would only repeat work already performed by the digest.
+                known->second.access = ++process_script_source_access;
+                ++process_script_source_memory_hit_count;
+                process_script_source_shared_byte_count += shared->size();
+                return shared;
+            }
+            process_script_sources.erase(known);
+        }
+
+        auto shared = preferred_source != nullptr
+                && preferred_source->size() == source.size()
+            ? preferred_source
+            : immutable_text_source::from_string(
+                std::make_shared<const std::string>(source));
+        process_script_sources.emplace(
+            key,
+            process_script_source_entry{
+                shared,
+                ++process_script_source_access});
+
+        if (process_script_sources.size() > maximum_process_script_source_entries) {
+            std::erase_if(process_script_sources, [](const auto& candidate) {
+                return candidate.second.source.expired();
+            });
+            while (process_script_sources.size()
+                > maximum_process_script_source_entries) {
+                const auto oldest = std::min_element(
+                    process_script_sources.begin(),
+                    process_script_sources.end(),
+                    [](const auto& left, const auto& right) {
+                        return left.second.access < right.second.access;
+                    });
+                if (oldest == process_script_sources.end()) break;
+                // The map holds weak references only. Removing metadata never
+                // invalidates a source still owned by an isolate.
+                process_script_sources.erase(oldest);
+            }
+        }
+        return shared;
+    }
+
+    v8::Local<v8::String> create_script_source_value(
+        const std::string& key,
+        std::string_view source,
+        std::shared_ptr<const immutable_text_source> preferred_source = {})
+    {
+        // Keep this owner alive through the fallback below. The process-sharing
+        // helper intentionally declines small or non-ASCII sources; moving the
+        // sole mapped/aliased owner into that call would release its backing
+        // storage and leave `source` dangling before NewFromUtf8 copies it.
+        if (auto shared = acquire_process_script_source(
+                key,
+                source,
+                preferred_source);
+            shared != nullptr) {
+            auto resource =
+                std::make_unique<shared_external_one_byte_source>(
+                    std::move(shared));
+            v8::Local<v8::String> external;
+            if (v8::String::NewExternalOneByte(isolate, resource.get())
+                    .ToLocal(&external)) {
+                // V8 owns and disposes the resource after this point.
+                static_cast<void>(resource.release());
+                return external;
+            }
+        }
+        return v8::String::NewFromUtf8(
+            isolate,
+            source.data(),
+            v8::NewStringType::kNormal,
+            static_cast<int>(source.size())).ToLocalChecked();
+    }
+
     bool compile_script(
-        const std::string& source,
+        std::string_view source,
         const std::string& document_name,
-        v8::Local<v8::Script>& script)
+        v8::Local<v8::Script>& script,
+        std::shared_ptr<const immutable_text_source> immutable_source = {})
     {
         ++compilation_request_count;
         const auto key_digest = compilation_key_digest(document_name, source);
@@ -18344,32 +19799,41 @@ struct v8_dom_runtime::implementation final {
             return true;
         }
 
-        auto source_value = v8::String::NewFromUtf8(
-            isolate,
-            source.data(),
-            v8::NewStringType::kNormal,
-            static_cast<int>(source.size())).ToLocalChecked();
+        const auto process_acquisition = acquire_process_compilation(key);
+        std::shared_ptr<const immutable_byte_buffer> shared_bytes;
+        auto has_persistent = false;
+        if (process_acquisition.producer) {
+            ++process_compilation_leader_count;
+            shared_bytes = read_compilation_cache(key_digest);
+            has_persistent = shared_bytes != nullptr;
+        } else {
+            shared_bytes = await_process_compilation(process_acquisition.entry);
+            if (shared_bytes == nullptr) {
+                return false;
+            }
+        }
+
+        auto source_value = create_script_source_value(
+            key,
+            source,
+            std::move(immutable_source));
         auto name_value = v8::String::NewFromUtf8(
             isolate,
             document_name.data(),
             v8::NewStringType::kNormal,
             static_cast<int>(document_name.size())).ToLocalChecked();
         v8::ScriptOrigin origin(name_value);
-        std::vector<uint8_t> persistent_bytes;
-        const auto has_persistent = read_compilation_cache(key_digest, persistent_bytes);
         v8::ScriptCompiler::CachedData* cached_data = nullptr;
-        if (has_persistent) {
-            auto* owned = new uint8_t[persistent_bytes.size()];
-            std::memcpy(owned, persistent_bytes.data(), persistent_bytes.size());
+        if (shared_bytes != nullptr && !shared_bytes->empty()) {
             cached_data = new v8::ScriptCompiler::CachedData(
-                owned,
-                static_cast<int>(persistent_bytes.size()),
-                v8::ScriptCompiler::CachedData::BufferOwned);
+                shared_bytes->data(),
+                static_cast<int>(shared_bytes->size()),
+                v8::ScriptCompiler::CachedData::BufferNotOwned);
         }
         v8::ScriptCompiler::Source compiler_source(source_value, origin, cached_data);
         v8::Local<v8::UnboundScript> unbound;
         const auto started = std::chrono::steady_clock::now();
-        const auto options = has_persistent
+        const auto options = cached_data != nullptr
             ? v8::ScriptCompiler::kConsumeCodeCache
             : v8::ScriptCompiler::kNoCompileOptions;
         const auto compiled = v8::ScriptCompiler::CompileUnboundScript(
@@ -18379,20 +19843,49 @@ struct v8_dom_runtime::implementation final {
         compilation_time_nanosecond_count += static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started).count());
-        if (!compiled) return false;
+        if (!compiled) {
+            if (process_acquisition.producer) {
+                fail_process_compilation(key, process_acquisition.entry);
+            }
+            return false;
+        }
 
+        std::shared_ptr<const immutable_byte_buffer> published_bytes = shared_bytes;
         if (has_persistent && cached_data != nullptr && !cached_data->rejected) {
             ++compilation_persistent_hit_count;
-        } else {
+        } else if (cached_data == nullptr || cached_data->rejected) {
             if (has_persistent) {
                 ++compilation_cache_rejection_count;
                 std::error_code error;
                 std::filesystem::remove(compilation_cache_path(key_digest), error);
             }
-            if (!compilation_cache_directory.empty()) {
-                std::unique_ptr<v8::ScriptCompiler::CachedData> generated(
-                    v8::ScriptCompiler::CreateCodeCache(unbound));
-                if (generated) write_compilation_cache(key_digest, *generated);
+            std::unique_ptr<v8::ScriptCompiler::CachedData> generated(
+                v8::ScriptCompiler::CreateCodeCache(unbound));
+            if (generated != nullptr
+                && generated->data != nullptr
+                && generated->length > 0) {
+                published_bytes = immutable_byte_buffer::copy(
+                    generated->data,
+                    static_cast<size_t>(generated->length));
+                if (!compilation_cache_directory.empty()) {
+                    write_compilation_cache(key_digest, *generated);
+                    if (auto mapped = read_compilation_cache(
+                            key_digest,
+                            false);
+                        mapped != nullptr) {
+                        published_bytes = std::move(mapped);
+                    }
+                }
+            }
+        }
+        if (process_acquisition.producer) {
+            if (published_bytes == nullptr || published_bytes->empty()) {
+                fail_process_compilation(key, process_acquisition.entry);
+            } else {
+                publish_process_compilation(
+                    key,
+                    process_acquisition.entry,
+                    std::move(published_bytes));
             }
         }
         retain_compiled_script(key, key_digest, unbound, source.size());
@@ -18402,24 +19895,32 @@ struct v8_dom_runtime::implementation final {
 
     bool execute_in_context(
         v8::Local<v8::Context> local_context,
-        const std::string& source,
+        std::string_view source,
         const std::string& document_name,
         std::string& error,
-        bool checkpoint_microtasks = true)
+        bool checkpoint_microtasks = true,
+        std::shared_ptr<const immutable_text_source> immutable_source = {})
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_script_execute : nullptr);
         const auto profile_started = profile_startup
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+#endif
         v8::Context::Scope context_scope(local_context);
         v8::TryCatch try_catch(isolate);
         v8::Local<v8::Script> script;
-        if (!compile_script(source, document_name, script)
+        if (!compile_script(
+                source,
+                document_name,
+                script,
+                std::move(immutable_source))
             || script->Run(local_context).IsEmpty()) {
             error = describe_exception(try_catch, local_context);
             return false;
         }
         if (checkpoint_microtasks) isolate->PerformMicrotaskCheckpoint();
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             auto& stats = startup_script_profiles[resource_leaf_name(document_name)];
             ++stats.calls;
@@ -18427,6 +19928,7 @@ struct v8_dom_runtime::implementation final {
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - profile_started).count());
         }
+#endif
         return true;
     }
 
@@ -18891,10 +20393,12 @@ struct v8_dom_runtime::implementation final {
 
     bool hydrate_frame(dom_node& frame)
     {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup && startup_frame_started == std::chrono::steady_clock::time_point{}) {
             startup_frame_started = std::chrono::steady_clock::now();
         }
         binding_callback_timer timer(profile_startup ? &startup_frame_hydrate : nullptr);
+#endif
         const auto html_iterator = frame.attributes.find("frame-html");
         const auto object_iterator = frame.attributes.find("object-html");
         const auto& html = html_iterator != frame.attributes.end() && !html_iterator->second.empty()
@@ -19041,6 +20545,7 @@ struct v8_dom_runtime::implementation final {
             for (const auto& script : scripts) {
                 if (script.defer != defer) continue;
                 std::string source = script.code;
+                std::shared_ptr<const immutable_text_source> immutable_source;
                 auto name = "htmlml-frame-inline-" + std::to_string(script.index) + ".js";
                 if (!script.source.empty()) {
                     if (!load_text_resource(
@@ -19048,7 +20553,8 @@ struct v8_dom_runtime::implementation final {
                             frame_base_address,
                             HTMLML_RESOURCE_SCRIPT,
                             source,
-                            name)) {
+                            name,
+                            &immutable_source)) {
                         frame_last_error_value = "Unable to load iframe script: " + script.source;
                         ++frame_script_error_count;
                         return false;
@@ -19062,7 +20568,16 @@ struct v8_dom_runtime::implementation final {
                     set_current_script(local_frame_context, document_value, name);
                 }
                 std::string error;
-                if (!execute_in_context(local_frame_context, source, name, error)) {
+                const auto script_source = immutable_source != nullptr
+                    ? immutable_source->view()
+                    : std::string_view(source);
+                if (!execute_in_context(
+                        local_frame_context,
+                        script_source,
+                        name,
+                        error,
+                        true,
+                        std::move(immutable_source))) {
                     frame_last_error_value = "Iframe script #" + std::to_string(script.index)
                         + " failed: " + error;
                     ++frame_script_error_count;
@@ -19113,7 +20628,6 @@ struct v8_dom_runtime::implementation final {
                 target).Check();
             v8::Local<v8::Value> arguments[] = {event};
             const auto listeners = frame_event_listeners.find(type);
-            const auto listener_contexts = frame_event_listener_contexts.find(type);
             if (listeners != frame_event_listeners.end()) {
                 auto* listener_list = &listeners->second;
                 // Listener callbacks can register more listeners. Snapshot the
@@ -19121,11 +20635,9 @@ struct v8_dom_runtime::implementation final {
                 // each persistent handle after returning from JavaScript.
                 const auto listener_count = listener_list->size();
                 for (size_t index = 0; index < listener_count; ++index) {
-                    if (listener_contexts != frame_event_listener_contexts.end()
-                        && index < listener_contexts->second.size()
-                        && listener_contexts->second[index].Get(isolate)
-                            != local_frame_context) continue;
-                    auto callback = (*listener_list)[index].Get(isolate);
+                    auto& listener = (*listener_list)[index];
+                    if (listener.context.Get(isolate) != local_frame_context) continue;
+                    auto callback = listener.callback.Get(isolate);
                     if (callback.IsEmpty()) continue;
                     v8::TryCatch try_catch(isolate);
                     if (callback->Call(
@@ -19647,11 +21159,11 @@ struct v8_dom_runtime::implementation final {
             if (name == "input" || name == "textarea") {
                 const auto value = node.attributes.find("value");
                 if (value != node.attributes.end()) {
-                    node.form_value = value->second;
-                    node.form_value_initialized = true;
-                    node.selection_start = node.form_value.size();
-                    node.selection_end = node.form_value.size();
-                    node.selection_direction = "none";
+                    node.mutable_form_control().value = value->second;
+                    node.mutable_form_control().value_initialized = true;
+                    node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
+                    node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
+                    node.mutable_form_control().selection_direction = text_selection_direction::none;
                 }
             }
             document.append_child(*stack.back(), node);
@@ -19802,8 +21314,9 @@ struct v8_dom_runtime::implementation final {
     static bool clear_inline_style(dom_node& node, const std::string& name)
     {
         const auto canonical_name = canonical_css_property_name(name);
-        node.inline_style_declarations.erase(canonical_name);
-        node.inline_important_declarations.erase(canonical_name);
+        auto& authored = node.mutable_authored_style();
+        authored.declarations.erase(canonical_name);
+        authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node.style, name, "auto")) {
             // Removing a placement declaration restores its affected
             // longhands to their computed initial value.
@@ -19933,10 +21446,11 @@ struct v8_dom_runtime::implementation final {
             || name == "transition-duration" || name == "transitionDelay"
             || name == "transition-delay" || name == "transitionTimingFunction"
             || name == "transition-timing-function") {
-            node.style.transition_property_value = "all";
-            node.style.transition_duration_value = "0s";
-            node.style.transition_delay_value = "0s";
-            node.style.transition_timing_function_value = "ease";
+            auto& animations = node.style.mutable_animations();
+            animations.transition_property_value = "all";
+            animations.transition_duration_value = "0s";
+            animations.transition_delay_value = "0s";
+            animations.transition_timing_function_value = "ease";
             configure_style_transitions(node.style);
         } else if (name == "animation" || name == "animationName"
             || name == "animation-name" || name == "animationDuration"
@@ -19944,11 +21458,12 @@ struct v8_dom_runtime::implementation final {
             || name == "animation-delay" || name == "animationTimingFunction"
             || name == "animation-timing-function" || name == "animationIterationCount"
             || name == "animation-iteration-count") {
-            node.style.animation_name_value = "none";
-            node.style.animation_duration_value = "0s";
-            node.style.animation_delay_value = "0s";
-            node.style.animation_timing_function_value = "ease";
-            node.style.animation_iteration_count_value = "1";
+            auto& animations = node.style.mutable_animations();
+            animations.animation_name_value = "none";
+            animations.animation_duration_value = "0s";
+            animations.animation_delay_value = "0s";
+            animations.animation_timing_function_value = "ease";
+            animations.animation_iteration_count_value = "1";
         } else if (name == "opacity") {
             node.style.opacity = 1;
             node.style.inline_property_mask &= ~inline_opacity;
@@ -19970,7 +21485,9 @@ struct v8_dom_runtime::implementation final {
             node.style.pointer_events_specified = false;
             node.style.inline_property_mask &= ~inline_pointer_events;
         } else if (name == "cursor") {
-            node.style.cursor.clear();
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->cursor.clear();
+            }
             node.style.inline_property_mask &= ~inline_cursor;
         } else if (name == "color") {
             node.style.foreground_rgba = 0;
@@ -19979,14 +21496,18 @@ struct v8_dom_runtime::implementation final {
             node.style.font_size = -1;
             node.style.line_height = -1;
             node.style.font_weight = 0;
-            node.style.font_family.clear();
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->font_family.clear();
+            }
             node.style.inline_property_mask &= ~(
                 inline_font_size | inline_line_height | inline_font_weight | inline_font_family);
         } else if (name == "fontSize" || name == "font-size") {
             node.style.font_size = -1;
             node.style.inline_property_mask &= ~inline_font_size;
         } else if (name == "fontFamily" || name == "font-family") {
-            node.style.font_family.clear();
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->font_family.clear();
+            }
             node.style.inline_property_mask &= ~inline_font_family;
         } else if (name == "fontWeight" || name == "font-weight") {
             node.style.font_weight = 0;
@@ -20003,10 +21524,14 @@ struct v8_dom_runtime::implementation final {
             node.style.word_spacing_specified = false;
             node.style.inline_property_mask &= ~inline_word_spacing;
         } else if (name == "textAlign" || name == "text-align") {
-            node.style.text_align.clear();
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->text_align.clear();
+            }
             node.style.inline_property_mask &= ~inline_text_align;
         } else if (name == "whiteSpace" || name == "white-space") {
-            node.style.white_space.clear();
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->white_space.clear();
+            }
             node.style.inline_property_mask &= ~inline_white_space;
         } else {
             return false;
@@ -20016,9 +21541,10 @@ struct v8_dom_runtime::implementation final {
 
     static std::string serialized_inline_style(const dom_node& node)
     {
+        const auto& authored = node.authored_style();
         std::vector<std::pair<std::string, std::string>> declarations(
-            node.inline_style_declarations.begin(),
-            node.inline_style_declarations.end());
+            authored.declarations.begin(),
+            authored.declarations.end());
         std::sort(declarations.begin(), declarations.end());
         std::string result;
         for (const auto& [name, value] : declarations) {
@@ -20026,7 +21552,7 @@ struct v8_dom_runtime::implementation final {
             result += name;
             result += ": ";
             result += value;
-            if (node.inline_important_declarations.contains(name)) {
+            if (authored.important_declarations.contains(name)) {
                 result += " !important";
             }
             result.push_back(';');
@@ -20057,8 +21583,7 @@ struct v8_dom_runtime::implementation final {
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        node->inline_style_declarations.clear();
-        node->inline_important_declarations.clear();
+        node->clear_authored_style();
         node->style.inline_property_mask = 0U;
         node->style.important_property_mask = 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
@@ -20079,6 +21604,16 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
         const auto name = to_utf8(info.GetIsolate(), info[0]);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (self->resize_profile_active) {
+            const auto canonical_name = canonical_css_property_name(name);
+            ++self->last_resize_style_property_counts[canonical_name];
+            ++self->last_resize_style_target_counts[
+                canonical_name + "@" + node->tag + "#" + node->id_attribute
+                    + "." + node->class_name + "/position-"
+                    + std::to_string(static_cast<uint32_t>(node->style.position))];
+        }
+#endif
         const auto property_mask = inline_style_mask(name);
         const auto has_important_rule =
             (node->style.important_property_mask & property_mask) != 0U;
@@ -20087,13 +21622,15 @@ struct v8_dom_runtime::implementation final {
         if (name.starts_with("--")) {
             if (!valid_custom_property_name(name)) return;
             if (value.empty()) {
-                node->style.custom_properties.erase(name);
-                node->inline_style_declarations.erase(name);
-                node->inline_important_declarations.erase(name);
+                node->style.mutable_custom_properties().values.erase(name);
+                auto& authored = node->mutable_authored_style();
+                authored.declarations.erase(name);
+                authored.important_declarations.erase(name);
             } else {
-                node->style.custom_properties[name] = value;
-                node->inline_style_declarations[name] = value;
-                node->inline_important_declarations.erase(name);
+                node->style.mutable_custom_properties().values[name] = value;
+                auto& authored = node->mutable_authored_style();
+                authored.declarations[name] = value;
+                authored.important_declarations.erase(name);
             }
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
@@ -20107,8 +21644,9 @@ struct v8_dom_runtime::implementation final {
         }
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
-        node->inline_style_declarations[canonical_name] = value;
-        node->inline_important_declarations.erase(canonical_name);
+        auto& authored = node->mutable_authored_style();
+        authored.declarations[canonical_name] = value;
+        authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
             // existing numeric grid-column projection when applicable.
@@ -20262,16 +21800,16 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "transition") {
             apply_transition_shorthand(node->style, value);
         } else if (name == "transition-property") {
-            node->style.transition_property_value = value;
+            node->style.mutable_animations().transition_property_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transition-duration") {
-            node->style.transition_duration_value = value;
+            node->style.mutable_animations().transition_duration_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transition-delay") {
-            node->style.transition_delay_value = value;
+            node->style.mutable_animations().transition_delay_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transition-timing-function") {
-            node->style.transition_timing_function_value = value;
+            node->style.mutable_animations().transition_timing_function_value = value;
             configure_style_transitions(node->style);
         } else if (name == "opacity") {
             node->style.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
@@ -20285,7 +21823,7 @@ struct v8_dom_runtime::implementation final {
             node->style.pointer_events_specified = value != "inherit" && value != "unset";
             node->style.inline_property_mask |= inline_pointer_events;
         } else if (name == "cursor") {
-            node->style.cursor = value;
+            node->style.mutable_textual().cursor = value;
             node->style.inline_property_mask |= inline_cursor;
         }
         else if (name == "background" || name == "background-color") {
@@ -20299,14 +21837,15 @@ struct v8_dom_runtime::implementation final {
                 node->style.font_size = -1;
                 node->style.line_height = -1;
                 node->style.font_weight = 0;
-                node->style.font_family.clear();
+                node->style.mutable_textual().font_family.clear();
                 node->style.inline_property_mask |= inline_font_size | inline_line_height
                     | inline_font_weight | inline_font_family;
             } else if (const auto font = parse_font_shorthand(*node, value); font.has_value()) {
                 node->style.font_size = font->font_size;
                 node->style.line_height = font->line_height;
                 node->style.font_weight = font->font_weight;
-                node->style.font_family = font->font_family;
+                node->style.mutable_textual().font_family =
+                    font->font_family;
                 node->style.inline_property_mask |= inline_font_size | inline_line_height
                     | inline_font_weight | inline_font_family;
             }
@@ -20314,7 +21853,8 @@ struct v8_dom_runtime::implementation final {
             node->style.font_size = resolved_declared_font_size(*node, value);
             node->style.inline_property_mask |= inline_font_size;
         } else if (name == "font-family") {
-            node->style.font_family = value == "inherit" || value == "unset"
+            node->style.mutable_textual().font_family =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
             node->style.inline_property_mask |= inline_font_family;
         } else if (name == "font-weight") {
@@ -20348,10 +21888,10 @@ struct v8_dom_runtime::implementation final {
                 node->style.inline_property_mask |= inline_word_spacing;
             }
         } else if (name == "text-align") {
-            node->style.text_align = value;
+            node->style.mutable_textual().text_align = value;
             node->style.inline_property_mask |= inline_text_align;
         } else if (name == "white-space") {
-            node->style.white_space = value;
+            node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
         sync_style_attribute(*node);
@@ -20360,7 +21900,7 @@ struct v8_dom_runtime::implementation final {
             self->configure_style_keyframe_animation(*node);
             self->document.update_style_animations(*node);
             self->detect_css_compositions(*node);
-            self->document.mark_dirty();
+            self->mark_cssom_layout_dirty(*node, canonical_name);
         }
     }
 
@@ -20390,16 +21930,18 @@ struct v8_dom_runtime::implementation final {
         if (computed) self->ensure_layout();
         std::string value;
         if (!computed) {
-            const auto authored = node->inline_style_declarations.find(
+            const auto& authored_style = node->authored_style().declarations;
+            const auto authored = authored_style.find(
                 canonical_css_property_name(name));
-            value = authored == node->inline_style_declarations.end()
+            value = authored == authored_style.end()
                 ? "" : authored->second;
         } else if (name.starts_with("--")) {
             const std::string* known_value = nullptr;
             for (auto* current_node = node; current_node != nullptr;
                  current_node = current_node->parent) {
-                const auto known = current_node->style.custom_properties.find(name);
-                if (known != current_node->style.custom_properties.end()) {
+                const auto& custom = current_node->style.custom_properties().values;
+                const auto known = custom.find(name);
+                if (known != custom.end()) {
                     known_value = &known->second;
                     break;
                 }
@@ -20517,29 +22059,29 @@ struct v8_dom_runtime::implementation final {
             } else if (name == "flex-basis") {
                 value = format_computed_length(node->style.flex_basis, node->layout.width);
             } else if (name == "grid-area") {
-                value = node->style.grid_area_value;
+                value = node->style.grid().area_value;
             } else if (name == "grid-row") {
-                value = node->style.grid_row_value;
+                value = node->style.grid().row_value;
             } else if (name == "grid-row-start") {
-                value = node->style.grid_row_start_value;
+                value = node->style.grid().row_start_value;
             } else if (name == "grid-row-end") {
-                value = node->style.grid_row_end_value;
+                value = node->style.grid().row_end_value;
             } else if (name == "grid-column") {
-                value = node->style.grid_column_value;
+                value = node->style.grid().column_value;
             } else if (name == "grid-column-start") {
-                value = node->style.grid_column_start_value;
+                value = node->style.grid().column_start_value;
             } else if (name == "grid-column-end") {
-                value = node->style.grid_column_end_value;
+                value = node->style.grid().column_end_value;
             } else if (name == "background-image") {
-                value = node->style.background_image_value;
+                value = node->style.background_image().image_value;
             } else if (name == "background-repeat") {
-                value = node->style.background_repeat;
+                value = node->style.background_image().repeat;
             } else if (name == "background-position") {
-                value = node->style.background_position_x + " "
-                    + node->style.background_position_y;
+                value = node->style.background_image().position_x + " "
+                    + node->style.background_image().position_y;
             } else if (name == "background-size") {
-                value = node->style.background_size_x + " "
-                    + node->style.background_size_y;
+                value = node->style.background_image().size_x + " "
+                    + node->style.background_image().size_y;
             } else if (name == "box-shadow") {
                 if (!node->style.box_shadow_present) {
                     value = "none";
@@ -20595,9 +22137,10 @@ struct v8_dom_runtime::implementation final {
                         node->style.transform_origin_y, node->layout.height));
             } else if (name == "transform") {
                 if (node->style.transform_specified
-                    || node->rotation_keyframe_animation_active) {
+                    || node->rotation_keyframe_animation_active_value()) {
                     constexpr double degrees_to_radians = 0.017453292519943295;
-                    const auto radians = static_cast<double>(node->painted_transform_rotate_degrees)
+                    const auto radians = static_cast<double>(
+                        node->painted_transform_rotation_value())
                         * degrees_to_radians;
                     const auto cosine = std::cos(radians);
                     const auto sine = std::sin(radians);
@@ -20613,14 +22156,14 @@ struct v8_dom_runtime::implementation final {
                         stream << std::setprecision(8) << number;
                         return stream.str();
                     };
-                    const auto a = cosine * node->painted_transform_scale_x;
-                    const auto b = sine * node->painted_transform_scale_x;
-                    const auto c = -sine * node->painted_transform_scale_y;
-                    const auto d = cosine * node->painted_transform_scale_y;
+                    const auto a = cosine * node->painted_transform_scale_x_value();
+                    const auto b = sine * node->painted_transform_scale_x_value();
+                    const auto c = -sine * node->painted_transform_scale_y_value();
+                    const auto d = cosine * node->painted_transform_scale_y_value();
                     const auto e = resolve(
-                        node->painted_transform_translate_x, node->layout.width);
+                        node->painted_transform_translate_x_value(), node->layout.width);
                     const auto f = resolve(
-                        node->painted_transform_translate_y, node->layout.height);
+                        node->painted_transform_translate_y_value(), node->layout.height);
                     value = "matrix(" + format_number(a) + ", " + format_number(b)
                         + ", " + format_number(c) + ", " + format_number(d)
                         + ", " + format_number(e) + ", " + format_number(f) + ")";
@@ -20628,27 +22171,24 @@ struct v8_dom_runtime::implementation final {
                     value = "none";
                 }
             } else if (name == "transition-property") {
-                value = node->style.transition_property_value;
+                value = node->style.animations().transition_property_value;
             } else if (name == "transition-duration") {
-                value = node->style.transition_duration_value;
+                value = node->style.animations().transition_duration_value;
             } else if (name == "transition-delay") {
-                value = node->style.transition_delay_value;
+                value = node->style.animations().transition_delay_value;
             } else if (name == "transition-timing-function") {
-                value = node->style.transition_timing_function_value;
+                value = node->style.animations().transition_timing_function_value;
             } else if (name == "opacity") {
-                value = serialize_css_number(node->opacity_animation_initialized
-                    ? node->painted_opacity : node->style.opacity);
+                value = serialize_css_number(node->painted_opacity_value());
             } else if (name == "color") {
                 uint32_t color = 0;
                 for (auto* current_node = node;
                     current_node != nullptr && (color & 0xFFU) == 0U;
                     current_node = current_node->parent) {
-                    if (current_node->color_animation_active) {
-                        color = current_node->painted_foreground_rgba;
+                    if (current_node->color_animation_active_value()) {
+                        color = current_node->painted_foreground_value();
                     } else if ((current_node->style.foreground_rgba & 0xFFU) != 0U) {
-                        color = current_node->color_animation_initialized
-                            ? current_node->painted_foreground_rgba
-                            : current_node->style.foreground_rgba;
+                        color = current_node->painted_foreground_value();
                     }
                 }
                 if ((color & 0xFFU) == 0U) color = 0x000000FFU;
@@ -20665,7 +22205,7 @@ struct v8_dom_runtime::implementation final {
                 }
                 value = stream.str();
             } else if (name == "white-space") {
-                value = node->style.white_space;
+                value = node->style.textual().white_space;
             } else if (name == "cursor") {
                 value = resolved_cursor(*node);
             } else if (name == "font-size") {
@@ -20709,9 +22249,10 @@ struct v8_dom_runtime::implementation final {
         const auto name = to_utf8(info.GetIsolate(), info[0]);
         if (name.starts_with("--")) {
             if (!valid_custom_property_name(name)) return;
-            node->style.custom_properties.erase(name);
-            node->inline_style_declarations.erase(name);
-            node->inline_important_declarations.erase(name);
+            node->style.mutable_custom_properties().values.erase(name);
+            auto& authored = node->mutable_authored_style();
+            authored.declarations.erase(name);
+            authored.important_declarations.erase(name);
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
             return;
@@ -20748,9 +22289,10 @@ struct v8_dom_runtime::implementation final {
         if (computed) self->ensure_layout();
         std::string value;
         if (!computed) {
-            const auto authored = node->inline_style_declarations.find(
+            const auto& authored_style = node->authored_style().declarations;
+            const auto authored = authored_style.find(
                 canonical_css_property_name(name));
-            value = authored == node->inline_style_declarations.end()
+            value = authored == authored_style.end()
                 ? "" : authored->second;
             info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
             return;
@@ -20939,21 +22481,23 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "borderBottomLeftRadius") {
             value = format_length(node->style.border_bottom_left_radius);
         } else if (name == "gridArea") {
-            value = node->style.grid_area_value;
+            value = node->style.grid().area_value;
         } else if (name == "gridRow") {
-            value = node->style.grid_row_value;
+            value = node->style.grid().row_value;
         } else if (name == "gridRowStart") {
-            value = node->style.grid_row_start_value;
+            value = node->style.grid().row_start_value;
         } else if (name == "gridRowEnd") {
-            value = node->style.grid_row_end_value;
+            value = node->style.grid().row_end_value;
         } else if (name == "gridColumn") {
-            value = node->style.grid_column_value;
+            value = node->style.grid().column_value;
         } else if (name == "gridColumnStart") {
-            value = node->style.grid_column_start_value;
+            value = node->style.grid().column_start_value;
         } else if (name == "gridColumnEnd") {
-            value = node->style.grid_column_end_value;
+            value = node->style.grid().column_end_value;
         } else if (name == "verticalAlign") {
-            value = node->style.vertical_align.empty() ? "baseline" : node->style.vertical_align;
+            value = node->style.textual().vertical_align.empty()
+                ? "baseline"
+                : node->style.textual().vertical_align;
         } else if (name == "boxSizing") {
             value = node->style.border_box ? "border-box" : "content-box";
         } else if (name == "borderRadius") {
@@ -20978,7 +22522,7 @@ struct v8_dom_runtime::implementation final {
                     node->style.transform_origin_y, node->layout.height));
         } else if (name == "transform") {
             if (!node->style.transform_specified
-                && !node->rotation_keyframe_animation_active) {
+                && !node->rotation_keyframe_animation_active_value()) {
                 value = "none";
             } else {
                 const auto format_transform_length = [](css_length length) {
@@ -20993,58 +22537,57 @@ struct v8_dom_runtime::implementation final {
                 };
                 value = "translate(" + format_transform_length(node->style.transform_translate_x)
                     + ", " + format_transform_length(node->style.transform_translate_y) + ") rotate("
-                    + serialize_css_number(node->painted_transform_rotate_degrees) + "deg)";
+                    + serialize_css_number(node->painted_transform_rotation_value()) + "deg)";
             }
         } else if (name == "transition" ) {
-            value = node->style.transition_property_value + " "
-                + node->style.transition_duration_value + " "
-                + node->style.transition_timing_function_value + " "
-                + node->style.transition_delay_value;
+            value = node->style.animations().transition_property_value + " "
+                + node->style.animations().transition_duration_value + " "
+                + node->style.animations().transition_timing_function_value + " "
+                + node->style.animations().transition_delay_value;
         } else if (name == "transitionProperty" || name == "transition-property") {
-            value = node->style.transition_property_value;
+            value = node->style.animations().transition_property_value;
         } else if (name == "transitionDuration" || name == "transition-duration") {
-            value = node->style.transition_duration_value;
+            value = node->style.animations().transition_duration_value;
         } else if (name == "transitionDelay" || name == "transition-delay") {
-            value = node->style.transition_delay_value;
+            value = node->style.animations().transition_delay_value;
         } else if (name == "transitionTimingFunction"
             || name == "transition-timing-function") {
-            value = node->style.transition_timing_function_value;
+            value = node->style.animations().transition_timing_function_value;
         } else if (name == "animation") {
-            value = node->style.animation_name_value + " "
-                + node->style.animation_duration_value + " "
-                + node->style.animation_timing_function_value + " "
-                + node->style.animation_delay_value + " "
-                + node->style.animation_iteration_count_value;
+            value = node->style.animations().animation_name_value + " "
+                + node->style.animations().animation_duration_value + " "
+                + node->style.animations().animation_timing_function_value + " "
+                + node->style.animations().animation_delay_value + " "
+                + node->style.animations().animation_iteration_count_value;
         } else if (name == "animationName" || name == "animation-name") {
-            value = node->style.animation_name_value;
+            value = node->style.animations().animation_name_value;
         } else if (name == "animationDuration" || name == "animation-duration") {
-            value = node->style.animation_duration_value;
+            value = node->style.animations().animation_duration_value;
         } else if (name == "animationDelay" || name == "animation-delay") {
-            value = node->style.animation_delay_value;
+            value = node->style.animations().animation_delay_value;
         } else if (name == "animationTimingFunction"
             || name == "animation-timing-function") {
-            value = node->style.animation_timing_function_value;
+            value = node->style.animations().animation_timing_function_value;
         } else if (name == "animationIterationCount"
             || name == "animation-iteration-count") {
-            value = node->style.animation_iteration_count_value;
+            value = node->style.animations().animation_iteration_count_value;
         } else if (name == "zIndex") {
             value = node->style.z_index_auto
                 ? "auto" : std::to_string(node->style.z_index);
         } else if (name == "opacity") {
             std::ostringstream stream;
-            stream << std::setprecision(6) << (node->opacity_animation_initialized
-                ? node->painted_opacity : node->style.opacity);
+            stream << std::setprecision(6) << node->painted_opacity_value();
             value = stream.str();
         } else if (name == "backgroundImage") {
-            value = node->style.background_image_value;
+            value = node->style.background_image().image_value;
         } else if (name == "backgroundRepeat") {
-            value = node->style.background_repeat;
+            value = node->style.background_image().repeat;
         } else if (name == "backgroundPosition") {
-            value = node->style.background_position_x + " "
-                + node->style.background_position_y;
+            value = node->style.background_image().position_x + " "
+                + node->style.background_image().position_y;
         } else if (name == "backgroundSize") {
-            value = node->style.background_size_x + " "
-                + node->style.background_size_y;
+            value = node->style.background_image().size_x + " "
+                + node->style.background_image().size_y;
         } else if (name == "background" || name == "backgroundColor") {
             value = serialize_color(node->style.background_rgba);
         } else if (name == "borderTopWidth") {
@@ -21069,20 +22612,17 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "overflowY") {
             value = serialize_overflow_mode(computed_overflow(node->style).second);
         } else if (name == "color") {
-            auto color = node->color_animation_active
-                ? node->painted_foreground_rgba
+            auto color = node->color_animation_active_value()
+                ? node->painted_foreground_value()
                 : (node->style.foreground_rgba & 0xFFU) != 0U
-                    ? (node->color_animation_initialized
-                        ? node->painted_foreground_rgba : node->style.foreground_rgba)
+                    ? node->painted_foreground_value()
                     : 0U;
             for (auto* ancestor = node->parent; (color & 0xFFU) == 0U && ancestor != nullptr;
                  ancestor = ancestor->parent) {
-                color = ancestor->color_animation_active
-                    ? ancestor->painted_foreground_rgba
+                color = ancestor->color_animation_active_value()
+                    ? ancestor->painted_foreground_value()
                     : (ancestor->style.foreground_rgba & 0xFFU) != 0U
-                        ? (ancestor->color_animation_initialized
-                            ? ancestor->painted_foreground_rgba
-                            : ancestor->style.foreground_rgba)
+                        ? ancestor->painted_foreground_value()
                         : 0U;
             }
             if ((color & 0xFFU) == 0U) color = 0x000000FFU;
@@ -21099,9 +22639,10 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "wordSpacing") {
             value = serialize_css_number(resolved_word_spacing(*node)) + "px";
         } else if (name == "lineHeight") {
-            const auto authored = node->inline_style_declarations.find("line-height");
+            const auto& authored_style = node->authored_style().declarations;
+            const auto authored = authored_style.find("line-height");
             if ((node->style.important_property_mask & inline_line_height) == 0U
-                && authored != node->inline_style_declarations.end()
+                && authored != authored_style.end()
                 && authored->second == "normal") {
                 value = "normal";
                 info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
@@ -21120,9 +22661,9 @@ struct v8_dom_runtime::implementation final {
             }
             value = serialize_css_number(line_height) + "px";
         } else if (name == "textAlign") {
-            value = node->style.text_align;
+            value = node->style.textual().text_align;
         } else if (name == "whiteSpace") {
-            value = node->style.white_space;
+            value = node->style.textual().white_space;
         } else if (name == "visibility") {
             auto* current = node;
             while (current != nullptr && !current->style.visibility_specified) {
@@ -21165,6 +22706,16 @@ struct v8_dom_runtime::implementation final {
         const auto has_important_rule =
             (node->style.important_property_mask & property_mask) != 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+        if (self->resize_profile_active) {
+            const auto canonical_name = canonical_css_property_name(name);
+            ++self->last_resize_style_property_counts[canonical_name];
+            ++self->last_resize_style_target_counts[
+                canonical_name + "@" + node->tag + "#" + node->id_attribute
+                    + "." + node->class_name + "/position-"
+                    + std::to_string(static_cast<uint32_t>(node->style.position))];
+        }
+#endif
         self->inventory_css_value_functions(value, "cssom-style");
         if (value.empty()) {
             clear_inline_style(*node, name);
@@ -21174,8 +22725,9 @@ struct v8_dom_runtime::implementation final {
         }
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
-        node->inline_style_declarations[canonical_name] = value;
-        node->inline_important_declarations.erase(canonical_name);
+        auto& authored = node->mutable_authored_style();
+        authored.declarations[canonical_name] = value;
+        authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
             // existing numeric grid-column projection when applicable.
@@ -21333,29 +22885,29 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "transition") {
             apply_transition_shorthand(node->style, value);
         } else if (name == "transitionProperty") {
-            node->style.transition_property_value = value;
+            node->style.mutable_animations().transition_property_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transitionDuration") {
-            node->style.transition_duration_value = value;
+            node->style.mutable_animations().transition_duration_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transitionDelay") {
-            node->style.transition_delay_value = value;
+            node->style.mutable_animations().transition_delay_value = value;
             configure_style_transitions(node->style);
         } else if (name == "transitionTimingFunction") {
-            node->style.transition_timing_function_value = value;
+            node->style.mutable_animations().transition_timing_function_value = value;
             configure_style_transitions(node->style);
         } else if (name == "animation") {
             apply_animation_shorthand(node->style, value);
         } else if (name == "animationName") {
-            node->style.animation_name_value = value;
+            node->style.mutable_animations().animation_name_value = value;
         } else if (name == "animationDuration") {
-            node->style.animation_duration_value = value;
+            node->style.mutable_animations().animation_duration_value = value;
         } else if (name == "animationDelay") {
-            node->style.animation_delay_value = value;
+            node->style.mutable_animations().animation_delay_value = value;
         } else if (name == "animationTimingFunction") {
-            node->style.animation_timing_function_value = value;
+            node->style.mutable_animations().animation_timing_function_value = value;
         } else if (name == "animationIterationCount") {
-            node->style.animation_iteration_count_value = value;
+            node->style.mutable_animations().animation_iteration_count_value = value;
         } else if (name == "opacity") {
             node->style.opacity = raw_value->IsNullOrUndefined()
                 ? 1.0F
@@ -21382,7 +22934,7 @@ struct v8_dom_runtime::implementation final {
             node->style.pointer_events_specified = value != "inherit" && value != "unset";
             node->style.inline_property_mask |= inline_pointer_events;
         } else if (name == "cursor") {
-            node->style.cursor = value;
+            node->style.mutable_textual().cursor = value;
             node->style.inline_property_mask |= inline_cursor;
         } else if (name == "color") {
             node->style.foreground_rgba = native_document::parse_color(value);
@@ -21392,14 +22944,15 @@ struct v8_dom_runtime::implementation final {
                 node->style.font_size = -1;
                 node->style.line_height = -1;
                 node->style.font_weight = 0;
-                node->style.font_family.clear();
+                node->style.mutable_textual().font_family.clear();
                 node->style.inline_property_mask |= inline_font_size | inline_line_height
                     | inline_font_weight | inline_font_family;
             } else if (const auto font = parse_font_shorthand(*node, value); font.has_value()) {
                 node->style.font_size = font->font_size;
                 node->style.line_height = font->line_height;
                 node->style.font_weight = font->font_weight;
-                node->style.font_family = font->font_family;
+                node->style.mutable_textual().font_family =
+                    font->font_family;
                 node->style.inline_property_mask |= inline_font_size | inline_line_height
                     | inline_font_weight | inline_font_family;
             }
@@ -21407,7 +22960,8 @@ struct v8_dom_runtime::implementation final {
             node->style.font_size = resolved_declared_font_size(*node, value);
             node->style.inline_property_mask |= inline_font_size;
         } else if (name == "fontFamily") {
-            node->style.font_family = value == "inherit" || value == "unset"
+            node->style.mutable_textual().font_family =
+                value == "inherit" || value == "unset"
                 ? std::string{} : value;
             node->style.inline_property_mask |= inline_font_family;
         } else if (name == "fontWeight") {
@@ -21441,10 +22995,10 @@ struct v8_dom_runtime::implementation final {
             node->style.line_height = resolved_declared_line_height(*node, value, font_size);
             node->style.inline_property_mask |= inline_line_height;
         } else if (name == "textAlign") {
-            node->style.text_align = value;
+            node->style.mutable_textual().text_align = value;
             node->style.inline_property_mask |= inline_text_align;
         } else if (name == "whiteSpace") {
-            node->style.white_space = value;
+            node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
         sync_style_attribute(*node);
@@ -21453,7 +23007,7 @@ struct v8_dom_runtime::implementation final {
             self->configure_style_keyframe_animation(*node);
             self->document.update_style_animations(*node);
             self->detect_css_compositions(*node);
-            self->document.mark_dirty();
+            self->mark_cssom_layout_dirty(*node, canonical_name);
         }
     }
 
@@ -21477,7 +23031,9 @@ struct v8_dom_runtime::implementation final {
             "web-api-binding");
         if (info.Length() < 1 || !info[0]->IsFunction()) return;
         auto* self = current(info.GetIsolate());
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (self->profile_startup) ++self->startup_raf_scheduled;
+#endif
         const auto id = self->next_timer_id++;
         constexpr auto frame_period = std::chrono::duration<double, std::milli>(1000.0 / 60.0);
         self->timers.push_back(timer_task{
@@ -21512,12 +23068,14 @@ struct v8_dom_runtime::implementation final {
             ? info[1]->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0)
             : 0;
         if (!std::isfinite(delay) || delay < 0) delay = 0;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (self->profile_startup) {
             ++self->startup_timer_scheduled;
             self->startup_max_timer_delay_ms = std::max(
                 self->startup_max_timer_delay_ms,
                 delay);
         }
+#endif
         if (repeating) delay = std::max(1.0, delay);
         const auto interval = std::chrono::duration<double, std::milli>(delay);
         std::vector<v8::Global<v8::Value>> arguments;
@@ -21707,20 +23265,21 @@ struct v8_dom_runtime::implementation final {
                     }
                 }
             }
-            self->frame_event_listeners[type].emplace_back(
-                info.GetIsolate(),
-                info[1].As<v8::Function>());
-            self->frame_event_listener_contexts[type].emplace_back(
-                info.GetIsolate(),
-                info.GetIsolate()->GetCurrentContext());
-            self->frame_event_listener_targets[type].push_back(target_node_id);
-            self->frame_event_listener_captures[type].push_back(use_capture);
-            self->frame_event_listener_once[type].push_back(use_once);
             auto name = to_utf8(info.GetIsolate(), info[1].As<v8::Function>()->GetName());
             if (name.empty()) name = "<anonymous>";
-            self->frame_event_listener_names[type].push_back(std::move(name));
-            self->frame_event_listener_registration_sequences[type].push_back(
-                self->current_input_sequence);
+            self->frame_event_listeners[type].push_back(
+                event_listener_registration{
+                    v8::Global<v8::Function>(
+                        info.GetIsolate(),
+                        info[1].As<v8::Function>()),
+                    v8::Global<v8::Context>(
+                        info.GetIsolate(),
+                        info.GetIsolate()->GetCurrentContext()),
+                    std::move(name),
+                    self->current_input_sequence,
+                    target_node_id,
+                    use_capture,
+                    use_once});
         } else if (type == "resize") {
             self->resize_listeners.emplace_back(info.GetIsolate(), info[1].As<v8::Function>());
         }
@@ -21767,25 +23326,20 @@ struct v8_dom_runtime::implementation final {
             }
             auto listeners = self->frame_event_listeners.find(type);
             if (listeners == self->frame_event_listeners.end()) return;
-            auto& callbacks = listeners->second;
-            auto& contexts = self->frame_event_listener_contexts[type];
-            auto& targets = self->frame_event_listener_targets[type];
-            auto& captures = self->frame_event_listener_captures[type];
+            auto& registrations = listeners->second;
             auto local_context = info.GetIsolate()->GetCurrentContext();
-            for (size_t index = 0; index < callbacks.size(); ++index) {
-                auto callback = callbacks[index].Get(info.GetIsolate());
-                const auto registered_target = index < targets.size() ? targets[index] : 0U;
-                if (registered_target != target_node_id
-                    || (index < contexts.size()
-                        && contexts[index].Get(info.GetIsolate()) != local_context)
-                    || (index < captures.size() ? captures[index] : false) != requested_capture
+            for (auto& registration : registrations) {
+                auto callback = registration.callback.Get(info.GetIsolate());
+                if (registration.target != target_node_id
+                    || registration.context.Get(info.GetIsolate()) != local_context
+                    || registration.capture != requested_capture
                     || callback.IsEmpty()
                     || !callback->StrictEquals(requested)) {
                     continue;
                 }
-                // Do not erase synchronized listener vectors while an event
-                // may be iterating them. The dispatch tail compacts tombstones.
-                callbacks[index].Reset();
+                // Do not erase while an event may be iterating the vector. The
+                // dispatch tail compacts this tombstone.
+                registration.callback.Reset();
                 break;
             }
             return;
@@ -22247,10 +23801,6 @@ struct v8_dom_runtime::implementation final {
                 v8::Integer::New(info.GetIsolate(), phase)).Check();
         };
         const auto listeners = self->frame_event_listeners.find(type);
-        const auto listener_contexts = self->frame_event_listener_contexts.find(type);
-        const auto targets = self->frame_event_listener_targets.find(type);
-        const auto captures = self->frame_event_listener_captures.find(type);
-        const auto once_flags = self->frame_event_listener_once.find(type);
         v8::Local<v8::Value> arguments[] = {event};
         const auto invoke_listeners = [&] (
             uint32_t target_id,
@@ -22261,20 +23811,14 @@ struct v8_dom_runtime::implementation final {
             set_phase(current_target, phase);
             const auto listener_count = listeners->second.size();
             for (size_t index = 0; index < listener_count; ++index) {
-                if (listener_contexts != self->frame_event_listener_contexts.end()
-                    && index < listener_contexts->second.size()
-                    && listener_contexts->second[index].Get(info.GetIsolate()) != local_context) continue;
-                const auto registered_target = targets != self->frame_event_listener_targets.end()
-                    && index < targets->second.size() ? targets->second[index] : 0U;
-                const auto registered_capture = captures != self->frame_event_listener_captures.end()
-                    && index < captures->second.size() ? captures->second[index] : false;
-                if (registered_target != target_id || registered_capture != capture) continue;
-                auto callback = listeners->second[index].Get(info.GetIsolate());
+                auto& listener = listeners->second[index];
+                if (listener.context.Get(info.GetIsolate()) != local_context
+                    || listener.target != target_id
+                    || listener.capture != capture) continue;
+                auto callback = listener.callback.Get(info.GetIsolate());
                 if (callback.IsEmpty()) continue;
                 if (callback->Call(local_context, current_target, 1, arguments).IsEmpty()) return false;
-                const auto invoke_once = once_flags != self->frame_event_listener_once.end()
-                    && index < once_flags->second.size() && once_flags->second[index];
-                if (invoke_once) listeners->second[index].Reset();
+                if (listener.once) listener.callback.Reset();
                 if (immediate_propagation_stopped()) break;
             }
             return true;
@@ -22403,38 +23947,9 @@ struct v8_dom_runtime::implementation final {
             }
         }
         if (listeners != self->frame_event_listeners.end()) {
-            auto& callbacks = listeners->second;
-            auto& contexts = self->frame_event_listener_contexts[type];
-            auto& registered_targets = self->frame_event_listener_targets[type];
-            auto& registered_captures = self->frame_event_listener_captures[type];
-            auto& registered_once = self->frame_event_listener_once[type];
-            auto& names = self->frame_event_listener_names[type];
-            auto& sequences = self->frame_event_listener_registration_sequences[type];
-            for (size_t index = callbacks.size(); index-- > 0;) {
-                if (!callbacks[index].IsEmpty()) continue;
-                callbacks.erase(callbacks.begin() + static_cast<std::ptrdiff_t>(index));
-                if (index < contexts.size()) {
-                    contexts.erase(contexts.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < registered_targets.size()) {
-                    registered_targets.erase(
-                        registered_targets.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < registered_captures.size()) {
-                    registered_captures.erase(
-                        registered_captures.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < registered_once.size()) {
-                    registered_once.erase(
-                        registered_once.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < names.size()) {
-                    names.erase(names.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-                if (index < sequences.size()) {
-                    sequences.erase(sequences.begin() + static_cast<std::ptrdiff_t>(index));
-                }
-            }
+            std::erase_if(
+                listeners->second,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
         }
         event->Set(
             local_context,
@@ -22573,10 +24088,12 @@ struct v8_dom_runtime::implementation final {
             }
             self->console_messages.push_back(payload);
         }
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
         if (std::getenv("HTMLML_PROBE_CONSOLE") != nullptr) {
             std::cerr << "[V8 console." << levels[static_cast<size_t>(level_index)]
                 << "] " << message.str() << '\n';
         }
+#endif
     }
 
     static void promise_rejected(v8::PromiseRejectMessage message)
@@ -22617,7 +24134,9 @@ struct v8_dom_runtime::implementation final {
     std::unordered_map<std::string, std::future<prefetched_resource>> prefetched_resources;
     v8::ArrayBuffer::Allocator* allocator{nullptr};
     v8::Isolate* isolate{nullptr};
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     v8::CpuProfiler* cpu_profiler{nullptr};
+#endif
     v8::Global<v8::Context> context;
     v8::Global<v8::FunctionTemplate> element_template;
     v8::Global<v8::ObjectTemplate> style_template;
@@ -22643,15 +24162,9 @@ struct v8_dom_runtime::implementation final {
     session_storage_state outer_session_storage;
     std::unordered_map<uint32_t, std::unique_ptr<session_storage_state>> frame_session_storage;
     std::unordered_map<uint32_t, v8::Global<v8::Function>> frame_load_listeners;
-    std::unordered_map<std::string, std::vector<v8::Global<v8::Function>>> frame_event_listeners;
-    std::unordered_map<std::string, std::vector<v8::Global<v8::Context>>>
-        frame_event_listener_contexts;
-    std::unordered_map<std::string, std::vector<uint32_t>> frame_event_listener_targets;
-    std::unordered_map<std::string, std::vector<bool>> frame_event_listener_captures;
-    std::unordered_map<std::string, std::vector<bool>> frame_event_listener_once;
-    std::unordered_map<std::string, std::vector<std::string>> frame_event_listener_names;
-    std::unordered_map<std::string, std::vector<uint64_t>>
-        frame_event_listener_registration_sequences;
+    std::unordered_map<std::string, std::vector<event_listener_registration>>
+        frame_event_listeners;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     std::unordered_map<std::string, uint64_t> event_dispatch_counts;
     std::unordered_map<std::string, std::unordered_map<uint32_t, uint64_t>>
         event_dispatch_target_counts;
@@ -22661,6 +24174,7 @@ struct v8_dom_runtime::implementation final {
     std::unordered_map<std::string, std::unordered_map<size_t, uint64_t>>
         event_callback_index_counts;
     std::string last_mousemove_ancestry;
+#endif
     std::vector<v8::Global<v8::Function>> resize_listeners;
     std::vector<timer_task> timers;
     std::vector<connected_resource_task> connected_resources;
@@ -22702,6 +24216,7 @@ struct v8_dom_runtime::implementation final {
     std::vector<hover_selector_dependency> hover_selector_dependencies;
     std::unordered_map<std::string, std::string> css_variables;
     std::unordered_set<std::string> important_css_variables;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     mutable std::mutex feature_observation_mutex;
     std::unordered_map<std::string, feature_observation> feature_observations;
     std::unordered_map<std::string, std::unordered_set<uint32_t>>
@@ -22710,12 +24225,16 @@ struct v8_dom_runtime::implementation final {
     // stable across unordered_map rehashes, so repeat decisions can increment
     // atomically without taking the report snapshot mutex on every hot API call.
     std::unordered_map<std::string, feature_observation*> feature_observation_writer_cache;
+    std::unordered_map<const char*, feature_observation*>
+        canvas_feature_observation_writer_cache;
+#endif
     uint64_t frame_script_execution_count{0};
     uint64_t frame_script_error_count{0};
     static constexpr size_t maximum_compilation_cache_entries = 256U;
     static constexpr size_t maximum_compilation_cache_source_bytes = 256U * 1024U * 1024U;
     static constexpr size_t minimum_hot_cache_source_bytes = 4U * 1024U;
     static constexpr uint64_t maximum_persistent_cache_entry_bytes = 64U * 1024U * 1024U;
+    static constexpr uint64_t minimum_mapped_cache_body_bytes = 64U * 1024U;
     static constexpr size_t maximum_persistent_cache_entries = 1024U;
     static constexpr uint64_t maximum_persistent_cache_bytes = 512U * 1024U * 1024U;
     static constexpr uint64_t maximum_resource_cache_entry_bytes = 64U * 1024U * 1024U;
@@ -22724,11 +24243,34 @@ struct v8_dom_runtime::implementation final {
     static constexpr uint64_t maximum_resource_cache_bytes = 512U * 1024U * 1024U;
     static constexpr size_t maximum_process_resource_cache_entries = 512U;
     static constexpr size_t maximum_process_resource_cache_bytes = 64U * 1024U * 1024U;
+    static constexpr size_t maximum_process_resource_load_entries = 512U;
+    static constexpr size_t maximum_process_compilation_cache_entries = 512U;
+    static constexpr size_t maximum_process_compilation_cache_bytes = 256U * 1024U * 1024U;
+    static constexpr size_t minimum_shared_script_source_bytes = 4U * 1024U;
+    static constexpr size_t maximum_process_script_source_entries = 2048U;
     inline static std::mutex process_resource_cache_mutex;
     inline static std::unordered_map<std::string, process_resource_cache_entry>
         process_resource_cache;
     inline static size_t process_resource_cache_bytes{0U};
+    inline static size_t process_resource_mapped_cache_bytes{0U};
     inline static uint64_t process_resource_cache_access{0U};
+    inline static std::mutex process_resource_load_mutex;
+    inline static std::unordered_map<
+        std::string,
+        std::shared_ptr<process_resource_load_entry>> process_resource_loads;
+    inline static uint64_t process_resource_load_access{0U};
+    inline static std::mutex process_compilation_cache_mutex;
+    inline static std::unordered_map<
+        std::string,
+        std::shared_ptr<process_compilation_entry>> process_compilation_cache;
+    inline static size_t process_compilation_cache_bytes{0U};
+    inline static size_t process_compilation_mapped_cache_bytes{0U};
+    inline static uint64_t process_compilation_cache_access{0U};
+    inline static std::mutex process_script_source_mutex;
+    inline static std::unordered_map<
+        std::string,
+        process_script_source_entry> process_script_sources;
+    inline static uint64_t process_script_source_access{0U};
     std::string compilation_cache_directory;
     std::unordered_map<std::string, compilation_cache_entry> compilation_cache;
     std::deque<std::string> compilation_cache_order;
@@ -22741,6 +24283,10 @@ struct v8_dom_runtime::implementation final {
     uint64_t compilation_cache_bytes_read_count{0};
     uint64_t compilation_cache_bytes_written_count{0};
     uint64_t compilation_time_nanosecond_count{0};
+    uint64_t process_compilation_memory_hit_count{0};
+    uint64_t process_compilation_leader_count{0};
+    uint64_t process_compilation_waiter_count{0};
+    uint64_t process_compilation_shared_byte_count{0};
     uint64_t resource_cache_request_count{0};
     uint64_t resource_cache_hit_count{0};
     uint64_t resource_cache_miss_count{0};
@@ -22748,6 +24294,13 @@ struct v8_dom_runtime::implementation final {
     uint64_t resource_cache_bytes_read_count{0};
     uint64_t resource_cache_bytes_written_count{0};
     uint64_t resource_cache_memory_hit_count{0};
+    std::atomic<uint64_t> process_resource_memory_hit_count{0};
+    std::atomic<uint64_t> process_resource_load_leader_count{0};
+    std::atomic<uint64_t> process_resource_load_waiter_count{0};
+    std::atomic<uint64_t> process_resource_shared_byte_count{0};
+    uint64_t process_script_source_memory_hit_count{0};
+    uint64_t process_script_source_shared_byte_count{0};
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     uint64_t css_profile_candidate_checks{0};
     uint64_t css_profile_matched_rules{0};
     uint64_t css_profile_declaration_applications{0};
@@ -22756,6 +24309,7 @@ struct v8_dom_runtime::implementation final {
     uint64_t css_profile_declarations_nanoseconds{0};
     uint64_t css_profile_finalize_nanoseconds{0};
     size_t last_traced_unindexed_css_count{0};
+#endif
     uint32_t resource_writes_since_prune{0};
     uint32_t persistent_writes_since_prune{0};
     uint64_t input_event_dispatch_count{0};
@@ -22779,15 +24333,26 @@ struct v8_dom_runtime::implementation final {
     double caret_blink_epoch_ms{0};
     std::string frame_last_error_value;
     const std::string empty_string;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     uint64_t last_resize_outer_listeners_ns{0};
     uint64_t last_resize_frame_listeners_ns{0};
     uint64_t last_resize_layout_ns{0};
     uint64_t last_resize_observers_ns{0};
+    uint64_t client_geometry_layout_reuse_count{0};
+#endif
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     bool profile_bindings{false};
+    bool profile_resize_cpu{false};
+    bool resize_cpu_profile_captured{false};
     bool profile_startup{false};
     bool profile_css{false};
+    bool resize_profile_active{false};
     std::array<binding_callback_stats, binding_category_count> binding_totals{};
     std::array<binding_callback_stats, binding_category_count> last_resize_binding_profile{};
+    std::unordered_map<std::string, uint64_t> last_resize_style_property_counts;
+    std::unordered_map<std::string, uint64_t> last_resize_style_target_counts;
+    std::unordered_map<std::string, uint64_t> last_resize_attribute_counts;
+    std::unordered_map<std::string, uint64_t> last_resize_geometry_counts;
     std::string last_resize_cpu_profile;
     binding_callback_stats startup_resource_read{};
     binding_callback_stats startup_css_parse{};
@@ -22810,6 +24375,7 @@ struct v8_dom_runtime::implementation final {
     std::unordered_map<std::string, binding_callback_stats> startup_task_profiles;
     std::chrono::steady_clock::time_point startup_profile_started{};
     std::chrono::steady_clock::time_point startup_frame_started{};
+#endif
 };
 
 v8_dom_runtime::v8_dom_runtime(
@@ -22873,22 +24439,38 @@ bool v8_dom_runtime::dispatch_resize()
 
 uint64_t v8_dom_runtime::last_resize_outer_listeners_nanoseconds() const noexcept
 {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     return impl_->last_resize_outer_listeners_ns;
+#else
+    return 0;
+#endif
 }
 
 uint64_t v8_dom_runtime::last_resize_frame_listeners_nanoseconds() const noexcept
 {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     return impl_->last_resize_frame_listeners_ns;
+#else
+    return 0;
+#endif
 }
 
 uint64_t v8_dom_runtime::last_resize_layout_nanoseconds() const noexcept
 {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     return impl_->last_resize_layout_ns;
+#else
+    return 0;
+#endif
 }
 
 uint64_t v8_dom_runtime::last_resize_observers_nanoseconds() const noexcept
 {
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     return impl_->last_resize_observers_ns;
+#else
+    return 0;
+#endif
 }
 
 bool v8_dom_runtime::dispatch_input(const htmlml_input_event& event)
@@ -22908,6 +24490,14 @@ uint32_t v8_dom_runtime::current_cursor_kind() const noexcept
     return impl_->current_cursor_kind();
 }
 
+void v8_dom_runtime::notify_low_memory()
+{
+    if (impl_->isolate == nullptr) return;
+    impl_->compact_retained_native_capacity();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    impl_->isolate->LowMemoryNotification();
+}
+
 void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
 {
     const auto now = std::chrono::steady_clock::now();
@@ -22916,19 +24506,42 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
     if (impl_->is_text_control(impl_->active_element)
-        && impl_->active_element->input_focused) {
+        && impl_->active_element->mutable_form_control().input_focused) {
         const auto elapsed = std::max(0.0, timestamp - impl_->caret_blink_epoch_ms);
         const auto visible = std::fmod(elapsed, 1000.0) < 500.0;
-        if (impl_->active_element->caret_visible != visible) {
-            impl_->active_element->caret_visible = visible;
+        if (impl_->active_element->mutable_form_control().caret_visible != visible) {
+            impl_->active_element->mutable_form_control().caret_visible = visible;
             impl_->document.mark_dirty();
         }
     }
     for (auto& timer : impl_->timers) {
-        if (!timer.animation_frame) continue;
+        if (!timer.animation_frame
+            || timer.deadline != std::chrono::steady_clock::time_point::max()) {
+            continue;
+        }
+        // Once a callback has joined a rendering opportunity it retains that
+        // opportunity's timestamp until it runs. A later compositor signal
+        // releases only callbacks requested for the next frame; it must not
+        // retimestamp callbacks that the fair task scheduler has not drained
+        // yet.
         timer.deadline = now;
         timer.animation_timestamp_ms = timestamp;
     }
+}
+
+bool v8_dom_runtime::pump_animation_frame_task()
+{
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    return impl_->drain_animation_frame_task()
+        && impl_->promote_pending_promise_error();
+}
+
+bool v8_dom_runtime::has_pending_animation_frame_task() const noexcept
+{
+    return impl_->has_due_animation_frame_task();
 }
 
 bool v8_dom_runtime::pump_task()
@@ -22964,6 +24577,9 @@ bool v8_dom_runtime::component_ready()
 
 std::string v8_dom_runtime::diagnostics()
 {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    return "certification telemetry disabled at compile time";
+#else
     std::ostringstream description;
     description << "resources=[";
     const auto start = impl_->loaded_resource_names.size() > 24U
@@ -23056,10 +24672,14 @@ std::string v8_dom_runtime::diagnostics()
         }
     }
     return description.str();
+#endif
 }
 
 std::string v8_dom_runtime::event_diagnostics() const
 {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    return "event telemetry disabled at compile time";
+#else
     std::vector<std::string> types;
     types.reserve(impl_->event_dispatch_counts.size());
     for (const auto& [type, count] : impl_->event_dispatch_counts) {
@@ -23100,10 +24720,11 @@ std::string v8_dom_runtime::event_diagnostics() const
             }
             result << '}';
         }
-        const auto registered_targets = impl_->frame_event_listener_targets.find(type);
-        if (registered_targets != impl_->frame_event_listener_targets.end()) {
+        if (listeners != impl_->frame_event_listeners.end()) {
             std::unordered_map<uint32_t, size_t> target_counts;
-            for (const auto target : registered_targets->second) ++target_counts[target];
+            for (const auto& listener : listeners->second) {
+                ++target_counts[listener.target];
+            }
             result << "/t{";
             bool first = true;
             for (const auto& [target, count] : target_counts) {
@@ -23114,39 +24735,29 @@ std::string v8_dom_runtime::event_diagnostics() const
             result << '}';
         }
         if (type == "mousemove") {
-            const auto names = impl_->frame_event_listener_names.find(type);
-            if (names != impl_->frame_event_listener_names.end()) {
+            if (listeners != impl_->frame_event_listeners.end()) {
                 result << "/n{";
-                for (size_t name_index = 0; name_index < names->second.size(); ++name_index) {
+                for (size_t name_index = 0;
+                    name_index < listeners->second.size();
+                    ++name_index) {
                     if (name_index != 0) result << ';';
-                    const auto target = registered_targets != impl_->frame_event_listener_targets.end()
-                        && name_index < registered_targets->second.size()
-                        ? registered_targets->second[name_index]
-                        : 0U;
+                    const auto& listener = listeners->second[name_index];
                     const auto callbacks = impl_->event_callback_index_counts.contains(type)
                         && impl_->event_callback_index_counts.at(type).contains(name_index)
                         ? impl_->event_callback_index_counts.at(type).at(name_index)
                         : 0U;
-                    const auto empty = listeners != impl_->frame_event_listeners.end()
-                        && name_index < listeners->second.size()
-                        && listeners->second[name_index].IsEmpty();
-                    const auto registration_sequences =
-                        impl_->frame_event_listener_registration_sequences.find(type);
-                    const auto registered_at = registration_sequences
-                            != impl_->frame_event_listener_registration_sequences.end()
-                        && name_index < registration_sequences->second.size()
-                        ? registration_sequences->second[name_index]
-                        : 0U;
-                    result << name_index << ':' << names->second[name_index]
-                        << "@t" << target << "/c" << callbacks
-                        << "/s" << registered_at
-                        << (empty ? "/empty" : "");
+                    result << name_index << ':' << listener.name
+                        << "@t" << listener.target << "/c" << callbacks
+                        << "/s" << listener.registration_sequence
+                        << (listener.callback.IsEmpty() ? "/empty" : "");
                 }
                 result << '}';
             }
         }
     }
     result << ']';
+    result << ", layout-client-reuses="
+        << impl_->client_geometry_layout_reuse_count;
     if (impl_->profile_bindings) {
         uint64_t total_nanoseconds = 0;
         result << ", resize-bindings=[";
@@ -23161,14 +24772,44 @@ std::string v8_dom_runtime::event_diagnostics() const
         }
         result << "]/profiled-ms" << std::fixed << std::setprecision(3)
             << static_cast<double>(total_nanoseconds) / 1'000'000.0;
-        if (!impl_->last_resize_cpu_profile.empty()) {
-            result << ", resize-cpu=" << impl_->last_resize_cpu_profile;
-        }
+        const auto append_counts = [&result](
+            std::string_view label,
+            const std::unordered_map<std::string, uint64_t>& counts) {
+            std::vector<std::pair<std::string, uint64_t>> ordered(
+                counts.begin(),
+                counts.end());
+            std::sort(ordered.begin(), ordered.end(), [](const auto& left, const auto& right) {
+                if (left.second != right.second) return left.second > right.second;
+                return left.first < right.first;
+            });
+            result << ", " << label << "={";
+            for (size_t index = 0; index < ordered.size(); ++index) {
+                if (index != 0) result << ';';
+                result << ordered[index].first << ':' << ordered[index].second;
+            }
+            result << '}';
+        };
+        append_counts(
+            "resize-style",
+            impl_->last_resize_style_property_counts);
+        append_counts(
+            "resize-style-targets",
+            impl_->last_resize_style_target_counts);
+        append_counts(
+            "resize-attributes",
+            impl_->last_resize_attribute_counts);
+        append_counts(
+            "resize-geometry",
+            impl_->last_resize_geometry_counts);
+    }
+    if (!impl_->last_resize_cpu_profile.empty()) {
+        result << ", resize-cpu=" << impl_->last_resize_cpu_profile;
     }
     if (!impl_->last_mousemove_ancestry.empty()) {
         result << ", mousemove-ancestry=" << impl_->last_mousemove_ancestry;
     }
     return result.str();
+#endif
 }
 
 std::string v8_dom_runtime::feature_use_json() const
@@ -23236,6 +24877,56 @@ uint64_t v8_dom_runtime::compilation_time_nanoseconds() const noexcept
     return impl_->compilation_time_nanosecond_count;
 }
 
+uint64_t v8_dom_runtime::process_compilation_memory_hits() const noexcept
+{
+    return impl_->process_compilation_memory_hit_count;
+}
+
+uint64_t v8_dom_runtime::process_compilation_leaders() const noexcept
+{
+    return impl_->process_compilation_leader_count;
+}
+
+uint64_t v8_dom_runtime::process_compilation_waiters() const noexcept
+{
+    return impl_->process_compilation_waiter_count;
+}
+
+uint64_t v8_dom_runtime::process_compilation_shared_bytes() const noexcept
+{
+    return impl_->process_compilation_shared_byte_count;
+}
+
+uint64_t v8_dom_runtime::process_resource_memory_hits() const noexcept
+{
+    return impl_->process_resource_memory_hit_count.load(std::memory_order_relaxed);
+}
+
+uint64_t v8_dom_runtime::process_resource_load_leaders() const noexcept
+{
+    return impl_->process_resource_load_leader_count.load(std::memory_order_relaxed);
+}
+
+uint64_t v8_dom_runtime::process_resource_load_waiters() const noexcept
+{
+    return impl_->process_resource_load_waiter_count.load(std::memory_order_relaxed);
+}
+
+uint64_t v8_dom_runtime::process_resource_shared_bytes() const noexcept
+{
+    return impl_->process_resource_shared_byte_count.load(std::memory_order_relaxed);
+}
+
+uint64_t v8_dom_runtime::process_script_source_memory_hits() const noexcept
+{
+    return impl_->process_script_source_memory_hit_count;
+}
+
+uint64_t v8_dom_runtime::process_script_source_shared_bytes() const noexcept
+{
+    return impl_->process_script_source_shared_byte_count;
+}
+
 uint64_t v8_dom_runtime::resource_cache_requests() const noexcept
 {
     return impl_->resource_cache_request_count;
@@ -23274,6 +24965,285 @@ uint64_t v8_dom_runtime::input_events_dispatched() const noexcept
 uint64_t v8_dom_runtime::input_callbacks_invoked() const noexcept
 {
     return impl_->input_callback_invocation_count;
+}
+
+v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexcept
+{
+    memory_metrics result{};
+    if (impl_->isolate != nullptr) {
+        v8::HeapStatistics statistics;
+        impl_->isolate->GetHeapStatistics(&statistics);
+        result.total_heap_bytes = statistics.total_heap_size();
+        result.used_heap_bytes = statistics.used_heap_size();
+        result.executable_heap_bytes = statistics.total_heap_size_executable();
+        result.physical_heap_bytes = statistics.total_physical_size();
+        result.external_bytes = statistics.external_memory();
+        result.malloced_bytes = statistics.malloced_memory();
+        result.peak_malloced_bytes = statistics.peak_malloced_memory();
+        v8::HeapCodeStatistics code_statistics;
+        if (impl_->isolate->GetHeapCodeAndMetadataStatistics(&code_statistics)) {
+            result.code_and_metadata_bytes = code_statistics.code_and_metadata_size();
+            result.bytecode_and_metadata_bytes =
+                code_statistics.bytecode_and_metadata_size();
+            result.external_script_source_bytes =
+                code_statistics.external_script_source_size();
+        }
+        const auto add_space = [](
+                                   uint64_t& used_total,
+                                   uint64_t& physical_total,
+                                   v8::HeapSpaceStatistics& space) {
+            used_total += space.space_used_size();
+            physical_total += space.physical_space_size();
+        };
+        const auto heap_space_count = impl_->isolate->NumberOfHeapSpaces();
+        for (size_t index = 0; index < heap_space_count; ++index) {
+            v8::HeapSpaceStatistics space;
+            if (!impl_->isolate->GetHeapSpaceStatistics(&space, index)) {
+                continue;
+            }
+            const std::string_view name{space.space_name()};
+            if (name == "new_space" || name == "new_large_object_space") {
+                add_space(
+                    result.young_space_used_bytes,
+                    result.young_space_physical_bytes,
+                    space);
+            } else if (name == "old_space") {
+                add_space(
+                    result.old_space_used_bytes,
+                    result.old_space_physical_bytes,
+                    space);
+            } else if (
+                name == "code_space" || name == "code_large_object_space") {
+                add_space(
+                    result.code_space_used_bytes,
+                    result.code_space_physical_bytes,
+                    space);
+            } else if (name == "map_space") {
+                add_space(
+                    result.map_space_used_bytes,
+                    result.map_space_physical_bytes,
+                    space);
+            } else if (name == "large_object_space") {
+                add_space(
+                    result.large_object_space_used_bytes,
+                    result.large_object_space_physical_bytes,
+                    space);
+            } else if (name == "read_only_space") {
+                add_space(
+                    result.read_only_space_used_bytes,
+                    result.read_only_space_physical_bytes,
+                    space);
+            } else if (name.starts_with("shared_")) {
+                add_space(
+                    result.shared_space_used_bytes,
+                    result.shared_space_physical_bytes,
+                    space);
+            } else if (
+                name == "trusted_space"
+                || name == "trusted_large_object_space") {
+                add_space(
+                    result.trusted_space_used_bytes,
+                    result.trusted_space_physical_bytes,
+                    space);
+            }
+        }
+        v8::SharedMemoryStatistics shared_statistics;
+        v8::V8::GetSharedMemoryStatistics(&shared_statistics);
+        result.read_only_space_used_bytes =
+            shared_statistics.read_only_space_used_size();
+        result.read_only_space_physical_bytes =
+            shared_statistics.read_only_space_physical_size();
+    }
+    {
+        std::lock_guard lock(implementation::process_compilation_cache_mutex);
+        result.process_compilation_cache_bytes =
+            implementation::process_compilation_cache_bytes;
+        result.process_compilation_mapped_cache_bytes =
+            implementation::process_compilation_mapped_cache_bytes;
+    }
+    {
+        std::lock_guard lock(implementation::process_resource_cache_mutex);
+        result.process_resource_cache_bytes =
+            implementation::process_resource_cache_bytes;
+        result.process_resource_mapped_cache_bytes =
+            implementation::process_resource_mapped_cache_bytes;
+    }
+    const auto native_dom = impl_->document.read_allocation_metrics();
+    result.native_dom_node_count = native_dom.node_count;
+    result.native_dom_node_size_bytes = native_dom.node_object_size_bytes;
+    result.native_dom_inline_bytes = native_dom.node_object_bytes;
+    result.native_dom_node_pool_reserved_bytes =
+        native_dom.node_pool_reserved_bytes;
+    result.native_dom_node_pool_peak_bytes =
+        native_dom.node_pool_peak_bytes;
+    result.native_dom_table_layout_count =
+        native_dom.table_layout_node_count;
+    result.native_dom_table_layout_storage_bytes =
+        native_dom.table_layout_storage_bytes;
+    result.native_dom_form_control_count =
+        native_dom.form_control_node_count;
+    result.native_dom_form_control_storage_bytes =
+        native_dom.form_control_storage_bytes;
+    result.native_dom_attribute_node_count =
+        native_dom.attribute_node_count;
+    result.native_dom_attribute_entry_count =
+        native_dom.attribute_entry_count;
+    result.native_dom_attribute_storage_bytes =
+        native_dom.attribute_storage_bytes;
+    result.native_dom_pseudo_storage_bytes =
+        native_dom.pseudo_element_storage_bytes;
+    result.native_dom_animation_count = native_dom.animation_data_count;
+    result.native_dom_animation_storage_bytes =
+        native_dom.animation_storage_bytes
+        + native_dom.animation_runtime_storage_bytes;
+    result.native_dom_custom_property_node_count =
+        native_dom.custom_property_node_count;
+    result.native_dom_custom_property_entry_count =
+        native_dom.custom_property_entry_count;
+    result.native_dom_custom_property_storage_bytes =
+        native_dom.custom_property_storage_bytes;
+    result.native_dom_background_image_count =
+        native_dom.background_image_data_count;
+    result.native_dom_background_image_storage_bytes =
+        native_dom.background_image_storage_bytes;
+    result.native_dom_grid_count = native_dom.grid_data_count;
+    result.native_dom_grid_storage_bytes = native_dom.grid_storage_bytes;
+    result.native_dom_textual_style_count =
+        native_dom.textual_style_data_count;
+    result.native_dom_textual_style_storage_bytes =
+        native_dom.textual_style_storage_bytes;
+    result.native_dom_authored_style_node_count =
+        native_dom.authored_style_node_count;
+    result.native_dom_authored_style_entry_count =
+        native_dom.authored_style_entry_count;
+    result.native_dom_authored_style_storage_bytes =
+        native_dom.authored_style_storage_bytes;
+    result.native_dom_canvas_node_count = native_dom.canvas_node_count;
+    result.native_dom_canvas_storage_bytes = native_dom.canvas_storage_bytes;
+    const auto wrapper_map_storage = [](const auto& wrappers) {
+        return wrappers.bucket_count() * sizeof(void*)
+            + wrappers.size()
+                * (sizeof(typename std::decay_t<decltype(wrappers)>::value_type)
+                    + 2U * sizeof(void*));
+    };
+    result.native_wrapper_handle_count =
+        impl_->node_wrappers.size()
+        + impl_->class_list_wrappers.size()
+        + impl_->style_wrappers.size()
+        + impl_->computed_style_wrappers.size();
+    result.native_wrapper_storage_bytes =
+        wrapper_map_storage(impl_->node_wrappers)
+        + wrapper_map_storage(impl_->class_list_wrappers)
+        + wrapper_map_storage(impl_->style_wrappers)
+        + wrapper_map_storage(impl_->computed_style_wrappers);
+    const auto listener_map_storage = [](const auto& map) {
+        using map_type = std::decay_t<decltype(map)>;
+        using vector_type = typename map_type::mapped_type;
+        using element_type = typename vector_type::value_type;
+        uint64_t bytes = map.bucket_count() * sizeof(void*);
+        for (const auto& [name, values] : map) {
+            bytes += sizeof(typename map_type::value_type)
+                + 2U * sizeof(void*) + name.capacity() + 1U
+                + values.capacity() * sizeof(element_type);
+        }
+        return bytes;
+    };
+    result.native_event_listener_count = std::accumulate(
+        impl_->frame_event_listeners.begin(),
+        impl_->frame_event_listeners.end(),
+        uint64_t{0},
+        [](uint64_t count, const auto& entry) {
+            return count + entry.second.size();
+        });
+    result.native_event_listener_storage_bytes =
+        listener_map_storage(impl_->frame_event_listeners);
+    for (const auto& [_, listeners] : impl_->frame_event_listeners) {
+        for (const auto& listener : listeners) {
+            result.native_event_listener_storage_bytes +=
+                listener.name.capacity() + 1U;
+        }
+    }
+    result.native_text_measurement_cache_entry_count =
+        native_dom.text_measurement_cache_entry_count;
+    result.native_text_measurement_cache_storage_bytes =
+        native_dom.text_measurement_cache_storage_bytes;
+
+    result.native_css_rule_count = impl_->css_rules.size();
+    result.native_css_rule_storage_bytes =
+        impl_->css_rules.capacity() * sizeof(implementation::css_rule);
+    const auto string_bytes = [](const std::string& value) {
+        return value.capacity() + 1U;
+    };
+    for (const auto& [name, keyframes] : impl_->opacity_keyframes) {
+        result.native_css_rule_storage_bytes += string_bytes(name)
+            + sizeof(decltype(impl_->opacity_keyframes)::value_type)
+            + keyframes.opacity_stops.capacity()
+                * sizeof(node_style::opacity_keyframe)
+            + keyframes.rotation_stops.capacity()
+                * sizeof(node_style::rotation_keyframe);
+    }
+    {
+        std::lock_guard lock(
+            implementation::shared_css_rule_payload_mutex);
+        for (auto& [hash, candidates] :
+            implementation::shared_css_rule_payloads) {
+            (void)hash;
+            for (auto iterator = candidates.begin();
+                iterator != candidates.end();) {
+                auto payload = iterator->lock();
+                if (payload == nullptr) {
+                    iterator = candidates.erase(iterator);
+                    continue;
+                }
+                ++result.process_shared_css_rule_count;
+                result.process_shared_css_rule_storage_bytes +=
+                    sizeof(implementation::css_rule_payload)
+                    + 2U * sizeof(void*)
+                    + string_bytes(payload->selector)
+                    + payload->compiled_selector.compounds.capacity()
+                        * sizeof(std::string)
+                    + payload->compiled_selector.combinators.capacity()
+                        * sizeof(char)
+                    + payload->declarations.capacity()
+                        * sizeof(implementation::css_declaration)
+                    + payload->media_queries.capacity() * sizeof(std::string);
+                for (const auto& compound :
+                    payload->compiled_selector.compounds) {
+                    result.process_shared_css_rule_storage_bytes +=
+                        string_bytes(compound);
+                }
+                for (const auto& declaration : payload->declarations) {
+                    result.process_shared_css_rule_storage_bytes +=
+                        string_bytes(declaration.name)
+                        + string_bytes(declaration.value);
+                }
+                for (const auto& query : payload->media_queries) {
+                    result.process_shared_css_rule_storage_bytes +=
+                        string_bytes(query);
+                }
+                ++iterator;
+            }
+        }
+    }
+    const auto indexed_rule_storage = [&](const auto& index) {
+        uint64_t bytes = index.bucket_count() * sizeof(void*);
+        for (const auto& [key, values] : index) {
+            bytes += sizeof(typename std::decay_t<decltype(index)>::value_type)
+                + 2U * sizeof(void*) + string_bytes(key)
+                + values.capacity() * sizeof(size_t);
+        }
+        return bytes;
+    };
+    result.native_css_index_storage_bytes =
+        indexed_rule_storage(impl_->css_rules_by_class)
+        + indexed_rule_storage(impl_->css_rules_by_id)
+        + indexed_rule_storage(impl_->css_rules_by_tag)
+        + indexed_rule_storage(impl_->css_rules_by_attribute)
+        + impl_->css_focus_rules.capacity() * sizeof(size_t)
+        + impl_->unindexed_css_rules.capacity() * sizeof(size_t)
+        + impl_->hover_selector_dependencies.capacity()
+            * sizeof(implementation::hover_selector_dependency);
+    return result;
 }
 
 const std::string& v8_dom_runtime::frame_last_error() const noexcept

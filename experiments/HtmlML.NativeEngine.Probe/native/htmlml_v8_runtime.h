@@ -19,6 +19,79 @@ void prewarm_v8_process();
 
 class v8_dom_runtime final {
 public:
+    struct memory_metrics final {
+        uint64_t total_heap_bytes{0};
+        uint64_t used_heap_bytes{0};
+        uint64_t executable_heap_bytes{0};
+        uint64_t physical_heap_bytes{0};
+        uint64_t external_bytes{0};
+        uint64_t malloced_bytes{0};
+        uint64_t peak_malloced_bytes{0};
+        uint64_t code_and_metadata_bytes{0};
+        uint64_t bytecode_and_metadata_bytes{0};
+        uint64_t external_script_source_bytes{0};
+        uint64_t young_space_used_bytes{0};
+        uint64_t young_space_physical_bytes{0};
+        uint64_t old_space_used_bytes{0};
+        uint64_t old_space_physical_bytes{0};
+        uint64_t code_space_used_bytes{0};
+        uint64_t code_space_physical_bytes{0};
+        uint64_t map_space_used_bytes{0};
+        uint64_t map_space_physical_bytes{0};
+        uint64_t large_object_space_used_bytes{0};
+        uint64_t large_object_space_physical_bytes{0};
+        uint64_t read_only_space_used_bytes{0};
+        uint64_t read_only_space_physical_bytes{0};
+        uint64_t shared_space_used_bytes{0};
+        uint64_t shared_space_physical_bytes{0};
+        uint64_t trusted_space_used_bytes{0};
+        uint64_t trusted_space_physical_bytes{0};
+        uint64_t process_compilation_cache_bytes{0};
+        uint64_t process_compilation_mapped_cache_bytes{0};
+        uint64_t process_resource_cache_bytes{0};
+        uint64_t process_resource_mapped_cache_bytes{0};
+        uint64_t native_dom_node_count{0};
+        uint64_t native_dom_node_size_bytes{0};
+        uint64_t native_dom_inline_bytes{0};
+        uint64_t native_dom_node_pool_reserved_bytes{0};
+        uint64_t native_dom_node_pool_peak_bytes{0};
+        uint64_t native_dom_table_layout_count{0};
+        uint64_t native_dom_table_layout_storage_bytes{0};
+        uint64_t native_dom_form_control_count{0};
+        uint64_t native_dom_form_control_storage_bytes{0};
+        uint64_t native_event_listener_count{0};
+        uint64_t native_event_listener_storage_bytes{0};
+        uint64_t native_dom_attribute_node_count{0};
+        uint64_t native_dom_attribute_entry_count{0};
+        uint64_t native_dom_attribute_storage_bytes{0};
+        uint64_t native_dom_pseudo_storage_bytes{0};
+        uint64_t native_dom_animation_count{0};
+        uint64_t native_dom_animation_storage_bytes{0};
+        uint64_t native_dom_custom_property_node_count{0};
+        uint64_t native_dom_custom_property_entry_count{0};
+        uint64_t native_dom_custom_property_storage_bytes{0};
+        uint64_t native_dom_background_image_count{0};
+        uint64_t native_dom_background_image_storage_bytes{0};
+        uint64_t native_dom_grid_count{0};
+        uint64_t native_dom_grid_storage_bytes{0};
+        uint64_t native_dom_textual_style_count{0};
+        uint64_t native_dom_textual_style_storage_bytes{0};
+        uint64_t native_dom_authored_style_node_count{0};
+        uint64_t native_dom_authored_style_entry_count{0};
+        uint64_t native_dom_authored_style_storage_bytes{0};
+        uint64_t native_css_rule_count{0};
+        uint64_t native_css_rule_storage_bytes{0};
+        uint64_t native_css_index_storage_bytes{0};
+        uint64_t process_shared_css_rule_count{0};
+        uint64_t process_shared_css_rule_storage_bytes{0};
+        uint64_t native_dom_canvas_node_count{0};
+        uint64_t native_dom_canvas_storage_bytes{0};
+        uint64_t native_wrapper_handle_count{0};
+        uint64_t native_wrapper_storage_bytes{0};
+        uint64_t native_text_measurement_cache_entry_count{0};
+        uint64_t native_text_measurement_cache_storage_bytes{0};
+    };
+
     struct viewport_metrics final {
         float width{1};
         float height{1};
@@ -65,7 +138,10 @@ public:
     bool dispatch_input(const htmlml_input_event& event);
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;
+    void notify_low_memory();
     void signal_animation_frame(double timestamp_ms);
+    bool pump_animation_frame_task();
+    bool has_pending_animation_frame_task() const noexcept;
     bool pump_task();
     bool has_pending_tasks() const noexcept;
     bool component_ready();
@@ -84,6 +160,16 @@ public:
     uint64_t compilation_cache_bytes_read() const noexcept;
     uint64_t compilation_cache_bytes_written() const noexcept;
     uint64_t compilation_time_nanoseconds() const noexcept;
+    uint64_t process_compilation_memory_hits() const noexcept;
+    uint64_t process_compilation_leaders() const noexcept;
+    uint64_t process_compilation_waiters() const noexcept;
+    uint64_t process_compilation_shared_bytes() const noexcept;
+    uint64_t process_resource_memory_hits() const noexcept;
+    uint64_t process_resource_load_leaders() const noexcept;
+    uint64_t process_resource_load_waiters() const noexcept;
+    uint64_t process_resource_shared_bytes() const noexcept;
+    uint64_t process_script_source_memory_hits() const noexcept;
+    uint64_t process_script_source_shared_bytes() const noexcept;
     uint64_t resource_cache_requests() const noexcept;
     uint64_t resource_cache_hits() const noexcept;
     uint64_t resource_cache_misses() const noexcept;
@@ -96,6 +182,7 @@ public:
     uint64_t last_resize_frame_listeners_nanoseconds() const noexcept;
     uint64_t last_resize_layout_nanoseconds() const noexcept;
     uint64_t last_resize_observers_nanoseconds() const noexcept;
+    memory_metrics read_memory_metrics() const noexcept;
     const std::string& frame_last_error() const noexcept;
 
 private:

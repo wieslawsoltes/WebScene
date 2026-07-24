@@ -48,6 +48,215 @@ void test_viewport_hit_testing_traverses_zero_height_document_root()
         "viewport hit testing clipped positioned content to a zero-height document root");
 }
 
+void test_animation_runtime_is_cold_for_static_nodes()
+{
+    htmlml_native::native_document document;
+    auto& root = document.body();
+    for (auto index = 0; index < 128; ++index) {
+        auto& node = document.create_element("div");
+        node.style.opacity = 0.75F;
+        node.style.transform_scale_x = 1.1F;
+        require(
+            document.append_child(root, node),
+            "static animation-allocation fixture could not append a node");
+        document.update_style_animations(node);
+    }
+    auto metrics = document.read_allocation_metrics();
+    require(
+        metrics.animation_runtime_count == 0
+            && metrics.animation_runtime_storage_bytes == 0,
+        "static nodes eagerly allocated animation runtime state");
+
+    auto& animated = document.create_element("div");
+    require(
+        document.append_child(root, animated),
+        "animated allocation fixture could not append its node");
+    animated.style.mutable_animations().opacity_transition.duration_ms = 100;
+    document.update_style_animations(animated);
+    metrics = document.read_allocation_metrics();
+    require(
+        metrics.animation_runtime_count == 1
+            && metrics.animation_runtime_storage_bytes
+                >= sizeof(htmlml_native::dom_node::animation_runtime_data),
+        "an animated node did not allocate its cold runtime state");
+}
+
+void test_textual_style_state_is_cold_and_copy_on_write()
+{
+    htmlml_native::native_document document;
+    auto& root = document.body();
+    for (auto index = 0; index < 128; ++index) {
+        auto& node = document.create_element("div");
+        node.style.width = {100, htmlml_native::length_unit::pixels};
+        node.style.opacity = 0.75F;
+        require(
+            document.append_child(root, node),
+            "textual-style allocation fixture could not append a node");
+    }
+    auto metrics = document.read_allocation_metrics();
+    require(
+        metrics.textual_style_data_count == 0
+            && metrics.textual_style_storage_bytes == 0,
+        "tokenless styles eagerly allocated textual CSS state");
+
+    auto& styled = document.create_element("button");
+    styled.style.mutable_textual().cursor = "pointer";
+    styled.style.mutable_textual().font_family = "Inter";
+    require(
+        document.append_child(root, styled),
+        "textual-style fixture could not append its styled node");
+    auto clone = styled.style;
+    clone.mutable_textual().cursor = "wait";
+    require(
+        styled.style.textual().cursor == "pointer"
+            && clone.textual().cursor == "wait",
+        "textual CSS state did not detach on style mutation");
+
+    metrics = document.read_allocation_metrics();
+    require(
+        metrics.textual_style_data_count == 1
+            && metrics.textual_style_storage_bytes
+                >= sizeof(htmlml_native::node_style::textual_style_data),
+        "authored textual CSS state was not attributed as cold storage");
+}
+
+void test_table_and_form_state_are_cold_for_ordinary_nodes()
+{
+    htmlml_native::native_document document;
+    auto& root = document.body();
+    for (auto index = 0; index < 128; ++index) {
+        auto& node = document.create_element("div");
+        require(
+            document.append_child(root, node),
+            "cold node-state fixture could not append an ordinary node");
+    }
+    auto metrics = document.read_allocation_metrics();
+    require(
+        metrics.table_layout_node_count == 0
+            && metrics.table_layout_storage_bytes == 0
+            && metrics.form_control_node_count == 0
+            && metrics.form_control_storage_bytes == 0,
+        "ordinary nodes eagerly allocated table or form-control state");
+
+    auto& table = document.create_element("table");
+    table.mutable_table_layout().column_widths = {80.0F, 120.0F};
+    auto& input = document.create_element("input");
+    input.mutable_form_control().value = "sample";
+    input.mutable_form_control().value_initialized = true;
+    require(
+        document.append_child(root, table) && document.append_child(root, input),
+        "cold node-state fixture could not append its specialized nodes");
+    metrics = document.read_allocation_metrics();
+    require(
+        metrics.table_layout_node_count == 1
+            && metrics.table_layout_storage_bytes
+                >= sizeof(htmlml_native::dom_node::table_layout_data)
+            && metrics.form_control_node_count == 1
+            && metrics.form_control_storage_bytes
+                >= sizeof(htmlml_native::dom_node::form_control_data),
+        "specialized table or form-control state was not attributed");
+}
+
+void test_document_clear_releases_and_reinitializes_node_pool()
+{
+    htmlml_native::native_document document;
+    for (auto cycle = 0; cycle < 4; ++cycle) {
+        auto& root = document.body();
+        for (auto index = 0; index < 512; ++index) {
+            auto& node = document.create_element("div");
+            require(
+                document.append_child(root, node),
+                "node-pool clear fixture could not append a node");
+        }
+        require(
+            document.node_count() == 513,
+            "node-pool clear fixture did not create the expected document");
+        const auto populated = document.read_allocation_metrics();
+        require(
+            populated.node_pool_reserved_bytes >= populated.node_object_bytes
+                && populated.node_pool_peak_bytes
+                    >= populated.node_pool_reserved_bytes,
+            "node-pool allocation metrics did not include live node chunks");
+        document.clear();
+        const auto cleared = document.read_allocation_metrics();
+        require(
+            document.node_count() == 1
+                && document.body().id == 1
+                && document.body().tag == "body",
+            "document clear did not release and reinitialize its node pool");
+        require(
+            cleared.node_pool_reserved_bytes
+                    < populated.node_pool_reserved_bytes
+                && cleared.node_pool_peak_bytes
+                    >= populated.node_pool_peak_bytes,
+            "document clear retained its previous node-pool high-water chunks");
+    }
+}
+
+void test_compact_attribute_collection_preserves_map_semantics()
+{
+    htmlml_native::attribute_collection left;
+    left["id"] = "dialog";
+    left["class"] = "open";
+    left["id"] = "updated";
+    require(
+        left.size() == 2 && left.at("id") == "updated",
+        "compact attributes duplicated or failed to replace an existing name");
+
+    htmlml_native::attribute_collection right;
+    right["class"] = "open";
+    right["id"] = "updated";
+    require(
+        left == right,
+        "compact attribute equality incorrectly depended on insertion order");
+    require(
+        left.erase("class") == 1
+            && left.erase("class") == 0
+            && !left.contains("class"),
+        "compact attribute erase did not preserve map semantics");
+}
+
+void test_out_of_flow_client_geometry_reuse_is_scoped()
+{
+    htmlml_native::native_document document;
+    auto& toolbar = document.create_element("div");
+    auto& overlay = document.create_element("div");
+    auto& overlay_child = document.create_element("div");
+    toolbar.style.width = {320, htmlml_native::length_unit::pixels};
+    toolbar.style.height = {32, htmlml_native::length_unit::pixels};
+    overlay.style.position = htmlml_native::position_mode::absolute;
+    overlay.style.width = {200, htmlml_native::length_unit::pixels};
+    overlay.style.height = {100, htmlml_native::length_unit::pixels};
+    require(
+        document.append_child(document.body(), toolbar)
+            && document.append_child(document.body(), overlay)
+            && document.append_child(overlay, overlay_child),
+        "out-of-flow geometry fixture could not build its tree");
+    document.layout(640, 360);
+    const auto passes = document.layout_passes();
+
+    overlay.style.width = {240, htmlml_native::length_unit::pixels};
+    document.mark_out_of_flow_geometry_dirty(overlay);
+    require(
+        document.dirty()
+            && document.can_reuse_client_geometry(toolbar)
+            && document.can_reuse_client_geometry(document.body()),
+        "an isolated positioned-box mutation invalidated unrelated client geometry");
+    require(
+        !document.can_reuse_client_geometry(overlay)
+            && !document.can_reuse_client_geometry(overlay_child),
+        "a positioned-box mutation incorrectly reused geometry inside its dirty subtree");
+    require(
+        document.layout_passes() == passes,
+        "geometry reuse performed an eager layout");
+
+    document.layout(640, 360);
+    document.mark_dirty();
+    require(
+        !document.can_reuse_client_geometry(toolbar),
+        "a global invalidation incorrectly reused cached client geometry");
+}
+
 std::string last_error(htmlml_engine* engine)
 {
     const auto required = htmlml_engine_copy_last_error(engine, nullptr, 0);
@@ -547,6 +756,7 @@ struct resource_server final {
     std::unordered_map<std::string, std::string> content;
     std::atomic<int> active{0};
     std::atomic<int> peak{0};
+    std::atomic<int> requests{0};
 };
 
 size_t load_test_resource(
@@ -566,6 +776,7 @@ size_t load_test_resource(
     if (known == server.content.end()) return 0U;
 
     if (destination == nullptr && !address.ends_with("index.html")) {
+        server.requests.fetch_add(1, std::memory_order_relaxed);
         const auto active = server.active.fetch_add(1, std::memory_order_relaxed) + 1;
         auto peak = server.peak.load(std::memory_order_relaxed);
         while (active > peak
@@ -576,6 +787,9 @@ size_t load_test_resource(
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(60));
         server.active.fetch_sub(1, std::memory_order_relaxed);
+    }
+    else if (destination == nullptr) {
+        server.requests.fetch_add(1, std::memory_order_relaxed);
     }
 
     constexpr size_t header_size = 2U + sizeof(uint32_t) + sizeof(int64_t) * 2U;
@@ -936,6 +1150,7 @@ void test_relative_stylesheet_background_uses_stylesheet_address()
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     require(found, "stylesheet-relative SVG background did not reach the native scene");
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     const auto report = feature_use(engine);
     require(
         report.find(R"("feature":"load:failed")") == std::string::npos,
@@ -944,6 +1159,7 @@ void test_relative_stylesheet_background_uses_stylesheet_address()
         report.find(R"("feature":"function:url","classification":"partially-supported","count":1,"semanticSlice":"first URL-backed SVG CSS background layer")")
             != std::string::npos,
         "CSS url() was not reported as the bounded implemented background slice");
+#endif
     htmlml_engine_destroy(engine);
 }
 
@@ -978,6 +1194,8 @@ void test_resource_cache_reuse_across_engine_generations()
     require(
         evaluate(first, "globalThis.__cachedResourceValue", "resource-cache-first.js") == "42",
         "first resource-cache script did not execute");
+    const auto requests_after_first =
+        server.requests.load(std::memory_order_relaxed);
     htmlml_engine_destroy(first);
 
     auto* second = htmlml_engine_create_with_options(&options);
@@ -988,17 +1206,193 @@ void test_resource_cache_reuse_across_engine_generations()
     require(
         evaluate(second, "globalThis.__cachedResourceValue", "resource-cache-second.js") == "42",
         "process-cached resource did not execute in the second engine");
-    auto second_diagnostics = diagnostics(second);
-    for (auto attempt = 0; second_diagnostics.empty() && attempt < 100; ++attempt) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        second_diagnostics = diagnostics(second);
-    }
-    if (second_diagnostics.find("resource-memory-hits=2") == std::string::npos) {
-        fail("document and script bodies were not reused from the process resource cache: "
-            + second_diagnostics);
-    }
+    require(
+        requests_after_first == 2
+            && server.requests.load(std::memory_order_relaxed)
+                == requests_after_first,
+        "document and script bodies were not reused from the process resource cache");
     htmlml_engine_destroy(second);
 
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(cache_directory, cleanup_error);
+}
+
+void test_parsed_css_rule_payloads_are_shared_across_live_engines()
+{
+    resource_server server{
+        .content = {
+            {"https://shared-css.test/index.html", R"(
+                <html><head><link rel="stylesheet" href="shared.css"></head>
+                <body><div class="shared-alpha">shared</div></body></html>)"},
+            {"https://shared-css.test/shared.css", R"(
+                .shared-alpha { color: rgb(1, 2, 3); padding: 4px; }
+                .shared-beta:hover { opacity: 0.75; }
+                @media (min-width: 1px) {
+                    .shared-gamma { display: block; }
+                })"}
+        }};
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    constexpr std::string_view url = "https://shared-css.test/index.html";
+    auto* first = htmlml_engine_create_with_options(&options);
+    auto* second = htmlml_engine_create_with_options(&options);
+    require(first != nullptr && second != nullptr,
+        "shared-CSS engine creation failed");
+    require(
+        htmlml_engine_load_url(first, url.data(), url.size()) != 0
+            && htmlml_engine_load_url(second, url.data(), url.size()) != 0,
+        "shared-CSS documents did not load");
+
+    htmlml_engine_memory_metrics first_memory{
+        sizeof(htmlml_engine_memory_metrics)};
+    htmlml_engine_memory_metrics second_memory{
+        sizeof(htmlml_engine_memory_metrics)};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        htmlml_engine_get_memory_metrics(first, &first_memory);
+        htmlml_engine_get_memory_metrics(second, &second_memory);
+        if (first_memory.native_css_rule_count >= 3U
+            && second_memory.native_css_rule_count >= 3U
+            && second_memory.process_shared_css_rule_count >= 3U) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        first_memory.native_css_rule_count >= 3U
+            && second_memory.native_css_rule_count
+                == first_memory.native_css_rule_count,
+        "equivalent live engines did not retain the same logical CSS rules");
+    require(
+        second_memory.process_shared_css_rule_count
+            < first_memory.native_css_rule_count
+                + second_memory.native_css_rule_count,
+        "equivalent CSS rule payloads were duplicated across live engines");
+    require(
+        second_memory.process_shared_css_rule_storage_bytes > 0U,
+        "shared CSS payload allocation attribution was absent");
+    htmlml_engine_destroy(second);
+    htmlml_engine_destroy(first);
+}
+
+void test_process_wide_resource_load_single_flight()
+{
+    constexpr size_t engine_count = 4U;
+    const auto shared_script =
+        std::string{
+            "globalThis.__sharedResourceExecutions = "
+            "(globalThis.__sharedResourceExecutions || 0) + 1;\n/*"}
+        + std::string(128U * 1024U, 'x')
+        + "*/";
+    const auto unique_suffix = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto origin = "https://resource-single-flight-" + unique_suffix + ".test/";
+    const auto document_url = origin + "index.html";
+    const auto script_url = origin + "shared.js";
+    resource_server server{
+        .content = {
+            {document_url,
+                "<html><body><script src=\"shared.js\"></script></body></html>"},
+            {script_url, shared_script}
+        }};
+    const auto cache_directory = std::filesystem::temp_directory_path()
+        / ("htmlml-native-resource-single-flight-test-" + unique_suffix);
+    std::filesystem::create_directories(cache_directory);
+    const auto cache_path = cache_directory.string();
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        cache_path.data(),
+        cache_path.size(),
+        load_test_resource,
+        &server};
+
+    std::array<htmlml_engine*, engine_count> engines{};
+    for (auto& engine : engines) {
+        engine = htmlml_engine_create_with_options(&options);
+        require(engine != nullptr, "resource single-flight engine creation failed");
+    }
+
+    std::atomic<size_t> ready{0U};
+    std::atomic<bool> start{false};
+    std::array<std::thread, engine_count> workers;
+    std::array<std::string, engine_count> results;
+    for (size_t index = 0U; index < engine_count; ++index) {
+        workers[index] = std::thread([&, index] {
+            ready.fetch_add(1U, std::memory_order_release);
+            while (!start.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            require(
+                htmlml_engine_load_url(
+                    engines[index],
+                    document_url.data(),
+                    document_url.size()) != 0,
+                "resource single-flight document load was rejected");
+            results[index] = evaluate(
+                engines[index],
+                "globalThis.__sharedResourceExecutions",
+                "resource-single-flight-result-" + unique_suffix + ".js");
+        });
+    }
+    while (ready.load(std::memory_order_acquire) != engine_count) {
+        std::this_thread::yield();
+    }
+    start.store(true, std::memory_order_release);
+    for (auto& worker : workers) worker.join();
+
+    uint64_t leaders = 0U;
+    uint64_t waiters = 0U;
+    uint64_t memory_hits = 0U;
+    uint64_t shared_bytes = 0U;
+    uint64_t script_source_hits = 0U;
+    uint64_t script_source_shared_bytes = 0U;
+    for (size_t index = 0U; index < engine_count; ++index) {
+        require(results[index] == "1", "resource sharing leaked mutable script state");
+        htmlml_process_cache_metrics metrics{
+            sizeof(htmlml_process_cache_metrics)};
+        require(
+            htmlml_engine_get_process_cache_metrics(engines[index], &metrics) != 0,
+            "resource single-flight metrics were unavailable");
+        leaders += metrics.resource_load_leaders;
+        waiters += metrics.resource_load_waiters;
+        memory_hits += metrics.resource_memory_hits;
+        shared_bytes += metrics.resource_shared_bytes;
+        script_source_hits += metrics.script_source_memory_hits;
+        script_source_shared_bytes += metrics.script_source_shared_bytes;
+
+        htmlml_engine_memory_metrics memory{
+            sizeof(htmlml_engine_memory_metrics)};
+        require(
+            htmlml_engine_get_memory_metrics(engines[index], &memory) != 0,
+            "external script-source memory metrics were unavailable");
+        require(
+            memory.v8_external_script_source_bytes >= shared_script.size(),
+            "large ASCII script source was copied into the V8 heap");
+        require(
+            memory.process_resource_mapped_cache_bytes >= shared_script.size(),
+            "large persisted script resource was not retained as file-backed memory");
+    }
+    require(
+        server.requests.load(std::memory_order_relaxed) == 2,
+        "identical resources were loaded more than once across four engines");
+    require(leaders == 2U, "resource loads did not elect one producer per URL");
+    require(waiters > 0U, "concurrent resource loads did not record waiters");
+    require(memory_hits > 0U, "resource waiters did not consume shared results");
+    require(shared_bytes > 0U, "resource waiters did not share immutable response bytes");
+    require(
+        script_source_hits >= engine_count - 1U,
+        "identical live engines did not reuse the external script-source backing");
+    require(
+        script_source_shared_bytes
+            >= (engine_count - 1U) * shared_script.size(),
+        "shared external script-source bytes were not attributed");
+
+    for (auto* engine : engines) htmlml_engine_destroy(engine);
     std::error_code cleanup_error;
     std::filesystem::remove_all(cache_directory, cleanup_error);
 }
@@ -1236,12 +1630,19 @@ void test_persistent_compilation_cache_reuse()
         "persisted compilation data changed script semantics in a fresh isolate");
     htmlml_engine_metrics second_metrics{};
     htmlml_engine_get_metrics(second, &second_metrics);
+    htmlml_process_cache_metrics second_process_metrics{
+        sizeof(htmlml_process_cache_metrics)};
     require(
-        second_metrics.compilation_persistent_hits >= 2U,
-        "second engine did not reuse persisted V8 compilation data");
+        htmlml_engine_get_process_cache_metrics(second, &second_process_metrics) != 0,
+        "process compilation-cache metrics were unavailable");
     require(
-        second_metrics.compilation_cache_bytes_read > 0U,
-        "second engine did not read persisted V8 compilation data");
+        second_metrics.compilation_persistent_hits >= 2U
+            || second_process_metrics.compilation_memory_hits >= 2U,
+        "second engine did not reuse process or persisted V8 compilation data");
+    require(
+        second_metrics.compilation_cache_bytes_read > 0U
+            || second_process_metrics.compilation_shared_bytes > 0U,
+        "second engine did not consume reusable V8 compilation data");
     htmlml_engine_destroy(second);
 
     std::error_code cleanup_error;
@@ -1305,11 +1706,126 @@ void test_executed_compilation_units_enrich_persistent_cache()
         "enriched compilation unit did not execute in the second engine");
     htmlml_engine_metrics metrics{};
     htmlml_engine_get_metrics(second, &metrics);
+    htmlml_process_cache_metrics process_metrics{
+        sizeof(htmlml_process_cache_metrics)};
     require(
-        metrics.compilation_persistent_hits > 0U,
-        "enriched compilation unit was not reused by the second engine");
+        htmlml_engine_get_process_cache_metrics(second, &process_metrics) != 0,
+        "hot-cache process metrics were unavailable");
+    require(
+        metrics.compilation_persistent_hits > 0U
+            || process_metrics.compilation_memory_hits > 0U,
+        "hot compilation unit was not reused by the second engine");
     htmlml_engine_destroy(second);
 
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(cache_directory, cleanup_error);
+}
+
+void test_process_wide_compilation_single_flight()
+{
+    constexpr size_t engine_count = 4U;
+    const auto cache_directory = std::filesystem::temp_directory_path()
+        / ("htmlml-native-v8-single-flight-test-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(cache_directory);
+    const auto cache_path = cache_directory.string();
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        cache_path.data(),
+        cache_path.size(),
+        nullptr,
+        nullptr};
+
+    std::string source =
+        "globalThis.__singleFlightExecutions = "
+        "(globalThis.__singleFlightExecutions || 0) + 1;\n";
+    for (auto function = 0; function < 12'000; ++function) {
+        source += "function sharedCold" + std::to_string(function)
+            + "(value){return value+" + std::to_string(function) + ";}\n";
+    }
+    const auto unique_suffix = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto document_name = "native-process-single-flight-" + unique_suffix + ".js";
+    const auto barrier_name = "native-process-single-flight-barrier-" + unique_suffix + ".js";
+
+    std::array<htmlml_engine*, engine_count> engines{};
+    for (auto& engine : engines) {
+        engine = htmlml_engine_create_with_options(&options);
+        require(engine != nullptr, "single-flight engine creation failed");
+    }
+
+    std::atomic<size_t> ready{0U};
+    std::atomic<bool> start{false};
+    std::array<std::thread, engine_count> workers;
+    std::array<std::string, engine_count> results;
+    for (size_t index = 0U; index < engine_count; ++index) {
+        workers[index] = std::thread([&, index] {
+            ready.fetch_add(1U, std::memory_order_release);
+            while (!start.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            execute(engines[index], source, document_name);
+            results[index] = evaluate(
+                engines[index],
+                "globalThis.__singleFlightExecutions",
+                barrier_name);
+        });
+    }
+    while (ready.load(std::memory_order_acquire) != engine_count) {
+        std::this_thread::yield();
+    }
+    start.store(true, std::memory_order_release);
+    for (auto& worker : workers) worker.join();
+
+    uint64_t leaders = 0U;
+    uint64_t waiters = 0U;
+    uint64_t memory_hits = 0U;
+    uint64_t shared_bytes = 0U;
+    uint64_t persistent_misses = 0U;
+    for (size_t index = 0U; index < engine_count; ++index) {
+        require(results[index] == "1", "single-flight sharing leaked mutable globals");
+        htmlml_process_cache_metrics process_metrics{
+            sizeof(htmlml_process_cache_metrics)};
+        require(
+            htmlml_engine_get_process_cache_metrics(
+                engines[index],
+                &process_metrics) != 0,
+            "single-flight process metrics were unavailable");
+        htmlml_engine_metrics metrics{};
+        htmlml_engine_get_metrics(engines[index], &metrics);
+        leaders += process_metrics.compilation_leaders;
+        waiters += process_metrics.compilation_waiters;
+        memory_hits += process_metrics.compilation_memory_hits;
+        shared_bytes += process_metrics.compilation_shared_bytes;
+        persistent_misses += metrics.compilation_persistent_misses;
+    }
+
+    require(
+        leaders == 2U,
+        "four engines did not elect exactly one producer for each cold compilation unit");
+    require(
+        memory_hits == (engine_count - 1U) * 2U,
+        "cold compilation results were not consumed by every non-producing isolate");
+    require(
+        waiters > 0U,
+        "the concurrent cold-start test did not observe compilation waiters");
+    require(
+        shared_bytes > 0U,
+        "non-producing isolates did not consume shared immutable cache bytes");
+    require(
+        persistent_misses == 2U,
+        "more than one engine read the cold persistent cache for a compilation unit");
+    htmlml_engine_memory_metrics memory{
+        sizeof(htmlml_engine_memory_metrics)};
+    require(
+        htmlml_engine_get_memory_metrics(engines.front(), &memory) != 0,
+        "single-flight memory metrics were unavailable");
+    require(
+        memory.process_compilation_mapped_cache_bytes > 0U,
+        "large persisted V8 compilation data was not retained as file-backed memory");
+
+    for (auto* engine : engines) htmlml_engine_destroy(engine);
     std::error_code cleanup_error;
     std::filesystem::remove_all(cache_directory, cleanup_error);
 }
@@ -1341,7 +1857,7 @@ void test_responsive_positioned_sizing(htmlml_engine* engine)
         }))()
     )JS", "native-responsive-positioned-desktop.js");
     require(desktop == R"({"width":550,"minWidth":"380px","narrow":false,"wide":true})",
-        "desktop media rules or fixed min/max sizing regressed");
+        "desktop media rules or fixed min/max sizing regressed: " + desktop);
 
     resize(engine, 320, 720, 2);
     auto narrow = evaluate(engine, R"JS(
@@ -4028,6 +4544,71 @@ void test_canvas_path_even_odd_fill_rule_reaches_scene(htmlml_engine* engine)
     require(observed_even_odd, "canvas even-odd fill rule was lost before the native scene");
 }
 
+void test_canvas_fill_rect_emits_only_relevant_paint_state(htmlml_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const canvas = document.createElement('canvas');
+          canvas.width = 40;
+          canvas.height = 40;
+          document.body.appendChild(canvas);
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#204060';
+          context.globalAlpha = 0.5;
+          context.lineWidth = 7;
+          context.strokeStyle = '#80a0c0';
+          context.fillRect(1, 2, 30, 20);
+          context.strokeRect(3, 4, 12, 8);
+        })()
+    )JS", "native-canvas-fill-rect-state-slice.js");
+    htmlml_engine_request_scene_checkpoint(engine);
+
+    auto observed_fill_rect = false;
+    auto observed_unrelated_fill_state = false;
+    auto observed_stroke_style = false;
+    auto observed_line_width = false;
+    auto observed_stroke_rect = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = htmlml_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
+                const auto kind = scene->canvas_commands[index].kind;
+                if (!observed_fill_rect) {
+                    if (kind == 22U) {
+                        observed_fill_rect = true;
+                    } else if (kind == 41U || kind == 42U
+                        || kind == 43U || kind == 44U || kind == 45U
+                        || kind == 47U || kind == 48U || kind == 49U
+                        || kind == 50U || kind == 51U || kind == 52U) {
+                        observed_unrelated_fill_state = true;
+                    }
+                } else {
+                    if (kind == 41U) observed_stroke_style = true;
+                    if (kind == 42U
+                        && std::abs(scene->canvas_commands[index].data.values[0] - 7.0)
+                            < 0.001) {
+                        observed_line_width = true;
+                    }
+                    if (kind == 23U) observed_stroke_rect = true;
+                }
+            }
+            htmlml_scene_acknowledge(scene);
+            htmlml_scene_release(scene);
+        }
+        if (observed_stroke_rect) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    require(observed_fill_rect, "Canvas2D fillRect was absent from the scene packet");
+    require(
+        !observed_unrelated_fill_state,
+        "Canvas2D fillRect eagerly emitted unrelated stroke, line, text, or image state");
+    require(
+        observed_stroke_style && observed_line_width && observed_stroke_rect,
+        "deferred Canvas2D stroke state was not emitted before the later strokeRect");
+}
+
 void test_canvas_path_2d_add_path_does_not_fill_stale_current_path(htmlml_engine* engine)
 {
     execute(engine, R"JS(
@@ -4132,6 +4713,7 @@ void test_canvas_line_dash_and_path_2d_arc_are_native(htmlml_engine* engine)
     require(observed_dash, "Canvas2D setLineDash did not reach the native scene packet");
     require(observed_arc_path, "Path2D.arc did not reach native SVG-path replay");
 
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     const auto report = feature_use(engine);
     require(
         report.find(R"("feature":"CanvasRenderingContext2D.setLineDash","classification":"supported")")
@@ -4139,6 +4721,7 @@ void test_canvas_line_dash_and_path_2d_arc_are_native(htmlml_engine* engine)
             && report.find(R"("feature":"Path2D.arc","classification":"supported")")
                 != std::string::npos,
         "supported canvas feature decisions were absent from the feature inventory: " + report);
+#endif
 }
 
 size_t count_canvas_layouts_with_bitmap(
@@ -4834,8 +5417,14 @@ void test_inner_window_load_acknowledgement(htmlml_engine* engine)
         "inner-window listener acknowledgement was not reflected in CustomEvent.detail");
 }
 
-void test_startup_profile_names_scripts_and_tasks(htmlml_engine* engine)
+void test_startup_profile_names_scripts_and_tasks()
 {
+    // Use a dedicated engine so its first component-ready publication captures
+    // this script's startup profile. Reusing the broad DOM regression engine
+    // made the assertion depend on whether an earlier test had already frozen
+    // its one-time readiness diagnostic snapshot.
+    auto* engine = htmlml_engine_create(64);
+    require(engine != nullptr, "startup-profile engine creation failed");
     execute(engine, R"JS(
         globalThis.__profiledTimerRan = false;
         let checksum = 0;
@@ -4882,6 +5471,7 @@ void test_startup_profile_names_scripts_and_tasks(htmlml_engine* engine)
     if (value.find("total=") == std::string::npos) {
         fail("startup diagnostics did not report total runtime age: " + value);
     }
+    htmlml_engine_destroy(engine);
 }
 
 void test_animation_frame_uses_host_frame(htmlml_engine* engine)
@@ -4919,6 +5509,312 @@ void test_animation_frame_uses_host_frame(htmlml_engine* engine)
     if (second != "[123.5,456.25]") {
         fail("nested requestAnimationFrame did not wait for the next host frame: " + second);
     }
+}
+
+void test_animation_frame_callback_list_timestamp_and_cancellation(htmlml_engine* engine)
+{
+    execute(engine, R"JS(
+        globalThis.__frameBatchEvents = [];
+        let cancelled;
+        requestAnimationFrame(timestamp => {
+          __frameBatchEvents.push(['first', timestamp]);
+          cancelAnimationFrame(cancelled);
+          requestAnimationFrame(nextTimestamp => {
+            __frameBatchEvents.push(['nested', nextTimestamp]);
+          });
+        });
+        cancelled = requestAnimationFrame(timestamp => {
+          __frameBatchEvents.push(['cancelled', timestamp]);
+        });
+        requestAnimationFrame(timestamp => {
+          __frameBatchEvents.push(['last', timestamp]);
+        });
+    )JS", "native-animation-frame-batch-setup.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__frameBatchEvents.length",
+            "native-animation-frame-batch-ready.js") == "0",
+        "animation-frame batch setup did not complete");
+
+    animation_frame(engine, 500.75, 7U);
+    auto first = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        first = evaluate(
+            engine,
+            "globalThis.__frameBatchEvents",
+            "native-animation-frame-batch-first.js");
+        if (first != "[]") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (first != R"([["first",500.75],["last",500.75]])") {
+        fail("animation-frame callback list was not one cancelable timestamp batch: "
+            + first);
+    }
+
+    animation_frame(engine, 525.5, 8U);
+    const auto second = evaluate(
+        engine,
+        "globalThis.__frameBatchEvents",
+        "native-animation-frame-batch-second.js");
+    if (second
+        != R"([["first",500.75],["last",500.75],["nested",525.5]])") {
+        fail("nested animation-frame callback escaped its following host frame: "
+            + second);
+    }
+}
+
+void test_animation_frame_pending_callbacks_keep_timestamp(htmlml_engine* engine)
+{
+    execute(engine, R"JS(
+        globalThis.__pendingFrameEvents = [];
+        requestAnimationFrame(timestamp => {
+          __pendingFrameEvents.push(['slow', timestamp]);
+          const deadline = performance.now() + 40;
+          while (performance.now() < deadline) {}
+          requestAnimationFrame(nextTimestamp => {
+            __pendingFrameEvents.push(['nested', nextTimestamp]);
+          });
+        });
+        requestAnimationFrame(timestamp => {
+          __pendingFrameEvents.push(['pending', timestamp]);
+        });
+    )JS", "native-animation-frame-pending-setup.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__pendingFrameEvents.length",
+            "native-animation-frame-pending-ready.js") == "0",
+        "pending animation-frame setup did not complete");
+
+    const auto consumed_before = consumed_input_count(engine);
+    animation_frame(engine, 600.25, 9U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 1,
+        "first pending-callback animation frame was not consumed");
+    animation_frame(engine, 625.5, 10U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 2,
+        "second pending-callback animation frame was not consumed");
+
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        result = evaluate(
+            engine,
+            "globalThis.__pendingFrameEvents",
+            "native-animation-frame-pending-result.js");
+        if (result
+            == R"([["slow",600.25],["pending",600.25],["nested",625.5]])") {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("a later host frame retimestamped a pending callback: " + result);
+}
+
+void test_pointer_input_precedes_following_render_opportunity()
+{
+    auto* engine = htmlml_engine_create(0);
+    require(engine != nullptr, "input/frame ordering engine creation failed");
+    resize(engine, 320, 200, 1U);
+    execute(engine, R"JS(
+        globalThis.__inputFrameEvents = [];
+        globalThis.__inputMoveCount = 0;
+        document.body.innerHTML =
+          '<div id="input-frame-target" style="position:fixed;inset:0"></div>';
+        document.getElementById('input-frame-target').addEventListener('mousemove', () => {
+          __inputMoveCount++;
+          requestAnimationFrame(timestamp => {
+            __inputFrameEvents.push(timestamp);
+          });
+        }, { once: true });
+    )JS", "native-input-frame-order-setup.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__inputFrameEvents.length",
+            "native-input-frame-order-ready.js") == "0",
+        "input/frame ordering setup did not complete");
+
+    const auto consumed_before = consumed_input_count(engine);
+    pointer_move(engine, 20, 20, 11U);
+    animation_frame(engine, 700.5, 0U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 2,
+        "adjacent pointer/frame inputs were not consumed");
+
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        result = evaluate(
+            engine,
+            "({ events: globalThis.__inputFrameEvents, moves: globalThis.__inputMoveCount })",
+            "native-input-frame-order-result.js");
+        if (result == R"({"events":[700.5],"moves":1})") {
+            htmlml_engine_destroy(engine);
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("pointer RAF missed its following rendering opportunity: " + result);
+}
+
+void test_resize_and_frame_form_one_rendering_opportunity()
+{
+    auto* engine = htmlml_engine_create(0);
+    require(engine != nullptr, "resize/frame pairing engine creation failed");
+    resize(engine, 320, 200, 1U);
+    execute(engine, R"JS(
+        globalThis.__resizeFrameEvents = [];
+        addEventListener('resize', () => {
+          __resizeFrameEvents.push(['resize', innerWidth, innerHeight]);
+          requestAnimationFrame(timestamp => {
+            __resizeFrameEvents.push(['frame', timestamp, innerWidth, innerHeight]);
+            requestAnimationFrame(nextTimestamp => {
+              __resizeFrameEvents.push(['nested', nextTimestamp]);
+            });
+          });
+        }, { once: true });
+    )JS", "native-resize-frame-pair-setup.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__resizeFrameEvents",
+            "native-resize-frame-pair-ready.js") == "[]",
+        "resize/frame pairing setup did not complete");
+
+    htmlml_engine_metrics before{};
+    htmlml_engine_get_metrics(engine, &before);
+    htmlml_resize_frame_metrics resize_frame_before{
+        sizeof(htmlml_resize_frame_metrics)};
+    require(
+        htmlml_engine_get_resize_frame_metrics(
+            engine,
+            &resize_frame_before) != 0,
+        "resize/frame metrics ABI was rejected");
+    const htmlml_input_event resize_event{
+        HTMLML_INPUT_RESIZE,
+        0U,
+        11U,
+        640,
+        360,
+        1,
+        0};
+    const htmlml_input_event frame_event{
+        HTMLML_INPUT_FRAME,
+        0U,
+        0U,
+        777.25,
+        0,
+        0,
+        0};
+    require(
+        htmlml_engine_enqueue_resize_frame(
+            engine,
+            &resize_event,
+            &frame_event) != 0,
+        "paired resize/frame submission was rejected");
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 2U,
+        "paired resize/frame inputs were not consumed");
+
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        result = evaluate(
+            engine,
+            "globalThis.__resizeFrameEvents",
+            "native-resize-frame-pair-result.js");
+        if (result
+            == R"([["resize",640,360],["frame",777.25,640,360]])") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (result != R"([["resize",640,360],["frame",777.25,640,360]])") {
+        fail("paired resize did not release RAF after resize observers: " + result);
+    }
+    const auto consumed_after_pair = consumed_input_count(engine);
+    animation_frame(engine, 800.5, 0U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_after_pair + 1U,
+        "nested resize RAF host frame was not consumed");
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        result = evaluate(
+            engine,
+            "globalThis.__resizeFrameEvents",
+            "native-resize-frame-nested-result.js");
+        if (result
+            == R"([["resize",640,360],["frame",777.25,640,360],["nested",800.5]])") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (result
+        != R"([["resize",640,360],["frame",777.25,640,360],["nested",800.5]])") {
+        fail("nested resize RAF did not wait for the next host frame: " + result);
+    }
+
+    htmlml_engine_metrics after{};
+    htmlml_engine_get_metrics(engine, &after);
+    require(
+        after.applied_resize_inputs == before.applied_resize_inputs + 1U
+            && after.applied_animation_frames
+                == before.applied_animation_frames + 2U
+            && after.coalesced_resize_inputs == before.coalesced_resize_inputs
+            && after.coalesced_animation_frames
+                == before.coalesced_animation_frames,
+        "paired resize/frame accounting was inconsistent");
+    htmlml_resize_frame_metrics resize_frame_after{
+        sizeof(htmlml_resize_frame_metrics)};
+    require(
+        htmlml_engine_get_resize_frame_metrics(
+            engine,
+            &resize_frame_after) != 0
+            && resize_frame_after.submitted_pairs
+                == resize_frame_before.submitted_pairs + 1U
+            && resize_frame_after.applied_pairs
+                == resize_frame_before.applied_pairs + 1U
+            && resize_frame_after.published_pairs
+                == resize_frame_before.published_pairs + 1U
+            && resize_frame_after.total_queue_nanoseconds
+                >= resize_frame_before.total_queue_nanoseconds
+                    + resize_frame_after.last_queue_nanoseconds
+            && resize_frame_after.total_dispatch_nanoseconds
+                >= resize_frame_before.total_dispatch_nanoseconds
+                    + resize_frame_after.last_dispatch_nanoseconds
+            && resize_frame_after.animation_frame_callbacks
+                >= resize_frame_before.animation_frame_callbacks + 1U
+            && resize_frame_after.total_animation_frame_batch_nanoseconds
+                >= resize_frame_before.total_animation_frame_batch_nanoseconds
+                    + resize_frame_after.last_animation_frame_batch_nanoseconds
+            && resize_frame_after.maximum_animation_frame_batch_nanoseconds
+                >= resize_frame_after.last_animation_frame_batch_nanoseconds
+            && resize_frame_after.total_to_publication_nanoseconds
+                >= resize_frame_before.total_to_publication_nanoseconds
+                    + resize_frame_after.last_to_publication_nanoseconds
+            && resize_frame_after.maximum_to_publication_nanoseconds
+                >= resize_frame_after.last_to_publication_nanoseconds,
+        "resize/frame stage timing was not attributed monotonically");
+
+    const htmlml_input_event invalid_frame{
+        HTMLML_INPUT_POINTER_MOVE,
+        0U,
+        12U,
+        0,
+        0,
+        0,
+        0};
+    require(
+        htmlml_engine_enqueue_resize_frame(
+            engine,
+            &resize_event,
+            &invalid_frame) == 0,
+        "paired resize/frame API accepted a non-frame record");
+    htmlml_engine_destroy(engine);
 }
 
 void test_secondary_click(htmlml_engine* engine)
@@ -5234,6 +6130,24 @@ void test_dropdown_runtime_primitives(htmlml_engine* engine)
 
 void test_input_dispatch_failures_are_attributed_and_consumable(htmlml_engine* engine)
 {
+    struct original_input_dispatch_metrics final {
+        uint32_t struct_size;
+        uint32_t reserved;
+        uint64_t last_dispatch_nanoseconds;
+        uint64_t maximum_dispatch_nanoseconds;
+        uint64_t last_dispatch_sequence;
+    };
+    static_assert(
+        sizeof(original_input_dispatch_metrics)
+            == offsetof(htmlml_input_dispatch_metrics, dispatched_inputs));
+    original_input_dispatch_metrics original{
+        sizeof(original_input_dispatch_metrics)};
+    require(
+        htmlml_engine_get_input_dispatch_metrics(
+            engine,
+            reinterpret_cast<htmlml_input_dispatch_metrics*>(&original)) != 0,
+        "input-dispatch metrics rejected the original ABI prefix");
+
     execute(engine, R"JS(
         (() => {
           document.body.innerHTML = '';
@@ -5275,6 +6189,9 @@ void test_input_dispatch_failures_are_attributed_and_consumable(htmlml_engine* e
     require(
         dispatch_metrics.last_dispatch_nanoseconds > 0
             && dispatch_metrics.maximum_dispatch_nanoseconds
+                >= dispatch_metrics.last_dispatch_nanoseconds
+            && dispatch_metrics.dispatched_inputs >= 2U
+            && dispatch_metrics.total_dispatch_nanoseconds
                 >= dispatch_metrics.last_dispatch_nanoseconds,
         "input-dispatch timing metrics were not populated monotonically");
 
@@ -5287,6 +6204,197 @@ void test_input_dispatch_failures_are_attributed_and_consumable(htmlml_engine* e
     require(
         take_input_dispatch_failure(engine).empty(),
         "input-dispatch failure was not consumed exactly once");
+}
+
+void test_animation_frame_dispatch_is_attributed()
+{
+    auto* engine = htmlml_engine_create(0);
+    require(engine != nullptr, "animation-frame metrics engine creation failed");
+    htmlml_animation_frame_metrics undersized{};
+    require(
+        htmlml_engine_get_animation_frame_metrics(engine, &undersized) == 0,
+        "animation-frame metrics accepted an undersized ABI structure");
+    htmlml_animation_frame_metrics before{
+        sizeof(htmlml_animation_frame_metrics)};
+    require(
+        htmlml_engine_get_animation_frame_metrics(engine, &before) != 0,
+        "animation-frame metrics ABI was rejected");
+
+    const auto consumed_before = consumed_input_count(engine);
+    animation_frame(engine, 12'345.5, 103U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 1U,
+        "attributed animation frame was not consumed");
+
+    htmlml_animation_frame_metrics after{
+        sizeof(htmlml_animation_frame_metrics)};
+    require(
+        htmlml_engine_get_animation_frame_metrics(engine, &after) != 0,
+        "animation-frame metrics were unavailable after dispatch");
+    require(
+        after.dispatched_frames == before.dispatched_frames + 1U
+            && after.total_dispatch_nanoseconds
+                >= before.total_dispatch_nanoseconds
+                    + after.last_dispatch_nanoseconds
+            && after.last_dispatch_nanoseconds > 0U
+            && after.maximum_dispatch_nanoseconds
+                >= after.last_dispatch_nanoseconds
+            && after.last_timestamp_microseconds == 12'345'500U,
+        "animation-frame timing or timestamp attribution was inconsistent");
+    htmlml_engine_destroy(engine);
+}
+
+void test_scene_flow_is_attributed()
+{
+    auto* engine = htmlml_engine_create(0);
+    require(engine != nullptr, "scene-flow metrics engine creation failed");
+    htmlml_scene_flow_metrics undersized{};
+    require(
+        htmlml_engine_get_scene_flow_metrics(engine, &undersized) == 0,
+        "scene-flow metrics accepted an undersized ABI structure");
+    htmlml_scene_flow_metrics before{sizeof(htmlml_scene_flow_metrics)};
+    require(
+        htmlml_engine_get_scene_flow_metrics(engine, &before) != 0,
+        "scene-flow metrics ABI was rejected");
+
+    const htmlml_scene_view* scene = nullptr;
+    for (auto attempt = 0; attempt < 100 && scene == nullptr; ++attempt) {
+        scene = htmlml_engine_acquire_latest_scene(engine);
+        if (scene == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(scene != nullptr, "scene-flow fixture did not publish an initial scene");
+    const auto revision = scene->header.revision;
+    require(
+        htmlml_scene_acknowledge(scene) != 0,
+        "scene-flow fixture could not acknowledge its initial scene");
+    htmlml_scene_release(scene);
+
+    htmlml_scene_flow_metrics after{sizeof(htmlml_scene_flow_metrics)};
+    require(
+        htmlml_engine_get_scene_flow_metrics(engine, &after) != 0,
+        "scene-flow metrics were unavailable after acknowledgement");
+    require(
+        after.publication_attempts >= before.publication_attempts
+            && after.acknowledged_scenes == before.acknowledged_scenes + 1U
+            && after.total_acknowledgement_nanoseconds
+                >= before.total_acknowledgement_nanoseconds
+                    + after.last_acknowledgement_nanoseconds
+            && after.maximum_acknowledgement_nanoseconds
+                >= after.last_acknowledgement_nanoseconds
+            && after.acknowledged_revision == revision,
+        "scene publication/backpressure attribution was inconsistent");
+    htmlml_engine_destroy(engine);
+}
+
+void test_ordered_scene_consumer_preserves_two_diff_chain()
+{
+    auto* engine = htmlml_engine_create(64);
+    require(engine != nullptr, "ordered-scene engine creation failed");
+    const auto wait_for_publications = [engine](
+        uint64_t minimum,
+        const char* failure) {
+        for (auto attempt = 0; attempt < 200; ++attempt) {
+            htmlml_engine_metrics metrics{};
+            htmlml_engine_get_metrics(engine, &metrics);
+            if (metrics.published_scenes >= minimum) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        fail(failure);
+    };
+
+    const htmlml_scene_view* checkpoint = nullptr;
+    for (auto attempt = 0; attempt < 200 && checkpoint == nullptr; ++attempt) {
+        checkpoint = htmlml_engine_acquire_next_scene(engine);
+        if (checkpoint == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(checkpoint != nullptr, "ordered consumer did not acquire checkpoint");
+    require(
+        htmlml_scene_acknowledge(checkpoint) != 0,
+        "ordered consumer could not acknowledge checkpoint");
+    htmlml_scene_release(checkpoint);
+
+    htmlml_engine_metrics baseline{};
+    htmlml_engine_get_metrics(engine, &baseline);
+    resize(engine, 401, 301, 1U);
+    wait_for_publications(
+        baseline.published_scenes + 1U,
+        "ordered producer did not publish its first diff");
+    const auto* first = htmlml_engine_acquire_next_scene(engine);
+    require(first != nullptr, "ordered consumer did not acquire first diff");
+    const auto first_revision = first->header.revision;
+
+    resize(engine, 402, 302, 2U);
+    wait_for_publications(
+        baseline.published_scenes + 2U,
+        "ordered producer did not publish one frame ahead");
+    const auto* latest = htmlml_engine_acquire_latest_scene(engine);
+    require(latest != nullptr, "ordered producer had no second diff");
+    require(
+        latest->header.base_revision == first_revision,
+        "ordered second diff did not retain the first revision as its base");
+    const auto second_revision = latest->header.revision;
+    htmlml_scene_release(latest);
+    htmlml_engine_memory_metrics queued_memory{
+        sizeof(htmlml_engine_memory_metrics)};
+    require(
+        htmlml_engine_get_memory_metrics(engine, &queued_memory) != 0
+            && queued_memory.pending_scene_count == 2U
+            && queued_memory.pending_scene_bytes
+                >= queued_memory.latest_scene_bytes
+            && queued_memory.latest_scene_bytes > 0,
+        "ordered scene memory was not bounded and attributed");
+
+    htmlml_scene_flow_metrics before_block{sizeof(htmlml_scene_flow_metrics)};
+    require(
+        htmlml_engine_get_scene_flow_metrics(engine, &before_block) != 0,
+        "ordered scene-flow metrics were unavailable");
+    resize(engine, 403, 303, 3U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    htmlml_scene_flow_metrics after_block{sizeof(htmlml_scene_flow_metrics)};
+    require(
+        htmlml_engine_get_scene_flow_metrics(engine, &after_block) != 0
+            && after_block.blocked_publications
+                > before_block.blocked_publications,
+        "ordered producer exceeded its two-scene bound");
+
+    require(
+        htmlml_scene_acknowledge(first) != 0,
+        "ordered consumer could not acknowledge first diff");
+    htmlml_scene_release(first);
+    const auto* second = htmlml_engine_acquire_next_scene(engine);
+    require(
+        second != nullptr && second->header.revision == second_revision,
+        "ordered consumer skipped its second diff");
+    require(
+        htmlml_scene_acknowledge(second) != 0,
+        "ordered consumer could not acknowledge second diff");
+    htmlml_scene_release(second);
+    wait_for_publications(
+        baseline.published_scenes + 3U,
+        "ordered producer did not resume after acknowledgement");
+    const auto* third = htmlml_engine_acquire_next_scene(engine);
+    require(
+        third != nullptr && third->header.base_revision == second_revision,
+        "ordered consumer lost the resumed diff chain");
+    require(
+        htmlml_scene_acknowledge(third) != 0,
+        "ordered consumer could not acknowledge resumed diff");
+    htmlml_scene_release(third);
+    htmlml_engine_memory_metrics drained_memory{
+        sizeof(htmlml_engine_memory_metrics)};
+    require(
+        htmlml_engine_get_memory_metrics(engine, &drained_memory) != 0
+            && drained_memory.pending_scene_count == 0
+            && drained_memory.pending_scene_bytes == 0,
+        "acknowledged ordered scenes remained attributed");
+    htmlml_engine_destroy(engine);
 }
 
 void test_keyboard_and_pointer_focus_modality()
@@ -6086,15 +7194,28 @@ void test_all_unset_resets_modeled_control_properties(htmlml_engine* engine)
         "all:unset did not reset modeled properties while preserving inline/custom state: "
             + state);
 
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
     const auto report = feature_use(engine);
     require(
         report.find(R"("feature":"property:all","classification":"partially-supported","count":1,"semanticSlice":"non-important unset across modeled properties, excluding custom properties")")
             != std::string::npos,
         "all:unset was not classified at its native decision point: " + report);
+#endif
 }
 
 void test_unsupported_features_are_reported_at_native_decision_points(htmlml_engine* engine)
 {
+#if !defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    const auto report = feature_use(engine);
+    require(
+        report.find(R"("telemetryEnabled":false)") != std::string::npos
+            && report.find("telemetry-disabled") != std::string::npos,
+        "production feature-use API did not report compile-time telemetry exclusion");
+    const auto scene_report = diagnostics(engine);
+    require(
+        scene_report.find("telemetry disabled at compile time") != std::string::npos,
+        "production diagnostics API did not report compile-time telemetry exclusion");
+#else
     execute(engine, R"JS(
         (() => {
           document.body.innerHTML = '';
@@ -6269,6 +7390,181 @@ void test_unsupported_features_are_reported_at_native_decision_points(htmlml_eng
             && listeners.find(R"("eventTypes":["click","htmlml-dispatched")")
                 != std::string::npos,
         "registered listener targets were absent from the structured inventory: " + listeners);
+#endif
+}
+
+void test_engine_memory_metrics_are_worker_snapshots(htmlml_engine* engine)
+{
+    struct original_memory_metrics final {
+        uint32_t struct_size;
+        uint32_t reserved;
+        uint64_t values[10];
+    };
+    static_assert(
+        sizeof(original_memory_metrics)
+            == offsetof(htmlml_engine_memory_metrics, v8_code_and_metadata_bytes));
+
+    execute(
+        engine,
+        "globalThis.__htmlmlMemoryProbe = new Array(4096).fill('probe')",
+        "memory-metrics.js");
+    htmlml_engine_memory_metrics undersized{};
+    require(
+        htmlml_engine_get_memory_metrics(engine, &undersized) == 0,
+        "memory metrics accepted an undersized ABI structure");
+    original_memory_metrics original{sizeof(original_memory_metrics)};
+    require(
+        htmlml_engine_get_memory_metrics(
+            engine,
+            reinterpret_cast<htmlml_engine_memory_metrics*>(&original)) != 0,
+        "memory metrics rejected the original ABI structure prefix");
+    htmlml_engine_memory_metrics previous_tail{};
+    previous_tail.struct_size =
+        offsetof(htmlml_engine_memory_metrics, v8_young_space_used_bytes);
+    previous_tail.native_event_listener_storage_bytes =
+        std::numeric_limits<uint64_t>::max();
+    require(
+        htmlml_engine_get_memory_metrics(engine, &previous_tail) != 0
+            && previous_tail.native_event_listener_storage_bytes
+                != std::numeric_limits<uint64_t>::max(),
+        "memory metrics rejected or truncated the previous additive ABI tail");
+
+    htmlml_engine_memory_metrics metrics{
+        sizeof(htmlml_engine_memory_metrics)};
+    for (auto attempt = 0; attempt < 100 && metrics.v8_total_heap_bytes == 0; ++attempt) {
+        require(
+            htmlml_engine_get_memory_metrics(engine, &metrics) != 0,
+            "memory metrics ABI was unavailable");
+        if (metrics.v8_total_heap_bytes == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        metrics.v8_total_heap_bytes > 0
+            && metrics.v8_used_heap_bytes > 0
+            && metrics.v8_physical_heap_bytes > 0,
+        "V8 heap memory was absent from the worker snapshot");
+    require(
+        metrics.v8_used_heap_bytes <= metrics.v8_total_heap_bytes,
+        "V8 used heap exceeded total heap");
+    require(
+        metrics.v8_code_and_metadata_bytes
+                + metrics.v8_bytecode_and_metadata_bytes
+            > 0,
+        "V8 code/bytecode memory was absent from the worker snapshot");
+    const auto attributed_space_used =
+        metrics.v8_young_space_used_bytes
+        + metrics.v8_old_space_used_bytes
+        + metrics.v8_code_space_used_bytes
+        + metrics.v8_map_space_used_bytes
+        + metrics.v8_large_object_space_used_bytes
+        + metrics.v8_read_only_space_used_bytes
+        + metrics.v8_shared_space_used_bytes
+        + metrics.v8_trusted_space_used_bytes;
+    const auto attributed_space_physical =
+        metrics.v8_young_space_physical_bytes
+        + metrics.v8_old_space_physical_bytes
+        + metrics.v8_code_space_physical_bytes
+        + metrics.v8_map_space_physical_bytes
+        + metrics.v8_large_object_space_physical_bytes
+        + metrics.v8_read_only_space_physical_bytes
+        + metrics.v8_shared_space_physical_bytes
+        + metrics.v8_trusted_space_physical_bytes;
+    require(
+        attributed_space_used > 0
+            && attributed_space_physical > 0
+            && attributed_space_used
+                <= metrics.v8_used_heap_bytes
+                    + metrics.v8_read_only_space_used_bytes
+            && attributed_space_physical
+                <= metrics.v8_physical_heap_bytes
+                    + metrics.v8_read_only_space_physical_bytes,
+        "V8 heap-space attribution was absent or exceeded aggregate heap metrics");
+    require(
+        metrics.native_dom_node_count > 0
+            && metrics.native_dom_node_size_bytes == sizeof(htmlml_native::dom_node)
+            && metrics.native_dom_inline_bytes
+                == metrics.native_dom_node_count * metrics.native_dom_node_size_bytes,
+        "native DOM allocation attribution was absent or internally inconsistent");
+    require(
+        metrics.native_dom_node_size_bytes <= 1000,
+        "cold pseudo-element, canvas, animation, custom-property, background, grid, table, or form state regressed into every native DOM node");
+    require(
+        metrics.native_dom_textual_style_count <= metrics.native_dom_node_count
+            && (metrics.native_dom_textual_style_count == 0
+                || metrics.native_dom_textual_style_storage_bytes
+                    >= metrics.native_dom_textual_style_count
+                        * sizeof(htmlml_native::node_style::textual_style_data)),
+        "sparse textual-style allocation attribution was internally inconsistent");
+    require(
+        metrics.native_dom_table_layout_count <= metrics.native_dom_node_count
+            && (metrics.native_dom_table_layout_count == 0
+                || metrics.native_dom_table_layout_storage_bytes
+                    >= metrics.native_dom_table_layout_count
+                        * sizeof(htmlml_native::dom_node::table_layout_data))
+            && metrics.native_dom_form_control_count <= metrics.native_dom_node_count
+            && (metrics.native_dom_form_control_count == 0
+                || metrics.native_dom_form_control_storage_bytes
+                    >= metrics.native_dom_form_control_count
+                        * sizeof(htmlml_native::dom_node::form_control_data)),
+        "sparse table/form allocation attribution was internally inconsistent");
+    require(
+        metrics.native_dom_attribute_node_count <= metrics.native_dom_node_count
+            && (metrics.native_dom_attribute_entry_count == 0
+                || metrics.native_dom_attribute_storage_bytes
+                    >= metrics.native_dom_attribute_entry_count
+                        * sizeof(htmlml_native::attribute_collection::value_type)),
+        "native compact-attribute allocation attribution was internally inconsistent");
+    require(
+        metrics.native_dom_animation_count <= metrics.native_dom_node_count
+            && (metrics.native_dom_animation_count == 0
+                || metrics.native_dom_animation_storage_bytes
+                    >= metrics.native_dom_animation_count
+                        * sizeof(htmlml_native::node_style::animation_data)),
+        "native animation allocation attribution was internally inconsistent");
+}
+
+void test_hidden_engine_reclamation_is_debounced_and_cancelable(
+    htmlml_engine* engine)
+{
+    const auto read_hidden_notifications = [&]() {
+        htmlml_engine_memory_metrics metrics{sizeof(htmlml_engine_memory_metrics)};
+        require(
+            htmlml_engine_get_memory_metrics(engine, &metrics) != 0,
+            "hidden-memory policy could not read engine metrics");
+        return metrics.hidden_low_memory_notifications;
+    };
+
+    require(
+        htmlml_engine_set_visible(engine, 0) != 0,
+        "engine rejected hidden host state");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    require(
+        htmlml_engine_set_visible(engine, 1) != 0,
+        "engine rejected restored visible host state");
+    const auto before_cancel_window = read_hidden_notifications();
+    std::this_thread::sleep_for(std::chrono::milliseconds(550));
+    require(
+        read_hidden_notifications() == before_cancel_window,
+        "transient hidden state was not canceled before reclamation");
+
+    require(
+        htmlml_engine_set_visible(engine, 0) != 0,
+        "engine rejected sustained hidden host state");
+    auto observed = false;
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        if (read_hidden_notifications() > before_cancel_window) {
+            observed = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    require(
+        observed,
+        "sustained hidden state did not schedule worker-thread reclamation");
+    require(
+        htmlml_engine_set_visible(engine, 1) != 0,
+        "engine rejected final visible host state");
 }
 
 } // namespace
@@ -6280,8 +7576,24 @@ int main()
 #else
     setenv("HTMLML_PROBE_PROFILE_STARTUP", "1", 1);
 #endif
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    require(
+        (htmlml_engine_get_build_features()
+            & HTMLML_ENGINE_BUILD_FEATURE_CERTIFICATION) != 0,
+        "certification build did not advertise certification telemetry");
+#else
+    require(
+        htmlml_engine_get_build_features() == 0,
+        "ordinary build unexpectedly advertised certification telemetry");
+#endif
     require(htmlml_engine_prewarm() != 0, "V8 prewarm failed");
     test_viewport_hit_testing_traverses_zero_height_document_root();
+    test_animation_runtime_is_cold_for_static_nodes();
+    test_textual_style_state_is_cold_and_copy_on_write();
+    test_table_and_form_state_are_cold_for_ordinary_nodes();
+    test_document_clear_releases_and_reinitializes_node_pool();
+    test_compact_attribute_collection_preserves_map_semantics();
+    test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
     test_parallel_resource_prefetch();
@@ -6292,12 +7604,26 @@ int main()
     test_loaded_document_keeps_html_and_body_cascade_distinct();
     test_relative_stylesheet_background_uses_stylesheet_address();
     test_resource_cache_reuse_across_engine_generations();
+    test_parsed_css_rule_payloads_are_shared_across_live_engines();
+    test_process_wide_resource_load_single_flight();
     test_resource_cache_policy_matrix();
     test_due_timer_precedes_dynamic_resource_wave();
     test_persistent_compilation_cache_reuse();
     test_executed_compilation_units_enrich_persistent_cache();
+    test_process_wide_compilation_single_flight();
     auto* engine = htmlml_engine_create(64);
     require(engine != nullptr, "engine creation failed");
+    require(
+        htmlml_engine_request_low_memory(engine) != 0,
+        "engine rejected an asynchronous low-memory request");
+    test_engine_memory_metrics_are_worker_snapshots(engine);
+    test_hidden_engine_reclamation_is_debounced_and_cancelable(engine);
+    execute(
+        engine,
+        "if (typeof IntersectionObserver !== 'function' || "
+        "typeof IntersectionObserverEntry !== 'function') "
+        "throw new Error('IntersectionObserver bootstrap missing')",
+        "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
     test_resize_listener_receives_window_event(engine);
     test_absolute_portal_centers_against_positioned_ancestor(engine);
@@ -6344,6 +7670,7 @@ int main()
     test_constrained_column_flex_scroll_item_keeps_footer_inside(engine);
     test_later_dom_overlay_background_paints_above_retained_canvas(engine);
     test_canvas_path_even_odd_fill_rule_reaches_scene(engine);
+    test_canvas_fill_rect_emits_only_relevant_paint_state(engine);
     test_canvas_path_2d_add_path_does_not_fill_stale_current_path(engine);
     test_canvas_line_dash_and_path_2d_arc_are_native(engine);
     test_detached_canvas_descendants_leave_native_scene(engine);
@@ -6358,6 +7685,9 @@ int main()
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
     test_dropdown_runtime_primitives(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
+    test_animation_frame_dispatch_is_attributed();
+    test_scene_flow_is_attributed();
+    test_ordered_scene_consumer_preserves_two_diff_chain();
     test_keyboard_and_pointer_focus_modality();
     test_navigator_platform_and_wheel_modifiers(engine);
     test_resize_precedes_new_viewport_pointer_input(engine);
@@ -6370,7 +7700,9 @@ int main()
     test_virtual_html_root_inherits_font_metrics(engine);
     test_font_shorthand_inherit_resets_control_metrics(engine);
     test_all_unset_resets_modeled_control_properties(engine);
-    test_startup_profile_names_scripts_and_tasks(engine);
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    test_startup_profile_names_scripts_and_tasks();
+#endif
     test_native_text_input_focus_events_and_caret(engine);
     test_svg_dom_parser_preserves_fill_rule(engine);
     test_frame_script_dom_presence(engine);
@@ -6382,6 +7714,10 @@ int main()
     test_frame_resize_preserves_outer_percentage_height(engine);
     test_inner_window_load_acknowledgement(engine);
     test_animation_frame_uses_host_frame(engine);
+    test_animation_frame_callback_list_timestamp_and_cancellation(engine);
+    test_animation_frame_pending_callbacks_keep_timestamp(engine);
+    test_pointer_input_precedes_following_render_opportunity();
+    test_resize_and_frame_form_one_rendering_opportunity();
     test_unsupported_features_are_reported_at_native_decision_points(engine);
     htmlml_engine_destroy(engine);
     engine = htmlml_engine_create(64);

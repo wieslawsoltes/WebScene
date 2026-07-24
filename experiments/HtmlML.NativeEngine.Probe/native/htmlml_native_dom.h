@@ -2,10 +2,13 @@
 
 #include "htmlml_native_engine.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <memory_resource>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -127,6 +130,199 @@ struct node_style final {
         float y2{1.0F};
     };
 
+    struct animation_data final {
+        std::string transition_property_value{"all"};
+        std::string transition_duration_value{"0s"};
+        std::string transition_delay_value{"0s"};
+        std::string transition_timing_function_value{"ease"};
+        transition_timing transform_transition{};
+        transition_timing opacity_transition{};
+        transition_timing color_transition{};
+        std::string animation_name_value{"none"};
+        std::string animation_duration_value{"0s"};
+        std::string animation_delay_value{"0s"};
+        std::string animation_timing_function_value{"ease"};
+        std::string animation_iteration_count_value{"1"};
+        std::string opacity_keyframe_animation_signature;
+        std::vector<opacity_keyframe> opacity_keyframes;
+        std::string rotation_keyframe_animation_signature;
+        std::vector<rotation_keyframe> rotation_keyframes;
+        float opacity_keyframe_duration_ms{0};
+        float opacity_keyframe_delay_ms{0};
+        float opacity_keyframe_iterations{1};
+        float opacity_keyframe_x1{0.25F};
+        float opacity_keyframe_y1{0.1F};
+        float opacity_keyframe_x2{0.25F};
+        float opacity_keyframe_y2{1.0F};
+    };
+
+    const animation_data& animations() const noexcept
+    {
+        static const animation_data defaults;
+        return animation_state == nullptr ? defaults : *animation_state;
+    }
+
+    bool has_animation_data() const noexcept
+    {
+        return animation_state != nullptr;
+    }
+
+    const animation_data* animation_data_identity() const noexcept
+    {
+        return animation_state.get();
+    }
+
+    animation_data& mutable_animations()
+    {
+        if (animation_state == nullptr) {
+            animation_state = std::make_shared<animation_data>();
+        } else if (animation_state.use_count() != 1) {
+            animation_state = std::make_shared<animation_data>(*animation_state);
+        }
+        return *animation_state;
+    }
+
+    void clear_animations() noexcept
+    {
+        animation_state.reset();
+    }
+
+    struct custom_property_data final {
+        std::unordered_map<std::string, std::string> values;
+        std::unordered_set<std::string> important;
+    };
+
+    const custom_property_data& custom_properties() const noexcept
+    {
+        static const custom_property_data empty;
+        return custom_property_state == nullptr ? empty : *custom_property_state;
+    }
+
+    custom_property_data& mutable_custom_properties()
+    {
+        if (custom_property_state == nullptr) {
+            custom_property_state = std::make_shared<custom_property_data>();
+        } else if (custom_property_state.use_count() != 1) {
+            custom_property_state =
+                std::make_shared<custom_property_data>(*custom_property_state);
+        }
+        return *custom_property_state;
+    }
+
+    bool has_custom_properties() const noexcept
+    {
+        return custom_property_state != nullptr
+            && (!custom_property_state->values.empty()
+                || !custom_property_state->important.empty());
+    }
+
+    const custom_property_data* custom_property_data_identity() const noexcept
+    {
+        return custom_property_state.get();
+    }
+
+    void clear_custom_properties() noexcept
+    {
+        custom_property_state.reset();
+    }
+
+    void move_custom_properties_from(node_style& source) noexcept
+    {
+        custom_property_state = std::move(source.custom_property_state);
+    }
+
+    struct background_image_data final {
+        std::string image_value{"none"};
+        std::string image_markup;
+        std::string image_view_box;
+        std::string repeat{"repeat"};
+        std::string position_x{"0%"};
+        std::string position_y{"0%"};
+        std::string size_x{"auto"};
+        std::string size_y{"auto"};
+    };
+
+    const background_image_data& background_image() const noexcept
+    {
+        static const background_image_data defaults;
+        return background_image_state == nullptr
+            ? defaults
+            : *background_image_state;
+    }
+
+    background_image_data& mutable_background_image()
+    {
+        if (background_image_state == nullptr) {
+            background_image_state = std::make_shared<background_image_data>();
+        } else if (background_image_state.use_count() != 1) {
+            background_image_state =
+                std::make_shared<background_image_data>(*background_image_state);
+        }
+        return *background_image_state;
+    }
+
+    bool has_background_image_data() const noexcept
+    {
+        return background_image_state != nullptr;
+    }
+
+    const background_image_data* background_image_data_identity() const noexcept
+    {
+        return background_image_state.get();
+    }
+
+    void clear_background_image() noexcept
+    {
+        background_image_state.reset();
+    }
+
+    struct grid_data final {
+        std::vector<css_length> template_columns;
+        std::vector<css_length> template_rows;
+        bool two_columns{false};
+        bool fractional_rows{false};
+        bool span_all{false};
+        int32_t column_start{0};
+        std::string area_value{"auto"};
+        std::string row_value{"auto"};
+        std::string row_start_value{"auto"};
+        std::string row_end_value{"auto"};
+        std::string column_value{"auto"};
+        std::string column_start_value{"auto"};
+        std::string column_end_value{"auto"};
+    };
+
+    const grid_data& grid() const noexcept
+    {
+        static const grid_data defaults;
+        return grid_state == nullptr ? defaults : *grid_state;
+    }
+
+    grid_data& mutable_grid()
+    {
+        if (grid_state == nullptr) {
+            grid_state = std::make_shared<grid_data>();
+        } else if (grid_state.use_count() != 1) {
+            grid_state = std::make_shared<grid_data>(*grid_state);
+        }
+        return *grid_state;
+    }
+
+    bool has_grid_data() const noexcept
+    {
+        return grid_state != nullptr;
+    }
+
+    const grid_data* grid_data_identity() const noexcept
+    {
+        return grid_state.get();
+    }
+
+    void clear_grid() noexcept
+    {
+        grid_state.reset();
+    }
+
     struct pseudo_element final {
         css_length width{};
         css_length height{};
@@ -160,6 +356,50 @@ struct node_style final {
         bool align_self_specified{false};
     };
 
+    struct pseudo_element_pair final {
+        pseudo_element before;
+        pseudo_element after;
+    };
+
+    const pseudo_element& before_pseudo() const noexcept
+    {
+        static const pseudo_element empty;
+        return pseudo_elements == nullptr ? empty : pseudo_elements->before;
+    }
+
+    const pseudo_element& after_pseudo() const noexcept
+    {
+        static const pseudo_element empty;
+        return pseudo_elements == nullptr ? empty : pseudo_elements->after;
+    }
+
+    pseudo_element& mutable_before_pseudo()
+    {
+        ensure_unique_pseudo_elements();
+        return pseudo_elements->before;
+    }
+
+    pseudo_element& mutable_after_pseudo()
+    {
+        ensure_unique_pseudo_elements();
+        return pseudo_elements->after;
+    }
+
+    void clear_pseudo_elements() noexcept
+    {
+        pseudo_elements.reset();
+    }
+
+    void move_pseudo_elements_from(node_style& source) noexcept
+    {
+        pseudo_elements = std::move(source.pseudo_elements);
+    }
+
+    bool has_pseudo_elements() const noexcept
+    {
+        return pseudo_elements != nullptr;
+    }
+
     css_length width{};
     css_length height{};
     css_length min_width{};
@@ -180,8 +420,6 @@ struct node_style final {
     css_length margin_bottom{};
     css_length row_gap{};
     css_length column_gap{};
-    std::vector<css_length> grid_template_columns;
-    std::vector<css_length> grid_template_rows;
     css_length border_left_width{};
     css_length border_top_width{};
     css_length border_right_width{};
@@ -203,34 +441,6 @@ struct node_style final {
     // computed value. The initial 50% 50% value is otherwise indistinguishable
     // from an explicitly authored origin when detecting CSS compositions.
     bool transform_origin_specified{false};
-    // Retain the winning transition longhands so comma-list cycling and
-    // shorthand/longhand cascade order can be resolved as a unit.
-    std::string transition_property_value{"all"};
-    std::string transition_duration_value{"0s"};
-    std::string transition_delay_value{"0s"};
-    std::string transition_timing_function_value{"ease"};
-    transition_timing transform_transition{};
-    transition_timing opacity_transition{};
-    transition_timing color_transition{};
-    // Bounded CSS Animations slice used by component loading indicators. The
-    // authored longhands stay available to getComputedStyle while the runtime
-    // resolves a named @keyframes rule into opacity stops for the compositor.
-    std::string animation_name_value{"none"};
-    std::string animation_duration_value{"0s"};
-    std::string animation_delay_value{"0s"};
-    std::string animation_timing_function_value{"ease"};
-    std::string animation_iteration_count_value{"1"};
-    std::string opacity_keyframe_animation_signature;
-    std::vector<opacity_keyframe> opacity_keyframes;
-    std::string rotation_keyframe_animation_signature;
-    std::vector<rotation_keyframe> rotation_keyframes;
-    float opacity_keyframe_duration_ms{0};
-    float opacity_keyframe_delay_ms{0};
-    float opacity_keyframe_iterations{1};
-    float opacity_keyframe_x1{0.25F};
-    float opacity_keyframe_y1{0.1F};
-    float opacity_keyframe_x2{0.25F};
-    float opacity_keyframe_y2{1.0F};
     display_mode display{display_mode::block};
     position_mode position{position_mode::normal};
     float_mode floating{float_mode::none};
@@ -245,18 +455,6 @@ struct node_style final {
     css_length flex_basis{};
     float opacity{1};
     uint32_t background_rgba{0};
-    // The first CSS background image layer. The current connected-component
-    // slice deliberately supports URL-backed SVG artwork because component
-    // badges and icons use that composition; additional image formats and
-    // multiple layers remain explicit capability gaps.
-    std::string background_image_value{"none"};
-    std::string background_image_markup;
-    std::string background_image_view_box;
-    std::string background_repeat{"repeat"};
-    std::string background_position_x{"0%"};
-    std::string background_position_y{"0%"};
-    std::string background_size_x{"auto"};
-    std::string background_size_y{"auto"};
     uint32_t foreground_rgba{0};
     uint32_t border_left_rgba{0};
     uint32_t border_top_rgba{0};
@@ -283,26 +481,63 @@ struct node_style final {
     // Collapsing both to integer zero made CSSOM unable to distinguish an
     // unspecified/root-inherited z-index from an authored `z-index: 0`.
     bool z_index_auto{true};
-    std::string font_family;
-    std::string text_align;
-    std::string vertical_align;
-    std::string text_transform;
-    std::string white_space;
-    // Authored cursor token. Cursor is inherited, so an empty value means the
-    // host projection resolves the nearest ancestor declaration or `auto`.
-    std::string cursor;
-    // SVG presentation-paint properties applied through the CSS cascade.
-    // Values remain as CSS tokens so currentColor can resolve against the
-    // live inherited foreground when the immutable SVG scene is serialized.
-    std::string svg_fill;
-    std::string svg_stroke;
-    std::string list_style_position;
-    std::string list_style_type;
-    // CSS custom properties participate in the cascade and inherit.  Keeping
-    // them on the native node lets component-scoped `var()` declarations be
-    // resolved without crossing the managed boundary.
-    std::unordered_map<std::string, std::string> custom_properties;
-    std::unordered_set<std::string> important_custom_properties;
+    struct textual_style_data final {
+        std::string font_family;
+        std::string text_align;
+        std::string vertical_align;
+        std::string text_transform;
+        std::string white_space;
+        // Authored cursor token. Cursor is inherited, so an empty value means
+        // the host projection resolves the nearest declaration or `auto`.
+        std::string cursor;
+        // SVG paint values remain tokens so currentColor can resolve against
+        // the live inherited foreground when the scene is serialized.
+        std::string svg_fill;
+        std::string svg_stroke;
+        std::string list_style_position;
+        std::string list_style_type;
+    };
+
+    const textual_style_data& textual() const noexcept
+    {
+        static const textual_style_data empty;
+        return textual_state == nullptr ? empty : *textual_state;
+    }
+
+    textual_style_data& mutable_textual()
+    {
+        if (textual_state == nullptr) {
+            textual_state = std::make_shared<textual_style_data>();
+        } else if (textual_state.use_count() != 1) {
+            textual_state =
+                std::make_shared<textual_style_data>(*textual_state);
+        }
+        return *textual_state;
+    }
+
+    textual_style_data* mutable_textual_if_present()
+    {
+        if (textual_state == nullptr) return nullptr;
+        if (textual_state.use_count() != 1) {
+            textual_state =
+                std::make_shared<textual_style_data>(*textual_state);
+        }
+        return textual_state.get();
+    }
+
+    bool has_textual_data() const noexcept
+    {
+        // This is an allocation-accounting predicate, not a semantic
+        // "contains a non-empty token" predicate. A payload that has been
+        // allocated and subsequently cleared still consumes its object and
+        // shared_ptr control-block storage and must remain visible to metrics.
+        return textual_state != nullptr;
+    }
+
+    const textual_style_data* textual_data_identity() const noexcept
+    {
+        return textual_state.get();
+    }
     uint64_t inline_property_mask{0};
     uint64_t important_property_mask{0};
     bool clip{false};
@@ -320,20 +555,42 @@ struct node_style final {
     bool margin_top_auto{false};
     bool margin_right_auto{false};
     bool margin_bottom_auto{false};
-    bool grid_two_columns{false};
-    bool grid_fractional_rows{false};
-    bool grid_span_all{false};
-    int32_t grid_column_start{0};
-    std::string grid_area_value{"auto"};
-    std::string grid_row_value{"auto"};
-    std::string grid_row_start_value{"auto"};
-    std::string grid_row_end_value{"auto"};
-    std::string grid_column_value{"auto"};
-    std::string grid_column_start_value{"auto"};
-    std::string grid_column_end_value{"auto"};
     bool table_layout_fixed{false};
-    pseudo_element before{};
-    pseudo_element after{};
+private:
+    void ensure_unique_pseudo_elements()
+    {
+        if (pseudo_elements == nullptr) {
+            pseudo_elements = std::make_shared<pseudo_element_pair>();
+        } else if (pseudo_elements.use_count() != 1) {
+            pseudo_elements = std::make_shared<pseudo_element_pair>(*pseudo_elements);
+        }
+    }
+
+    // Generated pseudo-elements are absent from most DOM nodes. Keeping two
+    // complete pseudo boxes inline cost 496 bytes on every element. Copy-on-
+    // write preserves cheap style cloning while paying for this cold state
+    // only when ::before or ::after participates in the cascade.
+    std::shared_ptr<pseudo_element_pair> pseudo_elements;
+    // Transition/keyframe state is similarly cold. A complete animation_data
+    // block is retained only for styles that author transition/animation
+    // properties; style clones share it until a declaration mutates it.
+    std::shared_ptr<animation_data> animation_state;
+    // Custom properties are authored by a minority of nodes. Copy-on-write
+    // keeps style snapshots cheap without embedding two empty hash tables in
+    // every node.
+    std::shared_ptr<custom_property_data> custom_property_state;
+    // URL-backed artwork and its sizing/positioning tokens are absent from
+    // most nodes. Keep the complete background-image block out of the hot
+    // computed-style footprint.
+    std::shared_ptr<background_image_data> background_image_state;
+    // Grid track and placement data is likewise sparse in ordinary component
+    // trees and large enough to keep out of every computed style.
+    std::shared_ptr<grid_data> grid_state;
+    // Keyword and authored-token strings are empty on most elements. Keeping
+    // ten std::string objects inline cost 240 bytes on every DOM node.
+    // Copy-on-write retains cheap style cloning and allocates the token block
+    // only when one of these properties participates in the cascade.
+    std::shared_ptr<textual_style_data> textual_state;
 };
 
 struct canvas_rect_command final {
@@ -361,35 +618,258 @@ struct text_layout_fragment final {
     std::string text;
 };
 
+struct canvas_node_data final {
+    std::vector<canvas_rect_command> rects;
+    std::vector<canvas_line_command> lines;
+    uint64_t generation{1};
+    std::vector<htmlml_canvas_command> commands;
+    std::vector<std::string> strings;
+    std::unordered_map<std::string, uint32_t> string_indices;
+#if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    uint64_t fill_rect_calls{0};
+    uint64_t probable_volume_fill_rect_calls{0};
+    std::unordered_map<uint64_t, uint64_t> probable_volume_by_generation;
+    uint64_t fill_calls{0};
+    uint64_t path_argument_fill_calls{0};
+    uint64_t draw_image_calls{0};
+    uint64_t canvas_draw_image_calls{0};
+    uint64_t self_draw_image_calls{0};
+    uint64_t fill_text_calls{0};
+    uint64_t stroke_text_calls{0};
+    uint64_t clear_rect_calls{0};
+    uint64_t full_clear_calls{0};
+    uint64_t full_clear_reset_calls{0};
+    uint64_t full_clear_current_clip_calls{0};
+    uint64_t full_clear_saved_clip_calls{0};
+    uint64_t clear_bounds_rejected_calls{0};
+    uint64_t max_clear_stack_depth{0};
+    std::unordered_map<uint32_t, uint64_t> fill_rect_color_calls;
+#endif
+};
+
+// Element attribute sets are generally tiny. A node-based unordered_map costs
+// three pointers plus allocator/hash nodes even when empty, and scatters the
+// common 1--4 attributes across allocations. A compact insertion-ordered
+// vector reduces every dom_node's inline size and keeps lookup data contiguous.
+// Attribute names are normalized by the HTML binding before reaching this
+// container; XML case preservation therefore remains unchanged.
+class attribute_collection final {
+public:
+    using value_type = std::pair<std::string, std::string>;
+    using storage_type = std::vector<value_type>;
+    using iterator = storage_type::iterator;
+    using const_iterator = storage_type::const_iterator;
+
+    iterator begin() noexcept { return values_.begin(); }
+    iterator end() noexcept { return values_.end(); }
+    const_iterator begin() const noexcept { return values_.begin(); }
+    const_iterator end() const noexcept { return values_.end(); }
+
+    bool empty() const noexcept { return values_.empty(); }
+    size_t size() const noexcept { return values_.size(); }
+    size_t storage_bytes() const noexcept
+    {
+        auto result = values_.capacity() * sizeof(value_type);
+        for (const auto& [name, value] : values_) {
+            result += name.capacity() + value.capacity() + 2U;
+        }
+        return result;
+    }
+
+    iterator find(std::string_view name) noexcept
+    {
+        return std::find_if(values_.begin(), values_.end(), [name](const auto& entry) {
+            return entry.first == name;
+        });
+    }
+
+    const_iterator find(std::string_view name) const noexcept
+    {
+        return std::find_if(values_.begin(), values_.end(), [name](const auto& entry) {
+            return entry.first == name;
+        });
+    }
+
+    bool contains(std::string_view name) const noexcept
+    {
+        return find(name) != end();
+    }
+
+    std::string& operator[](std::string_view name)
+    {
+        if (auto known = find(name); known != end()) return known->second;
+        values_.emplace_back(std::string(name), std::string{});
+        return values_.back().second;
+    }
+
+    std::string& at(std::string_view name)
+    {
+        if (auto known = find(name); known != end()) return known->second;
+        throw std::out_of_range("attribute not found");
+    }
+
+    const std::string& at(std::string_view name) const
+    {
+        if (auto known = find(name); known != end()) return known->second;
+        throw std::out_of_range("attribute not found");
+    }
+
+    size_t erase(std::string_view name)
+    {
+        const auto known = find(name);
+        if (known == end()) return 0;
+        values_.erase(known);
+        return 1;
+    }
+
+    bool operator==(const attribute_collection& other) const noexcept
+    {
+        if (values_.size() != other.values_.size()) return false;
+        return std::all_of(values_.begin(), values_.end(), [&other](const auto& entry) {
+            const auto match = other.find(entry.first);
+            return match != other.end() && match->second == entry.second;
+        });
+    }
+
+private:
+    storage_type values_;
+};
+
+enum class text_selection_direction : uint8_t {
+    none,
+    forward,
+    backward
+};
+
 struct dom_node final {
+    struct authored_style_data final {
+        std::unordered_map<std::string, std::string> declarations;
+        std::unordered_set<std::string> important_declarations;
+    };
+
+    struct table_layout_data final {
+        std::vector<float> column_widths;
+        size_t column_index{0};
+        size_t column_span{1};
+        size_t row_span{1};
+        float row_height{0};
+        float cell_height{0};
+    };
+
+    struct form_control_data final {
+        std::string value;
+        size_t selection_start{0};
+        size_t selection_end{0};
+        text_selection_direction selection_direction{text_selection_direction::none};
+        bool selectedness_initialized{false};
+        bool selectedness{false};
+        bool selection_explicitly_empty{false};
+        bool checkedness_initialized{false};
+        bool checkedness{false};
+        bool value_initialized{false};
+        bool input_focused{false};
+        bool caret_visible{false};
+    };
+
+    // Painted transition/keyframe state is needed only by nodes which have
+    // authored animation data. Keeping it inline made every static DOM node
+    // pay for three transition machines and two keyframe signatures.
+    struct animation_runtime_data final {
+        css_length painted_transform_translate_x{};
+        css_length painted_transform_translate_y{};
+        css_length transform_animation_from_translate_x{};
+        css_length transform_animation_from_translate_y{};
+        css_length transform_animation_target_translate_x{};
+        css_length transform_animation_target_translate_y{};
+        float painted_transform_scale_x{1};
+        float painted_transform_scale_y{1};
+        float transform_animation_from_scale_x{1};
+        float transform_animation_from_scale_y{1};
+        float transform_animation_target_scale_x{1};
+        float transform_animation_target_scale_y{1};
+        float painted_transform_rotate_degrees{0};
+        float transform_animation_from_degrees{0};
+        float transform_animation_target_degrees{0};
+        float transform_animation_duration_ms{0};
+        float transform_animation_delay_ms{0};
+        float transform_animation_x1{0.25F};
+        float transform_animation_y1{0.1F};
+        float transform_animation_x2{0.25F};
+        float transform_animation_y2{1.0F};
+        double transform_animation_started_ms{0};
+        bool transform_animation_initialized{false};
+        bool transform_animation_active{false};
+        bool transform_animation_start_event_sent{false};
+        float painted_opacity{1};
+        float opacity_animation_from{1};
+        float opacity_animation_target{1};
+        float opacity_animation_duration_ms{0};
+        float opacity_animation_delay_ms{0};
+        float opacity_animation_x1{0.25F};
+        float opacity_animation_y1{0.1F};
+        float opacity_animation_x2{0.25F};
+        float opacity_animation_y2{1.0F};
+        double opacity_animation_started_ms{0};
+        bool opacity_animation_initialized{false};
+        bool opacity_animation_active{false};
+        bool opacity_animation_start_event_sent{false};
+        std::string opacity_keyframe_animation_signature;
+        double opacity_keyframe_animation_started_ms{0};
+        bool opacity_keyframe_animation_active{false};
+        std::string rotation_keyframe_animation_signature;
+        double rotation_keyframe_animation_started_ms{0};
+        bool rotation_keyframe_animation_active{false};
+        uint32_t painted_foreground_rgba{0};
+        uint32_t color_animation_from_rgba{0};
+        uint32_t color_animation_target_rgba{0};
+        float color_animation_duration_ms{0};
+        float color_animation_delay_ms{0};
+        float color_animation_x1{0.25F};
+        float color_animation_y1{0.1F};
+        float color_animation_x2{0.25F};
+        float color_animation_y2{1.0F};
+        double color_animation_started_ms{0};
+        bool color_animation_initialized{false};
+        bool color_animation_active{false};
+        bool color_animation_start_event_sent{false};
+    };
+
     uint32_t id{0};
     std::string tag;
     std::string id_attribute;
     std::string class_name;
     std::string text_content;
-    std::string form_value;
-    size_t selection_start{0};
-    size_t selection_end{0};
-    std::string selection_direction{"none"};
     // XML documents preserve qualified/tag and attribute name case. HTML nodes
     // continue to apply the ASCII case-insensitive name rules at the binding.
     bool xml_mode{false};
-    // Option selectedness is live state and must not overwrite the authored
-    // `selected` attribute, which is the reset/default source.
-    bool selectedness_initialized{false};
-    bool selectedness{false};
-    // A select assigned a value/index with no match has no implicit first
-    // option until selection is changed or the form is reset.
-    bool selection_explicitly_empty{false};
-    // Checkedness is live control state; the authored `checked` attribute is
-    // retained separately as the default/reset source.
-    bool checkedness_initialized{false};
-    bool checkedness{false};
-    std::unordered_map<std::string, std::string> attributes;
-    // Authored inline declarations are retained independently from computed
-    // style so HTMLElement.style reflects specified values and mutations.
-    std::unordered_map<std::string, std::string> inline_style_declarations;
-    std::unordered_set<std::string> inline_important_declarations;
+    attribute_collection attributes;
+    const authored_style_data& authored_style() const noexcept
+    {
+        static const authored_style_data empty;
+        return authored_style_state == nullptr ? empty : *authored_style_state;
+    }
+
+    authored_style_data& mutable_authored_style()
+    {
+        if (authored_style_state == nullptr) {
+            authored_style_state = std::make_unique<authored_style_data>();
+        }
+        return *authored_style_state;
+    }
+
+    bool has_authored_style() const noexcept
+    {
+        return authored_style_state != nullptr
+            && (!authored_style_state->declarations.empty()
+                || !authored_style_state->important_declarations.empty());
+    }
+
+    void clear_authored_style() noexcept
+    {
+        authored_style_state.reset();
+    }
+
+    std::unique_ptr<authored_style_data> authored_style_state;
     dom_node* parent{nullptr};
     std::vector<dom_node*> children;
     node_style style{};
@@ -400,99 +880,165 @@ struct dom_node final {
     // wrappers inherit the highest positive descendant for scene ordering.
     int32_t paint_z_index{0};
     bool paints_after_retained_canvas{false};
-    std::vector<canvas_rect_command> canvas_rects;
-    std::vector<canvas_line_command> canvas_lines;
     std::vector<text_layout_fragment> text_layout_fragments;
     // Resolved table geometry is projected onto the semantic table boxes so
-    // row groups and rows can arrange against one shared column grid.
-    std::vector<float> table_column_widths;
-    size_t table_column_index{0};
-    size_t table_column_span{1};
-    size_t table_row_span{1};
-    float table_row_height{0};
-    float table_cell_height{0};
-    uint64_t canvas_generation{1};
-    std::vector<htmlml_canvas_command> canvas_commands;
-    std::vector<std::string> canvas_strings;
-    std::unordered_map<std::string, uint32_t> canvas_string_indices;
-    uint64_t canvas_fill_rect_calls{0};
-    uint64_t canvas_probable_volume_fill_rect_calls{0};
-    std::unordered_map<uint64_t, uint64_t> canvas_probable_volume_by_generation;
-    uint64_t canvas_fill_calls{0};
-    uint64_t canvas_path_argument_fill_calls{0};
-    uint64_t canvas_draw_image_calls{0};
-    uint64_t canvas_canvas_draw_image_calls{0};
-    uint64_t canvas_self_draw_image_calls{0};
-    uint64_t canvas_fill_text_calls{0};
-    uint64_t canvas_stroke_text_calls{0};
-    uint64_t canvas_clear_rect_calls{0};
-    uint64_t canvas_full_clear_calls{0};
-    uint64_t canvas_full_clear_reset_calls{0};
-    uint64_t canvas_full_clear_current_clip_calls{0};
-    uint64_t canvas_full_clear_saved_clip_calls{0};
-    uint64_t canvas_clear_bounds_rejected_calls{0};
-    uint64_t canvas_max_clear_stack_depth{0};
-    std::unordered_map<uint32_t, uint64_t> canvas_fill_rect_color_calls;
-    css_length painted_transform_translate_x{};
-    css_length painted_transform_translate_y{};
-    css_length transform_animation_from_translate_x{};
-    css_length transform_animation_from_translate_y{};
-    css_length transform_animation_target_translate_x{};
-    css_length transform_animation_target_translate_y{};
-    float painted_transform_scale_x{1};
-    float painted_transform_scale_y{1};
-    float transform_animation_from_scale_x{1};
-    float transform_animation_from_scale_y{1};
-    float transform_animation_target_scale_x{1};
-    float transform_animation_target_scale_y{1};
-    float painted_transform_rotate_degrees{0};
-    float transform_animation_from_degrees{0};
-    float transform_animation_target_degrees{0};
-    float transform_animation_duration_ms{0};
-    float transform_animation_delay_ms{0};
-    float transform_animation_x1{0.25F};
-    float transform_animation_y1{0.1F};
-    float transform_animation_x2{0.25F};
-    float transform_animation_y2{1.0F};
-    double transform_animation_started_ms{0};
-    bool transform_animation_initialized{false};
-    bool transform_animation_active{false};
-    bool transform_animation_start_event_sent{false};
-    float painted_opacity{1};
-    float opacity_animation_from{1};
-    float opacity_animation_target{1};
-    float opacity_animation_duration_ms{0};
-    float opacity_animation_delay_ms{0};
-    float opacity_animation_x1{0.25F};
-    float opacity_animation_y1{0.1F};
-    float opacity_animation_x2{0.25F};
-    float opacity_animation_y2{1.0F};
-    double opacity_animation_started_ms{0};
-    bool opacity_animation_initialized{false};
-    bool opacity_animation_active{false};
-    bool opacity_animation_start_event_sent{false};
-    std::string opacity_keyframe_animation_signature;
-    double opacity_keyframe_animation_started_ms{0};
-    bool opacity_keyframe_animation_active{false};
-    std::string rotation_keyframe_animation_signature;
-    double rotation_keyframe_animation_started_ms{0};
-    bool rotation_keyframe_animation_active{false};
-    uint32_t painted_foreground_rgba{0};
-    uint32_t color_animation_from_rgba{0};
-    uint32_t color_animation_target_rgba{0};
-    float color_animation_duration_ms{0};
-    float color_animation_delay_ms{0};
-    float color_animation_x1{0.25F};
-    float color_animation_y1{0.1F};
-    float color_animation_x2{0.25F};
-    float color_animation_y2{1.0F};
-    double color_animation_started_ms{0};
-    bool color_animation_initialized{false};
-    bool color_animation_active{false};
-    bool color_animation_start_event_sent{false};
-    bool form_value_initialized{false};
-    bool input_focused{false};
-    bool caret_visible{false};
+    // row groups and rows can arrange against one shared column grid. Ordinary
+    // nodes never need this vector or the five placement values.
+    const table_layout_data& table_layout() const noexcept
+    {
+        static const table_layout_data empty;
+        return table_layout_state == nullptr ? empty : *table_layout_state;
+    }
+
+    table_layout_data& mutable_table_layout()
+    {
+        if (table_layout_state == nullptr) {
+            table_layout_state = std::make_unique<table_layout_data>();
+        }
+        return *table_layout_state;
+    }
+
+    bool has_table_layout() const noexcept
+    {
+        return table_layout_state != nullptr;
+    }
+
+    std::unique_ptr<table_layout_data> table_layout_state;
+    // Live value/selection/checked/focus state is absent from ordinary DOM
+    // nodes. Option selectedness and checkedness remain separate from their
+    // authored attributes inside this cold record.
+    const form_control_data& form_control() const noexcept
+    {
+        static const form_control_data empty;
+        return form_control_state == nullptr ? empty : *form_control_state;
+    }
+
+    form_control_data& mutable_form_control()
+    {
+        if (form_control_state == nullptr) {
+            form_control_state = std::make_unique<form_control_data>();
+        }
+        return *form_control_state;
+    }
+
+    bool has_form_control() const noexcept
+    {
+        return form_control_state != nullptr;
+    }
+
+    std::unique_ptr<form_control_data> form_control_state;
+    const canvas_node_data& canvas() const noexcept
+    {
+        static const canvas_node_data empty;
+        return canvas_data == nullptr ? empty : *canvas_data;
+    }
+
+    canvas_node_data& mutable_canvas()
+    {
+        if (canvas_data == nullptr) {
+            canvas_data = std::make_unique<canvas_node_data>();
+        }
+        return *canvas_data;
+    }
+
+    bool has_canvas_data() const noexcept
+    {
+        return canvas_data != nullptr;
+    }
+
+    std::unique_ptr<canvas_node_data> canvas_data;
+    const animation_runtime_data* animation_runtime() const noexcept
+    {
+        return animation_runtime_state.get();
+    }
+
+    animation_runtime_data* animation_runtime() noexcept
+    {
+        return animation_runtime_state.get();
+    }
+
+    animation_runtime_data& mutable_animation_runtime()
+    {
+        if (animation_runtime_state == nullptr) {
+            animation_runtime_state = std::make_unique<animation_runtime_data>();
+        }
+        return *animation_runtime_state;
+    }
+
+    bool has_animation_runtime() const noexcept
+    {
+        return animation_runtime_state != nullptr;
+    }
+
+    css_length painted_transform_translate_x_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->transform_animation_initialized
+            ? animation_runtime_state->painted_transform_translate_x
+            : style.transform_translate_x;
+    }
+
+    css_length painted_transform_translate_y_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->transform_animation_initialized
+            ? animation_runtime_state->painted_transform_translate_y
+            : style.transform_translate_y;
+    }
+
+    float painted_transform_scale_x_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->transform_animation_initialized
+            ? animation_runtime_state->painted_transform_scale_x
+            : style.transform_scale_x;
+    }
+
+    float painted_transform_scale_y_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->transform_animation_initialized
+            ? animation_runtime_state->painted_transform_scale_y
+            : style.transform_scale_y;
+    }
+
+    float painted_transform_rotation_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->transform_animation_initialized
+            ? animation_runtime_state->painted_transform_rotate_degrees
+            : style.transform_rotate_degrees;
+    }
+
+    float painted_opacity_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->opacity_animation_initialized
+            ? animation_runtime_state->painted_opacity
+            : style.opacity;
+    }
+
+    uint32_t painted_foreground_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+                && animation_runtime_state->color_animation_initialized
+            ? animation_runtime_state->painted_foreground_rgba
+            : style.foreground_rgba;
+    }
+
+    bool rotation_keyframe_animation_active_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+            && animation_runtime_state->rotation_keyframe_animation_active;
+    }
+
+    bool color_animation_active_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+            && animation_runtime_state->color_animation_active;
+    }
+
+    std::unique_ptr<animation_runtime_data> animation_runtime_state;
     float scroll_left{0};
     float scroll_top{0};
     float scroll_content_width{0};
@@ -504,6 +1050,43 @@ struct dom_node final {
 
 class native_document final {
 public:
+    struct allocation_metrics final {
+        uint64_t node_count{0};
+        uint64_t node_object_size_bytes{0};
+        uint64_t node_object_bytes{0};
+        uint64_t node_pool_reserved_bytes{0};
+        uint64_t node_pool_peak_bytes{0};
+        uint64_t table_layout_node_count{0};
+        uint64_t table_layout_storage_bytes{0};
+        uint64_t form_control_node_count{0};
+        uint64_t form_control_storage_bytes{0};
+        uint64_t attribute_node_count{0};
+        uint64_t attribute_entry_count{0};
+        uint64_t attribute_storage_bytes{0};
+        uint64_t pseudo_element_pair_count{0};
+        uint64_t pseudo_element_storage_bytes{0};
+        uint64_t animation_data_count{0};
+        uint64_t animation_storage_bytes{0};
+        uint64_t animation_runtime_count{0};
+        uint64_t animation_runtime_storage_bytes{0};
+        uint64_t custom_property_node_count{0};
+        uint64_t custom_property_entry_count{0};
+        uint64_t custom_property_storage_bytes{0};
+        uint64_t background_image_data_count{0};
+        uint64_t background_image_storage_bytes{0};
+        uint64_t grid_data_count{0};
+        uint64_t grid_storage_bytes{0};
+        uint64_t textual_style_data_count{0};
+        uint64_t textual_style_storage_bytes{0};
+        uint64_t authored_style_node_count{0};
+        uint64_t authored_style_entry_count{0};
+        uint64_t authored_style_storage_bytes{0};
+        uint64_t canvas_node_count{0};
+        uint64_t canvas_storage_bytes{0};
+        uint64_t text_measurement_cache_entry_count{0};
+        uint64_t text_measurement_cache_storage_bytes{0};
+    };
+
     struct transition_event_record final {
         uint32_t node_id{0};
         std::string type;
@@ -540,6 +1123,7 @@ public:
 
     uint64_t layout_passes() const noexcept;
     size_t node_count() const noexcept;
+    allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
     size_t sum_attribute_bytes(const std::string& tag, const std::string& attribute) const noexcept;
     std::string first_attribute(const std::string& tag, const std::string& attribute) const;
@@ -547,6 +1131,8 @@ public:
     layout_rect busiest_canvas_layout() const noexcept;
     bool dirty() const noexcept;
     void mark_dirty() noexcept;
+    void mark_out_of_flow_geometry_dirty(dom_node& node) noexcept;
+    bool can_reuse_client_geometry(const dom_node& node) const noexcept;
     void signal_animation_frame(double timestamp_ms) noexcept;
     void update_style_animations(dom_node& node);
     bool advance_animations() noexcept;
@@ -568,6 +1154,56 @@ public:
     static uint32_t parse_color(const std::string& value);
 
 private:
+    class tracking_memory_resource final : public std::pmr::memory_resource {
+    public:
+        size_t reserved_bytes() const noexcept { return reserved_bytes_; }
+        size_t peak_bytes() const noexcept { return peak_bytes_; }
+
+    private:
+        void* do_allocate(size_t bytes, size_t alignment) override
+        {
+            auto* allocation =
+                std::pmr::new_delete_resource()->allocate(bytes, alignment);
+            reserved_bytes_ += bytes;
+            peak_bytes_ = std::max(peak_bytes_, reserved_bytes_);
+            return allocation;
+        }
+
+        void do_deallocate(
+            void* allocation,
+            size_t bytes,
+            size_t alignment) override
+        {
+            std::pmr::new_delete_resource()->deallocate(
+                allocation,
+                bytes,
+                alignment);
+            reserved_bytes_ -= std::min(reserved_bytes_, bytes);
+        }
+
+        bool do_is_equal(
+            const std::pmr::memory_resource& other) const noexcept override
+        {
+            return this == &other;
+        }
+
+        size_t reserved_bytes_{0};
+        size_t peak_bytes_{0};
+    };
+
+    struct node_deleter final {
+        std::pmr::memory_resource* resource{nullptr};
+
+        void operator()(dom_node* node) const noexcept
+        {
+            if (node == nullptr) return;
+            std::destroy_at(node);
+            resource->deallocate(node, sizeof(dom_node), alignof(dom_node));
+        }
+    };
+
+    using node_pointer = std::unique_ptr<dom_node, node_deleter>;
+
     struct text_measurement_key final {
         std::string text;
         std::string family;
@@ -637,7 +1273,17 @@ private:
         bool ignore_own_clip = false) noexcept;
     bool is_connected(const dom_node& node) const noexcept;
 
-    std::vector<std::unique_ptr<dom_node>> nodes_;
+    // DOM nodes require stable addresses but are frequently created and
+    // detached in component workloads. Allocate fixed-size nodes in bounded
+    // chunks so freed slots are reused without returning to the process
+    // allocator for every mutation. nodes_ is destroyed before node_pool_.
+    tracking_memory_resource node_pool_upstream_;
+    std::pmr::unsynchronized_pool_resource node_pool_{
+        std::pmr::pool_options{
+            .max_blocks_per_chunk = 64,
+            .largest_required_pool_block = sizeof(dom_node)},
+        &node_pool_upstream_};
+    std::vector<node_pointer> nodes_;
     dom_node* body_{nullptr};
     float viewport_width_{1};
     float viewport_height_{1};
@@ -654,6 +1300,8 @@ private:
         float,
         text_measurement_key_hash> text_measurement_cache_;
     bool dirty_{true};
+    bool globally_dirty_{true};
+    std::vector<dom_node*> out_of_flow_geometry_dirty_roots_;
 };
 
 } // namespace htmlml_native

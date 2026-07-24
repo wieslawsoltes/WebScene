@@ -12,6 +12,24 @@ target_compile_definitions(htmlml_native_engine PRIVATE HTMLML_NATIVE_ENGINE_BUI
 target_include_directories(htmlml_native_engine PUBLIC native)
 
 option(HTMLML_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
+option(HTMLML_V8_POINTER_COMPRESSION
+    "Compile the embedder ABI for a pointer-compressed V8 monolith" OFF)
+option(HTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE
+    "Compile the embedder ABI for V8's process-wide shared compression cage" OFF)
+option(HTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT
+    "Enable V8's optimize-for-size process policy unless the host overrides it" OFF)
+option(HTMLML_NATIVE_ENGINE_DENSE_LINK
+    "Dead-strip unused native code and expose only the HtmlML C ABI" OFF)
+option(HTMLML_NATIVE_ENGINE_CERTIFICATION
+    "Include certification telemetry, diagnostic snapshots, and native profiling hooks" OFF)
+
+if(HTMLML_NATIVE_ENGINE_CERTIFICATION)
+    target_compile_definitions(htmlml_native_engine PUBLIC
+        HTMLML_NATIVE_ENGINE_CERTIFICATION=1)
+    message(STATUS "HtmlML native engine: certification telemetry enabled")
+else()
+    message(STATUS "HtmlML native engine: certification telemetry excluded")
+endif()
 set(HTMLML_V8_ROOT
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/clearscript/V8/build/v8"
     CACHE PATH
@@ -32,14 +50,18 @@ else()
 endif()
 
 if(MSVC)
-    set(HTMLML_V8_MONOLITH
-        "${HTMLML_V8_ROOT}/out/${HTMLML_V8_CPU}/Release/obj/v8_monolith.lib")
+    set(HTMLML_V8_MONOLITH_FILENAME "v8_monolith.lib")
 else()
-    set(HTMLML_V8_MONOLITH
-        "${HTMLML_V8_ROOT}/out/${HTMLML_V8_CPU}/Release/obj/libv8_monolith.a")
+    set(HTMLML_V8_MONOLITH_FILENAME "libv8_monolith.a")
 endif()
+set(HTMLML_V8_OUTPUT_ROOT
+    "${HTMLML_V8_ROOT}/out/${HTMLML_V8_CPU}/Release"
+    CACHE PATH
+    "Path to the pinned V8 GN output directory")
+set(HTMLML_V8_MONOLITH
+    "${HTMLML_V8_OUTPUT_ROOT}/obj/${HTMLML_V8_MONOLITH_FILENAME}")
 set(HTMLML_V8_ICU_DATA
-    "${HTMLML_V8_ROOT}/out/${HTMLML_V8_CPU}/Release/icudtl.dat")
+    "${HTMLML_V8_OUTPUT_ROOT}/icudtl.dat")
 
 if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
     if(NOT EXISTS "${HTMLML_V8_ROOT}/include/v8.h")
@@ -57,6 +79,24 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
     target_compile_definitions(htmlml_native_engine PRIVATE
         HTMLML_NATIVE_ENGINE_WITH_V8
         HTMLML_V8_ICU_DATA_FILENAME="icudtl.dat")
+    if(HTMLML_V8_POINTER_COMPRESSION)
+        target_compile_definitions(htmlml_native_engine PRIVATE
+            V8_COMPRESS_POINTERS
+            V8_31BIT_SMIS_ON_64BIT_ARCH)
+    endif()
+    if(HTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE)
+        if(NOT HTMLML_V8_POINTER_COMPRESSION)
+            message(FATAL_ERROR
+                "HTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE requires "
+                "HTMLML_V8_POINTER_COMPRESSION")
+        endif()
+        target_compile_definitions(htmlml_native_engine PRIVATE
+            V8_COMPRESS_POINTERS_IN_SHARED_CAGE)
+    endif()
+    if(HTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT)
+        target_compile_definitions(htmlml_native_engine PRIVATE
+            HTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=1)
+    endif()
     target_link_libraries(htmlml_native_engine PRIVATE "${HTMLML_V8_MONOLITH}")
     if(APPLE)
         target_link_libraries(htmlml_native_engine PRIVATE "-framework CoreFoundation")
@@ -70,6 +110,13 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
     if(BUILD_TESTING)
         add_executable(htmlml_native_engine_tests
             tests/native_v8_runtime_tests.cpp)
+        if(HTMLML_NATIVE_ENGINE_DENSE_LINK)
+            # The release dylib intentionally exports only the stable C ABI.
+            # Direct native_document unit fixtures remain local to the test
+            # executable instead of widening that production export surface.
+            target_sources(htmlml_native_engine_tests PRIVATE
+                native/htmlml_native_dom.cpp)
+        endif()
         target_compile_features(htmlml_native_engine_tests PRIVATE cxx_std_20)
         target_link_libraries(htmlml_native_engine_tests PRIVATE htmlml_native_engine)
         add_test(NAME htmlml_native_engine_tests COMMAND htmlml_native_engine_tests)
@@ -90,4 +137,29 @@ if(MSVC)
 else()
     target_compile_options(htmlml_native_engine PRIVATE
         -Wall -Wextra -Wpedantic -fno-rtti -Wno-deprecated-declarations)
+endif()
+
+if(HTMLML_NATIVE_ENGINE_DENSE_LINK)
+    if(MSVC)
+        target_link_options(htmlml_native_engine PRIVATE
+            $<$<CONFIG:Release>:/OPT:REF>
+            $<$<CONFIG:Release>:/OPT:ICF>)
+    else()
+        target_compile_options(htmlml_native_engine PRIVATE
+            -ffunction-sections
+            -fdata-sections
+            -fvisibility=hidden
+            -fvisibility-inlines-hidden)
+        if(APPLE)
+            target_link_options(htmlml_native_engine PRIVATE
+                "LINKER:-dead_strip"
+                "LINKER:-x"
+                "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/native/htmlml_native_engine.exports")
+        elseif(UNIX)
+            target_link_options(htmlml_native_engine PRIVATE
+                "LINKER:--gc-sections"
+                "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/native/htmlml_native_engine.map"
+                "LINKER:-x")
+        endif()
+    endif()
 endif()
