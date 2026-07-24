@@ -152,8 +152,9 @@ jobs:
       shell: bash
       run: |
         v8_root=
-        if [[ '${{ steps.v8-cache.outputs.cache-hit }}' == true ]]; then
-          v8_root="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if [[ -f "$restored_v8/include/v8.h" ]]; then
+          v8_root="$restored_v8"
         fi
         scripts/build-native-engine-runtime.sh \
           --rid '${{ matrix.rid }}' \
@@ -165,7 +166,8 @@ jobs:
       shell: bash
       run: |
         v8_root=
-        if [[ '${{ steps.v8-cache.outputs.cache-hit }}' == true ]]; then
+        restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if [[ -f "$restored_v8/include/v8.h" ]]; then
           v8_root="/workspace/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         fi
         docker run --rm \
@@ -190,8 +192,9 @@ jobs:
       shell: pwsh
       run: |
         $v8Root = ""
-        if ('${{ steps.v8-cache.outputs.cache-hit }}' -eq 'true') {
-          $v8Root = "$env:GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        $restoredV8 = "$env:GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if (Test-Path (Join-Path $restoredV8 "include/v8.h")) {
+          $v8Root = $restoredV8
         }
         ./scripts/build-native-engine-runtime.ps1 `
           -Rid '${{ matrix.rid }}' `

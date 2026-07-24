@@ -24,6 +24,7 @@ RUN apt-get update \
         git \
         lld \
         ninja-build \
+        pkg-config \
         python3 \
         unzip \
         xz-utils \
