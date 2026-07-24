@@ -118,6 +118,12 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         global-json-file: global.json
+    - name: Install Linux linker
+      if: matrix.rid == 'linux-x64'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes lld
     - id: v8-cache-key
       name: Resolve pinned V8 SDK cache identity
       shell: bash
