@@ -165,8 +165,7 @@ try {
         --version $PackageVersion --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to add the native runtime package to a consumer." }
     & dotnet restore $consumerProject -r $Rid `
-        --source $Output `
-        --source "https://api.nuget.org/v3/index.json"
+        "-p:RestoreSources=$Output;https://api.nuget.org/v3/index.json"
     if ($LASTEXITCODE -ne 0) { throw "Failed to restore the native runtime package into a consumer." }
     & dotnet build $consumerProject -c Release -r $Rid --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }

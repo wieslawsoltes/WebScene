@@ -1,15 +1,16 @@
 diff --git a/include/ClearScript/polyfill.h b/include/ClearScript/polyfill.h
 --- a/include/ClearScript/polyfill.h
 +++ b/include/ClearScript/polyfill.h
-@@ -9,6 +9,7 @@
+@@ -9,6 +9,8 @@
  
  namespace std {
  
-+#if !defined(__cpp_lib_smart_ptr_for_overwrite) || (__cpp_lib_smart_ptr_for_overwrite < 202002L)
++#if (!defined(__cpp_lib_smart_ptr_for_overwrite) || (__cpp_lib_smart_ptr_for_overwrite < 202002L)) \
++    && (!defined(_GLIBCXX_RELEASE) || (_GLIBCXX_RELEASE < 11))
    // make_unique_for_overwrite
    template <typename T>
    constexpr unique_ptr<T> make_unique_for_overwrite() {
-@@ -18,6 +19,7 @@ namespace std {
+@@ -18,6 +20,7 @@ namespace std {
    constexpr unique_ptr<T> make_unique_for_overwrite(const size_t _Size) {
      return unique_ptr<T>(new remove_extent_t<T>[_Size]);
    }

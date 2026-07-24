@@ -71,7 +71,8 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
         HTMLML_V8_ICU_DATA_FILENAME="icudtl.dat")
     if(HTMLML_V8_POINTER_COMPRESSION)
         target_compile_definitions(htmlml_native_engine PRIVATE
-            V8_COMPRESS_POINTERS)
+            V8_COMPRESS_POINTERS
+            V8_31BIT_SMIS_ON_64BIT_ARCH)
     endif()
     if(HTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE)
         if(NOT HTMLML_V8_POINTER_COMPRESSION)
