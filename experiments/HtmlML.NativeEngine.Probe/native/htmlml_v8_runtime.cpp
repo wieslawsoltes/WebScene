@@ -37,6 +37,7 @@
 #if defined(_WIN32)
 #include <process.h>
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <dlfcn.h>

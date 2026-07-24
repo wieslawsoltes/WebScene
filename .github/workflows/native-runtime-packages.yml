@@ -96,16 +96,19 @@ jobs:
           cpu: arm64
           monolith: libv8_monolith.a
           script: unix
+          v8_cache_generation: v2
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
           monolith: libv8_monolith.a
           script: unix
+          v8_cache_generation: v3-ubuntu22
         - os: windows-latest
           rid: win-x64
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
+          v8_cache_generation: v2
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -118,6 +121,15 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         global-json-file: global.json
+    - name: Build Ubuntu 22.04 Linux runtime image
+      if: matrix.rid == 'linux-x64'
+      shell: bash
+      run: |
+        docker build \
+          --platform linux/amd64 \
+          --file packaging/HtmlML.NativeEngine.Runtime/Dockerfile.linux-x64 \
+          --tag htmlml-native-linux-builder:ubuntu-22.04 \
+          packaging/HtmlML.NativeEngine.Runtime
     - id: v8-cache-key
       name: Resolve pinned V8 SDK cache identity
       shell: bash
@@ -135,27 +147,57 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
-    - name: Build, pack, and test Unix runtime
-      if: matrix.script == 'unix'
+        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        restore-keys: |
+          htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+    - name: Build, pack, and test macOS runtime
+      if: matrix.rid == 'osx-arm64'
       shell: bash
       run: |
         v8_root=
-        if [[ '${{ steps.v8-cache.outputs.cache-hit }}' == true ]]; then
-          v8_root="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if [[ -f "$restored_v8/include/v8.h" ]]; then
+          v8_root="$restored_v8"
         fi
         scripts/build-native-engine-runtime.sh \
           --rid '${{ matrix.rid }}' \
           --package-version '${{ needs.metadata.outputs.package-version }}' \
           --v8-root "$v8_root" \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
+    - name: Build, pack, and test Linux runtime
+      if: matrix.rid == 'linux-x64'
+      shell: bash
+      run: |
+        v8_root=
+        restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if [[ -f "$restored_v8/include/v8.h" ]]; then
+          v8_root="/workspace/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        fi
+        docker run --rm \
+          --platform linux/amd64 \
+          --user "$(id -u):$(id -g)" \
+          --env HOME=/tmp/htmlml-home \
+          --env DOTNET_CLI_HOME=/tmp/htmlml-home \
+          --env NUGET_PACKAGES=/tmp/htmlml-home/.nuget/packages \
+          --volume "$GITHUB_WORKSPACE:/workspace" \
+          --workdir /workspace \
+          htmlml-native-linux-builder:ubuntu-22.04 \
+          bash -lc "
+            mkdir -p \"\$HOME\"
+            scripts/build-native-engine-runtime-linux-container.sh \
+              --rid '${{ matrix.rid }}' \
+              --package-version '${{ needs.metadata.outputs.package-version }}' \
+              --v8-root '$v8_root' \
+              --output /workspace/artifacts/nuget-packages
+          "
     - name: Build, pack, and test Windows runtime
       if: matrix.script == 'windows'
       shell: pwsh
       run: |
         $v8Root = ""
-        if ('${{ steps.v8-cache.outputs.cache-hit }}' -eq 'true') {
-          $v8Root = "$env:GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        $restoredV8 = "$env:GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
+        if (Test-Path (Join-Path $restoredV8 "include/v8.h")) {
+          $v8Root = $restoredV8
         }
         ./scripts/build-native-engine-runtime.ps1 `
           -Rid '${{ matrix.rid }}' `
@@ -190,7 +232,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:

@@ -59,7 +59,16 @@ if [[ -z "$v8_root" ]]; then
   mkdir -p "$v8_workspace"
 
   if [[ ! -d "$depot_tools/.git" ]]; then
-    git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$depot_tools"
+    clone_attempt=1
+    while ! git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$depot_tools"; do
+      if ((clone_attempt >= 3)); then
+        echo "Unable to clone depot_tools after $clone_attempt attempts." >&2
+        exit 1
+      fi
+      echo "depot_tools clone failed; retrying (attempt $((clone_attempt + 1))/3)." >&2
+      rm -rf "$depot_tools"
+      clone_attempt=$((clone_attempt + 1))
+    done
   fi
   export PATH="$depot_tools:$PATH"
   if [[ ! -f "$depot_tools/python3_bin_reldir.txt" ]]; then
@@ -145,15 +154,16 @@ cmake_args=(
   -DHTMLML_V8_OUTPUT_ROOT="$v8_output_root"
 )
 if [[ "$expected_kernel" == Linux ]]; then
-  # V8 is built with Clang and its Linux archive may contain Clang/LTO
-  # metadata. Linking it through GCC's GNU ld produces the misleading
-  # "unknown architecture ... i386:x86-64" diagnostics seen in CI.
-  if ! command -v clang++ >/dev/null 2>&1 || ! command -v ld.lld >/dev/null 2>&1; then
-    echo "Linux native runtime builds require clang++ and ld.lld to link the Clang-built V8 monolith." >&2
+  # V8's Linux archive must be linked with LLD. The compiler is selectable so
+  # the Ubuntu 22.04 compatibility image can use GCC 11's complete C++20
+  # standard library instead of Jammy's Clang 14 source_location support.
+  linux_cxx="${CXX:-clang++}"
+  if ! command -v "$linux_cxx" >/dev/null 2>&1 || ! command -v ld.lld >/dev/null 2>&1; then
+    echo "Linux native runtime builds require '$linux_cxx' and ld.lld." >&2
     exit 1
   fi
   cmake_args+=(
-    -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_CXX_COMPILER="$linux_cxx"
     -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
     -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld
   )

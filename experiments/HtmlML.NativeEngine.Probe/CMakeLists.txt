@@ -108,15 +108,11 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
     message(STATUS "HtmlML native engine: V8 enabled (${HTMLML_V8_MONOLITH})")
 
     if(BUILD_TESTING)
+        # Direct native_document unit fixtures remain local to the test
+        # executable instead of widening the production C ABI export surface.
         add_executable(htmlml_native_engine_tests
-            tests/native_v8_runtime_tests.cpp)
-        if(HTMLML_NATIVE_ENGINE_DENSE_LINK)
-            # The release dylib intentionally exports only the stable C ABI.
-            # Direct native_document unit fixtures remain local to the test
-            # executable instead of widening that production export surface.
-            target_sources(htmlml_native_engine_tests PRIVATE
-                native/htmlml_native_dom.cpp)
-        endif()
+            tests/native_v8_runtime_tests.cpp
+            native/htmlml_native_dom.cpp)
         target_compile_features(htmlml_native_engine_tests PRIVATE cxx_std_20)
         target_link_libraries(htmlml_native_engine_tests PRIVATE htmlml_native_engine)
         add_test(NAME htmlml_native_engine_tests COMMAND htmlml_native_engine_tests)
@@ -126,12 +122,19 @@ else()
 endif()
 
 if(MSVC)
+    # The pinned V8 Windows monolith is built with the static MSVC runtime
+    # (/MT). Match it here so the DLL does not mix CRT/STL implementations
+    # and fail with LNK2038/LNK2005 at link time.
+    set_property(TARGET htmlml_native_engine PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     # MSVC reports the historical C++98 value through __cplusplus unless this
     # conformance switch is enabled. V8 checks __cplusplus directly when
     # enforcing its C++20 embedder requirement.
     target_compile_options(htmlml_native_engine PRIVATE
         /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
     if(TARGET htmlml_native_engine_tests)
+        set_property(TARGET htmlml_native_engine_tests PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         target_compile_options(htmlml_native_engine_tests PRIVATE
             /std:c++20 /Zc:__cplusplus)
     endif()
