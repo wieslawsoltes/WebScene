@@ -24,6 +24,7 @@ RUN apt-get update \
         curl \
         gdb \
         git \
+        libfontconfig1 \
         lld \
         ninja-build \
         pkg-config \

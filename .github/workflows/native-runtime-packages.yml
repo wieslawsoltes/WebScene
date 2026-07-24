@@ -96,16 +96,19 @@ jobs:
           cpu: arm64
           monolith: libv8_monolith.a
           script: unix
+          v8_cache_generation: v2
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
           monolith: libv8_monolith.a
           script: unix
+          v8_cache_generation: v3-ubuntu22
         - os: windows-latest
           rid: win-x64
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
+          v8_cache_generation: v2
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -144,9 +147,9 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
         restore-keys: |
-          htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+          htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
     - name: Build, pack, and test macOS runtime
       if: matrix.rid == 'osx-arm64'
       shell: bash
@@ -229,7 +232,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-v2-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
