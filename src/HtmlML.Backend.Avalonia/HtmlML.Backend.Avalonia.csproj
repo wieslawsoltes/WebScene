@@ -6,6 +6,7 @@
     <IsPackable>true</IsPackable>
     <TrimMode>copyused</TrimMode>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>The complete Avalonia presentation backend for HtmlML.</Description>
     <PackageId>HtmlML.Backend.Avalonia</PackageId>
     <AssemblyName>HtmlML.Backend.Avalonia</AssemblyName>
@@ -30,6 +31,7 @@
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="AngleSharp" />
     <PackageReference Include="AngleSharp.Css" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" />
     <PackageReference Include="Svg.Skia" />
   </ItemGroup>
   <ItemGroup>

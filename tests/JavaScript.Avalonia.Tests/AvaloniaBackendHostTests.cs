@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HtmlML.Backends.Avalonia;
+using HtmlML.Backends.Avalonia.Native;
 using HtmlML.Backends;
 using HtmlML.Core;
 using JavaScript.Avalonia;
@@ -13,6 +14,17 @@ namespace JavaScript.Avalonia.Tests;
 
 public sealed class AvaloniaBackendHostTests
 {
+    [AvaloniaFact]
+    public void NativeSceneSurfaceIsOwnedByTheBackendAndAcceptsFocus()
+    {
+        var surface = new NativeSceneSurface(IntPtr.Zero);
+
+        Assert.Equal("HtmlML.Backend.Avalonia", surface.GetType().Assembly.GetName().Name);
+        Assert.True(surface.Focusable);
+        Assert.True(surface.ClipToBounds);
+        Assert.IsAssignableFrom<INativeHtmlMlRenderDiagnostics>(surface);
+    }
+
     [AvaloniaFact]
     public void PublicBackendProjectsNodesThroughThePortableContract()
     {

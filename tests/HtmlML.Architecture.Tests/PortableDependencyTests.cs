@@ -175,6 +175,9 @@ public sealed class PortableDependencyTests
         Assert.DoesNotContain("../JavaScript.Avalonia/JavaScript.Avalonia.csproj", references);
         Assert.Equal("HtmlML.Backend.Avalonia", typeof(AvaloniaBrowserHost).Assembly.GetName().Name);
         Assert.Equal("HtmlML.Backend.Avalonia", typeof(AvaloniaBackendHost).Assembly.GetName().Name);
+        Assert.Equal(
+            "HtmlML.Backend.Avalonia",
+            typeof(HtmlML.Backends.Avalonia.Native.NativeSceneSurface).Assembly.GetName().Name);
     }
 
     [Fact]
