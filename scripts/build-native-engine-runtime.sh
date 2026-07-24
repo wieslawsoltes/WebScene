@@ -235,7 +235,12 @@ dotnet run \
 
 consumer_root="$(mktemp -d)"
 consumer_dir="$consumer_root/consumer"
-dotnet new console --framework net8.0 --no-restore --output "$consumer_dir"
+consumer_framework=net8.0
+if [[ "$expected_kernel" == Linux ]]; then
+  # The compatibility image intentionally carries the pinned .NET 10 SDK.
+  consumer_framework=net10.0
+fi
+dotnet new console --framework "$consumer_framework" --no-restore --output "$consumer_dir"
 NUGET_PACKAGES="$consumer_root/packages" dotnet add "$consumer_dir/consumer.csproj" package \
   "HtmlML.NativeEngine.Runtime.$rid" \
   --version "$package_version" \
@@ -247,7 +252,7 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
 for copied_asset in "$native_name" icudtl.dat htmlml-native-runtime.json; do
-  copied_path="$consumer_dir/bin/Release/net8.0/$rid/$copied_asset"
+  copied_path="$consumer_dir/bin/Release/$consumer_framework/$rid/$copied_asset"
   if [[ ! -f "$copied_path" ]]; then
     echo "The runtime package did not copy '$copied_asset' to consumer output." >&2
     exit 1
