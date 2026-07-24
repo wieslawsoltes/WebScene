@@ -2,6 +2,7 @@
 #include "htmlml_native_dom.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
