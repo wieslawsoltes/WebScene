@@ -3465,6 +3465,83 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
         "translate/scale transition did not finish at its target geometry: " + completed);
 }
 
+void test_transform_transition_interpolates_from_none(htmlml_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              #none-transition {
+                width: 20px;
+                height: 20px;
+                transform: none;
+                transition: transform 100ms linear;
+              }
+              #none-transition.active {
+                transform: translateX(20px) rotate(0deg);
+              }
+            </style>
+            <div id="none-transition"></div>`;
+          requestAnimationFrame(() =>
+            document.getElementById('none-transition').classList.add('active'));
+        })()
+    )JS", "transform-transition-from-none-setup.js");
+    require(
+        evaluate(engine,
+            "getComputedStyle(document.getElementById('none-transition')).transform",
+            "transform-transition-from-none-initial.js")
+            == "\"matrix(1, 0, 0, 1, 0, 0)\"",
+        "transform transition from none did not begin at the identity matrix");
+    animation_frame(engine, 200.0, 7011U);
+    require(
+        evaluate(engine,
+            "getComputedStyle(document.getElementById('none-transition')).transform",
+            "transform-transition-from-none-before-frame.js")
+            == "\"matrix(1, 0, 0, 1, 0, 0)\"",
+        "transform transition from none jumped before the next host frame");
+
+    animation_frame(engine, 250.0, 7012U);
+    const auto midpoint = evaluate(engine,
+        "getComputedStyle(document.getElementById('none-transition')).transform",
+        "transform-transition-from-none-midpoint.js");
+    require(
+        midpoint == "\"matrix(1, 0, 0, 1, 10, 0)\"",
+        "transform transition from none did not publish midpoint geometry: " + midpoint);
+    animation_frame(engine, 300.0, 7013U);
+    const auto progressed = evaluate(engine,
+        "getComputedStyle(document.getElementById('none-transition')).transform",
+        "transform-transition-from-none-progressed.js");
+    require(
+        progressed == "\"matrix(1, 0, 0, 1, 20, 0)\"",
+        "transform transition from none did not finish at its target geometry: " + progressed);
+    execute(engine,
+        "document.getElementById('none-transition').classList.remove('active')",
+        "transform-transition-back-to-none-activate.js");
+    require(
+        evaluate(engine,
+            "getComputedStyle(document.getElementById('none-transition')).transform",
+            "transform-transition-back-to-none-initial.js")
+            == "\"matrix(1, 0, 0, 1, 20, 0)\"",
+        "transform transition back to none did not retain its initial painted value");
+    animation_frame(engine, 350.0, 7014U);
+    const auto reverse_midpoint = evaluate(engine,
+        "getComputedStyle(document.getElementById('none-transition')).transform",
+        "transform-transition-back-to-none-midpoint.js");
+    require(
+        reverse_midpoint == "\"matrix(1, 0, 0, 1, 10, 0)\"",
+        "transform transition back to none did not publish midpoint geometry: "
+            + reverse_midpoint);
+    animation_frame(engine, 400.0, 7015U);
+    const auto reverse_completed = evaluate(engine,
+        "getComputedStyle(document.getElementById('none-transition')).transform",
+        "transform-transition-back-to-none-complete.js");
+    require(
+        reverse_completed == "\"none\""
+            || reverse_completed == "\"matrix(1, 0, 0, 1, 0, 0)\"",
+        "transform transition back to none did not finish at the identity value: "
+            + reverse_completed);
+}
+
 void test_class_list_is_same_live_object(htmlml_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -5187,6 +5264,15 @@ void test_native_text_input_focus_events_and_caret(htmlml_engine* engine)
         evaluate(engine, "__nativeTextInput.value", "native-text-input-frame-ready.js")
             == "\"trend\"",
         "native text input frame did not drain");
+    // The shared test engine has already observed later host timestamps in
+    // transition fixtures. Re-arm the caret after this fixture's first frame so
+    // the blink assertion measures a local 500 ms phase instead of depending
+    // on timestamp ordering between otherwise independent tests.
+    keyboard_input(engine, HTMLML_INPUT_KEY_DOWN, 35U, 28U);
+    keyboard_input(engine, HTMLML_INPUT_KEY_UP, 35U, 29U);
+    require(
+        evaluate(engine, "true", "native-text-input-caret-rearmed.js") == "true",
+        "native text input caret reset did not drain");
     htmlml_engine_request_scene_checkpoint(engine);
     bool observed_caret = false;
     uint64_t caret_scene_revision = 0U;
@@ -5212,7 +5298,7 @@ void test_native_text_input_focus_events_and_caret(htmlml_engine* engine)
     }
     require(observed_caret, "focused native input did not publish a visible caret");
 
-    animation_frame(engine, 600.0, 29U);
+    animation_frame(engine, 600.0, 30U);
     require(
         evaluate(engine, "document.activeElement === __nativeTextInput",
             "native-text-input-blink-ready.js") == "true",
@@ -5251,7 +5337,7 @@ void test_native_text_input_focus_events_and_caret(htmlml_engine* engine)
         require(evaluate(engine, "true", "native-text-input-key-drain.js") == "true",
             "native keyboard navigation events did not drain");
     };
-    uint64_t editing_sequence = 30U;
+    uint64_t editing_sequence = 31U;
     press_key(37U, 0U, editing_sequence);
     press_key(37U, HTMLML_INPUT_MODIFIER_SHIFT, editing_sequence);
     const auto selected = evaluate(engine, R"JS((() => ({
@@ -7842,6 +7928,7 @@ int main()
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_transition_uses_host_clock_for_translate_and_scale(engine);
+    test_transform_transition_interpolates_from_none(engine);
     test_cssom_serializes_resolved_numbers_without_trailing_zeroes(engine);
     test_cssom_padding_assignment_updates_longhands_and_geometry(engine);
     test_cssom_border_assignment_updates_longhands_and_geometry(engine);

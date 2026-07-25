@@ -295,9 +295,15 @@ The first lifecycle decision is complete. The private TradingView sample now des
 inactive engines and performs a clean warm-cache restart from retained host
 configuration. Its saved-layout restore path was removed after manual failure and
 after exceeding the ordinary warm-engine baseline. Clean restart was selected for
-reliability and simplicity rather than a universal latency advantage. The next
-application milestone is the normalized Chrome differential and closure of the
-remaining unexplored-action denominator.
+reliability and simplicity rather than a universal latency advantage.
+
+The first normalized TradingView differential tranche has also produced and closed a
+product-neutral engine defect: transitions between `transform:none` and a transform
+list now expose their painted forward and reverse matrices, backed by a required
+Chrome/managed/native contract. The current application graph classifies its complete
+1,890-action denominator, but 1,021 actions remain blocked on reproducible state
+traversal. The next application milestone is to expand reversible frontier traversal,
+then rerun the isolated Chrome differential over the newly reachable edges.
 
 See the [supported use cases](use-cases.md) and
 [architecture decisions](docs/architecture/README.md).

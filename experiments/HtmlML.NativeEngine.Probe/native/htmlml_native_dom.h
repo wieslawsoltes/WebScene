@@ -1032,6 +1032,12 @@ struct dom_node final {
             && animation_runtime_state->rotation_keyframe_animation_active;
     }
 
+    bool transform_animation_active_value() const noexcept
+    {
+        return animation_runtime_state != nullptr
+            && animation_runtime_state->transform_animation_active;
+    }
+
     bool color_animation_active_value() const noexcept
     {
         return animation_runtime_state != nullptr

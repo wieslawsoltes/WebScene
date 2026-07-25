@@ -346,7 +346,8 @@ enum inline_style_property : uint64_t {
     inline_z_index = 1ULL << 44U,
     inline_float = 1ULL << 45U,
     inline_border = 1ULL << 46U,
-    inline_flex_basis = 1ULL << 47U
+    inline_flex_basis = 1ULL << 47U,
+    inline_grid = 1ULL << 48U
 };
 
 std::once_flag v8_initialize_once;
@@ -4318,12 +4319,14 @@ struct v8_dom_runtime::implementation final {
         const auto apply_inline_style_attribute = [&](dom_node& node) {
             const auto style = node.attributes.find("style");
             if (style == node.attributes.end()) return;
+            uint64_t inline_property_mask = 0U;
             for (const auto& declaration : parse_css_declarations(style->second, true)) {
                 inventory_css_value_functions(declaration.value, "inline-style-parser");
                 if (!store_inline_declaration(node, declaration)) continue;
                 apply_css_declaration(node, declaration);
-                node.style.inline_property_mask |= inline_style_mask(declaration.name);
+                inline_property_mask |= inline_style_mask(declaration.name);
             }
+            node.style.inline_property_mask |= inline_property_mask;
             detect_css_compositions(node);
         };
         apply_inline_style_attribute(html_element);
@@ -14114,13 +14117,16 @@ struct v8_dom_runtime::implementation final {
         else if (name == "class") node->class_name = value;
         else if (name == "style") {
             node->clear_authored_style();
+            node->style.clear_grid();
             node->style.inline_property_mask = 0U;
             node->style.important_property_mask = 0U;
+            uint64_t inline_property_mask = 0U;
             for (const auto& declaration : parse_css_declarations(value, true)) {
                 if (!store_inline_declaration(*node, declaration)) continue;
                 self->apply_css_declaration(*node, declaration);
-                node->style.inline_property_mask |= inline_style_mask(declaration.name);
+                inline_property_mask |= inline_style_mask(declaration.name);
             }
+            node->style.inline_property_mask |= inline_property_mask;
         }
         else if (name == "src" && node->tag == "iframe") {
             self->enqueue_iframe_hydration_if_needed(*node);
@@ -18467,19 +18473,20 @@ struct v8_dom_runtime::implementation final {
                 decision.classification = "unsupported";
                 decision.semantic_slice = "auto and fixed keywords";
             }
-        } else if (name == "grid-template-columns") {
+        } else if (name == "grid-template-columns" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
             grid.two_columns = has_multiple_grid_columns(value);
             grid.template_columns = parse_simple_grid_tracks(value);
             decision.classification = "partially-supported";
             decision.semantic_slice = "two-column component grids and explicit fixed track lengths";
-        } else if (name == "grid-template-rows") {
+        } else if (name == "grid-template-rows" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
             grid.fractional_rows = value.find("1fr") != std::string::npos;
             grid.template_rows = parse_simple_grid_tracks(value);
             decision.classification = "partially-supported";
             decision.semantic_slice = "fractional component rows and explicit fixed track lengths";
-        } else if (apply_grid_placement_declaration(node.style, name, value)) {
+        } else if (!is_inline(inline_grid)
+            && apply_grid_placement_declaration(node.style, name, value)) {
             decision.classification = "supported";
             decision.semantic_slice =
                 "grid-area, grid-row, grid-column, and placement longhand CSSOM values";
@@ -18844,7 +18851,9 @@ struct v8_dom_runtime::implementation final {
             node.style.z_index = 0;
             node.style.z_index_auto = true;
         }
-        node.style.clear_grid();
+        if ((node.style.inline_property_mask & inline_grid) == 0U) {
+            node.style.clear_grid();
+        }
         if ((node.style.inline_property_mask & inline_width) == 0U) node.style.width = {};
         if ((node.style.inline_property_mask & inline_height) == 0U) node.style.height = {};
         if ((node.style.inline_property_mask & inline_min_width) == 0U) node.style.min_width = {};
@@ -21403,6 +21412,13 @@ struct v8_dom_runtime::implementation final {
         if (name == "flex-shrink") return inline_flex_shrink;
         if (name == "flex-basis") return inline_flex_basis;
         if (name == "flex-wrap") return inline_flex_wrap;
+        if (name == "grid-template-columns" || name == "grid-template-rows"
+            || name == "grid-area" || name == "grid-row"
+            || name == "grid-row-start" || name == "grid-row-end"
+            || name == "grid-column" || name == "grid-column-start"
+            || name == "grid-column-end") {
+            return inline_grid;
+        }
         if (name == "background" || name == "background-color") return inline_background;
         if (name == "overflow" || name == "overflow-x" || name == "overflow-y") return inline_overflow;
         if (name == "visibility") return inline_visibility;
@@ -21698,12 +21714,14 @@ struct v8_dom_runtime::implementation final {
             document.append_child(*stack.back(), node);
             apply_css_rules(node);
             if (const auto style = node.attributes.find("style"); style != node.attributes.end()) {
+                uint64_t inline_property_mask = 0U;
                 for (const auto& declaration : parse_css_declarations(style->second, true)) {
                     inventory_css_value_functions(declaration.value, "inline-style-parser");
                     if (!store_inline_declaration(node, declaration)) continue;
                     apply_css_declaration(node, declaration);
-                    node.style.inline_property_mask |= inline_style_mask(declaration.name);
+                    inline_property_mask |= inline_style_mask(declaration.name);
                 }
+                node.style.inline_property_mask |= inline_property_mask;
                 detect_css_compositions(node);
             }
             if (name == "iframe") {
@@ -21849,6 +21867,24 @@ struct v8_dom_runtime::implementation final {
         if (apply_grid_placement_declaration(node.style, name, "auto")) {
             // Removing a placement declaration restores its affected
             // longhands to their computed initial value.
+            constexpr std::array grid_properties{
+                "grid-template-columns",
+                "grid-template-rows",
+                "grid-area",
+                "grid-row",
+                "grid-row-start",
+                "grid-row-end",
+                "grid-column",
+                "grid-column-start",
+                "grid-column-end"
+            };
+            const auto has_authored_grid = std::any_of(
+                grid_properties.begin(),
+                grid_properties.end(),
+                [&](std::string_view property) {
+                    return authored.declarations.contains(std::string(property));
+                });
+            if (!has_authored_grid) node.style.inline_property_mask &= ~inline_grid;
         } else if (apply_inset_declaration(node.style, name, "auto")) {
             node.style.inline_property_mask &=
                 ~(inline_left | inline_top | inline_right | inline_bottom);
@@ -22113,16 +22149,19 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         node->clear_authored_style();
+        node->style.clear_grid();
         node->style.inline_property_mask = 0U;
         node->style.important_property_mask = 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
+        uint64_t inline_property_mask = 0U;
         for (const auto& declaration : parse_css_declarations(value, true)) {
             if (!store_inline_declaration(*node, declaration)) continue;
             self->apply_css_declaration(*node, declaration);
-            node->style.inline_property_mask |= inline_style_mask(declaration.name);
+            inline_property_mask |= inline_style_mask(declaration.name);
         }
+        node->style.inline_property_mask |= inline_property_mask;
         sync_style_attribute(*node);
-        self->recascade_connected_subtree(*node, "style.removeProperty");
+        self->recascade_connected_subtree(*node, "style.cssText");
     }
 
     static void style_set_property(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -22179,6 +22218,7 @@ struct v8_dom_runtime::implementation final {
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
             // existing numeric grid-column projection when applicable.
+            node->style.inline_property_mask |= inline_grid;
         } else if (apply_inset_declaration(node->style, name, value)) {
             node->style.inline_property_mask |=
                 inline_left | inline_top | inline_right | inline_bottom;
@@ -22666,6 +22706,7 @@ struct v8_dom_runtime::implementation final {
                         node->style.transform_origin_y, node->layout.height));
             } else if (name == "transform") {
                 if (node->style.transform_specified
+                    || node->transform_animation_active_value()
                     || node->rotation_keyframe_animation_active_value()) {
                     constexpr double degrees_to_radians = 0.017453292519943295;
                     const auto radians = static_cast<double>(
@@ -22679,8 +22720,12 @@ struct v8_dom_runtime::implementation final {
                                 + length.pixel_offset
                             : static_cast<double>(length.value);
                     };
-                    const auto format_number = [](double number) {
-                        if (std::abs(number) < 0.000001) number = 0;
+                    const auto format_number = [](double number, bool preserve_negative_zero = false) {
+                        if (std::abs(number) < 0.000001) {
+                            number = preserve_negative_zero && std::signbit(number)
+                                ? -0.0
+                                : 0.0;
+                        }
                         std::ostringstream stream;
                         stream << std::setprecision(8) << number;
                         return stream.str();
@@ -22693,7 +22738,7 @@ struct v8_dom_runtime::implementation final {
                         node->painted_transform_translate_x_value(), node->layout.width);
                     const auto f = resolve(
                         node->painted_transform_translate_y_value(), node->layout.height);
-                    value = "matrix(" + format_number(a) + ", " + format_number(b)
+                    value = "matrix(" + format_number(a) + ", " + format_number(b, true)
                         + ", " + format_number(c) + ", " + format_number(d)
                         + ", " + format_number(e) + ", " + format_number(f) + ")";
                 } else {
@@ -23051,22 +23096,42 @@ struct v8_dom_runtime::implementation final {
                     node->style.transform_origin_y, node->layout.height));
         } else if (name == "transform") {
             if (!node->style.transform_specified
+                && !node->transform_animation_active_value()
                 && !node->rotation_keyframe_animation_active_value()) {
                 value = "none";
             } else {
-                const auto format_transform_length = [](css_length length) {
-                if (length.unit == length_unit::percent
-                    && std::abs(length.pixel_offset) > 0.000001F) {
-                    return "calc(" + serialize_css_number(length.value) + "% "
-                        + (length.pixel_offset < 0 ? "- " : "+ ")
-                        + serialize_css_number(std::abs(length.pixel_offset)) + "px)";
-                }
-                return serialize_css_number(length.value)
-                    + (length.unit == length_unit::percent ? "%" : "px");
+                constexpr double degrees_to_radians = 0.017453292519943295;
+                const auto radians = static_cast<double>(
+                    node->painted_transform_rotation_value()) * degrees_to_radians;
+                const auto cosine = std::cos(radians);
+                const auto sine = std::sin(radians);
+                const auto resolve = [](css_length length, float available) {
+                    return length.unit == length_unit::percent
+                        ? static_cast<double>(available) * length.value / 100.0
+                            + length.pixel_offset
+                        : static_cast<double>(length.value);
                 };
-                value = "translate(" + format_transform_length(node->style.transform_translate_x)
-                    + ", " + format_transform_length(node->style.transform_translate_y) + ") rotate("
-                    + serialize_css_number(node->painted_transform_rotation_value()) + "deg)";
+                const auto format_number = [](double number, bool preserve_negative_zero = false) {
+                    if (std::abs(number) < 0.000001) {
+                        number = preserve_negative_zero && std::signbit(number)
+                            ? -0.0
+                            : 0.0;
+                    }
+                    std::ostringstream stream;
+                    stream << std::setprecision(8) << number;
+                    return stream.str();
+                };
+                const auto a = cosine * node->painted_transform_scale_x_value();
+                const auto b = sine * node->painted_transform_scale_x_value();
+                const auto c = -sine * node->painted_transform_scale_y_value();
+                const auto d = cosine * node->painted_transform_scale_y_value();
+                const auto e = resolve(
+                    node->painted_transform_translate_x_value(), node->layout.width);
+                const auto f = resolve(
+                    node->painted_transform_translate_y_value(), node->layout.height);
+                value = "matrix(" + format_number(a) + ", " + format_number(b, true)
+                    + ", " + format_number(c) + ", " + format_number(d)
+                    + ", " + format_number(e) + ", " + format_number(f) + ")";
             }
         } else if (name == "transition" ) {
             value = node->style.animations().transition_property_value + " "
@@ -23260,6 +23325,7 @@ struct v8_dom_runtime::implementation final {
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
             // existing numeric grid-column projection when applicable.
+            node->style.inline_property_mask |= inline_grid;
         } else if (apply_inset_declaration(node->style, name, value)) {
             node->style.inline_property_mask |=
                 inline_left | inline_top | inline_right | inline_bottom;

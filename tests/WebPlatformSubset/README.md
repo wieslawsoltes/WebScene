@@ -29,8 +29,12 @@ serialization, and custom-property inheritance independently of any hosted produ
 Run them through both adapters with `--selection candidate`; candidate failures are
 reported but do not silently weaken the required profile.
 
-Current evidence (2026-07-23): the complete required profile passes 106/106 documents
-and 423/423 assertions in both managed and native. The native candidate profile passes
+Current evidence (2026-07-25): the complete required profile passes 107/107 documents
+and 424/424 assertions in both managed and native. The latest promotion is the
+Chrome-authorized `transform:none` transition contract discovered by the normalized
+TradingView graph; it requires forward and reverse identity interpolation through
+multiple observable frames. The native computed-style serializer now reports the
+painted transition matrix instead of snapping to the target transform. The native candidate profile passes
 28/28 documents and 81/81 assertions; managed passes 14/28 documents and 56/81
 assertions. The latest promotion adds the corrected Chrome-authorized overflow viewport
 contract and independent managed/native scrollbar paint authority. The preceding
@@ -65,7 +69,7 @@ click delegation, `MouseEvent` construction/cleanup, element-sibling navigation,
 compound selector continuation after functional pseudos. A retained-runtime reduction
 also added variadic `ParentNode.append()`, string-to-Text conversion, fragment
 flattening, and correct first/last element-child filtering. The managed aggregate
-passes all 106/106 required documents and 423/423 assertions. The inherited-line-height input primitive closes the former dialog
+passes all 107/107 required documents and 424/424 assertions. The inherited-line-height input primitive closes the former dialog
 height failure, and live temporal computed-style values plus coalesced rendering-frame
 delivery pass the unchanged Chrome-grounded rotation cadence contract in ten consecutive
 fresh processes. Its candidate aggregate is 14/28 documents and 56/81 assertions. See

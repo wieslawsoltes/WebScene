@@ -41,6 +41,13 @@
       "reason": "Required after both adapters published multiple monotonic intermediate translate/scale frames and correct completion bounds. Native evidence: artifacts/web-platform-subset-transform-transition-v3-20260722/native/results.json; managed evidence: artifacts/web-platform-subset-transform-transition-v6-20260722/managed/results.json."
     },
     {
+      "path": "contracts/transform-none-transition.html",
+      "type": "contract",
+      "capabilities": ["transform-transition-from-none", "identity-transform-interpolation", "cubic-bezier-overshoot", "host-frame-clock"],
+      "evidence": ["automatically-discovered-hover-transform-motion"],
+      "reason": "Required after the unchanged product-neutral contract passed Chrome, managed HtmlML, and native HtmlML for forward and reverse interpolation between transform:none and a translate/rotate list."
+    },
+    {
       "path": "contracts/paint-transitions-temporal.html",
       "type": "contract",
       "capabilities": ["transition-longhands", "opacity-interpolation", "color-interpolation", "transition-delay", "transition-events", "transition-cancellation", "transition-reversal", "temporal-paint"],

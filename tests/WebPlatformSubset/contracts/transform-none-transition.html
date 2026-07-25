@@ -1,0 +1,107 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Transform transitions interpolate from none</title>
+<style>
+  #target {
+    width: 20px;
+    height: 20px;
+    transform: none;
+    transition: transform 500ms cubic-bezier(.175,.885,.32,1.275);
+  }
+  #target.active {
+    transform: translateX(20px) rotate(0deg);
+  }
+</style>
+<body>
+<div id="target"></div>
+<script>
+  const state = window.__htmlMlWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const finish = (error, diagnostics = []) => {
+    state.diagnostics = diagnostics;
+    state.results.push({
+      name: "transform transitions use the identity transform when the start value is none",
+      status: error ? "FAIL" : "PASS",
+      message: error ? String(error && error.message || error) : null,
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = error
+      ? { status: 1, message: state.results[0].message, stack: state.results[0].stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  };
+  const translationX = node => {
+    const value = getComputedStyle(node).transform;
+    if (value === "none") return 0;
+    const numbers = (value.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || [])
+      .map(Number);
+    if (value.startsWith("matrix(")) return numbers[4];
+    if (value.startsWith("matrix3d(")) return numbers[12];
+    if (value.includes("translate")) return numbers[0];
+    throw new Error("computed transform is not supported by the contract: " + value);
+  };
+  try {
+    const target = document.getElementById("target");
+    if (translationX(target) !== 0) throw new Error("initial transform is not identity");
+    requestAnimationFrame(start => {
+      target.classList.add("active");
+      const samples = [];
+      const sample = timestamp => {
+        try {
+          const x = translationX(target);
+          samples.push({ elapsed: timestamp - start, x });
+          if (timestamp - start < 560) {
+            requestAnimationFrame(sample);
+            return;
+          }
+          const intermediate = samples.filter(value =>
+            value.x > .1 && Math.abs(value.x - 20) > .1);
+          if (intermediate.length < 3) {
+            throw new Error("fewer than three intermediate frames: " + JSON.stringify(samples));
+          }
+          if (samples[0].x >= 19.9) {
+            throw new Error("transition snapped on its first frame: " + JSON.stringify(samples));
+          }
+          if (Math.abs(samples.at(-1).x - 20) > .05) {
+            throw new Error("transition did not finish at 20px: " + JSON.stringify(samples));
+          }
+          target.classList.remove("active");
+          requestAnimationFrame(reverseStart => {
+            const reverseSamples = [];
+            const reverseSample = reverseTimestamp => {
+              try {
+                const reverseX = translationX(target);
+                reverseSamples.push({ elapsed: reverseTimestamp - reverseStart, x: reverseX });
+                if (reverseTimestamp - reverseStart < 560) {
+                  requestAnimationFrame(reverseSample);
+                  return;
+                }
+                const reverseIntermediate = reverseSamples.filter(value =>
+                  Math.abs(value.x) > .1 && Math.abs(value.x - 20) > .1);
+                if (reverseIntermediate.length < 3) {
+                  throw new Error("reverse transition had fewer than three intermediate frames: "
+                    + JSON.stringify(reverseSamples));
+                }
+                if (Math.abs(reverseSamples.at(-1).x) > .05) {
+                  throw new Error("reverse transition did not finish at none: "
+                    + JSON.stringify(reverseSamples));
+                }
+                finish(null, [
+                  JSON.stringify({ forward: samples, reverse: reverseSamples })
+                ]);
+              } catch (error) {
+                finish(error, [
+                  JSON.stringify({ forward: samples, reverse: reverseSamples })
+                ]);
+              }
+            };
+            requestAnimationFrame(reverseSample);
+          });
+        } catch (error) { finish(error, [JSON.stringify(samples)]); }
+      };
+      requestAnimationFrame(sample);
+    });
+  } catch (error) { finish(error); }
+</script>
+</body>

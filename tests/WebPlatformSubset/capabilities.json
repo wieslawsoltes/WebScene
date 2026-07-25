@@ -3,17 +3,17 @@
   "profile": "htmlml-component-1",
   "derivation": "Observed public DOM, style, geometry, event, and paint behavior from connected-component interaction corpora; no vendor source inspection.",
   "nativeRequiredWptBaseline": {
-    "recordedAt": "2026-07-23",
-    "evidence": "artifacts/web-platform-required-overflow-scroll-promoted-v1-20260723/native/results.json",
+    "recordedAt": "2026-07-25",
+    "evidence": "artifacts/web-platform-required-transform-none-20260725/native/results.json",
     "status": "passed",
-    "tests": 106,
-    "passed": 106,
+    "tests": 107,
+    "passed": 107,
     "failed": 0,
     "timedOut": 0,
-    "subtests": 423,
-    "subtestsPassed": 423,
+    "subtests": 424,
+    "subtestsPassed": 424,
     "subtestsFailed": 0,
-    "note": "The complete bounded required profile passes 106/106 documents and 423/423 assertions in both managed and native. The latest promotion adds the corrected Chrome-authorized overflow viewport contract: finite extents, saturation, queued and idempotent scroll events, ancestor hit-test clipping, and synchronous re-clamping after shrink and re-expansion. Chrome rejected the earlier formulation because a layout-taking vertical scrollbar induced horizontal overflow, an absolutely positioned tail legitimately preserved the old extent, and scroll events were asserted synchronously; only the corrected browser-valid bytes were promoted. Managed raster and native scene authority independently prove a proportional visible overlay thumb that moves with the bounded offset. The preceding typography promotion remains green, as does the complete 18-document/450-assertion ecosystem lane. Evidence: artifacts/web-platform-overflow-scroll-chrome-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-managed-fixed-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-native-current-v2-20260723/results.json, artifacts/web-platform-required-overflow-scroll-promoted-v1-20260723/{managed,native}/results.json, OverflowViewportClipsHitTestingAndReclampsAfterExtentMutation, and test_native_overflow_scrolling_and_nowrap."
+    "note": "The complete bounded required profile passes 107/107 documents and 424/424 assertions in both managed and native. The latest promotion adds the Chrome-authorized forward/reverse transform:none interpolation contract discovered by normalized TradingView exploration. The focused promoted-path rerun passes both adapters, and the complete native executable independently covers intermediate painted matrices, reverse identity completion, and the existing transition corpus. The preceding overflow, typography, and ecosystem promotions remain green. Evidence: artifacts/web-platform-required-transform-none-20260725/{managed,native}/results.json, artifacts/web-platform-transform-none-chrome-20260725/results.json, and test_transform_transition_interpolates_from_none."
   },
   "capabilities": [
     {
@@ -77,8 +77,8 @@
       "family": "transitions-and-animation",
       "required": ["host-frame-driven requestAnimationFrame", "transition longhands and delay", "four-number cubic-bezier timing", "translate, scale, rotate, opacity and color interpolation", "intermediate computed style, paint and client geometry", "transition run/start/cancel/end events", "cancellation and reversal", "dense bounded rotation cadence", "native opacity and rotate keyframes", "native animation shorthand and longhands", "native staggered delay and infinite iteration"],
       "productEvidence": ["calendar segmented-tab underline", "automatically discovered three-dot loader animation", "automatically discovered rotating spinner", "animated toolbar and dialog state changes", "continuous live-resize chart layout"],
-      "coverage": ["contracts/segmented-transform-transition.html", "contracts/paint-transitions-temporal.html", "contracts/rotation-transition-cadence.html", "contracts/css-opacity-keyframes-temporal.html", "contracts/css-rotation-keyframes-cadence.html", "CssTransformTransitionTests", "native host-clock transition and keyframe regressions", "hosted component automatically discovered temporal checkpoints", "hosted component intermediate viewport-publication gate"],
-      "gap": "Both adapters are required to pass the bounded transform/opacity/color transition slice, including events, cancellation, reversal and cadence. The managed cadence gate passes five consecutive serial runs, but a deliberately concurrent managed/native run recorded one 53ms host scheduling stall; competing-workload frame-loss percentiles and recovery therefore remain a reliability milestone rather than being hidden by a weaker threshold. Native additionally passes candidate opacity and rotate() CSS Animations contracts and generic discovery proves changing staggered-dot and spinner paint samples; those keyframe contracts remain candidate until managed implements the same slice. Other animated properties, directions, fill modes, play state, animation events, multiple-animation composition and the complete Web Animations API are not claimed. Evidence: artifacts/web-platform-rotation-cadence-managed-serial-v1-20260723."
+      "coverage": ["contracts/segmented-transform-transition.html", "contracts/transform-none-transition.html", "contracts/paint-transitions-temporal.html", "contracts/rotation-transition-cadence.html", "contracts/css-opacity-keyframes-temporal.html", "contracts/css-rotation-keyframes-cadence.html", "CssTransformTransitionTests", "native host-clock transition and keyframe regressions", "hosted component automatically discovered temporal checkpoints", "hosted component intermediate viewport-publication gate"],
+      "gap": "Both adapters are required to pass the bounded transform/opacity/color transition slice, including events, cancellation, reversal and cadence. Identity interpolation from transform:none is required after the automatically discovered hover discrepancy was reduced to a neutral forward/reverse contract and passed Chrome, managed, and native. The managed cadence gate passes five consecutive serial runs, but a deliberately concurrent managed/native run recorded one 53ms host scheduling stall; competing-workload frame-loss percentiles and recovery therefore remain a reliability milestone rather than being hidden by a weaker threshold. Native additionally passes candidate opacity and rotate() CSS Animations contracts and generic discovery proves changing staggered-dot and spinner paint samples; those keyframe contracts remain candidate until managed implements the same bounded slices. Other animated properties, directions, fill modes, play state, animation events, multiple-animation composition and the complete Web Animations API are not claimed. Evidence: artifacts/web-platform-rotation-cadence-managed-serial-v1-20260723."
     },
     {
       "family": "clipping-and-rounded-borders",
