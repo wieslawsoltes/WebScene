@@ -1,7 +1,11 @@
-# JavaScript Playground runtimes
+# HtmlML Playground runtimes
 
-The JavaScript Playground builds and runs with V8. V8 is the runtime implementation,
-conformance, and performance target.
+The Playground has two surfaces:
+
+- **DOM Playground** runs editable XAML and JavaScript through the managed
+  ClearScript-backed Avalonia DOM.
+- **Monaco (native)** runs the unmodified Monaco editor bundle through
+  `NativeHtmlMlView`, rendered on the native HtmlML canvas.
 
 Once the reviewed native binary has been built/packed for the current RID, the ordinary
 command needs no engine or native-path flags:
@@ -31,3 +35,19 @@ explicit reviewed binary above. Production packages are created per RID with
 `scripts/build-clearscript-v8-native.sh` and `scripts/pack-clearscript-v8-native.sh`;
 see `third-party/clearscript-patches/README.md` for supported RIDs and verification.
 After execution, the status line reports `Script executed (V8)`.
+
+To launch directly into the native Monaco tab, pass the ABI 2 native HtmlML engine:
+
+```sh
+dotnet run --project samples/JavaScriptPlayground/JavaScriptPlayground.csproj \
+  -c Release -- \
+  --monaco \
+  --native-library \
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+```
+
+`HTMLML_NATIVE_ENGINE_LIBRARY` can be used instead of `--native-library`.
+The Monaco tab is lazy-loaded, so the native engine is not required when only the
+DOM Playground is used. Monaco's generated web assets remain owned by
+`samples/NativeMonacoEditor`; the Playground links those files rather than carrying a
+modified or duplicate Monaco bundle.

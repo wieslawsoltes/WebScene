@@ -115,6 +115,12 @@ demonstrates:
 The page has no compatibility shim, visual text mirror, or document-level
 keyboard bridge.
 
+The same editor is also available from the `Monaco (native)` tab in
+`samples/JavaScriptPlayground`. The tab lazy-loads `NativeHtmlMlView` and links
+the standalone sample's generated web assets, so it neither starts the managed
+ClearScript DOM path when launched with `--monaco` nor carries a second Monaco
+bundle.
+
 `samples/NativeMonacoEditor.Headless` loads the same unchanged page and Monaco
 bundle in Avalonia Headless with Skia, renders the retained native scene to
 PNG, inserts a comment plus Enter through `NativeSceneSurface`, and captures
@@ -134,6 +140,11 @@ Build and run:
   --package-version 11.3.4-monaco.1
 
 dotnet run --project samples/NativeMonacoEditor -c Release -- \
+  --native-library \
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+
+dotnet run --project samples/JavaScriptPlayground -c Release -- \
+  --monaco \
   --native-library \
   "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
 
@@ -168,4 +179,5 @@ the missing browser behavior, and then adding an end-to-end Monaco scenario.
 - `tests/WebPlatformSubset/htmlml-component-profile.json`
 - `samples/NativeMonacoEditor`
 - `samples/NativeMonacoEditor.Headless`
+- `samples/JavaScriptPlayground`
 - `scripts/build-native-engine-runtime.sh`

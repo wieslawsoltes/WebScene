@@ -46,6 +46,9 @@ public partial class MainWindow : Window
     private readonly TextDocument _xamlDocument = new();
     private readonly TextDocument _scriptDocument = new();
     private readonly RegistryOptions _registryOptions = new(ThemeName.LightPlus);
+    private CancellationTokenSource? _nativeMonacoCancellation;
+    private Task? _nativeMonacoLoadTask;
+    private int _nativeMonacoLoadVersion;
     private int _xamlLoadVersion;
 
     public MainWindow()
@@ -59,12 +62,28 @@ public partial class MainWindow : Window
 
         _presets = CreatePresets();
         PresetCombo.ItemsSource = _presets;
-        PresetCombo.SelectionChanged += PresetComboOnSelectionChanged;
+        WorkspaceTabs.SelectionChanged += WorkspaceTabsOnSelectionChanged;
         var presetIndex = ResolveStartupPresetIndex(_presets);
         PresetCombo.SelectedIndex = presetIndex;
+        PresetCombo.SelectionChanged += PresetComboOnSelectionChanged;
         AutoRunCheckBox.IsChecked = true;
+        var startWithNativeMonaco = Environment.GetCommandLineArgs()
+            .Any(static argument => string.Equals(
+                argument,
+                "--monaco",
+                StringComparison.Ordinal));
 
-        if (presetIndex >= 0)
+        if (startWithNativeMonaco)
+        {
+            if (presetIndex >= 0)
+            {
+                _activePreset = _presets[presetIndex];
+                _xamlDocument.Text = _activePreset.Xaml;
+                _scriptDocument.Text = _activePreset.Script;
+            }
+            WorkspaceTabs.SelectedItem = NativeMonacoTab;
+        }
+        else if (presetIndex >= 0)
         {
             ApplyPreset(_presets[presetIndex]);
         }
@@ -73,6 +92,145 @@ public partial class MainWindow : Window
             ResetHost();
         }
     }
+
+    private void WorkspaceTabsOnSelectionChanged(
+        object? sender,
+        SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, WorkspaceTabs)
+            && ReferenceEquals(WorkspaceTabs.SelectedItem, NativeMonacoTab)
+            && IsLoaded)
+        {
+            _ = EnsureNativeMonacoLoadedAsync(forceReload: false);
+        }
+    }
+
+    private async void OnReloadNativeMonacoClick(
+        object? sender,
+        RoutedEventArgs e)
+    {
+        await EnsureNativeMonacoLoadedAsync(forceReload: true);
+    }
+
+    private Task EnsureNativeMonacoLoadedAsync(bool forceReload)
+    {
+        if (!forceReload && _nativeMonacoLoadTask is not null)
+        {
+            return _nativeMonacoLoadTask;
+        }
+
+        _nativeMonacoCancellation?.Cancel();
+        _nativeMonacoCancellation?.Dispose();
+        _nativeMonacoCancellation = new CancellationTokenSource();
+        var loadVersion = ++_nativeMonacoLoadVersion;
+        _nativeMonacoLoadTask = LoadNativeMonacoAsync(
+            loadVersion,
+            _nativeMonacoCancellation.Token);
+        return _nativeMonacoLoadTask;
+    }
+
+    private async Task LoadNativeMonacoAsync(
+        int loadVersion,
+        CancellationToken cancellationToken)
+    {
+        NativeMonacoFailure.IsVisible = false;
+        NativeMonacoStatus.Text = "Loading native Monaco…";
+        NativeMonacoStatus.Foreground = Brushes.Goldenrod;
+
+        try
+        {
+            var libraryPath = ResolveNativeMonacoLibraryPath(
+                Environment.GetCommandLineArgs());
+            var documentPath = Path.Combine(
+                AppContext.BaseDirectory,
+                "monaco",
+                "index.html");
+            var cachePath = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "HtmlML",
+                "JavaScriptPlayground",
+                "native-monaco-v8-cache");
+            await NativeMonacoHost.LoadAsync(
+                new Uri(documentPath).AbsoluteUri,
+                libraryPath,
+                cachePath,
+                cancellationToken);
+
+            if (loadVersion == _nativeMonacoLoadVersion)
+            {
+                NativeMonacoStatus.Text =
+                    "Ready · editable JavaScript · syntax highlighting";
+                NativeMonacoStatus.Foreground = Brushes.LightGreen;
+                Console.WriteLine(
+                    "[JavaScript Playground] Native Monaco loaded from "
+                    + $"'{libraryPath}'.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (loadVersion != _nativeMonacoLoadVersion)
+            {
+                return;
+            }
+
+            Console.Error.WriteLine(
+                $"[JavaScript Playground] Native Monaco failure: {error}");
+            NativeMonacoStatus.Text = "Native Monaco failed to load";
+            NativeMonacoStatus.Foreground = Brushes.IndianRed;
+            NativeMonacoFailureText.Text =
+                "The native Monaco editor could not start.\n\n"
+                + error.Message
+                + "\n\nPass --native-library /absolute/path/to/"
+                + NativeLibraryFileName()
+                + " or set HTMLML_NATIVE_ENGINE_LIBRARY.";
+            NativeMonacoFailure.IsVisible = true;
+        }
+    }
+
+    private static string ResolveNativeMonacoLibraryPath(
+        IReadOnlyList<string> arguments)
+    {
+        for (var index = 0; index + 1 < arguments.Count; index++)
+        {
+            if (string.Equals(
+                    arguments[index],
+                    "--native-library",
+                    StringComparison.Ordinal))
+            {
+                return Path.GetFullPath(arguments[index + 1]);
+            }
+        }
+
+        var configured = Environment.GetEnvironmentVariable(
+            "HTMLML_NATIVE_ENGINE_LIBRARY");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return Path.GetFullPath(configured);
+        }
+
+        var packaged = Path.Combine(
+            AppContext.BaseDirectory,
+            NativeLibraryFileName());
+        if (File.Exists(packaged))
+        {
+            return packaged;
+        }
+
+        throw new FileNotFoundException(
+            "No HtmlML native engine was configured.",
+            packaged);
+    }
+
+    private static string NativeLibraryFileName()
+        => OperatingSystem.IsWindows()
+            ? "htmlml_native_engine.dll"
+            : OperatingSystem.IsMacOS()
+                ? "libhtmlml_native_engine.dylib"
+                : "libhtmlml_native_engine.so";
 
     private void PresetComboOnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -657,10 +815,17 @@ if (typeof globalThis !== 'undefined') {
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
+        if (ReferenceEquals(WorkspaceTabs.SelectedItem, NativeMonacoTab))
+        {
+            _ = EnsureNativeMonacoLoadedAsync(forceReload: false);
+        }
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override async void OnClosed(EventArgs e)
     {
+        _nativeMonacoCancellation?.Cancel();
+        _nativeMonacoCancellation?.Dispose();
+        _nativeMonacoCancellation = null;
 #if HTMLML_CLEARSCRIPT_V8
         _v8PreparationCancellation?.Cancel();
         _v8PreparationCancellation?.Dispose();
@@ -671,6 +836,7 @@ if (typeof globalThis !== 'undefined') {
 #if HTMLML_CLEARSCRIPT_V8
         _v8SharedCache.Clear();
 #endif
+        await NativeMonacoHost.DisposeAsync();
         base.OnClosed(e);
     }
 
