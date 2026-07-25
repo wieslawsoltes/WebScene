@@ -18,6 +18,7 @@ using Avalonia.Rendering.Composition;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
+using JavaScript.Avalonia;
 #endif
 using HtmlML.Core;
 using HtmlML.Css;
@@ -1156,6 +1157,35 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
     }
 
     public void RequestRender() => InvalidateVisual();
+
+    public byte[] CaptureRetainedScenePng()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            return Dispatcher.UIThread.Invoke(
+                CaptureRetainedScenePng,
+                DispatcherPriority.Send);
+        }
+
+        var width = Math.Max(1, (int)Math.Ceiling(Bounds.Width));
+        var height = Math.Max(1, (int)Math.Ceiling(Bounds.Height));
+        using var bitmap = new SKBitmap(
+            width,
+            height,
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(19, 23, 34, 255));
+        _renderer.RenderRetained(
+            canvas,
+            (float)Math.Max(1, Bounds.Width),
+            (float)Math.Max(1, Bounds.Height),
+            null);
+        canvas.Flush();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
+    }
 
     public void SetCompositionAnimationFramesPaused(bool paused)
     {
@@ -4386,9 +4416,37 @@ public static class NativeTextShaping
 {
     private static readonly ConcurrentDictionary<string, SKTypeface> Typefaces =
         new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, SKTypeface> WebTypefaces =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public static bool RegisterWebTypeface(string family, ReadOnlySpan<byte> data)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(family);
+        if (data.IsEmpty) return false;
+
+        using var fontData = SKData.CreateCopy(data);
+        var typeface = SKTypeface.FromData(fontData);
+        if (typeface is null) return false;
+
+        var normalizedFamily = family.Trim().Trim('"', '\'');
+        if (WebTypefaces.TryAdd(normalizedFamily, typeface)) return true;
+
+        typeface.Dispose();
+        return true;
+    }
 
     public static SKTypeface ResolveTypeface(string familyList, int fontWeight)
     {
+        foreach (var rawFamily in familyList.Split(
+                     ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var family = rawFamily.Trim('"', '\'');
+            if (WebTypefaces.TryGetValue(family, out var webTypeface))
+            {
+                return webTypeface;
+            }
+        }
+
         var requestedWeight = Math.Clamp(fontWeight, 1, 1000);
         var key = $"{familyList}\u001f{requestedWeight}";
         return Typefaces.GetOrAdd(key, _ =>
@@ -4725,6 +4783,10 @@ public static unsafe class NativeHtmlMlApi
         Action<NativeScenePublished> scenePublished)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
+#if !HTMLML_UNO
+        private readonly ConcurrentDictionary<string, byte> _registeredFontSources =
+            new(StringComparer.Ordinal);
+#endif
 
         public void NotifyScenePublished(NativeScenePublished scene)
             => scenePublished(scene);
@@ -4755,6 +4817,13 @@ public static unsafe class NativeHtmlMlApi
                         : null
                 };
                 var resource = loader.LoadText(request);
+#if !HTMLML_UNO
+                if (resourceKind == HtmlMlResourceKind.StyleSheet
+                    && loader is AvaloniaResourceLoader avaloniaLoader)
+                {
+                    RegisterWebFonts(resource.Content, address, avaloniaLoader);
+                }
+#endif
                 var responseEntityTag = Encoding.UTF8.GetBytes(resource.EntityTag ?? entityTag ?? string.Empty);
                 var content = resource.NotModified
                     ? []
@@ -4784,6 +4853,117 @@ public static unsafe class NativeHtmlMlApi
             _pendingCopies.TryRemove(key, out _);
             return (nuint)bytes.Length;
         }
+
+#if !HTMLML_UNO
+        private void RegisterWebFonts(
+            string css,
+            string stylesheetAddress,
+            AvaloniaResourceLoader avaloniaLoader)
+        {
+            foreach (var rule in CssFontFaceRules(css))
+            {
+                var family = CssDeclarationValue(rule, "font-family")
+                    ?.Trim().Trim('"', '\'');
+                var source = FirstCssUrl(CssDeclarationValue(rule, "src"));
+                if (string.IsNullOrWhiteSpace(family)
+                    || string.IsNullOrWhiteSpace(source))
+                {
+                    continue;
+                }
+
+                var sourceKey = $"{family}\u001f{stylesheetAddress}\u001f{source}";
+                if (!_registeredFontSources.TryAdd(sourceKey, 0)) continue;
+                try
+                {
+                    var resource = avaloniaLoader
+                        .LoadBytesAsync(source, stylesheetAddress, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (!NativeTextShaping.RegisterWebTypeface(family, resource.Content))
+                    {
+                        Console.Error.WriteLine(
+                            $"[HtmlML native web font] '{resource.DisplayName}' is not a supported font.");
+                    }
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine(
+                        $"[HtmlML native web font] Could not load '{source}' from "
+                        + $"'{stylesheetAddress}': {error.Message}");
+                }
+            }
+        }
+
+        private static IEnumerable<string> CssFontFaceRules(string css)
+        {
+            var cursor = 0;
+            while (cursor < css.Length)
+            {
+                var rule = css.IndexOf("@font-face", cursor, StringComparison.OrdinalIgnoreCase);
+                if (rule < 0) yield break;
+                var open = css.IndexOf('{', rule + 10);
+                if (open < 0) yield break;
+                var close = css.IndexOf('}', open + 1);
+                if (close < 0) yield break;
+                yield return css[(open + 1)..close];
+                cursor = close + 1;
+            }
+        }
+
+        private static string? CssDeclarationValue(string rule, string name)
+        {
+            var cursor = 0;
+            while (cursor < rule.Length)
+            {
+                while (cursor < rule.Length
+                    && (char.IsWhiteSpace(rule[cursor]) || rule[cursor] == ';'))
+                {
+                    cursor++;
+                }
+                var separator = rule.IndexOf(':', cursor);
+                if (separator < 0) return null;
+                var end = separator + 1;
+                var parenthesisDepth = 0;
+                var quote = '\0';
+                for (; end < rule.Length; end++)
+                {
+                    var character = rule[end];
+                    if (quote != '\0')
+                    {
+                        if (character == quote
+                            && (end == 0 || rule[end - 1] != '\\'))
+                        {
+                            quote = '\0';
+                        }
+                        continue;
+                    }
+                    if (character is '\'' or '"') quote = character;
+                    else if (character == '(') parenthesisDepth++;
+                    else if (character == ')' && parenthesisDepth > 0) parenthesisDepth--;
+                    else if (character == ';' && parenthesisDepth == 0) break;
+                }
+                if (string.Equals(
+                        rule[cursor..separator].Trim(),
+                        name,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return rule[(separator + 1)..end].Trim();
+                }
+                cursor = end + 1;
+            }
+            return null;
+        }
+
+        private static string? FirstCssUrl(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var start = value.IndexOf("url(", StringComparison.OrdinalIgnoreCase);
+            if (start < 0) return null;
+            var end = value.IndexOf(')', start + 4);
+            if (end < 0) return null;
+            return value[(start + 4)..end].Trim().Trim('"', '\'');
+        }
+#endif
     }
 
     [DllImport(LibraryName, EntryPoint = "htmlml_engine_enqueue")]

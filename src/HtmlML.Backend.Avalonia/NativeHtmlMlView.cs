@@ -31,6 +31,37 @@ public sealed class NativeHtmlMlView : ContentControl, IAsyncDisposable
 
     public INativeHtmlMlRenderDiagnostics RenderDiagnostics => _surface;
 
+    public Task<string> EvaluateJsonAsync(
+        string source,
+        string documentName = "native-host-evaluation.js",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native HtmlML document is not loaded.");
+        }
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!NativeHtmlMlApi.TryEvaluateJson(
+                    engine,
+                    source,
+                    documentName,
+                    out var json))
+            {
+                throw new InvalidOperationException(
+                    $"Native HtmlML evaluation failed: "
+                    + NativeHtmlMlApi.GetLastError(engine));
+            }
+            return json;
+        }, cancellationToken);
+    }
+
     public async Task LoadAsync(
         string source,
         string nativeLibraryPath,

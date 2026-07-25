@@ -1138,6 +1138,7 @@ public:
     bool advance_animations() noexcept;
     bool has_active_animations() const noexcept;
     std::vector<transition_event_record> take_transition_events();
+    float measure_inline_content_width(const dom_node& node) const;
 
     static css_length parse_length(const std::string& value);
     static void parse_transform_translate(

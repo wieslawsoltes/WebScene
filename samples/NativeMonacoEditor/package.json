@@ -1,0 +1,11 @@
+{
+  "name": "htmlml-native-monaco-editor-sample",
+  "private": true,
+  "scripts": {
+    "build:web": "node build-monaco.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.8",
+    "monaco-editor": "0.56.0"
+  }
+}

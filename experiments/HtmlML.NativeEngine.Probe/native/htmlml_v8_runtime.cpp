@@ -2563,7 +2563,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "scrollLeft"), get_scroll_left, set_scroll_left);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "scrollTop"), get_scroll_top, set_scroll_top);
-        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetWidth"), get_client_width);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetWidth"), get_offset_width);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetHeight"), get_client_height);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetLeft"), get_offset_left);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetTop"), get_offset_top);
@@ -2642,8 +2642,14 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "remove"),
             v8::FunctionTemplate::New(isolate, remove_element));
         element->PrototypeTemplate()->Set(
+            js_string(isolate, "replaceWith"),
+            v8::FunctionTemplate::New(isolate, replace_with));
+        element->PrototypeTemplate()->Set(
             js_string(isolate, "insertAdjacentElement"),
             v8::FunctionTemplate::New(isolate, insert_adjacent_element));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "insertAdjacentHTML"),
+            v8::FunctionTemplate::New(isolate, insert_adjacent_html));
         element->PrototypeTemplate()->Set(
             js_string(isolate, "insertBefore"),
             v8::FunctionTemplate::New(isolate, insert_before));
@@ -3325,6 +3331,244 @@ struct v8_dom_runtime::implementation final {
         script->Run(local_context).ToLocalChecked();
     }
 
+    void install_editor_web_platform_globals(v8::Local<v8::Context> local_context)
+    {
+        // These are general browser primitives used by Monaco and other
+        // component runtimes. Keep them inside HtmlML's native realm so
+        // applications do not have to patch third-party bundles.
+        constexpr std::string_view source = R"JS(
+          (() => {
+            const enqueueMicrotask = callback => {
+              if (typeof callback !== 'function') {
+                throw new TypeError('queueMicrotask requires a function');
+              }
+              Promise.resolve().then(callback);
+            };
+
+            class HtmlMLTextEncoder {
+              constructor() {
+                Object.defineProperty(this, 'encoding', {
+                  value: 'utf-8', enumerable: true
+                });
+              }
+              encode(input = '') {
+                const bytes = [];
+                for (const character of String(input)) {
+                  let scalar = character.codePointAt(0);
+                  if (scalar >= 0xd800 && scalar <= 0xdfff) scalar = 0xfffd;
+                  if (scalar <= 0x7f) {
+                    bytes.push(scalar);
+                  } else if (scalar <= 0x7ff) {
+                    bytes.push(0xc0 | (scalar >> 6), 0x80 | (scalar & 0x3f));
+                  } else if (scalar <= 0xffff) {
+                    bytes.push(
+                      0xe0 | (scalar >> 12),
+                      0x80 | ((scalar >> 6) & 0x3f),
+                      0x80 | (scalar & 0x3f));
+                  } else {
+                    bytes.push(
+                      0xf0 | (scalar >> 18),
+                      0x80 | ((scalar >> 12) & 0x3f),
+                      0x80 | ((scalar >> 6) & 0x3f),
+                      0x80 | (scalar & 0x3f));
+                  }
+                }
+                return new Uint8Array(bytes);
+              }
+              encodeInto(input, destination) {
+                if (!(destination instanceof Uint8Array)) {
+                  throw new TypeError('TextEncoder.encodeInto requires a Uint8Array');
+                }
+                let read = 0;
+                let written = 0;
+                for (const character of String(input)) {
+                  const encoded = this.encode(character);
+                  if (written + encoded.length > destination.length) break;
+                  destination.set(encoded, written);
+                  written += encoded.length;
+                  read += character.length;
+                }
+                return { read, written };
+              }
+            }
+
+            const decoderLabels = new Map([
+              ['utf-8', 'utf-8'], ['utf8', 'utf-8'], ['unicode-1-1-utf-8', 'utf-8'],
+              ['utf-16', 'utf-16le'], ['utf-16le', 'utf-16le'], ['utf16le', 'utf-16le'],
+              ['utf-16be', 'utf-16be'], ['utf16be', 'utf-16be']
+            ]);
+            class HtmlMLTextDecoder {
+              constructor(label = 'utf-8', options = {}) {
+                const normalized = String(label).trim().toLowerCase();
+                const encoding = decoderLabels.get(normalized);
+                if (!encoding) throw new RangeError(`Unsupported encoding: ${label}`);
+                Object.defineProperties(this, {
+                  encoding: { value: encoding, enumerable: true },
+                  fatal: { value: Boolean(options.fatal), enumerable: true },
+                  ignoreBOM: { value: Boolean(options.ignoreBOM), enumerable: true }
+                });
+              }
+              decode(input = new Uint8Array()) {
+                let bytes;
+                if (input instanceof ArrayBuffer) {
+                  bytes = new Uint8Array(input);
+                } else if (ArrayBuffer.isView(input)) {
+                  bytes = new Uint8Array(
+                    input.buffer, input.byteOffset, input.byteLength);
+                } else {
+                  throw new TypeError('TextDecoder.decode requires an ArrayBuffer view');
+                }
+                if (this.encoding === 'utf-16le' || this.encoding === 'utf-16be') {
+                  const littleEndian = this.encoding === 'utf-16le';
+                  let cursor = 0;
+                  if (!this.ignoreBOM && bytes.length >= 2) {
+                    if (bytes[0] === 0xff && bytes[1] === 0xfe) cursor = 2;
+                    else if (bytes[0] === 0xfe && bytes[1] === 0xff) cursor = 2;
+                  }
+                  let result = '';
+                  for (; cursor + 1 < bytes.length; cursor += 2) {
+                    result += String.fromCharCode(littleEndian
+                      ? bytes[cursor] | (bytes[cursor + 1] << 8)
+                      : (bytes[cursor] << 8) | bytes[cursor + 1]);
+                  }
+                  if (cursor < bytes.length) {
+                    if (this.fatal) throw new TypeError('Invalid UTF-16 data');
+                    result += '\ufffd';
+                  }
+                  return result;
+                }
+
+                let cursor = 0;
+                if (!this.ignoreBOM && bytes.length >= 3
+                    && bytes[0] === 0xef && bytes[1] === 0xbb
+                    && bytes[2] === 0xbf) {
+                  cursor = 3;
+                }
+                let result = '';
+                const invalid = () => {
+                  if (this.fatal) throw new TypeError('Invalid UTF-8 data');
+                  result += '\ufffd';
+                };
+                while (cursor < bytes.length) {
+                  const first = bytes[cursor++];
+                  if (first <= 0x7f) {
+                    result += String.fromCharCode(first);
+                    continue;
+                  }
+                  let scalar = 0;
+                  let continuationCount = 0;
+                  let minimum = 0;
+                  if (first >= 0xc2 && first <= 0xdf) {
+                    scalar = first & 0x1f;
+                    continuationCount = 1;
+                    minimum = 0x80;
+                  } else if (first >= 0xe0 && first <= 0xef) {
+                    scalar = first & 0x0f;
+                    continuationCount = 2;
+                    minimum = 0x800;
+                  } else if (first >= 0xf0 && first <= 0xf4) {
+                    scalar = first & 0x07;
+                    continuationCount = 3;
+                    minimum = 0x10000;
+                  } else {
+                    invalid();
+                    continue;
+                  }
+                  if (cursor + continuationCount > bytes.length) {
+                    cursor = bytes.length;
+                    invalid();
+                    continue;
+                  }
+                  let valid = true;
+                  for (let index = 0; index < continuationCount; ++index) {
+                    const continuation = bytes[cursor + index];
+                    if ((continuation & 0xc0) !== 0x80) {
+                      valid = false;
+                      break;
+                    }
+                    scalar = (scalar << 6) | (continuation & 0x3f);
+                  }
+                  if (!valid || scalar < minimum || scalar > 0x10ffff
+                      || (scalar >= 0xd800 && scalar <= 0xdfff)) {
+                    invalid();
+                    continue;
+                  }
+                  cursor += continuationCount;
+                  result += String.fromCodePoint(scalar);
+                }
+                return result;
+              }
+            }
+
+            const definitions = new Map();
+            const pendingDefinitions = new Map();
+            const customElementsRegistry = {
+              define(name, constructor) {
+                const normalized = String(name).toLowerCase();
+                if (!normalized.includes('-') || typeof constructor !== 'function') {
+                  throw new TypeError('Invalid custom element definition');
+                }
+                if (definitions.has(normalized)) {
+                  throw new Error(`Custom element already defined: ${normalized}`);
+                }
+                definitions.set(normalized, constructor);
+                const pending = pendingDefinitions.get(normalized);
+                if (pending) {
+                  pending.resolve(constructor);
+                  pendingDefinitions.delete(normalized);
+                }
+              },
+              get(name) {
+                return definitions.get(String(name).toLowerCase());
+              },
+              getName(constructor) {
+                for (const [name, known] of definitions) {
+                  if (known === constructor) return name;
+                }
+                return null;
+              },
+              whenDefined(name) {
+                const normalized = String(name).toLowerCase();
+                if (!normalized.includes('-')) {
+                  return Promise.reject(new TypeError('Invalid custom element name'));
+                }
+                if (definitions.has(normalized)) {
+                  return Promise.resolve(definitions.get(normalized));
+                }
+                let pending = pendingDefinitions.get(normalized);
+                if (!pending) {
+                  let resolve;
+                  const promise = new Promise(callback => { resolve = callback; });
+                  pending = { promise, resolve };
+                  pendingDefinitions.set(normalized, pending);
+                }
+                return pending.promise;
+              },
+              upgrade() {}
+            };
+
+            Object.defineProperties(globalThis, {
+              queueMicrotask: {
+                value: enqueueMicrotask, writable: true, configurable: true
+              },
+              TextEncoder: {
+                value: HtmlMLTextEncoder, writable: true, configurable: true
+              },
+              TextDecoder: {
+                value: HtmlMLTextDecoder, writable: true, configurable: true
+              },
+              customElements: {
+                value: customElementsRegistry, configurable: true
+              }
+            });
+          })();
+        )JS";
+        auto script = v8::Script::Compile(
+            local_context,
+            js_string(isolate, std::string(source).c_str())).ToLocalChecked();
+        script->Run(local_context).ToLocalChecked();
+    }
+
     void install_globals(v8::Local<v8::Context> local_context)
     {
         auto global = local_context->Global();
@@ -3413,6 +3657,18 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "MouseEvent"),
             mouse_event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "KeyboardEvent"),
+            event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "PointerEvent"),
+            mouse_event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "WheelEvent"),
+            mouse_event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "FocusEvent"),
+            event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "InputEvent"),
+            event_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "UIEvent"),
+            event_template->GetFunction(local_context).ToLocalChecked()).Check();
         auto css = v8::Object::New(isolate);
         css->Set(
             local_context,
@@ -3423,6 +3679,19 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "supports"),
             v8::Function::New(local_context, css_supports).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "CSS"), css).Check();
+        auto mutation_observer_template = v8::FunctionTemplate::New(
+            isolate,
+            observer_constructor,
+            js_string(isolate, "MutationObserver.constructor"));
+        global->Set(
+            local_context,
+            js_string(isolate, "MutationObserver"),
+            mutation_observer_template->GetFunction(local_context).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "ResizeObserver"),
+            v8::FunctionTemplate::New(isolate, resize_observer_constructor)
+                ->GetFunction(local_context).ToLocalChecked()).Check();
         auto dom_parser_template = v8::FunctionTemplate::New(isolate);
         dom_parser_template->PrototypeTemplate()->Set(
             js_string(isolate, "parseFromString"),
@@ -3670,6 +3939,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
         crypto_script->Run(local_context).ToLocalChecked();
+        install_editor_web_platform_globals(local_context);
         install_intersection_observer_polyfill(local_context);
     }
 
@@ -3914,6 +4184,15 @@ struct v8_dom_runtime::implementation final {
         }
         document_base_address = resolved_url;
         set_context_location(local_context, local_context->Global(), resolved_url);
+        auto outer_document = document_object.Get(isolate);
+        outer_document->Set(
+            local_context,
+            js_string(isolate, "readyState"),
+            js_string(isolate, "loading")).Check();
+        outer_document->Set(
+            local_context,
+            js_string(isolate, "currentScript"),
+            v8::Null(isolate)).Check();
 
         const auto stylesheets = parse_frame_stylesheets(html);
         const auto scripts = parse_frame_scripts(html);
@@ -4108,15 +4387,72 @@ struct v8_dom_runtime::implementation final {
             }
             return true;
         };
-        if (!execute_group(false) || !execute_group(true)) return false;
-        document_object.Get(isolate)->Set(
+        if (!execute_group(false)) return false;
+        outer_document->Set(
+            local_context,
+            js_string(isolate, "readyState"),
+            js_string(isolate, "interactive")).Check();
+        if (!execute_group(true)) return false;
+
+        const auto dispatch_lifecycle_event = [&](
+            v8::Local<v8::Object> target,
+            const char* type) {
+            auto event = create_event_instance(local_context);
+            event->Set(
+                local_context,
+                js_string(isolate, "type"),
+                js_string(isolate, type)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "bubbles"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "cancelable"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "defaultPrevented"),
+                v8::False(isolate)).Check();
+            v8::Local<v8::Value> dispatcher_value;
+            if (!target->Get(
+                    local_context,
+                    js_string(isolate, "dispatchEvent")).ToLocal(&dispatcher_value)
+                || !dispatcher_value->IsFunction()) {
+                frame_last_error_value =
+                    std::string("Document ") + type + " dispatcher is unavailable";
+                ++frame_script_error_count;
+                report_document_script_error(frame_last_error_value);
+                return false;
+            }
+            v8::TryCatch try_catch(isolate);
+            v8::Local<v8::Value> arguments[] = {event};
+            if (dispatcher_value.As<v8::Function>()->Call(
+                    local_context,
+                    target,
+                    1,
+                    arguments).IsEmpty()) {
+                frame_last_error_value = std::string("Document ") + type
+                    + " dispatch failed: "
+                    + describe_exception(try_catch, local_context);
+                ++frame_script_error_count;
+                report_document_script_error(frame_last_error_value);
+                return false;
+            }
+            isolate->PerformMicrotaskCheckpoint();
+            return true;
+        };
+
+        outer_document->Set(
             local_context,
             js_string(isolate, "currentScript"),
             v8::Null(isolate)).Check();
-        document_object.Get(isolate)->Set(
+        if (!dispatch_lifecycle_event(outer_document, "DOMContentLoaded")) return false;
+        outer_document->Set(
             local_context,
             js_string(isolate, "readyState"),
             js_string(isolate, "complete")).Check();
+        if (!dispatch_lifecycle_event(local_context->Global(), "load")) return false;
         document.mark_dirty();
         last_error.clear();
         return true;
@@ -5058,11 +5394,13 @@ struct v8_dom_runtime::implementation final {
             || std::string_view(type) == "input") {
             const auto deleting = input.kind == HTMLML_INPUT_KEY_DOWN
                 && (static_cast<int>(input.x) == 8 || static_cast<int>(input.x) == 46);
+            const auto inserting_line_break = input.kind == HTMLML_INPUT_KEY_DOWN
+                && static_cast<int>(input.x) == 13;
             const auto data = text_input ? utf8_scalar(static_cast<uint32_t>(input.x)) : std::string{};
             event->Set(
                 local_context,
                 js_string(isolate, "data"),
-                deleting
+                deleting || inserting_line_break
                     ? v8::Local<v8::Value>(v8::Null(isolate))
                     : v8::Local<v8::Value>(js_string(isolate, data.c_str()))).Check();
             event->Set(
@@ -5072,6 +5410,8 @@ struct v8_dom_runtime::implementation final {
                     ? static_cast<int>(input.x) == 8
                         ? "deleteContentBackward"
                         : "deleteContentForward"
+                    : inserting_line_break
+                        ? "insertLineBreak"
                     : "insertText")).Check();
             event->Set(local_context, js_string(isolate, "isComposing"), v8::False(isolate)).Check();
         }
@@ -5647,6 +5987,7 @@ struct v8_dom_runtime::implementation final {
             std::max(target->mutable_form_control().selection_start, target->mutable_form_control().selection_end),
             target->mutable_form_control().value.size());
         bool changed = false;
+        bool inserting_line_break = false;
         const auto shift = (input.flags & HTMLML_INPUT_MODIFIER_SHIFT) != 0U;
         if (key_code == 8) {
             if (start == end) start = previous_utf8_boundary(target->mutable_form_control().value, start);
@@ -5654,6 +5995,9 @@ struct v8_dom_runtime::implementation final {
         } else if (key_code == 46) {
             if (start == end) end = next_utf8_boundary(target->mutable_form_control().value, end);
             changed = end > start;
+        } else if (key_code == 13 && target->tag == "textarea") {
+            changed = true;
+            inserting_line_break = true;
         } else if (key_code == 37 || key_code == 38
             || key_code == 39 || key_code == 40
             || key_code == 36 || key_code == 35) {
@@ -5704,8 +6048,14 @@ struct v8_dom_runtime::implementation final {
                 return false;
             }
             if (!before_input_prevented) {
-                target->mutable_form_control().value.erase(start, end - start);
-                target->mutable_form_control().selection_start = target->mutable_form_control().selection_end = start;
+                if (inserting_line_break) {
+                    target->mutable_form_control().value.replace(start, end - start, "\n");
+                    ++start;
+                } else {
+                    target->mutable_form_control().value.erase(start, end - start);
+                }
+                target->mutable_form_control().selection_start =
+                    target->mutable_form_control().selection_end = start;
                 target->mutable_form_control().selection_direction = text_selection_direction::none;
                 if (!dispatch_input_event_type(input, "input", *target)) return false;
             }
@@ -8855,6 +9205,151 @@ struct v8_dom_runtime::implementation final {
         self->document.mark_dirty();
     }
 
+    static void replace_with(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* replaced = unwrap_node(info.This());
+        if (replaced == nullptr || replaced->parent == nullptr) return;
+        auto* parent = replaced->parent;
+
+        std::vector<dom_node*> replacements;
+        for (int argument = 0; argument < info.Length(); ++argument) {
+            dom_node* replacement = nullptr;
+            if (info[argument]->IsObject()) {
+                replacement = unwrap_node(info[argument].As<v8::Object>());
+            } else {
+                auto& text = self->document.create_element("#text");
+                text.text_content = to_wtf8(info.GetIsolate(), info[argument]);
+                replacement = &text;
+            }
+            if (replacement == nullptr) continue;
+            if (replacement != replaced
+                && insertion_would_create_cycle(parent, replacement)) {
+                throw_hierarchy_request(info.GetIsolate(), "replaceWith");
+                return;
+            }
+            if (replacement->tag == "#document-fragment") {
+                for (auto* child : replacement->children) {
+                    if (insertion_would_create_cycle(parent, child)) {
+                        throw_hierarchy_request(info.GetIsolate(), "replaceWith");
+                        return;
+                    }
+                }
+            }
+            replacements.push_back(replacement);
+        }
+
+        if (replacements.size() == 1U && replacements.front() == replaced) return;
+        if (!self->blur_active_element_before_detach(*replaced)) return;
+
+        // Detach every incoming node before locating the final replacement
+        // point. This preserves identity when the source comes from Monaco's
+        // temporary parsing container and avoids stale sibling indices when a
+        // node is moved within the same parent.
+        std::vector<dom_node*> flattened;
+        for (auto* replacement : replacements) {
+            if (replacement == nullptr || replacement == replaced) continue;
+            if (replacement->tag == "#document-fragment") {
+                auto children = std::move(replacement->children);
+                replacement->children.clear();
+                for (auto* child : children) {
+                    if (child == nullptr) continue;
+                    child->parent = nullptr;
+                    flattened.push_back(child);
+                }
+                continue;
+            }
+            if (replacement->parent != nullptr) {
+                std::erase(replacement->parent->children, replacement);
+                replacement->parent = nullptr;
+            }
+            flattened.push_back(replacement);
+        }
+
+        const auto position = std::find(
+            parent->children.begin(), parent->children.end(), replaced);
+        if (position == parent->children.end()) return;
+        auto insertion_index =
+            static_cast<size_t>(position - parent->children.begin());
+        self->deactivate_connected_stylesheets(*replaced);
+        parent->children.erase(position);
+        replaced->parent = nullptr;
+        replaced->visible = false;
+        self->weaken_detached_subtree_wrappers(*replaced);
+
+        for (auto* replacement : flattened) {
+            replacement->parent = parent;
+            replacement->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(insertion_index++),
+                replacement);
+            self->recascade_connected_subtree(*replacement);
+            self->activate_connected_stylesheet(*replacement);
+            self->enqueue_connected_resource_if_needed(
+                *replacement,
+                self->wrap_node(*replacement),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*replacement);
+        }
+        self->document.mark_dirty();
+    }
+
+    static void insert_adjacent_html(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* reference = unwrap_node(info.This());
+        if (reference == nullptr || info.Length() < 2) return;
+        const auto position = lower_html_name(to_utf8(info.GetIsolate(), info[0]));
+
+        dom_node* parent = nullptr;
+        size_t insertion_index = 0U;
+        if (position == "afterbegin" || position == "beforeend") {
+            parent = reference;
+            insertion_index =
+                position == "afterbegin" ? 0U : parent->children.size();
+        } else if ((position == "beforebegin" || position == "afterend")
+            && reference->parent != nullptr) {
+            parent = reference->parent;
+            const auto found = std::find(
+                parent->children.begin(), parent->children.end(), reference);
+            if (found == parent->children.end()) return;
+            insertion_index =
+                static_cast<size_t>(found - parent->children.begin())
+                + (position == "afterend" ? 1U : 0U);
+        } else {
+            info.GetIsolate()->ThrowException(v8::Exception::SyntaxError(
+                js_string(info.GetIsolate(), "Invalid insertAdjacentHTML position")));
+            return;
+        }
+
+        auto& fragment = self->document.create_element("#document-fragment");
+        fragment.visible = false;
+        const auto html = to_utf8(info.GetIsolate(), info[1]);
+        if (!html.empty()) self->parse_inner_html(fragment, html);
+        auto children = std::move(fragment.children);
+        fragment.children.clear();
+        for (auto* child : children) {
+            if (child == nullptr) continue;
+            child->parent = parent;
+            child->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(insertion_index++),
+                child);
+            self->recascade_connected_subtree(*child);
+            self->activate_connected_stylesheet(*child);
+            self->enqueue_connected_resource_if_needed(
+                *child,
+                self->wrap_node(*child),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*child);
+        }
+        self->document.mark_dirty();
+    }
+
     static void insert_adjacent_element(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -9824,6 +10319,31 @@ struct v8_dom_runtime::implementation final {
                 : node->layout.width;
             info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), width));
         }
+    }
+
+    static void get_offset_width(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry));
+        auto* node = unwrap_node(info.Holder());
+        self->ensure_layout(node);
+        if (node == nullptr) return;
+        for (auto* current_node = node; current_node != nullptr;
+             current_node = current_node->parent) {
+            if (current_node->style.display != display_mode::none) continue;
+            info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), 0));
+            return;
+        }
+        const auto width =
+            node->style.display == display_mode::inline_flow
+                && !node->attributes.contains("namespace")
+                && node->style.width.unit == length_unit::automatic
+            ? self->document.measure_inline_content_width(*node)
+            : node->layout.width;
+        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), width));
     }
 
     static void get_client_height(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -15204,6 +15724,13 @@ struct v8_dom_runtime::implementation final {
                     "partially-supported",
                     "opacity and rotate() keyframes with host-clock timing",
                     "stylesheet-parser");
+            } else if (prelude.starts_with("@font-face")) {
+                record_feature(
+                    "css",
+                    "at-rule:@font-face",
+                    "supported",
+                    "font-family and first src url are registered by the native host",
+                    "stylesheet-parser");
             } else if (prelude.starts_with("@media")) {
                 auto nested_media = inherited_media;
                 auto query = trim_css(std::string_view(prelude).substr(6U));
@@ -20388,6 +20915,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(message_channel_source).c_str())).ToLocalChecked();
         message_channel_script->Run(local_context).ToLocalChecked();
+        install_editor_web_platform_globals(local_context);
         install_intersection_observer_polyfill(local_context);
         static_cast<void>(frame_body);
     }

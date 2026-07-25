@@ -1,0 +1,140 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Monaco editor native runtime prerequisites</title>
+<style>
+  #monaco-lines {
+    position: relative;
+    width: 520px;
+    height: 76px;
+    overflow: hidden;
+    color: rgb(212, 212, 212);
+    background: rgb(30, 30, 30);
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 19px;
+    white-space: pre;
+  }
+  #monaco-lines .view-line {
+    position: absolute;
+    left: 0;
+    width: 520px;
+    height: 19px;
+  }
+  #monaco-lines .keyword { color: rgb(86, 156, 214); }
+  #monaco-lines .string { color: rgb(206, 145, 120); }
+</style>
+<body>
+<div id="monaco-lines"></div>
+<script>
+  const state = window.__htmlMlWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL", message: String(error.message || error),
+        stack: error.stack || null
+      });
+    }
+  }
+
+  test("encoding and custom-element primitives are available", () => {
+    class HtmlMlMonacoElement extends HTMLElement {}
+    customElements.define("htmlml-monaco-element", HtmlMlMonacoElement);
+    assert(
+      customElements.get("htmlml-monaco-element") === HtmlMlMonacoElement,
+      "customElements did not preserve the registered constructor");
+    assert(
+      new TextDecoder().decode(
+        new Uint8Array([0x48, 0x69, 0x20, 0xf0, 0x9f, 0x91, 0x8b])) === "Hi 👋",
+      "TextDecoder did not decode UTF-8");
+    assert(
+      new TextDecoder("utf-16le").decode(
+        new Uint16Array([0x3c, 0x64, 0x69, 0x76, 0x3e])) === "<div>",
+      "TextDecoder did not decode a typed-array UTF-16 view");
+    assert(
+      Array.from(new TextEncoder().encode("Aé")).join(",") === "65,195,169",
+      "TextEncoder did not encode UTF-8");
+  });
+
+  test("Monaco-shaped line DOM preserves siblings and replacement identity", () => {
+    const layer = document.getElementById("monaco-lines");
+    layer.innerHTML =
+      '<div class="view-line" style="top:0px"><span class="keyword">const</span> answer = 42;</div>'
+      + '<div class="view-line" style="top:19px"><span class="keyword">function</span> greet() {</div>'
+      + '<div class="view-line" style="top:38px">  return <span class="string">"HtmlML"</span>;</div>';
+    const originalMiddle = layer.children[1];
+    const backwards = [];
+    for (let node = layer.lastChild; node; node = node.previousSibling) {
+      backwards.push(node.textContent);
+    }
+    assert(layer.childNodes.length === 3, "innerHTML lost top-level line nodes");
+    assert(backwards.length === 3, "previousSibling chain lost a line node");
+
+    layer.lastChild.insertAdjacentHTML(
+      "afterend",
+      '<div class="view-line" style="top:57px">}</div>');
+    const replacement = document.createElement("div");
+    replacement.className = "view-line";
+    replacement.style.top = "19px";
+    replacement.innerHTML =
+      '<span class="keyword">function</span> edit(value) {';
+    originalMiddle.replaceWith(replacement);
+
+    assert(layer.childNodes.length === 4, "line insertion did not add one sibling");
+    assert(replacement.parentNode === layer, "replaceWith lost replacement identity");
+    assert(originalMiddle.parentNode === null, "replaceWith retained the old line");
+    assert(
+      layer.lastChild.previousSibling.previousSibling.previousSibling
+        === layer.firstChild,
+      "four-line previousSibling chain is incomplete");
+  });
+
+  test("editor text metrics and token colors are observable", () => {
+    const layer = document.getElementById("monaco-lines");
+    const first = layer.firstChild;
+    const second = first.nextSibling;
+    const firstStyle = getComputedStyle(first);
+    const keywordStyle = getComputedStyle(first.querySelector(".keyword"));
+    assert(firstStyle.fontFamily.includes("mono"), "editor font is not monospace");
+    assert(firstStyle.lineHeight === "19px", `line height was ${firstStyle.lineHeight}`);
+    assert(
+      Math.abs(second.getBoundingClientRect().top
+        - first.getBoundingClientRect().top - 19) < 0.01,
+      "line boxes are not aligned to the configured line height");
+    assert(
+      keywordStyle.color === "rgb(86, 156, 214)",
+      `keyword token color was ${keywordStyle.color}`);
+
+    const measurement = document.createElement("span");
+    measurement.style.fontFamily = "monospace";
+    measurement.style.fontSize = "14px";
+    measurement.textContent = "0".repeat(256);
+    document.body.appendChild(measurement);
+    const digitWidth = measurement.offsetWidth / 256;
+    measurement.remove();
+    assert(
+      digitWidth > 5 && digitWidth < 20,
+      `inline digit width was ${digitWidth}px`);
+  });
+
+  const microtaskOrder = ["sync"];
+  queueMicrotask(() => {
+    microtaskOrder.push("microtask");
+    test("queueMicrotask runs after the current script", () => {
+      assert(
+        microtaskOrder.join(",") === "sync,microtask",
+        `microtask order was ${microtaskOrder.join(",")}`);
+    });
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  });
+</script>
+</body>

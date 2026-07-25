@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HtmlML.Backend.Avalonia\HtmlML.Backend.Avalonia.csproj" />
+    <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Skia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\NativeMonacoEditor\web\index.html"
+             Link="index.html"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\web\app.js"
+             Link="app.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\**\*"
+             Link="Assets\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="BuildNativeMonacoAssets"
+          BeforeTargets="PrepareForBuild"
+          Condition="!Exists('$(MSBuildProjectDirectory)\..\NativeMonacoEditor\Assets\monaco.js') or !Exists('$(MSBuildProjectDirectory)\..\NativeMonacoEditor\Assets\monaco.css')">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\NativeMonacoEditor"
+          Command="npm install --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\NativeMonacoEditor"
+          Command="npm run build:web" />
+  </Target>
+</Project>

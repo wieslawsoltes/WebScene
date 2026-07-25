@@ -905,6 +905,26 @@ float native_document::measure_text_width(
     return measured;
 }
 
+float native_document::measure_inline_content_width(const dom_node& node) const
+{
+    auto width = node.text_content.empty()
+        ? 0.0F
+        : measure_text_width(node.text_content, node);
+    for (const auto* child : node.children) {
+        if (child == nullptr || !child->visible
+            || child->style.display == display_mode::none) {
+            continue;
+        }
+        if (child->tag == "#text"
+            || child->style.display == display_mode::inline_flow) {
+            width += measure_inline_content_width(*child);
+        } else {
+            width += child->layout.width;
+        }
+    }
+    return width;
+}
+
 std::vector<std::string> native_document::wrap_text_lines(
     const std::string& value,
     float available_width,

@@ -904,6 +904,53 @@ void test_document_script_failure_remains_diagnostic()
     htmlml_engine_destroy(engine);
 }
 
+void test_outer_document_lifecycle_for_editor_bootstrap()
+{
+    resource_server server{
+        .content = {
+            {"https://editor-lifecycle.test/index.html", R"HTML(
+                <!doctype html>
+                <html><head>
+                  <script>
+                    globalThis.__editorLifecycle = [
+                      ['script', document.readyState]
+                    ];
+                    document.addEventListener('DOMContentLoaded', () => {
+                      __editorLifecycle.push(['domcontentloaded', document.readyState]);
+                    });
+                    window.addEventListener('load', () => {
+                      __editorLifecycle.push(['load', document.readyState]);
+                    });
+                  </script>
+                  <script defer>
+                    __editorLifecycle.push(['defer', document.readyState]);
+                  </script>
+                </head><body><div id="editor"></div></body></html>
+            )HTML"}
+        }};
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = htmlml_engine_create_with_options(&options);
+    require(engine != nullptr, "editor lifecycle engine creation failed");
+    const std::string url = "https://editor-lifecycle.test/index.html";
+    require(
+        htmlml_engine_load_url(engine, url.data(), url.size()) != 0,
+        "editor lifecycle document load was rejected");
+    const auto result = evaluate(
+        engine,
+        "({ state: document.readyState, events: __editorLifecycle })",
+        "native-editor-lifecycle-result.js");
+    require(
+        result == R"({"state":"complete","events":[["script","loading"],["defer","interactive"],["domcontentloaded","interactive"],["load","complete"]]})",
+        "outer document lifecycle did not follow browser ordering: " + result);
+    htmlml_engine_destroy(engine);
+}
+
 void test_dom_implementation_create_html_document()
 {
     resource_server server{
@@ -2290,6 +2337,113 @@ void test_related_tree_mutations_preserve_identity_and_atomicity(htmlml_engine* 
     require(
         result == R"({"invalidRemoveThrew":true,"orderAfterRemove":"first,node,last","removeAtomic":true,"returnedSelf":true,"orderAfterReplace":"first,node,last","replaceSelfParent":true,"ancestorAppendThrew":true,"ancestorReplaceThrew":true,"hierarchyAtomic":true})",
         "related DOM tree-mutation identity or atomicity regressed: " + result);
+}
+
+void test_monaco_browser_primitives(htmlml_engine* engine)
+{
+    execute(
+        engine,
+        "globalThis.__editorMicrotasks = ['sync']; "
+        "queueMicrotask(() => __editorMicrotasks.push('microtask'));",
+        "native-editor-queue-microtask.js");
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          class HtmlMlEditorElement extends HTMLElement {}
+          customElements.define('htmlml-editor-element', HtmlMlEditorElement);
+          const utf8 = new TextDecoder().decode(
+            new Uint8Array([0x48, 0x69, 0x20, 0xf0, 0x9f, 0x91, 0x8b]));
+          const utf16 = new TextDecoder('utf-16le').decode(
+            new Uint16Array([0x3c, 0x64, 0x69, 0x76, 0x3e]));
+          const encoded = Array.from(new TextEncoder().encode('Aé'));
+          const destination = new Uint8Array(8);
+          const into = new TextEncoder().encodeInto('Aé', destination);
+          const measurement = document.createElement('span');
+          measurement.style.fontFamily = 'monospace';
+          measurement.style.fontSize = '14px';
+          measurement.textContent = '0'.repeat(256);
+          document.body.appendChild(measurement);
+          const digitWidth = measurement.offsetWidth / 256;
+          measurement.remove();
+          return {
+            microtasks: __editorMicrotasks,
+            customElement: customElements.get('htmlml-editor-element')
+              === HtmlMlEditorElement,
+            utf8,
+            utf16,
+            encoded,
+            into: [into.read, into.written, ...destination.slice(0, into.written)],
+            observers: [
+              typeof ResizeObserver,
+              typeof MutationObserver,
+              typeof IntersectionObserver
+            ],
+            events: [
+              typeof KeyboardEvent,
+              typeof InputEvent,
+              typeof UIEvent
+            ],
+            inlineFontMetric: digitWidth > 5 && digitWidth < 20
+          };
+        })()
+    )JS", "native-editor-browser-primitives.js");
+    const auto expected =
+        R"({"microtasks":["sync","microtask"],"customElement":true,"utf8":"Hi 👋","utf16":"<div>","encoded":[65,195,169],"into":[2,3,65,195,169],"observers":["function","function","function"],"events":["function","function","function"],"inlineFontMetric":true})";
+    require(
+        result == expected,
+        "Monaco browser primitives are incomplete: " + result);
+}
+
+void test_monaco_view_line_dom_mutations(htmlml_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const layer = document.createElement('div');
+          layer.className = 'view-lines';
+          document.body.appendChild(layer);
+          layer.innerHTML =
+            '<div class="view-line" style="top:0px;height:19px;">'
+              + '<span><span class="mtk6">const</span><span class="mtk1"> answer = </span>'
+              + '<span class="mtk4">42</span><span class="mtk1">;</span></span></div>'
+            + '<div class="view-line" style="top:19px;height:19px;">'
+              + '<span><span class="mtk8">// native HtmlML</span></span></div>'
+            + '<div class="view-line" style="top:38px;height:19px;">'
+              + '<span><span class="mtk6">function</span><span class="mtk1"> greet() {</span></span></div>';
+
+          const initial = Array.from(layer.childNodes);
+          const backward = [];
+          for (let node = layer.lastChild; node; node = node.previousSibling) {
+            backward.push(node.textContent);
+          }
+          layer.lastChild.insertAdjacentHTML(
+            'afterend',
+            '<div class="view-line" style="top:57px;height:19px;">'
+              + '<span><span class="mtk1">}</span></span></div>');
+          const replacement = document.createElement('div');
+          replacement.className = 'view-line';
+          replacement.innerHTML =
+            '<span><span class="mtk8">// editable model</span></span>';
+          layer.children[1].replaceWith(replacement);
+
+          return {
+            initialCount: initial.length,
+            backward,
+            finalCount: layer.childNodes.length,
+            finalText: Array.from(layer.childNodes, node => node.textContent),
+            siblingChain:
+              layer.lastChild.previousSibling.previousSibling.previousSibling
+                === layer.firstChild,
+            replacementParent: replacement.parentNode === layer,
+            oldDetached: initial[1].parentNode === null,
+            tokenCount: layer.querySelectorAll('span').length
+          };
+        })()
+    )JS", "native-monaco-view-line-dom.js");
+    const auto expected =
+        R"({"initialCount":3,"backward":["function greet() {","// native HtmlML","const answer = 42;"],"finalCount":4,"finalText":["const answer = 42;","// editable model","function greet() {","}"],"siblingChain":true,"replacementParent":true,"oldDetached":true,"tokenCount":12})";
+    require(
+        result == expected,
+        "Monaco view-line DOM mutation semantics regressed: " + result);
 }
 
 void test_visibility_inherits_for_computed_style_and_focus(htmlml_engine* engine)
@@ -5139,6 +5293,40 @@ void test_native_text_input_focus_events_and_caret(htmlml_engine* engine)
         fail("native text input did not apply Delete and Backspace through DOM input events: "
             + erased);
     }
+
+    execute(engine, R"JS(
+        (() => {
+          const textarea = document.createElement('textarea');
+          textarea.value = 'firstsecond';
+          textarea.selectionStart = textarea.selectionEnd = 5;
+          textarea.style.width = '160px';
+          textarea.style.height = '48px';
+          globalThis.__nativeTextareaEvents = [];
+          for (const type of ['keydown', 'beforeinput', 'input']) {
+            textarea.addEventListener(type, event => __nativeTextareaEvents.push([
+              event.type, event.key || null, event.data ?? null, event.inputType || null
+            ]));
+          }
+          document.body.appendChild(textarea);
+          textarea.focus();
+          globalThis.__nativeTextarea = textarea;
+        })()
+    )JS", "native-textarea-enter-setup.js");
+    require(
+        evaluate(engine,
+            "document.activeElement === __nativeTextarea",
+            "native-textarea-enter-ready.js") == "true",
+        "native textarea fixture did not receive focus");
+    press_key(13U, 0U, editing_sequence);
+    const auto line_break = evaluate(engine, R"JS((() => ({
+      value: __nativeTextarea.value,
+      selection: [__nativeTextarea.selectionStart, __nativeTextarea.selectionEnd],
+      events: __nativeTextareaEvents
+    }))())JS", "native-textarea-enter-result.js");
+    if (line_break != R"({"value":"first\nsecond","selection":[6,6],"events":[["keydown","Enter",null,null],["beforeinput","Enter",null,"insertLineBreak"],["input","Enter",null,"insertLineBreak"]]})") {
+        fail("native textarea Enter did not apply the browser line-break default: "
+            + line_break);
+    }
 }
 
 void test_frame_script_dom_presence(htmlml_engine* engine)
@@ -7599,6 +7787,7 @@ int main()
     test_zero_command_engine_starts_with_clean_scene();
     test_parallel_resource_prefetch();
     test_document_script_failure_remains_diagnostic();
+    test_outer_document_lifecycle_for_editor_bootstrap();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
@@ -7635,6 +7824,8 @@ int main()
     test_replace_child_advances_attribute_selector_iteration(engine);
     test_insert_before_preserves_tree_identity_and_atomicity(engine);
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
+    test_monaco_browser_primitives(engine);
+    test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);
     test_visibility_inherits_for_computed_style_and_focus(engine);
     test_hover_specificity_preserves_visible_theme_icon(engine);

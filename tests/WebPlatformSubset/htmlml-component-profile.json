@@ -792,6 +792,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/monaco-editor-runtime-primitives.html",
+      "type": "contract",
+      "capabilities": ["queue-microtask", "text-encoding", "custom-elements-registry", "multi-root-innerhtml", "insert-adjacent-html", "replace-with", "sibling-navigation", "monospace-text-metrics", "token-color-cascade", "downloadable-font-face", "generated-icon-glyph-paint"],
+      "evidence": ["native-monaco-editor-integration", "native-monaco-headless-edit-and-fold-capture", "product-neutral-native-runtime-regressions"],
+      "reason": "Product-neutral certification for the browser, DOM-mutation, text-metric, token-style, and downloadable generated-icon font prerequisites exercised by an unmodified Monaco editor bundle. The exact native Avalonia headless gate additionally requires startup, rendering, native text/Enter editing, Monaco folding, Codicon registration and computed selection, and retained-scene screenshots without page-level shims. Keep candidate until the remaining worker-backed language-service and complex-input boundaries are independently certified."
+    },
+    {
       "path": "contracts/dom-document-cssom-hosted-page-primitives.html",
       "type": "contract",
       "capabilities": ["dom-implementation-create-html-document", "detached-document-structure", "detached-document-isolation", "document-location", "document-links-collection", "document-cookie-script-jar", "cssom-kebab-case-property-aliases"],

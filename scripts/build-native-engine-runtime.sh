@@ -181,6 +181,8 @@ if [[ "$expected_kernel" == Linux ]]; then
 fi
 cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --config Release --parallel
+cmake -E copy_if_different "$icu_data" "$build_dir/icudtl.dat"
+ctest --test-dir "$build_dir" -C Release --output-on-failure
 
 native_path="$build_dir/$native_name"
 if [[ ! -f "$native_path" ]]; then

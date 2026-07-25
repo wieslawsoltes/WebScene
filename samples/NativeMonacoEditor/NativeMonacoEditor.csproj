@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HtmlML.Backend.Avalonia\HtmlML.Backend.Avalonia.csproj" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="web\index.html"
+             Link="index.html"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="web\app.js"
+             Link="app.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="BuildNativeMonacoAssets"
+          BeforeTargets="PrepareForBuild"
+          Condition="!Exists('$(MSBuildProjectDirectory)\Assets\monaco.js') or !Exists('$(MSBuildProjectDirectory)\Assets\monaco.css')">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="npm install --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="npm run build:web" />
+  </Target>
+</Project>
