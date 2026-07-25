@@ -4,16 +4,16 @@
   "derivation": "Observed public DOM, style, geometry, event, and paint behavior from connected-component interaction corpora; no vendor source inspection.",
   "nativeRequiredWptBaseline": {
     "recordedAt": "2026-07-25",
-    "evidence": "artifacts/web-platform-required-transform-none-20260725/native/results.json",
+    "evidence": "artifacts/web-platform-required-visibility-promoted-native-v2-20260725/results.json",
     "status": "passed",
-    "tests": 107,
-    "passed": 107,
+    "tests": 108,
+    "passed": 108,
     "failed": 0,
     "timedOut": 0,
-    "subtests": 424,
-    "subtestsPassed": 424,
+    "subtests": 428,
+    "subtestsPassed": 428,
     "subtestsFailed": 0,
-    "note": "The complete bounded required profile passes 107/107 documents and 424/424 assertions in both managed and native. The latest promotion adds the Chrome-authorized forward/reverse transform:none interpolation contract discovered by normalized TradingView exploration. The focused promoted-path rerun passes both adapters, and the complete native executable independently covers intermediate painted matrices, reverse identity completion, and the existing transition corpus. The preceding overflow, typography, and ecosystem promotions remain green. Evidence: artifacts/web-platform-required-transform-none-20260725/{managed,native}/results.json, artifacts/web-platform-transform-none-chrome-20260725/results.json, and test_transform_transition_interpolates_from_none."
+    "note": "The complete bounded required profile passes 108/108 documents and 428/428 assertions in both managed and native. The latest promotion adds Chrome-authorized stylesheet visibility inheritance, retained layout, hidden focus/hit rejection, and explicit computed/interaction restoration. The managed interaction layer now filters inherited-hidden controls; native already passed the contract. The preceding transform:none, overflow, typography, and ecosystem promotions remain green. Evidence: artifacts/web-platform-visibility-inheritance-chrome-v1-20260725/results.json, artifacts/web-platform-required-visibility-promoted-v1-20260725/managed/results.json, artifacts/web-platform-required-visibility-promoted-native-v2-20260725/results.json, and InheritedHiddenVisibilityRejectsFocusAndHitOwnershipWhileExplicitVisibleRestoresBoth."
   },
   "capabilities": [
     {

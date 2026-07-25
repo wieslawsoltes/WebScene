@@ -1,0 +1,88 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stylesheet visibility inheritance and interaction eligibility</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  .under, .visibility-host, .visibility-host button {
+    position: absolute;
+    width: 80px;
+    height: 32px;
+  }
+  .under { left: 8px; top: 8px; }
+  .visibility-host { left: 8px; top: 8px; visibility: hidden; }
+  .visibility-host button { left: 0; top: 0; }
+  #restored { left: 96px; visibility: visible; }
+</style>
+<body>
+<button id="under" class="under">under</button>
+<div id="host" class="visibility-host">
+  <button id="inherited">inherited hidden</button>
+  <button id="restored">restored visible</button>
+</div>
+<script>
+  const state = window.__htmlMlWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name,
+        status: "FAIL",
+        message: String(error.message || error),
+        stack: error.stack || null
+      });
+    }
+  }
+
+  const host = document.getElementById("host");
+  const inherited = document.getElementById("inherited");
+  const restored = document.getElementById("restored");
+  const under = document.getElementById("under");
+
+  test("stylesheet visibility is inherited and may be explicitly restored", () => {
+    assert(getComputedStyle(host).visibility === "hidden",
+      "stylesheet visibility:hidden did not compute on the host");
+    assert(getComputedStyle(inherited).visibility === "hidden",
+      "the child did not inherit visibility:hidden");
+    assert(getComputedStyle(restored).visibility === "visible",
+      "the child did not explicitly restore visibility:visible");
+  });
+
+  test("inherited hidden visibility retains layout geometry", () => {
+    const hostRect = host.getBoundingClientRect();
+    const inheritedRect = inherited.getBoundingClientRect();
+    assert(hostRect.width === 80 && hostRect.height === 32,
+      `hidden host geometry was ${hostRect.width}x${hostRect.height}`);
+    assert(inheritedRect.width === 80 && inheritedRect.height === 32,
+      `inherited-hidden geometry was ${inheritedRect.width}x${inheritedRect.height}`);
+    assert(inherited.getClientRects().length > 0,
+      "inherited-hidden child exposed no client rectangle");
+  });
+
+  test("inherited hidden controls cannot receive focus but restored controls can", () => {
+    under.focus();
+    inherited.focus();
+    assert(document.activeElement === under,
+      "inherited-hidden control received focus");
+    restored.focus();
+    assert(document.activeElement === restored,
+      "explicitly restored control did not receive focus");
+  });
+
+  test("hit testing skips inherited hidden controls and includes restored controls", () => {
+    assert(document.elementFromPoint(16, 16) === under,
+      "inherited-hidden control retained hit ownership");
+    assert(document.elementFromPoint(112, 16) === restored,
+      "explicitly restored control did not receive hit ownership");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

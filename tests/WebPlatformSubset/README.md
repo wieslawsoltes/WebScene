@@ -29,12 +29,16 @@ serialization, and custom-property inheritance independently of any hosted produ
 Run them through both adapters with `--selection candidate`; candidate failures are
 reported but do not silently weaken the required profile.
 
-Current evidence (2026-07-25): the complete required profile passes 107/107 documents
-and 424/424 assertions in both managed and native. The latest promotion is the
+Current evidence (2026-07-25): the complete required profile contains 108 documents
+and 428 assertions. The latest promotion requires stylesheet `visibility` inheritance,
+layout retention, focus rejection, hit-test rejection, and explicit descendant
+computed/interaction restoration; Chrome and native already passed, while the managed
+interaction layer now
+filters inherited-hidden controls from focus and DOM hit testing. The preceding
 Chrome-authorized `transform:none` transition contract discovered by the normalized
-TradingView graph; it requires forward and reverse identity interpolation through
-multiple observable frames. The native computed-style serializer now reports the
-painted transition matrix instead of snapping to the target transform. The native candidate profile passes
+TradingView graph requires forward and reverse identity interpolation through multiple
+observable frames. The native computed-style serializer reports the painted transition
+matrix instead of snapping to the target transform. The native candidate profile passes
 28/28 documents and 81/81 assertions; managed passes 14/28 documents and 56/81
 assertions. The latest promotion adds the corrected Chrome-authorized overflow viewport
 contract and independent managed/native scrollbar paint authority. The preceding

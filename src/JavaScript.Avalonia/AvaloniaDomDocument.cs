@@ -581,6 +581,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             return Array.Empty<object>();
         }
 
+        EnsureStylesCurrent();
         var point = new Point(x, y);
         return EnumerateDocumentElements()
             .Select((element, index) => new
@@ -594,6 +595,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             .Where(candidate => candidate.Element.isConnected
                                 && candidate.Element.Control.IsVisible
                                 && candidate.Element.Control.IsHitTestVisible
+                                && !candidate.Element.HasHiddenComputedVisibility()
                                 && !CssLayout.GetPointerEventsNone(candidate.Element.Control)
                                 && candidate.Rect.width > 0
                                 && candidate.Rect.height > 0
@@ -7934,6 +7936,11 @@ public class AvaloniaDomElement :
 
     public virtual bool focus()
     {
+        if (HasHiddenComputedVisibility())
+        {
+            return false;
+        }
+
         if (!Control.Focusable)
         {
             Control.Focusable = true;
@@ -7941,6 +7948,13 @@ public class AvaloniaDomElement :
 
         var actualFocus = TryFocusControl(NavigationMethod.Unspecified, KeyModifiers.None);
         return OwnerDocument.ActivateElement(this, dispatchFocusEvent: !actualFocus, clearActualFocus: !actualFocus);
+    }
+
+    internal bool HasHiddenComputedVisibility()
+    {
+        var visibility = GetStyleValue("visibility");
+        return string.Equals(visibility, "hidden", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(visibility, "collapse", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsNaturallyFocusableElement()

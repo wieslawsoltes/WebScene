@@ -115,6 +115,48 @@ public sealed class DomTabIndexAndFocusVisibleTests
     }
 
     [AvaloniaFact]
+    public void InheritedHiddenVisibilityRejectsFocusAndHitOwnershipWhileExplicitVisibleRestoresBoth()
+    {
+        using var fixture = new Fixture();
+        var style = fixture.Append("style", fixture.Document.head);
+        style.textContent = """
+            .under, .host, .host button {
+                position: absolute;
+                width: 80px;
+                height: 32px;
+            }
+            .under, .host { left: 8px; top: 8px; }
+            .host { visibility: hidden; }
+            .host button { left: 0; top: 0; }
+            .host .restored { left: 96px; visibility: visible; }
+            """;
+        var under = fixture.Append("button");
+        under.className = "under";
+        var host = fixture.Append("div");
+        host.className = "host";
+        var inherited = fixture.Append("button", host);
+        var restored = fixture.Append("button", host);
+        restored.className = "restored";
+
+        fixture.Document.EnsureStylesCurrent();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            "hidden",
+            fixture.Document.getComputedStyle(inherited).getPropertyValue("visibility"));
+        Assert.Equal(
+            "visible",
+            fixture.Document.getComputedStyle(restored).getPropertyValue("visibility"));
+        Assert.True(under.focus());
+        Assert.False(inherited.focus());
+        Assert.Same(under, fixture.Document.activeElement);
+        Assert.True(restored.focus());
+        Assert.Same(restored, fixture.Document.activeElement);
+        Assert.Same(under, fixture.Document.elementFromPoint(16, 16));
+        Assert.Same(restored, fixture.Document.elementFromPoint(112, 16));
+    }
+
+    [AvaloniaFact]
     public void PointerFocusDoesNotMatchFocusVisibleForNonTextControls()
     {
         using var fixture = new Fixture();
