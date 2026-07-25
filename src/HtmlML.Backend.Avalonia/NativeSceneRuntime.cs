@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+#if !HTMLML_UNO
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -17,12 +18,18 @@ using Avalonia.Rendering.Composition;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
+#endif
 using HtmlML.Core;
+using HtmlML.Css;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
 
+#if HTMLML_UNO
+namespace HtmlML.Backends.Uno.Native;
+#else
 namespace HtmlML.Backends.Avalonia.Native;
+#endif
 
 public interface INativeHtmlMlRenderDiagnostics
 {
@@ -39,12 +46,14 @@ public interface INativeHtmlMlRenderDiagnostics
     void RequestRender();
 }
 
+#if !HTMLML_UNO
 public interface INativeHtmlMlFrozenPresentation : IDisposable
 {
     Control View { get; }
 
     ulong EstimatedBytes { get; }
 }
+#endif
 
 internal sealed class NativeSceneRenderObserver
 {
@@ -128,6 +137,7 @@ internal sealed class NativeSceneRenderObserver
     }
 }
 
+#if !HTMLML_UNO
 public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
 {
     private IntPtr _engine;
@@ -1351,6 +1361,7 @@ internal sealed class LivePerformanceHud : Border
         _callbacks = metrics.InputCallbacksInvoked;
     }
 }
+#endif
 
 internal enum NativeSceneCompositionMessage
 {
@@ -1486,6 +1497,7 @@ internal static class NativeSceneResizeProjection
     }
 }
 
+#if !HTMLML_UNO
 internal sealed unsafe class NativeSceneCompositionHandler(
     IntPtr engine,
     NativeSceneRenderObserver renderObserver,
@@ -1865,7 +1877,11 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                 canvas,
                 _viewportWidth,
                 _viewportHeight,
-                NativeBoundsIntersectsRenderClip);
+                bounds => NativeBoundsIntersectsRenderClip(new Rect(
+                    bounds.Left,
+                    bounds.Top,
+                    bounds.Width,
+                    bounds.Height)));
             retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
         }
         finally
@@ -2295,6 +2311,7 @@ internal sealed class NativeSceneDrawOperation(
         Interlocked.Exchange(ref s_latestResizeSequence, unchecked((long)sequence));
     }
 }
+#endif
 
 internal sealed unsafe class NativeCanvasSceneRenderer
 {
@@ -2439,10 +2456,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         SKCanvas canvas,
         float viewportWidth,
         float viewportHeight,
-        Func<Rect, bool>? intersects)
+        Func<SKRect, bool>? intersects)
     {
         if (s_domBackdropPicture is not null
-            && (intersects is null || intersects(new Rect(0, 0, viewportWidth, viewportHeight))))
+            && (intersects is null || intersects(new SKRect(0, 0, viewportWidth, viewportHeight))))
         {
             canvas.DrawPicture(s_domBackdropPicture);
         }
@@ -2454,7 +2471,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 continue;
             }
             if (intersects is not null
-                && !intersects(new Rect(layer.X, layer.Y, layer.Width, layer.Height)))
+                && !intersects(new SKRect(layer.X, layer.Y, layer.X + layer.Width, layer.Y + layer.Height)))
             {
                 continue;
             }
@@ -2473,7 +2490,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             canvas.RestoreToCount(save);
         }
         if (s_domOverlayPicture is not null
-            && (intersects is null || intersects(new Rect(0, 0, viewportWidth, viewportHeight))))
+            && (intersects is null || intersects(new SKRect(0, 0, viewportWidth, viewportHeight))))
         {
             canvas.DrawPicture(s_domOverlayPicture);
         }
@@ -3084,7 +3101,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         TransY = values[5],
                         Persp2 = 1
                     };
+#if HTMLML_UNO
+                    canvas.Concat(in matrix);
+#else
                     canvas.Concat(ref matrix);
+#endif
                     break;
             }
             cursor = close + 1;
@@ -3322,7 +3343,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 case 5:
                 {
                     var matrix = ToMatrix(command);
+#if HTMLML_UNO
+                    canvas.Concat(in matrix);
+#else
                     canvas.Concat(ref matrix);
+#endif
                     break;
                 }
                 case 6: canvas.Translate((float)command.V0, (float)command.V1); break;
@@ -3691,15 +3716,12 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
     private static SKColor ParseColor(string value)
     {
-        try
+        if (CssColorParser.TryParseColor(value, out var parsed))
         {
-            var color = global::Avalonia.Media.Color.Parse(value);
-            return new SKColor(color.R, color.G, color.B, color.A);
+            return new SKColor(parsed.R, parsed.G, parsed.B, parsed.A);
         }
-        catch
-        {
-            return SKColors.Black;
-        }
+
+        return SKColors.Black;
     }
 
     private static SKBlendMode BlendMode(string value)

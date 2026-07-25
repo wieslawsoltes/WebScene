@@ -1,6 +1,10 @@
 using System.Runtime.InteropServices;
 
+#if HTMLML_UNO
+namespace HtmlML.Backends.Uno.Native;
+#else
 namespace HtmlML.Backends.Avalonia.Native;
+#endif
 
 /// <summary>
 /// Process-wide lifecycle operations for the ABI 2 native HtmlML engine.
