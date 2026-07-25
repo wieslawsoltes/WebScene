@@ -2,15 +2,22 @@
 
 [![HtmlML NuGet](https://img.shields.io/nuget/vpre/HtmlML.svg)](https://www.nuget.org/packages/HtmlML/) [![HtmlML Backend NuGet](https://img.shields.io/nuget/vpre/HtmlML.Backend.Avalonia.svg)](https://www.nuget.org/packages/HtmlML.Backend.Avalonia/)
 
-HtmlML brings HTML-inspired markup and V8 scripting capabilities to [Avalonia](https://avaloniaui.net/). The repository contains reusable markup, browser-services, and runtime libraries:
+HtmlML is a native V8 and immutable-scene runtime for [Avalonia](https://avaloniaui.net/). Its flagship path runs JavaScript, DOM/CSS state, layout, input dispatch, Canvas, and SVG on a native engine thread, then publishes immutable scene diffs to the Avalonia compositor. This keeps hot UI work out of the managed object graph and UI dispatcher while preserving a browser-shaped compatibility surface for packaged React, TypeScript, and JavaScript components.
 
-- **HtmlML** – a markup layer that renders HTML-like tags inside Avalonia applications, complete with styling and canvas support.
-- **HtmlML.Backend.Avalonia** – DOM, browser, event, canvas, layout, and presentation services for Avalonia.
-- **JavaScript.Avalonia.ClearScript** – the ClearScript/V8 execution adapter, module loader, virtual-iframe runtime, and compilation cache.
+Avalonia remains responsible for the application window, scene presentation, platform input, lifecycle, and native .NET integration. The result is a high-performance native desktop surface without Chromium, WebKit, Electron, or a WebView. HtmlML's HTML-like markup and DOM APIs are the compatibility layer and direct authoring surface, not a promise to run arbitrary websites or to reproduce a complete browser.
+
+Compatibility is explicit and testable: managed ClearScript/Avalonia mode remains the behavioral oracle and compatibility fallback, while native support is promoted by shared conformance, rendering, input, and performance gates.
+
+The repository contains the runtime, component-hosting SDK, and Avalonia integration:
+
+- **HtmlML** – the HTML-like markup and direct authoring layer, with styling and Canvas support.
+- **HtmlML.Backend.Avalonia** – the Avalonia scene presenter, native runtime host, and managed presentation services.
+- **HtmlML.NativeEngine.Runtime** – RID-specific native V8/DOM/CSS/layout/scene runtime packages.
+- **JavaScript.Avalonia.ClearScript** – the managed ClearScript/V8 compatibility engine, module loader, virtual-iframe runtime, and compilation cache.
 - **HtmlML.Sdk** – versioned component manifests, compatibility checks, offline assets, lifecycle diagnostics, and the capability-based host bridge.
 - **HtmlML.Sdk.Avalonia** – the XAML-first packaged React/TypeScript component host.
 
-Together they enable you to describe user interfaces with familiar HTML semantics while orchestrating dynamic behaviour from JavaScript—no browser required.
+Together they make JavaScript UI components first-class citizens in native Avalonia applications, combining native-scene performance with an explicit and intentionally bounded web-platform profile.
 
 ## Usage Restriction Notice
 
@@ -20,12 +27,13 @@ This restriction is defined in the repository [LICENSE](LICENSE).
 
 ## Highlights
 
-- ⚡ **Avalonia-first**: Render HTML-inspired controls natively, respecting Avalonia layout, styling, and theming.
-- 🧠 **V8 JavaScript engine**: Run scripts through ClearScript/V8 with `window`, `document`, timers, animation frames, modules, and console access.
-- 🧩 **DOM abstraction**: Query, create, and mutate Avalonia controls through a DOM-like API (`getElementById`, `querySelector`, `appendChild`, `setAttribute`, etc.).
-- 🕹️ **Event bridge**: Wire Avalonia routed events (`click`, `pointerdown`, `keydown`, `input`, …) to JavaScript callbacks with strongly-typed payloads.
-- 🖼️ **Canvas integration**: HtmlML ships with a `<canvas>` element that mirrors the familiar 2D drawing API.
-- 🧱 **Extensible architecture**: Override document/element factories or compose custom hosts to tailor the experience for your application.
+- 🚀 **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread and publish immutable, damage-aware scene diffs to the Avalonia compositor.
+- ⚡ **Native application composition**: Combine JavaScript components with XAML, C#, native controls, menus, settings, and operating-system services.
+- 🧩 **Component hosting**: Mount versioned, offline React/TypeScript/JavaScript bundles through an engine-neutral component profile and Avalonia host.
+- 🧠 **Compatibility by contract**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines; promote support through conformance gates.
+- 🔌 **Capability-based host bridge**: Expose selected asynchronous .NET services to trusted components without giving them an implicit application-wide API.
+- 🕹️ **DOM and event integration**: Query and mutate the projected visual surface and route pointer, keyboard, text, focus, and routed-event behavior to JavaScript.
+- 🖼️ **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right shape.
 
 ## Repository Layout
 
@@ -117,12 +125,22 @@ dotnet run
 The web build runs the bounded compatibility checker and emits a versioned
 `htmlml-component.json`. Host services are available only through declared,
 asynchronous `htmlml.host.*` capabilities. Applications must also ship the reviewed
-native V8 package for their target RID.
+RID-specific ClearScript/V8 native package used by the component-host workflow.
 
 ### Consuming the libraries
 
-The current package line is prerelease. Reference the packages needed by the selected
-engine; for example, an Avalonia host using the native engine on macOS ARM64 uses:
+The current package line is prerelease. The native scene engine is the flagship runtime
+for production workloads: it owns V8, DOM/CSS, layout, input, and scene construction
+off the UI thread, and the Avalonia host consumes immutable scene handles. The native
+engine is promoted by capability and performance gates rather than silent fallback.
+
+The packaged component-host samples currently use the managed ClearScript/Avalonia path
+as the compatibility reference. The component profile is engine-neutral, so the same
+packaged assets and conformance tests can be promoted to the native scene host as each
+capability group is validated. See [Managed and native backends](docs/backends.md) and
+[the native scene-engine design](docs/architecture/native-v8-scene-engine.md).
+
+An Avalonia host using the opt-in native scene engine on macOS ARM64 uses:
 
 ```xml
 <ItemGroup>
@@ -135,9 +153,9 @@ The runtime package copies the native module, ICU data, and version/ABI manifest
 build and publish output. `win-x64` and `linux-x64` publishing are temporarily
 deferred while their pinned V8 builds move to faster, independently validated lanes.
 
-## Using HtmlML
+## Using the HTML-like authoring layer
 
-HtmlML exposes HTML-like tags (heading levels, paragraphs, lists, sections, navigation, canvas, etc.) that map to Avalonia controls. Example:
+HtmlML also supports direct authoring with HTML-like tags (heading levels, paragraphs, lists, sections, navigation, Canvas, and more) mapped to Avalonia presentation services. Packaged React/TypeScript components normally enter through `HtmlMlComponentHost`; use this lower-level surface when you want to author the document directly:
 
 ```xml
 <html xmlns="https://github.com/avaloniaui"
@@ -248,23 +266,36 @@ HtmlML.Backend.Avalonia + HtmlML.Sdk.Avalonia
 ```
 
 R0 through R5 are complete: the semantic cores are portable, Avalonia is the reference
-backend package, and the React/TypeScript SDK is packaged and template-tested. R6 is
-the direct ProGPU backend proof using the same component assets and profile contracts.
+backend package, and the React/TypeScript SDK, compatibility profile, templates, and
+component catalog are packaged and tested. The native V8/immutable-scene engine is the
+performance path. The next milestone is to mature that path through real application
+lifecycle, compatibility, reliability, and certification evidence.
 
-HtmlML supports a managed ClearScript/Avalonia mode and an opt-in native V8 mode that
-publishes immutable scene diffs. See [Managed and native backends](docs/backends.md) for
-selection guidance, runtime packages, release automation, and the precise status of
+HtmlML supports a managed ClearScript/Avalonia compatibility mode and a native V8 mode
+that publishes immutable scene diffs. See [Managed and native backends](docs/backends.md)
+for selection guidance, runtime packages, release automation, and the precise status of
 Uno, WPF, and direct GPU backend extensibility. The portable contracts are ready for
 backend authoring, but the shared coordinators and native scene-reader SDK still need
 extraction before those backends are turnkey integrations.
 
 ## Roadmap
 
-HtmlML's roadmap is to extract reusable JavaScript, DOM, CSS/layout, and graphics cores
-from the current Avalonia implementation while preserving Avalonia as the reference
-backend and adding direct ProGPU, WPF, WinUI, and Uno backends. React/TypeScript
-tooling, an explicit component compatibility profile, and an executable sample for
-every supported product use case are part of the same plan.
+HtmlML's immediate roadmap is to mature the native Avalonia product path: close
+application lifecycle and reliability gaps, promote native capability groups through
+shared compatibility gates, complete differential and unsupported-feature evidence,
+and keep the reusable runtime boundary exercised by real private samples.
+
+The Uno demo remains useful as an integration proof and a way to generate interest,
+but expanding it is not a current engineering priority. Direct ProGPU, Flutter, WPF,
+WinUI, and further backend work is deferred until the native runtime, scene ABI, and
+certification process have matured. Those proofs should consume the stable shared
+runtime rather than drive premature abstractions into it.
+
+The first lifecycle item is to reassess chart suspension. Saved-layout resume has not
+yet proved reliable in the private TradingView sample. Compare it with destroying the
+inactive engine and creating a clean warm-cache engine from host configuration, without
+saved-layout restoration. Prefer the simpler restart path if it restores a usable chart
+more reliably or faster.
 
 See the [supported use cases](use-cases.md) and
 [architecture decisions](docs/architecture/README.md).
