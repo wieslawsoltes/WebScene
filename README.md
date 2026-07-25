@@ -291,11 +291,13 @@ WinUI, and further backend work is deferred until the native runtime, scene ABI,
 certification process have matured. Those proofs should consume the stable shared
 runtime rather than drive premature abstractions into it.
 
-The first lifecycle item is to reassess chart suspension. Saved-layout resume has not
-yet proved reliable in the private TradingView sample. Compare it with destroying the
-inactive engine and creating a clean warm-cache engine from host configuration, without
-saved-layout restoration. Prefer the simpler restart path if it restores a usable chart
-more reliably or faster.
+The first lifecycle decision is complete. The private TradingView sample now destroys
+inactive engines and performs a clean warm-cache restart from retained host
+configuration. Its saved-layout restore path was removed after manual failure and
+after exceeding the ordinary warm-engine baseline. Clean restart was selected for
+reliability and simplicity rather than a universal latency advantage. The next
+application milestone is the normalized Chrome differential and closure of the
+remaining unexplored-action denominator.
 
 See the [supported use cases](use-cases.md) and
 [architecture decisions](docs/architecture/README.md).
