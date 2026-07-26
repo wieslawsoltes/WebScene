@@ -802,6 +802,13 @@
       "capabilities": ["stylesheet-visibility-inheritance", "computed-visibility-override-restoration", "hidden-layout-retention", "hidden-focus-rejection", "hidden-hit-test-rejection"],
       "evidence": ["hosted-component-responsive-footer-collapse", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract"],
       "reason": "Required after unchanged bytes pass all 4/4 assertions in Chrome and both HtmlML adapters. The contract requires stylesheet visibility:hidden to inherit into descendants while retaining layout rectangles, excludes inherited-hidden controls from programmatic focus and hit ownership, and permits a descendant to restore computed visibility and interaction eligibility explicitly. The managed fix filters focus and DOM hit testing from the inherited computed value rather than consumer selectors; native already satisfied the contract. Evidence: artifacts/web-platform-visibility-inheritance-chrome-v1-20260725/results.json, artifacts/web-platform-visibility-inheritance-managed-v2-20260725/results.json, and artifacts/web-platform-visibility-inheritance-native-v1-20260725/results.json."
+    },
+    {
+      "path": "contracts/dom-inner-text-block-boundaries.html",
+      "type": "contract",
+      "capabilities": ["rendered-inner-text", "block-boundary-text-separation", "inline-text-concatenation"],
+      "evidence": ["tradingview-semantic-inventory-accessible-name-reduction", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract"],
+      "reason": "Required after unchanged bytes pass both assertions in Chrome and both HtmlML adapters. The product-neutral contract separates raw textContent from rendered innerText: adjacent rendered block descendants receive a line-feed boundary while adjacent inline descendants remain concatenated. This fixes the nested menu and listbox accessible-name discrepancy exposed by the TradingView semantic inventory without introducing product selectors. Evidence: artifacts/web-platform-inner-text-chrome-v1-20260726/results.json, artifacts/web-platform-inner-text-managed-after-v1-20260726/results.json, artifacts/web-platform-inner-text-native-after-v1-20260726/results.json, and DomInnerTextTests."
     }
   ],
   "candidate": [

@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rendered innerText preserves block boundaries</title>
+<body>
+<div id="block-label"><div>Bars</div><div>Candles</div></div>
+<div id="inline-label"><span>Alpha</span><span>Beta</span></div>
+<script>
+  const state = window.__htmlMlWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name,
+        status: "FAIL",
+        message: String(error.message || error),
+        stack: error.stack || null
+      });
+    }
+  }
+
+  test("textContent remains the raw descendant text concatenation", () => {
+    assert(document.getElementById("block-label").textContent === "BarsCandles",
+      "textContent inserted a rendered block separator");
+  });
+
+  test("innerText separates rendered block descendants but not inline siblings", () => {
+    const block = document.getElementById("block-label").innerText;
+    const inline = document.getElementById("inline-label").innerText;
+    assert(block === "Bars\nCandles",
+      `block innerText was ${JSON.stringify(block)}`);
+    assert(inline === "AlphaBeta",
+      `inline innerText was ${JSON.stringify(inline)}`);
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

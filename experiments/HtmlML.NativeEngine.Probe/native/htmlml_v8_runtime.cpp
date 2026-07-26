@@ -2531,7 +2531,7 @@ struct v8_dom_runtime::implementation final {
                 | v8::PropertyAttribute::DontDelete));
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "nodeValue"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "textContent"), get_text_content, set_text_content);
-        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerText"), get_text_content, set_text_content);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerText"), get_inner_text, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "data"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "namespaceURI"), get_namespace_uri);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "children"), get_children);
@@ -9699,6 +9699,49 @@ struct v8_dom_runtime::implementation final {
         if (node == nullptr) return;
         std::string value;
         append_node_text(*node, value);
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), value));
+    }
+
+    static bool is_inline_text_display(display_mode display)
+    {
+        return display == display_mode::inline_flow
+            || display == display_mode::inline_block
+            || display == display_mode::inline_flex
+            || display == display_mode::inline_grid
+            || display == display_mode::inline_table
+            || display == display_mode::contents;
+    }
+
+    static void append_inner_text(const dom_node& node, std::string& value)
+    {
+        value += node.text_content;
+        auto previous_was_block = false;
+        for (const auto* child : node.children) {
+            if (child->style.display == display_mode::none) continue;
+            std::string child_text;
+            append_inner_text(*child, child_text);
+            if (child_text.empty()) continue;
+            const auto child_is_block = !is_inline_text_display(child->style.display);
+            if (!value.empty()
+                && (previous_was_block || child_is_block)
+                && value.back() != '\n') {
+                value.push_back('\n');
+            }
+            value += child_text;
+            previous_was_block = child_is_block;
+        }
+    }
+
+    static void get_inner_text(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        self->ensure_layout();
+        std::string value;
+        append_inner_text(*node, value);
         info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), value));
     }
 

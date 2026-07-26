@@ -10123,14 +10123,64 @@ public class AvaloniaDomElement :
         }
     }
 
-    // HTMLElement.innerText is layout-aware in browsers, but for the retained
-    // Avalonia DOM the closest stable contract is the rendered descendant text
-    // exposed by textContent. Keeping the setter on the same node-replacement
-    // path also preserves MutationObserver and layout invalidation behavior.
     public virtual string innerText
     {
-        get => textContent ?? string.Empty;
+        get
+        {
+            OwnerDocument.EnsureStylesCurrent();
+            OwnerDocument.FlushPendingLayout();
+            return GetRenderedInnerText();
+        }
         set => textContent = value ?? string.Empty;
+    }
+
+    private string GetRenderedInnerText()
+    {
+        if (Control is TextBlock textBlock)
+        {
+            return textBlock.Text ?? string.Empty;
+        }
+
+        if (TryGetControlsCollection(Control, out var controls))
+        {
+            var text = new StringBuilder();
+            var previousWasBlock = false;
+            foreach (var child in controls.OfType<Control>())
+            {
+                if (AvaloniaDomDocument.IsDomInfrastructureControl(child)) continue;
+                var childText = OwnerDocument.WrapControl(child).GetRenderedInnerText();
+                if (childText.Length == 0) continue;
+                var childIsBlock = CssLayout.GetDisplay(child) is not (
+                    CssDisplay.Inline
+                    or CssDisplay.InlineBlock
+                    or CssDisplay.InlineFlex
+                    or CssDisplay.InlineGrid
+                    or CssDisplay.InlineTable);
+                if (text.Length != 0
+                    && (previousWasBlock || childIsBlock)
+                    && text[^1] != '\n')
+                {
+                    text.Append('\n');
+                }
+                text.Append(childText);
+                previousWasBlock = childIsBlock;
+            }
+            return text.ToString();
+        }
+
+        if (Control is ContentControl { Content: string contentString })
+        {
+            return contentString;
+        }
+        if (Control is ContentControl { Content: Control contentChild })
+        {
+            return OwnerDocument.WrapControl(contentChild).GetRenderedInnerText();
+        }
+        if (Control is Decorator { Child: Control decoratorChild })
+        {
+            return OwnerDocument.WrapControl(decoratorChild).GetRenderedInnerText();
+        }
+        return string.Empty;
     }
 
     public virtual string innerHTML

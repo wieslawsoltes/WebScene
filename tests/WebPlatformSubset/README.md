@@ -29,8 +29,12 @@ serialization, and custom-property inheritance independently of any hosted produ
 Run them through both adapters with `--selection candidate`; candidate failures are
 reported but do not silently weaken the required profile.
 
-Current evidence (2026-07-25): the complete required profile contains 108 documents
-and 428 assertions. The latest promotion requires stylesheet `visibility` inheritance,
+Current evidence (2026-07-26): the complete required profile contains 109 documents
+and 430 assertions. The latest promotion requires rendered `innerText` block boundaries
+while preserving adjacent inline concatenation. It was reduced from a TradingView
+semantic-inventory accessible-name discrepancy, authorized unchanged in Chrome, and
+then passed unchanged in both HtmlML adapters. The preceding promotion requires
+stylesheet `visibility` inheritance,
 layout retention, focus rejection, hit-test rejection, and explicit descendant
 computed/interaction restoration; Chrome and native already passed, while the managed
 interaction layer now
