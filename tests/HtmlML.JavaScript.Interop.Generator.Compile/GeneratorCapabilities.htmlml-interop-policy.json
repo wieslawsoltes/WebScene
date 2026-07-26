@@ -1,0 +1,1036 @@
+{
+  "schemaVersion": "1.0",
+  "api": "GeneratorCapabilities.htmlml-interop-api.json",
+  "apiFingerprint": "dcffb90f98a5a6ba627ec573da394a68ab6b2adebe334f81a6cb4d022c5a5db9",
+  "namespace": "GeneratorCapabilities.Generated",
+  "typeMappings": {},
+  "functionsClassName": "JavaScriptGlobals",
+  "functions": [
+    {
+      "source": "GeneratorCapabilities.Controller.fromId",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.Controller.fromId",
+      "name": "FromIdAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.createDisposer",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.createDisposer",
+      "name": "CreateDisposerAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.createWidget",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.createWidget",
+      "name": "CreateWidgetAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.listWidgets",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.listWidgets",
+      "name": "ListWidgetsAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.loadDisposer",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.loadDisposer",
+      "name": "LoadDisposerAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.loadWidget",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.loadWidget",
+      "name": "LoadWidgetAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.loadWidgets",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.loadWidgets",
+      "name": "LoadWidgetsAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.maybeDisposer",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.maybeDisposer",
+      "name": "MaybeDisposerAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.normalizeLabel",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.normalizeLabel",
+      "name": "NormalizeLabelAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    },
+    {
+      "source": "GeneratorCapabilities.widgetOrLabel",
+      "overload": 0,
+      "globalName": "GeneratorCapabilities.widgetOrLabel",
+      "name": "WidgetOrLabelAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    }
+  ],
+  "globalProperties": [
+    {
+      "source": "GeneratorCapabilities.Controller.current",
+      "globalName": "GeneratorCapabilities.Controller.current",
+      "getterName": "GetCurrentAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Controller.ready",
+      "globalName": "GeneratorCapabilities.Controller.ready",
+      "getterName": "GetReadyAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Controller.version",
+      "globalName": "GeneratorCapabilities.Controller.version",
+      "getterName": "GetVersionAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.currentController",
+      "globalName": "GeneratorCapabilities.currentController",
+      "getterName": "GetCurrentControllerAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.libraryVersion",
+      "globalName": "GeneratorCapabilities.libraryVersion",
+      "getterName": "GetLibraryVersionAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.readyController",
+      "globalName": "GeneratorCapabilities.readyController",
+      "getterName": "GetReadyControllerAsync",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.widgets",
+      "globalName": "GeneratorCapabilities.widgets",
+      "getterName": "GetWidgetsAsync",
+      "include": true
+    }
+  ],
+  "models": [
+    {
+      "source": "GeneratorCapabilities.Brand",
+      "name": "Brand",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.DictionaryEnvelope",
+      "name": "DictionaryEnvelope",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Envelope",
+      "name": "Envelope",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.IWidget",
+      "name": "Widget",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.MixedWidgetDictionary",
+      "name": "MixedWidgetDictionary",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Named",
+      "name": "Named",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.NamedTimestamp",
+      "name": "NamedTimestamp",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.NumericWidgetDictionary",
+      "name": "NumericWidgetDictionary",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Timestamped",
+      "name": "Timestamped",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant1",
+      "name": "Variant1",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant10",
+      "name": "Variant10",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant11",
+      "name": "Variant11",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant12",
+      "name": "Variant12",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant13",
+      "name": "Variant13",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant14",
+      "name": "Variant14",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant15",
+      "name": "Variant15",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant16",
+      "name": "Variant16",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant17",
+      "name": "Variant17",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant2",
+      "name": "Variant2",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant3",
+      "name": "Variant3",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant4",
+      "name": "Variant4",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant5",
+      "name": "Variant5",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant6",
+      "name": "Variant6",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant7",
+      "name": "Variant7",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant8",
+      "name": "Variant8",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.Variant9",
+      "name": "Variant9",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.WidgetDictionary",
+      "name": "WidgetDictionary",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.WidgetOptions",
+      "name": "WidgetOptions",
+      "include": true
+    },
+    {
+      "source": "GeneratorCapabilities.WidgetSnapshot",
+      "name": "WidgetSnapshot",
+      "include": true
+    }
+  ],
+  "adapters": [
+    {
+      "source": "GeneratorCapabilities.Controller",
+      "name": "ControllerAdapter",
+      "include": true,
+      "methods": [
+        {
+          "source": "close",
+          "overload": 0,
+          "name": "CloseAsync",
+          "include": true
+        }
+      ]
+    },
+    {
+      "source": "GeneratorCapabilities.Widget",
+      "name": "WidgetAdapter",
+      "include": true,
+      "methods": [
+        {
+          "source": "acceptGenericWidgetDictionary",
+          "overload": 0,
+          "name": "AcceptGenericWidgetDictionaryAsync",
+          "include": true
+        },
+        {
+          "source": "acceptWidgetDictionary",
+          "overload": 0,
+          "name": "AcceptWidgetDictionaryAsync",
+          "include": true
+        },
+        {
+          "source": "acceptWidgetTuple",
+          "overload": 0,
+          "name": "AcceptWidgetTupleAsync",
+          "include": true
+        },
+        {
+          "source": "aliasedWidget",
+          "overload": 0,
+          "name": "AliasedWidget",
+          "include": true
+        },
+        {
+          "source": "aliasedWidgets",
+          "overload": 0,
+          "name": "AliasedWidgets",
+          "include": true
+        },
+        {
+          "source": "anonymousSnapshot",
+          "overload": 0,
+          "name": "AnonymousSnapshot",
+          "include": true
+        },
+        {
+          "source": "attach",
+          "overload": 0,
+          "name": "AttachAsync",
+          "include": true
+        },
+        {
+          "source": "bytes",
+          "overload": 0,
+          "name": "BytesAsync",
+          "include": true
+        },
+        {
+          "source": "choose",
+          "overload": 0,
+          "name": "Choose",
+          "include": true
+        },
+        {
+          "source": "chooseWide",
+          "overload": 0,
+          "name": "ChooseWide",
+          "include": true
+        },
+        {
+          "source": "configure",
+          "overload": 0,
+          "name": "ConfigureAsync",
+          "include": true
+        },
+        {
+          "source": "consumeWideCallback",
+          "overload": 0,
+          "name": "ConsumeWideCallbackAsync",
+          "include": true
+        },
+        {
+          "source": "createDisposer",
+          "overload": 0,
+          "name": "CreateDisposer",
+          "include": true
+        },
+        {
+          "source": "createDisposerAsync",
+          "overload": 0,
+          "name": "CreateDisposerAsync",
+          "include": true
+        },
+        {
+          "source": "describe",
+          "overload": 0,
+          "name": "Describe",
+          "include": true
+        },
+        {
+          "source": "disposerOrLabel",
+          "overload": 0,
+          "name": "DisposerOrLabel",
+          "include": true
+        },
+        {
+          "source": "disposers",
+          "overload": 0,
+          "name": "Disposers",
+          "include": true
+        },
+        {
+          "source": "element",
+          "overload": 0,
+          "name": "Element",
+          "include": true
+        },
+        {
+          "source": "genericWidgetDictionary",
+          "overload": 0,
+          "name": "GenericWidgetDictionary",
+          "include": true
+        },
+        {
+          "source": "getMap",
+          "overload": 0,
+          "name": "GetMap",
+          "include": true
+        },
+        {
+          "source": "intersection",
+          "overload": 0,
+          "name": "Intersection",
+          "include": true
+        },
+        {
+          "source": "listen",
+          "overload": 0,
+          "name": "ListenAsync",
+          "include": true
+        },
+        {
+          "source": "longTuple",
+          "overload": 0,
+          "name": "LongTuple",
+          "include": true
+        },
+        {
+          "source": "map",
+          "overload": 0,
+          "name": "Map",
+          "include": true
+        },
+        {
+          "source": "maybeAliasedWidget",
+          "overload": 0,
+          "name": "MaybeAliasedWidget",
+          "include": true
+        },
+        {
+          "source": "maybeAsync",
+          "overload": 0,
+          "name": "MaybeAsync",
+          "include": true
+        },
+        {
+          "source": "maybeBytes",
+          "overload": 0,
+          "name": "MaybeBytesAsync",
+          "include": true
+        },
+        {
+          "source": "maybeDisposer",
+          "overload": 0,
+          "name": "MaybeDisposer",
+          "include": true
+        },
+        {
+          "source": "maybeDisposerAsync",
+          "overload": 0,
+          "name": "MaybeDisposerAsync",
+          "include": true
+        },
+        {
+          "source": "maybeElement",
+          "overload": 0,
+          "name": "MaybeElement",
+          "include": true
+        },
+        {
+          "source": "maybeWidget",
+          "overload": 0,
+          "name": "MaybeWidget",
+          "include": true
+        },
+        {
+          "source": "maybeWidgetAsync",
+          "overload": 0,
+          "name": "MaybeWidgetAsync",
+          "include": true
+        },
+        {
+          "source": "maybeWidgets",
+          "overload": 0,
+          "name": "MaybeWidgets",
+          "include": true
+        },
+        {
+          "source": "mixedWidgetDictionary",
+          "overload": 0,
+          "name": "MixedWidgetDictionary",
+          "include": true
+        },
+        {
+          "source": "numericWidgetDictionary",
+          "overload": 0,
+          "name": "NumericWidgetDictionary",
+          "include": true
+        },
+        {
+          "source": "render",
+          "overload": 0,
+          "name": "RenderAsync",
+          "include": true
+        },
+        {
+          "source": "renderAsync",
+          "overload": 0,
+          "name": "RenderAsyncMethod2",
+          "include": true
+        },
+        {
+          "source": "singleWidgetTuple",
+          "overload": 0,
+          "name": "SingleWidgetTuple",
+          "include": true
+        },
+        {
+          "source": "snapshot",
+          "overload": 0,
+          "name": "Snapshot",
+          "include": true
+        },
+        {
+          "source": "tuple",
+          "overload": 0,
+          "name": "Tuple",
+          "include": true
+        },
+        {
+          "source": "update",
+          "overload": 0,
+          "name": "UpdateAsync",
+          "include": true
+        },
+        {
+          "source": "update",
+          "overload": 1,
+          "name": "UpdateOverload2Async",
+          "include": false
+        },
+        {
+          "source": "widgetDictionary",
+          "overload": 0,
+          "name": "WidgetDictionary",
+          "include": true
+        },
+        {
+          "source": "widgetEnvelope",
+          "overload": 0,
+          "name": "WidgetEnvelope",
+          "include": true
+        },
+        {
+          "source": "widgetOrLabel",
+          "overload": 0,
+          "name": "WidgetOrLabel",
+          "include": true
+        },
+        {
+          "source": "widgetRecord",
+          "overload": 0,
+          "name": "WidgetRecord",
+          "include": true
+        },
+        {
+          "source": "widgets",
+          "overload": 0,
+          "name": "Widgets",
+          "include": true
+        },
+        {
+          "source": "widgetsAsync",
+          "overload": 0,
+          "name": "WidgetsAsync",
+          "include": true
+        },
+        {
+          "source": "widgetsOrLabel",
+          "overload": 0,
+          "name": "WidgetsOrLabel",
+          "include": true
+        },
+        {
+          "source": "widgetTuple",
+          "overload": 0,
+          "name": "WidgetTuple",
+          "include": true
+        }
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "source": "GeneratorCapabilities.Controller",
+      "name": "Controller",
+      "include": true,
+      "constructor": null,
+      "constructors": [
+        {
+          "globalName": "GeneratorCapabilities.Controller",
+          "name": "CreateAsync",
+          "overload": 0
+        },
+        {
+          "globalName": "GeneratorCapabilities.Controller",
+          "name": "CreateOverload2Async",
+          "overload": 1
+        }
+      ],
+      "properties": [],
+      "methods": [
+        {
+          "source": "close",
+          "overload": 0,
+          "name": "CloseAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        }
+      ]
+    },
+    {
+      "source": "GeneratorCapabilities.Widget",
+      "name": "WidgetProxy",
+      "include": true,
+      "constructor": null,
+      "constructors": [],
+      "properties": [
+        {
+          "source": "children",
+          "include": true,
+          "getterName": "GetChildrenAsync",
+          "setterName": null
+        },
+        {
+          "source": "disposer",
+          "include": true,
+          "getterName": "GetDisposerAsync",
+          "setterName": "SetDisposerAsync"
+        },
+        {
+          "source": "marker",
+          "include": true,
+          "getterName": "GetMarkerAsync",
+          "setterName": null
+        },
+        {
+          "source": "peer",
+          "include": true,
+          "getterName": "GetPeerAsync",
+          "setterName": "SetPeerAsync"
+        },
+        {
+          "source": "ready",
+          "include": true,
+          "getterName": "GetReadyAsync",
+          "setterName": null
+        },
+        {
+          "source": "readyChildren",
+          "include": true,
+          "getterName": "GetReadyChildrenAsync",
+          "setterName": null
+        },
+        {
+          "source": "readyDisposer",
+          "include": true,
+          "getterName": "GetReadyDisposerAsync",
+          "setterName": null
+        }
+      ],
+      "methods": [
+        {
+          "source": "acceptGenericWidgetDictionary",
+          "overload": 0,
+          "name": "AcceptGenericWidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "acceptWidgetDictionary",
+          "overload": 0,
+          "name": "AcceptWidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "acceptWidgetTuple",
+          "overload": 0,
+          "name": "AcceptWidgetTupleAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "aliasedWidget",
+          "overload": 0,
+          "name": "AliasedWidgetAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "aliasedWidgets",
+          "overload": 0,
+          "name": "AliasedWidgetsAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "anonymousSnapshot",
+          "overload": 0,
+          "name": "AnonymousSnapshotAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "attach",
+          "overload": 0,
+          "name": "AttachAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "bytes",
+          "overload": 0,
+          "name": "BytesAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "choose",
+          "overload": 0,
+          "name": "ChooseAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "chooseWide",
+          "overload": 0,
+          "name": "ChooseWideAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "configure",
+          "overload": 0,
+          "name": "ConfigureAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "consumeWideCallback",
+          "overload": 0,
+          "name": "ConsumeWideCallbackAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "createDisposer",
+          "overload": 0,
+          "name": "CreateDisposerAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "createDisposerAsync",
+          "overload": 0,
+          "name": "CreateDisposerAsyncMethod2",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "describe",
+          "overload": 0,
+          "name": "DescribeAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "disposerOrLabel",
+          "overload": 0,
+          "name": "DisposerOrLabelAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "disposers",
+          "overload": 0,
+          "name": "DisposersAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "element",
+          "overload": 0,
+          "name": "ElementAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "genericWidgetDictionary",
+          "overload": 0,
+          "name": "GenericWidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "getMap",
+          "overload": 0,
+          "name": "GetMapAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "intersection",
+          "overload": 0,
+          "name": "IntersectionAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "listen",
+          "overload": 0,
+          "name": "ListenAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "longTuple",
+          "overload": 0,
+          "name": "LongTupleAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "map",
+          "overload": 0,
+          "name": "MapAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeAliasedWidget",
+          "overload": 0,
+          "name": "MaybeAliasedWidgetAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeAsync",
+          "overload": 0,
+          "name": "MaybeAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeBytes",
+          "overload": 0,
+          "name": "MaybeBytesAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeDisposer",
+          "overload": 0,
+          "name": "MaybeDisposerAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeDisposerAsync",
+          "overload": 0,
+          "name": "MaybeDisposerAsyncMethod2",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeElement",
+          "overload": 0,
+          "name": "MaybeElementAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeWidget",
+          "overload": 0,
+          "name": "MaybeWidgetAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeWidgetAsync",
+          "overload": 0,
+          "name": "MaybeWidgetAsyncMethod2",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "maybeWidgets",
+          "overload": 0,
+          "name": "MaybeWidgetsAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "mixedWidgetDictionary",
+          "overload": 0,
+          "name": "MixedWidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "numericWidgetDictionary",
+          "overload": 0,
+          "name": "NumericWidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "render",
+          "overload": 0,
+          "name": "RenderAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "renderAsync",
+          "overload": 0,
+          "name": "RenderAsyncMethod2",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "singleWidgetTuple",
+          "overload": 0,
+          "name": "SingleWidgetTupleAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "snapshot",
+          "overload": 0,
+          "name": "SnapshotAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "tuple",
+          "overload": 0,
+          "name": "TupleAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "update",
+          "overload": 0,
+          "name": "UpdateAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "update",
+          "overload": 1,
+          "name": "UpdateOverload2Async",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetDictionary",
+          "overload": 0,
+          "name": "WidgetDictionaryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetEnvelope",
+          "overload": 0,
+          "name": "WidgetEnvelopeAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetOrLabel",
+          "overload": 0,
+          "name": "WidgetOrLabelAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetRecord",
+          "overload": 0,
+          "name": "WidgetRecordAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgets",
+          "overload": 0,
+          "name": "WidgetsAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetsAsync",
+          "overload": 0,
+          "name": "WidgetsAsyncMethod2",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetsOrLabel",
+          "overload": 0,
+          "name": "WidgetsOrLabelAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "widgetTuple",
+          "overload": 0,
+          "name": "WidgetTupleAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        }
+      ]
+    }
+  ]
+}
