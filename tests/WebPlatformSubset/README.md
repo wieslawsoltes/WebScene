@@ -29,11 +29,16 @@ serialization, and custom-property inheritance independently of any hosted produ
 Run them through both adapters with `--selection candidate`; candidate failures are
 reported but do not silently weaken the required profile.
 
-Current evidence (2026-07-26): the complete required profile contains 109 documents
-and 430 assertions. The latest promotion requires rendered `innerText` block boundaries
-while preserving adjacent inline concatenation. It was reduced from a TradingView
-semantic-inventory accessible-name discrepancy, authorized unchanged in Chrome, and
-then passed unchanged in both HtmlML adapters. The preceding promotion requires
+Current evidence (2026-07-26): the complete required profile contains 110 documents
+and 433 assertions. The latest promotion requires selector APIs, element collections,
+and `parentElement` to preserve JavaScript node identity, uniqueness, and tree order.
+It was reduced from impossible duplicate structural paths in a hosted-component
+inventory, authorized unchanged in Chrome, and then passed unchanged in both HtmlML
+adapters. This rules out a general core identity defect and keeps transient-locator
+handling in the private consumer. The preceding promotion requires rendered `innerText`
+block boundaries while preserving adjacent inline concatenation. It was reduced from a
+TradingView semantic-inventory accessible-name discrepancy, authorized unchanged in
+Chrome, and then passed unchanged in both HtmlML adapters. The earlier promotion requires
 stylesheet `visibility` inheritance,
 layout retention, focus rejection, hit-test rejection, and explicit descendant
 computed/interaction restoration; Chrome and native already passed, while the managed

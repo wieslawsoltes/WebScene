@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Selector and element-collection node identity</title>
+<body>
+<section id="identity-host">
+  <span id="identity-first">first</span>
+  <span id="identity-second">second</span>
+  <span id="identity-third">third</span>
+</section>
+<script>
+  const state = window.__htmlMlWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({ name, status: "FAIL", message: String(error.message || error), stack: error.stack || null });
+    }
+  }
+
+  const host = document.getElementById("identity-host");
+  const first = document.getElementById("identity-first");
+  const second = document.getElementById("identity-second");
+  const third = document.getElementById("identity-third");
+
+  test("repeated selector reads preserve JavaScript node identity", () => {
+    assert(document.querySelector("#identity-second") === second,
+      "querySelector returned a different wrapper for the same node");
+    assert(document.querySelectorAll("#identity-second")[0] === second,
+      "querySelectorAll returned a different wrapper for the same node");
+  });
+
+  test("selector results contain each matching element exactly once", () => {
+    const selected = Array.from(host.querySelectorAll("span"));
+    assert(selected.length === 3, `expected three matches, received ${selected.length}`);
+    assert(new Set(selected).size === selected.length,
+      "querySelectorAll returned duplicate wrappers or nodes");
+    assert(selected[0] === first && selected[1] === second && selected[2] === third,
+      "querySelectorAll lost tree order or node identity");
+  });
+
+  test("children collections share identity with selector results", () => {
+    const children = Array.from(host.children);
+    assert(children.length === 3, `expected three children, received ${children.length}`);
+    assert(children.indexOf(first) === 0, "first child identity did not survive collection conversion");
+    assert(children.indexOf(second) === 1, "second child identity did not survive collection conversion");
+    assert(children.indexOf(third) === 2, "third child identity did not survive collection conversion");
+    assert(first.parentElement === host && second.parentElement === host && third.parentElement === host,
+      "parentElement did not preserve the parent node identity");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>
