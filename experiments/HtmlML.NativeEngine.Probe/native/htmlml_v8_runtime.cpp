@@ -2579,6 +2579,8 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "classList"), get_class_list);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "clientWidth"), get_client_width);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "clientHeight"), get_client_height);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "clientLeft"), get_client_left);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "clientTop"), get_client_top);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "scrollWidth"), get_scroll_width);
         element->InstanceTemplate()->SetNativeDataProperty(
@@ -8306,6 +8308,22 @@ struct v8_dom_runtime::implementation final {
             ->InstanceTemplate()
             ->NewInstance(local_context)
             .ToLocalChecked();
+        v8::Local<v8::Value> element_constructor;
+        const auto has_element_constructor = local_context->Global()
+            ->Get(local_context, js_string(isolate, "Element"))
+            .ToLocal(&element_constructor)
+            && element_constructor->IsFunction();
+        if (has_element_constructor) {
+            v8::Local<v8::Value> element_prototype;
+            if (element_constructor.As<v8::Function>()
+                    ->Get(
+                        local_context,
+                        js_string(isolate, "prototype"))
+                    .ToLocal(&element_prototype)
+                && element_prototype->IsObject()) {
+                object->SetPrototype(local_context, element_prototype).Check();
+            }
+        }
         object->SetAlignedPointerInInternalField(
             0,
             &node,
@@ -11307,6 +11325,46 @@ struct v8_dom_runtime::implementation final {
                 : node->layout.width;
             info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), width));
         }
+    }
+
+    static void get_client_left(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (node != nullptr && node->tag == "html"
+            && node->parent == &self->document.body()) {
+            node = &self->document.body();
+        }
+        self->ensure_layout(node);
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(v8::Number::New(
+            info.GetIsolate(),
+            resolve_connected_css_length(
+                *node,
+                node->style.border_left_width,
+                std::max(0.0F, node->layout.width))));
+    }
+
+    static void get_client_top(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (node != nullptr && node->tag == "html"
+            && node->parent == &self->document.body()) {
+            node = &self->document.body();
+        }
+        self->ensure_layout(node);
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(v8::Number::New(
+            info.GetIsolate(),
+            resolve_connected_css_length(
+                *node,
+                node->style.border_top_width,
+                std::max(0.0F, node->layout.width))));
     }
 
     static void get_offset_width(

@@ -118,6 +118,9 @@ internal static class HeadlessProof
             var inactiveRail = rightToolbar.GetProperty("inactive");
             var activeRailClass =
                 activeRail.GetProperty("className").GetString() ?? "";
+            var chartValuesCoach = visual.GetProperty("chartValuesCoach");
+            var chartValuesCoachRect = chartValuesCoach.GetProperty("rect");
+            var chartCanvasRect = pointerTarget.GetProperty("rect");
             var rightEdge = rightRect.GetProperty("x").GetDouble()
                 + rightRect.GetProperty("width").GetDouble();
             var toolbarEdge = toolbarRect.GetProperty("x").GetDouble()
@@ -125,6 +128,9 @@ internal static class HeadlessProof
             static double Bottom(JsonElement rect) =>
                 rect.GetProperty("y").GetDouble()
                 + rect.GetProperty("height").GetDouble();
+            static double Right(JsonElement rect) =>
+                rect.GetProperty("x").GetDouble()
+                + rect.GetProperty("width").GetDouble();
             if (!layout.GetProperty("ready").GetBoolean()
                 || layout.GetProperty("widgetbarWrap").GetProperty("position").GetString()
                     != "absolute"
@@ -162,6 +168,17 @@ internal static class HeadlessProof
                 || marketStatus.GetProperty("itemCount").GetInt32() != 3
                 || topSeparators.GetProperty("count").GetInt32() < 7
                 || !activeRailClass.Contains("isActive-", StringComparison.Ordinal)
+                || chartValuesCoach.GetProperty("message").GetString()
+                    != "Press and hold to see detailed chart values"
+                || chartValuesCoach.GetProperty("position").GetString() != "fixed"
+                || chartValuesCoach.GetProperty("transform").GetString()
+                    is "none" or "matrix(1, 0, 0, 1, 0, 0)"
+                || chartValuesCoachRect.GetProperty("x").GetDouble()
+                    < chartCanvasRect.GetProperty("x").GetDouble()
+                || chartValuesCoachRect.GetProperty("y").GetDouble()
+                    < chartCanvasRect.GetProperty("y").GetDouble()
+                || Right(chartValuesCoachRect) > Right(chartCanvasRect)
+                || Bottom(chartValuesCoachRect) > Bottom(chartCanvasRect)
                 || pointerTarget.GetProperty("tag").GetString() != "CANVAS"
                 || pointerTarget.GetProperty("cursor").GetString() != "crosshair"
                 || pointerInput.GetProperty("pointermove").GetInt32() < 1
@@ -398,6 +415,32 @@ internal static class HeadlessProof
                         return rect.y < 42 && rect.width >= 0.9
                           && rect.height >= 20;
                       });
+                    const chartValuesMessage = Array.from(
+                      chartDocument.querySelectorAll('*'))
+                      .filter(node => {
+                        const rect = node.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0
+                          && node.textContent?.includes(
+                            'Press and hold to see detailed chart values');
+                      })
+                      .sort((left, right) => {
+                        const leftRect = left.getBoundingClientRect();
+                        const rightRect = right.getBoundingClientRect();
+                        return leftRect.width * leftRect.height
+                          - rightRect.width * rightRect.height;
+                      })[0];
+                    const chartValuesCoach = (() => {
+                      for (let node = chartValuesMessage;
+                           node;
+                           node = node.parentElement) {
+                        const rect = node.getBoundingClientRect();
+                        if (getComputedStyle(node).position === 'fixed'
+                            && rect.width > 0 && rect.height > 0) {
+                          return node;
+                        }
+                      }
+                      return null;
+                    })();
                     return {
                       ready: Boolean(
                         right && widgetbarWrap && widgetbarTabs
@@ -461,7 +504,15 @@ internal static class HeadlessProof
                         rightToolbar: {
                           active: describeVisual(activeRailButton),
                           inactive: describeVisual(inactiveRailButton)
-                        }
+                        },
+                        chartValuesCoach: chartValuesCoach ? {
+                          ...describeVisual(chartValuesCoach),
+                          message: chartValuesMessage?.textContent?.trim(),
+                          position:
+                            getComputedStyle(chartValuesCoach).position,
+                          transform:
+                            getComputedStyle(chartValuesCoach).transform
+                        } : null
                       },
                       pointerTarget: (() => {
                         const result = [];

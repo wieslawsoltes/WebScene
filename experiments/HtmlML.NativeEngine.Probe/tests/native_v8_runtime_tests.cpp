@@ -5860,6 +5860,57 @@ void test_frame_script_dom_presence(htmlml_engine* engine)
         "contentDocument queries escaped the frame document boundary: " + boundary);
 }
 
+void test_dom_element_constructor_identity(htmlml_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const outer = document.createElement('div');
+          outer.style.borderLeft = '3px solid black';
+          outer.style.borderTop = '5px solid black';
+          document.body.appendChild(outer);
+          globalThis.__outerElementIdentity = {
+            node: outer instanceof Node,
+            element: outer instanceof Element,
+            htmlElement: outer instanceof HTMLElement,
+            ownerElement: outer instanceof outer.ownerDocument.defaultView.Element,
+            ownerHtmlElement:
+              outer instanceof outer.ownerDocument.defaultView.HTMLElement,
+            clientLeft: outer.clientLeft,
+            clientTop: outer.clientTop
+          };
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(
+            '<html><body><script>'
+            + 'const element = document.createElement("div");'
+            + 'document.body.appendChild(element);'
+            + 'globalThis.__elementIdentity = {'
+            + 'node: element instanceof Node,'
+            + 'element: element instanceof Element,'
+            + 'htmlElement: element instanceof HTMLElement,'
+            + 'ownerElement: element instanceof document.defaultView.Element,'
+            + 'ownerHtmlElement: element instanceof document.defaultView.HTMLElement'
+            + '};'
+            + '</script></body></html>');
+          frameDocument.close();
+          globalThis.__elementIdentityFrame = frame;
+        })()
+    )JS", "native-dom-element-constructor-identity-setup.js");
+    const auto result = evaluate(engine, R"JS(
+        ({
+          outer: globalThis.__outerElementIdentity,
+          frame: globalThis.__elementIdentityFrame.contentWindow.__elementIdentity
+        })
+    )JS", "native-dom-element-constructor-identity-result.js");
+    require(
+        result == R"({"outer":{"node":true,"element":true,"htmlElement":true,"ownerElement":true,"ownerHtmlElement":true,"clientLeft":3,"clientTop":5},"frame":{"node":true,"element":true,"htmlElement":true,"ownerElement":true,"ownerHtmlElement":true}})",
+        "DOM wrappers did not expose Element identity or client border insets: "
+            + result);
+}
+
 void test_provisional_frame_focus_and_document_event_identity(htmlml_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -8583,6 +8634,7 @@ int main()
     test_native_text_input_focus_events_and_caret(engine);
     test_svg_dom_parser_preserves_fill_rule(engine);
     test_frame_script_dom_presence(engine);
+    test_dom_element_constructor_identity(engine);
     test_provisional_frame_focus_and_document_event_identity(engine);
     test_initial_frame_document_write_and_hidden_style(engine);
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
