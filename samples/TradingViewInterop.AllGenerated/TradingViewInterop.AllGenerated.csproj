@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HtmlML.JavaScript.Interop\HtmlML.JavaScript.Interop.csproj" />
+    <ProjectReference Include="..\..\src\HtmlML.JavaScript.Interop.Generator\HtmlML.JavaScript.Interop.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="TradingViewAllApi.htmlml-interop-api.json" />
+    <AdditionalFiles Include="TradingViewAll.htmlml-interop-policy.json" />
+  </ItemGroup>
+</Project>

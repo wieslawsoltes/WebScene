@@ -1,0 +1,5526 @@
+{
+  "schemaVersion": "1.0",
+  "generator": "htmlml-interop-discover",
+  "typescriptVersion": "5.9.3",
+  "apiFingerprint": "dcffb90f98a5a6ba627ec573da394a68ab6b2adebe334f81a6cb4d022c5a5db9",
+  "declarations": [
+    {
+      "fileName": "GeneratorCapabilities.fixture.d.ts",
+      "sha256": "9aa42f7018a3890e1078203e95550339b3ad8048ec302520c0676f9e8c07fcdc"
+    }
+  ],
+  "types": [
+    {
+      "name": "Brand",
+      "qualifiedName": "GeneratorCapabilities.Brand",
+      "kind": "typeAlias",
+      "typeParameters": [
+        "T",
+        "Name"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "inlineObject",
+        "properties": [
+          {
+            "name": "__brand",
+            "optional": false,
+            "readonly": true,
+            "type": {
+              "kind": "void"
+            }
+          }
+        ],
+        "indexSignatures": []
+      }
+    },
+    {
+      "name": "Controller",
+      "qualifiedName": "GeneratorCapabilities.Controller",
+      "kind": "class",
+      "typeParameters": [],
+      "constructors": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "name",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "Controller",
+            "qualifiedName": "GeneratorCapabilities.Controller",
+            "display": "Controller",
+            "typeArguments": []
+          }
+        },
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "id",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            },
+            {
+              "name": "options",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "WidgetOptions",
+                    "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+                    "display": "WidgetOptions",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "Controller",
+            "qualifiedName": "GeneratorCapabilities.Controller",
+            "display": "Controller",
+            "typeArguments": []
+          }
+        }
+      ],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "close",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "DictionaryEnvelope",
+      "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Disposer",
+      "qualifiedName": "GeneratorCapabilities.Disposer",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "Disposer",
+        "qualifiedName": "GeneratorCapabilities.Disposer",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Envelope",
+      "qualifiedName": "GeneratorCapabilities.Envelope",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "value",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        },
+        {
+          "name": "values",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "typeParameter",
+              "name": "T"
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Formatter",
+      "qualifiedName": "GeneratorCapabilities.Formatter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "string"
+          }
+        }
+      ],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IWidget",
+      "qualifiedName": "GeneratorCapabilities.IWidget",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "label",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "MaybeDisposer",
+      "qualifiedName": "GeneratorCapabilities.MaybeDisposer",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "undefined"
+          },
+          {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "MixedWidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.MixedWidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "primary",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Named",
+      "qualifiedName": "GeneratorCapabilities.Named",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "name",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "NamedTimestamp",
+      "qualifiedName": "GeneratorCapabilities.NamedTimestamp",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "inlineObject",
+        "properties": [
+          {
+            "name": "name",
+            "optional": false,
+            "readonly": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "timestamp",
+            "optional": false,
+            "readonly": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ],
+        "indexSignatures": []
+      }
+    },
+    {
+      "name": "NumericWidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.NumericWidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "number",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Timestamped",
+      "qualifiedName": "GeneratorCapabilities.Timestamped",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "timestamp",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant1",
+      "qualifiedName": "GeneratorCapabilities.Variant1",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 1
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant10",
+      "qualifiedName": "GeneratorCapabilities.Variant10",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 10
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant11",
+      "qualifiedName": "GeneratorCapabilities.Variant11",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 11
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant12",
+      "qualifiedName": "GeneratorCapabilities.Variant12",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 12
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant13",
+      "qualifiedName": "GeneratorCapabilities.Variant13",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 13
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant14",
+      "qualifiedName": "GeneratorCapabilities.Variant14",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 14
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant15",
+      "qualifiedName": "GeneratorCapabilities.Variant15",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 15
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant16",
+      "qualifiedName": "GeneratorCapabilities.Variant16",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 16
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant17",
+      "qualifiedName": "GeneratorCapabilities.Variant17",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 17
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant2",
+      "qualifiedName": "GeneratorCapabilities.Variant2",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant3",
+      "qualifiedName": "GeneratorCapabilities.Variant3",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 3
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant4",
+      "qualifiedName": "GeneratorCapabilities.Variant4",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 4
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant5",
+      "qualifiedName": "GeneratorCapabilities.Variant5",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 5
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant6",
+      "qualifiedName": "GeneratorCapabilities.Variant6",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 6
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant7",
+      "qualifiedName": "GeneratorCapabilities.Variant7",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 7
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant8",
+      "qualifiedName": "GeneratorCapabilities.Variant8",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 8
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant9",
+      "qualifiedName": "GeneratorCapabilities.Variant9",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 9
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Widget",
+      "qualifiedName": "GeneratorCapabilities.Widget",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "acceptGenericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "DictionaryEnvelope",
+                "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+                "display": "DictionaryEnvelope<Widget>",
+                "typeArguments": [
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "acceptWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "WidgetDictionary",
+                "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+                "display": "WidgetDictionary",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "acceptWidgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "tuple",
+                "elements": [
+                  {
+                    "kind": "string"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "aliasedWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "aliasedWidgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "anonymousSnapshot",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "title",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "string"
+                }
+              },
+              {
+                "name": "widget",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        },
+        {
+          "name": "attach",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "widget",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            },
+            {
+              "name": "parent",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "bytes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "Uint8Array",
+              "qualifiedName": "Uint8Array",
+              "display": "Uint8Array<ArrayBufferLike>",
+              "typeArguments": [
+                {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "reference",
+                      "name": "ArrayBuffer",
+                      "qualifiedName": "ArrayBuffer",
+                      "display": "ArrayBuffer",
+                      "typeArguments": []
+                    },
+                    {
+                      "kind": "reference",
+                      "name": "SharedArrayBuffer",
+                      "qualifiedName": "SharedArrayBuffer",
+                      "display": "SharedArrayBuffer",
+                      "typeArguments": []
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "choose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "reference",
+                "name": "Variant1",
+                "qualifiedName": "GeneratorCapabilities.Variant1",
+                "display": "Variant1",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant2",
+                "qualifiedName": "GeneratorCapabilities.Variant2",
+                "display": "Variant2",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant3",
+                "qualifiedName": "GeneratorCapabilities.Variant3",
+                "display": "Variant3",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant4",
+                "qualifiedName": "GeneratorCapabilities.Variant4",
+                "display": "Variant4",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant5",
+                "qualifiedName": "GeneratorCapabilities.Variant5",
+                "display": "Variant5",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant6",
+                "qualifiedName": "GeneratorCapabilities.Variant6",
+                "display": "Variant6",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant7",
+                "qualifiedName": "GeneratorCapabilities.Variant7",
+                "display": "Variant7",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant8",
+                "qualifiedName": "GeneratorCapabilities.Variant8",
+                "display": "Variant8",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant9",
+                "qualifiedName": "GeneratorCapabilities.Variant9",
+                "display": "Variant9",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "chooseWide",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "reference",
+                "name": "Variant1",
+                "qualifiedName": "GeneratorCapabilities.Variant1",
+                "display": "Variant1",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant10",
+                "qualifiedName": "GeneratorCapabilities.Variant10",
+                "display": "Variant10",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant11",
+                "qualifiedName": "GeneratorCapabilities.Variant11",
+                "display": "Variant11",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant12",
+                "qualifiedName": "GeneratorCapabilities.Variant12",
+                "display": "Variant12",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant13",
+                "qualifiedName": "GeneratorCapabilities.Variant13",
+                "display": "Variant13",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant14",
+                "qualifiedName": "GeneratorCapabilities.Variant14",
+                "display": "Variant14",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant15",
+                "qualifiedName": "GeneratorCapabilities.Variant15",
+                "display": "Variant15",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant16",
+                "qualifiedName": "GeneratorCapabilities.Variant16",
+                "display": "Variant16",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant17",
+                "qualifiedName": "GeneratorCapabilities.Variant17",
+                "display": "Variant17",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant2",
+                "qualifiedName": "GeneratorCapabilities.Variant2",
+                "display": "Variant2",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant3",
+                "qualifiedName": "GeneratorCapabilities.Variant3",
+                "display": "Variant3",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant4",
+                "qualifiedName": "GeneratorCapabilities.Variant4",
+                "display": "Variant4",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant5",
+                "qualifiedName": "GeneratorCapabilities.Variant5",
+                "display": "Variant5",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant6",
+                "qualifiedName": "GeneratorCapabilities.Variant6",
+                "display": "Variant6",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant7",
+                "qualifiedName": "GeneratorCapabilities.Variant7",
+                "display": "Variant7",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant8",
+                "qualifiedName": "GeneratorCapabilities.Variant8",
+                "display": "Variant8",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant9",
+                "qualifiedName": "GeneratorCapabilities.Variant9",
+                "display": "Variant9",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "configure",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "enabled",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "boolean"
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "consumeWideCallback",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "handler",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "a",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      },
+                      {
+                        "name": "b",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "c",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "boolean"
+                        }
+                      },
+                      {
+                        "name": "d",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      },
+                      {
+                        "name": "e",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "createDisposer",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "createDisposerAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "describe",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "text",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "string"
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        },
+        {
+          "name": "disposerOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "disposers",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "element",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "HTMLElement",
+            "qualifiedName": "HTMLElement",
+            "display": "HTMLElement",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "genericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "DictionaryEnvelope",
+            "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+            "display": "DictionaryEnvelope<Widget>",
+            "typeArguments": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "getMap",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "ReadonlyMap",
+            "qualifiedName": "ReadonlyMap",
+            "display": "ReadonlyMap<string, number>",
+            "typeArguments": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "intersection",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "NamedTimestamp",
+            "qualifiedName": "GeneratorCapabilities.NamedTimestamp",
+            "display": "NamedTimestamp",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "listen",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "handler",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "callback",
+                    "name": null,
+                    "qualifiedName": null,
+                    "signatures": [
+                      {
+                        "typeParameters": [],
+                        "parameters": [
+                          {
+                            "name": "value",
+                            "optional": false,
+                            "rest": false,
+                            "type": {
+                              "kind": "string"
+                            }
+                          }
+                        ],
+                        "returns": {
+                          "kind": "void"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "longTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              },
+              {
+                "kind": "boolean"
+              },
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              },
+              {
+                "kind": "boolean"
+              },
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "map",
+          "overload": 0,
+          "typeParameters": [
+            "T"
+          ],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "typeParameter",
+                "name": "T"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        },
+        {
+          "name": "maybeAliasedWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "promise",
+                "result": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeBytes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "reference",
+                  "name": "Uint8Array",
+                  "qualifiedName": "Uint8Array",
+                  "display": "Uint8Array<ArrayBufferLike>",
+                  "typeArguments": [
+                    {
+                      "kind": "union",
+                      "types": [
+                        {
+                          "kind": "reference",
+                          "name": "ArrayBuffer",
+                          "qualifiedName": "ArrayBuffer",
+                          "display": "ArrayBuffer",
+                          "typeArguments": []
+                        },
+                        {
+                          "kind": "reference",
+                          "name": "SharedArrayBuffer",
+                          "qualifiedName": "SharedArrayBuffer",
+                          "display": "SharedArrayBuffer",
+                          "typeArguments": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeDisposer",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeDisposerAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "callback",
+                  "name": "Disposer",
+                  "qualifiedName": "GeneratorCapabilities.Disposer",
+                  "signatures": [
+                    {
+                      "typeParameters": [],
+                      "parameters": [],
+                      "returns": {
+                        "kind": "void"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeElement",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "HTMLElement",
+                "qualifiedName": "HTMLElement",
+                "display": "HTMLElement",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidgetAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeWidgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "array",
+                "readonly": true,
+                "element": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "mixedWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "MixedWidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.MixedWidgetDictionary",
+            "display": "MixedWidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "numericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "NumericWidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.NumericWidgetDictionary",
+            "display": "NumericWidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "render",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "renderAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        },
+        {
+          "name": "singleWidgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "snapshot",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "WidgetSnapshot",
+            "qualifiedName": "GeneratorCapabilities.WidgetSnapshot",
+            "display": "WidgetSnapshot",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "tuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "update",
+          "overload": 1,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "widgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "WidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+            "display": "WidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "widgetEnvelope",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Envelope",
+            "qualifiedName": "GeneratorCapabilities.Envelope",
+            "display": "Envelope<Widget>",
+            "typeArguments": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetRecord",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Record",
+            "qualifiedName": "Record",
+            "display": "Record<string, Widget>",
+            "typeArguments": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "widgetsAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": true,
+              "element": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "widgetsOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "array",
+                "readonly": true,
+                "element": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "children",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "disposer",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "marker",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "peer",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "ready",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "readyChildren",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": true,
+              "element": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "readyDisposer",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetHandle",
+      "qualifiedName": "GeneratorCapabilities.WidgetHandle",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "reference",
+        "name": "Widget",
+        "qualifiedName": "GeneratorCapabilities.Widget",
+        "display": "Widget",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "WidgetList",
+      "qualifiedName": "GeneratorCapabilities.WidgetList",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "array",
+        "readonly": true,
+        "element": {
+          "kind": "reference",
+          "name": "Widget",
+          "qualifiedName": "GeneratorCapabilities.Widget",
+          "display": "Widget",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "WidgetOptions",
+      "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "formatter",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": null,
+            "qualifiedName": null,
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [
+                  {
+                    "name": "value",
+                    "optional": false,
+                    "rest": false,
+                    "type": {
+                      "kind": "number"
+                    }
+                  }
+                ],
+                "returns": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "namedFormatter",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": "Formatter",
+            "qualifiedName": "GeneratorCapabilities.Formatter",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [
+                  {
+                    "name": "value",
+                    "optional": false,
+                    "rest": false,
+                    "type": {
+                      "kind": "number"
+                    }
+                  }
+                ],
+                "returns": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "nested",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "inlineObject",
+                "properties": [
+                  {
+                    "name": "enabled",
+                    "optional": false,
+                    "readonly": false,
+                    "type": {
+                      "kind": "boolean"
+                    }
+                  }
+                ],
+                "indexSignatures": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "pattern",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "RegExp",
+                "qualifiedName": "RegExp",
+                "display": "RegExp",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "WidgetOptions",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetSnapshot",
+      "qualifiedName": "GeneratorCapabilities.WidgetSnapshot",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "dispose",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidget",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "title",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "tuple",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widget",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "widgets",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    }
+  ],
+  "roots": [
+    {
+      "name": "Brand",
+      "qualifiedName": "GeneratorCapabilities.Brand",
+      "kind": "typeAlias",
+      "typeParameters": [
+        "T",
+        "Name"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "inlineObject",
+        "properties": [
+          {
+            "name": "__brand",
+            "optional": false,
+            "readonly": true,
+            "type": {
+              "kind": "void"
+            }
+          }
+        ],
+        "indexSignatures": []
+      }
+    },
+    {
+      "name": "Controller",
+      "qualifiedName": "GeneratorCapabilities.Controller",
+      "kind": "class",
+      "typeParameters": [],
+      "constructors": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "name",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "Controller",
+            "qualifiedName": "GeneratorCapabilities.Controller",
+            "display": "Controller",
+            "typeArguments": []
+          }
+        },
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "id",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            },
+            {
+              "name": "options",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "WidgetOptions",
+                    "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+                    "display": "WidgetOptions",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "Controller",
+            "qualifiedName": "GeneratorCapabilities.Controller",
+            "display": "Controller",
+            "typeArguments": []
+          }
+        }
+      ],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "close",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "DictionaryEnvelope",
+      "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Disposer",
+      "qualifiedName": "GeneratorCapabilities.Disposer",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "Disposer",
+        "qualifiedName": "GeneratorCapabilities.Disposer",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Envelope",
+      "qualifiedName": "GeneratorCapabilities.Envelope",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "value",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        },
+        {
+          "name": "values",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "typeParameter",
+              "name": "T"
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Formatter",
+      "qualifiedName": "GeneratorCapabilities.Formatter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "string"
+          }
+        }
+      ],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IWidget",
+      "qualifiedName": "GeneratorCapabilities.IWidget",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "label",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "MaybeDisposer",
+      "qualifiedName": "GeneratorCapabilities.MaybeDisposer",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "undefined"
+          },
+          {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "MixedWidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.MixedWidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "primary",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Named",
+      "qualifiedName": "GeneratorCapabilities.Named",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "name",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "NamedTimestamp",
+      "qualifiedName": "GeneratorCapabilities.NamedTimestamp",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "inlineObject",
+        "properties": [
+          {
+            "name": "name",
+            "optional": false,
+            "readonly": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "timestamp",
+            "optional": false,
+            "readonly": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ],
+        "indexSignatures": []
+      }
+    },
+    {
+      "name": "NumericWidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.NumericWidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "number",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "Timestamped",
+      "qualifiedName": "GeneratorCapabilities.Timestamped",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "timestamp",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant1",
+      "qualifiedName": "GeneratorCapabilities.Variant1",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 1
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant10",
+      "qualifiedName": "GeneratorCapabilities.Variant10",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 10
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant11",
+      "qualifiedName": "GeneratorCapabilities.Variant11",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 11
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant12",
+      "qualifiedName": "GeneratorCapabilities.Variant12",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 12
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant13",
+      "qualifiedName": "GeneratorCapabilities.Variant13",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 13
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant14",
+      "qualifiedName": "GeneratorCapabilities.Variant14",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 14
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant15",
+      "qualifiedName": "GeneratorCapabilities.Variant15",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 15
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant16",
+      "qualifiedName": "GeneratorCapabilities.Variant16",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 16
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant17",
+      "qualifiedName": "GeneratorCapabilities.Variant17",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 17
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant2",
+      "qualifiedName": "GeneratorCapabilities.Variant2",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant3",
+      "qualifiedName": "GeneratorCapabilities.Variant3",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 3
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant4",
+      "qualifiedName": "GeneratorCapabilities.Variant4",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 4
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant5",
+      "qualifiedName": "GeneratorCapabilities.Variant5",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 5
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant6",
+      "qualifiedName": "GeneratorCapabilities.Variant6",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 6
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant7",
+      "qualifiedName": "GeneratorCapabilities.Variant7",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 7
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant8",
+      "qualifiedName": "GeneratorCapabilities.Variant8",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 8
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Variant9",
+      "qualifiedName": "GeneratorCapabilities.Variant9",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "literal",
+            "value": 9
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Widget",
+      "qualifiedName": "GeneratorCapabilities.Widget",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "acceptGenericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "DictionaryEnvelope",
+                "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+                "display": "DictionaryEnvelope<Widget>",
+                "typeArguments": [
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "acceptWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "WidgetDictionary",
+                "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+                "display": "WidgetDictionary",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "acceptWidgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "tuple",
+                "elements": [
+                  {
+                    "kind": "string"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "aliasedWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "aliasedWidgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "anonymousSnapshot",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "title",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "string"
+                }
+              },
+              {
+                "name": "widget",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        },
+        {
+          "name": "attach",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "widget",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            },
+            {
+              "name": "parent",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "Widget",
+                    "qualifiedName": "GeneratorCapabilities.Widget",
+                    "display": "Widget",
+                    "typeArguments": []
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "bytes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "Uint8Array",
+              "qualifiedName": "Uint8Array",
+              "display": "Uint8Array<ArrayBufferLike>",
+              "typeArguments": [
+                {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "reference",
+                      "name": "ArrayBuffer",
+                      "qualifiedName": "ArrayBuffer",
+                      "display": "ArrayBuffer",
+                      "typeArguments": []
+                    },
+                    {
+                      "kind": "reference",
+                      "name": "SharedArrayBuffer",
+                      "qualifiedName": "SharedArrayBuffer",
+                      "display": "SharedArrayBuffer",
+                      "typeArguments": []
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "choose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "reference",
+                "name": "Variant1",
+                "qualifiedName": "GeneratorCapabilities.Variant1",
+                "display": "Variant1",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant2",
+                "qualifiedName": "GeneratorCapabilities.Variant2",
+                "display": "Variant2",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant3",
+                "qualifiedName": "GeneratorCapabilities.Variant3",
+                "display": "Variant3",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant4",
+                "qualifiedName": "GeneratorCapabilities.Variant4",
+                "display": "Variant4",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant5",
+                "qualifiedName": "GeneratorCapabilities.Variant5",
+                "display": "Variant5",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant6",
+                "qualifiedName": "GeneratorCapabilities.Variant6",
+                "display": "Variant6",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant7",
+                "qualifiedName": "GeneratorCapabilities.Variant7",
+                "display": "Variant7",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant8",
+                "qualifiedName": "GeneratorCapabilities.Variant8",
+                "display": "Variant8",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant9",
+                "qualifiedName": "GeneratorCapabilities.Variant9",
+                "display": "Variant9",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "chooseWide",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "reference",
+                "name": "Variant1",
+                "qualifiedName": "GeneratorCapabilities.Variant1",
+                "display": "Variant1",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant10",
+                "qualifiedName": "GeneratorCapabilities.Variant10",
+                "display": "Variant10",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant11",
+                "qualifiedName": "GeneratorCapabilities.Variant11",
+                "display": "Variant11",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant12",
+                "qualifiedName": "GeneratorCapabilities.Variant12",
+                "display": "Variant12",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant13",
+                "qualifiedName": "GeneratorCapabilities.Variant13",
+                "display": "Variant13",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant14",
+                "qualifiedName": "GeneratorCapabilities.Variant14",
+                "display": "Variant14",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant15",
+                "qualifiedName": "GeneratorCapabilities.Variant15",
+                "display": "Variant15",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant16",
+                "qualifiedName": "GeneratorCapabilities.Variant16",
+                "display": "Variant16",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant17",
+                "qualifiedName": "GeneratorCapabilities.Variant17",
+                "display": "Variant17",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant2",
+                "qualifiedName": "GeneratorCapabilities.Variant2",
+                "display": "Variant2",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant3",
+                "qualifiedName": "GeneratorCapabilities.Variant3",
+                "display": "Variant3",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant4",
+                "qualifiedName": "GeneratorCapabilities.Variant4",
+                "display": "Variant4",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant5",
+                "qualifiedName": "GeneratorCapabilities.Variant5",
+                "display": "Variant5",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant6",
+                "qualifiedName": "GeneratorCapabilities.Variant6",
+                "display": "Variant6",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant7",
+                "qualifiedName": "GeneratorCapabilities.Variant7",
+                "display": "Variant7",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant8",
+                "qualifiedName": "GeneratorCapabilities.Variant8",
+                "display": "Variant8",
+                "typeArguments": []
+              },
+              {
+                "kind": "reference",
+                "name": "Variant9",
+                "qualifiedName": "GeneratorCapabilities.Variant9",
+                "display": "Variant9",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "configure",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "enabled",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "boolean"
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "consumeWideCallback",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "handler",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "a",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      },
+                      {
+                        "name": "b",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "c",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "boolean"
+                        }
+                      },
+                      {
+                        "name": "d",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      },
+                      {
+                        "name": "e",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "createDisposer",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "createDisposerAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "describe",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "text",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "string"
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        },
+        {
+          "name": "disposerOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "disposers",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "element",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "HTMLElement",
+            "qualifiedName": "HTMLElement",
+            "display": "HTMLElement",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "genericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "DictionaryEnvelope",
+            "qualifiedName": "GeneratorCapabilities.DictionaryEnvelope",
+            "display": "DictionaryEnvelope<Widget>",
+            "typeArguments": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "getMap",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "ReadonlyMap",
+            "qualifiedName": "ReadonlyMap",
+            "display": "ReadonlyMap<string, number>",
+            "typeArguments": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "intersection",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "NamedTimestamp",
+            "qualifiedName": "GeneratorCapabilities.NamedTimestamp",
+            "display": "NamedTimestamp",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "listen",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "handler",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "callback",
+                    "name": null,
+                    "qualifiedName": null,
+                    "signatures": [
+                      {
+                        "typeParameters": [],
+                        "parameters": [
+                          {
+                            "name": "value",
+                            "optional": false,
+                            "rest": false,
+                            "type": {
+                              "kind": "string"
+                            }
+                          }
+                        ],
+                        "returns": {
+                          "kind": "void"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "longTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              },
+              {
+                "kind": "boolean"
+              },
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              },
+              {
+                "kind": "boolean"
+              },
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "map",
+          "overload": 0,
+          "typeParameters": [
+            "T"
+          ],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "typeParameter",
+                "name": "T"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        },
+        {
+          "name": "maybeAliasedWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "promise",
+                "result": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeBytes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "reference",
+                  "name": "Uint8Array",
+                  "qualifiedName": "Uint8Array",
+                  "display": "Uint8Array<ArrayBufferLike>",
+                  "typeArguments": [
+                    {
+                      "kind": "union",
+                      "types": [
+                        {
+                          "kind": "reference",
+                          "name": "ArrayBuffer",
+                          "qualifiedName": "ArrayBuffer",
+                          "display": "ArrayBuffer",
+                          "typeArguments": []
+                        },
+                        {
+                          "kind": "reference",
+                          "name": "SharedArrayBuffer",
+                          "qualifiedName": "SharedArrayBuffer",
+                          "display": "SharedArrayBuffer",
+                          "typeArguments": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeDisposer",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeDisposerAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "callback",
+                  "name": "Disposer",
+                  "qualifiedName": "GeneratorCapabilities.Disposer",
+                  "signatures": [
+                    {
+                      "typeParameters": [],
+                      "parameters": [],
+                      "returns": {
+                        "kind": "void"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeElement",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "HTMLElement",
+                "qualifiedName": "HTMLElement",
+                "display": "HTMLElement",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidget",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidgetAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "union",
+              "types": [
+                {
+                  "kind": "undefined"
+                },
+                {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "maybeWidgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "array",
+                "readonly": true,
+                "element": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "mixedWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "MixedWidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.MixedWidgetDictionary",
+            "display": "MixedWidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "numericWidgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "NumericWidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.NumericWidgetDictionary",
+            "display": "NumericWidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "render",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "renderAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        },
+        {
+          "name": "singleWidgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "snapshot",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "WidgetSnapshot",
+            "qualifiedName": "GeneratorCapabilities.WidgetSnapshot",
+            "display": "WidgetSnapshot",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "tuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "update",
+          "overload": 1,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "widgetDictionary",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "WidgetDictionary",
+            "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+            "display": "WidgetDictionary",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "widgetEnvelope",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Envelope",
+            "qualifiedName": "GeneratorCapabilities.Envelope",
+            "display": "Envelope<Widget>",
+            "typeArguments": [
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetRecord",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "Record",
+            "qualifiedName": "Record",
+            "display": "Record<string, Widget>",
+            "typeArguments": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgets",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "widgetsAsync",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": true,
+              "element": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "widgetsOrLabel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "array",
+                "readonly": true,
+                "element": {
+                  "kind": "reference",
+                  "name": "Widget",
+                  "qualifiedName": "GeneratorCapabilities.Widget",
+                  "display": "Widget",
+                  "typeArguments": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "widgetTuple",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "children",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "disposer",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": "Disposer",
+                "qualifiedName": "GeneratorCapabilities.Disposer",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "marker",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "peer",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "ready",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "readyChildren",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": true,
+              "element": {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "readyDisposer",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "promise",
+            "result": {
+              "kind": "callback",
+              "name": "Disposer",
+              "qualifiedName": "GeneratorCapabilities.Disposer",
+              "signatures": [
+                {
+                  "typeParameters": [],
+                  "parameters": [],
+                  "returns": {
+                    "kind": "void"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetDictionary",
+      "qualifiedName": "GeneratorCapabilities.WidgetDictionary",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [
+        {
+          "key": "string",
+          "value": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetHandle",
+      "qualifiedName": "GeneratorCapabilities.WidgetHandle",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "reference",
+        "name": "Widget",
+        "qualifiedName": "GeneratorCapabilities.Widget",
+        "display": "Widget",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "WidgetList",
+      "qualifiedName": "GeneratorCapabilities.WidgetList",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "array",
+        "readonly": true,
+        "element": {
+          "kind": "reference",
+          "name": "Widget",
+          "qualifiedName": "GeneratorCapabilities.Widget",
+          "display": "Widget",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "WidgetOptions",
+      "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "formatter",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": null,
+            "qualifiedName": null,
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [
+                  {
+                    "name": "value",
+                    "optional": false,
+                    "rest": false,
+                    "type": {
+                      "kind": "number"
+                    }
+                  }
+                ],
+                "returns": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "namedFormatter",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": "Formatter",
+            "qualifiedName": "GeneratorCapabilities.Formatter",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [
+                  {
+                    "name": "value",
+                    "optional": false,
+                    "rest": false,
+                    "type": {
+                      "kind": "number"
+                    }
+                  }
+                ],
+                "returns": {
+                  "kind": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "nested",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "inlineObject",
+                "properties": [
+                  {
+                    "name": "enabled",
+                    "optional": false,
+                    "readonly": false,
+                    "type": {
+                      "kind": "boolean"
+                    }
+                  }
+                ],
+                "indexSignatures": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "pattern",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "RegExp",
+                "qualifiedName": "RegExp",
+                "display": "RegExp",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "WidgetOptions",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "WidgetSnapshot",
+      "qualifiedName": "GeneratorCapabilities.WidgetSnapshot",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "dispose",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "maybeWidget",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "title",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "tuple",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "tuple",
+            "elements": [
+              {
+                "kind": "string"
+              },
+              {
+                "kind": "reference",
+                "name": "Widget",
+                "qualifiedName": "GeneratorCapabilities.Widget",
+                "display": "Widget",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "widget",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "widgets",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": true,
+            "element": {
+              "kind": "reference",
+              "name": "Widget",
+              "qualifiedName": "GeneratorCapabilities.Widget",
+              "display": "Widget",
+              "typeArguments": []
+            }
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    }
+  ],
+  "functions": [
+    {
+      "name": "fromId",
+      "qualifiedName": "GeneratorCapabilities.Controller.fromId",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "id",
+          "optional": false,
+          "rest": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "returns": {
+        "kind": "reference",
+        "name": "Controller",
+        "qualifiedName": "GeneratorCapabilities.Controller",
+        "display": "Controller",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "createDisposer",
+      "qualifiedName": "GeneratorCapabilities.createDisposer",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "callback",
+        "name": "Disposer",
+        "qualifiedName": "GeneratorCapabilities.Disposer",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "createWidget",
+      "qualifiedName": "GeneratorCapabilities.createWidget",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "options",
+          "optional": false,
+          "rest": false,
+          "type": {
+            "kind": "reference",
+            "name": "WidgetOptions",
+            "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+            "display": "WidgetOptions",
+            "typeArguments": []
+          }
+        }
+      ],
+      "returns": {
+        "kind": "reference",
+        "name": "Widget",
+        "qualifiedName": "GeneratorCapabilities.Widget",
+        "display": "Widget",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "listWidgets",
+      "qualifiedName": "GeneratorCapabilities.listWidgets",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "array",
+        "readonly": true,
+        "element": {
+          "kind": "reference",
+          "name": "Widget",
+          "qualifiedName": "GeneratorCapabilities.Widget",
+          "display": "Widget",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "loadDisposer",
+      "qualifiedName": "GeneratorCapabilities.loadDisposer",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "promise",
+        "result": {
+          "kind": "callback",
+          "name": "Disposer",
+          "qualifiedName": "GeneratorCapabilities.Disposer",
+          "signatures": [
+            {
+              "typeParameters": [],
+              "parameters": [],
+              "returns": {
+                "kind": "void"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "loadWidget",
+      "qualifiedName": "GeneratorCapabilities.loadWidget",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "name",
+          "optional": false,
+          "rest": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "configure",
+          "optional": true,
+          "rest": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "options",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "reference",
+                          "name": "WidgetOptions",
+                          "qualifiedName": "GeneratorCapabilities.WidgetOptions",
+                          "display": "WidgetOptions",
+                          "typeArguments": []
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "kind": "promise",
+        "result": {
+          "kind": "reference",
+          "name": "Widget",
+          "qualifiedName": "GeneratorCapabilities.Widget",
+          "display": "Widget",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "loadWidgets",
+      "qualifiedName": "GeneratorCapabilities.loadWidgets",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "promise",
+        "result": {
+          "kind": "array",
+          "readonly": true,
+          "element": {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        }
+      }
+    },
+    {
+      "name": "maybeDisposer",
+      "qualifiedName": "GeneratorCapabilities.maybeDisposer",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "undefined"
+          },
+          {
+            "kind": "callback",
+            "name": "Disposer",
+            "qualifiedName": "GeneratorCapabilities.Disposer",
+            "signatures": [
+              {
+                "typeParameters": [],
+                "parameters": [],
+                "returns": {
+                  "kind": "void"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "normalizeLabel",
+      "qualifiedName": "GeneratorCapabilities.normalizeLabel",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "value",
+          "optional": false,
+          "rest": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "returns": {
+        "kind": "string"
+      }
+    },
+    {
+      "name": "widgetOrLabel",
+      "qualifiedName": "GeneratorCapabilities.widgetOrLabel",
+      "overload": 0,
+      "typeParameters": [],
+      "parameters": [],
+      "returns": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "string"
+          },
+          {
+            "kind": "reference",
+            "name": "Widget",
+            "qualifiedName": "GeneratorCapabilities.Widget",
+            "display": "Widget",
+            "typeArguments": []
+          }
+        ]
+      }
+    }
+  ],
+  "globals": [
+    {
+      "name": "current",
+      "qualifiedName": "GeneratorCapabilities.Controller.current",
+      "readonly": true,
+      "type": {
+        "kind": "reference",
+        "name": "Controller",
+        "qualifiedName": "GeneratorCapabilities.Controller",
+        "display": "Controller",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "ready",
+      "qualifiedName": "GeneratorCapabilities.Controller.ready",
+      "readonly": true,
+      "type": {
+        "kind": "promise",
+        "result": {
+          "kind": "reference",
+          "name": "Controller",
+          "qualifiedName": "GeneratorCapabilities.Controller",
+          "display": "Controller",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "version",
+      "qualifiedName": "GeneratorCapabilities.Controller.version",
+      "readonly": true,
+      "type": {
+        "kind": "string"
+      }
+    },
+    {
+      "name": "currentController",
+      "qualifiedName": "GeneratorCapabilities.currentController",
+      "readonly": true,
+      "type": {
+        "kind": "reference",
+        "name": "Controller",
+        "qualifiedName": "GeneratorCapabilities.Controller",
+        "display": "Controller",
+        "typeArguments": []
+      }
+    },
+    {
+      "name": "libraryVersion",
+      "qualifiedName": "GeneratorCapabilities.libraryVersion",
+      "readonly": true,
+      "type": {
+        "kind": "string"
+      }
+    },
+    {
+      "name": "readyController",
+      "qualifiedName": "GeneratorCapabilities.readyController",
+      "readonly": true,
+      "type": {
+        "kind": "promise",
+        "result": {
+          "kind": "reference",
+          "name": "Controller",
+          "qualifiedName": "GeneratorCapabilities.Controller",
+          "display": "Controller",
+          "typeArguments": []
+        }
+      }
+    },
+    {
+      "name": "widgets",
+      "qualifiedName": "GeneratorCapabilities.widgets",
+      "readonly": true,
+      "type": {
+        "kind": "array",
+        "readonly": true,
+        "element": {
+          "kind": "reference",
+          "name": "Widget",
+          "qualifiedName": "GeneratorCapabilities.Widget",
+          "display": "Widget",
+          "typeArguments": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <HtmlMLInteropApiManifest>$(MSBuildThisFileDirectory)..\HtmlML.JavaScript.Interop.Generator.Compile\GeneratorCapabilities.htmlml-interop-api.json</HtmlMLInteropApiManifest>
+    <HtmlMLInteropPolicy>$(MSBuildThisFileDirectory)..\HtmlML.JavaScript.Interop.Generator.Compile\GeneratorCapabilities.htmlml-interop-policy.json</HtmlMLInteropPolicy>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HtmlMLInteropPackageVersion)' == ''">
+    <ProjectReference Include="..\..\src\HtmlML.JavaScript.Interop\HtmlML.JavaScript.Interop.csproj" />
+    <ProjectReference Include="..\..\src\HtmlML.JavaScript.Interop.Generator\HtmlML.JavaScript.Interop.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="$(HtmlMLInteropApiManifest)" />
+    <AdditionalFiles Include="$(HtmlMLInteropPolicy)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HtmlMLInteropPackageVersion)' != ''">
+    <PackageReference Include="HtmlML.JavaScript.Interop"
+                      Version="$(HtmlMLInteropPackageVersion)" />
+    <PackageReference Include="HtmlML.JavaScript.Interop.Generator"
+                      Version="$(HtmlMLInteropPackageVersion)"
+                      PrivateAssets="all" />
+  </ItemGroup>
+</Project>

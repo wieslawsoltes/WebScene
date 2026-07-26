@@ -12,19 +12,26 @@
     "./profile": "./types/profile.d.ts",
     "./vite": "./vite.mjs",
     "./esbuild": "./esbuild.mjs",
-    "./compatibility": "./compatibility.mjs"
+    "./compatibility": "./compatibility.mjs",
+    "./interop-discovery": "./interop-discovery.mjs"
   },
   "types": "./types/index.d.ts",
   "bin": {
-    "htmlml-check": "./checker.mjs"
+    "htmlml-check": "./checker.mjs",
+    "htmlml-interop-discover": "./interop-discover.mjs",
+    "htmlml-interop-validate": "./interop-validate.mjs"
   },
   "files": [
     "types",
+    "schemas",
     "*.mjs",
     "README.md"
   ],
   "scripts": {
     "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": ">=20"

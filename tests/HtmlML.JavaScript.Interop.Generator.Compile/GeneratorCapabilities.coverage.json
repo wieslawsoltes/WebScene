@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "declarations": 1,
+  "namedTypes": 24,
+  "methods": 43,
+  "properties": 32,
+  "constructors": 2,
+  "callbacks": 18,
+  "promises": 16,
+  "functions": 10,
+  "globals": 7,
+  "typeKinds": {
+    "array": 14,
+    "boolean": 4,
+    "callback": 18,
+    "class": 1,
+    "inlineObject": 5,
+    "interface": 17,
+    "literal": 9,
+    "number": 12,
+    "promise": 16,
+    "reference": 68,
+    "string": 34,
+    "tuple": 6,
+    "typeAlias": 6,
+    "typeParameter": 4,
+    "undefined": 20,
+    "union": 28,
+    "void": 27
+  },
+  "fallbacks": []
+}
