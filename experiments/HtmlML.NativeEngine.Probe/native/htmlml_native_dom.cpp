@@ -925,6 +925,49 @@ float native_document::measure_inline_content_width(const dom_node& node) const
     return width;
 }
 
+size_t native_document::text_caret_offset_at_x(
+    const dom_node& node,
+    float x) const
+{
+    const auto& text = node.text_content;
+    if (text.empty()) return 0;
+
+    auto text_x = node.layout.x;
+    if (!node.text_layout_fragments.empty()) {
+        text_x = node.text_layout_fragments.front().x;
+    }
+    const auto relative_x = std::max(0.0F, x - text_x);
+
+    size_t byte_offset = 0;
+    size_t utf16_offset = 0;
+    auto previous_width = 0.0F;
+    while (byte_offset < text.size()) {
+        const auto first = static_cast<uint8_t>(text[byte_offset]);
+        size_t byte_length = 1U;
+        size_t utf16_length = 1U;
+        if ((first & 0xe0U) == 0xc0U) {
+            byte_length = 2U;
+        } else if ((first & 0xf0U) == 0xe0U) {
+            byte_length = 3U;
+        } else if ((first & 0xf8U) == 0xf0U) {
+            byte_length = 4U;
+            utf16_length = 2U;
+        }
+        byte_length = std::min(byte_length, text.size() - byte_offset);
+        const auto next_byte_offset = byte_offset + byte_length;
+        const auto next_width = measure_text_width(
+            std::string_view(text).substr(0, next_byte_offset),
+            node);
+        if (relative_x < (previous_width + next_width) * 0.5F) {
+            return utf16_offset;
+        }
+        byte_offset = next_byte_offset;
+        utf16_offset += utf16_length;
+        previous_width = next_width;
+    }
+    return utf16_offset;
+}
+
 std::vector<std::string> native_document::wrap_text_lines(
     const std::string& value,
     float available_width,

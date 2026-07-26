@@ -1145,6 +1145,7 @@ public:
     bool has_active_animations() const noexcept;
     std::vector<transition_event_record> take_transition_events();
     float measure_inline_content_width(const dom_node& node) const;
+    size_t text_caret_offset_at_x(const dom_node& node, float x) const;
 
     static css_length parse_length(const std::string& value);
     static void parse_transform_translate(

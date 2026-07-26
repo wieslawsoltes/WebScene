@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -62,6 +63,20 @@ internal static class Program
                   tokenSpans: document.querySelectorAll('.view-line span[class*="mtk"]').length,
                   activeTag: document.activeElement?.tagName ?? null,
                   status: document.getElementById('status')?.textContent ?? null,
+                  tokenAncestry: (() => {
+                    const result = [];
+                    for (let node = document.querySelector('.mtk8');
+                         node && node !== document.body;
+                         node = node.parentElement) {
+                      result.push({
+                        tag: node.tagName,
+                        nodeType: node.nodeType,
+                        elementNode: node.ELEMENT_NODE,
+                        fingerprint: node.getAttribute?.('data-mprt') ?? null
+                      });
+                    }
+                    return result;
+                  })(),
                   layout: globalThis.__htmlMlMonacoEditor?.getLayoutInfo() ?? null,
                   geometry: Object.fromEntries(
                     ['.monaco-editor', '.margin', '.lines-content', '.view-lines',
@@ -101,6 +116,141 @@ internal static class Program
                 "monaco-native-headless-initial.png");
             var surface = (NativeSceneSurface)view.Content!;
             SaveNativeFrame(surface, initialPath);
+
+            var installLiveInputDiagnosticsTask = view.EvaluateJsonAsync("""
+                (() => {
+                  globalThis.__htmlMlMonacoMouseDown = null;
+                  globalThis.__htmlMlMonacoEditor.onMouseDown(event => {
+                    globalThis.__htmlMlMonacoMouseDown = {
+                      targetType: event.target?.type ?? null,
+                      position: event.target?.position ?? null
+                    };
+                  });
+                  return true;
+                })()
+                """);
+            PumpUntil(installLiveInputDiagnosticsTask, TimeSpan.FromSeconds(10));
+            var routedBeforeLiveInput = surface.RoutedInputEvents;
+            window.MouseDown(
+                new Point(92, 22),
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.LeftMouseButton);
+            window.MouseUp(
+                new Point(92, 22),
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.None);
+            window.KeyTextInput("Z");
+            PumpFrames(view, window, TimeSpan.FromSeconds(2));
+            var liveClickTypeStateTask = view.EvaluateJsonAsync("""
+                ({
+                  value: globalThis.__htmlMlMonacoEditor?.getValue() ?? null,
+                  position: globalThis.__htmlMlMonacoEditor?.getPosition() ?? null,
+                  activeTag: document.activeElement?.tagName ?? null,
+                  monacoMouseDown: globalThis.__htmlMlMonacoMouseDown
+                })
+                """);
+            PumpUntil(liveClickTypeStateTask, TimeSpan.FromSeconds(10));
+            using (var clickState = JsonDocument.Parse(liveClickTypeStateTask.Result))
+            {
+                var root = clickState.RootElement;
+                var value = root.GetProperty("value").GetString() ?? "";
+                var activeTag = root.GetProperty("activeTag").GetString();
+                var targetType = root
+                    .GetProperty("monacoMouseDown")
+                    .GetProperty("targetType")
+                    .GetInt32();
+                if (!value.StartsWith("fZunction", StringComparison.Ordinal)
+                    || activeTag != "TEXTAREA"
+                    || targetType != 6)
+                {
+                    throw new InvalidOperationException(
+                        $"Live Monaco click/type did not edit and retain focus: "
+                        + liveClickTypeStateTask.Result);
+                }
+            }
+            var routedLiveInput = surface.RoutedInputEvents - routedBeforeLiveInput;
+            if (!surface.IsFocused || routedLiveInput < 3)
+            {
+                throw new InvalidOperationException(
+                    "Avalonia did not route the live pointer/text sequence to Monaco.");
+            }
+            Console.WriteLine(
+                $"Live click/type state: {liveClickTypeStateTask.Result}; "
+                + $"surface-focused={surface.IsFocused}; "
+                + $"routed-inputs={routedLiveInput}");
+
+            window.MouseDown(
+                new Point(92, 22),
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.LeftMouseButton);
+            window.MouseMove(
+                new Point(220, 22),
+                Avalonia.Input.RawInputModifiers.LeftMouseButton);
+            window.MouseUp(
+                new Point(220, 22),
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.None);
+            PumpFrames(view, window, TimeSpan.FromSeconds(2));
+            var dragSelectionTask = view.EvaluateJsonAsync("""
+                (() => {
+                  const editor = globalThis.__htmlMlMonacoEditor;
+                  const selection = editor.getSelection();
+                  return {
+                    selection,
+                    selectedText: editor.getModel().getValueInRange(selection),
+                    activeTag: document.activeElement?.tagName ?? null
+                  };
+                })()
+                """);
+            PumpUntil(dragSelectionTask, TimeSpan.FromSeconds(10));
+            using (var dragState = JsonDocument.Parse(dragSelectionTask.Result))
+            {
+                var root = dragState.RootElement;
+                if (string.IsNullOrEmpty(root.GetProperty("selectedText").GetString())
+                    || root.GetProperty("activeTag").GetString() != "TEXTAREA")
+                {
+                    throw new InvalidOperationException(
+                        $"Live Monaco drag did not create a focused selection: "
+                        + dragSelectionTask.Result);
+                }
+            }
+            Console.WriteLine($"Live drag-selection state: {dragSelectionTask.Result}");
+            var selectedPath = Path.Combine(
+                options.OutputDirectory,
+                "monaco-native-headless-selected.png");
+            SaveNativeFrame(surface, selectedPath);
+
+            window.KeyTextInput("drag-replaced");
+            PumpFrames(view, window, TimeSpan.FromSeconds(1));
+            var resetTask = view.EvaluateJsonAsync("""
+                (() => {
+                  const editor = globalThis.__htmlMlMonacoEditor;
+                  const replaced = editor.getValue().includes('drag-replaced');
+                  editor.setValue([
+                    'function greet(name) {',
+                    '  const message = `Hello, ${name}!`;',
+                    '  return message;',
+                    '}',
+                    '',
+                    'for (const name of ["Avalonia", "HtmlML", "Monaco"]) {',
+                    '  console.log(greet(name));',
+                    '}'
+                  ].join('\n'));
+                  editor.setPosition({ lineNumber: 1, column: 1 });
+                  editor.focus();
+                  return { replaced };
+                })()
+                """);
+            PumpUntil(resetTask, TimeSpan.FromSeconds(10));
+            using (var resetState = JsonDocument.Parse(resetTask.Result))
+            {
+                if (!resetState.RootElement.GetProperty("replaced").GetBoolean())
+                {
+                    throw new InvalidOperationException(
+                        "Typing did not replace the live Monaco drag selection.");
+                }
+            }
+            PumpFrames(view, window, TimeSpan.FromSeconds(1));
 
             var inputSequence = SubmitTextWithRetry(
                 surface,
@@ -149,6 +299,7 @@ internal static class Program
             SaveNativeFrame(surface, foldedPath);
 
             Console.WriteLine($"Initial screenshot: {initialPath}");
+            Console.WriteLine($"Selected screenshot: {selectedPath}");
             Console.WriteLine($"Edited screenshot:  {editedPath}");
             Console.WriteLine($"Folded screenshot:  {foldedPath}");
             Console.WriteLine(

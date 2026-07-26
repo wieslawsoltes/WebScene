@@ -59,6 +59,13 @@
     assert(
       Array.from(new TextEncoder().encode("Aé")).join(",") === "65,195,169",
       "TextEncoder did not encode UTF-8");
+    assert(
+      Number.isFinite(window.scrollX) && Number.isFinite(window.scrollY),
+      "window scroll offsets were not finite numbers");
+    assert(
+      window.pageXOffset === window.scrollX
+        && window.pageYOffset === window.scrollY,
+      "legacy and current window scroll offsets disagreed");
   });
 
   test("Monaco-shaped line DOM preserves siblings and replacement identity", () => {
@@ -92,6 +99,34 @@
       layer.lastChild.previousSibling.previousSibling.previousSibling
         === layer.firstChild,
       "four-line previousSibling chain is incomplete");
+
+    const token = layer.querySelector(".keyword");
+    const ancestry = [];
+    for (let node = token; node && node !== document.body;
+         node = node.parentElement) {
+      if (node.nodeType === node.ELEMENT_NODE) {
+        ancestry.push(node.tagName);
+      }
+    }
+    assert(
+      ancestry.join(",") === "SPAN,DIV,DIV",
+      `Monaco-style element ancestry was ${ancestry.join(",")}`);
+
+    const tokenRect = token.getBoundingClientRect();
+    const range = document.caretRangeFromPoint(
+      tokenRect.left + tokenRect.width * 0.4,
+      tokenRect.top + tokenRect.height * 0.5);
+    assert(range && range.startContainer, "caretRangeFromPoint returned no caret");
+    assert(
+      range.startContainer.nodeType === range.startContainer.TEXT_NODE,
+      "caretRangeFromPoint did not resolve a text node");
+    assert(
+      range.startContainer.parentNode === token,
+      "caretRangeFromPoint did not retain the hit token ancestry");
+    assert(
+      range.startOffset > 0
+        && range.startOffset < range.startContainer.textContent.length,
+      `caret offset was ${range.startOffset}`);
   });
 
   test("editor text metrics and token colors are observable", () => {

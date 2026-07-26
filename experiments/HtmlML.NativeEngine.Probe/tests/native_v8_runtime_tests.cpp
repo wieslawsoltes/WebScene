@@ -2357,6 +2357,22 @@ void test_monaco_browser_primitives(htmlml_engine* engine)
           const encoded = Array.from(new TextEncoder().encode('Aé'));
           const destination = new Uint8Array(8);
           const into = new TextEncoder().encodeInto('Aé', destination);
+          const elementNode = document.createElement('span');
+          const textNode = document.createTextNode('token');
+          const caretHost = document.createElement('div');
+          caretHost.style.position = 'absolute';
+          caretHost.style.left = '0px';
+          caretHost.style.top = '0px';
+          caretHost.style.fontFamily = 'monospace';
+          caretHost.style.fontSize = '14px';
+          const caretToken = document.createElement('span');
+          caretToken.appendChild(document.createTextNode('function'));
+          caretHost.appendChild(caretToken);
+          document.body.appendChild(caretHost);
+          const caretRect = caretToken.getBoundingClientRect();
+          const caretRange = document.caretRangeFromPoint(
+            caretRect.left + caretRect.width * 0.4,
+            caretRect.top + caretRect.height * 0.5);
           const measurement = document.createElement('span');
           measurement.style.fontFamily = 'monospace';
           measurement.style.fontSize = '14px';
@@ -2382,12 +2398,34 @@ void test_monaco_browser_primitives(htmlml_engine* engine)
               typeof InputEvent,
               typeof UIEvent
             ],
+            nodeConstants: [
+              elementNode.nodeType,
+              elementNode.ELEMENT_NODE,
+              textNode.nodeType,
+              textNode.TEXT_NODE,
+              elementNode.DOCUMENT_NODE,
+              elementNode.DOCUMENT_FRAGMENT_NODE
+            ],
+            windowOffsets: [
+              window.scrollX,
+              window.scrollY,
+              window.pageXOffset,
+              window.pageYOffset
+            ],
+            caretHit: [
+              typeof document.caretRangeFromPoint,
+              caretRange.startContainer.nodeType,
+              caretRange.startContainer.TEXT_NODE,
+              caretRange.startContainer.parentNode === caretToken,
+              caretRange.startOffset > 0
+                && caretRange.startOffset < caretRange.startContainer.textContent.length
+            ],
             inlineFontMetric: digitWidth > 5 && digitWidth < 20
           };
         })()
     )JS", "native-editor-browser-primitives.js");
     const auto expected =
-        R"({"microtasks":["sync","microtask"],"customElement":true,"utf8":"Hi 👋","utf16":"<div>","encoded":[65,195,169],"into":[2,3,65,195,169],"observers":["function","function","function"],"events":["function","function","function"],"inlineFontMetric":true})";
+        R"({"microtasks":["sync","microtask"],"customElement":true,"utf8":"Hi 👋","utf16":"<div>","encoded":[65,195,169],"into":[2,3,65,195,169],"observers":["function","function","function"],"events":["function","function","function"],"nodeConstants":[1,1,3,3,9,11],"windowOffsets":[0,0,0,0],"caretHit":["function",3,3,true,true],"inlineFontMetric":true})";
     require(
         result == expected,
         "Monaco browser primitives are incomplete: " + result);

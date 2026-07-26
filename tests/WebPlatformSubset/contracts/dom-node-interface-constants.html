@@ -24,9 +24,17 @@
   });
 
   test("live nodes agree with their interface constants", () => {
-    assert(document.createElement("div").nodeType === Node.ELEMENT_NODE, "element nodeType mismatch");
-    assert(document.createTextNode("text").nodeType === Node.TEXT_NODE, "text nodeType mismatch");
+    const element = document.createElement("div");
+    const text = document.createTextNode("text");
+    assert(element.nodeType === Node.ELEMENT_NODE, "element nodeType mismatch");
+    assert(text.nodeType === Node.TEXT_NODE, "text nodeType mismatch");
     assert(document.nodeType === Node.DOCUMENT_NODE, "document nodeType mismatch");
+    assert(element.ELEMENT_NODE === 1, "live element did not inherit ELEMENT_NODE");
+    assert(text.TEXT_NODE === 3, "live text did not inherit TEXT_NODE");
+    assert(element.DOCUMENT_NODE === 9, "live node did not inherit DOCUMENT_NODE");
+    assert(
+      element.DOCUMENT_FRAGMENT_NODE === 11,
+      "live node did not inherit DOCUMENT_FRAGMENT_NODE");
   });
 
   const failure = state.results.find(result => result.status !== "PASS");

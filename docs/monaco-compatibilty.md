@@ -30,6 +30,16 @@ The released `11.3.4-alpha.6` native runtime failed before Monaco could render:
    sample bundle initially omitted Monaco's Codicon registration, and the
    native Avalonia text shaper only resolved installed system fonts, producing
    a missing-glyph box for the collapsed chevron.
+9. Monaco identifies editor hit targets by walking live-node constants and
+   resolving a character caret from viewport coordinates. Native nodes exposed
+   `Node.ELEMENT_NODE` statically but not through live node instances, and
+   `Document.caretRangeFromPoint()` was absent, so text clicks were reported as
+   unknown targets.
+10. `window.scrollX`, `scrollY`, `pageXOffset`, and `pageYOffset` were
+    undefined. Monaco subtracts the current window offsets from mouse page
+    coordinates, turning otherwise valid native pointer coordinates into
+    `NaN`. Monaco consequently did not prevent the pointer default, its hidden
+    textarea blurred, and click, drag-selection, and text entry appeared dead.
 
 The earlier single-line screenshot was therefore not evidence of Monaco
 compatibility. Its visible source was a temporary text mirror and input used a
@@ -59,6 +69,11 @@ The native runtime now supplies:
 - Downloadable `@font-face` registration in the native Avalonia resource
   bridge, including relative and data-URI sources, with the resulting
   typefaces shared by native measurement and retained-scene painting.
+- Standard Node constants inherited by live element and text wrappers.
+- Finite window scroll offsets and their legacy aliases in outer and frame
+  realms.
+- `Document.caretRangeFromPoint()` with text-node ancestry and a font-measured
+  UTF-16 caret offset.
 
 These capabilities are installed by the native runtime in outer and frame
 realms. Applications do not patch globals and the Monaco bundle remains
@@ -72,6 +87,8 @@ WebPlatformSubset contract. It certifies:
 - encoding and custom-element primitives;
 - Monaco-shaped multi-root line insertion and replacement;
 - complete `previousSibling` chains and replacement identity;
+- live-node constants, finite window scroll coordinates, and character-level
+  caret hit testing;
 - monospace style, fixed line-height geometry, and observable token color;
 - intrinsic repeated-digit font measurement used by Monaco's gutter sizing;
 - microtask ordering.
@@ -122,14 +139,19 @@ ClearScript DOM path when launched with `--monaco` nor carries a second Monaco
 bundle.
 
 `samples/NativeMonacoEditor.Headless` loads the same unchanged page and Monaco
-bundle in Avalonia Headless with Skia, renders the retained native scene to
-PNG, inserts a comment plus Enter through `NativeSceneSurface`, and captures
-the retokenized nine-line result. A third frame invokes Monaco's own fold
-command and captures the collapsed function body with Monaco's Codicon
-chevron. The gate fails unless both the registered native typeface and the
-fold control's computed font family resolve as `codicon`. The runtime probe
-reports a 42 px line-number column and an 88 px content origin, replacing the
-incorrect 977/1023 px geometry.
+bundle in Avalonia Headless with Skia and renders the retained native scene to
+PNG. Its integration gate sends a real top-level Avalonia click, types at the
+resolved Monaco caret, drags the mouse to create a non-empty selection, types
+to replace that selection, and captures the visible selected range. It then
+inserts a comment plus Enter through `NativeSceneSurface` and captures the
+retokenized nine-line result. A final frame invokes Monaco's own fold command
+and captures the collapsed function body with Monaco's Codicon chevron. The
+gate fails unless the textarea retains focus, Monaco reports a content-text
+mouse target, the model changes, the drag selection is non-empty, replacement
+typing succeeds, and both the registered native typeface and fold control's
+computed font family resolve as `codicon`. The runtime probe reports a 42 px
+line-number column and an 88 px content origin, replacing the incorrect
+977/1023 px geometry.
 
 Build and run:
 

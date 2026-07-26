@@ -2615,6 +2615,26 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerHTML"), get_inner_html, set_inner_html);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "contentWindow"), get_content_window);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "contentDocument"), get_content_document);
+        // Web IDL exposes Node's type constants on Node.prototype as well as
+        // on the Node constructor. Component code commonly compares
+        // `node.nodeType === node.ELEMENT_NODE` while walking event ancestry.
+        // Keeping these only on the constructor makes every live node fail
+        // that guard even though Node.ELEMENT_NODE itself is correct.
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "ELEMENT_NODE"),
+            v8::Integer::New(isolate, 1));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "ATTRIBUTE_NODE"),
+            v8::Integer::New(isolate, 2));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "TEXT_NODE"),
+            v8::Integer::New(isolate, 3));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_NODE"),
+            v8::Integer::New(isolate, 9));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_FRAGMENT_NODE"),
+            v8::Integer::New(isolate, 11));
         element->PrototypeTemplate()->Set(
             js_string(isolate, "appendChild"),
             v8::FunctionTemplate::New(isolate, append_child));
@@ -2871,6 +2891,18 @@ struct v8_dom_runtime::implementation final {
         frame_window->SetNativeDataProperty(
             js_string(isolate, "devicePixelRatio"),
             get_device_pixel_ratio);
+        frame_window->SetNativeDataProperty(
+            js_string(isolate, "scrollX"),
+            get_window_scroll_x);
+        frame_window->SetNativeDataProperty(
+            js_string(isolate, "scrollY"),
+            get_window_scroll_y);
+        frame_window->SetNativeDataProperty(
+            js_string(isolate, "pageXOffset"),
+            get_window_scroll_x);
+        frame_window->SetNativeDataProperty(
+            js_string(isolate, "pageYOffset"),
+            get_window_scroll_y);
         frame_window_template.Reset(isolate, frame_window);
 
         auto document_template = v8::ObjectTemplate::New(isolate);
@@ -2938,6 +2970,9 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "elementFromPoint"),
             v8::FunctionTemplate::New(isolate, document_element_from_point));
+        document_template->Set(
+            js_string(isolate, "caretRangeFromPoint"),
+            v8::FunctionTemplate::New(isolate, document_caret_range_from_point));
         document_template->Set(
             js_string(isolate, "getElementsByTagName"),
             v8::FunctionTemplate::New(isolate, document_get_elements_by_tag_name));
@@ -3761,6 +3796,22 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "devicePixelRatio"),
             get_device_pixel_ratio).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "scrollX"),
+            get_window_scroll_x).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "scrollY"),
+            get_window_scroll_y).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "pageXOffset"),
+            get_window_scroll_x).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "pageYOffset"),
+            get_window_scroll_y).Check();
         install_screen(local_context, global);
         global->Set(local_context, js_string(isolate, "parent"), global).Check();
         global->Set(local_context, js_string(isolate, "top"), global).Check();
@@ -8494,6 +8545,78 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(node == nullptr
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
             : v8::Local<v8::Value>(self->wrap_node(*node)));
+    }
+
+    static void document_caret_range_from_point(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->ensure_layout();
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        const auto x = info.Length() > 0
+            ? static_cast<float>(info[0]->NumberValue(local_context).FromMaybe(0)) : 0;
+        const auto y = info.Length() > 1
+            ? static_cast<float>(info[1]->NumberValue(local_context).FromMaybe(0)) : 0;
+        auto* hit = self->document.hit_test(
+            root == nullptr ? self->active_root() : *root,
+            x,
+            y);
+        if (hit == nullptr) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+
+        const auto find_text_node = [&](const auto& recurse, dom_node& node) -> dom_node* {
+            if (node.tag == "#text" && !node.text_content.empty()) return &node;
+            dom_node* fallback = nullptr;
+            for (auto* child : node.children) {
+                if (child == nullptr) continue;
+                auto* candidate = recurse(recurse, *child);
+                if (candidate == nullptr) continue;
+                if (fallback == nullptr) fallback = candidate;
+                const auto& box = candidate->layout;
+                if (x >= box.x && x <= box.x + box.width
+                    && y >= box.y && y <= box.y + box.height) {
+                    return candidate;
+                }
+            }
+            return fallback;
+        };
+        auto* text = find_text_node(find_text_node, *hit);
+        auto* container = text == nullptr ? hit : text;
+        const auto offset = text == nullptr
+            ? 0U
+            : self->document.text_caret_offset_at_x(*text, x);
+
+        auto range = v8::Object::New(info.GetIsolate());
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "startContainer"),
+            self->wrap_node(*container)).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "startOffset"),
+            v8::Integer::NewFromUnsigned(
+                info.GetIsolate(),
+                static_cast<uint32_t>(offset))).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "endContainer"),
+            self->wrap_node(*container)).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "endOffset"),
+            v8::Integer::NewFromUnsigned(
+                info.GetIsolate(),
+                static_cast<uint32_t>(offset))).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "collapsed"),
+            v8::True(info.GetIsolate())).Check();
+        info.GetReturnValue().Set(range);
     }
 
     static void document_get_elements_by_tag_name(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -20564,6 +20687,22 @@ struct v8_dom_runtime::implementation final {
             get_device_pixel_ratio).Check();
         global->SetNativeDataProperty(local_context, js_string(isolate, "innerWidth"), get_inner_width).Check();
         global->SetNativeDataProperty(local_context, js_string(isolate, "innerHeight"), get_inner_height).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "scrollX"),
+            get_window_scroll_x).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "scrollY"),
+            get_window_scroll_y).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "pageXOffset"),
+            get_window_scroll_x).Check();
+        global->SetNativeDataProperty(
+            local_context,
+            js_string(isolate, "pageYOffset"),
+            get_window_scroll_y).Check();
         install_screen(local_context, global);
         global->Set(local_context, js_string(isolate, "setTimeout"), v8::Function::New(local_context, set_timeout).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "clearTimeout"), v8::Function::New(local_context, clear_timeout).ToLocalChecked()).Check();
@@ -24644,6 +24783,30 @@ struct v8_dom_runtime::implementation final {
         static_cast<void>(width);
         static_cast<void>(device_scale_factor);
         info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), height));
+    }
+
+    static void get_window_scroll_x(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry));
+        info.GetReturnValue().Set(v8::Number::New(
+            info.GetIsolate(),
+            self->active_root().scroll_left));
+    }
+
+    static void get_window_scroll_y(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry));
+        info.GetReturnValue().Set(v8::Number::New(
+            info.GetIsolate(),
+            self->active_root().scroll_top));
     }
 
     static void get_device_pixel_ratio(
