@@ -1,0 +1,37 @@
+<Project Sdk="Uno.Sdk/6.5.31">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+    <UnoFeatures>SkiaRenderer;</UnoFeatures>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIdGuid>20E78A1B-E990-469B-AAD4-09E173F824E7</ApplicationIdGuid>
+    <ApplicationTitle>HtmlML Native Runtime Showcase</ApplicationTitle>
+    <ApplicationId>com.htmlml.nativeruntimeshowcase</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HtmlML.Backend.Uno\HtmlML.Backend.Uno.csproj" />
+    <ProjectReference Include="..\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj" />
+    <PackageReference Include="SkiaSharp" VersionOverride="3.119.2" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" VersionOverride="3.119.2" />
+    <PackageReference Include="Svg.Skia" VersionOverride="5.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\NativeRuntimeShowcase.Web\index.html"
+             Link="index.html"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeRuntimeShowcase.Web\showcase.js"
+             Link="showcase.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\**\*"
+             Link="Assets\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -110,6 +110,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HtmlML.JavaScript.Interop.G
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HtmlML.JavaScript.Interop.PackageSmoke", "tests\HtmlML.JavaScript.Interop.PackageSmoke\HtmlML.JavaScript.Interop.PackageSmoke.csproj", "{DD0266DA-3FE5-42EA-A4E3-C28F14A5F72A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeRuntimeShowcase.Interop", "samples\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj", "{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeRuntimeShowcase.Avalonia", "samples\NativeRuntimeShowcase.Avalonia\NativeRuntimeShowcase.Avalonia.csproj", "{F7A512C0-D70F-4255-9485-41AC859E4751}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeRuntimeShowcase.Uno", "samples\NativeRuntimeShowcase.Uno\NativeRuntimeShowcase.Uno.csproj", "{90730C50-47A7-40EE-ABEA-553A955C4E36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -288,6 +294,18 @@ Global
 		{DD0266DA-3FE5-42EA-A4E3-C28F14A5F72A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DD0266DA-3FE5-42EA-A4E3-C28F14A5F72A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DD0266DA-3FE5-42EA-A4E3-C28F14A5F72A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F7A512C0-D70F-4255-9485-41AC859E4751}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F7A512C0-D70F-4255-9485-41AC859E4751}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F7A512C0-D70F-4255-9485-41AC859E4751}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F7A512C0-D70F-4255-9485-41AC859E4751}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -336,5 +354,8 @@ Global
 		{A9C36F33-5E72-42C6-BA8B-5F78CFB56004} = {C84500EC-56E5-4305-90EE-065B9247D958}
 		{A9C36F33-5E72-42C6-BA8B-5F78CFB56006} = {C84500EC-56E5-4305-90EE-065B9247D958}
 		{DD0266DA-3FE5-42EA-A4E3-C28F14A5F72A} = {C84500EC-56E5-4305-90EE-065B9247D958}
+		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
+		{F7A512C0-D70F-4255-9485-41AC859E4751} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
+		{90730C50-47A7-40EE-ABEA-553A955C4E36} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
 	EndGlobalSection
 EndGlobal

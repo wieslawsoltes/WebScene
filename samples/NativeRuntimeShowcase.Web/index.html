@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HtmlML native runtime showcase</title>
+  <link rel="stylesheet" href="Assets/monaco.css">
+  <style>
+    html, body, #editor {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #1e1e1e;
+    }
+    #status {
+      position: fixed;
+      right: 12px;
+      bottom: 10px;
+      z-index: 1000;
+      padding: 4px 8px;
+      border: 1px solid #3c3c3c;
+      border-radius: 4px;
+      color: #d4d4d4;
+      background: rgba(37, 37, 38, 0.94);
+      font: 12px/18px monospace;
+      pointer-events: none;
+    }
+  </style>
+  <script defer src="Assets/monaco.js"></script>
+  <script defer src="showcase.js"></script>
+</head>
+<body>
+  <div id="editor" aria-label="Editable file"></div>
+  <div id="status">Loading native Monaco…</div>
+</body>
+</html>

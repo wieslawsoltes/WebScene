@@ -549,6 +549,36 @@ public sealed class UnoNativeHtmlMlView : ContentControl, IAsyncDisposable
 
     public INativeHtmlMlRenderDiagnostics RenderDiagnostics => _surface;
 
+    public Task<string> EvaluateJsonAsync(
+        string source,
+        string documentName = "native-host-evaluation.js",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var engine = Volatile.Read(ref _engine);
+            if (engine == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "The native HtmlML document is not loaded.");
+            }
+            if (!NativeHtmlMlApi.TryEvaluateJson(
+                    engine,
+                    source,
+                    documentName,
+                    out var json))
+            {
+                throw new InvalidOperationException(
+                    "Native HtmlML evaluation failed: "
+                    + NativeHtmlMlApi.GetLastError(engine));
+            }
+            return json;
+        }, cancellationToken);
+    }
+
     public bool TryEvaluateJson(
         string source,
         string documentName,
@@ -593,7 +623,7 @@ public sealed class UnoNativeHtmlMlView : ContentControl, IAsyncDisposable
         _engine = NativeHtmlMlApi.EngineCreate(
             0,
             compilationCacheDirectory,
-            new UnoHttpResourceLoader(),
+            new UnoResourceLoader(),
             _surface.OnNativeScenePublished);
         if (_engine == IntPtr.Zero)
         {
@@ -642,7 +672,7 @@ public sealed class UnoNativeHtmlMlView : ContentControl, IAsyncDisposable
     }
 }
 
-internal sealed class UnoHttpResourceLoader : IHtmlMlResourceLoader
+internal sealed class UnoResourceLoader : IHtmlMlResourceLoader
 {
     private static readonly HttpClient Client = new();
     private readonly ConcurrentDictionary<string, HtmlMlTextResource> _cache = new(StringComparer.Ordinal);
@@ -650,6 +680,36 @@ internal sealed class UnoHttpResourceLoader : IHtmlMlResourceLoader
     public HtmlMlTextResource LoadText(in HtmlMlResourceRequest request)
     {
         var address = Resolve(request.Specifier, request.BaseAddress);
+        var uri = new Uri(address);
+        if (uri.IsFile)
+        {
+            return new HtmlMlTextResource(
+                address,
+                File.ReadAllText(uri.LocalPath),
+                address,
+                null)
+            {
+                LastModified = File.GetLastWriteTimeUtc(uri.LocalPath),
+                IsCacheable = true
+            };
+        }
+        if (uri.Scheme.Equals("data", StringComparison.OrdinalIgnoreCase))
+        {
+            var separator = address.IndexOf(',');
+            if (separator < 0)
+            {
+                throw new InvalidDataException("Malformed data URI.");
+            }
+            var metadata = address[..separator];
+            var payload = address[(separator + 1)..];
+            var dataContent = metadata.EndsWith(
+                    ";base64",
+                    StringComparison.OrdinalIgnoreCase)
+                ? System.Text.Encoding.UTF8.GetString(
+                    Convert.FromBase64String(payload))
+                : Uri.UnescapeDataString(payload);
+            return new HtmlMlTextResource(address, dataContent, address, null);
+        }
         if (_cache.TryGetValue(address, out var cached))
         {
             return cached;

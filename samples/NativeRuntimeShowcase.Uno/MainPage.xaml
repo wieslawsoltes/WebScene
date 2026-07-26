@@ -1,0 +1,97 @@
+<Page
+    x:Class="NativeRuntimeShowcase.Uno.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#101216">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Border
+        Padding="14,11"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="2">
+          <TextBlock
+              FontSize="18"
+              FontWeight="SemiBold"
+              Text="HtmlML native runtime showcase" />
+          <TextBlock
+              Foreground="#AEB5C2"
+              Text="Native V8 · retained canvas scene · generated .NET ↔ Monaco API · Uno Skia" />
+        </StackPanel>
+        <StackPanel
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="8">
+          <Button Click="OnShowTradingView" Content="TradingView" />
+          <Button Click="OnShowEditor" Content="Monaco editor" />
+          <Button Click="OnOpenFile" Content="Open file…" />
+          <Button
+              x:Name="SaveButton"
+              Click="OnSaveFile"
+              Content="Save"
+              IsEnabled="False" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border
+        Grid.Row="1"
+        Padding="10,7"
+        Background="#13161B"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,0,0,1">
+      <TextBlock
+          x:Name="DocumentText"
+          Foreground="#C7CDD8"
+          FontFamily="Cascadia Mono, Menlo, monospace"
+          FontSize="12"
+          Text="https://trading-terminal.tradingview-widget.com/"
+          TextTrimming="CharacterEllipsis" />
+    </Border>
+
+    <Grid Grid.Row="2">
+      <ContentControl
+          x:Name="TerminalContent"
+          HorizontalContentAlignment="Stretch"
+          VerticalContentAlignment="Stretch" />
+      <ContentControl
+          x:Name="EditorContent"
+          HorizontalContentAlignment="Stretch"
+          VerticalContentAlignment="Stretch"
+          Visibility="Collapsed" />
+    </Grid>
+
+    <Border
+        Grid.Row="3"
+        Padding="10,7"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,1,0,0">
+      <TextBlock
+          x:Name="StatusText"
+          Foreground="#AEB5C2"
+          FontFamily="Cascadia Mono, Menlo, monospace"
+          FontSize="11"
+          Text="Starting native runtime…" />
+    </Border>
+
+    <Border
+        x:Name="LoadFailure"
+        Grid.RowSpan="4"
+        Visibility="Collapsed"
+        Margin="24"
+        Padding="18"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center"
+        Background="#EE3A1111"
+        CornerRadius="8">
+      <TextBlock
+          x:Name="LoadFailureText"
+          MaxWidth="840"
+          Foreground="White"
+          TextWrapping="Wrap" />
+    </Border>
+  </Grid>
+</Page>

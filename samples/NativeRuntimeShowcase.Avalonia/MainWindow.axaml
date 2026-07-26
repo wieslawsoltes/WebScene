@@ -1,0 +1,105 @@
+<Window
+    x:Class="NativeRuntimeShowcase.Avalonia.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:native="clr-namespace:HtmlML.Backends.Avalonia.Native;assembly=HtmlML.Backend.Avalonia"
+    Width="1440"
+    Height="900"
+    MinWidth="960"
+    MinHeight="640"
+    Background="#101216"
+    Title="HtmlML · Native Runtime Showcase · Avalonia">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Border
+        Padding="14,11"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="2">
+          <TextBlock
+              FontSize="18"
+              FontWeight="SemiBold"
+              Text="HtmlML native runtime showcase" />
+          <TextBlock
+              Foreground="#AEB5C2"
+              Text="Native V8 · retained canvas scene · generated .NET ↔ Monaco API · Avalonia" />
+        </StackPanel>
+        <StackPanel
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="8">
+          <Button
+              x:Name="TradingViewButton"
+              Click="OnShowTradingView"
+              Content="TradingView" />
+          <Button
+              x:Name="EditorButton"
+              Click="OnShowEditor"
+              Content="Monaco editor" />
+          <Button
+              x:Name="OpenButton"
+              Click="OnOpenFile"
+              Content="Open file…" />
+          <Button
+              x:Name="SaveButton"
+              Click="OnSaveFile"
+              Content="Save"
+              IsEnabled="False" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border
+        Grid.Row="1"
+        Padding="10,7"
+        Background="#13161B"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,0,0,1">
+      <TextBlock
+          x:Name="DocumentText"
+          Foreground="#C7CDD8"
+          FontFamily="Cascadia Mono, Menlo, monospace"
+          FontSize="12"
+          Text="https://trading-terminal.tradingview-widget.com/"
+          TextTrimming="CharacterEllipsis" />
+    </Border>
+
+    <Grid Grid.Row="2">
+      <native:NativeHtmlMlView x:Name="TerminalHost" />
+      <native:NativeHtmlMlView x:Name="EditorHost" IsVisible="False" />
+    </Grid>
+
+    <Border
+        Grid.Row="3"
+        Padding="10,7"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,1,0,0">
+      <TextBlock
+          x:Name="StatusText"
+          Foreground="#AEB5C2"
+          FontFamily="Cascadia Mono, Menlo, monospace"
+          FontSize="11"
+          Text="Starting native runtime…" />
+    </Border>
+
+    <Border
+        x:Name="LoadFailure"
+        Grid.RowSpan="4"
+        IsVisible="False"
+        Margin="24"
+        Padding="18"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center"
+        Background="#EE3A1111"
+        CornerRadius="8">
+      <TextBlock
+          x:Name="LoadFailureText"
+          MaxWidth="840"
+          Foreground="White"
+          TextWrapping="Wrap" />
+    </Border>
+  </Grid>
+</Window>

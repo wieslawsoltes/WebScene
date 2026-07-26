@@ -56,6 +56,7 @@ This restriction is defined in the repository [LICENSE](LICENSE).
 | `packaging/HtmlML.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
 | `samples/website` | HtmlML showcase demonstrating markup, styling, and canvas scripting. |
 | `samples/JavaScriptPlayground` | Interactive playground with editable XAML, live preview, and JavaScript console for `JavaScript.Avalonia`. |
+| `samples/NativeRuntimeShowcase.*` | Native TradingView canvas and generated-.NET-API Monaco showcase for Avalonia and Uno. |
 
 ## Getting Started
 
