@@ -3029,11 +3029,25 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             shaper = new SKShaper(typeface);
             shapers.Add(shaperKey, shaper);
         }
-        var shaped = shaper.Shape(parts[5], paint);
+        var featureFlags = NativeTextShaping.ResolveFeatureFlags(
+            parts[5],
+            parts[4],
+            0);
+        var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(parts[4]);
+        var shapedWidth = NativeTextShaping.MeasureShapedWidth(
+            shaper,
+            parts[5],
+            paint,
+            featureFlags,
+            tabularDigitScale);
+        var widthScale = (featureFlags & NativeTextShaping.TabularNumerals) != 0
+            ? NativeTextShaping.ResolveWidthScale(parts[4], fontSize, fontWeight)
+            : 1f;
+        var renderedWidth = shapedWidth * widthScale;
         var x = parts[3] switch
         {
-            "center" => command.X + (command.Width - shaped.Width) * 0.5f,
-            "right" or "end" => command.X + command.Width - shaped.Width,
+            "center" => command.X + (command.Width - renderedWidth) * 0.5f,
+            "right" or "end" => command.X + command.Width - renderedWidth,
             _ => command.X,
         };
         paint.GetFontMetrics(out var metrics);
@@ -3042,8 +3056,20 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var baseline = command.Y
             + Math.Max(0, (command.Height - contentHeight) * 0.5f)
             + (contentHeight - glyphHeight) * 0.5f
-            - metrics.Ascent;
-        canvas.DrawShapedText(shaper, parts[5], x, baseline, paint);
+            - metrics.Ascent
+            + (parsedLineHeight == 0 ? 3f : 0f);
+        canvas.Save();
+        canvas.Scale(widthScale, 1f, x, baseline);
+        NativeTextShaping.DrawShapedText(
+            canvas,
+            shaper,
+            parts[5],
+            x,
+            baseline,
+            paint,
+            featureFlags,
+            tabularDigitScale);
+        canvas.Restore();
     }
 
     private static void DrawDomShadow(SKCanvas canvas, in SceneCommand command)
@@ -4505,6 +4531,7 @@ public struct NativeTextMetrics
 
 public static class NativeTextShaping
 {
+    internal const uint TabularNumerals = 1u << 0;
     private static readonly ConcurrentDictionary<string, SKTypeface> Typefaces =
         new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, SKTypeface> WebTypefaces =
@@ -4572,13 +4599,166 @@ public static class NativeTextShaping
         });
     }
 
+    internal static float ResolveWidthScale(string familyList, float fontSize, int fontWeight)
+    {
+        if (!OperatingSystem.IsMacOS() || !UsesMacSystemUiMetrics(familyList))
+        {
+            return 1f;
+        }
+
+        // Keep the native Skia compositor in lockstep with the managed
+        // Avalonia DOM/Canvas calibration for Blink's macOS system UI face.
+        var size = Math.Clamp(fontSize, 8f, 24f);
+        var weight = Math.Clamp(fontWeight, 100, 900);
+        return Math.Clamp(
+            1.0222f + (16f - size) * 0.0062f - (weight - 400f) * 0.000133f,
+            0.96f,
+            1.08f);
+    }
+
+    internal static float MeasureShapedWidth(
+        SKShaper shaper,
+        string text,
+        SKPaint paint,
+        uint featureFlags,
+        float tabularDigitScale = 1f)
+    {
+        if ((featureFlags & TabularNumerals) == 0)
+        {
+            return shaper.Shape(text, paint).Width;
+        }
+
+        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var width = 0f;
+        for (var index = 0; index < text.Length;)
+        {
+            if (text[index] is >= '0' and <= '9')
+            {
+                width += tabularDigitWidth;
+                index++;
+                continue;
+            }
+            var start = index++;
+            while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
+            width += shaper.Shape(text[start..index], paint).Width;
+        }
+        return width;
+    }
+
+    internal static void DrawShapedText(
+        SKCanvas canvas,
+        SKShaper shaper,
+        string text,
+        float x,
+        float baseline,
+        SKPaint paint,
+        uint featureFlags,
+        float tabularDigitScale = 1f)
+    {
+        if ((featureFlags & TabularNumerals) == 0)
+        {
+            canvas.DrawShapedText(shaper, text, x, baseline, paint);
+            return;
+        }
+
+        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var cursor = x;
+        for (var index = 0; index < text.Length;)
+        {
+            if (text[index] is >= '0' and <= '9')
+            {
+                var digit = text[index].ToString();
+                canvas.DrawShapedText(shaper, digit, cursor, baseline, paint);
+                cursor += tabularDigitWidth;
+                index++;
+                continue;
+            }
+            var start = index++;
+            while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
+            var segment = text[start..index];
+            canvas.DrawShapedText(shaper, segment, cursor, baseline, paint);
+            cursor += shaper.Shape(segment, paint).Width;
+        }
+    }
+
+    internal static uint ResolveFeatureFlags(
+        string text,
+        string familyList,
+        uint authoredFeatureFlags)
+    {
+        if ((authoredFeatureFlags & TabularNumerals) != 0)
+        {
+            return authoredFeatureFlags;
+        }
+        if (!OperatingSystem.IsMacOS() || !UsesMacSystemUiMetrics(familyList))
+        {
+            return authoredFeatureFlags;
+        }
+
+        var sawDigit = false;
+        foreach (var character in text)
+        {
+            if (character is >= '0' and <= '9')
+            {
+                sawDigit = true;
+                continue;
+            }
+            if (character is ' ' or '.' or ',' or '+' or '-' or '\u2212'
+                or '(' or ')' or '/' or '%' or ':')
+            {
+                continue;
+            }
+            return authoredFeatureFlags;
+        }
+        return sawDigit ? authoredFeatureFlags | TabularNumerals : authoredFeatureFlags;
+    }
+
+    internal static float ResolveTabularDigitScale(string familyList)
+        => OperatingSystem.IsMacOS() && UsesMacSystemUiMetrics(familyList)
+            ? 1.014f
+            : 1f;
+
+    private static bool UsesMacSystemUiMetrics(string familyList)
+    {
+        foreach (var rawFamily in familyList.Split(
+                     ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var family = rawFamily.Trim('"', '\'');
+            if (WebTypefaces.ContainsKey(family))
+            {
+                return false;
+            }
+            if (string.Equals(family, "-apple-system", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(family, "BlinkMacSystemFont", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(family, "system-ui", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (family.Equals("sans-serif", StringComparison.OrdinalIgnoreCase)
+                || family.Equals("serif", StringComparison.OrdinalIgnoreCase)
+                || family.Equals("monospace", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            using var installed = SKTypeface.FromFamilyName(family);
+            if (installed is not null
+                && string.Equals(installed.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        return false;
+    }
+
     public static NativeTextMetrics Measure(
         string text,
         string familyList,
         float fontSize,
         int fontWeight,
         float letterSpacing,
-        float wordSpacing)
+        float wordSpacing,
+        uint featureFlags = 0)
     {
         var typeface = ResolveTypeface(familyList, fontWeight);
         using var paint = new SKPaint
@@ -4588,7 +4768,13 @@ public static class NativeTextShaping
             Typeface = typeface
         };
         using var shaper = new SKShaper(typeface);
-        var shaped = shaper.Shape(text, paint);
+        featureFlags = ResolveFeatureFlags(text, familyList, featureFlags);
+        var shapedWidth = MeasureShapedWidth(
+            shaper,
+            text,
+            paint,
+            featureFlags,
+            ResolveTabularDigitScale(familyList));
         paint.GetFontMetrics(out var fontMetrics);
         var graphemes = string.IsNullOrEmpty(text)
             ? 0
@@ -4597,7 +4783,10 @@ public static class NativeTextShaping
         return new NativeTextMetrics
         {
             StructSize = (uint)Marshal.SizeOf<NativeTextMetrics>(),
-            AdvanceWidth = shaped.Width
+            AdvanceWidth = shapedWidth
+                * ((featureFlags & TabularNumerals) != 0
+                    ? ResolveWidthScale(familyList, fontSize, fontWeight)
+                    : 1f)
                 + Math.Max(0, graphemes - 1) * letterSpacing
                 + spaces * wordSpacing,
             Ascent = -fontMetrics.Ascent,
@@ -4794,13 +4983,17 @@ public static unsafe class NativeHtmlMlApi
             var value = Marshal.PtrToStringUTF8(text, checked((int)textLength)) ?? string.Empty;
             var family = Marshal.PtrToStringUTF8(fontFamily, checked((int)fontFamilyLength))
                 ?? "sans-serif";
-            metrics = NativeTextShaping.Measure(
+            var measured = NativeTextShaping.Measure(
                 value,
                 family,
                 fontSize,
                 fontWeight,
                 letterSpacing,
                 wordSpacing);
+            metrics.AdvanceWidth = measured.AdvanceWidth;
+            metrics.Ascent = measured.Ascent;
+            metrics.Descent = measured.Descent;
+            metrics.Leading = measured.Leading;
             return 1;
         }
         catch (Exception error)

@@ -1271,9 +1271,15 @@ private:
         }
     };
 
-    float measure_text_width(
+    htmlml_text_metrics measure_text(
         std::string_view value,
         const dom_node& node) const;
+    float measure_text_width(
+        std::string_view value,
+        const dom_node& node) const
+    {
+        return measure_text(value, node).advance_width;
+    }
     std::vector<std::string> wrap_text_lines(
         const std::string& value,
         float available_width,
@@ -1337,7 +1343,7 @@ private:
     void* text_measure_user_data_{nullptr};
     mutable std::unordered_map<
         text_measurement_key,
-        float,
+        htmlml_text_metrics,
         text_measurement_key_hash> text_measurement_cache_;
     bool dirty_{true};
     bool globally_dirty_{true};

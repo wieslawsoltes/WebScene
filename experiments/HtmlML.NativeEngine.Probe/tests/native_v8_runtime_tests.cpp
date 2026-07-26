@@ -35,6 +35,60 @@ void require(bool condition, std::string_view message)
     if (!condition) fail(message);
 }
 
+uint8_t measure_baseline_fixture_text(
+    void*,
+    const char* text,
+    size_t text_length,
+    const char*,
+    size_t,
+    float font_size,
+    int32_t,
+    float,
+    float,
+    htmlml_text_metrics* metrics)
+{
+    if (metrics == nullptr || metrics->struct_size < sizeof(htmlml_text_metrics)) return 0;
+    metrics->advance_width = static_cast<float>(text_length) * font_size * 0.5F;
+    if (font_size >= 20.0F) {
+        metrics->ascent = 10.0F;
+        metrics->descent = 10.0F;
+    } else {
+        metrics->ascent = 9.0F;
+        metrics->descent = 1.0F;
+    }
+    metrics->leading = 0.0F;
+    return text == nullptr ? 0 : 1;
+}
+
+void test_flex_baseline_uses_host_font_metrics()
+{
+    htmlml_native::native_document document(measure_baseline_fixture_text, nullptr);
+    auto& row = document.create_element("div");
+    row.style.display = htmlml_native::display_mode::flex;
+    row.style.align_items = htmlml_native::align_mode::baseline;
+    row.style.width = {100.0F, htmlml_native::length_unit::pixels};
+
+    auto& large = document.create_element("#text");
+    large.text_content = "Large";
+    large.style.font_size = 20.0F;
+    large.style.line_height = 20.0F;
+    auto& small = document.create_element("#text");
+    small.text_content = "Small";
+    small.style.font_size = 10.0F;
+    small.style.line_height = 10.0F;
+
+    require(
+        document.append_child(document.body(), row)
+            && document.append_child(row, large)
+            && document.append_child(row, small),
+        "font-metric baseline fixture could not build its flex row");
+    document.layout(200.0F, 100.0F);
+
+    require(
+        std::abs((small.layout.y - large.layout.y) - 1.0F) < 0.01F,
+        "flex baseline alignment ignored the host shaper's ascent/descent metrics");
+}
+
 void test_viewport_hit_testing_traverses_zero_height_document_root()
 {
     htmlml_native::native_document document;
@@ -8503,6 +8557,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(htmlml_engine_prewarm() != 0, "V8 prewarm failed");
+    test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();

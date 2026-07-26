@@ -857,7 +857,7 @@ native_document::native_document(
     clear();
 }
 
-float native_document::measure_text_width(
+htmlml_text_metrics native_document::measure_text(
     std::string_view value,
     const dom_node& node) const
 {
@@ -881,7 +881,12 @@ float native_document::measure_text_width(
     if (text_measurement_cache_.size() >= 16'384U) {
         text_measurement_cache_.clear();
     }
-    auto measured = fallback_text_width(transformed, font_size);
+    htmlml_text_metrics measured{
+        sizeof(htmlml_text_metrics),
+        fallback_text_width(transformed, font_size),
+        font_size * 0.9F,
+        font_size * 0.1F,
+        0.0F};
     if (text_measure_callback_ != nullptr) {
         htmlml_text_metrics metrics{};
         metrics.struct_size = sizeof(metrics);
@@ -897,8 +902,13 @@ float native_document::measure_text_width(
                 word_spacing,
                 &metrics) != 0U
             && std::isfinite(metrics.advance_width)
-            && metrics.advance_width >= 0) {
-            measured = metrics.advance_width;
+            && metrics.advance_width >= 0
+            && std::isfinite(metrics.ascent)
+            && metrics.ascent >= 0
+            && std::isfinite(metrics.descent)
+            && metrics.descent >= 0
+            && std::isfinite(metrics.leading)) {
+            measured = metrics;
         }
     }
     text_measurement_cache_.emplace(std::move(key), measured);
@@ -3167,16 +3177,15 @@ void native_document::layout_children(dom_node& parent)
             [&](const dom_node& node) -> std::optional<float> {
                 if (node.visible && node.tag == "#text" && has_visible_text(node.text_content)) {
                     const auto font_size = resolved_font_size(node);
+                    const auto metrics = measure_text(node.text_content, node);
+                    const auto glyph_height = metrics.ascent + metrics.descent;
                     const auto line_height = resolved_line_height(node, font_size);
-                    // CSS baseline alignment uses the font's alphabetic ascent,
-                    // not the visual midpoint of the glyph box. The native
-                    // document currently receives width measurements only, so
-                    // use a 90% em ascent fallback calibrated against the
-                    // platform sans-serif metrics used by the Chrome oracle.
-                    // Keeping the half-leading separate preserves line-height.
+                    // Match the compositor's alphabetic baseline exactly:
+                    // CSS distributes the difference between line-height and
+                    // the shaped font box equally above and below the glyphs.
                     return node.layout.y
-                        + std::max(0.0F, line_height - font_size) * 0.5F
-                        + font_size * 0.9F;
+                        + (line_height - glyph_height) * 0.5F
+                        + metrics.ascent;
                 }
                 for (const auto* descendant : node.children) {
                     if (const auto baseline = first_text_baseline(*descendant)) return baseline;
