@@ -1,6 +1,7 @@
 #include "htmlml_v8_runtime.h"
 
 #include "htmlml_native_dom.h"
+#include "htmlml_native_websocket.h"
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
@@ -1465,6 +1466,11 @@ struct v8_dom_runtime::implementation final {
         double animation_timestamp_ms{-1};
     };
 
+    struct websocket_binding final {
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Function> callback;
+    };
+
     struct pending_promise_rejection final {
         v8::Global<v8::Promise> promise;
         std::string error;
@@ -1740,6 +1746,23 @@ struct v8_dom_runtime::implementation final {
 
     ~implementation()
     {
+        // Resource prefetch tasks capture this runtime and may still be inside
+        // the host loader when teardown begins. Join them while the loader and
+        // all of its bridge state are still alive.
+        for (auto& [key, future] : prefetched_resources) {
+            static_cast<void>(key);
+            if (!future.valid()) continue;
+            try {
+                static_cast<void>(future.get());
+            } catch (...) {
+            }
+        }
+        prefetched_resources.clear();
+        // Stop and join every network worker before releasing persistent V8
+        // handles or disposing the isolate. Socket callbacks never touch V8,
+        // but they may still be appending to the native delivery queue.
+        websocket_transport.shutdown();
+        websocket_bindings.clear();
         if (isolate != nullptr && !compilation_cache_directory.empty()) {
             v8::Isolate::Scope isolate_scope(isolate);
             v8::HandleScope handle_scope(isolate);
@@ -2336,7 +2359,7 @@ struct v8_dom_runtime::implementation final {
         auto* match = find_named(find_named, self->active_root());
         if (match == nullptr) {
             static const std::unordered_set<std::string> known_web_api_globals{
-                "localStorage", "indexedDB", "fetch", "XMLHttpRequest", "WebSocket",
+                "localStorage", "indexedDB", "fetch", "XMLHttpRequest",
                 "Worker", "SharedWorker", "ServiceWorker", "BroadcastChannel",
                 "OffscreenCanvas", "requestIdleCallback", "cancelIdleCallback"};
             if (known_web_api_globals.contains(name)) {
@@ -3367,6 +3390,565 @@ struct v8_dom_runtime::implementation final {
         script->Run(local_context).ToLocalChecked();
     }
 
+    static void websocket_open(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        if (self == nullptr
+            || info.Length() < 4
+            || !info[2]->IsArray()
+            || !info[3]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "Invalid native WebSocket open request")));
+            return;
+        }
+
+        const auto url = to_utf8(isolate, info[0]);
+        const auto origin = to_utf8(isolate, info[1]);
+        std::vector<std::string> protocols;
+        auto protocol_values = info[2].As<v8::Array>();
+        protocols.reserve(protocol_values->Length());
+        for (uint32_t index = 0; index < protocol_values->Length(); ++index) {
+            v8::Local<v8::Value> value;
+            if (!protocol_values->Get(local_context, index).ToLocal(&value)) return;
+            protocols.push_back(to_utf8(isolate, value));
+        }
+
+        const auto socket_id = self->websocket_transport.open(
+            url,
+            origin,
+            std::move(protocols));
+        if (socket_id == 0) {
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(isolate, "Unable to create native WebSocket")));
+            return;
+        }
+        self->websocket_bindings.emplace(
+            socket_id,
+            websocket_binding{
+                v8::Global<v8::Context>(isolate, local_context),
+                v8::Global<v8::Function>(isolate, info[3].As<v8::Function>())});
+        info.GetReturnValue().Set(v8::Number::New(
+            isolate,
+            static_cast<double>(socket_id)));
+    }
+
+    static void websocket_send(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        if (self == nullptr || info.Length() < 3 || !info[0]->IsNumber()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "Invalid native WebSocket send request")));
+            return;
+        }
+        const auto socket_id = static_cast<uint64_t>(
+            info[0]->IntegerValue(local_context).FromMaybe(0));
+        const auto binary = info[2]->BooleanValue(isolate);
+        const uint8_t* bytes = nullptr;
+        size_t byte_count = 0;
+        std::string text;
+        if (info[1]->IsArrayBuffer()) {
+            const auto backing = info[1].As<v8::ArrayBuffer>()->GetBackingStore();
+            bytes = static_cast<const uint8_t*>(backing->Data());
+            byte_count = backing->ByteLength();
+        } else if (info[1]->IsArrayBufferView()) {
+            const auto view = info[1].As<v8::ArrayBufferView>();
+            const auto backing = view->Buffer()->GetBackingStore();
+            bytes = static_cast<const uint8_t*>(backing->Data()) + view->ByteOffset();
+            byte_count = view->ByteLength();
+        } else {
+            text = to_utf8(isolate, info[1]);
+            bytes = reinterpret_cast<const uint8_t*>(text.data());
+            byte_count = text.size();
+        }
+        static constexpr uint8_t empty_payload = 0;
+        if (bytes == nullptr) bytes = &empty_payload;
+        info.GetReturnValue().Set(v8::Boolean::New(
+            isolate,
+            self->websocket_transport.send(
+                socket_id,
+                bytes,
+                byte_count,
+                binary)));
+    }
+
+    static void websocket_close(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        if (self == nullptr || info.Length() < 3 || !info[0]->IsNumber()) return;
+        const auto socket_id = static_cast<uint64_t>(
+            info[0]->IntegerValue(local_context).FromMaybe(0));
+        const auto close_code = static_cast<uint16_t>(
+            std::clamp(
+                info[1]->Int32Value(local_context).FromMaybe(1000),
+                0,
+                65535));
+        info.GetReturnValue().Set(v8::Boolean::New(
+            isolate,
+            self->websocket_transport.close(
+                socket_id,
+                close_code,
+                to_utf8(isolate, info[2]))));
+    }
+
+    static void websocket_buffered_amount(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        if (self == nullptr || info.Length() < 1 || !info[0]->IsNumber()) {
+            info.GetReturnValue().Set(v8::Number::New(isolate, 0));
+            return;
+        }
+        const auto socket_id = static_cast<uint64_t>(
+            info[0]->IntegerValue(local_context).FromMaybe(0));
+        info.GetReturnValue().Set(v8::Number::New(
+            isolate,
+            static_cast<double>(
+                self->websocket_transport.buffered_amount(socket_id))));
+    }
+
+    bool drain_websocket_event()
+    {
+        native_websocket_transport::event value;
+        if (!websocket_transport.try_pop(value)) return true;
+        const auto binding_iterator = websocket_bindings.find(value.socket_id);
+        if (binding_iterator == websocket_bindings.end()) {
+            if (value.type == native_websocket_transport::event_type::closed) {
+                websocket_transport.release(value.socket_id);
+            }
+            return true;
+        }
+        auto event_context = binding_iterator->second.context.Get(isolate);
+        auto callback = binding_iterator->second.callback.Get(isolate);
+        if (event_context.IsEmpty() || callback.IsEmpty()) {
+            websocket_bindings.erase(binding_iterator);
+            websocket_transport.release(value.socket_id);
+            return true;
+        }
+        v8::Context::Scope event_scope(event_context);
+        auto envelope = v8::Object::New(isolate);
+        const auto set_string = [&](const char* name, const std::string& text) {
+            envelope->Set(
+                event_context,
+                js_string(isolate, name),
+                js_string(isolate, text.c_str())).Check();
+        };
+        switch (value.type) {
+            case native_websocket_transport::event_type::opened:
+                set_string("type", "open");
+                set_string("protocol", value.protocol);
+                set_string("extensions", value.extensions);
+                break;
+            case native_websocket_transport::event_type::message: {
+                set_string("type", "message");
+                envelope->Set(
+                    event_context,
+                    js_string(isolate, "binary"),
+                    v8::Boolean::New(isolate, value.binary)).Check();
+                if (value.binary) {
+                    auto buffer = v8::ArrayBuffer::New(isolate, value.payload.size());
+                    if (!value.payload.empty()) {
+                        std::memcpy(
+                            buffer->GetBackingStore()->Data(),
+                            value.payload.data(),
+                            value.payload.size());
+                    }
+                    envelope->Set(
+                        event_context,
+                        js_string(isolate, "data"),
+                        v8::Uint8Array::New(buffer, 0, value.payload.size())).Check();
+                } else {
+                    envelope->Set(
+                        event_context,
+                        js_string(isolate, "data"),
+                        v8::String::NewFromUtf8(
+                            isolate,
+                            reinterpret_cast<const char*>(value.payload.data()),
+                            v8::NewStringType::kNormal,
+                            static_cast<int>(value.payload.size())).ToLocalChecked()).Check();
+                }
+                break;
+            }
+            case native_websocket_transport::event_type::error:
+                set_string("type", "error");
+                set_string("message", value.reason);
+                break;
+            case native_websocket_transport::event_type::closed:
+                set_string("type", "close");
+                set_string("reason", value.reason);
+                envelope->Set(
+                    event_context,
+                    js_string(isolate, "code"),
+                    v8::Integer::New(isolate, value.close_code)).Check();
+                envelope->Set(
+                    event_context,
+                    js_string(isolate, "wasClean"),
+                    v8::Boolean::New(isolate, value.was_clean)).Check();
+                break;
+        }
+
+        v8::Local<v8::Value> arguments[] = {envelope};
+        v8::TryCatch try_catch(isolate);
+        if (callback->Call(
+                event_context,
+                event_context->Global(),
+                1,
+                arguments).IsEmpty()) {
+            last_error = "WebSocket event dispatch failed: "
+                + describe_exception(try_catch, event_context);
+            if (value.type == native_websocket_transport::event_type::closed) {
+                websocket_bindings.erase(value.socket_id);
+                websocket_transport.release(value.socket_id);
+            }
+            return false;
+        }
+        isolate->PerformMicrotaskCheckpoint();
+        if (value.type == native_websocket_transport::event_type::closed) {
+            websocket_bindings.erase(value.socket_id);
+            websocket_transport.release(value.socket_id);
+        }
+        return true;
+    }
+
+    void install_websocket_globals(v8::Local<v8::Context> local_context)
+    {
+        auto global = local_context->Global();
+        global->Set(
+            local_context,
+            js_string(isolate, "__htmlMlWebSocketOpen"),
+            v8::Function::New(local_context, websocket_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__htmlMlWebSocketSend"),
+            v8::Function::New(local_context, websocket_send).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__htmlMlWebSocketClose"),
+            v8::Function::New(local_context, websocket_close).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__htmlMlWebSocketBufferedAmount"),
+            v8::Function::New(
+                local_context,
+                websocket_buffered_amount).ToLocalChecked()).Check();
+
+        constexpr std::string_view source = R"JS(
+          (() => {
+            const diagnostics = {
+              created: 0, opened: 0, messages: 0, bytesReceived: 0,
+              errors: 0, closed: 0
+            };
+
+            class HtmlMLEventTarget {
+              constructor() {
+                Object.defineProperty(this, '_listeners', {
+                  value: new Map(), configurable: false
+                });
+              }
+              addEventListener(type, listener, options = {}) {
+                if (typeof listener !== 'function'
+                    && typeof listener?.handleEvent !== 'function') return;
+                const name = String(type);
+                const listeners = this._listeners.get(name) || [];
+                if (listeners.some(entry => entry.listener === listener)) return;
+                const entry = {
+                  listener,
+                  once: Boolean(options && typeof options === 'object'
+                    ? options.once : false)
+                };
+                listeners.push(entry);
+                this._listeners.set(name, listeners);
+                const signal = options && typeof options === 'object'
+                  ? options.signal : null;
+                if (signal?.aborted) {
+                  this.removeEventListener(name, listener);
+                } else if (signal?.addEventListener) {
+                  signal.addEventListener(
+                    'abort',
+                    () => this.removeEventListener(name, listener),
+                    { once: true });
+                }
+              }
+              removeEventListener(type, listener) {
+                const listeners = this._listeners.get(String(type));
+                if (!listeners) return;
+                const index = listeners.findIndex(entry => entry.listener === listener);
+                if (index >= 0) listeners.splice(index, 1);
+              }
+              dispatchEvent(event) {
+                if (!event || !event.type) {
+                  throw new TypeError('dispatchEvent requires an Event');
+                }
+                const type = String(event.type);
+                Object.defineProperties(event, {
+                  target: { value: this, configurable: true },
+                  currentTarget: { value: this, configurable: true }
+                });
+                const handler = this[`on${type}`];
+                if (typeof handler === 'function') handler.call(this, event);
+                for (const entry of (this._listeners.get(type) || []).slice()) {
+                  if (typeof entry.listener === 'function') {
+                    entry.listener.call(this, event);
+                  } else {
+                    entry.listener.handleEvent(event);
+                  }
+                  if (entry.once) this.removeEventListener(type, entry.listener);
+                }
+                return !event.defaultPrevented;
+              }
+            }
+
+            class HtmlMLMessageEvent {
+              constructor(type, init = {}) {
+                this.type = String(type);
+                this.data = init.data;
+                this.origin = init.origin || '';
+                this.lastEventId = init.lastEventId || '';
+                this.source = init.source || null;
+                this.ports = init.ports || [];
+                this.defaultPrevented = false;
+              }
+              preventDefault() { this.defaultPrevented = true; }
+            }
+            class HtmlMLCloseEvent {
+              constructor(type, init = {}) {
+                this.type = String(type);
+                this.code = Number(init.code) || 0;
+                this.reason = String(init.reason || '');
+                this.wasClean = Boolean(init.wasClean);
+                this.defaultPrevented = false;
+              }
+              preventDefault() { this.defaultPrevented = true; }
+            }
+            class HtmlMLErrorEvent {
+              constructor(type, init = {}) {
+                this.type = String(type);
+                this.message = String(init.message || '');
+                this.error = init.error;
+                this.defaultPrevented = false;
+              }
+              preventDefault() { this.defaultPrevented = true; }
+            }
+
+            const validProtocol = value => {
+              if (!value || /[()<>@,;:\\"\/\[\]?={} \t]/.test(value)) return false;
+              for (const character of value) {
+                const code = character.charCodeAt(0);
+                if (code < 0x21 || code > 0x7e) return false;
+              }
+              return true;
+            };
+            const documentOrigin = () => {
+              const protocol = String(globalThis.location?.protocol || '');
+              const host = String(globalThis.location?.host || '');
+              return (protocol === 'http:' || protocol === 'https:') && host
+                ? `${protocol}//${host}` : '';
+            };
+
+            class HtmlMLWebSocket extends HtmlMLEventTarget {
+              constructor(url, protocols = []) {
+                super();
+                if (arguments.length === 0) {
+                  throw new TypeError("Failed to construct 'WebSocket': 1 argument required");
+                }
+                let resolved = __htmlMlResolveUrl(
+                  String(url),
+                  String(globalThis.location?.href || ''));
+                if (resolved.startsWith('http:')) resolved = `ws:${resolved.slice(5)}`;
+                else if (resolved.startsWith('https:')) resolved = `wss:${resolved.slice(6)}`;
+                if ((!resolved.startsWith('ws:') && !resolved.startsWith('wss:'))
+                    || resolved.includes('#')) {
+                  throw new DOMException('Invalid WebSocket URL', 'SyntaxError');
+                }
+                const requested = typeof protocols === 'string'
+                  ? [protocols] : Array.from(protocols);
+                const seen = new Set();
+                for (let index = 0; index < requested.length; ++index) {
+                  requested[index] = String(requested[index]);
+                  if (!validProtocol(requested[index])
+                      || seen.has(requested[index])) {
+                    throw new DOMException(
+                      'Invalid or duplicate WebSocket subprotocol',
+                      'SyntaxError');
+                  }
+                  seen.add(requested[index]);
+                }
+
+                Object.defineProperties(this, {
+                  url: { value: resolved, enumerable: true },
+                  protocol: { value: '', writable: true, enumerable: true },
+                  extensions: { value: '', writable: true, enumerable: true },
+                  readyState: {
+                    value: HtmlMLWebSocket.CONNECTING,
+                    writable: true,
+                    enumerable: true
+                  },
+                  onopen: { value: null, writable: true, enumerable: true },
+                  onmessage: { value: null, writable: true, enumerable: true },
+                  onerror: { value: null, writable: true, enumerable: true },
+                  onclose: { value: null, writable: true, enumerable: true },
+                  _binaryType: { value: 'blob', writable: true },
+                  _id: {
+                    value: __htmlMlWebSocketOpen(
+                      resolved,
+                      documentOrigin(),
+                      requested,
+                      envelope => this._receive(envelope))
+                  }
+                });
+                ++diagnostics.created;
+                __htmlMlRecordWebApi(
+                  'WebSocket.constructor',
+                  'supported',
+                  'native RFC 6455 client with ws/wss, subprotocol, binary, compression, and close support');
+              }
+              get binaryType() { return this._binaryType; }
+              set binaryType(value) {
+                value = String(value);
+                if (value === 'blob' || value === 'arraybuffer') {
+                  this._binaryType = value;
+                }
+              }
+              get bufferedAmount() {
+                return __htmlMlWebSocketBufferedAmount(this._id);
+              }
+              send(data) {
+                if (this.readyState === HtmlMLWebSocket.CONNECTING) {
+                  throw new DOMException(
+                    "Failed to execute 'send': WebSocket is still CONNECTING",
+                    'InvalidStateError');
+                }
+                if (this.readyState !== HtmlMLWebSocket.OPEN) return;
+                if (data instanceof ArrayBuffer) {
+                  __htmlMlWebSocketSend(this._id, new Uint8Array(data), true);
+                } else if (ArrayBuffer.isView(data)) {
+                  __htmlMlWebSocketSend(
+                    this._id,
+                    new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+                    true);
+                } else if (typeof Blob === 'function' && data instanceof Blob) {
+                  __htmlMlWebSocketSend(this._id, String(data), true);
+                } else {
+                  __htmlMlWebSocketSend(this._id, String(data), false);
+                }
+              }
+              close(code, reason = '') {
+                if (code !== undefined
+                    && code !== 1000
+                    && !(code >= 3000 && code <= 4999)) {
+                  throw new DOMException('Invalid WebSocket close code', 'InvalidAccessError');
+                }
+                reason = String(reason);
+                if (new TextEncoder().encode(reason).byteLength > 123) {
+                  throw new DOMException(
+                    'WebSocket close reason exceeds 123 UTF-8 bytes',
+                    'SyntaxError');
+                }
+                if (this.readyState === HtmlMLWebSocket.CLOSING
+                    || this.readyState === HtmlMLWebSocket.CLOSED) return;
+                this.readyState = HtmlMLWebSocket.CLOSING;
+                __htmlMlWebSocketClose(this._id, code === undefined ? 1000 : code, reason);
+              }
+              _receive(envelope) {
+                switch (envelope.type) {
+                  case 'open':
+                    if (this.readyState !== HtmlMLWebSocket.CONNECTING) return;
+                    this.protocol = envelope.protocol || '';
+                    this.extensions = envelope.extensions || '';
+                    this.readyState = HtmlMLWebSocket.OPEN;
+                    ++diagnostics.opened;
+                    this.dispatchEvent({ type: 'open', defaultPrevented: false });
+                    break;
+                  case 'message': {
+                    if (this.readyState !== HtmlMLWebSocket.OPEN) return;
+                    let data = envelope.data;
+                    if (envelope.binary) {
+                      diagnostics.bytesReceived += data.byteLength;
+                      if (this.binaryType === 'arraybuffer') {
+                        data = data.buffer.slice(
+                          data.byteOffset,
+                          data.byteOffset + data.byteLength);
+                      } else {
+                        data = new Blob([data]);
+                      }
+                    } else {
+                      diagnostics.bytesReceived += String(data).length;
+                    }
+                    ++diagnostics.messages;
+                    this.dispatchEvent(new HtmlMLMessageEvent('message', { data }));
+                    break;
+                  }
+                  case 'error':
+                    ++diagnostics.errors;
+                    this.dispatchEvent(new HtmlMLErrorEvent(
+                      'error',
+                      { message: envelope.message || 'WebSocket connection error' }));
+                    break;
+                  case 'close':
+                    this.readyState = HtmlMLWebSocket.CLOSED;
+                    ++diagnostics.closed;
+                    this.dispatchEvent(new HtmlMLCloseEvent('close', envelope));
+                    break;
+                }
+              }
+            }
+            for (const [name, value] of Object.entries({
+              CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3
+            })) {
+              Object.defineProperty(HtmlMLWebSocket, name, {
+                value, enumerable: true
+              });
+              Object.defineProperty(HtmlMLWebSocket.prototype, name, {
+                value, enumerable: true
+              });
+            }
+
+            Object.defineProperties(globalThis, {
+              EventTarget: {
+                value: globalThis.EventTarget || HtmlMLEventTarget,
+                writable: true,
+                configurable: true
+              },
+              MessageEvent: {
+                value: globalThis.MessageEvent || HtmlMLMessageEvent,
+                writable: true,
+                configurable: true
+              },
+              CloseEvent: {
+                value: globalThis.CloseEvent || HtmlMLCloseEvent,
+                writable: true,
+                configurable: true
+              },
+              ErrorEvent: {
+                value: globalThis.ErrorEvent || HtmlMLErrorEvent,
+                writable: true,
+                configurable: true
+              },
+              WebSocket: {
+                value: HtmlMLWebSocket,
+                writable: true,
+                configurable: true
+              },
+              __htmlMlWebSocketDiagnostics: {
+                value: () => ({ ...diagnostics }),
+                configurable: true
+              }
+            });
+          })();
+        )JS";
+        auto script = v8::Script::Compile(
+            local_context,
+            js_string(isolate, std::string(source).c_str())).ToLocalChecked();
+        script->Run(local_context).ToLocalChecked();
+    }
+
     void install_editor_web_platform_globals(v8::Local<v8::Context> local_context)
     {
         // These are general browser primitives used by Monaco and other
@@ -3666,6 +4248,10 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "dispatchEvent"),
             v8::Function::New(local_context, dispatch_event).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "postMessage"),
+            v8::Function::New(local_context, window_post_message).ToLocalChecked()).Check();
         auto event_template = v8::FunctionTemplate::New(isolate, event_constructor);
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
@@ -3867,6 +4453,10 @@ struct v8_dom_runtime::implementation final {
         location->Set(local_context, js_string(isolate, "pathname"), js_string(isolate, "/")).Check();
         location->Set(local_context, js_string(isolate, "search"), js_string(isolate, "")).Check();
         location->Set(local_context, js_string(isolate, "hash"), js_string(isolate, "")).Check();
+        location->Set(
+            local_context,
+            js_string(isolate, "toString"),
+            v8::Function::New(local_context, location_to_string).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "location"), location).Check();
 
         install_navigator(isolate, local_context, global);
@@ -3892,20 +4482,58 @@ struct v8_dom_runtime::implementation final {
               toString() { return this._text; }
             }
             class HtmlMLURLSearchParams {
-              constructor(owner = null) {
-                this._owner = owner;
+              constructor(init = null) {
+                this._owner = init && typeof init === 'object'
+                  && 'href' in init ? init : null;
                 this._pairs = [];
+                const query = String(
+                  this._owner ? this._owner.search : init || '')
+                  .replace(/^\?/, '');
+                for (const item of query ? query.split('&') : []) {
+                  const separator = item.indexOf('=');
+                  const decode = value => decodeURIComponent(
+                    String(value).replace(/\+/g, ' '));
+                  this._pairs.push(separator < 0
+                    ? [decode(item), '']
+                    : [decode(item.slice(0, separator)),
+                      decode(item.slice(separator + 1))]);
+                }
+              }
+              _updateOwner() {
+                if (!this._owner) return;
+                const serialized = this.toString();
+                this._owner.search = serialized ? `?${serialized}` : '';
+                this._owner.href = this._owner.origin + this._owner.pathname
+                  + this._owner.search + this._owner.hash;
               }
               append(name, value) {
                 __htmlMlRecordWebApi(
                   'URLSearchParams.append', 'partially-supported',
-                  'ordered append and URL serialization without the complete mutation/query surface');
+                  'ordered query parsing and common mutation/query operations');
                 this._pairs.push([String(name), String(value)]);
-                if (!this._owner) return;
-                const serialized = `${encodeURIComponent(String(name))}=${encodeURIComponent(String(value))}`;
-                this._owner.search += (this._owner.search ? '&' : '?') + serialized;
-                this._owner.href = this._owner.origin + this._owner.pathname
-                  + this._owner.search + this._owner.hash;
+                this._updateOwner();
+              }
+              get(name) {
+                name = String(name);
+                const pair = this._pairs.find(entry => entry[0] === name);
+                return pair ? pair[1] : null;
+              }
+              has(name) {
+                name = String(name);
+                return this._pairs.some(entry => entry[0] === name);
+              }
+              set(name, value) {
+                name = String(name);
+                value = String(value);
+                const first = this._pairs.findIndex(entry => entry[0] === name);
+                this._pairs = this._pairs.filter(entry => entry[0] !== name);
+                this._pairs.splice(first < 0 ? this._pairs.length : first, 0, [name, value]);
+                this._updateOwner();
+              }
+              delete(name) {
+                name = String(name);
+                this._pairs = this._pairs.filter(entry => entry[0] !== name);
+                this._updateOwner();
               }
               toString() {
                 return this._pairs.map(([name, value]) =>
@@ -3930,8 +4558,15 @@ struct v8_dom_runtime::implementation final {
                 this.origin = this.protocol && this.host ? `${this.protocol}//${this.host}` : 'null';
                 this.searchParams = new HtmlMLURLSearchParams(this);
               }
-              toString() { return this.href; }
-              toJSON() { return this.href; }
+              toString() {
+                const search = this.search && !this.search.startsWith('?')
+                  ? `?${this.search}` : this.search;
+                const hash = this.hash && !this.hash.startsWith('#')
+                  ? `#${this.hash}` : this.hash;
+                return `${this.protocol}${this.host ? `//${this.host}` : ''}`
+                  + `${this.pathname}${search}${hash}`;
+              }
+              toJSON() { return this.toString(); }
               static createObjectURL(blob) { return __htmlMlCreateObjectUrl(String(blob)); }
               static revokeObjectURL() {}
             }
@@ -3991,6 +4626,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
         crypto_script->Run(local_context).ToLocalChecked();
+        install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
         install_intersection_observer_polyfill(local_context);
     }
@@ -4459,7 +5095,9 @@ struct v8_dom_runtime::implementation final {
             event->Set(
                 local_context,
                 js_string(isolate, "bubbles"),
-                v8::False(isolate)).Check();
+                v8::Boolean::New(
+                    isolate,
+                    std::string_view(type) == "DOMContentLoaded")).Check();
             event->Set(
                 local_context,
                 js_string(isolate, "cancelable"),
@@ -4770,10 +5408,15 @@ struct v8_dom_runtime::implementation final {
         // compilation and optimization work. An embedder must service that
         // queue; otherwise hot application code remains on its initial tier.
         pump_v8_platform_tasks();
+        if (websocket_transport.has_pending_events()) {
+            return drain_websocket_event();
+        }
         if (!pending_frame_hydrations.empty()) {
             auto* frame = pending_frame_hydrations.front();
             pending_frame_hydrations.erase(pending_frame_hydrations.begin());
             if (frame != nullptr && !hydrate_frame(*frame)) {
+                frame->attributes["data-htmlml-frame-error"] =
+                    frame_last_error_value;
                 last_error = frame_last_error_value;
                 return false;
             }
@@ -7016,7 +7659,8 @@ struct v8_dom_runtime::implementation final {
             const auto& base = in_frame_context() ? frame_base_address : document_base_address;
             if (task.node->tag == "link") {
                 const auto href = task.node->attributes.find("href");
-                if (href != task.node->attributes.end()) {
+                if (href != task.node->attributes.end()
+                    && !object_urls.contains(href->second)) {
                     start_resource_prefetch(
                         href->second,
                         base,
@@ -7029,6 +7673,14 @@ struct v8_dom_runtime::implementation final {
                         source->second,
                         base,
                         HTMLML_RESOURCE_SCRIPT);
+                }
+            } else if (task.node->tag == "img") {
+                const auto source = task.node->attributes.find("src");
+                if (source != task.node->attributes.end() && !source->second.empty()) {
+                    start_resource_prefetch(
+                        source->second,
+                        base,
+                        HTMLML_RESOURCE_IMAGE);
                 }
             }
         }
@@ -7072,12 +7724,18 @@ struct v8_dom_runtime::implementation final {
                 std::string stylesheet;
                 std::string stylesheet_name;
                 const auto& base = in_frame_context() ? frame_base_address : document_base_address;
-                if (load_text_resource(
+                const auto object_url = object_urls.find(href_iterator->second);
+                const auto loaded = object_url != object_urls.end()
+                    ? (stylesheet = object_url->second,
+                        stylesheet_name = href_iterator->second,
+                        true)
+                    : load_text_resource(
                         href_iterator->second,
                         base,
                         HTMLML_RESOURCE_STYLESHEET,
                         stylesheet,
-                        stylesheet_name)) {
+                        stylesheet_name);
+                if (loaded) {
                     const auto first_new_rule = add_stylesheet(
                         std::move(stylesheet),
                         stylesheet_name);
@@ -7085,16 +7743,18 @@ struct v8_dom_runtime::implementation final {
                     binding_callback_timer recascade_timer(
                         profile_startup ? &startup_stylesheet_recascade : nullptr);
 #endif
-                    const auto custom_properties_changed = appended_css_rules_define_custom_properties(
-                        first_new_rule);
-                    for (auto* existing : document.query_selector_all(document.body(), "*")) {
+                    const auto custom_properties_changed =
+                        appended_css_rules_define_custom_properties(first_new_rule);
+                    for (auto* existing :
+                        document.query_selector_all(document.body(), "*")) {
 #if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
                         if (profile_startup) ++startup_stylesheet_recascade_nodes;
 #endif
                         apply_appended_css_rules(*existing, first_new_rule);
                     }
                     if (custom_properties_changed) {
-                        for (auto* existing : document.query_selector_all(document.body(), "*")) {
+                        for (auto* existing :
+                            document.query_selector_all(document.body(), "*")) {
                             reapply_css_variable_dependent_rules(*existing);
                         }
                     }
@@ -7143,6 +7803,68 @@ struct v8_dom_runtime::implementation final {
             }
             loaded_resource_names.push_back(resource_leaf_name(script_name));
             ++frame_script_execution_count;
+        } else if (node.tag == "img") {
+            const auto source = node.attributes.find("src");
+            if (source == node.attributes.end() || source->second.empty()) {
+                node.clear_replaced_image();
+                return true;
+            }
+            auto& image = node.mutable_replaced_image();
+            if (!image.complete || image.source != source->second) {
+                std::string markup;
+                std::string resolved_source;
+                const auto& base =
+                    in_frame_context() ? frame_base_address : document_base_address;
+                if (!load_text_resource(
+                        source->second,
+                        base,
+                        HTMLML_RESOURCE_IMAGE,
+                        markup,
+                        resolved_source)) {
+                    frame_last_error_value =
+                        "Unable to load connected image: " + source->second;
+                    ++frame_script_error_count;
+                    return false;
+                }
+                const auto view_box = svg_view_box(markup);
+                if (view_box.empty()) {
+                    frame_last_error_value =
+                        "Connected image is not a supported SVG: " + source->second;
+                    ++frame_script_error_count;
+                    return false;
+                }
+                float view_x = 0;
+                float view_y = 0;
+                float view_width = 0;
+                float view_height = 0;
+                std::istringstream view_box_stream(view_box);
+                view_box_stream
+                    >> view_x >> view_y >> view_width >> view_height;
+                image.source = source->second;
+                image.resolved_source = std::move(resolved_source);
+                image.markup = std::move(markup);
+                image.view_box = view_box;
+                image.natural_width = std::max(0.0F, view_width);
+                image.natural_height = std::max(0.0F, view_height);
+                image.complete = true;
+                wrapper->Set(
+                    local_context,
+                    js_string(isolate, "complete"),
+                    v8::True(isolate)).Check();
+                wrapper->Set(
+                    local_context,
+                    js_string(isolate, "currentSrc"),
+                    js_string(isolate, image.resolved_source.c_str())).Check();
+                wrapper->Set(
+                    local_context,
+                    js_string(isolate, "naturalWidth"),
+                    v8::Number::New(isolate, image.natural_width)).Check();
+                wrapper->Set(
+                    local_context,
+                    js_string(isolate, "naturalHeight"),
+                    v8::Number::New(isolate, image.natural_height)).Check();
+                document.mark_dirty();
+            }
         }
 
         v8::Local<v8::Value> onload;
@@ -7656,6 +8378,21 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "toggle"),
             v8::Function::New(local_context, class_list_toggle, data).ToLocalChecked()).Check();
+        auto value_getter = v8::Function::New(
+            local_context,
+            class_list_value_getter_bridge,
+            data).ToLocalChecked();
+        auto value_setter = v8::Function::New(
+            local_context,
+            class_list_value_setter_bridge,
+            data).ToLocalChecked();
+        v8::PropertyDescriptor value_descriptor(value_getter, value_setter);
+        value_descriptor.set_enumerable(true);
+        value_descriptor.set_configurable(true);
+        object->DefineProperty(
+            local_context,
+            js_string(isolate, "value"),
+            value_descriptor).Check();
         auto& wrapper = class_list_wrappers[key];
         wrapper.Reset(isolate, object);
         if (!is_connected(node)) wrapper.SetWeak();
@@ -7707,7 +8444,8 @@ struct v8_dom_runtime::implementation final {
                 if (!executable) return;
             }
         }
-        auto resource_element = node.tag == "link" || node.tag == "script";
+        auto resource_element =
+            node.tag == "link" || node.tag == "script" || node.tag == "img";
         v8::Local<v8::Value> onload;
         const auto has_onload = wrapper->Get(
                 resource_context,
@@ -7722,11 +8460,43 @@ struct v8_dom_runtime::implementation final {
 
     void enqueue_iframe_hydration_if_needed(dom_node& node)
     {
-        if (node.tag != "iframe" || !is_connected(node)) return;
+        if (!is_connected(node)) return;
+        if (node.tag != "iframe") {
+            for (auto* child : node.children) {
+                if (child != nullptr) {
+                    enqueue_iframe_hydration_if_needed(*child);
+                }
+            }
+            return;
+        }
         const auto source = node.attributes.find("src");
         if (source != node.attributes.end()) {
             const auto object = object_urls.find(source->second);
-            if (object != object_urls.end()) node.attributes["object-html"] = object->second;
+            if (object != object_urls.end()) {
+                node.attributes["object-html"] = object->second;
+            } else {
+                const auto& base =
+                    in_frame_context() ? frame_base_address : document_base_address;
+                const auto resolved = resolve_resource_url(source->second, base);
+                if (resolved.starts_with("http://")
+                    || resolved.starts_with("https://")) {
+                    node.attributes["data-htmlml-remote-attempt"] = resolved;
+                    std::string html;
+                    std::string resolved_name;
+                    if (load_text_resource(
+                            resolved,
+                            {},
+                            HTMLML_RESOURCE_DOCUMENT,
+                            html,
+                            resolved_name)) {
+                        node.attributes["src"] = resolved;
+                        node.attributes["object-html"] = std::move(html);
+                        node.attributes["data-htmlml-remote-result"] = "loaded";
+                    } else {
+                        node.attributes["data-htmlml-remote-result"] = "failed";
+                    }
+                }
+            }
         }
         if (!node.attributes.contains("object-html")
             && !node.attributes.contains("frame-html")) return;
@@ -9044,6 +9814,17 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(js_string(info.GetIsolate(), ""));
     }
 
+    static void location_to_string(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> href;
+        if (info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "href")).ToLocal(&href)) {
+            info.GetReturnValue().Set(href);
+        }
+    }
+
     static void return_null(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
@@ -9116,6 +9897,7 @@ struct v8_dom_runtime::implementation final {
                 fragment_child->visible = true;
                 if (!self->document.append_child(*parent, *fragment_child)) continue;
                 self->recascade_connected_subtree(*fragment_child);
+                self->recascade_connected_node(*parent);
                 self->activate_connected_stylesheet(*fragment_child);
                 self->enqueue_connected_resource_if_needed(
                     *fragment_child,
@@ -9141,6 +9923,11 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         self->recascade_connected_subtree(*child);
+        // Appending a child changes structural selectors on the container
+        // itself. In particular, a dynamically populated `:empty` button must
+        // stop matching before layout (TradingView's market-status pill uses
+        // exactly this pattern).
+        self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*child);
         self->enqueue_connected_resource_if_needed(
             *child,
@@ -9214,6 +10001,7 @@ struct v8_dom_runtime::implementation final {
                 info.GetIsolate()->GetCurrentContext());
             self->enqueue_iframe_hydration_if_needed(*child);
         }
+        self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*parent);
         self->document.mark_dirty();
     }
@@ -10298,6 +11086,37 @@ struct v8_dom_runtime::implementation final {
         return info.Data()->IsExternal()
             ? static_cast<dom_node*>(info.Data().As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault))
             : nullptr;
+    }
+
+    static void class_list_value_getter_bridge(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
+        const auto* node = class_list_node(info);
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(js_dom_string(
+            info.GetIsolate(),
+            node->class_name));
+    }
+
+    static void class_list_value_setter_bridge(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* node = class_list_node(info);
+        if (node == nullptr || info.Length() < 1) return;
+        self->record_feature(
+            "html", "attribute:class", "supported", {}, "html-attribute");
+        const auto value = to_wtf8(info.GetIsolate(), info[0]);
+        if (node->class_name == value
+            && node->attributes.contains("class")) {
+            return;
+        }
+        node->class_name = value;
+        node->attributes["class"] = node->class_name;
+        self->recascade_connected_subtree(*node, "classList.value");
     }
 
     static bool has_class(const dom_node& node, std::string_view value)
@@ -11677,13 +12496,16 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         if (node->tag != "img") return;
+        node->clear_replaced_image();
         auto local_context = info.GetIsolate()->GetCurrentContext();
-        info.Holder()->Set(local_context, js_string(info.GetIsolate(), "complete"), v8::True(info.GetIsolate())).Check();
-        v8::Local<v8::Value> onload;
-        if (info.Holder()->Get(local_context, js_string(info.GetIsolate(), "onload")).ToLocal(&onload)
-            && onload->IsFunction()) {
-            onload.As<v8::Function>()->Call(local_context, info.Holder(), 0, nullptr).ToLocalChecked();
-        }
+        info.Holder()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "complete"),
+            v8::False(info.GetIsolate())).Check();
+        self->enqueue_connected_resource_if_needed(
+            *node,
+            info.Holder(),
+            local_context);
     }
 
     static void set_element_href(v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
@@ -14297,6 +15119,13 @@ struct v8_dom_runtime::implementation final {
         else if (name == "src" && node->tag == "iframe") {
             self->enqueue_iframe_hydration_if_needed(*node);
         }
+        else if (name == "src" && node->tag == "img") {
+            node->clear_replaced_image();
+            self->enqueue_connected_resource_if_needed(
+                *node,
+                info.This(),
+                info.GetIsolate()->GetCurrentContext());
+        }
         if (self->attribute_requires_recascade(name)) {
             self->recascade_connected_subtree(*node, "style.setProperty-clear");
         } else {
@@ -14338,6 +15167,9 @@ struct v8_dom_runtime::implementation final {
         node->attributes.erase(name);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
+        else if (name == "src" && node->tag == "img") {
+            node->clear_replaced_image();
+        }
         else if (name == "style") {
             node->clear_authored_style();
             node->style.inline_property_mask = 0U;
@@ -14540,24 +15372,71 @@ struct v8_dom_runtime::implementation final {
         auto location = v8::Object::New(isolate);
         const auto scheme_end = href.find(':');
         const auto authority_start = href.find("://");
-        const auto path_start = authority_start == std::string::npos
+        const auto authority_end = authority_start == std::string::npos
             ? std::string::npos
-            : href.find('/', authority_start + 3U);
+            : href.find_first_of("/?#", authority_start + 3U);
         const auto host = authority_start == std::string::npos
             ? std::string{}
             : href.substr(
                 authority_start + 3U,
-                (path_start == std::string::npos ? href.size() : path_start) - authority_start - 3U);
-        const auto path = path_start == std::string::npos ? "/" : href.substr(path_start);
+                (authority_end == std::string::npos ? href.size() : authority_end)
+                    - authority_start - 3U);
+        const auto query_start = href.find(
+            '?',
+            authority_end == std::string::npos ? 0U : authority_end);
+        const auto hash_start = href.find(
+            '#',
+            authority_end == std::string::npos ? 0U : authority_end);
+        const auto path_end = std::min(
+            query_start == std::string::npos ? href.size() : query_start,
+            hash_start == std::string::npos ? href.size() : hash_start);
+        const auto path = authority_end == std::string::npos
+            || authority_end >= path_end
+            || href[authority_end] != '/'
+            ? std::string("/")
+            : href.substr(authority_end, path_end - authority_end);
+        const auto search = query_start == std::string::npos
+            ? std::string{}
+            : href.substr(
+                query_start,
+                (hash_start == std::string::npos ? href.size() : hash_start)
+                    - query_start);
+        const auto hash = hash_start == std::string::npos
+            ? std::string{}
+            : href.substr(hash_start);
         location->Set(local_context, js_string(isolate, "href"), js_string(isolate, href.c_str())).Check();
         location->Set(
             local_context,
             js_string(isolate, "protocol"),
             js_string(isolate, scheme_end == std::string::npos ? "" : href.substr(0U, scheme_end + 1U).c_str())).Check();
         location->Set(local_context, js_string(isolate, "host"), js_string(isolate, host.c_str())).Check();
+        const auto port_separator = host.find_last_of(':');
+        const auto has_port = port_separator != std::string::npos
+            && host.find(']') == std::string::npos;
+        const auto hostname = has_port ? host.substr(0U, port_separator) : host;
+        const auto port = has_port ? host.substr(port_separator + 1U) : std::string{};
+        location->Set(
+            local_context,
+            js_string(isolate, "hostname"),
+            js_string(isolate, hostname.c_str())).Check();
+        location->Set(
+            local_context,
+            js_string(isolate, "port"),
+            js_string(isolate, port.c_str())).Check();
+        const auto origin = scheme_end == std::string::npos || host.empty()
+            ? std::string("null")
+            : href.substr(0U, scheme_end + 1U) + "//" + host;
+        location->Set(
+            local_context,
+            js_string(isolate, "origin"),
+            js_string(isolate, origin.c_str())).Check();
         location->Set(local_context, js_string(isolate, "pathname"), js_string(isolate, path.c_str())).Check();
-        location->Set(local_context, js_string(isolate, "search"), js_string(isolate, "")).Check();
-        location->Set(local_context, js_string(isolate, "hash"), js_string(isolate, "")).Check();
+        location->Set(local_context, js_string(isolate, "search"), js_string(isolate, search.c_str())).Check();
+        location->Set(local_context, js_string(isolate, "hash"), js_string(isolate, hash.c_str())).Check();
+        location->Set(
+            local_context,
+            js_string(isolate, "toString"),
+            v8::Function::New(local_context, location_to_string).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "location"), location).Check();
         v8::Local<v8::Value> document_value;
         if (global->Get(
@@ -16373,6 +17252,11 @@ struct v8_dom_runtime::implementation final {
                 break;
             }
         }
+        // A partially consumed compound selector is not a match. Silently
+        // accepting an unsupported suffix broadens malformed or generated
+        // selectors (for example `[data-role=statuses-pill]_hidden`) to the
+        // valid prefix and can incorrectly hide the element.
+        if (cursor != selector.size()) return false;
 
         const auto is_element = [](const dom_node* candidate) {
             return candidate != nullptr && !candidate->tag.starts_with('#');
@@ -18400,17 +19284,25 @@ struct v8_dom_runtime::implementation final {
             parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
             parse_border(node.style.border_left_width, node.style.border_left_rgba);
             return;
-        } else if (name == "border-top") {
+        } else if (name == "border-top" || name == "border-block-start") {
             parse_border(node.style.border_top_width, node.style.border_top_rgba);
             return;
-        } else if (name == "border-right") {
+        } else if (name == "border-right" || name == "border-inline-end") {
             parse_border(node.style.border_right_width, node.style.border_right_rgba);
             return;
-        } else if (name == "border-bottom") {
+        } else if (name == "border-bottom" || name == "border-block-end") {
             parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
             return;
-        } else if (name == "border-left") {
+        } else if (name == "border-left" || name == "border-inline-start") {
             parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            return;
+        } else if (name == "border-inline") {
+            parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba);
+            return;
+        } else if (name == "border-block") {
+            parse_border(node.style.border_top_width, node.style.border_top_rgba);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
             return;
         } else if (name == "border-color") {
             parse_four_border_values(true);
@@ -18435,29 +19327,53 @@ struct v8_dom_runtime::implementation final {
             node.style.border_bottom_width = {};
             node.style.border_left_width = {};
             return;
-        } else if (name == "border-top-color") {
+        } else if (name == "border-top-color"
+            || name == "border-block-start-color") {
             node.style.border_top_rgba = parse_declared_color(value);
             return;
-        } else if (name == "border-right-color") {
+        } else if (name == "border-right-color"
+            || name == "border-inline-end-color") {
             node.style.border_right_rgba = parse_declared_color(value);
             return;
-        } else if (name == "border-bottom-color") {
+        } else if (name == "border-bottom-color"
+            || name == "border-block-end-color") {
             node.style.border_bottom_rgba = parse_declared_color(value);
             return;
-        } else if (name == "border-left-color") {
+        } else if (name == "border-left-color"
+            || name == "border-inline-start-color") {
             node.style.border_left_rgba = parse_declared_color(value);
             return;
-        } else if (name == "border-top-width") {
+        } else if (name == "border-inline-color") {
+            node.style.border_left_rgba = parse_declared_color(value);
+            node.style.border_right_rgba = node.style.border_left_rgba;
+            return;
+        } else if (name == "border-block-color") {
+            node.style.border_top_rgba = parse_declared_color(value);
+            node.style.border_bottom_rgba = node.style.border_top_rgba;
+            return;
+        } else if (name == "border-top-width"
+            || name == "border-block-start-width") {
             node.style.border_top_width = native_document::parse_length(value);
             return;
-        } else if (name == "border-right-width") {
+        } else if (name == "border-right-width"
+            || name == "border-inline-end-width") {
             node.style.border_right_width = native_document::parse_length(value);
             return;
-        } else if (name == "border-bottom-width") {
+        } else if (name == "border-bottom-width"
+            || name == "border-block-end-width") {
             node.style.border_bottom_width = native_document::parse_length(value);
             return;
-        } else if (name == "border-left-width") {
+        } else if (name == "border-left-width"
+            || name == "border-inline-start-width") {
             node.style.border_left_width = native_document::parse_length(value);
+            return;
+        } else if (name == "border-inline-width") {
+            node.style.border_left_width = native_document::parse_length(value);
+            node.style.border_right_width = node.style.border_left_width;
+            return;
+        } else if (name == "border-block-width") {
+            node.style.border_top_width = native_document::parse_length(value);
+            node.style.border_bottom_width = node.style.border_top_width;
             return;
         }
         if (name == "width" && !is_inline(inline_width)) {
@@ -19222,6 +20138,7 @@ struct v8_dom_runtime::implementation final {
         if (trace_css) css_profile_candidate_checks += candidates.size();
 #endif
         std::vector<const css_rule*> matched_rules;
+        std::vector<std::pair<int, const css_rule*>> matched_pseudo_rules;
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
@@ -19229,12 +20146,7 @@ struct v8_dom_runtime::implementation final {
             const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
                 if (!pseudo_origin.empty() && css_selector_matches(node, pseudo_origin)) {
-                    auto& pseudo = pseudo_kind == 1
-                        ? node.style.mutable_before_pseudo()
-                        : node.style.mutable_after_pseudo();
-                    for (const auto& declaration : rule.declarations()) {
-                        apply_pseudo_css_declaration(node, pseudo, declaration);
-                    }
+                    matched_pseudo_rules.emplace_back(pseudo_kind, &rule);
                 }
                 continue;
             }
@@ -19262,6 +20174,18 @@ struct v8_dom_runtime::implementation final {
             for (const auto& declaration : rule->declarations()) {
                 if (declaration.name.starts_with("--")) continue;
                 apply_css_declaration(node, declaration);
+            }
+        }
+        // Pseudo-elements inherit the originating element's completed
+        // computed style. Apply them only after its custom and ordinary
+        // declarations so `::before { background:var(--active-bg) }` resolves
+        // the state variable authored on the active element.
+        for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            auto& pseudo = pseudo_kind == 1
+                ? node.style.mutable_before_pseudo()
+                : node.style.mutable_after_pseudo();
+            for (const auto& declaration : rule->declarations()) {
+                apply_pseudo_css_declaration(node, pseudo, declaration);
             }
         }
 #if defined(HTMLML_NATIVE_ENGINE_CERTIFICATION)
@@ -19345,6 +20269,7 @@ struct v8_dom_runtime::implementation final {
         candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
 
         std::vector<const css_rule*> matched_rules;
+        std::vector<std::pair<int, const css_rule*>> matched_pseudo_rules;
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
@@ -19352,12 +20277,7 @@ struct v8_dom_runtime::implementation final {
             const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
                 if (!pseudo_origin.empty() && css_selector_matches(node, pseudo_origin)) {
-                    auto& pseudo = pseudo_kind == 1
-                        ? node.style.mutable_before_pseudo()
-                        : node.style.mutable_after_pseudo();
-                    for (const auto& declaration : rule.declarations()) {
-                        apply_pseudo_css_declaration(node, pseudo, declaration);
-                    }
+                    matched_pseudo_rules.emplace_back(pseudo_kind, &rule);
                 }
                 continue;
             }
@@ -19371,6 +20291,14 @@ struct v8_dom_runtime::implementation final {
         for (const auto* rule : matched_rules) {
             for (const auto& declaration : rule->declarations()) {
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
+            }
+        }
+        for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            auto& pseudo = pseudo_kind == 1
+                ? node.style.mutable_before_pseudo()
+                : node.style.mutable_after_pseudo();
+            for (const auto& declaration : rule->declarations()) {
+                apply_pseudo_css_declaration(node, pseudo, declaration);
             }
         }
         configure_style_keyframe_animation(node);
@@ -19422,12 +20350,26 @@ struct v8_dom_runtime::implementation final {
         sort_css_candidates(candidates);
         candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
 
+        std::vector<const css_rule*> matched_rules;
+        std::unordered_set<std::string> variable_dependent_properties;
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches || !css_rule_matches(node, rule)) continue;
+            matched_rules.push_back(&rule);
             for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")
                     && declaration.value.find("var(") != std::string::npos) {
+                    variable_dependent_properties.insert(declaration.name);
+                }
+            }
+        }
+        // Replay the complete cascade for every property whose computed value
+        // depends on a newly introduced custom property. Replaying only the
+        // var() declaration lets it jump past later declarations of equal or
+        // higher precedence (for example a responsive `display:none`).
+        for (const auto* rule : matched_rules) {
+            for (const auto& declaration : rule->declarations()) {
+                if (variable_dependent_properties.contains(declaration.name)) {
                     apply_css_declaration(node, declaration);
                 }
             }
@@ -19533,6 +20475,12 @@ struct v8_dom_runtime::implementation final {
             }
         }
 #endif
+    }
+
+    void recascade_connected_node(dom_node& node)
+    {
+        if (!is_connected(node)) return;
+        apply_css_rules(node);
     }
 
     void recascade_hover_transition(
@@ -20678,7 +21626,17 @@ struct v8_dom_runtime::implementation final {
         actual_frame_windows[frame.id].Reset(isolate, global);
         actual_frame_documents[frame.id].Reset(isolate, frame_document_value);
         global->Set(local_context, js_string(isolate, "name"), js_string(isolate, frame.attributes["name"].c_str())).Check();
-        global->Set(local_context, js_string(isolate, "parent"), context.Get(isolate)->Global()).Check();
+        auto parent_window = context.Get(isolate)->Global();
+        for (auto* ancestor = frame.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor->tag != "iframe") continue;
+            const auto owner_window = actual_frame_windows.find(ancestor->id);
+            if (owner_window != actual_frame_windows.end()
+                && !owner_window->second.IsEmpty()) {
+                parent_window = owner_window->second.Get(isolate);
+            }
+            break;
+        }
+        global->Set(local_context, js_string(isolate, "parent"), parent_window).Check();
         global->Set(local_context, js_string(isolate, "top"), context.Get(isolate)->Global()).Check();
         global->Set(local_context, js_string(isolate, "frameElement"), wrap_node(frame)).Check();
         global->SetNativeDataProperty(
@@ -20714,6 +21672,7 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "addEventListener"), v8::Function::New(local_context, add_event_listener).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "removeEventListener"), v8::Function::New(local_context, remove_event_listener).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "dispatchEvent"), v8::Function::New(local_context, dispatch_event).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate, "postMessage"), v8::Function::New(local_context, window_post_message).ToLocalChecked()).Check();
         auto event_template = v8::FunctionTemplate::New(isolate, event_constructor);
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
@@ -20933,20 +21892,58 @@ struct v8_dom_runtime::implementation final {
                 toString() { return this._text; }
               }
               class HtmlMLURLSearchParams {
-                constructor(owner = null) {
-                  this._owner = owner;
+                constructor(init = null) {
+                  this._owner = init && typeof init === 'object'
+                    && 'href' in init ? init : null;
                   this._pairs = [];
+                  const query = String(
+                    this._owner ? this._owner.search : init || '')
+                    .replace(/^\?/, '');
+                  for (const item of query ? query.split('&') : []) {
+                    const separator = item.indexOf('=');
+                    const decode = value => decodeURIComponent(
+                      String(value).replace(/\+/g, ' '));
+                    this._pairs.push(separator < 0
+                      ? [decode(item), '']
+                      : [decode(item.slice(0, separator)),
+                        decode(item.slice(separator + 1))]);
+                  }
+                }
+                _updateOwner() {
+                  if (!this._owner) return;
+                  const serialized = this.toString();
+                  this._owner.search = serialized ? `?${serialized}` : '';
+                  this._owner.href = this._owner.origin + this._owner.pathname
+                    + this._owner.search + this._owner.hash;
                 }
                 append(name, value) {
                   __htmlMlRecordWebApi(
                     'URLSearchParams.append', 'partially-supported',
-                    'ordered append and URL serialization without the complete mutation/query surface');
+                    'ordered query parsing and common mutation/query operations');
                   this._pairs.push([String(name), String(value)]);
-                  if (!this._owner) return;
-                  const serialized = `${encodeURIComponent(String(name))}=${encodeURIComponent(String(value))}`;
-                  this._owner.search += (this._owner.search ? '&' : '?') + serialized;
-                  this._owner.href = this._owner.origin + this._owner.pathname
-                    + this._owner.search + this._owner.hash;
+                  this._updateOwner();
+                }
+                get(name) {
+                  name = String(name);
+                  const pair = this._pairs.find(entry => entry[0] === name);
+                  return pair ? pair[1] : null;
+                }
+                has(name) {
+                  name = String(name);
+                  return this._pairs.some(entry => entry[0] === name);
+                }
+                set(name, value) {
+                  name = String(name);
+                  value = String(value);
+                  const first = this._pairs.findIndex(entry => entry[0] === name);
+                  this._pairs = this._pairs.filter(entry => entry[0] !== name);
+                  this._pairs.splice(first < 0 ? this._pairs.length : first, 0, [name, value]);
+                  this._updateOwner();
+                }
+                delete(name) {
+                  name = String(name);
+                  this._pairs = this._pairs.filter(entry => entry[0] !== name);
+                  this._updateOwner();
                 }
                 toString() {
                   return this._pairs.map(([name, value]) =>
@@ -20971,8 +21968,15 @@ struct v8_dom_runtime::implementation final {
                   this.origin = this.protocol && this.host ? `${this.protocol}//${this.host}` : 'null';
                   this.searchParams = new HtmlMLURLSearchParams(this);
                 }
-                toString() { return this.href; }
-                toJSON() { return this.href; }
+                toString() {
+                  const search = this.search && !this.search.startsWith('?')
+                    ? `?${this.search}` : this.search;
+                  const hash = this.hash && !this.hash.startsWith('#')
+                    ? `#${this.hash}` : this.hash;
+                  return `${this.protocol}${this.host ? `//${this.host}` : ''}`
+                    + `${this.pathname}${search}${hash}`;
+                }
+                toJSON() { return this.toString(); }
                 static createObjectURL(blob) { return __htmlMlCreateObjectUrl(String(blob)); }
                 static revokeObjectURL() {}
               }
@@ -21106,6 +22110,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(message_channel_source).c_str())).ToLocalChecked();
         message_channel_script->Run(local_context).ToLocalChecked();
+        install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
         install_intersection_observer_polyfill(local_context);
         static_cast<void>(frame_body);
@@ -23970,6 +24975,100 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(resolver->GetPromise());
     }
 
+    static void window_post_message(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || info.Length() < 1) return;
+
+        auto isolate = info.GetIsolate();
+        auto target_context = isolate->GetCurrentContext();
+        auto source_context = isolate->GetIncumbentContext();
+        if (target_context.IsEmpty()) return;
+        if (source_context.IsEmpty()) source_context = target_context;
+
+        auto target_global = target_context->Global();
+        const auto read_origin = [&](v8::Local<v8::Context> local_context) {
+            v8::Context::Scope scope(local_context);
+            v8::Local<v8::Value> location_value;
+            v8::Local<v8::Value> origin_value;
+            if (local_context->Global()->Get(
+                    local_context,
+                    js_string(isolate, "location")).ToLocal(&location_value)
+                && location_value->IsObject()
+                && location_value.As<v8::Object>()->Get(
+                    local_context,
+                    js_string(isolate, "origin")).ToLocal(&origin_value)) {
+                return to_utf8(isolate, origin_value);
+            }
+            return std::string("null");
+        };
+
+        const auto target_origin = read_origin(target_context);
+        if (info.Length() > 1 && !info[1]->IsUndefined()) {
+            const auto requested_origin = to_utf8(isolate, info[1]);
+            if (!requested_origin.empty()
+                && requested_origin != "*"
+                && requested_origin != target_origin) {
+                return;
+            }
+        }
+        const auto source_origin = read_origin(source_context);
+
+        v8::Context::Scope target_scope(target_context);
+        auto event = v8::Object::New(isolate);
+        event->Set(
+            target_context,
+            js_string(isolate, "type"),
+            js_string(isolate, "message")).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "data"),
+            info[0]).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "origin"),
+            js_string(isolate, source_origin.c_str())).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "source"),
+            source_context->Global()).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "lastEventId"),
+            js_string(isolate, "")).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "ports"),
+            v8::Array::New(isolate)).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "bubbles"),
+            v8::False(isolate)).Check();
+        event->Set(
+            target_context,
+            js_string(isolate, "cancelable"),
+            v8::False(isolate)).Check();
+
+        v8::Local<v8::Value> dispatch_value;
+        if (!target_global->Get(
+                target_context,
+                js_string(isolate, "dispatchEvent")).ToLocal(&dispatch_value)
+            || !dispatch_value->IsFunction()) {
+            return;
+        }
+        v8::Local<v8::Value> arguments[] = {event};
+        v8::TryCatch try_catch(isolate);
+        if (dispatch_value.As<v8::Function>()->Call(
+                target_context,
+                target_global,
+                1,
+                arguments).IsEmpty()) {
+            self->last_error = "Window.postMessage dispatch failed: "
+                + self->describe_exception(try_catch, target_context);
+            ++self->frame_script_error_count;
+        }
+    }
+
     static void add_event_listener(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -24579,6 +25678,33 @@ struct v8_dom_runtime::implementation final {
         };
         const auto listeners = self->frame_event_listeners.find(type);
         v8::Local<v8::Value> arguments[] = {event};
+        const auto invoke_callback = [&](
+            v8::Local<v8::Function> callback,
+            v8::Local<v8::Object> current_target) {
+            v8::TryCatch try_catch(info.GetIsolate());
+            if (!callback->Call(
+                    local_context,
+                    current_target,
+                    1,
+                    arguments).IsEmpty()) {
+                return true;
+            }
+
+            self->frame_last_error_value = "Uncaught exception in '" + type
+                + "' event listener: "
+                + self->describe_exception(try_catch, local_context);
+            ++self->frame_script_error_count;
+            {
+                std::lock_guard lock(self->console_message_mutex);
+                constexpr size_t maximum_console_messages = 1024U;
+                if (self->console_messages.size() >= maximum_console_messages) {
+                    self->console_messages.pop_front();
+                }
+                self->console_messages.push_back(
+                    "error\n" + self->frame_last_error_value);
+            }
+            return false;
+        };
         const auto invoke_listeners = [&] (
             uint32_t target_id,
             v8::Local<v8::Object> current_target,
@@ -24594,7 +25720,7 @@ struct v8_dom_runtime::implementation final {
                     || listener.capture != capture) continue;
                 auto callback = listener.callback.Get(info.GetIsolate());
                 if (callback.IsEmpty()) continue;
-                if (callback->Call(local_context, current_target, 1, arguments).IsEmpty()) return false;
+                invoke_callback(callback, current_target);
                 if (listener.once) listener.callback.Reset();
                 if (immediate_propagation_stopped()) break;
             }
@@ -24609,11 +25735,8 @@ struct v8_dom_runtime::implementation final {
                     js_string(info.GetIsolate(), property_name.c_str())).ToLocal(&handler)
                 || !handler->IsFunction()) return true;
             set_phase(wrapper, phase);
-            return !handler.As<v8::Function>()->Call(
-                local_context,
-                wrapper,
-                1,
-                arguments).IsEmpty();
+            invoke_callback(handler.As<v8::Function>(), wrapper);
+            return true;
         };
 
         auto global = local_context->Global();
@@ -24630,9 +25753,16 @@ struct v8_dom_runtime::implementation final {
                 ? std::numeric_limits<uint32_t>::max()
                 : 0U;
             const auto direct_target = receiver_is_document ? document_target : global;
-            if (!invoke_listeners(direct_target_id, direct_target, true, 2)
+            if (receiver_is_document
+                && !invoke_listeners(0U, global, true, 1)) return;
+            if (!propagation_stopped()
+                && (!invoke_listeners(direct_target_id, direct_target, true, 2)
                 || (!immediate_propagation_stopped()
-                    && !invoke_listeners(direct_target_id, direct_target, false, 2))) return;
+                    && !invoke_listeners(direct_target_id, direct_target, false, 2)))) return;
+            if (receiver_is_document
+                && read_boolean("bubbles")
+                && !propagation_stopped()
+                && !invoke_listeners(0U, global, false, 3)) return;
             if (!receiver_is_document && !immediate_propagation_stopped()) {
                 v8::Local<v8::Value> handler;
                 if (global->Get(
@@ -24640,11 +25770,7 @@ struct v8_dom_runtime::implementation final {
                         js_string(info.GetIsolate(), property_name.c_str())).ToLocal(&handler)
                     && handler->IsFunction()) {
                     set_phase(global, 2);
-                    if (handler.As<v8::Function>()->Call(
-                            local_context,
-                            global,
-                            1,
-                            arguments).IsEmpty()) return;
+                    invoke_callback(handler.As<v8::Function>(), global);
                 }
             }
         } else {
@@ -24978,6 +26104,8 @@ struct v8_dom_runtime::implementation final {
 #endif
     std::vector<v8::Global<v8::Function>> resize_listeners;
     std::vector<timer_task> timers;
+    native_websocket_transport websocket_transport;
+    std::unordered_map<uint64_t, websocket_binding> websocket_bindings;
     std::vector<connected_resource_task> connected_resources;
     std::mutex host_request_mutex;
     std::deque<std::string> host_requests;
@@ -25357,7 +26485,8 @@ bool v8_dom_runtime::pump_task()
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
-    return !impl_->pending_frame_hydrations.empty()
+    return impl_->websocket_transport.has_pending_events()
+        || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()
         || impl_->resize_observers_pending
         || impl_->has_due_timer();

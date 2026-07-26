@@ -135,6 +135,14 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to build the native HtmlML engine." }
 
 $nativePath = Join-Path $buildDir "Release/htmlml_native_engine.dll"
 if (-not (Test-Path $nativePath)) { throw "Native engine build did not produce '$nativePath'." }
+$ixWebSocketLicense = Join-Path $buildDir "_deps/htmlml_ixwebsocket-src/LICENSE.txt"
+$mbedTlsLicense = Join-Path $buildDir "_deps/htmlml_mbedtls-src/LICENSE"
+if (-not (Test-Path $ixWebSocketLicense)) {
+    throw "IXWebSocket license was not found at '$ixWebSocketLicense'."
+}
+if (-not (Test-Path $mbedTlsLicense)) {
+    throw "Mbed TLS license was not found at '$mbedTlsLicense'."
+}
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $packArguments = @(
     "pack", (Join-Path $repoRoot "packaging/HtmlML.NativeEngine.Runtime/HtmlML.NativeEngine.Runtime.csproj"),
@@ -144,6 +152,8 @@ $packArguments = @(
     "-p:HtmlMlNativeEngineIcuDataPath=$icuData",
     "-p:HtmlMlNativeEngineV8LicensePath=$v8License",
     "-p:HtmlMlNativeEngineIcuLicensePath=$icuLicense",
+    "-p:HtmlMlNativeEngineIXWebSocketLicensePath=$ixWebSocketLicense",
+    "-p:HtmlMlNativeEngineMbedTlsLicensePath=$mbedTlsLicense",
     "-p:HtmlMlNativeEngineV8PointerCompression=true",
     "-p:HtmlMlNativeEngineV8SharedCage=true",
     "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true",

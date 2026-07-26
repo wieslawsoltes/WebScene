@@ -1,6 +1,10 @@
 #include "htmlml_native_engine.h"
 #include "htmlml_native_dom.h"
 
+#include <ixwebsocket/IXGetFreePort.h>
+#include <ixwebsocket/IXNetSystem.h>
+#include <ixwebsocket/IXWebSocketServer.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -11,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -918,6 +923,9 @@ void test_outer_document_lifecycle_for_editor_bootstrap()
                     document.addEventListener('DOMContentLoaded', () => {
                       __editorLifecycle.push(['domcontentloaded', document.readyState]);
                     });
+                    window.addEventListener('DOMContentLoaded', () => {
+                      __editorLifecycle.push(['window-domcontentloaded', document.readyState]);
+                    });
                     window.addEventListener('load', () => {
                       __editorLifecycle.push(['load', document.readyState]);
                     });
@@ -946,8 +954,59 @@ void test_outer_document_lifecycle_for_editor_bootstrap()
         "({ state: document.readyState, events: __editorLifecycle })",
         "native-editor-lifecycle-result.js");
     require(
-        result == R"({"state":"complete","events":[["script","loading"],["defer","interactive"],["domcontentloaded","interactive"],["load","complete"]]})",
+        result == R"({"state":"complete","events":[["script","loading"],["defer","interactive"],["domcontentloaded","interactive"],["window-domcontentloaded","interactive"],["load","complete"]]})",
         "outer document lifecycle did not follow browser ordering: " + result);
+    htmlml_engine_destroy(engine);
+}
+
+void test_event_listener_exceptions_do_not_abort_document_load()
+{
+    resource_server server{
+        .content = {
+            {"https://listener-error.test/index.html", R"HTML(
+                <!doctype html>
+                <html><head>
+                  <script>
+                    globalThis.__listenerEvents = [];
+                    document.addEventListener('DOMContentLoaded', () => {
+                      __listenerEvents.push('before-error');
+                      throw new Error('expected listener failure');
+                    });
+                    document.addEventListener('DOMContentLoaded', () => {
+                      __listenerEvents.push('after-error');
+                    });
+                    window.addEventListener('load', () => {
+                      __listenerEvents.push('load');
+                    });
+                  </script>
+                </head><body><div id="content">loaded</div></body></html>
+            )HTML"}
+        }};
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = htmlml_engine_create_with_options(&options);
+    require(engine != nullptr, "listener-error engine creation failed");
+    const std::string url = "https://listener-error.test/index.html";
+    require(
+        htmlml_engine_load_url(engine, url.data(), url.size()) != 0,
+        "event listener exception incorrectly rejected the document load");
+    const auto result = evaluate(
+        engine,
+        "({ state: document.readyState, events: __listenerEvents })",
+        "native-listener-error-result.js");
+    require(
+        result == R"({"state":"complete","events":["before-error","after-error","load"]})",
+        "event listener exception stopped lifecycle dispatch: " + result);
+
+    htmlml_engine_metrics metrics{};
+    htmlml_engine_get_metrics(engine, &metrics);
+    require(metrics.frame_script_errors == 1,
+        "event listener exception was not retained as a diagnostic");
     htmlml_engine_destroy(engine);
 }
 
@@ -1634,6 +1693,66 @@ void test_due_timer_precedes_dynamic_resource_wave()
     require(
         order == R"(["timer","script","load"])",
         "a due timer was starved behind the dynamic resource task source");
+    htmlml_engine_destroy(engine);
+}
+
+void test_dynamic_stylesheet_custom_properties_preserve_cascade_order()
+{
+    resource_server server{
+        .content = {
+            {"https://dynamic-cascade.test/index.html", R"(
+                <html><body><script>
+                  const symbol = document.createElement('div');
+                  symbol.className = 'symbol';
+                  const volume = document.createElement('span');
+                  volume.className = 'cell volume hidden';
+                  symbol.appendChild(volume);
+                  document.body.appendChild(symbol);
+                  globalThis.__dynamicCascadeDisplay = 'loading';
+                  const link = document.createElement('link');
+                  link.rel = 'stylesheet';
+                  link.href = 'watchlist.css';
+                  link.onload = () => {
+                    globalThis.__dynamicCascadeDisplay =
+                      getComputedStyle(volume).display;
+                  };
+                  document.head.appendChild(link);
+                </script></body></html>)"},
+            {"https://dynamic-cascade.test/watchlist.css", R"(
+                :root { --watchlist-volume-display: flex; }
+                .symbol .cell.volume {
+                  display: var(--watchlist-volume-display, flex);
+                }
+                .symbol .cell.hidden { display: none; }
+            )"}
+        }};
+    const htmlml_engine_options options{
+        sizeof(htmlml_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = htmlml_engine_create_with_options(&options);
+    require(engine != nullptr, "dynamic-cascade engine creation failed");
+    const std::string url = "https://dynamic-cascade.test/index.html";
+    require(
+        htmlml_engine_load_url(engine, url.data(), url.size()) != 0,
+        "dynamic-cascade document load failed");
+
+    auto display = std::string{};
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        display = evaluate(
+            engine,
+            "globalThis.__dynamicCascadeDisplay",
+            "dynamic-cascade-result.js");
+        if (display == R"("none")") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        display == R"("none")",
+        "custom-property recascade overrode a later display declaration: "
+            + display);
     htmlml_engine_destroy(engine);
 }
 
@@ -2677,9 +2796,16 @@ void test_flex_basis_reserves_fixed_track(htmlml_engine* engine)
           document.body.innerHTML = '';
           const style = document.createElement('style');
           style.textContent = `
-            .row { display: flex; width: 273px; }
-            .label { flex: 0 0 30px; }
+            .row { display: flex; align-items: center; width: 273px; height: 31px; }
+            .label { flex: 0 0 30px; height: 12px; }
             .track { flex: 1 1 0%; }
+            .column { display: flex; flex-direction: column; width: 31px; height: 200px; }
+            .vertical-basis { flex: 0 0 80px; width: 12px; }
+            .contents-row { display: flex; width: 200px; height: 31px; }
+            .contents-wrapper { display: contents; }
+            .contents-item { flex: 0 0 80px; height: 12px; }
+            .symbol .cell.volume { display: flex; }
+            .symbol .cell.hidden { display: none; }
           `;
           document.body.appendChild(style);
           const row = document.createElement('div');
@@ -2691,16 +2817,47 @@ void test_flex_basis_reserves_fixed_track(htmlml_engine* engine)
           row.appendChild(label);
           row.appendChild(track);
           document.body.appendChild(row);
+          const column = document.createElement('div');
+          column.className = 'column';
+          const verticalBasis = document.createElement('div');
+          verticalBasis.className = 'vertical-basis';
+          column.appendChild(verticalBasis);
+          document.body.appendChild(column);
+          const symbol = document.createElement('div');
+          symbol.className = 'symbol';
+          const hiddenVolume = document.createElement('span');
+          hiddenVolume.className = 'cell volume hidden';
+          symbol.appendChild(hiddenVolume);
+          document.body.appendChild(symbol);
+          const contentsRow = document.createElement('div');
+          contentsRow.className = 'contents-row';
+          const contentsWrapper = document.createElement('div');
+          contentsWrapper.className = 'contents-wrapper';
+          const contentsItem = document.createElement('div');
+          contentsItem.className = 'contents-item';
+          contentsWrapper.appendChild(contentsItem);
+          contentsRow.appendChild(contentsWrapper);
+          document.body.appendChild(contentsRow);
+          const wrapperRect = contentsWrapper.getBoundingClientRect();
+          const contentsRect = contentsItem.getBoundingClientRect();
           return [
             label.getBoundingClientRect().width,
+            label.getBoundingClientRect().height,
             track.getBoundingClientRect().width,
+            verticalBasis.getBoundingClientRect().width,
+            verticalBasis.getBoundingClientRect().height,
+            getComputedStyle(hiddenVolume).display,
+            wrapperRect.width,
+            wrapperRect.height,
+            contentsRect.width,
+            contentsRect.height,
             getComputedStyle(label).flexGrow,
             getComputedStyle(track).flexGrow
           ];
         })()
     )JS", "native-flex-basis-track.js");
-    if (result != "[30,243,\"0\",\"1\"]") {
-        fail("flex-basis did not reserve the fixed track: " + result);
+    if (result != "[30,12,243,12,80,\"none\",0,0,80,12,\"0\",\"1\"]") {
+        fail("flex-basis did not remain confined to the flex main axis: " + result);
     }
 }
 
@@ -2935,6 +3092,172 @@ void test_zero_height_flex_item_grows_and_hit_tests_descendants(htmlml_engine* e
     if (result != R"({"spaceHeight":120,"treeHeight":120,"hitClass":"title","hitText":"Trend Line"})") {
         fail("a growable zero-height flex item did not fill or expose descendants to hit testing: "
             + result);
+    }
+}
+
+void test_empty_non_growing_flex_item_collapses_main_axis(htmlml_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            .column {
+              align-items:flex-start;
+              display:flex;
+              flex-direction:column-reverse;
+              height:120px;
+              width:200px;
+            }
+            .scroll {
+              display:flex;
+              flex-direction:column-reverse;
+              max-height:100%;
+              pointer-events:auto;
+            }
+            .inner {
+              align-items:flex-start;
+              contain:layout;
+              display:flex;
+              flex-direction:column;
+            }
+            .row {
+              align-items:flex-start;
+              display:flex;
+              height:40px;
+              width:120px;
+            }
+          `;
+          document.body.appendChild(style);
+
+          const column = document.createElement('section');
+          column.className = 'column';
+          column.style.pointerEvents = 'none';
+          const scroll = document.createElement('div');
+          scroll.className = 'scroll';
+          const inner = document.createElement('div');
+          inner.className = 'inner';
+          scroll.appendChild(inner);
+          column.appendChild(scroll);
+          document.body.appendChild(column);
+
+          const row = document.createElement('div');
+          row.className = 'row';
+          const empty = document.createElement('div');
+          row.appendChild(empty);
+          document.body.appendChild(row);
+
+          return {
+            column: column.getBoundingClientRect().height,
+            scroll: [
+              scroll.getBoundingClientRect().width,
+              scroll.getBoundingClientRect().height
+            ],
+            inner: [
+              inner.getBoundingClientRect().width,
+              inner.getBoundingClientRect().height
+            ],
+            rowItem: [
+              empty.getBoundingClientRect().width,
+              empty.getBoundingClientRect().height
+            ],
+            hit: document.elementFromPoint(100, 60)?.tagName || null
+          };
+        })()
+    )JS", "native-empty-flex-item-collapse.js");
+    require(
+        result == R"({"column":120,"scroll":[0,0],"inner":[0,0],"rowItem":[0,40],"hit":"BODY"})",
+        "empty non-growing flex items expanded across the main axis: " + result);
+}
+
+void test_appending_child_invalidates_empty_selector(htmlml_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const style = document.createElement('style');
+          style.textContent = `
+            [data-role=status-pill] {
+              display:inline-flex;
+              min-width:6px;
+            }
+            [data-role=status-pill]:empty {
+              display:none;
+            }
+            [data-role=status-pill]_hidden {
+              display:none;
+            }
+            .status-item {
+              display:flex;
+              height:18px;
+              width:18px;
+            }
+          `;
+          document.body.appendChild(style);
+          const pill = document.createElement('button');
+          pill.setAttribute('data-role', 'status-pill');
+          document.body.appendChild(pill);
+          const before = getComputedStyle(pill).display;
+          const item = document.createElement('span');
+          item.className = 'status-item';
+          pill.appendChild(item);
+          const rect = pill.getBoundingClientRect();
+          return {
+            before,
+            after: getComputedStyle(pill).display,
+            width: rect.width,
+            height: rect.height
+          };
+        })()
+    )JS", "dynamic-empty-selector-invalidation.js");
+    if (result != R"({"before":"none","after":"inline-flex","width":18,"height":18})") {
+        fail("appending a child did not invalidate :empty on its parent: " + result);
+    }
+}
+
+void test_inline_block_preserves_vertical_padding(htmlml_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            .toolbar {
+              align-items:center;
+              display:flex;
+              height:38px;
+            }
+            #documentation {
+              background:#2962ff;
+              border-radius:80px;
+              color:#fff;
+              display:inline-block;
+              font-size:14px;
+              line-height:18px;
+              padding:5px 12px;
+            }
+          `;
+          document.body.appendChild(style);
+          const toolbar = document.createElement('div');
+          toolbar.className = 'toolbar';
+          const button = document.createElement('button');
+          button.id = 'documentation';
+          button.textContent = 'Documentation';
+          toolbar.appendChild(button);
+          document.body.appendChild(toolbar);
+          const rect = button.getBoundingClientRect();
+          return {
+            y: rect.y,
+            height: rect.height,
+            paddingTop: getComputedStyle(button).paddingTop,
+            paddingBottom: getComputedStyle(button).paddingBottom
+          };
+        })()
+    )JS", "inline-block-vertical-padding.js");
+    if (result != R"({"y":5,"height":28,"paddingTop":"5px","paddingBottom":"5px"})") {
+        fail("inline-block text box discarded its vertical padding: " + result);
     }
 }
 
@@ -3591,6 +3914,12 @@ void test_class_list_is_same_live_object(htmlml_engine* engine)
           const same = tokens === node.classList;
           const distinct = tokens !== other.classList;
           node.className = 'shown';
+          tokens.value = 'widgetbar-wrap unselectable';
+          const assignedValue = tokens.value;
+          const assignedAttribute = node.getAttribute('class');
+          const assignedTokens =
+            tokens.contains('widgetbar-wrap') && tokens.contains('unselectable');
+          tokens.value = 'shown';
           const originalContains = tokens.contains;
           let calls = 0;
           tokens.contains = function(token) {
@@ -3606,13 +3935,16 @@ void test_class_list_is_same_live_object(htmlml_engine* engine)
             distinct,
             present,
             calls,
+            assignedValue,
+            assignedAttribute,
+            assignedTokens,
             reattached: node.classList === tokens,
             live: tokens.contains('after') && !tokens.contains('shown')
           };
         })()
     )JS", "dom-token-list-same-object.js");
     require(
-        result == R"({"same":true,"distinct":true,"present":true,"calls":1,"reattached":true,"live":true})",
+        result == R"({"same":true,"distinct":true,"present":true,"calls":1,"assignedValue":"widgetbar-wrap unselectable","assignedAttribute":"widgetbar-wrap unselectable","assignedTokens":true,"reattached":true,"live":true})",
         "Element.classList did not preserve same-object identity and live method shadowing: "
             + result);
 }
@@ -4056,6 +4388,38 @@ void test_cssom_border_assignment_updates_longhands_and_geometry(htmlml_engine* 
     require(
         value == R"JSON(["3px","3px","3px","3px","3px","100px","20px",106,26,"1px","2px","3px","4px","5px","rgb(255, 0, 0)",106,28])JSON",
         "border CSSOM assignment did not update longhands or geometry: " + value);
+}
+
+void test_logical_inline_borders_reach_geometry(htmlml_engine* engine)
+{
+    const auto value = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .widgetbar-pages {
+                width:100px;
+                height:20px;
+                border-inline-end:1px solid;
+                border-inline-start:1px solid;
+                border-color:rgb(235,235,235);
+              }
+            </style>
+            <div class="widgetbar-pages"></div>`;
+          const pages = document.querySelector('.widgetbar-pages');
+          const style = getComputedStyle(pages);
+          const rect = pages.getBoundingClientRect();
+          return [
+            style.borderLeftWidth,
+            style.borderRightWidth,
+            style.borderLeftColor,
+            style.borderRightColor,
+            rect.width
+          ];
+        })()
+    )JS", "native-logical-inline-borders.js");
+    require(
+        value == R"JSON(["1px","1px","rgb(235, 235, 235)","rgb(235, 235, 235)",102])JSON",
+        "logical inline borders did not reach physical geometry: " + value);
 }
 
 void test_hidden_subtree_retains_computed_height_without_boxes(htmlml_engine* engine)
@@ -6955,7 +7319,7 @@ void test_generated_pseudo_element_opacity(htmlml_engine* engine)
               position: relative;
               width: 18px;
               height: 18px;
-              color: rgb(83, 186, 176);
+              --status-background: rgb(83, 186, 176);
             }
             .status-halo::after {
               content: '';
@@ -6963,7 +7327,7 @@ void test_generated_pseudo_element_opacity(htmlml_engine* engine)
               inset: 0;
               width: 18px;
               height: 18px;
-              background: currentColor;
+              background: var(--status-background);
               opacity: 0.25;
             }
           `;
@@ -7357,6 +7721,97 @@ void test_svg_background_image_reaches_scene_with_position_and_size(htmlml_engin
     std::error_code cleanup_error;
     std::filesystem::remove_all(resource_directory, cleanup_error);
     require(found, "URL-backed SVG background did not reach the scene at 0,2 48x24");
+}
+
+void test_svg_img_element_loads_and_reaches_scene(htmlml_engine* engine)
+{
+    const auto resource_directory = std::filesystem::temp_directory_path()
+        / ("htmlml-img-svg-"
+            + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(resource_directory);
+    const auto svg_path = resource_directory / "symbol.svg";
+    {
+        std::ofstream svg(svg_path, std::ios::binary);
+        svg << R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12"><rect width="24" height="12" fill="#2962ff"/></svg>)";
+    }
+    const auto root = resource_directory.string();
+    require(
+        htmlml_engine_set_resource_root(engine, root.data(), root.size()) != 0,
+        "IMG SVG fixture resource root was rejected");
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const image = document.createElement('img');
+          image.id = 'native-svg-image';
+          image.style.width = '18px';
+          image.style.height = '18px';
+          globalThis.__nativeSvgImageLoads = 0;
+          image.onload = () => __nativeSvgImageLoads++;
+          image.src = 'symbol.svg';
+          document.body.appendChild(image);
+        })()
+    )JS", "native-svg-img-setup.js");
+
+    std::string image_state;
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        image_state = evaluate(engine, R"JS((() => {
+          const image = document.querySelector('#native-svg-image');
+          return {
+            complete: image.complete,
+            currentSrc: image.currentSrc,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+            loads: __nativeSvgImageLoads
+          };
+        })())JS", "native-svg-img-state.js");
+        if (image_state.find(R"("complete":true)") != std::string::npos
+            && image_state.find(R"("loads":1)") != std::string::npos) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    require(
+        image_state.find(R"("currentSrc":)") != std::string::npos
+            && image_state.find("symbol.svg") != std::string::npos
+            && image_state.find(R"("naturalWidth":24)") != std::string::npos
+            && image_state.find(R"("naturalHeight":12)") != std::string::npos
+            && image_state.find(R"("loads":1)") != std::string::npos,
+        "SVG IMG element did not expose an asynchronous loaded state: "
+            + image_state);
+
+    htmlml_engine_request_scene_checkpoint(engine);
+    auto found = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = htmlml_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind == 6U
+                    && std::abs(command.x) < 0.01F
+                    && std::abs(command.y) < 0.01F
+                    && std::abs(command.width - 18.0F) < 0.01F
+                    && std::abs(command.height - 18.0F) < 0.01F
+                    && command.flags < scene->string_count) {
+                    const auto resource = scene->strings[command.flags];
+                    const std::string_view bytes(
+                        scene->string_bytes + resource.byte_offset,
+                        resource.byte_length);
+                    found = bytes.find("<svg") != std::string_view::npos
+                        && bytes.find("0 0 24 12") != std::string_view::npos;
+                    break;
+                }
+            }
+            htmlml_scene_acknowledge(scene);
+            htmlml_scene_release(scene);
+        }
+        if (found) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(resource_directory, cleanup_error);
+    require(found, "loaded SVG IMG element did not reach the native scene");
 }
 
 void test_virtual_html_root_inherits_font_metrics(htmlml_engine* engine)
@@ -7880,6 +8335,103 @@ void test_hidden_engine_reclamation_is_debounced_and_cancelable(
         "engine rejected final visible host state");
 }
 
+void test_native_websocket_browser_api()
+{
+    require(ix::initNetSystem(), "IXWebSocket network initialization failed");
+    const auto port = ix::getFreePort();
+    require(port > 0, "could not reserve a local WebSocket test port");
+
+    std::mutex server_state_mutex;
+    std::string observed_origin;
+    ix::WebSocketServer server(port, "127.0.0.1");
+    server.setOnClientMessageCallback(
+        [&](std::shared_ptr<ix::ConnectionState>,
+            ix::WebSocket& socket,
+            const ix::WebSocketMessagePtr& message) {
+            if (message->type == ix::WebSocketMessageType::Open) {
+                std::lock_guard lock(server_state_mutex);
+                const auto origin = message->openInfo.headers.find("Origin");
+                if (origin != message->openInfo.headers.end()) {
+                    observed_origin = origin->second;
+                }
+            } else if (message->type == ix::WebSocketMessageType::Message) {
+                socket.send(message->str, message->binary);
+            }
+        });
+    const auto listening = server.listen();
+    require(listening.first, "local WebSocket server could not listen");
+    server.start();
+
+    auto* engine = htmlml_engine_create(0);
+    require(engine != nullptr, "WebSocket test engine creation failed");
+    const auto source = std::string(R"JS(
+        location.protocol = 'https:';
+        location.host = 'websocket-origin.test';
+        globalThis.__htmlMlWebSocketTest = {
+          events: [], text: null, binary: null, closed: false, closeCode: 0,
+          closeReason: '', error: null
+        };
+        const socket = new WebSocket('ws://127.0.0.1:)JS")
+        + std::to_string(port)
+        + R"JS(/echo');
+        socket.binaryType = 'arraybuffer';
+        socket.addEventListener('open', () => {
+          __htmlMlWebSocketTest.events.push('open');
+          socket.send('native-text');
+        });
+        socket.addEventListener('message', event => {
+          __htmlMlWebSocketTest.events.push('message');
+          if (typeof event.data === 'string') {
+            __htmlMlWebSocketTest.text = event.data;
+            socket.send(new Uint8Array([0, 1, 254, 255]));
+          } else {
+            __htmlMlWebSocketTest.binary =
+              Array.from(new Uint8Array(event.data));
+            socket.close(1000, 'complete');
+          }
+        });
+        socket.addEventListener('error', event => {
+          __htmlMlWebSocketTest.error = event.message || 'error';
+        });
+        socket.addEventListener('close', event => {
+          __htmlMlWebSocketTest.events.push('close');
+          __htmlMlWebSocketTest.closed = true;
+          __htmlMlWebSocketTest.closeCode = event.code;
+          __htmlMlWebSocketTest.closeReason = event.reason;
+        });
+    )JS";
+    execute(engine, source, "native-websocket-browser-api.js");
+
+    std::string state;
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        state = evaluate(
+            engine,
+            "globalThis.__htmlMlWebSocketTest",
+            "native-websocket-browser-api-state.js");
+        if (state.find("\"closed\":true") != std::string::npos) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    require(
+        state.find("\"events\":[\"open\",\"message\",\"message\",\"close\"]")
+                != std::string::npos
+            && state.find("\"text\":\"native-text\"") != std::string::npos
+            && state.find("\"binary\":[0,1,254,255]") != std::string::npos
+            && state.find("\"closeCode\":1000") != std::string::npos
+            && state.find("\"closeReason\":\"complete\"") != std::string::npos
+            && state.find("\"error\":null") != std::string::npos,
+        "browser WebSocket API did not complete text/binary/close echo lifecycle");
+    {
+        std::lock_guard lock(server_state_mutex);
+        require(
+            observed_origin == "https://websocket-origin.test",
+            "browser WebSocket API did not forward the document origin");
+    }
+
+    htmlml_engine_destroy(engine);
+    server.stop();
+    require(ix::uninitNetSystem(), "IXWebSocket network cleanup failed");
+}
+
 } // namespace
 
 int main()
@@ -7912,6 +8464,7 @@ int main()
     test_parallel_resource_prefetch();
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();
+    test_event_listener_exceptions_do_not_abort_document_load();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
@@ -7922,6 +8475,7 @@ int main()
     test_process_wide_resource_load_single_flight();
     test_resource_cache_policy_matrix();
     test_due_timer_precedes_dynamic_resource_wave();
+    test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
     test_executed_compilation_units_enrich_persistent_cache();
     test_process_wide_compilation_single_flight();
@@ -7932,6 +8486,7 @@ int main()
         "engine rejected an asynchronous low-memory request");
     test_engine_memory_metrics_are_worker_snapshots(engine);
     test_hidden_engine_reclamation_is_debounced_and_cancelable(engine);
+    test_native_websocket_browser_api();
     execute(
         engine,
         "if (typeof IntersectionObserver !== 'function' || "
@@ -7961,6 +8516,9 @@ int main()
     test_floats_share_a_bounded_formatting_line(engine);
     test_wrapped_flex_resolves_each_line_independently(engine);
     test_zero_height_flex_item_grows_and_hit_tests_descendants(engine);
+    test_empty_non_growing_flex_item_collapses_main_axis(engine);
+    test_appending_child_invalidates_empty_selector(engine);
+    test_inline_block_preserves_vertical_padding(engine);
     test_pointer_hit_targets_and_related_targets_are_elements(engine);
     test_pointer_cursor_and_external_anchor_host_handoff(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
@@ -7970,6 +8528,7 @@ int main()
     test_cssom_serializes_resolved_numbers_without_trailing_zeroes(engine);
     test_cssom_padding_assignment_updates_longhands_and_geometry(engine);
     test_cssom_border_assignment_updates_longhands_and_geometry(engine);
+    test_logical_inline_borders_reach_geometry(engine);
     test_hidden_subtree_retains_computed_height_without_boxes(engine);
     test_cssom_z_index_survives_connection_and_recascade(engine);
     test_important_custom_property_cascade_reaches_paint(engine);
@@ -8014,6 +8573,7 @@ int main()
     test_positive_z_before_paints_above_lower_z_child(engine);
     test_element_opacity_emits_isolated_group(engine);
     test_svg_background_image_reaches_scene_with_position_and_size(engine);
+    test_svg_img_element_loads_and_reaches_scene(engine);
     test_virtual_html_root_inherits_font_metrics(engine);
     test_font_shorthand_inherit_resets_control_metrics(engine);
     test_all_unset_resets_modeled_control_properties(engine);

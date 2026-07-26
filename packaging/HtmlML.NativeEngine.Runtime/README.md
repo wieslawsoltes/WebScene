@@ -18,6 +18,9 @@ counters are not shipped. The stable
 `htmlml_engine_get_build_features` ABI reports zero for these package binaries.
 The library locates ICU data relative to its own module, so the package remains
 relocatable.
+Browser-facing `WebSocket` support is implemented inside the native runtime
+with the pinned IXWebSocket transport; it does not call back into a managed
+network stack.
 Applications must target the same `RuntimeIdentifier`; mixing runtime packages and
 RIDs is rejected during the build.
 

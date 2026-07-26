@@ -27,6 +27,8 @@ namespace JavaScriptPlayground;
 
 public partial class MainWindow : Window
 {
+    private const string TradingViewTerminalUrl =
+        "https://trading-terminal.tradingview-widget.com/";
     private readonly List<Preset> _presets;
     private readonly PlaygroundShellBridge _shellBridge = new();
     private readonly List<AvaloniaBrowserHost> _hosts = new();
@@ -49,6 +51,10 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _nativeMonacoCancellation;
     private Task? _nativeMonacoLoadTask;
     private int _nativeMonacoLoadVersion;
+    private readonly DispatcherTimer _nativeTradingViewDiagnosticsTimer;
+    private CancellationTokenSource? _nativeTradingViewCancellation;
+    private Task? _nativeTradingViewLoadTask;
+    private int _nativeTradingViewLoadVersion;
     private int _xamlLoadVersion;
 
     public MainWindow()
@@ -61,6 +67,12 @@ public partial class MainWindow : Window
         ConfigureEditors();
 
         _presets = CreatePresets();
+        _nativeTradingViewDiagnosticsTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _nativeTradingViewDiagnosticsTimer.Tick +=
+            OnNativeTradingViewDiagnosticsTick;
         PresetCombo.ItemsSource = _presets;
         WorkspaceTabs.SelectionChanged += WorkspaceTabsOnSelectionChanged;
         var presetIndex = ResolveStartupPresetIndex(_presets);
@@ -72,8 +84,23 @@ public partial class MainWindow : Window
                 argument,
                 "--monaco",
                 StringComparison.Ordinal));
+        var startWithNativeTradingView = Environment.GetCommandLineArgs()
+            .Any(static argument => string.Equals(
+                argument,
+                "--tradingview",
+                StringComparison.Ordinal));
 
-        if (startWithNativeMonaco)
+        if (startWithNativeTradingView)
+        {
+            if (presetIndex >= 0)
+            {
+                _activePreset = _presets[presetIndex];
+                _xamlDocument.Text = _activePreset.Xaml;
+                _scriptDocument.Text = _activePreset.Script;
+            }
+            WorkspaceTabs.SelectedItem = NativeTradingViewTab;
+        }
+        else if (startWithNativeMonaco)
         {
             if (presetIndex >= 0)
             {
@@ -102,6 +129,12 @@ public partial class MainWindow : Window
             && IsLoaded)
         {
             _ = EnsureNativeMonacoLoadedAsync(forceReload: false);
+        }
+        else if (ReferenceEquals(sender, WorkspaceTabs)
+            && ReferenceEquals(WorkspaceTabs.SelectedItem, NativeTradingViewTab)
+            && IsLoaded)
+        {
+            _ = EnsureNativeTradingViewLoadedAsync(forceReload: false);
         }
     }
 
@@ -139,7 +172,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var libraryPath = ResolveNativeMonacoLibraryPath(
+            var libraryPath = ResolveNativeLibraryPath(
                 Environment.GetCommandLineArgs());
             var documentPath = Path.Combine(
                 AppContext.BaseDirectory,
@@ -191,7 +224,144 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string ResolveNativeMonacoLibraryPath(
+    private async void OnReloadNativeTradingViewClick(
+        object? sender,
+        RoutedEventArgs e)
+    {
+        await EnsureNativeTradingViewLoadedAsync(forceReload: true);
+    }
+
+    private Task EnsureNativeTradingViewLoadedAsync(bool forceReload)
+    {
+        if (!forceReload && _nativeTradingViewLoadTask is not null)
+        {
+            return _nativeTradingViewLoadTask;
+        }
+
+        _nativeTradingViewDiagnosticsTimer.Stop();
+        _nativeTradingViewCancellation?.Cancel();
+        _nativeTradingViewCancellation?.Dispose();
+        _nativeTradingViewCancellation = new CancellationTokenSource();
+        var loadVersion = ++_nativeTradingViewLoadVersion;
+        _nativeTradingViewLoadTask = LoadNativeTradingViewAsync(
+            loadVersion,
+            _nativeTradingViewCancellation.Token);
+        return _nativeTradingViewLoadTask;
+    }
+
+    private async Task LoadNativeTradingViewAsync(
+        int loadVersion,
+        CancellationToken cancellationToken)
+    {
+        NativeTradingViewFailure.IsVisible = false;
+        NativeTradingViewStatus.Text = "Loading hosted TradingView terminal…";
+        NativeTradingViewStatus.Foreground = Brushes.Goldenrod;
+
+        try
+        {
+            var libraryPath = ResolveNativeLibraryPath(
+                Environment.GetCommandLineArgs());
+            var cachePath = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "HtmlML",
+                "JavaScriptPlayground",
+                "native-tradingview-v8-cache");
+            await NativeTradingViewHost.LoadAsync(
+                TradingViewTerminalUrl,
+                libraryPath,
+                cachePath,
+                cancellationToken);
+
+            if (loadVersion == _nativeTradingViewLoadVersion)
+            {
+                NativeTradingViewStatus.Text =
+                    "Loaded · connecting to live market data…";
+                NativeTradingViewStatus.Foreground = Brushes.LightGreen;
+                _nativeTradingViewDiagnosticsTimer.Start();
+                await RefreshNativeTradingViewDiagnosticsAsync();
+                Console.WriteLine(
+                    "[JavaScript Playground] Native TradingView loaded from "
+                    + $"'{libraryPath}'.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (loadVersion != _nativeTradingViewLoadVersion)
+            {
+                return;
+            }
+
+            Console.Error.WriteLine(
+                $"[JavaScript Playground] Native TradingView failure: {error}");
+            NativeTradingViewStatus.Text =
+                "Native TradingView failed to load";
+            NativeTradingViewStatus.Foreground = Brushes.IndianRed;
+            NativeTradingViewFailureText.Text =
+                "The native TradingView terminal could not start.\n\n"
+                + error.Message
+                + "\n\nPass --native-library /absolute/path/to/"
+                + NativeLibraryFileName()
+                + " or set HTMLML_NATIVE_ENGINE_LIBRARY.";
+            NativeTradingViewFailure.IsVisible = true;
+        }
+    }
+
+    private async void OnNativeTradingViewDiagnosticsTick(
+        object? sender,
+        EventArgs e)
+        => await RefreshNativeTradingViewDiagnosticsAsync();
+
+    private async Task RefreshNativeTradingViewDiagnosticsAsync()
+    {
+        try
+        {
+            var json = await NativeTradingViewHost.EvaluateJsonAsync("""
+                (() => {
+                  const websocket = [
+                    globalThis,
+                    ...Array.from(document.querySelectorAll('iframe'))
+                      .map(frame => frame.contentWindow)
+                  ]
+                    .map(realm =>
+                      realm?.__htmlMlWebSocketDiagnostics?.() ?? null)
+                    .filter(Boolean)
+                    .reduce((total, current) => ({
+                      opened: total.opened + current.opened,
+                      messages: total.messages + current.messages,
+                      bytesReceived:
+                        total.bytesReceived + current.bytesReceived,
+                      errors: total.errors + current.errors
+                    }), {
+                      opened: 0, messages: 0,
+                      bytesReceived: 0, errors: 0
+                    });
+                  return websocket.opened > 0
+                    ? `Live WebSocket · ${websocket.messages} messages · `
+                      + `${websocket.bytesReceived} bytes`
+                    : `Loaded · waiting for native WebSocket data…`;
+                })()
+                """);
+            NativeTradingViewStatus.Text =
+                System.Text.Json.JsonSerializer.Deserialize<string>(json)
+                ?? json;
+        }
+        catch when (_nativeTradingViewCancellation?.IsCancellationRequested == true)
+        {
+        }
+        catch (Exception error)
+        {
+            _nativeTradingViewDiagnosticsTimer.Stop();
+            NativeTradingViewStatus.Text =
+                $"TradingView diagnostics stopped: {error.Message}";
+            NativeTradingViewStatus.Foreground = Brushes.IndianRed;
+        }
+    }
+
+    private static string ResolveNativeLibraryPath(
         IReadOnlyList<string> arguments)
     {
         for (var index = 0; index + 1 < arguments.Count; index++)
@@ -819,6 +989,12 @@ if (typeof globalThis !== 'undefined') {
         {
             _ = EnsureNativeMonacoLoadedAsync(forceReload: false);
         }
+        else if (ReferenceEquals(
+            WorkspaceTabs.SelectedItem,
+            NativeTradingViewTab))
+        {
+            _ = EnsureNativeTradingViewLoadedAsync(forceReload: false);
+        }
     }
 
     protected override async void OnClosed(EventArgs e)
@@ -826,6 +1002,10 @@ if (typeof globalThis !== 'undefined') {
         _nativeMonacoCancellation?.Cancel();
         _nativeMonacoCancellation?.Dispose();
         _nativeMonacoCancellation = null;
+        _nativeTradingViewDiagnosticsTimer.Stop();
+        _nativeTradingViewCancellation?.Cancel();
+        _nativeTradingViewCancellation?.Dispose();
+        _nativeTradingViewCancellation = null;
 #if HTMLML_CLEARSCRIPT_V8
         _v8PreparationCancellation?.Cancel();
         _v8PreparationCancellation?.Dispose();
@@ -837,6 +1017,7 @@ if (typeof globalThis !== 'undefined') {
         _v8SharedCache.Clear();
 #endif
         await NativeMonacoHost.DisposeAsync();
+        await NativeTradingViewHost.DisposeAsync();
         base.OnClosed(e);
     }
 

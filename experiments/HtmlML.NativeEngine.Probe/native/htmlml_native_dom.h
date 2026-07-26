@@ -771,6 +771,16 @@ struct dom_node final {
         bool caret_visible{false};
     };
 
+    struct replaced_image_data final {
+        std::string source;
+        std::string resolved_source;
+        std::string markup;
+        std::string view_box;
+        float natural_width{0};
+        float natural_height{0};
+        bool complete{false};
+    };
+
     // Painted transition/keyframe state is needed only by nodes which have
     // authored animation data. Keeping it inline made every static DOM node
     // pay for three transition machines and two keyframe signatures.
@@ -927,6 +937,28 @@ struct dom_node final {
     }
 
     std::unique_ptr<form_control_data> form_control_state;
+    const replaced_image_data& replaced_image() const noexcept
+    {
+        static const replaced_image_data empty;
+        return replaced_image_state == nullptr
+            ? empty
+            : *replaced_image_state;
+    }
+
+    replaced_image_data& mutable_replaced_image()
+    {
+        if (replaced_image_state == nullptr) {
+            replaced_image_state = std::make_unique<replaced_image_data>();
+        }
+        return *replaced_image_state;
+    }
+
+    void clear_replaced_image() noexcept
+    {
+        replaced_image_state.reset();
+    }
+
+    std::unique_ptr<replaced_image_data> replaced_image_state;
     const canvas_node_data& canvas() const noexcept
     {
         static const canvas_node_data empty;

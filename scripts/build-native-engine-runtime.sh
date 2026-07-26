@@ -189,6 +189,11 @@ if [[ ! -f "$native_path" ]]; then
   echo "Native engine build did not produce '$native_path'." >&2
   exit 1
 fi
+ixwebsocket_license="$build_dir/_deps/htmlml_ixwebsocket-src/LICENSE.txt"
+if [[ ! -f "$ixwebsocket_license" ]]; then
+  echo "IXWebSocket license was not found at '$ixwebsocket_license'." >&2
+  exit 1
+fi
 if [[ "$expected_kernel" == Linux ]] \
     && readelf -SW "$native_path" 2>&1 | grep -Eq '\.crel(\.|$)'; then
   echo "Native engine output contains unsupported CREL relocation sections: $native_path" >&2
@@ -206,6 +211,7 @@ pack_args=(
   "-p:HtmlMlNativeEngineIcuDataPath=$icu_data"
   "-p:HtmlMlNativeEngineV8LicensePath=$v8_license"
   "-p:HtmlMlNativeEngineIcuLicensePath=$icu_license"
+  "-p:HtmlMlNativeEngineIXWebSocketLicensePath=$ixwebsocket_license"
   "-p:HtmlMlNativeEngineV8PointerCompression=true"
   "-p:HtmlMlNativeEngineV8SharedCage=true"
   "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true"

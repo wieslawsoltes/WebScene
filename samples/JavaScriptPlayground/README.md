@@ -1,11 +1,14 @@
 # HtmlML Playground runtimes
 
-The Playground has two surfaces:
+The Playground has three surfaces:
 
 - **DOM Playground** runs editable XAML and JavaScript through the managed
   ClearScript-backed Avalonia DOM.
 - **Monaco (native)** runs the unmodified Monaco editor bundle through
   `NativeHtmlMlView`, rendered on the native HtmlML canvas.
+- **TradingView (native)** runs the hosted TradingView terminal through the
+  native DOM/runtime, including nested iframe pointer input and the browser
+  `WebSocket` API backed directly by portable C++ networking.
 
 Once the reviewed native binary has been built/packed for the current RID, the ordinary
 command needs no engine or native-path flags:
@@ -47,7 +50,17 @@ dotnet run --project samples/JavaScriptPlayground/JavaScriptPlayground.csproj \
 ```
 
 `HTMLML_NATIVE_ENGINE_LIBRARY` can be used instead of `--native-library`.
-The Monaco tab is lazy-loaded, so the native engine is not required when only the
+The native tabs are lazy-loaded, so the native engine is not required when only the
 DOM Playground is used. Monaco's generated web assets remain owned by
 `samples/NativeMonacoEditor`; the Playground links those files rather than carrying a
 modified or duplicate Monaco bundle.
+
+To launch directly into the TradingView feature sample:
+
+```sh
+dotnet run --project samples/JavaScriptPlayground/JavaScriptPlayground.csproj \
+  -c Release -- \
+  --tradingview \
+  --native-library \
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+```

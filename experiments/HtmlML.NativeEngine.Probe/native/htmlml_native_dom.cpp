@@ -2008,6 +2008,10 @@ void native_document::layout_children(dom_node& parent)
                 if (!node.text_content.empty()) text_runs.push_back(&node);
                 return true;
             }
+            // Inline-block and inline-table descendants are atomic inline
+            // boxes. Flattening their text into the surrounding line discards
+            // their own padding, background, and border geometry.
+            if (node.style.display != display_mode::inline_flow) return false;
             // Generated content belongs to the inline subtree at the point
             // where its originating element participates. Flattening only the
             // DOM text descendants drops child ::before/::after content (for
@@ -2403,6 +2407,7 @@ void native_document::layout_children(dom_node& parent)
     std::optional<dom_node> marker_item;
     std::optional<dom_node> before_item;
     std::optional<dom_node> after_item;
+    const auto flex_container = is_flex_container(parent.style.display);
     std::vector<dom_node*> layout_items;
     layout_items.reserve(parent.children.size() + 3U);
     if (has_inside_marker) {
@@ -2413,13 +2418,31 @@ void native_document::layout_children(dom_node& parent)
         before_item.emplace(make_pseudo_layout_node(parent, parent.style.before_pseudo()));
         layout_items.push_back(&*before_item);
     }
-    layout_items.insert(layout_items.end(), parent.children.begin(), parent.children.end());
+    const auto append_layout_item = [&](const auto& self, dom_node* child) -> void {
+        if (flex_container
+            && child != nullptr
+            && child->style.display == display_mode::contents
+            && !is_out_of_flow(child->style.position)) {
+            // display:contents contributes no principal box. Its children are
+            // flex items of the nearest flex formatting context while their
+            // DOM ancestry remains unchanged for inheritance and selectors.
+            child->visible = parent.visible;
+            child->layout = {};
+            child->scroll_content_width = 0;
+            child->scroll_content_height = 0;
+            for (auto* descendant : child->children) self(self, descendant);
+            return;
+        }
+        if (child != nullptr) layout_items.push_back(child);
+    };
+    for (auto* child : parent.children) {
+        append_layout_item(append_layout_item, child);
+    }
     if (has_after) {
         after_item.emplace(make_pseudo_layout_node(parent, parent.style.after_pseudo()));
         layout_items.push_back(&*after_item);
     }
 
-    const auto flex_container = is_flex_container(parent.style.display);
     const auto participates_in_flow = [&](const dom_node* child) {
         return child->style.display != display_mode::none
             && !is_out_of_flow(child->style.position)
@@ -2466,7 +2489,6 @@ void native_document::layout_children(dom_node& parent)
     }
     float fixed = 0;
     float grow = 0;
-    float automatic_count = 0;
     size_t automatic_main_margin_count = 0U;
     std::unordered_map<const dom_node*, float> flex_base_main_sizes;
     const auto flow_count = static_cast<size_t>(std::count_if(
@@ -2535,13 +2557,6 @@ void native_document::layout_children(dom_node& parent)
             }
             const auto child_grow = std::max(0.0F, child->style.flex_grow);
             grow += child_grow;
-            // Auto-width inline boxes shrink to their contents. In particular,
-            // a portal host span whose only child is position:fixed has a zero
-            // width box; stretching it across the row makes it intercept input
-            // outside the visible popup.
-            if (child_grow == 0 && !is_inline_level(child->style.display)) {
-                automatic_count += 1.0F;
-            }
             flex_base_main_sizes.emplace(child, 0.0F);
         }
     }
@@ -2672,10 +2687,10 @@ void native_document::layout_children(dom_node& parent)
         }
     }
     const auto automatic_margin_share = flex_container && grow == 0
-        && automatic_count == 0 && automatic_main_margin_count > 0U
+        && automatic_main_margin_count > 0U
         ? remaining / static_cast<float>(automatic_main_margin_count)
         : 0.0F;
-    const auto justify_free = flex_container && grow == 0 && automatic_count == 0
+    const auto justify_free = flex_container && grow == 0
         && automatic_main_margin_count == 0U
         ? remaining : 0.0F;
     float justify_gap = 0;
@@ -2955,8 +2970,7 @@ void native_document::layout_children(dom_node& parent)
                         : 0.0F)
                 : grow > 0
                     ? remaining * std::max(0.0F, child->style.flex_grow) / grow
-                    : is_inline_level(child->style.display) ? 0.0F
-                    : automatic_count > 0 ? remaining / automatic_count : remaining;
+                    : 0.0F;
             if (inline_flow && !flex_container) {
                 width = std::min(
                     width,
@@ -2974,12 +2988,10 @@ void native_document::layout_children(dom_node& parent)
                     || is_specified(parent.style.height));
             const auto available_line_cross_size = wrapped_has_definite_cross_size
                 ? stretched_wrapped_line_cross_size : content.height;
-            auto height = flex_container && is_specified(child->style.flex_basis)
-                ? resolve_length(*child, child->style.flex_basis, content.height, 0)
-                    + (grow > 0
-                        ? remaining * std::max(0.0F, child->style.flex_grow) / grow
-                        : 0.0F)
-                : definite_authored_height
+            // flex-basis sizes the main axis only. In a row it must not leak
+            // into the cross-axis height (for example, an 80px watchlist
+            // column basis inside a 31px-tall row).
+            auto height = definite_authored_height
                 ? outer_authored_size(*child, false, content.height)
                 : (flex_container
                         && (child->style.align_self_specified
@@ -3027,7 +3039,12 @@ void native_document::layout_children(dom_node& parent)
                 : resolve_length(*child, child->style.margin_bottom, content.height, 0);
             vertical_margin_bottom = margin_bottom;
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
-            auto height = is_specified(child->style.height)
+            auto height = flex_container && is_specified(child->style.flex_basis)
+                ? resolve_length(*child, child->style.flex_basis, content.height, 0)
+                    + (grow > 0
+                        ? remaining * std::max(0.0F, child->style.flex_grow) / grow
+                        : 0.0F)
+                : is_specified(child->style.height)
                 ? outer_authored_size(*child, false, content.height)
                     + (flex_container && grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
@@ -3040,15 +3057,22 @@ void native_document::layout_children(dom_node& parent)
                     ? 0.0F
                 : grow > 0
                     ? remaining * std::max(0.0F, child->style.flex_grow) / grow
-                    : automatic_count > 0 ? remaining / automatic_count : remaining;
+                    : 0.0F;
             height = constrain_size(*child, false, height, content.height);
             if (const auto shrunk = flex_shrunk_main_sizes.find(child);
                 shrunk != flex_shrunk_main_sizes.end()) {
                 height = constrain_size(*child, false, shrunk->second, content.height);
             }
+            const auto alignment = child->style.align_self_specified
+                ? child->style.align_self : parent.style.align_items;
+            const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             auto width = is_specified(child->style.width)
                 ? outer_authored_size(*child, true, content.width)
-                : std::max(0.0F, content.width - margin_left - margin_right);
+                : flex_container && alignment != align_mode::stretch
+                    ? std::min(
+                        std::max(0.0F, content.width - margin_left - margin_right),
+                        intrinsic_width)
+                    : std::max(0.0F, content.width - margin_left - margin_right);
             width = constrain_size(*child, true, width, content.width);
             const auto horizontal_margin_is_auto = child->style.margin_left_auto
                 || child->style.margin_right_auto;
@@ -3067,8 +3091,6 @@ void native_document::layout_children(dom_node& parent)
                     margin_right = remaining_inline_space;
                 }
             }
-            const auto alignment = child->style.align_self_specified
-                ? child->style.align_self : parent.style.align_items;
             const auto x = horizontal_margin_is_auto
                 ? content.x + margin_left
                 : alignment == align_mode::center
@@ -4130,6 +4152,27 @@ void native_document::append_scene(
                 0U,
                 node.id});
         }
+    }
+    const auto& replaced_image = node.replaced_image();
+    if (paint_self
+        && node.tag == "img"
+        && !replaced_image.markup.empty()
+        && !replaced_image.view_box.empty()
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        const auto resource_index = append_scene_string(
+            replaced_image.view_box + '\t' + replaced_image.markup,
+            strings,
+            string_bytes);
+        commands.push_back(htmlml_scene_command{
+            6U,
+            resource_index,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            0U,
+            node.id});
     }
     const auto append_border_rect = [&](float x, float y, float width, float height, uint32_t rgba) {
         if ((rgba & 0xFFU) == 0U || width <= 0 || height <= 0) return;

@@ -1158,7 +1158,7 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
 
     public void RequestRender() => InvalidateVisual();
 
-    public byte[] CaptureRetainedScenePng()
+    public unsafe byte[] CaptureRetainedScenePng()
     {
         if (!Dispatcher.UIThread.CheckAccess())
         {
@@ -1167,6 +1167,7 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
                 DispatcherPriority.Send);
         }
 
+        RefreshRetainedSceneForCapture();
         var width = Math.Max(1, (int)Math.Ceiling(Bounds.Width));
         var height = Math.Max(1, (int)Math.Ceiling(Bounds.Height));
         using var bitmap = new SKBitmap(
@@ -1185,6 +1186,63 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
         using var image = SKImage.FromBitmap(bitmap);
         using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         return encoded.ToArray();
+    }
+
+    private unsafe void RefreshRetainedSceneForCapture()
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            return;
+        }
+
+        bool ApplyAvailableScenes()
+        {
+            var applied = false;
+            while (true)
+            {
+                var scene = NativeHtmlMlApi.EngineAcquireNextScene(engine);
+                if (scene == IntPtr.Zero)
+                {
+                    return applied;
+                }
+                try
+                {
+                    var view = (NativeSceneView*)scene;
+                    if (view != null
+                        && view->StructSize == sizeof(NativeSceneView)
+                        && view->AbiVersion == 2)
+                    {
+                        _renderer.ApplyDiff(view);
+                        applied = true;
+                    }
+                    NativeHtmlMlApi.SceneAcknowledge(scene);
+                }
+                finally
+                {
+                    NativeHtmlMlApi.SceneRelease(scene);
+                }
+            }
+        }
+
+        ApplyAvailableScenes();
+        if (NativeHtmlMlApi.EngineRequestSceneCheckpoint(engine) == 0)
+        {
+            return;
+        }
+        NativeFrameInput.Submit(
+            engine,
+            Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
+
+        var deadline = Stopwatch.GetTimestamp() + 2 * Stopwatch.Frequency;
+        while (Stopwatch.GetTimestamp() < deadline)
+        {
+            if (ApplyAvailableScenes())
+            {
+                return;
+            }
+            Thread.Sleep(2);
+        }
     }
 
     public void SetCompositionAnimationFramesPaused(bool paused)
@@ -1245,7 +1303,7 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
     public void SubmitAnimationFrame(double timestampMilliseconds)
         => NativeFrameInput.Submit(_engine, timestampMilliseconds);
 
-    public override void Render(DrawingContext context)
+    public override unsafe void Render(DrawingContext context)
     {
         base.Render(context);
         // The composition child is not part of Avalonia's input hit-test tree.
@@ -1268,11 +1326,21 @@ public sealed class NativeSceneSurface : Control, INativeHtmlMlRenderDiagnostics
             // must not inherit stale publication counts from already acquired
             // scenes.
             _compositionMailbox.TryConsume();
+            var view = (NativeSceneView*)scene;
+            var applied = view != null
+                && view->StructSize == sizeof(NativeSceneView)
+                && view->AbiVersion == 2
+                && _renderer.ApplyDiff(view);
+            if (applied)
+            {
+                NativeHtmlMlApi.SceneAcknowledge(scene);
+            }
             context.Custom(new NativeSceneDrawOperation(
                 scene,
                 new Rect(Bounds.Size),
                 _renderer,
-                _renderObserver));
+                _renderObserver,
+                applied));
         }
     }
 }
@@ -2214,7 +2282,8 @@ internal sealed class NativeSceneDrawOperation(
     IntPtr scene,
     Rect bounds,
     NativeCanvasSceneRenderer renderer,
-    NativeSceneRenderObserver renderObserver) : ICustomDrawOperation
+    NativeSceneRenderObserver renderObserver,
+    bool sceneAlreadyApplied = false) : ICustomDrawOperation
 {
     private IntPtr _scene = scene;
 
@@ -2249,8 +2318,7 @@ internal sealed class NativeSceneDrawOperation(
         var view = (NativeSceneView*)scene;
         if (view == null
             || view->StructSize != sizeof(NativeSceneView)
-            || view->AbiVersion != 2
-            || context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature)) is not ISkiaSharpApiLeaseFeature feature)
+            || view->AbiVersion != 2)
         {
             return;
         }
@@ -2260,6 +2328,21 @@ internal sealed class NativeSceneDrawOperation(
             || (header.CanvasLayerCount != 0 && (view->CanvasLayers == null || view->CanvasCommands == null))
             || (view->StringCount != 0 && (view->Strings == null || view->StringBytes == null)))
         {
+            return;
+        }
+
+        if (context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature))
+                is not ISkiaSharpApiLeaseFeature feature)
+        {
+            // Headless render targets may execute custom draw operations
+            // without exposing a drawable Skia lease. Still compile and
+            // acknowledge the immutable scene so diagnostic captures use the
+            // same retained DOM/canvas state and the producer is not blocked
+            // behind an unacknowledged publication.
+            if (!sceneAlreadyApplied && renderer.ApplyDiff(view))
+            {
+                NativeHtmlMlApi.SceneAcknowledge(scene);
+            }
             return;
         }
 
@@ -2276,11 +2359,19 @@ internal sealed class NativeSceneDrawOperation(
                 header.ViewportWidth,
                 header.ViewportHeight);
             canvas.Scale(scale.X, scale.Y);
-            if (!renderer.ApplyDiffAndRender(canvas, view))
+            if (!sceneAlreadyApplied && !renderer.ApplyDiff(view))
             {
                 return;
             }
-            NativeHtmlMlApi.SceneAcknowledge(scene);
+            renderer.RenderRetained(
+                canvas,
+                header.ViewportWidth,
+                header.ViewportHeight,
+                null);
+            if (!sceneAlreadyApplied)
+            {
+                NativeHtmlMlApi.SceneAcknowledge(scene);
+            }
             RecordRendered(header);
             renderObserver.RecordRendered(header);
         }

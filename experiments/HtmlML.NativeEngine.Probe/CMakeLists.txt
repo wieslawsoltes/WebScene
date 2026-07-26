@@ -1,7 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
-project(HtmlMLNativeEngineProbe LANGUAGES CXX)
+project(HtmlMLNativeEngineProbe LANGUAGES C CXX)
 
 include(CTest)
+include(FetchContent)
+
+if(MSVC)
+    # V8's Windows monolith uses the static CRT. Set the directory default
+    # before FetchContent creates IXWebSocket/Mbed TLS targets so the complete
+    # native dependency graph uses the same runtime.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY
+        "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 add_library(htmlml_native_engine SHARED
     native/htmlml_native_engine.cpp
@@ -74,7 +83,43 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
         message(FATAL_ERROR "HtmlML native engine: ICU data not found at ${HTMLML_V8_ICU_DATA}")
     endif()
 
-    target_sources(htmlml_native_engine PRIVATE native/htmlml_v8_runtime.cpp)
+    # WebSocket I/O is a native implementation detail. IXWebSocket supplies a
+    # portable RFC 6455 client while the HtmlML adapter below owns all V8
+    # lifetime/threading semantics. Pin both source and digest so release
+    # builds do not float with upstream.
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(USE_TLS ON CACHE BOOL "" FORCE)
+    if(WIN32)
+        # Windows release runners do not carry a stable OpenSSL SDK. Build the
+        # pinned Mbed TLS release and give IXWebSocket its normal CMake targets.
+        set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+        set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            htmlml_mbedtls
+            URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2
+            URL_HASH SHA256=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_MakeAvailable(htmlml_mbedtls)
+        set(USE_MBED_TLS ON CACHE BOOL "" FORCE)
+        set(USE_ZLIB OFF CACHE BOOL "" FORCE)
+        set(MBEDTLS_FOUND TRUE)
+        set(MBEDTLS_VERSION_GREATER_THAN_3 TRUE)
+        set(MBEDTLS_INCLUDE_DIRS "${htmlml_mbedtls_SOURCE_DIR}/include")
+        set(MBEDTLS_LIBRARIES mbedtls mbedx509 mbedcrypto)
+    else()
+        set(USE_ZLIB ON CACHE BOOL "" FORCE)
+    endif()
+    FetchContent_Declare(
+        htmlml_ixwebsocket
+        URL https://github.com/machinezone/IXWebSocket/archive/refs/tags/v12.0.1.tar.gz
+        URL_HASH SHA256=d23bdc91dbfe2b9ae13c322d539392d7a6b8b506560f41c90e227fa0f86a2405
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    FetchContent_MakeAvailable(htmlml_ixwebsocket)
+
+    target_sources(htmlml_native_engine PRIVATE
+        native/htmlml_v8_runtime.cpp
+        native/htmlml_native_websocket.cpp)
     target_include_directories(htmlml_native_engine SYSTEM PRIVATE "${HTMLML_V8_ROOT}/include")
     target_compile_definitions(htmlml_native_engine PRIVATE
         HTMLML_NATIVE_ENGINE_WITH_V8
@@ -97,7 +142,9 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
         target_compile_definitions(htmlml_native_engine PRIVATE
             HTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=1)
     endif()
-    target_link_libraries(htmlml_native_engine PRIVATE "${HTMLML_V8_MONOLITH}")
+    target_link_libraries(htmlml_native_engine PRIVATE
+        "${HTMLML_V8_MONOLITH}"
+        ixwebsocket)
     if(APPLE)
         target_link_libraries(htmlml_native_engine PRIVATE "-framework CoreFoundation")
     elseif(WIN32)
@@ -114,7 +161,9 @@ if(HTMLML_NATIVE_ENGINE_ENABLE_V8)
             tests/native_v8_runtime_tests.cpp
             native/htmlml_native_dom.cpp)
         target_compile_features(htmlml_native_engine_tests PRIVATE cxx_std_20)
-        target_link_libraries(htmlml_native_engine_tests PRIVATE htmlml_native_engine)
+        target_link_libraries(htmlml_native_engine_tests PRIVATE
+            htmlml_native_engine
+            ixwebsocket)
         add_test(NAME htmlml_native_engine_tests COMMAND htmlml_native_engine_tests)
     endif()
 else()

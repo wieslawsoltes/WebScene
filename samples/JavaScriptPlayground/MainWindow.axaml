@@ -125,5 +125,44 @@
         </Grid>
       </Grid>
     </TabItem>
+
+    <TabItem x:Name="NativeTradingViewTab" Header="TradingView (native)">
+      <Grid RowDefinitions="Auto,*" Background="#101216">
+        <Border Padding="10,8"
+                Background="#181B21"
+                BorderBrush="#2A2E37"
+                BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <TextBlock Text="TradingView Terminal on the HtmlML native runtime"
+                         Foreground="#F1F1F1"
+                         FontWeight="SemiBold" />
+              <TextBlock x:Name="NativeTradingViewStatus"
+                         Text="Select this tab to load"
+                         Foreground="#A9A9A9" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="Reload terminal"
+                    Click="OnReloadNativeTradingViewClick" />
+          </Grid>
+        </Border>
+        <Grid Grid.Row="1">
+          <native:NativeHtmlMlView x:Name="NativeTradingViewHost" />
+          <Border x:Name="NativeTradingViewFailure"
+                  IsVisible="False"
+                  Margin="24"
+                  Padding="18"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Background="#CC3A1111"
+                  CornerRadius="8">
+            <TextBlock x:Name="NativeTradingViewFailureText"
+                       MaxWidth="760"
+                       Foreground="White"
+                       TextWrapping="Wrap" />
+          </Border>
+        </Grid>
+      </Grid>
+    </TabItem>
   </TabControl>
 </Window>

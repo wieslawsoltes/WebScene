@@ -1,0 +1,82 @@
+<Window
+    x:Class="NativeTradingViewTerminal.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:native="clr-namespace:HtmlML.Backends.Avalonia.Native;assembly=HtmlML.Backend.Avalonia"
+    Width="1440"
+    Height="900"
+    MinWidth="960"
+    MinHeight="640"
+    Background="#101216"
+    Title="HtmlML · Native TradingView Terminal">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border
+        Padding="12"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="0,0,0,1">
+      <StackPanel Spacing="2">
+        <TextBlock
+            FontSize="17"
+            FontWeight="SemiBold"
+            Text="TradingView Terminal on HtmlML" />
+        <TextBlock
+            Foreground="#AEB5C2"
+            Text="Hosted JavaScript application · native V8 DOM · native C++ WebSocket transport" />
+      </StackPanel>
+    </Border>
+
+    <Border
+        Grid.Row="1"
+        Margin="12,12,12,0"
+        Background="#13161B"
+        BorderBrush="#2A2E37"
+        BorderThickness="1"
+        CornerRadius="6"
+        ClipToBounds="True">
+      <native:NativeHtmlMlView x:Name="TerminalHost" />
+    </Border>
+
+    <Border
+        Grid.Row="2"
+        Margin="12"
+        Padding="10,7"
+        Background="#181B21"
+        BorderBrush="#2A2E37"
+        BorderThickness="1"
+        CornerRadius="6">
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+        <TextBlock
+            x:Name="StatusText"
+            VerticalAlignment="Center"
+            FontWeight="SemiBold"
+            Text="Starting native HtmlML…" />
+        <TextBlock
+            x:Name="DiagnosticsText"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Foreground="#AEB5C2"
+            FontFamily="Cascadia Mono, Menlo, monospace"
+            FontSize="11"
+            TextTrimming="CharacterEllipsis" />
+      </Grid>
+    </Border>
+
+    <Border
+        x:Name="LoadFailure"
+        Grid.RowSpan="3"
+        IsVisible="False"
+        Margin="24"
+        Padding="18"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center"
+        Background="#EE3A1111"
+        CornerRadius="8">
+      <TextBlock
+          x:Name="LoadFailureText"
+          MaxWidth="800"
+          Foreground="White"
+          TextWrapping="Wrap" />
+    </Border>
+  </Grid>
+</Window>

@@ -25,12 +25,14 @@ RUN apt-get update \
         gdb \
         git \
         libfontconfig1 \
+        libssl-dev \
         lld \
         ninja-build \
         pkg-config \
         python3 \
         unzip \
         xz-utils \
+        zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dotnet-sdk /usr/share/dotnet /usr/share/dotnet
