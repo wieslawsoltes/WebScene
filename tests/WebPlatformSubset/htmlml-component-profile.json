@@ -815,7 +815,7 @@
       "type": "contract",
       "capabilities": ["selector-node-identity", "selector-result-uniqueness", "element-collection-node-identity", "parent-element-node-identity"],
       "evidence": ["hosted-component-duplicate-raw-locator-reduction", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract"],
-      "reason": "Required after unchanged bytes pass all 3/3 assertions in Chrome and both HtmlML adapters. The product-neutral contract requires selector APIs, element collections, and parentElement to return the same JavaScript object for one DOM node, with selector results unique and tree ordered. It rules out a general core node-identity defect as the source of duplicate raw interaction paths, allowing the private inventory to reject transient unlocatable targets without weakening the DOM contract. Evidence: artifacts/web-platform-selector-identity-chrome-v1-20260726/results.json and artifacts/web-platform-selector-identity-htmlml-v1-20260726/{managed,native}/results.json."
+      "reason": "Required after unchanged bytes pass all 4/4 assertions in Chrome and both HtmlML adapters. The product-neutral contract requires selector APIs, element collections, and parentElement to return the same JavaScript object for one DOM node, with selector results unique and tree ordered across a deep id-less tree. It rules out a general core node-identity defect as the source of duplicate raw interaction paths, allowing the private inventory to reject transient unlocatable targets without weakening the DOM contract. Evidence: artifacts/web-platform-selector-identity-chrome-v2-20260726/results.json and artifacts/web-platform-selector-identity-htmlml-v2-20260726/{managed,native}/results.json."
     }
   ],
   "candidate": [

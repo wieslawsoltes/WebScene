@@ -10,10 +10,10 @@
     "passed": 110,
     "failed": 0,
     "timedOut": 0,
-    "subtests": 433,
-    "subtestsPassed": 433,
+    "subtests": 434,
+    "subtestsPassed": 434,
     "subtestsFailed": 0,
-    "note": "The complete bounded required profile passes 110/110 documents and 433/433 assertions in both managed and native. The latest promotion adds Chrome-authorized selector and element-collection node identity, uniqueness, and tree-order invariants. It rules out a general core identity defect behind transient duplicate application locators; private inventory code now rejects an element absent from its live parent collection instead of inventing nth-child(1). The preceding innerText, visibility, transform:none, overflow, typography, and ecosystem promotions remain green. Evidence: artifacts/web-platform-selector-identity-chrome-v1-20260726/results.json and artifacts/web-platform-required-selector-identity-promoted-v1-20260726/{managed,native}/results.json."
+    "note": "The complete bounded required profile passes 110/110 documents and 434/434 assertions in both managed and native. The latest promotion adds Chrome-authorized selector and element-collection node identity, uniqueness, and tree-order invariants, including a 204-node deep id-less structural-path stress case. It rules out a general core identity defect behind transient duplicate application locators; private inventory code now rejects an element absent from its live parent collection instead of inventing nth-child(1). The preceding innerText, visibility, transform:none, overflow, typography, and ecosystem promotions remain green. Evidence: artifacts/web-platform-selector-identity-chrome-v2-20260726/results.json and artifacts/web-platform-required-selector-identity-promoted-v2-20260726/{managed,native}/results.json."
   },
   "capabilities": [
     {

@@ -52,6 +52,37 @@
       "parentElement did not preserve the parent node identity");
   });
 
+  test("deep id-less structural paths remain unique and locatable", () => {
+    const root = document.createElement("div");
+    for (let groupIndex = 0; groupIndex < 12; groupIndex++) {
+      const group = document.createElement("section");
+      for (let itemIndex = 0; itemIndex < 8; itemIndex++) {
+        const item = document.createElement("div");
+        const leaf = document.createElement("span");
+        leaf.textContent = `${groupIndex}:${itemIndex}`;
+        item.appendChild(leaf);
+        group.appendChild(item);
+      }
+      root.appendChild(group);
+    }
+    document.body.appendChild(root);
+
+    const paths = new Set();
+    for (const element of Array.from(root.querySelectorAll("*"))) {
+      const parts = [];
+      for (let current = element; current && current !== root; current = current.parentElement) {
+        const siblings = Array.from(current.parentElement.children);
+        const index = siblings.indexOf(current);
+        assert(index >= 0, "a selected element was absent from its parent's children collection");
+        parts.unshift(`${current.localName}:nth-child(${index + 1})`);
+      }
+      const path = parts.join(">");
+      assert(!paths.has(path), `duplicate structural path: ${path}`);
+      paths.add(path);
+    }
+    assert(paths.size === 204, `expected 204 unique structural paths, received ${paths.size}`);
+  });
+
   const failure = state.results.find(result => result.status !== "PASS");
   state.harness = failure
     ? { status: 1, message: failure.message, stack: failure.stack }
