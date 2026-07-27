@@ -7,10 +7,8 @@
 <p align="center"><strong>Web components. Native performance.</strong></p>
 
 <p align="center">
-  Bring React, TypeScript, and JavaScript components into native application frameworks—<strong>without a WebView or embedded browser.</strong>
+  Run packaged React, TypeScript, and JavaScript components in native application frameworks through a high-performance scene pipeline—<strong>no WebView or embedded browser required.</strong>
 </p>
-
-<p align="center"><strong>No WebView · No embedded browser · No Chromium · No Electron</strong></p>
 
 <table align="center">
   <tr>
@@ -44,11 +42,13 @@
 
 ## Positioning
 
-**WebScene brings packaged web components into native application frameworks—including Avalonia, Uno Platform, WPF, WinUI, and Flutter—without embedding a browser.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
+**WebScene is a native component runtime for bringing web-authored experiences into Avalonia, Uno Platform, WPF, WinUI, Flutter, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
 
-**It is not a WebView, browser control, or embedded browser.** WebScene does not ship Chromium, WebKit, Electron, or a hidden browser process. Its native engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. The result is a browser-shaped component model backed by native rendering and application composition.
+Its engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. Applications can combine those components with native controls, services, menus, accessibility, input, and lifecycle management instead of placing the experience in an isolated browser surface.
 
-The platform is designed for trusted, versioned, offline component bundles and application-owned experiences—not arbitrary websites or full browser compatibility. Avalonia is the reference implementation today; Uno Platform and Flutter provide integration proofs, while WPF and WinUI are planned presenters built on the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
+WebScene packages trusted, versioned components with explicit compatibility profiles, offline assets, lifecycle diagnostics, and a capability-based bridge to host services. Avalonia is the reference implementation today; Uno Platform and Flutter provide integration proofs, while WPF and WinUI are planned presenters built on the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
+
+The familiar web authoring model is backed by native scene rendering: WebScene does not embed a WebView, browser control, Chromium/WebKit runtime, or Electron shell.
 
 The WebScene product family includes:
 
@@ -60,22 +60,17 @@ The WebScene product family includes:
 - **WebScene.Sdk.Avalonia** – the XAML-first host for packaged React, TypeScript, and JavaScript components.
 - **JavaScript.Avalonia.ClearScript** – the managed compatibility engine and behavioral reference.
 
-## Usage Restriction Notice
-
-At maintainer request, AvaloniaUI OÜ may not use this repository in any form.
-
-This restriction is defined in the repository [LICENSE](LICENSE).
-
 ## Highlights
 
-- 🪶 **No embedded browser**: Deliver web-authored components without a WebView, Chromium/WebKit runtime, Electron shell, or hidden browser process.
 - 🚀 **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread and publish immutable, damage-aware scene diffs to a framework-native presenter.
+- 🌐 **Cross-framework presentation**: Target Avalonia, Uno Platform, Flutter, WPF, and WinUI through a shared runtime, portable contracts, and framework-specific presenters.
 - ⚡ **Native application composition**: Combine web components with XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
 - 🧩 **Component hosting**: Mount versioned, offline React/TypeScript/JavaScript bundles through an engine-neutral component profile and framework host.
 - 🧠 **Compatibility by contract**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines; promote support through conformance gates.
 - 🔌 **Capability-based host bridge**: Expose selected asynchronous .NET services to trusted components without giving them an implicit application-wide API.
 - 🕹️ **DOM and event integration**: Query and mutate the projected visual surface and route pointer, keyboard, text, focus, and routed-event behavior to JavaScript.
 - 🖼️ **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right shape.
+- 🪶 **Browserless integration**: Deliver web-authored components without a WebView or embedded browser runtime.
 
 ## Repository Layout
 
@@ -384,3 +379,9 @@ If your organisation requires a different licensing arrangement, please reach ou
 ---
 
 © Wiesław Šoltés. All rights reserved.
+
+## Usage Restriction Notice
+
+At maintainer request, AvaloniaUI OÜ may not use this repository in any form.
+
+This restriction is defined in the repository [LICENSE](LICENSE).
