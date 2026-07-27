@@ -7,7 +7,7 @@ import 'tradingview_datafeed.dart';
 
 const _documentUrl = String.fromEnvironment(
   'WEBSCENE_DOCUMENT_URL',
-  defaultValue: 'https://tv.sandwichtrading.com/index56.html',
+  defaultValue: 'https://trading-terminal.tradingview-widget.com/',
 );
 const _runtimeLibrary = String.fromEnvironment('WEBSCENE_RUNTIME_LIBRARY');
 const _bridgeLibrary = String.fromEnvironment('WEBSCENE_FLUTTER_BRIDGE');

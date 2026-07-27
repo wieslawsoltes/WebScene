@@ -13,7 +13,7 @@ work to the compositor.
 That extra hop preserved thread affinity, but it made scene throughput depend on the
 application UI queue. A busy application, live window resize, or several active WebScene
 documents could queue scene notifications behind input and layout work. The resulting
-latency was visible in Sandwich as delayed dialogs, broken-feeling pointer drags, and
+latency was visible in the TradingView terminal as delayed dialogs, broken-feeling pointer drags, and
 chart updates that caught up only after resize ended, even though JavaScript and scene
 production remained off the UI thread.
 

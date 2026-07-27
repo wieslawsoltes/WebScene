@@ -5,7 +5,7 @@ example_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 package_dir="$(cd "$example_dir/.." && pwd)"
 repo_dir="$(cd "$package_dir/../.." && pwd)"
 runtime="${WEBSCENE_NATIVE_ENGINE_LIBRARY:-$repo_dir/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib}"
-document_url="${WEBSCENE_DOCUMENT_URL:-https://tv.sandwichtrading.com/index56.html}"
+document_url="${WEBSCENE_DOCUMENT_URL:-https://trading-terminal.tradingview-widget.com/}"
 ssd_cache_root="${WEBSCENE_FLUTTER_CACHE_ROOT:-/Volumes/SSD/danw/caches/webscene-flutter}"
 
 mkdir -p \
