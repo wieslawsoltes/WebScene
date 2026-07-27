@@ -35,9 +35,35 @@
   </tr>
 </table>
 
+<p align="center"><strong>NuGet packages</strong></p>
+
 <p align="center">
-  <a href="https://www.nuget.org/packages/WebScene/"><img src="https://img.shields.io/nuget/vpre/WebScene.svg" alt="WebScene NuGet"></a>
-  <a href="https://www.nuget.org/packages/WebScene.Backend.Avalonia/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg" alt="WebScene Backend NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene/"><img src="https://img.shields.io/nuget/vpre/WebScene.svg?label=WebScene&amp;style=flat-square" alt="WebScene NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Sdk/"><img src="https://img.shields.io/nuget/vpre/WebScene.Sdk.svg?label=WebScene.Sdk&amp;style=flat-square" alt="WebScene.Sdk NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Sdk.Avalonia/"><img src="https://img.shields.io/nuget/vpre/WebScene.Sdk.Avalonia.svg?label=WebScene.Sdk.Avalonia&amp;style=flat-square" alt="WebScene.Sdk.Avalonia NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Backend.Uno/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Uno.svg?label=WebScene.Backend.Uno&amp;style=flat-square" alt="WebScene.Backend.Uno NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Backend.Avalonia/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg?label=WebScene.Backend.Avalonia&amp;style=flat-square" alt="WebScene.Backend.Avalonia NuGet"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.nuget.org/packages/WebScene.Core/"><img src="https://img.shields.io/nuget/vpre/WebScene.Core.svg?label=WebScene.Core&amp;style=flat-square" alt="WebScene.Core NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Backend.Abstractions/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Abstractions.svg?label=WebScene.Backend.Abstractions&amp;style=flat-square" alt="WebScene.Backend.Abstractions NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Dom/"><img src="https://img.shields.io/nuget/vpre/WebScene.Dom.svg?label=WebScene.Dom&amp;style=flat-square" alt="WebScene.Dom NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Css/"><img src="https://img.shields.io/nuget/vpre/WebScene.Css.svg?label=WebScene.Css&amp;style=flat-square" alt="WebScene.Css NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Graphics/"><img src="https://img.shields.io/nuget/vpre/WebScene.Graphics.svg?label=WebScene.Graphics&amp;style=flat-square" alt="WebScene.Graphics NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.JavaScript/"><img src="https://img.shields.io/nuget/vpre/WebScene.JavaScript.svg?label=WebScene.JavaScript&amp;style=flat-square" alt="WebScene.JavaScript NuGet"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.nuget.org/packages/WebScene.JavaScript.Interop/"><img src="https://img.shields.io/nuget/vpre/WebScene.JavaScript.Interop.svg?label=WebScene.JavaScript.Interop&amp;style=flat-square" alt="WebScene.JavaScript.Interop NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.JavaScript.Interop.Generator/"><img src="https://img.shields.io/nuget/vpre/WebScene.JavaScript.Interop.Generator.svg?label=WebScene.JavaScript.Interop.Generator&amp;style=flat-square" alt="WebScene.JavaScript.Interop.Generator NuGet"></a>
+  <a href="https://www.nuget.org/packages/JavaScript.Avalonia.ClearScript/"><img src="https://img.shields.io/nuget/vpre/JavaScript.Avalonia.ClearScript.svg?label=JavaScript.Avalonia.ClearScript&amp;style=flat-square" alt="JavaScript.Avalonia.ClearScript NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Templates/"><img src="https://img.shields.io/nuget/vpre/WebScene.Templates.svg?label=WebScene.Templates&amp;style=flat-square" alt="WebScene.Templates NuGet"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/"><img src="https://img.shields.io/nuget/vpre/WebScene.NativeEngine.Runtime.osx-arm64.svg?label=WebScene.NativeEngine.Runtime.osx-arm64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.osx-arm64 NuGet"></a>
+  <a href="https://www.nuget.org/packages/JavaScript.Avalonia.ClearScript.Native.osx-arm64/"><img src="https://img.shields.io/nuget/vpre/JavaScript.Avalonia.ClearScript.Native.osx-arm64.svg?label=JavaScript.Avalonia.ClearScript.Native.osx-arm64&amp;style=flat-square" alt="JavaScript.Avalonia.ClearScript.Native.osx-arm64 NuGet"></a>
 </p>
 
 ## What WebScene enables
