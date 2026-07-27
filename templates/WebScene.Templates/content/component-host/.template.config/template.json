@@ -5,7 +5,7 @@
   "identity": "WebScene.Templates.ComponentHost",
   "name": "WebScene React component host",
   "shortName": "webscene-component-host",
-  "sourceName": "WebSceneComponentHost",
+  "sourceName": "WebSceneComponentHostApp",
   "preferNameDirectory": true,
   "symbols": {
     "websceneVersion": {
@@ -15,5 +15,5 @@
       "replaces": "WEBSCENE_PACKAGE_VERSION"
     }
   },
-  "primaryOutputs": [{ "path": "WebSceneComponentHost.csproj" }]
+  "primaryOutputs": [{ "path": "WebSceneComponentHostApp.csproj" }]
 }

@@ -386,6 +386,26 @@ void execute(webscene_engine* engine, std::string_view source, std::string_view 
         "script was rejected");
 }
 
+void execute_and_wait(
+    webscene_engine* engine,
+    std::string_view source,
+    std::string_view name)
+{
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    execute(engine, source, name);
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_metrics after{};
+        webscene_engine_get_metrics(engine, &after);
+        if (after.executed_scripts > before.executed_scripts) return;
+        if (after.script_errors > before.script_errors) {
+            fail("script execution failed: " + last_error(engine));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("script execution did not complete");
+}
+
 std::string evaluate(webscene_engine* engine, std::string_view source, std::string_view name)
 {
     std::vector<char> buffer(64U * 1024U, '\0');
@@ -486,6 +506,19 @@ void animation_frame(webscene_engine* engine, double timestamp, uint64_t sequenc
         0,
         0};
     require(webscene_engine_enqueue(engine, &input) != 0, "animation frame was rejected");
+}
+
+void animation_frame_and_wait(
+    webscene_engine* engine,
+    double timestamp,
+    uint64_t sequence)
+{
+    const auto consumed_before = consumed_input_count(engine);
+    animation_frame(engine, timestamp, sequence);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 1U,
+        "animation frame was not consumed");
 }
 
 void test_zero_command_engine_starts_with_clean_scene()
@@ -950,16 +983,21 @@ void test_document_script_failure_remains_diagnostic()
         "script-error document load was rejected");
 
     webscene_engine_metrics metrics{};
+    auto diagnostic = std::string{};
     for (auto attempt = 0; attempt < 200; ++attempt) {
         webscene_engine_get_metrics(engine, &metrics);
-        if (metrics.frame_script_errors != 0) break;
+        diagnostic = last_error(engine);
+        if (metrics.frame_script_errors != 0
+            && diagnostic.find("release page failure") != std::string::npos) {
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     require(metrics.frame_script_errors == 1,
         "document script failure was not counted");
-    require(last_error(engine).find("release page failure") != std::string::npos,
+    require(diagnostic.find("release page failure") != std::string::npos,
         "document script failure was cleared before the host could diagnose it: "
-            + last_error(engine));
+            + diagnostic);
     webscene_engine_destroy(engine);
 }
 
@@ -3817,7 +3855,7 @@ void test_transform_origin_keywords_cascade_independently_from_inline_transform(
 void test_transform_transition_uses_host_clock_for_translate_and_scale(
     webscene_engine* engine)
 {
-    execute(engine, R"JS(
+    execute_and_wait(engine, R"JS(
         (() => {
           document.body.innerHTML = `
             <style>
@@ -3834,7 +3872,7 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
             <div id="temporal-indicator"></div>`;
         })()
     )JS", "transform-transition-host-clock-setup.js");
-    animation_frame(engine, 0.0, 7001U);
+    animation_frame_and_wait(engine, 0.0, 7001U);
     const auto initial = evaluate(engine,
         "getComputedStyle(document.getElementById('temporal-indicator')).getPropertyValue('transform')",
         "transform-transition-initial.js");
@@ -3842,7 +3880,7 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
         initial == "\"matrix(0.5, 0, 0, 1, 0, 0)\"",
         "transform transition fixture did not begin at its authored transform: " + initial);
 
-    execute(engine,
+    execute_and_wait(engine,
         "document.getElementById('temporal-indicator').classList.add('selected')",
         "transform-transition-activate.js");
     require(
@@ -3851,7 +3889,7 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
             "transform-transition-before-frame.js") == "\"matrix(0.5, 0, 0, 1, 0, 0)\"",
         "transform transition jumped before the next host frame");
 
-    animation_frame(engine, 50.0, 7002U);
+    animation_frame_and_wait(engine, 50.0, 7002U);
     const auto midpoint = evaluate(engine, R"JS(
         (() => {
           const indicator = document.getElementById('temporal-indicator');
@@ -3865,7 +3903,7 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
         midpoint == R"({"matrix":[0.75,0,0,1,40,0],"rect":[50,75]})",
         "translate/scale transition did not publish midpoint geometry: " + midpoint);
 
-    animation_frame(engine, 100.0, 7003U);
+    animation_frame_and_wait(engine, 100.0, 7003U);
     const auto completed = evaluate(engine, R"JS(
         (() => {
           const indicator = document.getElementById('temporal-indicator');
@@ -3882,7 +3920,7 @@ void test_transform_transition_uses_host_clock_for_translate_and_scale(
 
 void test_transform_transition_interpolates_from_none(webscene_engine* engine)
 {
-    execute(engine, R"JS(
+    execute_and_wait(engine, R"JS(
         (() => {
           document.body.innerHTML = `
             <style>
@@ -3907,7 +3945,7 @@ void test_transform_transition_interpolates_from_none(webscene_engine* engine)
             "transform-transition-from-none-initial.js")
             == "\"matrix(1, 0, 0, 1, 0, 0)\"",
         "transform transition from none did not begin at the identity matrix");
-    animation_frame(engine, 200.0, 7011U);
+    animation_frame_and_wait(engine, 200.0, 7011U);
     require(
         evaluate(engine,
             "getComputedStyle(document.getElementById('none-transition')).transform",
@@ -3915,21 +3953,21 @@ void test_transform_transition_interpolates_from_none(webscene_engine* engine)
             == "\"matrix(1, 0, 0, 1, 0, 0)\"",
         "transform transition from none jumped before the next host frame");
 
-    animation_frame(engine, 250.0, 7012U);
+    animation_frame_and_wait(engine, 250.0, 7012U);
     const auto midpoint = evaluate(engine,
         "getComputedStyle(document.getElementById('none-transition')).transform",
         "transform-transition-from-none-midpoint.js");
     require(
         midpoint == "\"matrix(1, 0, 0, 1, 10, 0)\"",
         "transform transition from none did not publish midpoint geometry: " + midpoint);
-    animation_frame(engine, 300.0, 7013U);
+    animation_frame_and_wait(engine, 300.0, 7013U);
     const auto progressed = evaluate(engine,
         "getComputedStyle(document.getElementById('none-transition')).transform",
         "transform-transition-from-none-progressed.js");
     require(
         progressed == "\"matrix(1, 0, 0, 1, 20, 0)\"",
         "transform transition from none did not finish at its target geometry: " + progressed);
-    execute(engine,
+    execute_and_wait(engine,
         "document.getElementById('none-transition').classList.remove('active')",
         "transform-transition-back-to-none-activate.js");
     require(
@@ -3938,7 +3976,7 @@ void test_transform_transition_interpolates_from_none(webscene_engine* engine)
             "transform-transition-back-to-none-initial.js")
             == "\"matrix(1, 0, 0, 1, 20, 0)\"",
         "transform transition back to none did not retain its initial painted value");
-    animation_frame(engine, 350.0, 7014U);
+    animation_frame_and_wait(engine, 350.0, 7014U);
     const auto reverse_midpoint = evaluate(engine,
         "getComputedStyle(document.getElementById('none-transition')).transform",
         "transform-transition-back-to-none-midpoint.js");
@@ -3946,7 +3984,7 @@ void test_transform_transition_interpolates_from_none(webscene_engine* engine)
         reverse_midpoint == "\"matrix(1, 0, 0, 1, 10, 0)\"",
         "transform transition back to none did not publish midpoint geometry: "
             + reverse_midpoint);
-    animation_frame(engine, 400.0, 7015U);
+    animation_frame_and_wait(engine, 400.0, 7015U);
     const auto reverse_completed = evaluate(engine,
         "getComputedStyle(document.getElementById('none-transition')).transform",
         "transform-transition-back-to-none-complete.js");
@@ -4006,7 +4044,7 @@ void test_class_list_is_same_live_object(webscene_engine* engine)
 void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
     webscene_engine* engine)
 {
-    execute(engine, R"JS(
+    execute_and_wait(engine, R"JS(
         (() => {
           document.body.innerHTML = `
             <style>
@@ -4031,8 +4069,8 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
           }
         })()
     )JS", "paint-transition-host-clock-setup.js");
-    animation_frame(engine, 0.0, 7011U);
-    execute(engine,
+    animation_frame_and_wait(engine, 0.0, 7011U);
+    execute_and_wait(engine,
         "document.getElementById('temporal-paint').classList.add('selected')",
         "paint-transition-activate.js");
 
@@ -4047,7 +4085,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
         metadata == R"(["opacity, color","100ms, 200ms","20ms, 0ms","linear, linear"])" ,
         "computed transition metadata was not observable: " + metadata);
 
-    animation_frame(engine, 50.0, 7012U);
+    animation_frame_and_wait(engine, 50.0, 7012U);
     const auto midpoint = evaluate(engine, R"JS(
         (() => {
           const style = getComputedStyle(document.getElementById('temporal-paint'));
@@ -4069,7 +4107,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
 
     // Reverse while both properties are running. The old transitions must be
     // cancelled and the new transitions must start from the painted midpoint.
-    execute(engine,
+    execute_and_wait(engine,
         "(() => { const target = document.getElementById('temporal-paint');"
         " target.style.setProperty('opacity', '.2');"
         " target.style.setProperty('color', 'rgb(10, 20, 30)'); })()",
@@ -4079,7 +4117,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
             "document.getElementById('temporal-paint').style.getPropertyValue('opacity')",
             "paint-transition-reverse-flush.js") == "\".2\"",
         "inline reversal mutation did not reach the DOM before the next host frame");
-    animation_frame(engine, 100.0, 7013U);
+    animation_frame_and_wait(engine, 100.0, 7013U);
     const auto reversed = evaluate(engine, R"JS(
         (() => {
           const style = getComputedStyle(document.getElementById('temporal-paint'));
@@ -4094,7 +4132,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
             && reversed.find("\"color\":\"rgb(29, 39, 49)\"") != std::string::npos,
         "transition cancellation/reversal did not retain the painted midpoint: " + reversed);
 
-    animation_frame(engine, 300.0, 7014U);
+    animation_frame_and_wait(engine, 300.0, 7014U);
     const auto completed = evaluate(engine, R"JS(
         (() => {
           const style = getComputedStyle(document.getElementById('temporal-paint'));
@@ -4113,7 +4151,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
 void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     webscene_engine* engine)
 {
-    execute(engine, R"JS(
+    execute_and_wait(engine, R"JS(
         (() => {
           document.body.innerHTML = `
             <style>
@@ -4144,7 +4182,7 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
         metadata == R"(["dot-pulse","1000ms","100ms","linear","infinite"])",
         "computed CSS animation metadata was not observable: " + metadata);
 
-    animation_frame(engine, 550.0, 7021U);
+    animation_frame_and_wait(engine, 550.0, 7021U);
     const auto first = evaluate(engine, R"JS(
         (() => [...document.querySelectorAll('.dot')].map(node =>
           Math.round(Number(getComputedStyle(node).opacity) * 1000) / 1000))()
@@ -4152,7 +4190,7 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     require(first == "[0.6,1,1]",
         "staggered animation delays did not retain pre-start opacity: " + first);
 
-    animation_frame(engine, 900.0, 7022U);
+    animation_frame_and_wait(engine, 900.0, 7022U);
     const auto second = evaluate(engine, R"JS(
         (() => [...document.querySelectorAll('.dot')].map(node =>
           Math.round(Number(getComputedStyle(node).opacity) * 1000) / 1000))()
@@ -4160,7 +4198,7 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     require(second == "[0.333,0.2,0.6]",
         "keyframe stops were not interpolated on the host clock: " + second);
 
-    animation_frame(engine, 1450.0, 7023U);
+    animation_frame_and_wait(engine, 1450.0, 7023U);
     const auto wrapped = evaluate(engine, R"JS(
         (() => [...document.querySelectorAll('.dot')].map(node =>
           Math.round(Number(getComputedStyle(node).opacity) * 1000) / 1000))()
@@ -4172,7 +4210,7 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
 void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
     webscene_engine* engine)
 {
-    execute(engine, R"JS(
+    execute_and_wait(engine, R"JS(
         (() => {
           document.body.innerHTML = `
             <style>
@@ -4193,7 +4231,7 @@ void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
 
     // Publish the insertion frame so the animation timeline starts at the
     // current host timestamp rather than at the first sampled intermediate frame.
-    animation_frame(engine, 1450.0, 7030U);
+    animation_frame_and_wait(engine, 1450.0, 7030U);
     const auto metadata = evaluate(engine, R"JS(
         (() => {
           const style = getComputedStyle(document.getElementById('spinner'));
@@ -4235,7 +4273,7 @@ void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
         })()
     )JS";
 
-    animation_frame(engine, 1675.0, 7031U);
+    animation_frame_and_wait(engine, 1675.0, 7031U);
     const auto quarter_turn = evaluate(
         engine, angle_expression, "rotation-keyframes-quarter-turn.js");
     require(
@@ -4297,14 +4335,14 @@ void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
             == layout_before_animation.layout_passes,
         "paint-only rotation repeated full document layout");
 
-    animation_frame(engine, 1900.0, 7032U);
+    animation_frame_and_wait(engine, 1900.0, 7032U);
     const auto half_turn = evaluate(
         engine, angle_expression, "rotation-keyframes-half-turn.js");
     require(
         std::abs(std::strtof(half_turn.c_str(), nullptr) - 180.0F) < 0.1F,
         "rotate() keyframes did not publish a half turn: " + half_turn);
 
-    animation_frame(engine, 2575.0, 7033U);
+    animation_frame_and_wait(engine, 2575.0, 7033U);
     const auto wrapped_quarter_turn = evaluate(
         engine, angle_expression, "rotation-keyframes-wrapped-quarter-turn.js");
     require(

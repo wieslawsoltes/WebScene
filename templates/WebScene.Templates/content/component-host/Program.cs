@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace WebSceneComponentHost;
+namespace WebSceneComponentHostApp;
 
 internal static class Program
 {

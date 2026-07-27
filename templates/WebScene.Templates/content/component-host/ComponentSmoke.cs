@@ -1,6 +1,6 @@
 using WebScene.Sdk;
 
-namespace WebSceneComponentHost;
+namespace WebSceneComponentHostApp;
 
 internal static class ComponentSmoke
 {

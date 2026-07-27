@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using WebScene.Sdk;
 using WebScene.Sdk.Avalonia;
 
-namespace WebSceneComponentHost;
+namespace WebSceneComponentHostApp;
 
 public sealed partial class MainWindow : Window
 {

@@ -4,6 +4,14 @@ project(WebSceneNativeEngineProbe LANGUAGES C CXX)
 include(CTest)
 include(FetchContent)
 
+# CMake 3.24 made extracted archive timestamps deterministic through CMP0135.
+# Use the policy when available while remaining compatible with the Ubuntu
+# 22.04 runner's CMake 3.22, which does not recognize
+# DOWNLOAD_EXTRACT_TIMESTAMP as a FetchContent argument.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 if(MSVC)
     # V8's Windows monolith uses the static CRT. Set the directory default
     # before FetchContent creates IXWebSocket/Mbed TLS targets so the complete
@@ -98,8 +106,7 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         FetchContent_Declare(
             webscene_mbedtls
             URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.4/mbedtls-3.6.4.tar.bz2
-            URL_HASH SHA256=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+            URL_HASH SHA256=ec35b18a6c593cf98c3e30db8b98ff93e8940a8c4e690e66b41dfc011d678110)
         FetchContent_MakeAvailable(webscene_mbedtls)
         set(USE_MBED_TLS ON CACHE BOOL "" FORCE)
         set(USE_ZLIB OFF CACHE BOOL "" FORCE)
@@ -110,11 +117,14 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     else()
         set(USE_ZLIB ON CACHE BOOL "" FORCE)
     endif()
+    # WebScene embeds IXWebSocket and ships only its own runtime library.
+    # Disable IXWebSocket's standalone install export, which otherwise tries
+    # to export private Mbed TLS targets on Windows.
+    set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
         webscene_ixwebsocket
         URL https://github.com/machinezone/IXWebSocket/archive/refs/tags/v12.0.1.tar.gz
-        URL_HASH SHA256=d23bdc91dbfe2b9ae13c322d539392d7a6b8b506560f41c90e227fa0f86a2405
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        URL_HASH SHA256=d23bdc91dbfe2b9ae13c322d539392d7a6b8b506560f41c90e227fa0f86a2405)
     FetchContent_MakeAvailable(webscene_ixwebsocket)
 
     target_sources(webscene_native_engine PRIVATE
