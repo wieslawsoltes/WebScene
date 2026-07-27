@@ -1,13 +1,16 @@
 import { mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
-await mkdir(new URL("./Assets/", import.meta.url), { recursive: true });
+const assetsDirectory = fileURLToPath(new URL("./Assets/", import.meta.url));
+
+await mkdir(assetsDirectory, { recursive: true });
 
 await build({
   entryPoints: {
-    monaco: new URL("./web/editor-entry.js", import.meta.url).pathname
+    monaco: fileURLToPath(new URL("./web/editor-entry.js", import.meta.url))
   },
-  outdir: new URL("./Assets/", import.meta.url).pathname,
+  outdir: assetsDirectory,
   entryNames: "[name]",
   assetNames: "[name]",
   bundle: true,

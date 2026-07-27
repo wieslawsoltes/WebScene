@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
   configureInteropPolicy,
@@ -210,7 +211,7 @@ test('strict discovery fails when a declaration requires an untyped fallback', a
 
   await assert.rejects(
     execFileAsync(process.execPath, [
-      new URL('../interop-discover.mjs', import.meta.url).pathname,
+      fileURLToPath(new URL('../interop-discover.mjs', import.meta.url)),
       '--declarations',
       declarations,
       '--report-output',

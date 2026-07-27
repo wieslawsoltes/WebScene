@@ -4,10 +4,11 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const validator = new URL('../interop-validate.mjs', import.meta.url).pathname;
+const validator = fileURLToPath(new URL('../interop-validate.mjs', import.meta.url));
 
 test('validation command creates a strict all-surface artifact set', async () => {
   const root = await mkdtemp(join(tmpdir(), 'webscene-interop-validate-'));
