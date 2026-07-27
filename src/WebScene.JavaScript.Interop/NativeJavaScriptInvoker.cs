@@ -55,8 +55,15 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
             if (typeof fn !== "function") throw new TypeError(`${path} is not a function.`);
             return [receiver, fn];
           };
-          const globalValue = path =>
-            path.split(".").reduce((value, key) => value[key], globalThis);
+          const globalValue = path => {
+            const parts = path.split(".");
+            const first = parts.shift();
+            let value = first in globalThis
+              ? globalThis[first]
+              : (0, eval)(first);
+            for (const key of parts) value = value[key];
+            return value;
+          };
           const member = (handle, name) => {
             const receiver = get(handle);
             const fn = receiver[name];

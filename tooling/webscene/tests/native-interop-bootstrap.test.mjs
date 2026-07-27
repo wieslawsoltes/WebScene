@@ -27,6 +27,7 @@ test('native interop bootstrap separates JSON values from retained objects', asy
       pending: null,
       plainObject: { active: true }
     };
+    let LexicalWidget = { active: true };
   `, context);
   const bridge = context.__webSceneDotNetInterop;
 
@@ -60,6 +61,8 @@ test('native interop bootstrap separates JSON values from retained objects', asy
     null);
   assert.ok(Number.isInteger(
     bridge.getOptionalGlobalObject('TestLibrary.plainObject')));
+  assert.ok(Number.isInteger(
+    bridge.getOptionalGlobalObject('LexicalWidget')));
   const liveArray = bridge.invokeGlobalValue(
     'TestLibrary.liveArray',
     '[]');
