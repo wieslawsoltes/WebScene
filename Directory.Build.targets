@@ -4,7 +4,7 @@
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';webscene;'))">$(PackageTags);webscene</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';web-components;'))">$(PackageTags);web-components</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';native-ui;'))">$(PackageTags);native-ui</PackageTags>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Refreshes WebScene branding, package descriptions, native runtime platform information, and NuGet documentation.</PackageReleaseNotes>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Prevents empty and zero-glyph native text runs from reaching Skia's shaped-text draw path.</PackageReleaseNotes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>

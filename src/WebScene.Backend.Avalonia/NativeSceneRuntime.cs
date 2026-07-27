@@ -4623,6 +4623,10 @@ public static class NativeTextShaping
         uint featureFlags,
         float tabularDigitScale = 1f)
     {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
         if ((featureFlags & TabularNumerals) == 0)
         {
             return shaper.Shape(text, paint).Width;
@@ -4655,9 +4659,13 @@ public static class NativeTextShaping
         uint featureFlags,
         float tabularDigitScale = 1f)
     {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
         if ((featureFlags & TabularNumerals) == 0)
         {
-            canvas.DrawShapedText(shaper, text, x, baseline, paint);
+            DrawShapedTextRun(canvas, shaper, text, x, baseline, paint);
             return;
         }
 
@@ -4668,7 +4676,7 @@ public static class NativeTextShaping
             if (text[index] is >= '0' and <= '9')
             {
                 var digit = text[index].ToString();
-                canvas.DrawShapedText(shaper, digit, cursor, baseline, paint);
+                DrawShapedTextRun(canvas, shaper, digit, cursor, baseline, paint);
                 cursor += tabularDigitWidth;
                 index++;
                 continue;
@@ -4676,9 +4684,51 @@ public static class NativeTextShaping
             var start = index++;
             while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
             var segment = text[start..index];
-            canvas.DrawShapedText(shaper, segment, cursor, baseline, paint);
+            DrawShapedTextRun(canvas, shaper, segment, cursor, baseline, paint);
             cursor += shaper.Shape(segment, paint).Width;
         }
+    }
+
+    private static void DrawShapedTextRun(
+        SKCanvas canvas,
+        SKShaper shaper,
+        string text,
+        float x,
+        float baseline,
+        SKPaint paint)
+    {
+        var result = shaper.Shape(text, x, baseline, paint);
+        if (result.Codepoints.Length == 0 || result.Points.Length == 0)
+        {
+            return;
+        }
+
+        using var font = paint.ToFont();
+        font.Typeface = shaper.Typeface;
+        using var builder = new SKTextBlobBuilder();
+        var glyphCount = Math.Min(result.Codepoints.Length, result.Points.Length);
+        var run = builder.AllocatePositionedRun(font, glyphCount);
+        var glyphs = run.GetGlyphSpan();
+        var positions = run.GetPositionSpan();
+        for (var index = 0; index < glyphCount; index++)
+        {
+            glyphs[index] = (ushort)result.Codepoints[index];
+            positions[index] = result.Points[index];
+        }
+
+        using var textBlob = builder.Build();
+        if (textBlob is null)
+        {
+            return;
+        }
+
+        var xOffset = paint.TextAlign switch
+        {
+            SKTextAlign.Center => -result.Width * 0.5f,
+            SKTextAlign.Right => -result.Width,
+            _ => 0f,
+        };
+        canvas.DrawText(textBlob, xOffset, 0, paint);
     }
 
     internal static uint ResolveFeatureFlags(
