@@ -72,7 +72,8 @@ export async function discoverInteropSurface(declarationPaths, rootNames = []) {
   ].sort((left, right) =>
     left.qualifiedName.localeCompare(right.qualifiedName));
   const files = await Promise.all(declarationFiles.map(async sourceFile => {
-    const content = await readFile(sourceFile.fileName);
+    const content = (await readFile(sourceFile.fileName, 'utf8'))
+      .replace(/\r\n?/g, '\n');
     return {
       fileName: basename(sourceFile.fileName),
       sha256: createHash('sha256').update(content).digest('hex')

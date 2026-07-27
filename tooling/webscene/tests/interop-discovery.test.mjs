@@ -172,6 +172,25 @@ test('follows imported declaration files and hashes the complete public graph', 
     ['index.d.ts', 'widget.d.ts']);
 });
 
+test('canonicalizes declaration line endings for stable fingerprints', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'webscene-interop-line-endings-'));
+  const declarations = join(root, 'library.d.ts');
+  const source = [
+    'export interface Widget {',
+    '  value(): string;',
+    '}',
+    ''
+  ];
+
+  await writeFile(declarations, source.join('\n'));
+  const lf = await discoverInteropSurface([declarations]);
+  await writeFile(declarations, source.join('\r\n'));
+  const crlf = await discoverInteropSurface([declarations]);
+
+  assert.equal(crlf.apiFingerprint, lf.apiFingerprint);
+  assert.deepEqual(crlf.declarations, lf.declarations);
+});
+
 test('separates exported roots from private dependency declarations', async () => {
   const root = await mkdtemp(join(tmpdir(), 'webscene-interop-exports-'));
   const entry = join(root, 'index.d.ts');
