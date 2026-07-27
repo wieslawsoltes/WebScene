@@ -9,7 +9,7 @@ await build({
   },
   outdir: new URL("./Assets/", import.meta.url).pathname,
   entryNames: "[name]",
-  assetNames: "[name]-[hash]",
+  assetNames: "[name]",
   bundle: true,
   format: "iife",
   platform: "browser",

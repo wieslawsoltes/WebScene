@@ -63,6 +63,7 @@ for template in "${templates[@]}"; do
   dotnet publish "$output/R5Smoke.csproj" -c "$configuration" --no-build -o "$output/publish"
 done
 
+npm ci --prefix "$repo_root/tooling/webscene"
 npm test --prefix "$repo_root/tooling/webscene"
 npm ci --prefix "$repo_root/samples/components"
 npm run build --prefix "$repo_root/samples/components"

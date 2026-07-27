@@ -11,6 +11,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj" />
+    <ProjectReference Include="..\NativeMonacoEditor.Assets\NativeMonacoEditor.Assets.csproj"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
@@ -23,8 +25,14 @@
     <Content Include="..\NativeRuntimeShowcase.Web\showcase.js"
              Link="showcase.js"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\NativeMonacoEditor\Assets\**\*"
-             Link="Assets\%(RecursiveDir)%(Filename)%(Extension)"
+    <Content Include="..\NativeMonacoEditor\Assets\monaco.js"
+             Link="Assets\monaco.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\monaco.css"
+             Link="Assets\monaco.css"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\codicon.ttf"
+             Link="Assets\codicon.ttf"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

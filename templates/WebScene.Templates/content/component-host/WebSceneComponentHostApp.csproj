@@ -15,6 +15,8 @@
     <PackageReference Include="WebScene.Sdk.Avalonia" Version="WEBSCENE_PACKAGE_VERSION" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Component\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Component/**/*"
+             Link="Component/%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

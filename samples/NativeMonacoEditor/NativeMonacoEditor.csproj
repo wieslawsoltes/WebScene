@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\NativeMonacoEditor.Assets\NativeMonacoEditor.Assets.csproj"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
   </ItemGroup>
@@ -21,16 +23,11 @@
     <Content Include="web\app.js"
              Link="app.js"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\**\*"
+    <Content Include="Assets\monaco.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\monaco.css"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\codicon.ttf"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-
-  <Target Name="BuildNativeMonacoAssets"
-          BeforeTargets="PrepareForBuild"
-          Condition="!Exists('$(MSBuildProjectDirectory)\Assets\monaco.js') or !Exists('$(MSBuildProjectDirectory)\Assets\monaco.css')">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
-          Command="npm install --no-audit --no-fund" />
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
-          Command="npm run build:web" />
-  </Target>
 </Project>

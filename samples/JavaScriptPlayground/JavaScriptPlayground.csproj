@@ -34,6 +34,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
+    <ProjectReference Include="..\NativeMonacoEditor.Assets\NativeMonacoEditor.Assets.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Scripts\**\*.*" CopyToOutputDirectory="PreserveNewest" />
@@ -43,17 +45,15 @@
     <Content Include="..\NativeMonacoEditor\web\app.js"
              Link="monaco\app.js"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\NativeMonacoEditor\Assets\**\*"
-             Link="monaco\Assets\%(RecursiveDir)%(Filename)%(Extension)"
+    <Content Include="..\NativeMonacoEditor\Assets\monaco.js"
+             Link="monaco\Assets\monaco.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\monaco.css"
+             Link="monaco\Assets\monaco.css"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\NativeMonacoEditor\Assets\codicon.ttf"
+             Link="monaco\Assets\codicon.ttf"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="BuildNativeMonacoAssets"
-          BeforeTargets="PrepareForBuild"
-          Condition="!Exists('$(MSBuildProjectDirectory)\..\NativeMonacoEditor\Assets\monaco.js') or !Exists('$(MSBuildProjectDirectory)\..\NativeMonacoEditor\Assets\monaco.css')">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\NativeMonacoEditor"
-          Command="npm install --no-audit --no-fund" />
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\..\NativeMonacoEditor"
-          Command="npm run build:web" />
-  </Target>
   <Import Project="..\..\build\WebSceneClearScriptV8Native.targets" />
 </Project>

@@ -46,7 +46,9 @@ jobs:
     - name: React and TypeScript SDK contracts
       run: dotnet test tests/WebScene.Sdk.Tests/WebScene.Sdk.Tests.csproj -c Release --no-build
     - name: TypeScript profile and bundler tooling
-      run: npm test --prefix tooling/webscene
+      run: |
+        npm ci --prefix tooling/webscene
+        npm test --prefix tooling/webscene
     - name: Build and execute R5 component catalog
       run: |
         npm ci --prefix samples/components

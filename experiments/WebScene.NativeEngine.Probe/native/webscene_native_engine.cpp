@@ -2112,13 +2112,8 @@ private:
         // metrics are diagnostic snapshots, not scheduling inputs; keep the cached
         // ABI view reasonably fresh without placing the census on the hot path.
         const auto memory_metrics_now = std::chrono::steady_clock::now();
-        const auto has_compiled_code_snapshot =
-            v8_code_and_metadata_bytes_.load(std::memory_order_relaxed) != 0U
-            || v8_bytecode_and_metadata_bytes_.load(
-                std::memory_order_relaxed) != 0U;
         if (last_memory_metrics_update_
                 != std::chrono::steady_clock::time_point{}
-            && has_compiled_code_snapshot
             && memory_metrics_now - last_memory_metrics_update_
                 < std::chrono::seconds(1)) {
             return;

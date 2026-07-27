@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <IsPackable>false</IsPackable>
+    <MonacoSourceDirectory>$(MSBuildProjectDirectory)\..\NativeMonacoEditor</MonacoSourceDirectory>
+  </PropertyGroup>
+
+  <Target Name="BuildNativeMonacoAssets"
+          BeforeTargets="Build"
+          Condition="!Exists('$(MonacoSourceDirectory)\Assets\monaco.js') or !Exists('$(MonacoSourceDirectory)\Assets\monaco.css') or !Exists('$(MonacoSourceDirectory)\Assets\codicon.ttf')">
+    <Exec WorkingDirectory="$(MonacoSourceDirectory)"
+          Command="npm ci --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(MonacoSourceDirectory)"
+          Command="npm run build:web" />
+  </Target>
+</Project>

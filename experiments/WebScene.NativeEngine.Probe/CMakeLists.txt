@@ -191,11 +191,13 @@ if(MSVC)
     # enforcing its C++20 embedder requirement.
     target_compile_options(webscene_native_engine PRIVATE
         /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
+    target_compile_definitions(webscene_native_engine PRIVATE NOMINMAX)
     if(TARGET webscene_native_engine_tests)
         set_property(TARGET webscene_native_engine_tests PROPERTY
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         target_compile_options(webscene_native_engine_tests PRIVATE
             /std:c++20 /Zc:__cplusplus)
+        target_compile_definitions(webscene_native_engine_tests PRIVATE NOMINMAX)
     endif()
 else()
     target_compile_options(webscene_native_engine PRIVATE

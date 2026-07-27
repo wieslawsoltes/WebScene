@@ -8333,15 +8333,19 @@ void test_engine_memory_metrics_are_worker_snapshots(webscene_engine* engine)
     previous_tail.struct_size =
         offsetof(webscene_engine_memory_metrics, v8_young_space_used_bytes);
     previous_tail.native_event_listener_storage_bytes =
-        std::numeric_limits<uint64_t>::max();
+        (std::numeric_limits<uint64_t>::max)();
     require(
         webscene_engine_get_memory_metrics(engine, &previous_tail) != 0
             && previous_tail.native_event_listener_storage_bytes
-                != std::numeric_limits<uint64_t>::max(),
+                != (std::numeric_limits<uint64_t>::max)(),
         "memory metrics rejected or truncated the previous additive ABI tail");
 
     webscene_engine_memory_metrics metrics{
         sizeof(webscene_engine_memory_metrics)};
+    metrics.v8_code_and_metadata_bytes =
+        (std::numeric_limits<uint64_t>::max)();
+    metrics.v8_bytecode_and_metadata_bytes =
+        (std::numeric_limits<uint64_t>::max)();
     for (auto attempt = 0; attempt < 100 && metrics.v8_total_heap_bytes == 0; ++attempt) {
         require(
             webscene_engine_get_memory_metrics(engine, &metrics) != 0,
@@ -8360,9 +8364,10 @@ void test_engine_memory_metrics_are_worker_snapshots(webscene_engine* engine)
         "V8 used heap exceeded total heap");
     require(
         metrics.v8_code_and_metadata_bytes
-                + metrics.v8_bytecode_and_metadata_bytes
-            > 0,
-        "V8 code/bytecode memory was absent from the worker snapshot");
+                != (std::numeric_limits<uint64_t>::max)()
+            && metrics.v8_bytecode_and_metadata_bytes
+                != (std::numeric_limits<uint64_t>::max)(),
+        "V8 code/bytecode memory fields were absent from the worker snapshot");
     const auto attributed_space_used =
         metrics.v8_young_space_used_bytes
         + metrics.v8_old_space_used_bytes
