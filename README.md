@@ -40,13 +40,17 @@
   <a href="https://www.nuget.org/packages/WebScene.Backend.Avalonia/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg" alt="WebScene Backend NuGet"></a>
 </p>
 
-## Positioning
+## What WebScene enables
 
-**WebScene is a native component runtime for bringing web-authored experiences into Avalonia, Uno Platform, WPF, WinUI, Flutter, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
+**WebScene is a native component runtime for bringing web-authored experiences into Flutter, Uno Platform, WPF, WinUI, Avalonia, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
+
+- **Run advanced existing controls and libraries with high fidelity.** WebScene is exercised against an unchanged [Monaco Editor](docs/monaco-compatibilty.md) bundle and a live [TradingView terminal](samples/NativeRuntimeShowcase/README.md), covering demanding layout, text, Canvas/SVG, input, focus, observers, nested frames, and real-time data.
+- **Generate strongly typed .NET interop APIs from `.d.ts` files.** The TypeScript discovery tool emits the complete named type graph, an editable policy, and a coverage report; the Roslyn generator turns the reviewed surface into C# models, outbound proxies, functions, globals, and inbound adapters.
+- **Compose web and native UI as one application.** Components can call selected host services, participate in native input and lifecycle, and sit alongside XAML/C# or Flutter/Dart controls.
 
 Its engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. Applications can combine those components with native controls, services, menus, accessibility, input, and lifecycle management instead of placing the experience in an isolated browser surface.
 
-WebScene packages trusted, versioned components with explicit compatibility profiles, offline assets, lifecycle diagnostics, and a capability-based bridge to host services. Avalonia is the reference implementation today; Uno Platform and Flutter provide integration proofs, while WPF and WinUI are planned presenters built on the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
+WebScene packages trusted, versioned components with explicit compatibility profiles, offline assets, lifecycle diagnostics, and a capability-based bridge to host services. Flutter and Uno Platform provide integration proofs; WPF and WinUI are planned presenters; Avalonia is the reference implementation today. All presenters share the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
 
 The familiar web authoring model is backed by native scene rendering: WebScene does not embed a WebView, browser control, Chromium/WebKit runtime, or Electron shell.
 
@@ -54,16 +58,19 @@ The WebScene product family includes:
 
 - **WebScene** – the product brand and HTML-like direct-authoring layer.
 - **WebScene.NativeEngine.Runtime** – the native V8, DOM, CSS, layout, and scene engine.
+- **WebScene.Backend.Flutter** and **WebScene.Backend.Uno** – cross-framework integration proofs.
 - **WebScene.Backend.Avalonia** – native scene presentation and Avalonia host integration.
-- **WebScene.Backend.Uno** and **WebScene.Backend.Flutter** – cross-framework integration proofs.
 - **WebScene.Sdk** – versioned component packaging, compatibility, lifecycle, and host-bridge contracts.
 - **WebScene.Sdk.Avalonia** – the XAML-first host for packaged React, TypeScript, and JavaScript components.
+- **WebScene.JavaScript.Interop** and **WebScene.JavaScript.Interop.Generator** – typed .NET interop models, proxies, and adapters generated from reviewed TypeScript declarations.
 - **JavaScript.Avalonia.ClearScript** – the managed compatibility engine and behavioral reference.
 
 ## Highlights
 
 - 🚀 **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread and publish immutable, damage-aware scene diffs to a framework-native presenter.
-- 🌐 **Cross-framework presentation**: Target Avalonia, Uno Platform, Flutter, WPF, and WinUI through a shared runtime, portable contracts, and framework-specific presenters.
+- 🌐 **Cross-framework presentation**: Target Flutter, Uno Platform, WPF, WinUI, and Avalonia through a shared runtime, portable contracts, and framework-specific presenters.
+- 🎛️ **High-fidelity existing controls**: Run sophisticated libraries such as Monaco Editor and TradingView with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
+- 🧬 **`.d.ts`-to-.NET interop**: Generate reviewable, strongly typed C# models, proxies, functions, globals, and callback adapters from TypeScript declaration files.
 - ⚡ **Native application composition**: Combine web components with XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
 - 🧩 **Component hosting**: Mount versioned, offline React/TypeScript/JavaScript bundles through an engine-neutral component profile and framework host.
 - 🧠 **Compatibility by contract**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines; promote support through conformance gates.
@@ -72,21 +79,79 @@ The WebScene product family includes:
 - 🖼️ **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right shape.
 - 🪶 **Browserless integration**: Deliver web-authored components without a WebView or embedded browser runtime.
 
+## Proven with demanding web libraries
+
+WebScene targets more than small custom widgets. Its native compatibility and rendering
+gates exercise sophisticated, existing web software without replacing it with a
+framework-specific rewrite.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/monaco-editor.png" alt="Monaco Editor running through WebScene's native scene runtime" width="100%">
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/tradingview-terminal.jpg" alt="TradingView terminal public sample running through WebScene" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Monaco Editor</strong><br><sub>Native text layout, syntax highlighting, editing, selection, and folding</sub></td>
+    <td align="center"><strong>TradingView terminal</strong><br><sub>Live charts, WebSockets, nested frames, toolbars, and interaction</sub></td>
+  </tr>
+</table>
+
+| Existing library | Demonstrated behavior |
+| --- | --- |
+| [Monaco Editor](docs/monaco-compatibilty.md) | An unchanged Monaco 0.56.0 bundle with measured text and layout, DOM mutation, syntax highlighting, focus, pointer selection, typing, and code folding. |
+| [TradingView terminal](samples/NativeRuntimeShowcase/README.md) | A live hosted terminal using nested frames, Canvas rendering, WebSockets, pointer and keyboard input, responsive layout, and interactive controls. |
+
+## Generate typed .NET APIs from `.d.ts`
+
+WebScene can turn a library's TypeScript declarations into a reviewable, strongly typed
+.NET interop surface:
+
+```text
+library.d.ts
+    → type-graph discovery
+    → API manifest + editable policy + coverage report
+    → Roslyn source generation
+    → C# models + proxies + functions + globals + inbound adapters
+```
+
+Run discovery directly or use `webscene-interop-validate` to make declaration drift and
+unsupported fallbacks fail in CI:
+
+```bash
+node tooling/webscene/interop-discover.mjs \
+  --declarations path/to/library.d.ts \
+  --output obj/library.webscene-interop-api.json \
+  --policy-output library.webscene-interop-policy.json \
+  --report-output obj/library.coverage.json \
+  --namespace MyApp.Interop \
+  --fail-on-fallbacks
+```
+
+The [TradingView all-surface gate](samples/TradingViewInterop.AllGenerated/README.md)
+demonstrates full declaration discovery with no handwritten C#, while the
+[native runtime showcase](samples/NativeRuntimeShowcase/README.md) generates its
+Monaco .NET API from `MonacoApi.d.ts` at build time.
+
 ## Repository Layout
 
 | Path | Description |
 | --- | --- |
 | `src/WebScene.Core` | UI-framework-neutral values and host/backend contracts. |
 | `src/WebScene.Backend.Abstractions` | Backend manifests, validation, and capability negotiation. |
-| `src/WebScene.Backend.Avalonia` | Current Avalonia presentation implementation. |
-| `src/WebScene.Backend.Uno` | Uno Platform native-scene integration proof. |
 | `src/WebScene.Backend.Flutter` | Flutter native-scene integration proof. |
+| `src/WebScene.Backend.Uno` | Uno Platform native-scene integration proof. |
+| `src/WebScene.Backend.Avalonia` | Current Avalonia presentation implementation. |
 | `src/WebScene` | WebScene markup library and HTML element implementations. |
 | `src/JavaScript.Avalonia` | Engine-neutral browser/DOM services for Avalonia. |
 | `src/JavaScript.Avalonia.ClearScript` | ClearScript/V8 execution adapter and shared compilation cache. |
+| `src/WebScene.JavaScript.Interop*` | Runtime contracts and Roslyn source generation for strongly typed `.d.ts`-derived .NET APIs. |
 | `src/WebScene.Sdk` | Portable Component Profile 1 product contracts and host bridge. |
 | `src/WebScene.Sdk.Avalonia` | Avalonia `WebSceneComponentHost` for packaged components. |
-| `tooling/webscene` | Bounded TypeScript declarations, checker, and Vite/esbuild plugins. |
+| `tooling/webscene` | TypeScript declaration discovery and validation, component checker, and Vite/esbuild plugins. |
 | `templates/WebScene.Templates` | Component-host, hybrid, and TypeScript `dotnet new` templates. |
 | `samples/components` | Twelve versioned, offline component packages shared by backends. |
 | `samples/hosts/Avalonia` | Runnable `.csproj` hosts: the R5 catalog and three standalone product shapes. |
@@ -95,7 +160,7 @@ The WebScene product family includes:
 | `packaging/WebScene.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
 | `samples/website` | WebScene showcase demonstrating markup, styling, and canvas scripting. |
 | `samples/JavaScriptPlayground` | Interactive playground with editable XAML, live preview, and JavaScript console for `JavaScript.Avalonia`. |
-| `samples/NativeRuntimeShowcase.*` | Native TradingView canvas and generated-.NET-API Monaco showcase for Avalonia and Uno. |
+| `samples/NativeRuntimeShowcase.*` | Native TradingView canvas and generated-.NET-API Monaco showcase for Uno Platform and Avalonia. |
 
 ## Getting Started
 
@@ -304,7 +369,7 @@ WebScene portable cores + native V8/immutable-scene runtime
                 ↓
 Framework presenters and hosts
                 ↓
-Avalonia · Uno Platform · Flutter · WPF · WinUI
+Flutter · Uno Platform · WPF · WinUI · Avalonia
 ```
 
 R0 through R5 are complete: the semantic cores are portable, Avalonia is the reference
@@ -318,20 +383,21 @@ frameworks.
 WebScene supports a managed ClearScript/Avalonia compatibility mode and a native V8 mode
 that publishes immutable scene diffs. See [Managed and native backends](docs/backends.md)
 for selection guidance, runtime packages, release automation, and the precise status of
-Avalonia, Uno Platform, Flutter, WPF, WinUI, and direct GPU backend extensibility. The
+Flutter, Uno Platform, WPF, WinUI, Avalonia, and direct GPU backend extensibility. The
 portable contracts are ready for backend authoring, but the shared coordinators and
 native scene-reader SDK still need extraction before every framework is a turnkey
 integration.
 
 ## Roadmap
 
-WebScene's immediate roadmap is to mature the native Avalonia reference path and extract
-the stable presenter SDK shared by every host framework: close application lifecycle
-and reliability gaps, promote native capability groups through shared compatibility
-gates, complete differential and unsupported-feature evidence, and keep the reusable
-runtime boundary exercised by real applications.
+WebScene's immediate roadmap is to extract the stable presenter SDK shared by Flutter,
+Uno Platform, WPF, WinUI, and Avalonia while continuing to mature the native Avalonia
+reference path: close application lifecycle and reliability gaps, promote native
+capability groups through shared compatibility gates, complete differential and
+unsupported-feature evidence, and keep the reusable runtime boundary exercised by real
+applications.
 
-The Uno Platform and Flutter proofs validate that boundary across managed and native
+The Flutter and Uno Platform proofs validate that boundary across managed and native
 host models. WPF and WinUI presenters follow once the scene-reader SDK and ABI are
 stable. Each framework integration should consume the same tested runtime rather than
 forking the DOM, CSS, JavaScript, or scene engines.
