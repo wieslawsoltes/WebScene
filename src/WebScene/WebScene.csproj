@@ -8,9 +8,9 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
   <PropertyGroup>
-    <Description>An HTML markup support for Avalonia.</Description>
+    <Description>WebScene's Avalonia-native component runtime and HTML-like authoring layer for React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG without a WebView or embedded browser.</Description>
     <PackageId>WebScene</PackageId>
-    <PackageTags>html;axaml;xaml;markup;avalonia;avaloniaui</PackageTags>
+    <PackageTags>html;axaml;xaml;markup;avalonia;avaloniaui;react;typescript;dom;css;canvas;svg</PackageTags>
   </PropertyGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8981</NoWarn>

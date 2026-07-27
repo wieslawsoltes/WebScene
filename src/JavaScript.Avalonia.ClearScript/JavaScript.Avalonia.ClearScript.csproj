@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>true</IsPackable>
-    <Description>Optional ClearScript V8 runtime for JavaScript.Avalonia.</Description>
+    <Description>Optional ClearScript V8 adapter for WebScene JavaScript execution in Avalonia-native component hosts.</Description>
     <PackageId>JavaScript.Avalonia.ClearScript</PackageId>
-    <PackageTags>avalonia;javascript;v8;clearscript</PackageTags>
+    <PackageTags>avalonia;javascript;v8;clearscript;component-host</PackageTags>
     <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>

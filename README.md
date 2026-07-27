@@ -257,11 +257,11 @@ dotnet run
 The web build runs the bounded compatibility checker and emits a versioned
 `webscene-component.json`. Host services are available only through declared,
 asynchronous `webscene.host.*` capabilities. Applications must also ship the reviewed
-RID-specific ClearScript/V8 native package used by the component-host workflow.
+RID-specific WebScene native runtime package used by the component-host workflow.
 
 ### Consuming the libraries
 
-The current package line is prerelease. The native scene engine is the flagship runtime
+The stable package line is production-ready. The native scene engine is the flagship runtime
 for production workloads: it owns V8, DOM/CSS, layout, input, and scene construction
 off the UI thread, and the Avalonia host consumes immutable scene handles. The native
 engine is promoted by capability and performance gates rather than silent fallback.
@@ -276,11 +276,11 @@ Add the Avalonia backend and the native runtime package matching the target plat
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.0" />
+  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.1" />
   <!-- Choose one runtime package for the target platform. -->
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.0" />
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.0" /> -->
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.0" /> -->
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.1" />
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.1" /> -->
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.1" /> -->
 </ItemGroup>
 ```
 

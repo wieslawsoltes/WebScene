@@ -3,13 +3,14 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <NoWarn>$(NoWarn);NU1507</NoWarn>
-    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionPrefix>1.0.1</VersionPrefix>
     <Authors>Wiesław Šoltés</Authors>
     <Company>Wiesław Šoltés</Company>
     <Copyright>Copyright © Wiesław Šoltés 2025</Copyright>
     <PackageProjectUrl>https://github.com/wieslawsoltes/WebScene</PackageProjectUrl>
     <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageIcon>webscene-logo.jpg</PackageIcon>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
@@ -26,6 +27,10 @@
     <None Include="$(MSBuildThisFileDirectory)LICENSE"
           Pack="true"
           PackagePath=""
+          Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)docs\assets\webscene-logo.jpg"
+          Pack="true"
+          PackagePath="webscene-logo.jpg"
           Visible="false" />
   </ItemGroup>
 </Project>

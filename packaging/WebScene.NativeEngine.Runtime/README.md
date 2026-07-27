@@ -24,11 +24,19 @@ network stack.
 Applications must target the same `RuntimeIdentifier`; mixing runtime packages and
 RIDs is rejected during the build.
 
-Install the package matching the application's deployment RID, for example:
+Install the package matching the application's deployment RID:
 
 ```xml
 <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="VERSION" />
+<!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="VERSION" /> -->
+<!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="VERSION" /> -->
 ```
 
-The release workflow builds `osx-arm64`, `linux-x64`, and `win-x64`. Additional RIDs
-listed by the package definition are reserved until their release lanes are enabled.
+| Target platform | Runtime identifier | Package |
+| --- | --- | --- |
+| macOS on Apple silicon | `osx-arm64` | [`WebScene.NativeEngine.Runtime.osx-arm64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/) |
+| Linux x64 | `linux-x64` | [`WebScene.NativeEngine.Runtime.linux-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/) |
+| Windows x64 | `win-x64` | [`WebScene.NativeEngine.Runtime.win-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/) |
+
+Additional RIDs listed by the package definition are reserved until their release
+lanes are enabled.

@@ -6,11 +6,16 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <PackageId Condition="'$(WebSceneNativeEngineRid)' != ''">WebScene.NativeEngine.Runtime.$(WebSceneNativeEngineRid)</PackageId>
     <PackageId Condition="'$(PackageId)' == ''">WebScene.NativeEngine.Runtime.Template</PackageId>
-    <Description>RID-specific native V8 DOM, CSS, layout and immutable-scene engine for WebScene.</Description>
+    <WebSceneNativeEnginePlatformName>$(WebSceneNativeEngineRid)</WebSceneNativeEnginePlatformName>
+    <WebSceneNativeEnginePlatformName Condition="'$(WebSceneNativeEngineRid)' == 'osx-arm64'">macOS on Apple silicon</WebSceneNativeEnginePlatformName>
+    <WebSceneNativeEnginePlatformName Condition="'$(WebSceneNativeEngineRid)' == 'linux-x64'">Linux x64</WebSceneNativeEnginePlatformName>
+    <WebSceneNativeEnginePlatformName Condition="'$(WebSceneNativeEngineRid)' == 'win-x64'">Windows x64</WebSceneNativeEnginePlatformName>
+    <Title>WebScene Native Engine Runtime for $(WebSceneNativeEnginePlatformName)</Title>
+    <Description>Native WebScene V8, DOM, CSS, layout, Canvas, SVG, and immutable-scene runtime for $(WebSceneNativeEnginePlatformName) ($(WebSceneNativeEngineRid)), built to run web components in native applications without a WebView or embedded browser.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>webscene;dom;css;v8;native;runtime</PackageTags>
+    <PackageTags>webscene;web-components;dom;css;canvas;svg;v8;native;runtime;$(WebSceneNativeEngineRid)</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <WebSceneNativeEngineAbiVersion>2</WebSceneNativeEngineAbiVersion>
     <WebSceneNativeEngineV8Revision>14.7.173.23</WebSceneNativeEngineV8Revision>

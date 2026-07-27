@@ -29,6 +29,8 @@ MANAGED_PACKAGE_IDS = {
     "JavaScript.Avalonia.ClearScript",
 }
 DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
+REPOSITORY_URL = "https://github.com/wieslawsoltes/WebScene"
+REQUIRED_PACKAGE_TAGS = {"webscene", "web-components", "native-ui"}
 
 
 def read_nuspec(package: pathlib.Path) -> tuple[str, str, list[tuple[str, str]]]:
@@ -58,6 +60,69 @@ def sha256(path: pathlib.Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def validate_package_metadata(package: pathlib.Path, package_id: str) -> dict[str, object]:
+    with zipfile.ZipFile(package) as archive:
+        names = set(archive.namelist())
+        nuspec_name = next(name for name in names if name.endswith(".nuspec"))
+        root = ET.fromstring(archive.read(nuspec_name))
+        namespace = root.tag.partition("}")[0].lstrip("{")
+        prefix = f"{{{namespace}}}" if namespace else ""
+        metadata = root.find(f"{prefix}metadata")
+        if metadata is None:
+            raise RuntimeError(f"{package}: missing nuspec metadata")
+
+        def required_text(name: str) -> str:
+            value = metadata.findtext(f"{prefix}{name}")
+            if not value or not value.strip():
+                raise RuntimeError(f"{package_id}: missing NuGet {name} metadata")
+            return value.strip()
+
+        title = required_text("title")
+        description = required_text("description")
+        icon = required_text("icon")
+        readme = required_text("readme")
+        project_url = required_text("projectUrl")
+        release_notes = required_text("releaseNotes")
+        license_file = required_text("license")
+        tags_text = required_text("tags")
+        tags = set(tags_text.replace(";", " ").split())
+        repository = metadata.find(f"{prefix}repository")
+        repository_url = repository.attrib.get("url") if repository is not None else None
+
+        if "WebScene" not in description:
+            raise RuntimeError(
+                f"{package_id}: description does not identify the WebScene product"
+            )
+        if project_url != REPOSITORY_URL or repository_url != REPOSITORY_URL:
+            raise RuntimeError(
+                f"{package_id}: package and repository URLs must point to {REPOSITORY_URL}"
+            )
+        missing_tags = sorted(REQUIRED_PACKAGE_TAGS - tags)
+        if missing_tags:
+            raise RuntimeError(
+                f"{package_id}: missing NuGet tags: {', '.join(missing_tags)}"
+            )
+        for packaged_file, metadata_name in (
+            (icon, "icon"),
+            (readme, "readme"),
+            (license_file, "license"),
+        ):
+            if packaged_file not in names:
+                raise RuntimeError(
+                    f"{package_id}: NuGet {metadata_name} file is not packaged: "
+                    f"{packaged_file}"
+                )
+
+    return {
+        "title": title,
+        "description": description,
+        "icon": icon,
+        "readme": readme,
+        "tags": sorted(tags),
+        "releaseNotes": release_notes,
+    }
 
 
 def validate_template_defaults(package: pathlib.Path, version: str) -> None:
@@ -114,6 +179,13 @@ def validate_native_runtime(
         if manifest_name not in archive.namelist():
             raise RuntimeError(f"{package}: missing {manifest_name}")
         manifest = json.loads(archive.read(manifest_name))
+        native_readme = archive.read("README.md").decode("utf-8")
+        for published_rid in sorted(DEFAULT_NATIVE_RIDS):
+            expected_package_id = f"WebScene.NativeEngine.Runtime.{published_rid}"
+            if expected_package_id not in native_readme:
+                raise RuntimeError(
+                    f"{package}: native readme does not list {expected_package_id}"
+                )
 
     expected = {
         "schemaVersion": 1,
@@ -150,6 +222,7 @@ def main() -> int:
 
     packages: dict[str, pathlib.Path] = {}
     dependencies: dict[str, list[tuple[str, str]]] = {}
+    package_metadata: dict[str, dict[str, object]] = {}
     for package in sorted(args.package_directory.glob("*.nupkg")):
         if package.name.endswith(".snupkg"):
             continue
@@ -166,6 +239,7 @@ def main() -> int:
             )
         packages[package_id] = package
         dependencies[package_id] = package_dependencies
+        package_metadata[package_id] = validate_package_metadata(package, package_id)
 
     missing = sorted(expected_ids - packages.keys())
     if missing:
@@ -216,6 +290,7 @@ def main() -> int:
                     {"id": dependency_id, "version": dependency_version}
                     for dependency_id, dependency_version in dependencies[package_id]
                 ],
+                "metadata": package_metadata[package_id],
             }
             for package_id in sorted(packages)
         },
