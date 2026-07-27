@@ -63,7 +63,8 @@
 
 <p align="center">
   <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/"><img src="https://img.shields.io/nuget/vpre/WebScene.NativeEngine.Runtime.osx-arm64.svg?label=WebScene.NativeEngine.Runtime.osx-arm64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.osx-arm64 NuGet"></a>
-  <a href="https://www.nuget.org/packages/JavaScript.Avalonia.ClearScript.Native.osx-arm64/"><img src="https://img.shields.io/nuget/vpre/JavaScript.Avalonia.ClearScript.Native.osx-arm64.svg?label=JavaScript.Avalonia.ClearScript.Native.osx-arm64&amp;style=flat-square" alt="JavaScript.Avalonia.ClearScript.Native.osx-arm64 NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/"><img src="https://img.shields.io/nuget/vpre/WebScene.NativeEngine.Runtime.linux-x64.svg?label=WebScene.NativeEngine.Runtime.linux-x64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.linux-x64 NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/"><img src="https://img.shields.io/nuget/vpre/WebScene.NativeEngine.Runtime.win-x64.svg?label=WebScene.NativeEngine.Runtime.win-x64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.win-x64 NuGet"></a>
 </p>
 
 ## What WebScene enables
@@ -271,18 +272,26 @@ packaged assets and conformance tests can be promoted to the native scene host a
 capability group is validated. See [Managed and native backends](docs/backends.md) and
 [the native scene-engine design](docs/architecture/native-v8-scene-engine.md).
 
-An Avalonia host using the opt-in native scene engine on macOS ARM64 uses:
+Add the Avalonia backend and the native runtime package matching the target platform:
 
 ```xml
 <ItemGroup>
   <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.0" />
+  <!-- Choose one runtime package for the target platform. -->
   <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.0" />
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.0" /> -->
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.0" /> -->
 </ItemGroup>
 ```
 
-The runtime package copies the native module, ICU data, and version/ABI manifest to
-build and publish output. Verified runtime packages are produced for `osx-arm64`,
-`linux-x64`, and `win-x64`.
+| Target platform | Runtime identifier | Native runtime package |
+| --- | --- | --- |
+| macOS on Apple silicon | `osx-arm64` | [`WebScene.NativeEngine.Runtime.osx-arm64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/) |
+| Linux x64 | `linux-x64` | [`WebScene.NativeEngine.Runtime.linux-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/) |
+| Windows x64 | `win-x64` | [`WebScene.NativeEngine.Runtime.win-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/) |
+
+Each runtime package copies the native module, ICU data, and version/ABI manifest
+to build and publish output.
 
 ## Using the HTML-like authoring layer
 
