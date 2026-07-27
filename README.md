@@ -13,8 +13,8 @@
 <table align="center">
   <tr>
     <td align="center" width="120">
-      <a href="https://avaloniaui.net/"><img src="docs/assets/platforms/avalonia.svg" alt="Avalonia" height="52"></a><br>
-      <strong>Avalonia</strong>
+      <a href="https://flutter.dev/"><img src="docs/assets/platforms/flutter.svg" alt="Flutter" height="52"></a><br>
+      <strong>Flutter</strong>
     </td>
     <td align="center" width="120">
       <a href="https://platform.uno/"><img src="docs/assets/platforms/uno.svg" alt="Uno Platform" height="52"></a><br>
@@ -29,8 +29,8 @@
       <strong>WinUI</strong>
     </td>
     <td align="center" width="120">
-      <a href="https://flutter.dev/"><img src="docs/assets/platforms/flutter.svg" alt="Flutter" height="52"></a><br>
-      <strong>Flutter</strong>
+      <a href="https://avaloniaui.net/"><img src="docs/assets/platforms/avalonia.svg" alt="Avalonia" height="52"></a><br>
+      <strong>Avalonia</strong>
     </td>
   </tr>
 </table>
