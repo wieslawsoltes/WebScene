@@ -2,24 +2,31 @@
   <img src="docs/assets/webscene-logo.jpg" alt="WebScene" width="900">
 </p>
 
-[![WebScene NuGet](https://img.shields.io/nuget/vpre/WebScene.svg)](https://www.nuget.org/packages/WebScene/) [![WebScene Backend NuGet](https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg)](https://www.nuget.org/packages/WebScene.Backend.Avalonia/)
+<h1 align="center">WebScene</h1>
 
-WebScene is a native V8 and immutable-scene runtime for [Avalonia](https://avaloniaui.net/). Its flagship path runs JavaScript, DOM/CSS state, layout, input dispatch, Canvas, and SVG on a native engine thread, then publishes immutable scene diffs to the Avalonia compositor. This keeps hot UI work out of the managed object graph and UI dispatcher while preserving a browser-shaped compatibility surface for packaged React, TypeScript, and JavaScript components.
+<p align="center"><strong>Web components. Native performance.</strong></p>
 
-Avalonia remains responsible for the application window, scene presentation, platform input, lifecycle, and native .NET integration. The result is a high-performance native desktop surface without Chromium, WebKit, Electron, or a WebView. WebScene's HTML-like markup and DOM APIs are the compatibility layer and direct authoring surface, not a promise to run arbitrary websites or to reproduce a complete browser.
+<p align="center">
+  <a href="https://www.nuget.org/packages/WebScene/"><img src="https://img.shields.io/nuget/vpre/WebScene.svg" alt="WebScene NuGet"></a>
+  <a href="https://www.nuget.org/packages/WebScene.Backend.Avalonia/"><img src="https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg" alt="WebScene Backend NuGet"></a>
+</p>
 
-Compatibility is explicit and testable: managed ClearScript/Avalonia mode remains the behavioral oracle and compatibility fallback, while native support is promoted by shared conformance, rendering, input, and performance gates.
+## Positioning
 
-The repository contains the runtime, component-hosting SDK, and Avalonia integration:
+**WebScene is a native runtime for bringing packaged web-authored components into .NET desktop applications.** It lets teams build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while the host application retains native windows, composition, input, lifecycle, and .NET integration.
 
-- **WebScene** – the HTML-like markup and direct authoring layer, with styling and Canvas support.
-- **WebScene.Backend.Avalonia** – the Avalonia scene presenter, native runtime host, and managed presentation services.
-- **WebScene.NativeEngine.Runtime** – RID-specific native V8/DOM/CSS/layout/scene runtime packages.
-- **JavaScript.Avalonia.ClearScript** – the managed ClearScript/V8 compatibility engine, module loader, virtual-iframe runtime, and compilation cache.
-- **WebScene.Sdk** – versioned component manifests, compatibility checks, offline assets, lifecycle diagnostics, and the capability-based host bridge.
-- **WebScene.Sdk.Avalonia** – the XAML-first packaged React/TypeScript component host.
+WebScene is not a browser and does not embed Chromium, WebKit, Electron, or a WebView. Its native engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to the [Avalonia](https://avaloniaui.net/) compositor. The result is a browser-shaped development model backed by a native rendering pipeline.
 
-Together they make JavaScript UI components first-class citizens in native Avalonia applications, combining native-scene performance with an explicit and intentionally bounded web-platform profile.
+The platform is designed for trusted, versioned, offline component bundles and application-owned experiences—not arbitrary websites or full browser compatibility. Its supported web-platform profile is explicit and testable, with shared conformance, rendering, input, and performance gates across the native engine and managed ClearScript/Avalonia fallback.
+
+The WebScene product family includes:
+
+- **WebScene** – the product brand and HTML-like direct-authoring layer.
+- **WebScene.NativeEngine.Runtime** – the native V8, DOM, CSS, layout, and scene engine.
+- **WebScene.Backend.Avalonia** – native scene presentation and Avalonia host integration.
+- **WebScene.Sdk** – versioned component packaging, compatibility, lifecycle, and host-bridge contracts.
+- **WebScene.Sdk.Avalonia** – the XAML-first host for packaged React, TypeScript, and JavaScript components.
+- **JavaScript.Avalonia.ClearScript** – the managed compatibility engine and behavioral reference.
 
 ## Usage Restriction Notice
 
