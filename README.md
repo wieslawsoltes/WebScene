@@ -1,4 +1,6 @@
-# WebScene
+<p align="center">
+  <img src="docs/assets/webscene-logo.jpg" alt="WebScene" width="900">
+</p>
 
 [![WebScene NuGet](https://img.shields.io/nuget/vpre/WebScene.svg)](https://www.nuget.org/packages/WebScene/) [![WebScene Backend NuGet](https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg)](https://www.nuget.org/packages/WebScene.Backend.Avalonia/)
 
