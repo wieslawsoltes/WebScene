@@ -15,11 +15,14 @@ MANAGED_PACKAGE_IDS = {
     "WebScene",
     "WebScene.Backend.Abstractions",
     "WebScene.Backend.Avalonia",
+    "WebScene.Backend.Uno",
     "WebScene.Core",
     "WebScene.Css",
     "WebScene.Dom",
     "WebScene.Graphics",
     "WebScene.JavaScript",
+    "WebScene.JavaScript.Interop",
+    "WebScene.JavaScript.Interop.Generator",
     "WebScene.Sdk",
     "WebScene.Sdk.Avalonia",
     "WebScene.Templates",
@@ -190,7 +193,10 @@ def main() -> int:
         package.name.removesuffix(f".{args.version}.snupkg")
         for package in args.package_directory.glob(f"*.{args.version}.snupkg")
     }
-    expected_symbol_ids = MANAGED_PACKAGE_IDS - {"WebScene.Templates"}
+    expected_symbol_ids = MANAGED_PACKAGE_IDS - {
+        "WebScene.JavaScript.Interop.Generator",
+        "WebScene.Templates",
+    }
     missing_symbols = sorted(expected_symbol_ids - symbol_ids)
     if missing_symbols:
         raise RuntimeError("Missing symbol packages: " + ", ".join(missing_symbols))

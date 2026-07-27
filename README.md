@@ -275,14 +275,14 @@ An Avalonia host using the opt-in native scene engine on macOS ARM64 uses:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="11.3.4-alpha.6" />
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="11.3.4-alpha.6" />
+  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.0" />
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.0" />
 </ItemGroup>
 ```
 
 The runtime package copies the native module, ICU data, and version/ABI manifest to
-build and publish output. `win-x64` and `linux-x64` publishing are temporarily
-deferred while their pinned V8 builds move to faster, independently validated lanes.
+build and publish output. Verified runtime packages are produced for `osx-arm64`,
+`linux-x64`, and `win-x64`.
 
 ## Using the HTML-like authoring layer
 

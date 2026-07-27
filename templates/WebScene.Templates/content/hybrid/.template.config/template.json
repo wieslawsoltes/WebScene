@@ -11,7 +11,7 @@
     "websceneVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "11.3.4-alpha.6",
+      "defaultValue": "1.0.0",
       "replaces": "WEBSCENE_PACKAGE_VERSION"
     }
   },
