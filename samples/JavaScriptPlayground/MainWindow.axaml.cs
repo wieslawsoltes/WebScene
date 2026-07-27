@@ -19,7 +19,7 @@ using AvaloniaEdit.TextMate;
 using TextMateSharp.Grammars;
 using System.Linq;
 using Avalonia.VisualTree;
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
 using JavaScript.Avalonia.ClearScript;
 #endif
 
@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private readonly List<AvaloniaBrowserHost> _hosts = new();
     private readonly List<Control> _documentRoots = new();
     private Preset? _activePreset;
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
     private readonly List<ClearScriptV8Runtime> _v8Runtimes = new();
     private readonly ClearScriptV8SharedCache _v8SharedCache = CreatePlaygroundV8Cache();
     private CancellationTokenSource? _v8PreparationCancellation;
@@ -181,7 +181,7 @@ public partial class MainWindow : Window
             var cachePath = Path.Combine(
                 Environment.GetFolderPath(
                     Environment.SpecialFolder.LocalApplicationData),
-                "HtmlML",
+                "WebScene",
                 "JavaScriptPlayground",
                 "native-monaco-v8-cache");
             await NativeMonacoHost.LoadAsync(
@@ -219,7 +219,7 @@ public partial class MainWindow : Window
                 + error.Message
                 + "\n\nPass --native-library /absolute/path/to/"
                 + NativeLibraryFileName()
-                + " or set HTMLML_NATIVE_ENGINE_LIBRARY.";
+                + " or set WEBSCENE_NATIVE_ENGINE_LIBRARY.";
             NativeMonacoFailure.IsVisible = true;
         }
     }
@@ -264,7 +264,7 @@ public partial class MainWindow : Window
             var cachePath = Path.Combine(
                 Environment.GetFolderPath(
                     Environment.SpecialFolder.LocalApplicationData),
-                "HtmlML",
+                "WebScene",
                 "JavaScriptPlayground",
                 "native-tradingview-v8-cache");
             await NativeTradingViewHost.LoadAsync(
@@ -305,7 +305,7 @@ public partial class MainWindow : Window
                 + error.Message
                 + "\n\nPass --native-library /absolute/path/to/"
                 + NativeLibraryFileName()
-                + " or set HTMLML_NATIVE_ENGINE_LIBRARY.";
+                + " or set WEBSCENE_NATIVE_ENGINE_LIBRARY.";
             NativeTradingViewFailure.IsVisible = true;
         }
     }
@@ -327,7 +327,7 @@ public partial class MainWindow : Window
                       .map(frame => frame.contentWindow)
                   ]
                     .map(realm =>
-                      realm?.__htmlMlWebSocketDiagnostics?.() ?? null)
+                      realm?.__webSceneWebSocketDiagnostics?.() ?? null)
                     .filter(Boolean)
                     .reduce((total, current) => ({
                       opened: total.opened + current.opened,
@@ -376,7 +376,7 @@ public partial class MainWindow : Window
         }
 
         var configured = Environment.GetEnvironmentVariable(
-            "HTMLML_NATIVE_ENGINE_LIBRARY");
+            "WEBSCENE_NATIVE_ENGINE_LIBRARY");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return Path.GetFullPath(configured);
@@ -391,16 +391,16 @@ public partial class MainWindow : Window
         }
 
         throw new FileNotFoundException(
-            "No HtmlML native engine was configured.",
+            "No WebScene native engine was configured.",
             packaged);
     }
 
     private static string NativeLibraryFileName()
         => OperatingSystem.IsWindows()
-            ? "htmlml_native_engine.dll"
+            ? "webscene_native_engine.dll"
             : OperatingSystem.IsMacOS()
-                ? "libhtmlml_native_engine.dylib"
-                : "libhtmlml_native_engine.so";
+                ? "libwebscene_native_engine.dylib"
+                : "libwebscene_native_engine.so";
 
     private void PresetComboOnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -438,7 +438,7 @@ public partial class MainWindow : Window
 
     private async void OnRunScriptClick(object? sender, RoutedEventArgs e)
     {
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
         if (_v8PreparationTask is { IsCompleted: false } preparation)
         {
             SetStatus("Waiting for background V8 compilation...", false);
@@ -471,7 +471,7 @@ public partial class MainWindow : Window
             PreviewHost.InvalidateArrange();
             Dispatcher.UIThread.RunJobs();
 
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
             DisposeSessions();
             SetDomLoadingOverlay(true, "Compiling JavaScript");
             SetStatus("⠋ Compiling JavaScript off the UI thread...", false);
@@ -497,7 +497,7 @@ public partial class MainWindow : Window
         }
     }
 
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
     private void BeginV8Preparation(int loadVersion, bool runScript)
     {
         _v8PreparationCancellation?.Cancel();
@@ -693,11 +693,11 @@ public partial class MainWindow : Window
     private static ClearScriptV8SharedCache CreatePlaygroundV8Cache()
     {
         var configuredDirectory = Environment.GetEnvironmentVariable(
-            "HTMLML_PLAYGROUND_V8_CACHE_DIRECTORY");
+            "WEBSCENE_PLAYGROUND_V8_CACHE_DIRECTORY");
         var directory = string.IsNullOrWhiteSpace(configuredDirectory)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "HtmlML",
+                "WebScene",
                 "JavaScriptPlayground",
                 "v8-cache")
             : configuredDirectory;
@@ -712,8 +712,8 @@ public partial class MainWindow : Window
 
     private static string CreateNativeCompatibilityTag()
     {
-        var configuredPath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
-        var rid = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_RID")
+        var configuredPath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
+        var rid = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_RID")
                   ?? RuntimeInformation.RuntimeIdentifier;
         var extension = rid.StartsWith("win-", StringComparison.Ordinal)
             ? "dll"
@@ -837,7 +837,7 @@ public partial class MainWindow : Window
             currentHost => new PlaygroundDomDocument(currentHost, documentRoot));
         _hosts.Add(host);
 
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
         var runtime = new ClearScriptV8Runtime(
             host,
             new ClearScriptV8RuntimeOptions
@@ -869,7 +869,7 @@ if (typeof globalThis !== 'undefined') {
 
     private void DisposeSessions()
     {
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
         for (var index = _v8Runtimes.Count - 1; index >= 0; index--)
         {
             _v8Runtimes[index].Dispose();
@@ -1006,14 +1006,14 @@ if (typeof globalThis !== 'undefined') {
         _nativeTradingViewCancellation?.Cancel();
         _nativeTradingViewCancellation?.Dispose();
         _nativeTradingViewCancellation = null;
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
         _v8PreparationCancellation?.Cancel();
         _v8PreparationCancellation?.Dispose();
         _v8PreparationCancellation = null;
         StopV8PreparationIndicator();
 #endif
         DisposeSessions();
-#if HTMLML_CLEARSCRIPT_V8
+#if WEBSCENE_CLEARSCRIPT_V8
         _v8SharedCache.Clear();
 #endif
         await NativeMonacoHost.DisposeAsync();
@@ -1041,7 +1041,7 @@ if (typeof globalThis !== 'undefined') {
         CornerRadius="8">
   <StackPanel Spacing="10">
     <TextBlock Name="title"
-               Text="HtmlML.Backend.Avalonia"
+               Text="WebScene.Backend.Avalonia"
                Foreground="#1f2937"
                FontSize="22"
                FontWeight="SemiBold" />
@@ -2518,7 +2518,7 @@ renderChart(currentType);
             new Preset(
                 "Canvas WebGL + Three.js",
                 """
-<Border xmlns="https://github.com/avaloniaui" xmlns:js="clr-namespace:JavaScript.Avalonia;assembly=HtmlML.Backend.Avalonia" Padding="16" Background="#0f172a" BorderBrush="#1e293b" BorderThickness="1" CornerRadius="8">
+<Border xmlns="https://github.com/avaloniaui" xmlns:js="clr-namespace:JavaScript.Avalonia;assembly=WebScene.Backend.Avalonia" Padding="16" Background="#0f172a" BorderBrush="#1e293b" BorderThickness="1" CornerRadius="8">
   <StackPanel Spacing="12">
     <TextBlock Text="Canvas WebGL with Three.js" FontWeight="SemiBold" Foreground="#e5e7eb" />
     <TextBlock Text="Runs Three.js against JavaScript.Avalonia's browser-style WebGL context and renders the scene into the canvas surface." TextWrapping="Wrap" Foreground="#94a3b8" />
@@ -2667,7 +2667,7 @@ frameHandle = window.requestAnimationFrame(tick);
             new Preset(
                 "Canvas WebGL + Three.js Lava Shader",
                 """
-<Border xmlns="https://github.com/avaloniaui" xmlns:js="clr-namespace:JavaScript.Avalonia;assembly=HtmlML.Backend.Avalonia" Padding="16" Background="#050505" BorderBrush="#1f2937" BorderThickness="1" CornerRadius="8">
+<Border xmlns="https://github.com/avaloniaui" xmlns:js="clr-namespace:JavaScript.Avalonia;assembly=WebScene.Backend.Avalonia" Padding="16" Background="#050505" BorderBrush="#1f2937" BorderThickness="1" CornerRadius="8">
   <StackPanel Spacing="12">
     <TextBlock Text="Three.js lava shader" FontWeight="SemiBold" Foreground="#f8fafc" />
     <TextBlock Text="Port of the current three.js webgl_shader_lava: custom ShaderMaterial, official lava textures, BloomPass blur, and OutputPass sRGB transfer." TextWrapping="Wrap" Foreground="#fca5a5" />

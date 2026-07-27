@@ -7,8 +7,8 @@ using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using SkiaSharp;
 using Svg.Skia;
-using HtmlML.Core;
-using HtmlML.Graphics;
+using WebScene.Core;
+using WebScene.Graphics;
 
 namespace JavaScript.Avalonia;
 

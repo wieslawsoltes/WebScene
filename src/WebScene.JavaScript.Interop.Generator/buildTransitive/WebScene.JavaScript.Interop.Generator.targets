@@ -1,0 +1,21 @@
+<Project>
+  <ItemGroup Condition="'$(WebSceneInteropApiManifest)' != '' and '$(WebSceneInteropPolicy)' != ''">
+    <AdditionalFiles Remove="$(WebSceneInteropApiManifest)" />
+    <AdditionalFiles Remove="$(WebSceneInteropPolicy)" />
+    <AdditionalFiles Include="$(WebSceneInteropApiManifest)" />
+    <AdditionalFiles Include="$(WebSceneInteropPolicy)" />
+  </ItemGroup>
+
+  <Target Name="ValidateWebSceneJavaScriptInteropInputs"
+          BeforeTargets="CoreCompile"
+          Condition="'$(WebSceneInteropApiManifest)' != '' or '$(WebSceneInteropPolicy)' != ''">
+    <Error Condition="'$(WebSceneInteropApiManifest)' == ''"
+           Text="WebSceneInteropApiManifest must be set when WebSceneInteropPolicy is configured." />
+    <Error Condition="'$(WebSceneInteropPolicy)' == ''"
+           Text="WebSceneInteropPolicy must be set when WebSceneInteropApiManifest is configured." />
+    <Error Condition="'$(WebSceneInteropApiManifest)' != '' and !Exists('$(WebSceneInteropApiManifest)')"
+           Text="The WebScene JavaScript interop API manifest does not exist: $(WebSceneInteropApiManifest)" />
+    <Error Condition="'$(WebSceneInteropPolicy)' != '' and !Exists('$(WebSceneInteropPolicy)')"
+           Text="The WebScene JavaScript interop policy does not exist: $(WebSceneInteropPolicy)" />
+  </Target>
+</Project>

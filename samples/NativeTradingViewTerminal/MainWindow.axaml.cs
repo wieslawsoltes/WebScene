@@ -66,7 +66,7 @@ public sealed partial class MainWindow : Window
                       .map(frame => frame.contentWindow)
                   ]
                     .map(realm =>
-                      realm?.__htmlMlWebSocketDiagnostics?.() ?? null)
+                      realm?.__webSceneWebSocketDiagnostics?.() ?? null)
                     .filter(Boolean)
                     .reduce((total, current) => ({
                       opened: total.opened + current.opened,

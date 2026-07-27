@@ -12,7 +12,7 @@ public sealed class V8CachedEvaluateTests
     [Trait("Runtime", "V8Native")]
     public void OwnerControlPlaneEvaluationUsesSharedCompilationCache()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath)) return;
 
         var window = new Window

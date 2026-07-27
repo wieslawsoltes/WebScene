@@ -259,7 +259,7 @@ public sealed class R5ReactDashboardResponsiveVisualTests
         AssertClose(height, actual.height);
     }
 
-    private static void AssertPortableRect(HtmlML.Core.HtmlMlRect actual, double x, double y, double width, double height)
+    private static void AssertPortableRect(WebScene.Core.WebSceneRect actual, double x, double y, double width, double height)
     {
         AssertPortableClose(x, actual.X);
         AssertPortableClose(y, actual.Y);

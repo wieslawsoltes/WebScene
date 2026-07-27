@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.webtonativemigration",
+  "displayName": "WebToNativeMigration",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "input.pointer",
+    "input.keyboard",
+    "input.focus",
+    "host.commands"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

@@ -79,23 +79,23 @@ cpu_model="$(sysctl -n machdep.cpu.brand_string 2>/dev/null \
 memory_bytes="$(sysctl -n hw.memsize 2>/dev/null \
   || awk '/MemTotal/ { print $2 * 1024; exit }' /proc/meminfo 2>/dev/null \
   || printf 'unknown')"
-rid="${HTMLML_CLEARSCRIPT_RID:-not-configured}"
-native_path="${HTMLML_CLEARSCRIPT_NATIVE:-}"
+rid="${WEBSCENE_CLEARSCRIPT_RID:-not-configured}"
+native_path="${WEBSCENE_CLEARSCRIPT_NATIVE:-}"
 native_sha256="not-configured"
-react_root="${HTMLML_REACT_REPRO_ROOT:-not-configured}"
+react_root="${WEBSCENE_REACT_REPRO_ROOT:-not-configured}"
 react_sha256="not-configured"
 if [[ -n "$native_path" && -f "$native_path" ]]; then
   native_sha256="$(shasum -a 256 "$native_path" | awk '{print $1}')"
 fi
 if [[ "$profile" != "ci" ]]; then
   if [[ -z "$native_path" || ! -f "$native_path" || "$rid" == "not-configured" ]]; then
-    printf 'Profile native requires HTMLML_CLEARSCRIPT_NATIVE and HTMLML_CLEARSCRIPT_RID.\n' >&2
+    printf 'Profile native requires WEBSCENE_CLEARSCRIPT_NATIVE and WEBSCENE_CLEARSCRIPT_RID.\n' >&2
     exit 2
   fi
   if [[ "$react_root" == "not-configured" \
         || ! -f "$react_root/react/umd/react.production.min.js" \
         || ! -f "$react_root/react-dom/umd/react-dom.production.min.js" ]]; then
-    printf 'Profile native requires HTMLML_REACT_REPRO_ROOT with pinned React 18.2.0 UMD assets.\n' >&2
+    printf 'Profile native requires WEBSCENE_REACT_REPRO_ROOT with pinned React 18.2.0 UMD assets.\n' >&2
     exit 2
   fi
   react_sha256="$(
@@ -105,9 +105,9 @@ if [[ "$profile" != "ci" ]]; then
       | shasum -a 256 \
       | awk '{print $1}'
   )"
-  export HTMLML_CLEARSCRIPT_NATIVE="$native_path"
-  export HTMLML_CLEARSCRIPT_RID="$rid"
-  export HTMLML_REACT_REPRO_ROOT="$react_root"
+  export WEBSCENE_CLEARSCRIPT_NATIVE="$native_path"
+  export WEBSCENE_CLEARSCRIPT_RID="$rid"
+  export WEBSCENE_REACT_REPRO_ROOT="$react_root"
 fi
 
 printf '{\n' > "$output_root/metadata.json"
@@ -232,57 +232,57 @@ check_portable_package_coverage_floor() {
   awk -v actual="$line_rate" -v floor="$floor_line" 'BEGIN { exit(actual + 0.0000001 < floor) }'
 }
 
-run_gate restore dotnet restore HtmlML.sln
+run_gate restore dotnet restore WebScene.sln
 if [[ "$profile" == "ci" ]]; then
-  run_gate release-build dotnet build HtmlML.sln -c Release --no-restore \
-    -p:HtmlMlClearScriptNativeRequired=false -p:HtmlMlClearScriptNativeRid=
+  run_gate release-build dotnet build WebScene.sln -c Release --no-restore \
+    -p:WebSceneClearScriptNativeRequired=false -p:WebSceneClearScriptNativeRid=
 else
-  run_gate release-build dotnet build HtmlML.sln -c Release --no-restore \
-    -p:HtmlMlClearScriptNativePath="$native_path" -p:HtmlMlClearScriptNativeRid="$rid"
+  run_gate release-build dotnet build WebScene.sln -c Release --no-restore \
+    -p:WebSceneClearScriptNativePath="$native_path" -p:WebSceneClearScriptNativeRid="$rid"
 fi
-run_gate core-tests-net8 dotnet test tests/HtmlML.Core.Tests/HtmlML.Core.Tests.csproj \
+run_gate core-tests-net8 dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj \
   -c Release -f net8.0 --no-build --settings coverage-core.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/core/net8.0"
-run_gate core-tests-net10 dotnet test tests/HtmlML.Core.Tests/HtmlML.Core.Tests.csproj \
+run_gate core-tests-net10 dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj \
   -c Release -f net10.0 --no-build --settings coverage-core.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/core/net10.0"
 run_gate core-coverage-net8 check_core_coverage_floor net8.0
 run_gate core-coverage-net10 check_core_coverage_floor net10.0
-run_gate javascript-tests-net8 dotnet test tests/HtmlML.JavaScript.Tests/HtmlML.JavaScript.Tests.csproj \
+run_gate javascript-tests-net8 dotnet test tests/WebScene.JavaScript.Tests/WebScene.JavaScript.Tests.csproj \
   -c Release -f net8.0 --no-build
-run_gate javascript-tests-net10 dotnet test tests/HtmlML.JavaScript.Tests/HtmlML.JavaScript.Tests.csproj \
+run_gate javascript-tests-net10 dotnet test tests/WebScene.JavaScript.Tests/WebScene.JavaScript.Tests.csproj \
   -c Release -f net10.0 --no-build
-run_gate dom-tests-net8 dotnet test tests/HtmlML.Dom.Tests/HtmlML.Dom.Tests.csproj \
+run_gate dom-tests-net8 dotnet test tests/WebScene.Dom.Tests/WebScene.Dom.Tests.csproj \
   -c Release -f net8.0 --no-build
-run_gate dom-tests-net10 dotnet test tests/HtmlML.Dom.Tests/HtmlML.Dom.Tests.csproj \
+run_gate dom-tests-net10 dotnet test tests/WebScene.Dom.Tests/WebScene.Dom.Tests.csproj \
   -c Release -f net10.0 --no-build
-run_gate css-tests-net8 dotnet test tests/HtmlML.Css.Tests/HtmlML.Css.Tests.csproj \
+run_gate css-tests-net8 dotnet test tests/WebScene.Css.Tests/WebScene.Css.Tests.csproj \
   -c Release -f net8.0 --no-build --settings coverage-css.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/css/net8.0"
-run_gate css-tests-net10 dotnet test tests/HtmlML.Css.Tests/HtmlML.Css.Tests.csproj \
+run_gate css-tests-net10 dotnet test tests/WebScene.Css.Tests/WebScene.Css.Tests.csproj \
   -c Release -f net10.0 --no-build --settings coverage-css.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/css/net10.0"
 run_gate css-coverage-net8 check_portable_package_coverage_floor css net8.0
 run_gate css-coverage-net10 check_portable_package_coverage_floor css net10.0
-run_gate graphics-tests-net8 dotnet test tests/HtmlML.Graphics.Tests/HtmlML.Graphics.Tests.csproj \
+run_gate graphics-tests-net8 dotnet test tests/WebScene.Graphics.Tests/WebScene.Graphics.Tests.csproj \
   -c Release -f net8.0 --no-build --settings coverage-graphics.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/graphics/net8.0"
-run_gate graphics-tests-net10 dotnet test tests/HtmlML.Graphics.Tests/HtmlML.Graphics.Tests.csproj \
+run_gate graphics-tests-net10 dotnet test tests/WebScene.Graphics.Tests/WebScene.Graphics.Tests.csproj \
   -c Release -f net10.0 --no-build --settings coverage-graphics.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/graphics/net10.0"
 run_gate graphics-coverage-net8 check_portable_package_coverage_floor graphics net8.0
 run_gate graphics-coverage-net10 check_portable_package_coverage_floor graphics net10.0
-run_gate backend-abstractions-tests-net8 dotnet test tests/HtmlML.Backend.Abstractions.Tests/HtmlML.Backend.Abstractions.Tests.csproj \
+run_gate backend-abstractions-tests-net8 dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj \
   -c Release -f net8.0 --no-build --settings coverage-backend-abstractions.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/backend-abstractions/net8.0"
-run_gate backend-abstractions-tests-net10 dotnet test tests/HtmlML.Backend.Abstractions.Tests/HtmlML.Backend.Abstractions.Tests.csproj \
+run_gate backend-abstractions-tests-net10 dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj \
   -c Release -f net10.0 --no-build --settings coverage-backend-abstractions.runsettings \
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/backend-abstractions/net10.0"
 run_gate backend-abstractions-coverage-net8 check_portable_package_coverage_floor backend-abstractions net8.0
 run_gate backend-abstractions-coverage-net10 check_portable_package_coverage_floor backend-abstractions net10.0
-run_gate architecture-tests dotnet test tests/HtmlML.Architecture.Tests/HtmlML.Architecture.Tests.csproj -c Release --no-build
+run_gate architecture-tests dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release --no-build
 run_gate backend-package-smoke dotnet run \
-  --project tests/HtmlML.Backend.PackageSmoke/HtmlML.Backend.PackageSmoke.csproj \
+  --project tests/WebScene.Backend.PackageSmoke/WebScene.Backend.PackageSmoke.csproj \
   -c Release --no-build
 run_gate avalonia-tests-net8 dotnet test tests/JavaScript.Avalonia.Tests/JavaScript.Avalonia.Tests.csproj \
   -c Release -f net8.0 --no-build --settings coverage.runsettings \
@@ -292,7 +292,7 @@ run_gate avalonia-tests-net10 dotnet test tests/JavaScript.Avalonia.Tests/JavaSc
   --collect:"XPlat Code Coverage" --results-directory "$output_root/coverage/net10.0"
 run_gate coverage-net8 check_coverage_floor net8.0
 run_gate coverage-net10 check_coverage_floor net10.0
-run_gate wpt-list dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+run_gate wpt-list dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release --no-build -- --selection all --list
 run_probe css-custom-properties css-custom-properties --iterations 100
 run_probe css-style-storage css-style-storage --elements 2000 --variants 16 --media-resize
@@ -303,8 +303,8 @@ if [[ "$profile" == "native" ]]; then
   # can bind ClearScript/V8 globals across the two install identities and abort
   # during browser bootstrap. Other native gates retain the explicit path for
   # their native-presence contract checks.
-  run_gate wpt-required env -u HTMLML_CLEARSCRIPT_NATIVE -u HTMLML_CLEARSCRIPT_RID \
-    dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+  run_gate wpt-required env -u WEBSCENE_CLEARSCRIPT_NATIVE -u WEBSCENE_CLEARSCRIPT_RID \
+    dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
     -c Release --no-build -- --selection required --output "$output_root/wpt"
   run_probe v8dom v8dom
   run_probe v8canvasboundary v8canvasboundary

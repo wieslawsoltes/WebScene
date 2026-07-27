@@ -104,7 +104,7 @@ public static class V8MutationObserverProbe
         public ManagedObserverScope(AvaloniaDomDocument document, AvaloniaDomElement element)
         {
             Observer = new DomMutationObserver(document, NoOpCallback.Instance);
-            Observer.__htmlMlObserve(
+            Observer.__webSceneObserve(
                 element,
                 childList: false,
                 attributes: true,

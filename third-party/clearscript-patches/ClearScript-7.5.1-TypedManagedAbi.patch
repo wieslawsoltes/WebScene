@@ -14,32 +14,32 @@ index e7d9c798..5d49ad92 100644
  //-----------------------------------------------------------------------------
  
  static std::atomic<size_t> s_InstanceCount(0);
-+static std::atomic<V8ContextImpl::HtmlMlReadDomNumericPropertyMethod*> s_pHtmlMlReadDomNumericProperty(nullptr);
-+static std::atomic<V8ContextImpl::HtmlMlWriteDomRectMethod*> s_pHtmlMlWriteDomRect(nullptr);
++static std::atomic<V8ContextImpl::WebSceneReadDomNumericPropertyMethod*> s_pWebSceneReadDomNumericProperty(nullptr);
++static std::atomic<V8ContextImpl::WebSceneWriteDomRectMethod*> s_pWebSceneWriteDomRect(nullptr);
 +
 +//-----------------------------------------------------------------------------
 +
-+bool V8ContextImpl::RegisterHtmlMlTypedManagedAbi(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept
++bool V8ContextImpl::RegisterWebSceneTypedManagedAbi(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept
 +{
 +    if ((version != 1) || (pvReadDomNumericProperty == nullptr) || (pvWriteDomRect == nullptr))
 +    {
 +        return false;
 +    }
 +
-+    s_pHtmlMlReadDomNumericProperty.store(
-+        reinterpret_cast<HtmlMlReadDomNumericPropertyMethod*>(pvReadDomNumericProperty),
++    s_pWebSceneReadDomNumericProperty.store(
++        reinterpret_cast<WebSceneReadDomNumericPropertyMethod*>(pvReadDomNumericProperty),
 +        std::memory_order_release);
-+    s_pHtmlMlWriteDomRect.store(
-+        reinterpret_cast<HtmlMlWriteDomRectMethod*>(pvWriteDomRect),
++    s_pWebSceneWriteDomRect.store(
++        reinterpret_cast<WebSceneWriteDomRectMethod*>(pvWriteDomRect),
 +        std::memory_order_release);
 +    return true;
 +}
 +
 +//-----------------------------------------------------------------------------
 +
-+void V8ContextImpl::HtmlMlReadDomNumericPropertyCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
++void V8ContextImpl::WebSceneReadDomNumericPropertyCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 +{
-+    auto pCallback = s_pHtmlMlReadDomNumericProperty.load(std::memory_order_acquire);
++    auto pCallback = s_pWebSceneReadDomNumericProperty.load(std::memory_order_acquire);
 +    if ((pCallback == nullptr) || (info.Length() < 2))
 +    {
 +        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), std::numeric_limits<double>::quiet_NaN()));
@@ -54,9 +54,9 @@ index e7d9c798..5d49ad92 100644
 +
 +//-----------------------------------------------------------------------------
 +
-+void V8ContextImpl::HtmlMlWriteDomRectCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
++void V8ContextImpl::WebSceneWriteDomRectCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 +{
-+    auto pCallback = s_pHtmlMlWriteDomRect.load(std::memory_order_acquire);
++    auto pCallback = s_pWebSceneWriteDomRect.load(std::memory_order_acquire);
 +    if ((pCallback == nullptr) || (info.Length() < 3) || !info[2]->IsFloat64Array())
 +    {
 +        info.GetReturnValue().Set(false);
@@ -85,8 +85,8 @@ index e7d9c798..5d49ad92 100644
  
              ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("getPromiseState"), FROM_MAYBE(v8::Function::New(m_hContext, GetPromiseStateCallback, hContextImpl)))));
              ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("getPromiseResult"), FROM_MAYBE(v8::Function::New(m_hContext, GetPromiseResultCallback, hContextImpl)))));
-+            ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("__htmlMlNativeReadDomNumericProperty"), FROM_MAYBE(v8::Function::New(m_hContext, HtmlMlReadDomNumericPropertyCallback, hContextImpl)))));
-+            ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("__htmlMlNativeWriteDomRect"), FROM_MAYBE(v8::Function::New(m_hContext, HtmlMlWriteDomRectCallback, hContextImpl)))));
++            ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("__webSceneNativeReadDomNumericProperty"), FROM_MAYBE(v8::Function::New(m_hContext, WebSceneReadDomNumericPropertyCallback, hContextImpl)))));
++            ASSERT_EVAL(FROM_MAYBE(m_hContext->Global()->Set(m_hContext, CreateString("__webSceneNativeWriteDomRect"), FROM_MAYBE(v8::Function::New(m_hContext, WebSceneWriteDomRectCallback, hContextImpl)))));
  
              m_hMissingPropertyValue = CreatePersistent(CreateSymbol());
              m_hHostExceptionKey = CreatePersistent(CreateString("hostException"));
@@ -98,13 +98,13 @@ index 335bfe70..90f532a3 100644
  
  public:
  
-+    typedef MANAGED_METHOD(double) HtmlMlReadDomNumericPropertyMethod(int64_t nodeId, int32_t property);
-+    typedef MANAGED_METHOD(StdBool) HtmlMlWriteDomRectMethod(int64_t nodeId, int32_t kind, double* pValues);
++    typedef MANAGED_METHOD(double) WebSceneReadDomNumericPropertyMethod(int64_t nodeId, int32_t property);
++    typedef MANAGED_METHOD(StdBool) WebSceneWriteDomRectMethod(int64_t nodeId, int32_t kind, double* pValues);
 +
      V8ContextImpl(V8IsolateImpl* pIsolateImpl, const StdString& name);
      V8ContextImpl(SharedPtr<V8IsolateImpl>&& spIsolateImpl, const StdString& name, const Options& options);
      static size_t GetInstanceCount();
-+    static bool RegisterHtmlMlTypedManagedAbi(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept;
++    static bool RegisterWebSceneTypedManagedAbi(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept;
  
      const StdString& GetName() const { return m_Name; }
      const Persistent<v8::Context>& GetContext() const { return m_hContext; }
@@ -112,8 +112,8 @@ index 335bfe70..90f532a3 100644
  
      static void GetPromiseStateCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
      static void GetPromiseResultCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
-+    static void HtmlMlReadDomNumericPropertyCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
-+    static void HtmlMlWriteDomRectCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
++    static void WebSceneReadDomNumericPropertyCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
++    static void WebSceneWriteDomRectCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
  
      v8::MaybeLocal<v8::Promise> ImportModule(const V8DocumentInfo* pSourceDocumentInfo, v8::Local<v8::String> hSpecifier);
      v8::MaybeLocal<v8::Module> ResolveModule(v8::Local<v8::String> hSpecifier, const V8DocumentInfo* pSourceDocumentInfo);
@@ -125,9 +125,9 @@ index 0297cbd7..6a03ee56 100644
  
  //-----------------------------------------------------------------------------
  
-+NATIVE_ENTRY_POINT(StdBool) HtmlMlTypedManagedAbi_Register(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept
++NATIVE_ENTRY_POINT(StdBool) WebSceneTypedManagedAbi_Register(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept
 +{
-+    return V8ContextImpl::RegisterHtmlMlTypedManagedAbi(version, pvReadDomNumericProperty, pvWriteDomRect);
++    return V8ContextImpl::RegisterWebSceneTypedManagedAbi(version, pvReadDomNumericProperty, pvWriteDomRect);
 +}
 +
 +//-----------------------------------------------------------------------------
@@ -143,7 +143,7 @@ index 8ad6149e..608a84c3 100644
  
  NATIVE_ENTRY_POINT(void**) V8SplitProxyManaged_SetMethodTable(void** pMethodTable) noexcept;
  NATIVE_ENTRY_POINT(const StdChar*) V8SplitProxyNative_GetVersion() noexcept;
-+NATIVE_ENTRY_POINT(StdBool) HtmlMlTypedManagedAbi_Register(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept;
++NATIVE_ENTRY_POINT(StdBool) WebSceneTypedManagedAbi_Register(int32_t version, void* pvReadDomNumericProperty, void* pvWriteDomRect) noexcept;
  NATIVE_ENTRY_POINT(void) V8Environment_InitializeICU(const char* pICUData, uint32_t size) noexcept;
  
  NATIVE_ENTRY_POINT(void*) Memory_Allocate(size_t size) noexcept;

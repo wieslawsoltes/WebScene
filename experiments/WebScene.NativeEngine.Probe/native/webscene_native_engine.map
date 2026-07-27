@@ -1,0 +1,6 @@
+WEBSCENE_NATIVE_ENGINE_1 {
+    global:
+        webscene_*;
+    local:
+        *;
+};

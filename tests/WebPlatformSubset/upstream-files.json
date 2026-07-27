@@ -1,5 +1,5 @@
 {
-  "schema": "htmlml-wpt-upstream-files-v1",
+  "schema": "webscene-wpt-upstream-files-v1",
   "repository": "https://github.com/web-platform-tests/wpt",
   "revision": "2c705104a295c48053eeddf7fe0170d790a4e853",
   "hashAlgorithm": "sha256",

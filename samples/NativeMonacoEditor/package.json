@@ -1,5 +1,5 @@
 {
-  "name": "htmlml-native-monaco-editor-sample",
+  "name": "webscene-native-monaco-editor-sample",
   "private": true,
   "scripts": {
     "build:web": "node build-monaco.mjs"

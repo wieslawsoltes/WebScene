@@ -11,7 +11,7 @@ unreviewable collection of partial behaviors.
 
 ## Decision
 
-A backend declares immutable `HtmlMlBackendCapabilities` at construction. Component
+A backend declares immutable `WebSceneBackendCapabilities` at construction. Component
 manifests and profile tests can require capabilities. Missing required capabilities
 produce a diagnostic and fail before component startup. Capability flags indicate the
 presence of an implementation; profile tests prove its semantics.

@@ -7,7 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using HtmlML.Core;
+using WebScene.Core;
 using Xunit;
 
 namespace JavaScript.Avalonia.Tests;
@@ -256,7 +256,7 @@ public sealed class CssInsideListMarkerFormattingContextAuthorityTests
 
     private static Box From(DomRect rect) => new(rect.x, rect.y, rect.width, rect.height);
 
-    private static Box From(HtmlMlRect rect) => new(rect.X, rect.Y, rect.Width, rect.Height);
+    private static Box From(WebSceneRect rect) => new(rect.X, rect.Y, rect.Width, rect.Height);
 
     private readonly record struct Box(double X, double Y, double Width, double Height);
 

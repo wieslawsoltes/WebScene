@@ -5,7 +5,7 @@
 
 ## Summary
 
-The native HtmlML runtime can be hosted inside a Flutter application through
+The native WebScene runtime can be hosted inside a Flutter application through
 `dart:ffi`. The runtime already exposes a renderer-neutral C ABI with opaque
 engine handles, primitive input records, callbacks, and immutable scene tables.
 It does not require .NET or Avalonia.
@@ -33,7 +33,7 @@ Flutter input, lifecycle and frame clock
                   |
                   | Dart FFI
                   v
-       HtmlML native engine worker
+       WebScene native engine worker
        V8 + DOM + CSS + layout
                   |
                   | immutable scene diffs
@@ -50,17 +50,17 @@ Flutter input, lifecycle and frame clock
 
 Flutter does not expose an internal native `SkCanvas` to application code.
 Rendering should therefore target the public `dart:ui` API. This also keeps the
-HtmlML integration independent of whether a particular Flutter platform uses
+WebScene integration independent of whether a particular Flutter platform uses
 Impeller or Skia internally.
 
 ## Runtime lifecycle
 
 The Flutter host should:
 
-1. Load the RID-appropriate HtmlML library and colocated `icudtl.dat`.
-2. Verify `htmlml_engine_get_abi_version()` before creating an engine.
-3. Call `htmlml_engine_prewarm()` during application startup.
-4. Create an engine with `htmlml_engine_create_with_options()`.
+1. Load the RID-appropriate WebScene library and colocated `icudtl.dat`.
+2. Verify `webscene_engine_get_abi_version()` before creating an engine.
+3. Call `webscene_engine_prewarm()` during application startup.
+4. Create an engine with `webscene_engine_create_with_options()`.
 5. Configure the resource root and load the initial document.
 6. Forward viewport, scale, pointer, keyboard, text, visibility, and frame
    events.
@@ -76,12 +76,12 @@ context recreation.
 
 ## FFI package
 
-Create a Flutter FFI package, for example `htmlml_flutter`, containing:
+Create a Flutter FFI package, for example `webscene_flutter`, containing:
 
 ```text
-htmlml_flutter/
+webscene_flutter/
   lib/
-    htmlml_flutter.dart
+    webscene_flutter.dart
     src/
       bindings.dart
       engine.dart
@@ -97,7 +97,7 @@ htmlml_flutter/
 
 Generate bindings from:
 
-`experiments/HtmlML.NativeEngine.Probe/native/htmlml_native_engine.h`
+`experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.h`
 
 The package must bundle the correct library, ICU data, notices, and runtime
 manifest for the target architecture. It should validate the ABI and manifest
@@ -106,7 +106,7 @@ at startup and report an actionable error for an incompatible binary.
 ## Renderer mapping
 
 The Avalonia renderer in
-`src/HtmlML.Backend.Avalonia/NativeSceneRuntime.cs` provides the behavioral
+`src/WebScene.Backend.Avalonia/NativeSceneRuntime.cs` provides the behavioral
 reference.
 
 | SkiaSharp reference | Flutter equivalent |
@@ -135,7 +135,7 @@ and overlapping content.
 
 Canvas layers that use destructive composition must remain isolated with
 `saveLayer`. A `CustomPainter` canvas may be shared with other Flutter content,
-so an HtmlML clear or destination blend operation must never affect neighboring
+so an WebScene clear or destination blend operation must never affect neighboring
 widgets.
 
 ## Scene ABI improvements
@@ -157,21 +157,21 @@ Duplicating those magic numbers in Dart would make the Flutter backend fragile.
 
 ## Input and frame scheduling
 
-Flutter events map to `htmlml_input_event`:
+Flutter events map to `webscene_input_event`:
 
-- Pointer hover/move → `HTMLML_INPUT_POINTER_MOVE`
-- Pointer down → `HTMLML_INPUT_POINTER_DOWN`
-- Pointer up/cancel → `HTMLML_INPUT_POINTER_UP`
-- Scroll → `HTMLML_INPUT_WHEEL`
-- Viewport change → `HTMLML_INPUT_RESIZE`
-- Keyboard down/up → `HTMLML_INPUT_KEY_DOWN` / `HTMLML_INPUT_KEY_UP`
-- Committed Unicode scalars → `HTMLML_INPUT_TEXT`
-- Flutter frame timestamp → `HTMLML_INPUT_FRAME`
+- Pointer hover/move → `WEBSCENE_INPUT_POINTER_MOVE`
+- Pointer down → `WEBSCENE_INPUT_POINTER_DOWN`
+- Pointer up/cancel → `WEBSCENE_INPUT_POINTER_UP`
+- Scroll → `WEBSCENE_INPUT_WHEEL`
+- Viewport change → `WEBSCENE_INPUT_RESIZE`
+- Keyboard down/up → `WEBSCENE_INPUT_KEY_DOWN` / `WEBSCENE_INPUT_KEY_UP`
+- Committed Unicode scalars → `WEBSCENE_INPUT_TEXT`
+- Flutter frame timestamp → `WEBSCENE_INPUT_FRAME`
 
-Coordinates should use HtmlML CSS pixels. The resize event must include
+Coordinates should use WebScene CSS pixels. The resize event must include
 Flutter's device-pixel ratio in `delta_x`.
 
-Use `htmlml_engine_enqueue_resize_frame()` when a resize and rendering
+Use `webscene_engine_enqueue_resize_frame()` when a resize and rendering
 opportunity belong to the same Flutter frame. Preserve ordering for down, up,
 cancel, capture, and key transitions. Pointer moves and wheel input may be
 coalesced according to the native contract.
@@ -184,7 +184,7 @@ the owning Dart isolate, which then invalidates the painter.
 
 Text is the main architectural issue for a production backend.
 
-Native HtmlML layout can call `htmlml_text_measure_callback` synchronously on
+Native WebScene layout can call `webscene_text_measure_callback` synchronously on
 the engine worker. Layout and painting must use compatible glyph advances to
 avoid wrapping drift, clipping, and fallback-font differences.
 
@@ -195,7 +195,7 @@ metrics.
 
 PoC options:
 
-1. Omit the callback and use HtmlML's fallback width approximation. This is
+1. Omit the callback and use WebScene's fallback width approximation. This is
    suitable only for proving engine, input, scene, and drawing integration.
 2. Add a small native text-shaping shim that is safe on the engine worker and
    use the same font selection and advances when painting.
@@ -208,7 +208,7 @@ text-layout mismatches instead of treating fallback measurement as parity.
 ## Resource loading
 
 For the first PoC, extract Flutter assets to an application-support directory
-and pass that directory to `htmlml_engine_set_resource_root()`. This avoids a
+and pass that directory to `webscene_engine_set_resource_root()`. This avoids a
 synchronous Dart resource callback on the native worker.
 
 A later host-resource adapter may support packaged assets, HTTP caching, and
@@ -234,8 +234,8 @@ pixel tests.
 The package should expose a widget similar to:
 
 ```dart
-HtmlMlView(
-  document: HtmlMlDocument.asset('assets/example/index.html'),
+WebSceneView(
+  document: WebSceneDocument.asset('assets/example/index.html'),
   onReady: () {},
   onConsoleMessage: (message) {},
   onError: (error) {},
@@ -268,7 +268,7 @@ but they are required for a production backend.
 
 ### Phase 2: Basic Flutter renderer
 
-- Add `HtmlMlView` and `CustomPainter`.
+- Add `WebSceneView` and `CustomPainter`.
 - Render rectangles, borders, rounded rectangles, transforms, clipping, and
   opacity.
 - Translate pointer and resize input.
@@ -301,7 +301,7 @@ but they are required for a production backend.
 The PoC is successful when:
 
 - A Flutter desktop app loads the packaged native runtime without .NET.
-- A local HtmlML document executes JavaScript and signals readiness.
+- A local WebScene document executes JavaScript and signals readiness.
 - Resize, pointer, keyboard, text, and animation-frame inputs reach the engine
   in order.
 - Scene publication schedules Flutter painting without blocking the engine.
@@ -326,12 +326,12 @@ The PoC is successful when:
 
 ## References
 
-- `experiments/HtmlML.NativeEngine.Probe/native/htmlml_native_engine.h`
-- `experiments/HtmlML.NativeEngine.Probe/README.md`
+- `experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.h`
+- `experiments/WebScene.NativeEngine.Probe/README.md`
 - `docs/architecture/native-v8-scene-engine.md`
 - `docs/backends.md`
-- `src/HtmlML.Backend.Avalonia/NativeSceneRuntime.cs`
-- `packaging/HtmlML.NativeEngine.Runtime/README.md`
+- `src/WebScene.Backend.Avalonia/NativeSceneRuntime.cs`
+- `packaging/WebScene.NativeEngine.Runtime/README.md`
 - [Flutter: Bind to native code using FFI](https://docs.flutter.dev/platform-integration/bind-native-code)
 - [Flutter architectural overview](https://docs.flutter.dev/resources/architectural-overview)
 - [Flutter `dart:ui.Canvas`](https://api.flutter.dev/flutter/dart-ui/Canvas-class.html)

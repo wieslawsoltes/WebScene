@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify an HtmlML release package set and emit machine-readable evidence."""
+"""Verify an WebScene release package set and emit machine-readable evidence."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ import xml.etree.ElementTree as ET
 
 
 MANAGED_PACKAGE_IDS = {
-    "HtmlML",
-    "HtmlML.Backend.Abstractions",
-    "HtmlML.Backend.Avalonia",
-    "HtmlML.Core",
-    "HtmlML.Css",
-    "HtmlML.Dom",
-    "HtmlML.Graphics",
-    "HtmlML.JavaScript",
-    "HtmlML.Sdk",
-    "HtmlML.Sdk.Avalonia",
-    "HtmlML.Templates",
+    "WebScene",
+    "WebScene.Backend.Abstractions",
+    "WebScene.Backend.Avalonia",
+    "WebScene.Core",
+    "WebScene.Css",
+    "WebScene.Dom",
+    "WebScene.Graphics",
+    "WebScene.JavaScript",
+    "WebScene.Sdk",
+    "WebScene.Sdk.Avalonia",
+    "WebScene.Templates",
     "JavaScript.Avalonia.ClearScript",
 }
 DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
@@ -71,12 +71,12 @@ def validate_template_defaults(package: pathlib.Path, version: str) -> None:
             config = json.loads(archive.read(config_name))
             actual = (
                 config.get("symbols", {})
-                .get("htmlmlVersion", {})
+                .get("websceneVersion", {})
                 .get("defaultValue")
             )
             if actual != version:
                 raise RuntimeError(
-                    f"{package}: {config_name} defaults HtmlML packages to "
+                    f"{package}: {config_name} defaults WebScene packages to "
                     f"{actual!r}, expected {version!r}"
                 )
         template_projects = [
@@ -105,7 +105,7 @@ def validate_native_runtime(
     version: str,
 ) -> None:
     manifest_name = (
-        f"runtimes/{runtime_identifier}/native/htmlml-native-runtime.json"
+        f"runtimes/{runtime_identifier}/native/webscene-native-runtime.json"
     )
     with zipfile.ZipFile(package) as archive:
         if manifest_name not in archive.namelist():
@@ -143,7 +143,7 @@ def main() -> int:
     native_rids = set(args.native_rids or DEFAULT_NATIVE_RIDS)
     expected_ids = set(MANAGED_PACKAGE_IDS)
     if not args.managed_only:
-        expected_ids.update(f"HtmlML.NativeEngine.Runtime.{rid}" for rid in native_rids)
+        expected_ids.update(f"WebScene.NativeEngine.Runtime.{rid}" for rid in native_rids)
 
     packages: dict[str, pathlib.Path] = {}
     dependencies: dict[str, list[tuple[str, str]]] = {}
@@ -151,7 +151,7 @@ def main() -> int:
         if package.name.endswith(".snupkg"):
             continue
         package_id, version, package_dependencies = read_nuspec(package)
-        if args.managed_only and package_id.startswith("HtmlML.NativeEngine.Runtime."):
+        if args.managed_only and package_id.startswith("WebScene.NativeEngine.Runtime."):
             continue
         if package_id not in expected_ids:
             raise RuntimeError(f"Unexpected package in release set: {package_id}")
@@ -168,10 +168,10 @@ def main() -> int:
     if missing:
         raise RuntimeError("Missing release packages: " + ", ".join(missing))
 
-    validate_template_defaults(packages["HtmlML.Templates"], args.version)
+    validate_template_defaults(packages["WebScene.Templates"], args.version)
     if not args.managed_only:
         for runtime_identifier in sorted(native_rids):
-            package_id = f"HtmlML.NativeEngine.Runtime.{runtime_identifier}"
+            package_id = f"WebScene.NativeEngine.Runtime.{runtime_identifier}"
             validate_native_runtime(
                 packages[package_id],
                 runtime_identifier,
@@ -190,7 +190,7 @@ def main() -> int:
         package.name.removesuffix(f".{args.version}.snupkg")
         for package in args.package_directory.glob(f"*.{args.version}.snupkg")
     }
-    expected_symbol_ids = MANAGED_PACKAGE_IDS - {"HtmlML.Templates"}
+    expected_symbol_ids = MANAGED_PACKAGE_IDS - {"WebScene.Templates"}
     missing_symbols = sorted(expected_symbol_ids - symbol_ids)
     if missing_symbols:
         raise RuntimeError("Missing symbol packages: " + ", ".join(missing_symbols))

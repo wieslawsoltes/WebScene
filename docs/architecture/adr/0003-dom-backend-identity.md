@@ -11,9 +11,9 @@ impossible to reuse and makes reparenting or control replacement observable to J
 
 ## Decision
 
-Every DOM node has a stable `HtmlMlNodeId` derived from its existing
-`__htmlMlDomIdentity`. A framework object is carried only through
-`HtmlMlBackendHandle`, whose equality is native reference identity. The existing
+Every DOM node has a stable `WebSceneNodeId` derived from its existing
+`__webSceneDomIdentity`. A framework object is carried only through
+`WebSceneBackendHandle`, whose equality is native reference identity. The existing
 `AvaloniaDomElement.Control` property remains temporarily for source compatibility;
 portable contracts use `DomNodeId` and `BackendHandle`.
 

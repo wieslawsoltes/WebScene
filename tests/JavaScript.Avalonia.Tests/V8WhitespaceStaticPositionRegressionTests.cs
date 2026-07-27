@@ -13,7 +13,7 @@ public sealed class V8WhitespaceStaticPositionRegressionTests
     [Trait("Runtime", "V8Native")]
     public void AuthoredTextSurvivesWhileCollapsedPresentationDefinesStaticPosition()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath)) return;
 
         var root = new CssLayoutPanel { Width = 120, Height = 40 };

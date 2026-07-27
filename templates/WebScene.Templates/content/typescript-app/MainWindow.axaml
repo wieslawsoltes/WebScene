@@ -1,0 +1,7 @@
+<Window x:Class="WebSceneTypeScriptApp.MainWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sdk="clr-namespace:WebScene.Sdk.Avalonia;assembly=WebScene.Sdk.Avalonia"
+        Width="1000" Height="680" Title="WebScene TypeScript Desktop">
+  <sdk:WebSceneComponentHost x:Name="PrimaryHost" PackagePath="Component" AutoMount="False" Margin="16" />
+</Window>

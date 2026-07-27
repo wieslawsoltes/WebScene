@@ -102,19 +102,19 @@ public sealed class CssPointerMediaHoverSpikeTests
             HostTestUtilities.GetElement(document.body).appendChild(study);
 
             var events = new List<string>();
-            title.__htmlMlAddExternalEventListener(
+            title.__webSceneAddExternalEventListener(
                 "mouseenter",
                 new RecordingClassListener(events, "title-enter", study, add: true),
                 capture: false,
                 once: false,
                 passive: false);
-            title.__htmlMlAddExternalEventListener(
+            title.__webSceneAddExternalEventListener(
                 "mouseleave",
                 new RecordingClassListener(events, "title-leave", study, add: false),
                 capture: false,
                 once: false,
                 passive: false);
-            actions.__htmlMlAddExternalEventListener(
+            actions.__webSceneAddExternalEventListener(
                 "mouseenter",
                 new RecordingClassListener(events, "actions-enter", study, add: true),
                 capture: false,

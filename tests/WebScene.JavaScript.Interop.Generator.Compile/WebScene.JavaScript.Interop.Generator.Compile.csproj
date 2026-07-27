@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <WebSceneInteropApiManifest Condition="'$(WebSceneInteropApiManifest)' == ''">$(MSBuildThisFileDirectory)GeneratorCapabilities.webscene-interop-api.json</WebSceneInteropApiManifest>
+    <WebSceneInteropPolicy Condition="'$(WebSceneInteropPolicy)' == ''">$(MSBuildThisFileDirectory)GeneratorCapabilities.webscene-interop-policy.json</WebSceneInteropPolicy>
+    <WebSceneInteropHarnessId Condition="'$(WebSceneInteropHarnessId)' == ''">$([System.IO.Path]::GetFileNameWithoutExtension('$(WebSceneInteropApiManifest)'))-$([System.IO.Path]::GetFileNameWithoutExtension('$(WebSceneInteropPolicy)'))</WebSceneInteropHarnessId>
+    <IntermediateOutputPath>obj/$(WebSceneInteropHarnessId)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>bin/$(WebSceneInteropHarnessId)/$(Configuration)/</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop.Generator\WebScene.JavaScript.Interop.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="$(WebSceneInteropApiManifest)"
+                     Condition="'$(WebSceneInteropApiManifest)' != ''" />
+    <AdditionalFiles Include="$(WebSceneInteropPolicy)"
+                     Condition="'$(WebSceneInteropPolicy)' != ''" />
+  </ItemGroup>
+</Project>

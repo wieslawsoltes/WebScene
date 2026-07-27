@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "id": "webscene.backend.uno",
+  "displayName": "WebScene Uno Skia Backend",
+  "version": "11.3.4",
+  "assembly": "WebScene.Backend.Uno",
+  "backendType": "WebScene.Backends.Uno.UnoBackendHost",
+  "maximumSupportLevel": "Advanced",
+  "capabilities": [
+    "DomProjection",
+    "CssLayout",
+    "Canvas2D",
+    "Svg",
+    "Images",
+    "PointerInput",
+    "KeyboardInput",
+    "TextInput",
+    "Focus"
+  ],
+  "targetFrameworks": ["net10.0"],
+  "platforms": ["uno-skia-desktop", "uno-skia-mobile", "uno-skia-wasm"]
+}

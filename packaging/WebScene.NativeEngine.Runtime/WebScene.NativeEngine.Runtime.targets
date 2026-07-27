@@ -1,0 +1,39 @@
+<Project>
+  <PropertyGroup>
+    <WebSceneNativeEnginePackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</WebSceneNativeEnginePackageRoot>
+    <WebSceneNativeEnginePackageAsset>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedFileName)</WebSceneNativeEnginePackageAsset>
+    <WebSceneNativeEnginePackageIcuData>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedIcuFileName)</WebSceneNativeEnginePackageIcuData>
+    <WebSceneNativeEnginePackageManifest>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\webscene-native-runtime.json</WebSceneNativeEnginePackageManifest>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WebSceneNativeEnginePackagedRid)' != ''">
+    <Content Include="$(WebSceneNativeEnginePackageAsset)"
+             Link="$(WebSceneNativeEnginePackagedFileName)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
+    <Content Include="$(WebSceneNativeEnginePackageManifest)"
+             Link="webscene-native-runtime.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
+    <Content Include="$(WebSceneNativeEnginePackageIcuData)"
+             Link="$(WebSceneNativeEnginePackagedIcuFileName)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <Target Name="ValidateWebSceneNativeRuntimePackage"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(WebSceneNativeEnginePackagedRid)' != ''">
+    <Error Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != '$(WebSceneNativeEnginePackagedRid)'"
+           Text="WebScene native runtime package RID '$(WebSceneNativeEnginePackagedRid)' does not match target RuntimeIdentifier '$(RuntimeIdentifier)'." />
+    <Error Condition="!Exists('$(WebSceneNativeEnginePackageAsset)')"
+           Text="WebScene native runtime package is corrupt; the native asset is missing: $(WebSceneNativeEnginePackageAsset)" />
+    <Error Condition="!Exists('$(WebSceneNativeEnginePackageManifest)')"
+           Text="WebScene native runtime package is corrupt; its manifest is missing: $(WebSceneNativeEnginePackageManifest)" />
+    <Error Condition="!Exists('$(WebSceneNativeEnginePackageIcuData)')"
+           Text="WebScene native runtime package is corrupt; V8 ICU data is missing: $(WebSceneNativeEnginePackageIcuData)" />
+  </Target>
+</Project>

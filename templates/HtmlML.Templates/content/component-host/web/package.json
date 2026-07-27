@@ -1,7 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "scripts": { "build": "tsc --noEmit && vite build", "check": "htmlml-check --manifest htmlml-component.json --source src" },
-  "dependencies": { "@htmlml/sdk": "^1.0.0", "react": "^19.1.1", "react-dom": "^19.1.1" },
-  "devDependencies": { "@types/react": "^19.1.9", "@types/react-dom": "^19.1.7", "@vitejs/plugin-react": "^4.6.0", "typescript": "^5.8.3", "vite": "^7.0.4" }
-}

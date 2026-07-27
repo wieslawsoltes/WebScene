@@ -251,14 +251,14 @@ public class CanvasRenderingContext2DTests
         Assert.Equal(1, brush.GradientStops[1].Offset);
         Assert.Equal(Colors.Blue, brush.GradientStops[1].Color);
 
-        var model = Assert.IsType<HtmlML.Graphics.CanvasLinearGradientModel>(gradient.Model);
-        Assert.Equal(new HtmlML.Core.HtmlMlPoint(0, 0), model.Start);
-        Assert.Equal(new HtmlML.Core.HtmlMlPoint(100, 0), model.End);
+        var model = Assert.IsType<WebScene.Graphics.CanvasLinearGradientModel>(gradient.Model);
+        Assert.Equal(new WebScene.Core.WebScenePoint(0, 0), model.Start);
+        Assert.Equal(new WebScene.Core.WebScenePoint(100, 0), model.End);
         Assert.Equal(
             new[]
             {
-                new HtmlML.Graphics.CanvasGradientStop(0, HtmlML.Core.HtmlMlColor.FromRgb(255, 0, 0)),
-                new HtmlML.Graphics.CanvasGradientStop(1, HtmlML.Core.HtmlMlColor.FromRgb(0, 0, 255))
+                new WebScene.Graphics.CanvasGradientStop(0, WebScene.Core.WebSceneColor.FromRgb(255, 0, 0)),
+                new WebScene.Graphics.CanvasGradientStop(1, WebScene.Core.WebSceneColor.FromRgb(0, 0, 255))
             },
             model.Stops);
     }
@@ -269,10 +269,10 @@ public class CanvasRenderingContext2DTests
         var gradient = new CanvasRadialGradient(1, 2, 3, 4, 5, 6);
         gradient.addColorStop(.25, "rgba(10, 20, 30, 0.5)");
 
-        var model = Assert.IsType<HtmlML.Graphics.CanvasRadialGradientModel>(gradient.Model);
-        Assert.Equal(new HtmlML.Core.HtmlMlPoint(1, 2), model.StartCenter);
+        var model = Assert.IsType<WebScene.Graphics.CanvasRadialGradientModel>(gradient.Model);
+        Assert.Equal(new WebScene.Core.WebScenePoint(1, 2), model.StartCenter);
         Assert.Equal(3, model.StartRadius);
-        Assert.Equal(new HtmlML.Core.HtmlMlPoint(4, 5), model.EndCenter);
+        Assert.Equal(new WebScene.Core.WebScenePoint(4, 5), model.EndCenter);
         Assert.Equal(6, model.EndRadius);
         var stop = Assert.Single(model.Stops);
         Assert.Equal(.25, stop.Offset);
@@ -379,14 +379,14 @@ public class CanvasRenderingContext2DTests
         Assert.Equal(
             new[]
             {
-                HtmlML.Graphics.CanvasPathCommandKind.MoveTo,
-                HtmlML.Graphics.CanvasPathCommandKind.LineTo,
-                HtmlML.Graphics.CanvasPathCommandKind.CubicBezierTo,
-                HtmlML.Graphics.CanvasPathCommandKind.QuadraticBezierTo,
-                HtmlML.Graphics.CanvasPathCommandKind.Arc,
-                HtmlML.Graphics.CanvasPathCommandKind.ArcTo,
-                HtmlML.Graphics.CanvasPathCommandKind.Rect,
-                HtmlML.Graphics.CanvasPathCommandKind.ClosePath
+                WebScene.Graphics.CanvasPathCommandKind.MoveTo,
+                WebScene.Graphics.CanvasPathCommandKind.LineTo,
+                WebScene.Graphics.CanvasPathCommandKind.CubicBezierTo,
+                WebScene.Graphics.CanvasPathCommandKind.QuadraticBezierTo,
+                WebScene.Graphics.CanvasPathCommandKind.Arc,
+                WebScene.Graphics.CanvasPathCommandKind.ArcTo,
+                WebScene.Graphics.CanvasPathCommandKind.Rect,
+                WebScene.Graphics.CanvasPathCommandKind.ClosePath
             },
             builder.Model.Commands.Select(static command => command.Kind));
         Assert.Equal(17, builder.Model.Commands[4].Radius);
@@ -434,24 +434,24 @@ public class CanvasRenderingContext2DTests
 
         var command = Assert.IsType<FillRectCommand>(Assert.Single(surface.Commands));
         var state = command.Snapshot.Model;
-        Assert.IsType<HtmlML.Graphics.CanvasGradientPaintModel>(state.FillStyle);
-        var stroke = Assert.IsType<HtmlML.Graphics.CanvasColorPaintModel>(state.StrokeStyle);
+        Assert.IsType<WebScene.Graphics.CanvasGradientPaintModel>(state.FillStyle);
+        var stroke = Assert.IsType<WebScene.Graphics.CanvasColorPaintModel>(state.StrokeStyle);
         Assert.Equal((byte)1, stroke.Color.R);
         Assert.Equal(.75, state.GlobalAlpha);
-        Assert.Equal(HtmlML.Graphics.CanvasCompositeOperation.Multiply, state.CompositeOperation);
-        Assert.Equal(HtmlML.Graphics.CanvasLineCap.Round, state.LineCap);
-        Assert.Equal(HtmlML.Graphics.CanvasLineJoin.Bevel, state.LineJoin);
+        Assert.Equal(WebScene.Graphics.CanvasCompositeOperation.Multiply, state.CompositeOperation);
+        Assert.Equal(WebScene.Graphics.CanvasLineCap.Round, state.LineCap);
+        Assert.Equal(WebScene.Graphics.CanvasLineJoin.Bevel, state.LineJoin);
         Assert.Equal(new double[] { 2, 4 }, state.LineDash);
         Assert.Equal(1, state.LineDashOffset);
-        Assert.Equal(HtmlML.Graphics.CanvasTextAlign.Center, state.TextAlign);
-        Assert.Equal(HtmlML.Graphics.CanvasTextBaseline.Middle, state.TextBaseline);
+        Assert.Equal(WebScene.Graphics.CanvasTextAlign.Center, state.TextAlign);
+        Assert.Equal(WebScene.Graphics.CanvasTextBaseline.Middle, state.TextBaseline);
         Assert.False(state.ImageSmoothingEnabled);
-        Assert.Equal(HtmlML.Graphics.CanvasImageSmoothingQuality.High, state.ImageSmoothingQuality);
+        Assert.Equal(WebScene.Graphics.CanvasImageSmoothingQuality.High, state.ImageSmoothingQuality);
         Assert.Equal((5d, 6d, 7d), (state.Shadow.Blur, state.Shadow.OffsetX, state.Shadow.OffsetY));
-        Assert.Equal(new HtmlML.Graphics.GraphicsTransform(1, 0, 0, 1, 8, 9), state.Transform);
+        Assert.Equal(new WebScene.Graphics.GraphicsTransform(1, 0, 0, 1, 8, 9), state.Transform);
         var clip = Assert.Single(state.Clips);
         Assert.Equal(state.Transform, clip.Transform);
-        Assert.Equal(HtmlML.Graphics.CanvasPathCommandKind.Rect, Assert.Single(clip.Path.Commands).Kind);
+        Assert.Equal(WebScene.Graphics.CanvasPathCommandKind.Rect, Assert.Single(clip.Path.Commands).Kind);
         Assert.NotNull(command.Snapshot.ClipGeometry);
         Assert.Equal(new Rect(9, 11, 30, 40), command.Snapshot.ClipGeometry!.Bounds);
     }
@@ -537,16 +537,16 @@ public class CanvasRenderingContext2DTests
         Assert.Equal(
             new[]
             {
-                HtmlML.Graphics.CanvasDisplayCommandKind.FillRectangle,
-                HtmlML.Graphics.CanvasDisplayCommandKind.FillRectangle,
-                HtmlML.Graphics.CanvasDisplayCommandKind.StrokeRectangle,
-                HtmlML.Graphics.CanvasDisplayCommandKind.ClearRectangle,
-                HtmlML.Graphics.CanvasDisplayCommandKind.FillPath,
-                HtmlML.Graphics.CanvasDisplayCommandKind.StrokePath,
-                HtmlML.Graphics.CanvasDisplayCommandKind.FillText,
-                HtmlML.Graphics.CanvasDisplayCommandKind.StrokeText,
-                HtmlML.Graphics.CanvasDisplayCommandKind.DrawImage,
-                HtmlML.Graphics.CanvasDisplayCommandKind.PutImageData
+                WebScene.Graphics.CanvasDisplayCommandKind.FillRectangle,
+                WebScene.Graphics.CanvasDisplayCommandKind.FillRectangle,
+                WebScene.Graphics.CanvasDisplayCommandKind.StrokeRectangle,
+                WebScene.Graphics.CanvasDisplayCommandKind.ClearRectangle,
+                WebScene.Graphics.CanvasDisplayCommandKind.FillPath,
+                WebScene.Graphics.CanvasDisplayCommandKind.StrokePath,
+                WebScene.Graphics.CanvasDisplayCommandKind.FillText,
+                WebScene.Graphics.CanvasDisplayCommandKind.StrokeText,
+                WebScene.Graphics.CanvasDisplayCommandKind.DrawImage,
+                WebScene.Graphics.CanvasDisplayCommandKind.PutImageData
             },
             commands.Select(static command => command.Kind));
         Assert.NotNull(commands[4].Path);
@@ -554,7 +554,7 @@ public class CanvasRenderingContext2DTests
         Assert.Equal("fill", commands[6].Text);
         Assert.False(commands[8].Resource.IsEmpty);
         Assert.NotNull(commands[9].ImageData);
-        Assert.Equal(new HtmlML.Core.HtmlMlRect(25, 25, 1, 1), commands[9].DestinationRectangle);
+        Assert.Equal(new WebScene.Core.WebSceneRect(25, 25, 1, 1), commands[9].DestinationRectangle);
     }
 
     [AvaloniaFact]
@@ -567,14 +567,14 @@ public class CanvasRenderingContext2DTests
             VirtualWidth = 4,
             VirtualHeight = 4
         };
-        surface.PortableDisplayList.Add(new HtmlML.Graphics.CanvasDisplayCommand(
-            HtmlML.Graphics.CanvasDisplayCommandKind.FillRectangle,
-            HtmlML.Graphics.CanvasStateModel.Default with
+        surface.PortableDisplayList.Add(new WebScene.Graphics.CanvasDisplayCommand(
+            WebScene.Graphics.CanvasDisplayCommandKind.FillRectangle,
+            WebScene.Graphics.CanvasStateModel.Default with
             {
-                FillStyle = new HtmlML.Graphics.CanvasColorPaintModel(
-                    HtmlML.Core.HtmlMlColor.FromRgb(255, 0, 0))
+                FillStyle = new WebScene.Graphics.CanvasColorPaintModel(
+                    WebScene.Core.WebSceneColor.FromRgb(255, 0, 0))
             },
-            Rectangle: new HtmlML.Core.HtmlMlRect(0, 0, 4, 4)));
+            Rectangle: new WebScene.Core.WebSceneRect(0, 0, 4, 4)));
         Assert.Empty(surface.Commands);
 
         var window = new Window { Width = 4, Height = 4, Content = surface };
@@ -606,8 +606,8 @@ public class CanvasRenderingContext2DTests
             22, 4, 5, 0, 5, 10
         ];
         string[] strings = ["#ff0000", "#0000ff"];
-        var reference = new HtmlML.Graphics.CanvasReferenceRenderer();
-        reference.Replay(packet, strings, new HtmlML.Core.HtmlMlSize(10, 10));
+        var reference = new WebScene.Graphics.CanvasReferenceRenderer();
+        reference.Replay(packet, strings, new WebScene.Core.WebSceneSize(10, 10));
 
         var surface = new CanvasDrawingSurface
         {
@@ -644,17 +644,17 @@ public class CanvasRenderingContext2DTests
             VirtualWidth = 80,
             VirtualHeight = 32
         };
-        surface.PortableDisplayList.Add(new HtmlML.Graphics.CanvasDisplayCommand(
-            HtmlML.Graphics.CanvasDisplayCommandKind.FillText,
-            HtmlML.Graphics.CanvasStateModel.Default with
+        surface.PortableDisplayList.Add(new WebScene.Graphics.CanvasDisplayCommand(
+            WebScene.Graphics.CanvasDisplayCommandKind.FillText,
+            WebScene.Graphics.CanvasStateModel.Default with
             {
-                FillStyle = new HtmlML.Graphics.CanvasColorPaintModel(
-                    HtmlML.Core.HtmlMlColor.FromRgb(255, 0, 0)),
+                FillStyle = new WebScene.Graphics.CanvasColorPaintModel(
+                    WebScene.Core.WebSceneColor.FromRgb(255, 0, 0)),
                 Font = "20px sans-serif",
-                TextBaseline = HtmlML.Graphics.CanvasTextBaseline.Top
+                TextBaseline = WebScene.Graphics.CanvasTextBaseline.Top
             },
             Text: "R3",
-            Origin: new HtmlML.Core.HtmlMlPoint(2, 2)));
+            Origin: new WebScene.Core.WebScenePoint(2, 2)));
         Assert.Empty(surface.Commands);
 
         var window = new Window { Width = 80, Height = 32, Content = surface };
@@ -691,8 +691,8 @@ public class CanvasRenderingContext2DTests
         var path = Assert.Single(surface.PortableDisplayList.Commands).Path!;
         var part = Assert.Single(path.Parts);
         Assert.Equal("M 0 0 L 10 0 L 0 10 Z", part.Path.SvgPathData);
-        Assert.Equal(HtmlML.Graphics.CanvasPathCommandKind.Rect, Assert.Single(part.Path.Commands).Kind);
-        Assert.Equal(new HtmlML.Graphics.GraphicsTransform(2, 0, 0, 2, 3, 4), part.Transform);
+        Assert.Equal(WebScene.Graphics.CanvasPathCommandKind.Rect, Assert.Single(part.Path.Commands).Kind);
+        Assert.Equal(new WebScene.Graphics.GraphicsTransform(2, 0, 0, 2, 3, 4), part.Transform);
         Assert.True(command.Geometry.FillContains(new Point(5, 6)));
         Assert.True(command.Geometry.FillContains(new Point(45, 46)));
     }
@@ -1138,7 +1138,7 @@ public class CanvasRenderingContext2DTests
 
         // Browser-observed outer badge path: a 34px square with
         // 16px corners. Chromium's antialiasing reads this as circular, while
-        // retaining its 2px straight edges makes the HtmlML badge look squared.
+        // retaining its 2px straight edges makes the WebScene badge look squared.
         ctx.beginPath();
         ctx.moveTo(14.5, -1);
         ctx.lineTo(16.5, -1);
@@ -1356,7 +1356,7 @@ public class CanvasRenderingContext2DTests
         throw new NotSupportedException($"Unsupported screenshot pixel format: {format}.");
     }
 
-    private static void AssertPixelWithin(HtmlML.Core.HtmlMlColor expected, Color actual, int tolerance)
+    private static void AssertPixelWithin(WebScene.Core.WebSceneColor expected, Color actual, int tolerance)
     {
         var within = Math.Abs(expected.A - actual.A) <= tolerance
                      && Math.Abs(expected.R - actual.R) <= tolerance

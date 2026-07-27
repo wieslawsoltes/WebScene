@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace HtmlML.Samples.ComponentHost;
+namespace WebScene.Samples.ComponentHost;
 
 internal static class Program
 {

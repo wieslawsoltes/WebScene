@@ -2,13 +2,13 @@
     x:Class="NativeRuntimeShowcase.Avalonia.MainWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:native="clr-namespace:HtmlML.Backends.Avalonia.Native;assembly=HtmlML.Backend.Avalonia"
+    xmlns:native="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia"
     Width="1440"
     Height="900"
     MinWidth="960"
     MinHeight="640"
     Background="#101216"
-    Title="HtmlML · Native Runtime Showcase · Avalonia">
+    Title="WebScene · Native Runtime Showcase · Avalonia">
   <Grid RowDefinitions="Auto,Auto,*,Auto">
     <Border
         Padding="14,11"
@@ -20,7 +20,7 @@
           <TextBlock
               FontSize="18"
               FontWeight="SemiBold"
-              Text="HtmlML native runtime showcase" />
+              Text="WebScene native runtime showcase" />
           <TextBlock
               Foreground="#AEB5C2"
               Text="Native V8 · retained canvas scene · generated .NET ↔ Monaco API · Avalonia" />
@@ -67,8 +67,8 @@
     </Border>
 
     <Grid Grid.Row="2">
-      <native:NativeHtmlMlView x:Name="TerminalHost" />
-      <native:NativeHtmlMlView x:Name="EditorHost" IsVisible="False" />
+      <native:NativeWebSceneView x:Name="TerminalHost" />
+      <native:NativeWebSceneView x:Name="EditorHost" IsVisible="False" />
     </Grid>
 
     <Border

@@ -1,8 +1,8 @@
-# Concurrent HtmlML Engine Design
+# Concurrent WebScene Engine Design
 
 ## Purpose
 
-HtmlML applications may host several independent JavaScript components at the
+WebScene applications may host several independent JavaScript components at the
 same time. A common case is multiple TradingView charts loading the same
 scripts and resources concurrently. The runtime should preserve isolation
 between components without repeating expensive work for identical inputs.
@@ -19,7 +19,7 @@ Cross-process coordination and shared-isolate hosting are later extensions.
 
 ## Existing Behaviour
 
-HtmlML currently provides several useful layers of reuse:
+WebScene currently provides several useful layers of reuse:
 
 - V8, its platform and ICU data are initialized once per process.
 - Each native engine owns a separate V8 isolate, context, heap, DOM and event
@@ -32,7 +32,7 @@ HtmlML currently provides several useful layers of reuse:
 - Persistent writes use uniquely named temporary files followed by rename, so
   readers cannot observe a partially written final entry.
 
-The compilation key contains the HtmlML runtime identity, document name and
+The compilation key contains the WebScene runtime identity, document name and
 exact source bytes. Consequently, different scripts cannot alias merely
 because they use the same URL.
 
@@ -127,7 +127,7 @@ default:
 - JavaScript execution within an isolate is serialized.
 - A long-running component can delay every context in the isolate.
 - Garbage collection and fatal isolate failures affect the whole group.
-- HtmlML currently stores runtime state on the isolate; multi-context hosting
+- WebScene currently stores runtime state on the isolate; multi-context hosting
   would require context-local embedder state and callback routing.
 - Scheduling, timer ownership, microtask checkpoints and DOM bindings would
   need explicit per-context isolation.
@@ -339,24 +339,24 @@ ordinary isolate-local heap objects or handles transferable.
 
 The runtime has experimental controls for:
 
-- `HTMLML_V8_MAX_HEAP_MIB` and `HTMLML_V8_INITIAL_HEAP_MIB`, translated into
+- `WEBSCENE_V8_MAX_HEAP_MIB` and `WEBSCENE_V8_INITIAL_HEAP_MIB`, translated into
   `v8::ResourceConstraints` before isolate creation;
-- `HTMLML_V8_MEMORY_SAVER`, translated into `Isolate::SetMemorySaverMode`;
-- `HTMLML_V8_OPTIMIZE_FOR_SIZE`, translated into V8's process-start
+- `WEBSCENE_V8_MEMORY_SAVER`, translated into `Isolate::SetMemorySaverMode`;
+- `WEBSCENE_V8_OPTIMIZE_FOR_SIZE`, translated into V8's process-start
   `--optimize-for-size` flag. Release packages default this to enabled; setting
   the value to `0`, `false`, `no` or `off` disables it before the first engine
   initializes. In the pinned V8 this reduces the maximum semi-space size to
   1 MiB without disabling JIT;
-- `HTMLML_V8_PLATFORM_THREADS`, which bounds the one process-wide V8 worker
+- `WEBSCENE_V8_PLATFORM_THREADS`, which bounds the one process-wide V8 worker
   pool;
-- `HTMLML_V8_IDLE_TASKS`, which enables platform idle-task support. A scheduler
+- `WEBSCENE_V8_IDLE_TASKS`, which enables platform idle-task support. A scheduler
   integration is still required before idle work is actively budgeted.
 
 Heap limits are safety/GC-frequency controls, not free memory reductions. A
 limit below the chart's live set will increase GC work and can terminate the
 process if V8 cannot recover. The JavaScript stack limit similarly bounds
 recursion; it does not shrink the operating-system stack reserved by
-HtmlML's `std::jthread`. Measurements show the V8 platform threads are mostly
+WebScene's `std::jthread`. Measurements show the V8 platform threads are mostly
 process-wide and additional engines add roughly one worker thread each, so
 thread-stack tuning is lower priority than heap representation and chart
 grouping.
@@ -368,7 +368,7 @@ cannot execute the same simultaneous JavaScript work in parallel and is
 unlikely to preserve 60 Hz during resize or other all-chart activity.
 
 The first shared-engine spike also found a more immediate constraint:
-HtmlML currently owns one active iframe context and one mutable iframe CSS
+WebScene currently owns one active iframe context and one mutable iframe CSS
 rule set per engine. Four sibling TradingView iframes cannot yet reach
 independent ready states inside one engine. Supporting that topology requires
 per-frame contexts, CSS state, timers, listeners, microtask ownership and DOM
@@ -418,7 +418,7 @@ from shrinking JavaScript's recursion limit:
    tuning and full frame delivery; hidden charts enter memory-saver mode,
    receive a reduced animation cadence and may receive a low-memory
    notification after an idle grace period.
-5. Evaluate a custom context snapshot for HtmlML's stable host bootstrap. This
+5. Evaluate a custom context snapshot for WebScene's stable host bootstrap. This
    can improve creation time, but deserialized mutable TradingView heaps remain
    isolate-local, so snapshots must not be counted as live heap sharing.
 6. Measure a V8 build without unused optional subsystems such as WebAssembly
@@ -559,7 +559,7 @@ empty sample. The first chart is not representative of another chart: it pays
 for process-wide V8, graphics, font and shared resource initialization.
 
 The release linker now hides every V8/C++ implementation symbol, exports
-exactly the 32-function HtmlML C ABI, dead-strips unreachable sections and
+exactly the 32-function WebScene C ABI, dead-strips unreachable sections and
 removes local link symbols. On macOS arm64 the pointer-compressed dylib fell
 from 48 MiB to 25 MiB: about 20 MiB of that is package/link metadata and
 3.6 MiB is removed text/constants. Three fresh-process four-chart runs all
@@ -606,11 +606,11 @@ release those allocator regions. A direct allocator pressure-relief call
 returned no memory and has therefore been removed. Surface lifetime and idle
 V8 policy remain separate targets.
 
-An empty-window hold subsequently isolated the surface cost before any HtmlML
+An empty-window hold subsequently isolated the surface cost before any WebScene
 engine or chart existed. The 1,920-by-1,200 Avalonia top level already owned
 two 9,008 KiB Skia allocations and one freed allocation of the same size.
-Those buffers are top-level swapchain/backbuffer cost, not per-chart HtmlML
-canvas surfaces. Retained HtmlML canvas layers are SKPicture command streams;
+Those buffers are top-level swapchain/backbuffer cost, not per-chart WebScene
+canvas surfaces. Retained WebScene canvas layers are SKPicture command streams;
 their reported logical bitmap dimensions do not represent retained RGBA
 allocations. Renderer buffer pooling is therefore rejected as a chart-density
 optimization unless later allocation stacks identify a separate per-chart
@@ -761,9 +761,9 @@ Its public .NET-facing lifecycle is asynchronous:
   await it before exposing the live chart.
 
 The application-facing facade now builds as the reusable
-`HtmlML.TradingView.Avalonia` assembly rather than being compiled into the
+`WebScene.TradingView.Avalonia` assembly rather than being compiled into the
 sample executable. It is packable independently, consumes either the local or
-NuGet HtmlML Avalonia backend, and leaves the matching RID-native runtime as a
+NuGet WebScene Avalonia backend, and leaves the matching RID-native runtime as a
 host-application dependency. This keeps `SuspendAsync`/`ResumeAsync`, the
 datafeed contract, and native session factory usable by another Avalonia
 application without bringing the private diagnostic executable with them.
@@ -847,7 +847,7 @@ risk:
    experimental switch has been removed.
 4. Continue attributing transient native allocations, but do not treat the
    top-level Skia swapchain as per-chart memory. The full-window buffers exist
-   before HtmlML starts. Generic PMR pooling, allocator pressure relief and the
+   before WebScene starts. Generic PMR pooling, allocator pressure relief and the
    macOS nano allocator have already been rejected by measurements.
 5. Continue compact native representation only where metrics show density:
    atomize repeated DOM/CSS identifiers, use enums for closed CSS value sets,
@@ -855,7 +855,7 @@ risk:
    now only about 10.52 MiB at four charts, so its remaining total upside is
    bounded and lower than V8/graphics work.
 6. Keep separate isolates for simultaneously active charts. A shared isolate
-   cannot execute their JavaScript in parallel, HtmlML does not yet have
+   cannot execute their JavaScript in parallel, WebScene does not yet have
    independent multi-frame state inside one engine, and eight-chart resize is
    already CPU-bound. Shared-engine grouping remains suitable only for
    inactive or mutually exclusive charts after a dedicated scheduler design.
@@ -881,13 +881,13 @@ Several V8 knobs have now been measured and rejected as density defaults:
 - A runtime-created custom startup snapshot for the pure-JavaScript
   IntersectionObserver bootstrap raised the observed four-chart median to
   384.8 MiB from 378.1 MiB and did not improve startup. It is rejected; a
-  build-time mapped snapshot would still leave HtmlML's native callback
+  build-time mapped snapshot would still leave WebScene's native callback
   templates and per-document state isolate-local.
 
 Independently of retained memory, incremental native layout is now the leading
 throughput optimization. A TradingView resize alternates layout-affecting
 width/height/top/left writes with synchronous `offsetWidth`/`offsetHeight`
-reads. HtmlML currently resolves each dirty read with a full document layout.
+reads. WebScene currently resolves each dirty read with a full document layout.
 The measured post-listener layout/publication work is small in isolation, but
 the repeated forced-layout boundary amplifies TradingView's resize observers
 and JavaScript layout work across eight engines. The next performance spike
@@ -992,7 +992,7 @@ callbacks into 7 ms turns and regressed document startup from roughly
 
 The large interaction regression was subsequently traced to input/render
 ordering, not to the native allocation reductions. Commit `b2f14ea` introduced
-continuous-input aggregation ordered by `htmlml_input_event.sequence`, but the
+continuous-input aggregation ordered by `webscene_input_event.sequence`, but the
 managed host intentionally submits render opportunities with sequence zero.
 When a pointer move and the following host frame occupied one aggregate, the
 frame therefore ran first. TradingView's pointer handler requested RAF only
@@ -1003,7 +1003,7 @@ pointer-then-frame test proves that the pointer handler joins that rendering
 opportunity even though the frame's public sequence is zero.
 
 The scene lane is now an ordered, bounded two-diff queue for compositors that
-opt into `htmlml_engine_acquire_next_scene`; the legacy latest-scene API retains
+opt into `webscene_engine_acquire_next_scene`; the legacy latest-scene API retains
 its one-scene behavior. An ordered consumer can apply one diff while the native
 worker prepares the next without breaking base revisions. An A/B against the
 legacy lane improved one-chart pan/axis by roughly 3--8 Hz and removed active
@@ -1137,7 +1137,7 @@ single successful execution.
 
 ## Decision
 
-HtmlML retains separate isolates and worker threads as its compatibility,
+WebScene retains separate isolates and worker threads as its compatibility,
 isolation and responsiveness default. Native process-wide single-flight
 compilation and resource loading now prevent duplicate cold work, and
 immutable cached-data buffers are shared across those isolates. Shared-isolate

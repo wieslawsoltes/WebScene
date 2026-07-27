@@ -34,12 +34,12 @@ function registerModule(name, options, body) {
 
 function registerTest(name, body, skipped = false) {
   const testName = String(name);
-  const blocked = globalThis.__htmlMlQUnitBlockedNames;
+  const blocked = globalThis.__webSceneQUnitBlockedNames;
   if (blocked && (typeof blocked.has === "function"
     ? blocked.has(testName)
     : Array.isArray(blocked) && blocked.includes(testName))) return;
   const index = registrationIndex++;
-  const shard = globalThis.__htmlMlQUnitShard;
+  const shard = globalThis.__webSceneQUnitShard;
   if (shard && index % Number(shard.count) !== Number(shard.index)) return;
   currentModule.children.push({ type: "test", name: testName, body, skipped });
 }

@@ -13,7 +13,7 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(root, "../..");
 const manifestPath = path.join(root, "ecosystem-profile.json");
-const runnerProject = path.join(repositoryRoot, "tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj");
+const runnerProject = path.join(repositoryRoot, "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj");
 
 function parseArguments(values) {
   const options = new Map();
@@ -73,7 +73,7 @@ function runWptEngine(engine, outputDirectory, nativeLibrary, timeoutSeconds) {
   ];
   if (engine === "native") {
     if (!nativeLibrary || !existsSync(nativeLibrary)) {
-      throw new Error("Native ecosystem evidence requires --native-library <existing path> or HTMLML_NATIVE_ENGINE_LIBRARY.");
+      throw new Error("Native ecosystem evidence requires --native-library <existing path> or WEBSCENE_NATIVE_ENGINE_LIBRARY.");
     }
     args.push("--native-library", nativeLibrary);
   }
@@ -106,7 +106,7 @@ function findChrome() {
 }
 
 async function launchChrome(executable) {
-  const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "htmlml-ecosystem-chrome-"));
+  const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "webscene-ecosystem-chrome-"));
   const child = spawn(executable, [
     "--headless=new",
     "--disable-background-networking",
@@ -186,7 +186,7 @@ async function runChromeDocument(client, documentPath, timeoutSeconds) {
     let state = null;
     while (Date.now() < deadline) {
       try {
-        const json = await evaluate(client, "JSON.stringify(globalThis.__htmlMlWptState || null)");
+        const json = await evaluate(client, "JSON.stringify(globalThis.__webSceneWptState || null)");
         state = JSON.parse(json);
         if (state?.complete) break;
       } catch { /* Execution context is replaced while navigating. */ }
@@ -249,7 +249,7 @@ async function runChrome(manifest, outputDirectory, timeoutSeconds) {
     await closeChrome(chrome);
   }
   const artifact = {
-    schema: "htmlml-ecosystem-chrome-result-v1",
+    schema: "webscene-ecosystem-chrome-result-v1",
     profile: manifest.profile,
     engine: "chrome",
     identity: chromeIdentity.version,
@@ -297,7 +297,7 @@ const outputRoot = path.resolve(options.get("--output") || path.join(
   repositoryRoot,
   "TestResults/EcosystemCompatibility",
   new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-")));
-const nativeLibrary = options.get("--native-library") || process.env.HTMLML_NATIVE_ENGINE_LIBRARY;
+const nativeLibrary = options.get("--native-library") || process.env.WEBSCENE_NATIVE_ENGINE_LIBRARY;
 const timeoutSeconds = Number(options.get("--timeout-seconds") || 20);
 if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) throw new Error("--timeout-seconds must be positive.");
 
@@ -319,7 +319,7 @@ for (const engine of engines) {
 }
 
 const report = {
-  schema: "htmlml-ecosystem-consumer-result-v1",
+  schema: "webscene-ecosystem-consumer-result-v1",
   profile: manifest.profile,
   recordedAt: new Date().toISOString(),
   packageLockSha256: provenance.packageLockSha256,

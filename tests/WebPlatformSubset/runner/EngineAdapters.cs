@@ -10,7 +10,7 @@ using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
 
-namespace HtmlML.WebPlatformSubset.Runner;
+namespace WebScene.WebPlatformSubset.Runner;
 
 internal interface IWptEngineEnvironment : IDisposable
 {
@@ -77,14 +77,14 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         }
         if (!File.Exists(libraryPath))
         {
-            throw new FileNotFoundException("Native HtmlML engine library was not found.", libraryPath);
+            throw new FileNotFoundException("Native WebScene engine library was not found.", libraryPath);
         }
 
         NativeApi.Configure(libraryPath);
         _engine = NativeApi.Create(options.NativeCacheDirectory);
         if (_engine == IntPtr.Zero)
         {
-            throw new InvalidOperationException("The native HtmlML engine could not be created.");
+            throw new InvalidOperationException("The native WebScene engine could not be created.");
         }
 
         try
@@ -114,7 +114,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
 
     public string? ReadState()
     {
-        var json = Evaluate("window.__htmlMlWptState || null", "htmlml-wpt-read-state.js");
+        var json = Evaluate("window.__webSceneWptState || null", "webscene-wpt-read-state.js");
         return string.Equals(json, "null", StringComparison.Ordinal) ? null : json;
     }
 
@@ -124,10 +124,10 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
     {
         var actionJson = Evaluate("""
             (function () {
-              const queue = window.__htmlMlWptInputActions;
+              const queue = window.__webSceneWptInputActions;
               return queue && queue.length ? queue.shift() : null;
             })()
-            """, "htmlml-wpt-read-input.js");
+            """, "webscene-wpt-read-input.js");
         if (string.Equals(actionJson, "null", StringComparison.Ordinal)) return;
 
         var action = JsonSerializer.Deserialize<NativeInputAction>(actionJson, JsonOptions)
@@ -186,7 +186,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                     }
                     Execute(
                         $"document.getElementById({JsonSerializer.Serialize(action.TargetId)})?.focus();",
-                        "htmlml-wpt-send-keys-focus.js");
+                        "webscene-wpt-send-keys-focus.js");
                     SettleFrame();
                     foreach (var rune in action.Value.EnumerateRunes())
                     {
@@ -210,7 +210,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 // focus target, matching the managed adapter's contract.
                 Execute(
                     $"document.getElementById({JsonSerializer.Serialize(action.TargetId)})?.focus();",
-                    "htmlml-wpt-click-focus.js");
+                    "webscene-wpt-click-focus.js");
                 SettleFrame();
             }
         }
@@ -220,8 +220,8 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         }
 
         Execute(
-            $"window.__htmlMlCompleteInputAction({action.Id}, {JsonSerializer.Serialize(error)});",
-            "htmlml-wpt-complete-input.js");
+            $"window.__webSceneCompleteInputAction({action.Id}, {JsonSerializer.Serialize(error)});",
+            "webscene-wpt-complete-input.js");
     }
 
     public void SettleFrame()
@@ -236,7 +236,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         });
         // A native frame consumes animation work; the no-op script then gives
         // the runtime a task-drain turn for zero-delay WPT completion timers.
-        Execute("void 0", "htmlml-wpt-pump.js");
+        Execute("void 0", "webscene-wpt-pump.js");
         AcquireLatestScene(waitForSequence: _sequence);
     }
 
@@ -299,51 +299,51 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         var markup = styles + body;
 
         Execute($$"""
-            const htmlMlViewportRoot = document.body;
-            const htmlMlDocumentElement = document.createElement('html');
-            const htmlMlHead = document.createElement('head');
-            const htmlMlBody = document.createElement('body');
-            htmlMlViewportRoot.appendChild(htmlMlDocumentElement);
-            htmlMlDocumentElement.appendChild(htmlMlHead);
-            htmlMlDocumentElement.appendChild(htmlMlBody);
+            const webSceneViewportRoot = document.body;
+            const webSceneDocumentElement = document.createElement('html');
+            const webSceneHead = document.createElement('head');
+            const webSceneBody = document.createElement('body');
+            webSceneViewportRoot.appendChild(webSceneDocumentElement);
+            webSceneDocumentElement.appendChild(webSceneHead);
+            webSceneDocumentElement.appendChild(webSceneBody);
             for (const [name, value] of {{JsonSerializer.Serialize(htmlAttributes)}}) {
-              htmlMlDocumentElement.setAttribute(name, value);
+              webSceneDocumentElement.setAttribute(name, value);
             }
             for (const [name, value] of {{JsonSerializer.Serialize(bodyAttributes)}}) {
-              htmlMlBody.setAttribute(name, value);
+              webSceneBody.setAttribute(name, value);
             }
             // Adapter viewport normalization belongs to the internal native
             // viewport box, not the authored BODY. Keeping it there preserves
             // browser CSS inheritance/cascade and prevents a zero-height BODY
             // with only positioned children from clipping WPT hit testing.
-            htmlMlViewportRoot.style.margin = '0';
-            htmlMlViewportRoot.style.padding = '0';
-            htmlMlViewportRoot.style.overflow = 'hidden';
-            htmlMlViewportRoot.style.background = '#ffffff';
-            htmlMlBody.innerHTML = {{JsonSerializer.Serialize(markup)}};
-            """, Path.Combine(upstreamRoot, "htmlml-wpt-document.js"));
+            webSceneViewportRoot.style.margin = '0';
+            webSceneViewportRoot.style.padding = '0';
+            webSceneViewportRoot.style.overflow = 'hidden';
+            webSceneViewportRoot.style.background = '#ffffff';
+            webSceneBody.innerHTML = {{JsonSerializer.Serialize(markup)}};
+            """, Path.Combine(upstreamRoot, "webscene-wpt-document.js"));
 
         for (var index = 0; index < scripts.Count; index++)
         {
             if (string.IsNullOrWhiteSpace(scripts[index].Source)) continue;
             Execute(
                 scripts[index].Source,
-                Path.Combine(upstreamRoot, $"htmlml-wpt-inline-{index}.js"));
+                Path.Combine(upstreamRoot, $"webscene-wpt-inline-{index}.js"));
         }
         Execute(
             """
             document.readyState = 'interactive';
             document.dispatchEvent(new Event('DOMContentLoaded'));
             document.readyState = 'complete';
-            const htmlMlLoadEvent = new Event('load');
-            const htmlMlOnLoad = window.onload;
+            const webSceneLoadEvent = new Event('load');
+            const webSceneOnLoad = window.onload;
             window.onload = null;
-            window.dispatchEvent(htmlMlLoadEvent);
-            if (typeof htmlMlOnLoad === 'function') {
-              htmlMlOnLoad.call(window, htmlMlLoadEvent);
+            window.dispatchEvent(webSceneLoadEvent);
+            if (typeof webSceneOnLoad === 'function') {
+              webSceneOnLoad.call(window, webSceneLoadEvent);
             }
             """,
-            Path.Combine(upstreamRoot, "htmlml-wpt-load.js"));
+            Path.Combine(upstreamRoot, "webscene-wpt-load.js"));
     }
 
     private NativePoint ResolveTarget(string id)
@@ -355,7 +355,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
               const rect = target.getBoundingClientRect();
               return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
             })()
-            """, "htmlml-wpt-target.js");
+            """, "webscene-wpt-target.js");
         if (string.Equals(json, "null", StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"WPT input target '#{id}' was not found.");
@@ -444,7 +444,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         if (!NativeApi.TryEvaluate(
                 _engine,
                 "null",
-                $"{documentName}.htmlml-task-barrier.js",
+                $"{documentName}.webscene-task-barrier.js",
                 out _))
         {
             throw new InvalidOperationException(
@@ -980,7 +980,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
 
 internal static unsafe class NativeApi
 {
-    private const string LibraryName = "htmlml_native_engine";
+    private const string LibraryName = "webscene_native_engine";
     private static readonly object Gate = new();
     private static string? _libraryPath;
     private static bool _resolverInstalled;
@@ -1163,16 +1163,16 @@ internal static unsafe class NativeApi
 
     internal static uint GetAbiVersion() => EngineGetAbiVersion();
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_get_abi_version")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_get_abi_version")]
     private static extern uint EngineGetAbiVersion();
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_create")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_create")]
     private static extern IntPtr EngineCreate(uint simulatedChartCommandCount);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_create_with_options")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_create_with_options")]
     private static extern IntPtr EngineCreateWithOptions(in NativeEngineOptions options);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_execute_script")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_execute_script")]
     private static extern byte EngineExecuteScript(
         IntPtr engine,
         byte[] source,
@@ -1180,13 +1180,13 @@ internal static unsafe class NativeApi
         byte[] documentName,
         nuint documentNameLength);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_set_resource_root")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_set_resource_root")]
     private static extern byte EngineSetResourceRoot(
         IntPtr engine,
         byte[] root,
         nuint rootLength);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_evaluate_json")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_evaluate_json")]
     private static extern nuint EngineEvaluateJson(
         IntPtr engine,
         byte[] source,
@@ -1197,25 +1197,25 @@ internal static unsafe class NativeApi
         nuint destinationCapacity,
         uint timeoutMilliseconds);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_copy_last_error")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_copy_last_error")]
     private static extern nuint EngineCopyLastError(
         IntPtr engine,
         byte[]? destination,
         nuint destinationCapacity);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_destroy")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_destroy")]
     internal static extern void EngineDestroy(IntPtr engine);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_enqueue")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_enqueue")]
     internal static extern byte EngineEnqueue(IntPtr engine, in NativeInputEvent input);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_engine_acquire_latest_scene")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_acquire_latest_scene")]
     internal static extern IntPtr EngineAcquireLatestScene(IntPtr engine);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_scene_acknowledge")]
+    [DllImport(LibraryName, EntryPoint = "webscene_scene_acknowledge")]
     internal static extern byte SceneAcknowledge(IntPtr scene);
 
-    [DllImport(LibraryName, EntryPoint = "htmlml_scene_release")]
+    [DllImport(LibraryName, EntryPoint = "webscene_scene_release")]
     internal static extern void SceneRelease(IntPtr scene);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

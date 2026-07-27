@@ -13,9 +13,9 @@ Run the reproducible lanes from the repository root:
 scripts/run-r0-baseline.sh --profile ci
 
 # Add required WPT and the focused reviewed-native V8 contracts.
-HTMLML_CLEARSCRIPT_NATIVE=/absolute/path/to/ClearScriptV8.<rid>.<ext> \
-HTMLML_CLEARSCRIPT_RID=<rid> \
-HTMLML_REACT_REPRO_ROOT=/absolute/path/to/react-18.2.0-node_modules \
+WEBSCENE_CLEARSCRIPT_NATIVE=/absolute/path/to/ClearScriptV8.<rid>.<ext> \
+WEBSCENE_CLEARSCRIPT_RID=<rid> \
+WEBSCENE_REACT_REPRO_ROOT=/absolute/path/to/react-18.2.0-node_modules \
 scripts/run-r0-baseline.sh --profile native
 ```
 
@@ -30,7 +30,7 @@ credentials are available to CI.
 Create the pinned external React fixture without modifying the repository:
 
 ```sh
-npm install --prefix /tmp/htmlml-react-repro --ignore-scripts --no-package-lock \
+npm install --prefix /tmp/webscene-react-repro --ignore-scripts --no-package-lock \
   --no-audit --no-fund react@18.2.0 react-dom@18.2.0
-export HTMLML_REACT_REPRO_ROOT=/tmp/htmlml-react-repro/node_modules
+export WEBSCENE_REACT_REPRO_ROOT=/tmp/webscene-react-repro/node_modules
 ```

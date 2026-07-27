@@ -283,14 +283,14 @@ public static class V8DomInteropProbe
             v8.Execute("""
                 function ExternalMutationObserver(callback) {
                     const observer = this;
-                    this.backend = document.__htmlMlCreateExternalMutationObserver(function(records) {
+                    this.backend = document.__webSceneCreateExternalMutationObserver(function(records) {
                         callback(Array.from(records), observer);
                     });
-                    this.backend.__htmlMlSetExternalObserver(this);
+                    this.backend.__webSceneSetExternalObserver(this);
                 }
                 ExternalMutationObserver.prototype.observe = function(target, options) {
                     options = options || {};
-                    this.backend.__htmlMlObserve(
+                    this.backend.__webSceneObserve(
                         target,
                         Boolean(options.childList),
                         Boolean(options.attributes),
@@ -500,7 +500,7 @@ public static class V8DomInteropProbe
             var identityReadProbe = new DomIdentityReadProbe();
             runtime.Engine.AddHostObject("identityReadProbe", identityReadProbe);
             runtime.Engine.Execute("""
-                globalThis.identityReadWrapped = __htmlMlWrapHostObject(identityReadProbe);
+                globalThis.identityReadWrapped = __webSceneWrapHostObject(identityReadProbe);
                 globalThis.batchProbeCanvas = document.createElement('canvas');
                 document.documentElement.classList.add('theme-dark');
                 document.documentElement.dataset.theme = 'dark';
@@ -577,9 +577,9 @@ public static class V8DomInteropProbe
                 if (batchProbeDomParserSemantics) {
                     batchProbeContext.fill(new Path2D(batchProbeParsedPaths[0].getAttribute('d')));
                 }
-                globalThis.batchProbeTextWidth = batchProbeContext.measureText('HtmlML').width;
+                globalThis.batchProbeTextWidth = batchProbeContext.measureText('WebScene').width;
                 globalThis.batchProbeTransformA = batchProbeContext.getTransform().a;
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
                 """);
             var canvas = (AvaloniaDomElement)host.Document.querySelector("canvas")!;
             var surface = (CanvasDrawingSurface)canvas.Control;
@@ -605,7 +605,7 @@ public static class V8DomInteropProbe
             runtime.Engine.Execute("""
                 batchProbeCanvas.width = 240;
                 batchProbeContext.fillRect(0, 0, 5, 5);
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
                 """);
             var resizePassed = surface.Commands.Count == 1
                                && surface.Commands[0].GetType().Name == "FillRectCommand";
@@ -615,11 +615,11 @@ public static class V8DomInteropProbe
                 // must be interned after the capacity flush so its index belongs to the new packet.
                 for (let index = 0; index < 8191; index++) batchProbeContext.beginPath();
                 batchProbeContext.fillStyle = '#123456';
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
 
                 for (let index = 0; index < 8190; index++) batchProbeContext.beginPath();
                 batchProbeContext.fillText('packet-boundary', 1, 1);
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
                 globalThis.batchProbeStringBoundaryPassed = true;
                 """, "v8-canvas-string-packet-boundary.js");
             var stringBoundaryPassed = Convert.ToBoolean(
@@ -646,7 +646,7 @@ public static class V8DomInteropProbe
                 globalThis.runTextMetricsProbe = function(iterations) {
                     let total = 0;
                     for (let index = 0; index < iterations; index++) {
-                        total += batchProbeContext.measureText('HtmlML ' + (index % 10)).width;
+                        total += batchProbeContext.measureText('WebScene ' + (index % 10)).width;
                     }
                     return total;
                 };
@@ -663,7 +663,7 @@ public static class V8DomInteropProbe
                 globalThis.runMissingPropertyProbe = function(iterations) {
                     let matches = 0;
                     for (let index = 0; index < iterations; index++) {
-                        if (batchProbeCanvas.__htmlMlAbsentOptionalProperty === undefined) matches++;
+                        if (batchProbeCanvas.__webSceneAbsentOptionalProperty === undefined) matches++;
                     }
                     return matches;
                 };
@@ -1015,7 +1015,7 @@ public static class V8DomInteropProbe
     {
         public int ReadCount { get; private set; }
 
-        public object? __htmlMlDomIdentity
+        public object? __webSceneDomIdentity
         {
             get
             {

@@ -34,7 +34,7 @@ globalThis.testIframe = () => {
 import("../upstream/jquery/test/unit/attributes.js")
   .then(() => runRegisteredQUnitTests())
   .catch(error => {
-    const state = globalThis.__htmlMlWptState;
+    const state = globalThis.__webSceneWptState;
     state.results.push({
       name: "jQuery attributes upstream source load",
       status: "FAIL",

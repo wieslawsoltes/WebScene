@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <Description>Component manifests, compatibility checks, diagnostics, lifecycle, and host bridge contracts for WebScene applications.</Description>
+    <PackageId>WebScene.Sdk</PackageId>
+    <PackageTags>webscene;react;typescript;sdk;components;host-bridge</PackageTags>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
+    <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="schemas\webscene-component.schema.json" Pack="true" PackagePath="schemas\" />
+  </ItemGroup>
+</Project>

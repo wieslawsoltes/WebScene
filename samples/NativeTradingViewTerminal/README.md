@@ -2,15 +2,15 @@
 
 This sample loads the hosted
 `https://trading-terminal.tradingview-widget.com/` JavaScript application
-directly in `NativeHtmlMlView`. Its browser-facing `WebSocket` API is backed by
-the portable C++ socket transport inside the HtmlML native runtime; no .NET
+directly in `NativeWebSceneView`. Its browser-facing `WebSocket` API is backed by
+the portable C++ socket transport inside the WebScene native runtime; no .NET
 WebSocket callback is involved.
 
 Run the desktop sample:
 
 ```bash
 dotnet run --project samples/NativeTradingViewTerminal \
-  -- --native-library /absolute/path/to/libhtmlml_native_engine.dylib
+  -- --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
 Generate repeatable headless evidence (JSON plus a PNG):
@@ -18,7 +18,7 @@ Generate repeatable headless evidence (JSON plus a PNG):
 ```bash
 dotnet run --project samples/NativeTradingViewTerminal -c Release -- \
   --headless-proof \
-  --native-library /absolute/path/to/libhtmlml_native_engine.dylib \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
   --output artifacts/native-tradingview-terminal
 ```
 

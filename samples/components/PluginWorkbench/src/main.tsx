@@ -13,7 +13,7 @@ function App(): React.ReactNode {
     if (!allowed) return;
     const loaded = active.includes(id);
     setActive(values => loaded ? values.filter(value => value !== id) : [...values, id]);
-    htmlml.host.commands.invoke(loaded ? 'pluginUnloaded' : 'pluginLoaded', { id });
+    webscene.host.commands.invoke(loaded ? 'pluginUnloaded' : 'pluginLoaded', { id });
   };
   return <main style={shellStyle}>
     <SampleHeader eyebrow="Trusted plugin runtime" title="Plugin workbench" detail="Manifest-declared capabilities, isolated UI lifetimes, explicit permission denial and deterministic reload." />

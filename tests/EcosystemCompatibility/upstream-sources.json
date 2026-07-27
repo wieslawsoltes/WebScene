@@ -1,5 +1,5 @@
 {
-  "schema": "htmlml-ecosystem-upstream-sources-v1",
+  "schema": "webscene-ecosystem-upstream-sources-v1",
   "suites": [
     {
       "id": "bootstrap",
@@ -141,11 +141,11 @@
           "inFileHarnessBlocked": [
             {
               "name": "show/hide shadow child nodes",
-              "reason": "Requires Shadow DOM, which is outside the current bounded HtmlML component profile."
+              "reason": "Requires Shadow DOM, which is outside the current bounded WebScene component profile."
             },
             {
               "name": "shadow toggle()",
-              "reason": "Requires Shadow DOM, which is outside the current bounded HtmlML component profile."
+              "reason": "Requires Shadow DOM, which is outside the current bounded WebScene component profile."
             },
             {
               "name": "css('width') should work correctly before document ready (trac-14084)",

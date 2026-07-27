@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <WebSceneInteropApiManifest>$(MSBuildThisFileDirectory)..\WebScene.JavaScript.Interop.Generator.Compile\GeneratorCapabilities.webscene-interop-api.json</WebSceneInteropApiManifest>
+    <WebSceneInteropPolicy>$(MSBuildThisFileDirectory)..\WebScene.JavaScript.Interop.Generator.Compile\GeneratorCapabilities.webscene-interop-policy.json</WebSceneInteropPolicy>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WebSceneInteropPackageVersion)' == ''">
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop.Generator\WebScene.JavaScript.Interop.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="$(WebSceneInteropApiManifest)" />
+    <AdditionalFiles Include="$(WebSceneInteropPolicy)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WebSceneInteropPackageVersion)' != ''">
+    <PackageReference Include="WebScene.JavaScript.Interop"
+                      Version="$(WebSceneInteropPackageVersion)" />
+    <PackageReference Include="WebScene.JavaScript.Interop.Generator"
+                      Version="$(WebSceneInteropPackageVersion)"
+                      PrivateAssets="all" />
+  </ItemGroup>
+</Project>

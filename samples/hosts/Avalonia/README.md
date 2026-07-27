@@ -1,19 +1,19 @@
-# HtmlML R5 Avalonia samples
+# WebScene R5 Avalonia samples
 
 These are checked-in, runnable .NET projects over the shared packages in
 `samples/components`:
 
 | Project | What it demonstrates |
 | --- | --- |
-| `HtmlML.Sdk.SampleCatalog` | Browse and mount all 12 R5 packages from one app. |
-| `ComponentHost.Basic` | A single `HtmlMlComponentHost` in a native window. |
+| `WebScene.Sdk.SampleCatalog` | Browse and mount all 12 R5 packages from one app. |
+| `ComponentHost.Basic` | A single `WebSceneComponentHost` in a native window. |
 | `Hybrid.ReactIslands` | A native shell with two isolated component instances and host capabilities. |
 | `TypeScriptDesktop` | A component-owned application surface with settings and notification services. |
 
 Run the complete catalog:
 
 ```bash
-dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog
+dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog
 ```
 
 Or run a standalone product shape:
@@ -37,7 +37,7 @@ real V8/Avalonia mount fails:
 scripts/run-r5-catalog-runtime-smoke.sh
 ```
 
-The V8-backed hosts require HtmlML's reviewed native ClearScript library. Ordinary
+The V8-backed hosts require WebScene's reviewed native ClearScript library. Ordinary
 builds automatically resolve the current RID from the stable repository cache at
 `artifacts/v8-native/runtimes/<rid>/native` and copy it into the application output.
 
@@ -50,5 +50,5 @@ scripts/build-clearscript-v8-native.sh --rid osx-arm64 --download-v8
 
 Use the RID for your platform (`osx-arm64`, `osx-x64`, `linux-x64`, or `linux-arm64`).
 Windows native builds follow `third-party/clearscript-patches/README.md`.
-`HTMLML_CLEARSCRIPT_NATIVE` and `HTMLML_CLEARSCRIPT_RID` remain explicit overrides
+`WEBSCENE_CLEARSCRIPT_NATIVE` and `WEBSCENE_CLEARSCRIPT_RID` remain explicit overrides
 when testing a reviewed binary outside the repository cache.

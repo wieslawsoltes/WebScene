@@ -1,9 +1,9 @@
-<Window x:Class="HtmlML.Samples.ComponentHost.MainWindow"
+<Window x:Class="WebScene.Samples.ComponentHost.MainWindow"
         xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:sdk="clr-namespace:HtmlML.Sdk.Avalonia;assembly=HtmlML.Sdk.Avalonia"
+        xmlns:sdk="clr-namespace:WebScene.Sdk.Avalonia;assembly=WebScene.Sdk.Avalonia"
         Width="900" Height="620" MinWidth="640" MinHeight="420"
-        Title="HtmlML · Basic Component Host">
+        Title="WebScene · Basic Component Host">
   <Grid RowDefinitions="Auto,*,Auto">
     <Border Padding="20,16" Background="#152238">
       <StackPanel Spacing="4">
@@ -11,7 +11,7 @@
         <TextBlock Foreground="#C7D5EA" Text="One packaged component mounted inside a native Avalonia window." />
       </StackPanel>
     </Border>
-    <sdk:HtmlMlComponentHost x:Name="PrimaryHost" Grid.Row="1" PackagePath="Component" AutoMount="False" Margin="20" />
+    <sdk:WebSceneComponentHost x:Name="PrimaryHost" Grid.Row="1" PackagePath="Component" AutoMount="False" Margin="20" />
     <Border Grid.Row="2" Padding="20,10" Background="#0E1828">
       <TextBlock x:Name="StatusText" Foreground="#C7D5EA" Text="Waiting to mount…" />
     </Border>

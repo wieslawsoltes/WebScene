@@ -12,7 +12,7 @@ arguments=(
   --repo "$repo_root"
   --output "$repo_root/TestResults/R4/renderer-matrix.json"
 )
-if [[ -n "${HTMLML_PROGPU_AVALONIA_SOURCE:-}" ]]; then
-  arguments+=(--progpu-avalonia-source "$HTMLML_PROGPU_AVALONIA_SOURCE")
+if [[ -n "${WEBSCENE_PROGPU_AVALONIA_SOURCE:-}" ]]; then
+  arguments+=(--progpu-avalonia-source "$WEBSCENE_PROGPU_AVALONIA_SOURCE")
 fi
 python3 scripts/write-r4-renderer-matrix.py "${arguments[@]}"

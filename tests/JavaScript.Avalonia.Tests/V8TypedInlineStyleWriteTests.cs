@@ -144,7 +144,7 @@ public sealed class V8TypedInlineStyleWriteTests
             using var resultDocument = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
                 "JSON.stringify(globalThis.__typedInlineStyleWriteResult)")) ?? "{}");
             using var metricsDocument = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlDescribeTypedInlineStyleWriteMetrics())")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneDescribeTypedInlineStyleWriteMetrics())")) ?? "{}");
             Assert.Empty(host.JavaScriptExceptionDiagnostics);
             return new ProbeResult(
                 resultDocument.RootElement.Clone(),
@@ -159,7 +159,7 @@ public sealed class V8TypedInlineStyleWriteTests
 
     private static bool HasNativeV8()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         return !string.IsNullOrWhiteSpace(nativePath) && File.Exists(nativePath);
     }
 

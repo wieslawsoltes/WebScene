@@ -1,9 +1,9 @@
 <html xmlns="https://github.com/avaloniaui"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       x:Class="wwwroot.index"
-      title="HtmlML Demo">
+      title="WebScene Demo">
   <head>
-    <title>HtmlML Demo</title>
+    <title>WebScene Demo</title>
     <!-- Linked CSS via <link rel="stylesheet" href="...css" type="text/css"/> -->
     <link rel="stylesheet" href="avares://website/Assets/demo.css" type="text/css" />
     <!-- Inline CSS via <style type="text/css"> -->
@@ -130,11 +130,11 @@
   <body scroll="auto" class="app-body">
 
     <header class="card">
-      <h1 class="hero" title="Heading tooltip">HtmlML Demo</h1>
+      <h1 class="hero" title="Heading tooltip">WebScene Demo</h1>
       <p class="muted">Demonstrates elements, classes, and styles.</p>
       <nav>
         <p>
-          <a href="https://github.com/wieslawsoltes/HtmlML">GitHub</a> | 
+          <a href="https://github.com/wieslawsoltes/WebScene">GitHub</a> |
           <a href="https://avaloniaui.net/">Avalonia</a>
         </p>
       </nav>

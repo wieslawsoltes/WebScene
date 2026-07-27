@@ -9,7 +9,7 @@ function App(): React.ReactNode {
   const [saved, setSaved] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [records, setRecords] = useState<string[]>([]);
-  useEffect(() => { htmlml.host.settings.invoke('get', { key: 'theme' }); }, []);
+  useEffect(() => { webscene.host.settings.invoke('get', { key: 'theme' }); }, []);
   useEffect(() => {
     if (view !== 'data' || records.length) return;
     const handle = setTimeout(() => setRecords(['Quarterly report', 'Design review', 'Launch checklist']), 300);
@@ -17,7 +17,7 @@ function App(): React.ReactNode {
   }, [view, records.length]);
   const save = () => {
     setSaved(true);
-    htmlml.host.notifications.invoke('show', { message: `Saved profile for ${name}` });
+    webscene.host.notifications.invoke('show', { message: `Saved profile for ${name}` });
   };
   return <main style={shellStyle}>
     <SampleHeader eyebrow="TypeScript application" title="Desktop workspace" detail="Routing-shaped local views, typed form state, an overlay dialog, async data and explicit host services." />

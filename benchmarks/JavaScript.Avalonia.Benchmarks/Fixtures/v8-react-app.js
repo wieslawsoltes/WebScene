@@ -1,12 +1,12 @@
 (function () {
-  window.__htmlMlReactProbe = { renders: 0, effects: 0 };
+  window.__webSceneReactProbe = { renders: 0, effects: 0 };
   class Toolbar extends React.Component {
     constructor(props) {
       super(props);
       this.state = { phase: 0 };
     }
     componentDidMount() {
-      window.__htmlMlReactProbe.effects++;
+      window.__webSceneReactProbe.effects++;
       this.setState(state => ({ phase: state.phase | 1 }));
       Promise.resolve().then(() => this.setState(state => ({ phase: state.phase | 2 })));
       this.mutationObserver = new MutationObserver(() => {
@@ -18,7 +18,7 @@
       });
       this.resizeObserver.observe(this.node);
       this.node.setAttribute('data-mounted', 'true');
-      parent.__htmlMlOwnerSchedule(() => {
+      parent.__webSceneOwnerSchedule(() => {
         this.setState(state => ({ phase: state.phase | 16 }));
       });
     }
@@ -27,10 +27,10 @@
       this.resizeObserver.disconnect();
     }
     render() {
-      window.__htmlMlReactProbe.renders++;
-      parent.__htmlMlOwnerRead(this.props.index);
+      window.__webSceneReactProbe.renders++;
+      parent.__webSceneOwnerRead(this.props.index);
       const children = [];
-      const itemCount = Number(window.__htmlMlReactProbeItemCount || 180);
+      const itemCount = Number(window.__webSceneReactProbeItemCount || 180);
       for (let index = 0; index < itemCount; index++) {
         children.push(React.createElement('span', { key: index }, 'item-' + index));
       }
@@ -79,9 +79,9 @@
       this.state = { chunkLoaded: false, styleLoaded: false };
     }
     render() {
-      if (!window.__htmlMlNestedRootsMounted) {
-        window.__htmlMlNestedRootsMounted = true;
-        if (window.__htmlMlReactSyncNestedRoots) mountToolbars();
+      if (!window.__webSceneNestedRootsMounted) {
+        window.__webSceneNestedRootsMounted = true;
+        if (window.__webSceneReactSyncNestedRoots) mountToolbars();
         else queueMicrotask(mountToolbars);
         const renderStylesheet = document.createElement('link');
         renderStylesheet.rel = 'stylesheet';
@@ -91,7 +91,7 @@
         const renderScript = document.createElement('script');
         renderScript.src = './Fixtures/v8-react-chunk.js';
         renderScript.onload = () => {
-          window.__htmlMlReactChunkOrder.push('load');
+          window.__webSceneReactChunkOrder.push('load');
           this.setState({ chunkLoaded: true });
         };
         document.head.appendChild(renderScript);

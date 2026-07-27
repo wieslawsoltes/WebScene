@@ -24,7 +24,7 @@ public class CssLayoutPanel : Panel, ICustomHitTest
 {
     private static readonly bool s_forcePortableArrangement =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_ENABLE_PORTABLE_LAYOUT"),
+            Environment.GetEnvironmentVariable("WEBSCENE_ENABLE_PORTABLE_LAYOUT"),
             "1",
             StringComparison.Ordinal);
 
@@ -5397,7 +5397,7 @@ internal sealed class DomTextInputControl : TextBox, ICustomHitTest
         }
 
         // TextBox delegates editing/navigation keys to its template presenter.
-        // HTMLML can run without an Avalonia theme, in which case the fallback
+        // WEBSCENE can run without an Avalonia theme, in which case the fallback
         // renderer has no presenter and those native defaults become no-ops.
         // Keep the single-line HTML input semantics available in that mode.
         var text = Text ?? string.Empty;

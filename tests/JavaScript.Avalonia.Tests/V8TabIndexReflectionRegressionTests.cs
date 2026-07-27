@@ -13,7 +13,7 @@ public sealed class V8TabIndexReflectionRegressionTests
     [Trait("Runtime", "V8Native")]
     public void TabIndexPropertyAndAttributeReflectionMatchHtmlSemantics()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -43,7 +43,7 @@ public sealed class V8TabIndexReflectionRegressionTests
                 const markup = document.getElementById('markup');
                 const button = document.getElementById('button');
                 const input = document.getElementById('input');
-                const result = globalThis.__htmlMlTabIndexReflection = {
+                const result = globalThis.__webSceneTabIndexReflection = {
                   initial: [span.tabIndex, span.getAttribute('tabindex'), markup.tabIndex, button.tabIndex, input.tabIndex],
                   focusEvents: []
                 };
@@ -60,7 +60,7 @@ public sealed class V8TabIndexReflectionRegressionTests
                 """, "v8-tabindex-reflection-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlTabIndexReflection)")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneTabIndexReflection)")) ?? "{}");
             var root = result.RootElement;
             Assert.Equal([-1, 0, 2, 0, 0], root.GetProperty("initial").EnumerateArray()
                 .Select(static item => item.ValueKind == JsonValueKind.Null ? 0 : item.GetInt32()));

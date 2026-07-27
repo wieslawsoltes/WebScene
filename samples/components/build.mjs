@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { build } from 'vite';
-import { htmlml } from '@htmlml/sdk/vite';
+import { webscene } from '@webscene/sdk/vite';
 
 const componentsRoot = dirname(fileURLToPath(import.meta.url));
 const catalog = JSON.parse(await readFile(join(componentsRoot, 'catalog.json'), 'utf8'));
@@ -19,7 +19,7 @@ for (const sample of catalog.samples) {
       'process.env.NODE_ENV': JSON.stringify('production')
     },
     plugins: [
-      htmlml({ manifest: join(sampleRoot, 'htmlml-component.json') }),
+      webscene({ manifest: join(sampleRoot, 'webscene-component.json') }),
       react()
     ],
     build: {
@@ -29,7 +29,7 @@ for (const sample of catalog.samples) {
       lib: {
         entry: join(sampleRoot, 'src', 'main.tsx'),
         formats: ['iife'],
-        name: `HtmlMl${sample.id.replaceAll('.', '')}`,
+        name: `WebScene${sample.id.replaceAll('.', '')}`,
         fileName: () => 'dist/main.js'
       },
       rollupOptions: {

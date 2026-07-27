@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <WebSceneClearScriptNativeRequired Condition="'$(WebSceneClearScriptNativeRequired)' == ''">true</WebSceneClearScriptNativeRequired>
+    <WebSceneClearScriptNativePath Condition="'$(WebSceneClearScriptNativePath)' == '' and '$(WEBSCENE_CLEARSCRIPT_NATIVE)' != ''">$(WEBSCENE_CLEARSCRIPT_NATIVE)</WebSceneClearScriptNativePath>
+    <WebSceneClearScriptNativeRid Condition="'$(WebSceneClearScriptNativeRid)' == '' and '$(WEBSCENE_CLEARSCRIPT_RID)' != ''">$(WEBSCENE_CLEARSCRIPT_RID)</WebSceneClearScriptNativeRid>
+    <WebSceneClearScriptNativeRid Condition="'$(WebSceneClearScriptNativeRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WebSceneClearScriptNativeRid>
+    <WebSceneClearScriptNativeFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('win-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).dll</WebSceneClearScriptNativeFileName>
+    <WebSceneClearScriptNativeFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('linux-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).so</WebSceneClearScriptNativeFileName>
+    <WebSceneClearScriptNativeFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('osx-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).dylib</WebSceneClearScriptNativeFileName>
+    <WebSceneClearScriptNativeCacheRoot Condition="'$(WebSceneClearScriptNativeCacheRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\artifacts\v8-native</WebSceneClearScriptNativeCacheRoot>
+    <WebSceneClearScriptNativeCacheCandidate>$(WebSceneClearScriptNativeCacheRoot)\runtimes\$(WebSceneClearScriptNativeRid)\native\$(WebSceneClearScriptNativeFileName)</WebSceneClearScriptNativeCacheCandidate>
+    <WebSceneClearScriptNativeOutputCandidate>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\runtimes\$(WebSceneClearScriptNativeRid)\native\$(WebSceneClearScriptNativeFileName)</WebSceneClearScriptNativeOutputCandidate>
+    <WebSceneClearScriptNativePath Condition="'$(WebSceneClearScriptNativePath)' == '' and Exists('$(WebSceneClearScriptNativeCacheCandidate)')">$(WebSceneClearScriptNativeCacheCandidate)</WebSceneClearScriptNativePath>
+    <WebSceneClearScriptNativePath Condition="'$(WebSceneClearScriptNativePath)' == '' and Exists('$(WebSceneClearScriptNativeOutputCandidate)')">$(WebSceneClearScriptNativeOutputCandidate)</WebSceneClearScriptNativePath>
+    <WebSceneClearScriptNativeFromOutput Condition="'$(WebSceneClearScriptNativePath)' == '$(WebSceneClearScriptNativeOutputCandidate)'">true</WebSceneClearScriptNativeFromOutput>
+  </PropertyGroup>
+
+  <Import Project="..\..\..\build\WebSceneClearScriptV8Native.targets" />
+</Project>

@@ -2,7 +2,7 @@
 
 This showcase runs the hosted
 [`https://trading-terminal.tradingview-widget.com/`](https://trading-terminal.tradingview-widget.com/)
-application and a local, unchanged Monaco Editor bundle through HtmlML's native
+application and a local, unchanged Monaco Editor bundle through WebScene's native
 V8/DOM/canvas runtime. The same experience is available through Avalonia and
 Uno Skia hosts.
 
@@ -27,7 +27,7 @@ Run Avalonia:
 ```sh
 dotnet run --project samples/NativeRuntimeShowcase.Avalonia -c Release -- \
   --native-library \
-  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
 ```
 
 Run Uno desktop:
@@ -36,10 +36,10 @@ Run Uno desktop:
 dotnet run --project samples/NativeRuntimeShowcase.Uno -f net10.0-desktop \
   -c Release -- \
   --native-library \
-  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
 ```
 
-`HTMLML_NATIVE_ENGINE_LIBRARY` can be used instead of the command-line option.
+`WEBSCENE_NATIVE_ENGINE_LIBRARY` can be used instead of the command-line option.
 Add `--editor` after the application arguments to start directly in Monaco.
 The showcase reuses the checked-in Monaco 0.56.0 assets from
 `samples/NativeMonacoEditor/Assets`; no browser control or WebView is involved.

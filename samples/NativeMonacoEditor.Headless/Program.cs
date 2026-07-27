@@ -6,7 +6,7 @@ using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Skia;
 using Avalonia.Threading;
-using HtmlML.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia.Native;
 
 namespace NativeMonacoEditor.Headless;
 
@@ -31,7 +31,7 @@ internal static class Program
             })
             .SetupWithoutStarting();
 
-        var view = new NativeHtmlMlView(useCompositionVisual: false);
+        var view = new NativeWebSceneView(useCompositionVisual: false);
         var window = new Window
         {
             Width = Width,
@@ -56,9 +56,9 @@ internal static class Program
             PumpFrames(view, window, TimeSpan.FromSeconds(4));
             var stateTask = view.EvaluateJsonAsync("""
                 ({
-                  ready: globalThis.__htmlMlComponentReady === true,
-                  hasEditor: Boolean(globalThis.__htmlMlMonacoEditor),
-                  value: globalThis.__htmlMlMonacoEditor?.getValue() ?? null,
+                  ready: globalThis.__webSceneComponentReady === true,
+                  hasEditor: Boolean(globalThis.__webSceneMonacoEditor),
+                  value: globalThis.__webSceneMonacoEditor?.getValue() ?? null,
                   viewLines: document.querySelectorAll('.view-line').length,
                   tokenSpans: document.querySelectorAll('.view-line span[class*="mtk"]').length,
                   activeTag: document.activeElement?.tagName ?? null,
@@ -77,7 +77,7 @@ internal static class Program
                     }
                     return result;
                   })(),
-                  layout: globalThis.__htmlMlMonacoEditor?.getLayoutInfo() ?? null,
+                  layout: globalThis.__webSceneMonacoEditor?.getLayoutInfo() ?? null,
                   geometry: Object.fromEntries(
                     ['.monaco-editor', '.margin', '.lines-content', '.view-lines',
                      '.view-line', 'textarea.inputarea'].map(selector => {
@@ -119,9 +119,9 @@ internal static class Program
 
             var installLiveInputDiagnosticsTask = view.EvaluateJsonAsync("""
                 (() => {
-                  globalThis.__htmlMlMonacoMouseDown = null;
-                  globalThis.__htmlMlMonacoEditor.onMouseDown(event => {
-                    globalThis.__htmlMlMonacoMouseDown = {
+                  globalThis.__webSceneMonacoMouseDown = null;
+                  globalThis.__webSceneMonacoEditor.onMouseDown(event => {
+                    globalThis.__webSceneMonacoMouseDown = {
                       targetType: event.target?.type ?? null,
                       position: event.target?.position ?? null
                     };
@@ -143,10 +143,10 @@ internal static class Program
             PumpFrames(view, window, TimeSpan.FromSeconds(2));
             var liveClickTypeStateTask = view.EvaluateJsonAsync("""
                 ({
-                  value: globalThis.__htmlMlMonacoEditor?.getValue() ?? null,
-                  position: globalThis.__htmlMlMonacoEditor?.getPosition() ?? null,
+                  value: globalThis.__webSceneMonacoEditor?.getValue() ?? null,
+                  position: globalThis.__webSceneMonacoEditor?.getPosition() ?? null,
                   activeTag: document.activeElement?.tagName ?? null,
-                  monacoMouseDown: globalThis.__htmlMlMonacoMouseDown
+                  monacoMouseDown: globalThis.__webSceneMonacoMouseDown
                 })
                 """);
             PumpUntil(liveClickTypeStateTask, TimeSpan.FromSeconds(10));
@@ -193,7 +193,7 @@ internal static class Program
             PumpFrames(view, window, TimeSpan.FromSeconds(2));
             var dragSelectionTask = view.EvaluateJsonAsync("""
                 (() => {
-                  const editor = globalThis.__htmlMlMonacoEditor;
+                  const editor = globalThis.__webSceneMonacoEditor;
                   const selection = editor.getSelection();
                   return {
                     selection,
@@ -224,7 +224,7 @@ internal static class Program
             PumpFrames(view, window, TimeSpan.FromSeconds(1));
             var resetTask = view.EvaluateJsonAsync("""
                 (() => {
-                  const editor = globalThis.__htmlMlMonacoEditor;
+                  const editor = globalThis.__webSceneMonacoEditor;
                   const replaced = editor.getValue().includes('drag-replaced');
                   editor.setValue([
                     'function greet(name) {',
@@ -232,7 +232,7 @@ internal static class Program
                     '  return message;',
                     '}',
                     '',
-                    'for (const name of ["Avalonia", "HtmlML", "Monaco"]) {',
+                    'for (const name of ["Avalonia", "WebScene", "Monaco"]) {',
                     '  console.log(greet(name));',
                     '}'
                   ].join('\n'));
@@ -258,8 +258,8 @@ internal static class Program
             PumpFrames(view, window, TimeSpan.FromSeconds(3));
             var editedStateTask = view.EvaluateJsonAsync("""
                 ({
-                  value: globalThis.__htmlMlMonacoEditor?.getValue() ?? null,
-                  lines: globalThis.__htmlMlMonacoEditor?.getModel()?.getLineCount() ?? 0,
+                  value: globalThis.__webSceneMonacoEditor?.getValue() ?? null,
+                  lines: globalThis.__webSceneMonacoEditor?.getModel()?.getLineCount() ?? 0,
                   status: document.getElementById('status')?.textContent ?? null
                 })
                 """);
@@ -273,9 +273,9 @@ internal static class Program
 
             var foldTask = view.EvaluateJsonAsync("""
                 (() => {
-                  const editor = globalThis.__htmlMlMonacoEditor;
+                  const editor = globalThis.__webSceneMonacoEditor;
                   editor.setPosition({ lineNumber: 2, column: 1 });
-                  editor.trigger('htmlml-headless', 'editor.fold', {});
+                  editor.trigger('webscene-headless', 'editor.fold', {});
                   return true;
                 })()
                 """);
@@ -285,7 +285,7 @@ internal static class Program
                 ({
                   viewLines: document.querySelectorAll('.view-line').length,
                   modelLines:
-                    globalThis.__htmlMlMonacoEditor?.getModel()?.getLineCount() ?? 0,
+                    globalThis.__webSceneMonacoEditor?.getModel()?.getLineCount() ?? 0,
                   foldIconFont: getComputedStyle(
                     document.querySelector('.codicon-folding-collapsed')
                   ).fontFamily
@@ -364,7 +364,7 @@ internal static class Program
     }
 
     private static void PumpFrames(
-        NativeHtmlMlView view,
+        NativeWebSceneView view,
         Window window,
         TimeSpan duration)
     {

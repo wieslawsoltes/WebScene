@@ -1,0 +1,4357 @@
+{
+  "schemaVersion": "1.0",
+  "generator": "webscene-interop-discover",
+  "typescriptVersion": "5.9.3",
+  "apiFingerprint": "55f0efb59a9f2a7e4925675fac135764ae9ca540abde30a39e769498f9e5d525",
+  "declarations": [
+    {
+      "fileName": "TradingViewApi.fixture.d.ts",
+      "sha256": "9c4e06b232a13e66dd7bf229e7875293a59ce25b3fc1e7e351b6f7ca1d5ae97b"
+    }
+  ],
+  "types": [
+    {
+      "name": "AccountManagerInfo",
+      "qualifiedName": "Broker.AccountManagerInfo",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "accountTitle",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "summary",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "accountBalance",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "number"
+                }
+              },
+              {
+                "name": "equity",
+                "optional": false,
+                "readonly": false,
+                "type": {
+                  "kind": "number"
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Execution",
+      "qualifiedName": "Broker.Execution",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "id",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "price",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "qty",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "side",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "kind": "literal",
+                "value": -1
+              }
+            ]
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "time",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IBrokerConnectionAdapterHost",
+      "qualifiedName": "Broker.IBrokerConnectionAdapterHost",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "executionUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "execution",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Execution",
+                "qualifiedName": "Broker.Execution",
+                "display": "Execution",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "orderUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "order",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Order",
+                "qualifiedName": "Broker.Order",
+                "display": "Order",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "positionUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "position",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Position",
+                "qualifiedName": "Broker.Position",
+                "display": "Position",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "showNotification",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "title",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "notificationType",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "number"
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IBrokerTerminal",
+      "qualifiedName": "Broker.IBrokerTerminal",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "accountManagerInfo",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "AccountManagerInfo",
+            "qualifiedName": "Broker.AccountManagerInfo",
+            "display": "AccountManagerInfo",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "cancelOrder",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "orderId",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        },
+        {
+          "name": "closePosition",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "positionId",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        },
+        {
+          "name": "executions",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbol",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": false,
+              "element": {
+                "kind": "reference",
+                "name": "Execution",
+                "qualifiedName": "Broker.Execution",
+                "display": "Execution",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "modifyOrder",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "order",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Order",
+                "qualifiedName": "Broker.Order",
+                "display": "Order",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        },
+        {
+          "name": "orders",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": false,
+              "element": {
+                "kind": "reference",
+                "name": "Order",
+                "qualifiedName": "Broker.Order",
+                "display": "Order",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "placeOrder",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "order",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "PreOrder",
+                "qualifiedName": "Broker.PreOrder",
+                "display": "PreOrder",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "OrderResult",
+              "qualifiedName": "Broker.OrderResult",
+              "display": "OrderResult",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "positions",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": false,
+              "element": {
+                "kind": "reference",
+                "name": "Position",
+                "qualifiedName": "Broker.Position",
+                "display": "Position",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "reversePosition",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "positionId",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "void"
+            }
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Order",
+      "qualifiedName": "Broker.Order",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "id",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "limitPrice",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "qty",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "side",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "kind": "literal",
+                "value": -1
+              }
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": "placing"
+              },
+              {
+                "kind": "literal",
+                "value": "inactive"
+              },
+              {
+                "kind": "literal",
+                "value": "working"
+              },
+              {
+                "kind": "literal",
+                "value": "rejected"
+              },
+              {
+                "kind": "literal",
+                "value": "filled"
+              },
+              {
+                "kind": "literal",
+                "value": "cancelled"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stopPrice",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "OrderResult",
+      "qualifiedName": "Broker.OrderResult",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "orderId",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "OrderStatus",
+      "qualifiedName": "Broker.OrderStatus",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "literal",
+            "value": "placing"
+          },
+          {
+            "kind": "literal",
+            "value": "inactive"
+          },
+          {
+            "kind": "literal",
+            "value": "working"
+          },
+          {
+            "kind": "literal",
+            "value": "rejected"
+          },
+          {
+            "kind": "literal",
+            "value": "filled"
+          },
+          {
+            "kind": "literal",
+            "value": "cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Position",
+      "qualifiedName": "Broker.Position",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "avgPrice",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "id",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "qty",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "side",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "kind": "literal",
+                "value": -1
+              }
+            ]
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "PreOrder",
+      "qualifiedName": "Broker.PreOrder",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "limitPrice",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "qty",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "side",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "kind": "literal",
+                "value": -1
+              }
+            ]
+          }
+        },
+        {
+          "name": "stopPrice",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Side",
+      "qualifiedName": "Broker.Side",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "union",
+        "types": [
+          {
+            "kind": "literal",
+            "value": 1
+          },
+          {
+            "kind": "literal",
+            "value": -1
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChartingLibraryWidgetOptions",
+      "qualifiedName": "Charting_Library.ChartingLibraryWidgetOptions",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "autosize",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        },
+        {
+          "name": "broker_factory",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "host",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "reference",
+                          "name": "IBrokerConnectionAdapterHost",
+                          "qualifiedName": "Broker.IBrokerConnectionAdapterHost",
+                          "display": "IBrokerConnectionAdapterHost",
+                          "typeArguments": []
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "reference",
+                      "name": "IBrokerTerminal",
+                      "qualifiedName": "Broker.IBrokerTerminal",
+                      "display": "IBrokerTerminal",
+                      "typeArguments": []
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "container",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "datafeed",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "reference",
+                "name": "IDatafeedChartApi",
+                "qualifiedName": "Datafeed.IDatafeedChartApi",
+                "display": "IDatafeedChartApi",
+                "typeArguments": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "interval",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "locale",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IChartingLibraryWidget",
+      "qualifiedName": "Charting_Library.IChartingLibraryWidget",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "activeChart",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "IChartWidgetApi",
+            "qualifiedName": "Charting_Library.IChartWidgetApi",
+            "display": "IChartWidgetApi",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "getLanguage",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IChartWidgetApi",
+      "qualifiedName": "Charting_Library.IChartWidgetApi",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "createExecutionShape",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IExecutionLineAdapter",
+              "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+              "display": "IExecutionLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "createOrderLine",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IOrderLineAdapter",
+              "qualifiedName": "Charting_Library.IOrderLineAdapter",
+              "display": "IOrderLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "createPositionLine",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IPositionLineAdapter",
+              "qualifiedName": "Charting_Library.IPositionLineAdapter",
+              "display": "IPositionLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "crosshairPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "IWatchedValue",
+            "qualifiedName": "Charting_Library.IWatchedValue",
+            "display": "IWatchedValue<number>",
+            "typeArguments": [
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "resolution",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "setScrollEnabled",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "enabled",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "boolean"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setSymbol",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbol",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "options",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "SetSymbolOptions",
+                    "qualifiedName": "Charting_Library.SetSymbolOptions",
+                    "display": "SetSymbolOptions",
+                    "typeArguments": []
+                  },
+                  {
+                    "kind": "callback",
+                    "name": null,
+                    "qualifiedName": null,
+                    "signatures": [
+                      {
+                        "typeParameters": [],
+                        "parameters": [],
+                        "returns": {
+                          "kind": "void"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "boolean"
+            }
+          }
+        },
+        {
+          "name": "setVisibleStudies",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "studyIds",
+              "optional": false,
+              "rest": true,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "string"
+                }
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setZoomEnabled",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "enabled",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "boolean"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "symbol",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IExecutionLineAdapter",
+      "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setTime",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "time",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IOrderLineAdapter",
+      "qualifiedName": "Charting_Library.IOrderLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "onCancel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "text",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "onMove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "id",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "price",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IPositionLineAdapter",
+      "qualifiedName": "Charting_Library.IPositionLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "onClose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "text",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IWatchedValue",
+      "qualifiedName": "Charting_Library.IWatchedValue",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "setValue",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "typeParameter",
+                "name": "T"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "subscribe",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "value",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "typeParameter",
+                          "name": "T"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "value",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "ResolutionString",
+      "qualifiedName": "Charting_Library.ResolutionString",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "string"
+      }
+    },
+    {
+      "name": "SetSymbolOptions",
+      "qualifiedName": "Charting_Library.SetSymbolOptions",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "doNotActivateChart",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "widget",
+      "qualifiedName": "Charting_Library.widget",
+      "kind": "class",
+      "typeParameters": [],
+      "constructors": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "options",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "ChartingLibraryWidgetOptions",
+                "qualifiedName": "Charting_Library.ChartingLibraryWidgetOptions",
+                "display": "ChartingLibraryWidgetOptions",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "widget",
+            "qualifiedName": "Charting_Library.widget",
+            "display": "widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "activeChart",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "IChartWidgetApi",
+            "qualifiedName": "Charting_Library.IChartWidgetApi",
+            "display": "IChartWidgetApi",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "getLanguage",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "Bar",
+      "qualifiedName": "Datafeed.Bar",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "close",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "high",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "low",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "open",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "time",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "volume",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "DatafeedConfiguration",
+      "qualifiedName": "Datafeed.DatafeedConfiguration",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "exchanges",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "reference",
+                  "name": "Exchange",
+                  "qualifiedName": "Datafeed.Exchange",
+                  "display": "Exchange",
+                  "typeArguments": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_resolutions",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": false,
+            "element": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "name": "supports_marks",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supports_time",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supports_timescale_marks",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "ErrorCallback",
+      "qualifiedName": "Datafeed.ErrorCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "ErrorCallback",
+        "qualifiedName": "Datafeed.ErrorCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "reason",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "string"
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Exchange",
+      "qualifiedName": "Datafeed.Exchange",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "desc",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "name",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "value",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "HistoryCallback",
+      "qualifiedName": "Datafeed.HistoryCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "HistoryCallback",
+        "qualifiedName": "Datafeed.HistoryCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "bars",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "array",
+                  "readonly": false,
+                  "element": {
+                    "kind": "reference",
+                    "name": "Bar",
+                    "qualifiedName": "Datafeed.Bar",
+                    "display": "Bar",
+                    "typeArguments": []
+                  }
+                }
+              },
+              {
+                "name": "metadata",
+                "optional": true,
+                "rest": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "reference",
+                      "name": "HistoryMetadata",
+                      "qualifiedName": "Datafeed.HistoryMetadata",
+                      "display": "HistoryMetadata",
+                      "typeArguments": []
+                    }
+                  ]
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HistoryMetadata",
+      "qualifiedName": "Datafeed.HistoryMetadata",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "nextTime",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "noData",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "boolean"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IDatafeedChartApi",
+      "qualifiedName": "Datafeed.IDatafeedChartApi",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "getBars",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbolInfo",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "LibrarySymbolInfo",
+                "qualifiedName": "Datafeed.LibrarySymbolInfo",
+                "display": "LibrarySymbolInfo",
+                "typeArguments": []
+              }
+            },
+            {
+              "name": "resolution",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "periodParams",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "PeriodParams",
+                "qualifiedName": "Datafeed.PeriodParams",
+                "display": "PeriodParams",
+                "typeArguments": []
+              }
+            },
+            {
+              "name": "onResult",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "HistoryCallback",
+                "qualifiedName": "Datafeed.HistoryCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "bars",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "array",
+                          "readonly": false,
+                          "element": {
+                            "kind": "reference",
+                            "name": "Bar",
+                            "qualifiedName": "Datafeed.Bar",
+                            "display": "Bar",
+                            "typeArguments": []
+                          }
+                        }
+                      },
+                      {
+                        "name": "metadata",
+                        "optional": true,
+                        "rest": false,
+                        "type": {
+                          "kind": "union",
+                          "types": [
+                            {
+                              "kind": "undefined"
+                            },
+                            {
+                              "kind": "reference",
+                              "name": "HistoryMetadata",
+                              "qualifiedName": "Datafeed.HistoryMetadata",
+                              "display": "HistoryMetadata",
+                              "typeArguments": []
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "onError",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "ErrorCallback",
+                "qualifiedName": "Datafeed.ErrorCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "reason",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "getQuotes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbols",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "string"
+                }
+              }
+            },
+            {
+              "name": "onDataCallback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "QuotesCallback",
+                "qualifiedName": "Datafeed.QuotesCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "quotes",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "array",
+                          "readonly": false,
+                          "element": {
+                            "kind": "reference",
+                            "name": "QuoteData",
+                            "qualifiedName": "Datafeed.QuoteData",
+                            "display": "QuoteData",
+                            "typeArguments": []
+                          }
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "onErrorCallback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "ErrorCallback",
+                "qualifiedName": "Datafeed.ErrorCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "reason",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "onReady",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "OnReadyCallback",
+                "qualifiedName": "Datafeed.OnReadyCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "configuration",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "reference",
+                          "name": "DatafeedConfiguration",
+                          "qualifiedName": "Datafeed.DatafeedConfiguration",
+                          "display": "DatafeedConfiguration",
+                          "typeArguments": []
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "resolveSymbol",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbolName",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "onResolve",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "ResolveCallback",
+                "qualifiedName": "Datafeed.ResolveCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "symbolInfo",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "reference",
+                          "name": "LibrarySymbolInfo",
+                          "qualifiedName": "Datafeed.LibrarySymbolInfo",
+                          "display": "LibrarySymbolInfo",
+                          "typeArguments": []
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "onError",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "ErrorCallback",
+                "qualifiedName": "Datafeed.ErrorCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "reason",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "searchSymbols",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "userInput",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "exchange",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "symbolType",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "onResult",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "SearchSymbolsCallback",
+                "qualifiedName": "Datafeed.SearchSymbolsCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "items",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "array",
+                          "readonly": false,
+                          "element": {
+                            "kind": "reference",
+                            "name": "SearchSymbolResultItem",
+                            "qualifiedName": "Datafeed.SearchSymbolResultItem",
+                            "display": "SearchSymbolResultItem",
+                            "typeArguments": []
+                          }
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "subscribeBars",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbolInfo",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "LibrarySymbolInfo",
+                "qualifiedName": "Datafeed.LibrarySymbolInfo",
+                "display": "LibrarySymbolInfo",
+                "typeArguments": []
+              }
+            },
+            {
+              "name": "resolution",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "onRealtimeCallback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "SubscribeBarsCallback",
+                "qualifiedName": "Datafeed.SubscribeBarsCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "bar",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "reference",
+                          "name": "Bar",
+                          "qualifiedName": "Datafeed.Bar",
+                          "display": "Bar",
+                          "typeArguments": []
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "subscriberUID",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "onResetCacheNeededCallback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "subscribeQuotes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbols",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "string"
+                }
+              }
+            },
+            {
+              "name": "fastSymbols",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "string"
+                }
+              }
+            },
+            {
+              "name": "onRealtimeCallback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": "QuotesCallback",
+                "qualifiedName": "Datafeed.QuotesCallback",
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "quotes",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "array",
+                          "readonly": false,
+                          "element": {
+                            "kind": "reference",
+                            "name": "QuoteData",
+                            "qualifiedName": "Datafeed.QuoteData",
+                            "display": "QuoteData",
+                            "typeArguments": []
+                          }
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "listenerGuid",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "unsubscribeBars",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "subscriberUID",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "unsubscribeQuotes",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "listenerGuid",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "LibrarySymbolInfo",
+      "qualifiedName": "Datafeed.LibrarySymbolInfo",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "data_status",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "literal",
+                "value": "streaming"
+              },
+              {
+                "kind": "literal",
+                "value": "endofday"
+              },
+              {
+                "kind": "literal",
+                "value": "pulsed"
+              },
+              {
+                "kind": "literal",
+                "value": "delayed_streaming"
+              }
+            ]
+          }
+        },
+        {
+          "name": "description",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "exchange",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "has_intraday",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "boolean"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listed_exchange",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "minmov",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "name",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "pricescale",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "session",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "supported_resolutions",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "array",
+            "readonly": false,
+            "element": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "name": "ticker",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "timezone",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "type",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "volume_precision",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "OnReadyCallback",
+      "qualifiedName": "Datafeed.OnReadyCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "OnReadyCallback",
+        "qualifiedName": "Datafeed.OnReadyCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "configuration",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "reference",
+                  "name": "DatafeedConfiguration",
+                  "qualifiedName": "Datafeed.DatafeedConfiguration",
+                  "display": "DatafeedConfiguration",
+                  "typeArguments": []
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PeriodParams",
+      "qualifiedName": "Datafeed.PeriodParams",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "countBack",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "firstDataRequest",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "from",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "to",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "QuoteData",
+      "qualifiedName": "Datafeed.QuoteData",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "n",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "s",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "literal",
+                "value": "ok"
+              },
+              {
+                "kind": "literal",
+                "value": "error"
+              }
+            ]
+          }
+        },
+        {
+          "name": "v",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "inlineObject",
+            "properties": [
+              {
+                "name": "ch",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "chp",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "short_name",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "string"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "exchange",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "string"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "description",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "string"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "lp",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "ask",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "bid",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "volume",
+                "optional": true,
+                "readonly": false,
+                "type": {
+                  "kind": "union",
+                  "types": [
+                    {
+                      "kind": "undefined"
+                    },
+                    {
+                      "kind": "number"
+                    }
+                  ]
+                }
+              }
+            ],
+            "indexSignatures": []
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "QuotesCallback",
+      "qualifiedName": "Datafeed.QuotesCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "QuotesCallback",
+        "qualifiedName": "Datafeed.QuotesCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "quotes",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "array",
+                  "readonly": false,
+                  "element": {
+                    "kind": "reference",
+                    "name": "QuoteData",
+                    "qualifiedName": "Datafeed.QuoteData",
+                    "display": "QuoteData",
+                    "typeArguments": []
+                  }
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResolveCallback",
+      "qualifiedName": "Datafeed.ResolveCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "ResolveCallback",
+        "qualifiedName": "Datafeed.ResolveCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "symbolInfo",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "reference",
+                  "name": "LibrarySymbolInfo",
+                  "qualifiedName": "Datafeed.LibrarySymbolInfo",
+                  "display": "LibrarySymbolInfo",
+                  "typeArguments": []
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SearchSymbolResultItem",
+      "qualifiedName": "Datafeed.SearchSymbolResultItem",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "description",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "exchange",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "full_name",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "symbol",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "ticker",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "SearchSymbolsCallback",
+      "qualifiedName": "Datafeed.SearchSymbolsCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "SearchSymbolsCallback",
+        "qualifiedName": "Datafeed.SearchSymbolsCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "items",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "array",
+                  "readonly": false,
+                  "element": {
+                    "kind": "reference",
+                    "name": "SearchSymbolResultItem",
+                    "qualifiedName": "Datafeed.SearchSymbolResultItem",
+                    "display": "SearchSymbolResultItem",
+                    "typeArguments": []
+                  }
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SubscribeBarsCallback",
+      "qualifiedName": "Datafeed.SubscribeBarsCallback",
+      "kind": "typeAlias",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": [],
+      "aliasTarget": {
+        "kind": "callback",
+        "name": "SubscribeBarsCallback",
+        "qualifiedName": "Datafeed.SubscribeBarsCallback",
+        "signatures": [
+          {
+            "typeParameters": [],
+            "parameters": [
+              {
+                "name": "bar",
+                "optional": false,
+                "rest": false,
+                "type": {
+                  "kind": "reference",
+                  "name": "Bar",
+                  "qualifiedName": "Datafeed.Bar",
+                  "display": "Bar",
+                  "typeArguments": []
+                }
+              }
+            ],
+            "returns": {
+              "kind": "void"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "roots": [
+    {
+      "name": "IBrokerConnectionAdapterHost",
+      "qualifiedName": "Broker.IBrokerConnectionAdapterHost",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "executionUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "execution",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Execution",
+                "qualifiedName": "Broker.Execution",
+                "display": "Execution",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "orderUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "order",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Order",
+                "qualifiedName": "Broker.Order",
+                "display": "Order",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "positionUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "position",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "Position",
+                "qualifiedName": "Broker.Position",
+                "display": "Position",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "showNotification",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "title",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "notificationType",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "number"
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IChartWidgetApi",
+      "qualifiedName": "Charting_Library.IChartWidgetApi",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "createExecutionShape",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IExecutionLineAdapter",
+              "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+              "display": "IExecutionLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "createOrderLine",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IOrderLineAdapter",
+              "qualifiedName": "Charting_Library.IOrderLineAdapter",
+              "display": "IOrderLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "createPositionLine",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "reference",
+              "name": "IPositionLineAdapter",
+              "qualifiedName": "Charting_Library.IPositionLineAdapter",
+              "display": "IPositionLineAdapter",
+              "typeArguments": []
+            }
+          }
+        },
+        {
+          "name": "crosshairPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "IWatchedValue",
+            "qualifiedName": "Charting_Library.IWatchedValue",
+            "display": "IWatchedValue<number>",
+            "typeArguments": [
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        },
+        {
+          "name": "resolution",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "setScrollEnabled",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "enabled",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "boolean"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setSymbol",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "symbol",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "options",
+              "optional": true,
+              "rest": false,
+              "type": {
+                "kind": "union",
+                "types": [
+                  {
+                    "kind": "undefined"
+                  },
+                  {
+                    "kind": "reference",
+                    "name": "SetSymbolOptions",
+                    "qualifiedName": "Charting_Library.SetSymbolOptions",
+                    "display": "SetSymbolOptions",
+                    "typeArguments": []
+                  },
+                  {
+                    "kind": "callback",
+                    "name": null,
+                    "qualifiedName": null,
+                    "signatures": [
+                      {
+                        "typeParameters": [],
+                        "parameters": [],
+                        "returns": {
+                          "kind": "void"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "boolean"
+            }
+          }
+        },
+        {
+          "name": "setVisibleStudies",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "studyIds",
+              "optional": false,
+              "rest": true,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "string"
+                }
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setZoomEnabled",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "enabled",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "boolean"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "symbol",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IExecutionLineAdapter",
+      "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setTime",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "time",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IExecutionLineAdapter",
+            "qualifiedName": "Charting_Library.IExecutionLineAdapter",
+            "display": "IExecutionLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IOrderLineAdapter",
+      "qualifiedName": "Charting_Library.IOrderLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "onCancel",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "text",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "onMove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IOrderLineAdapter",
+            "qualifiedName": "Charting_Library.IOrderLineAdapter",
+            "display": "IOrderLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "id",
+          "optional": false,
+          "readonly": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "price",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IPositionLineAdapter",
+      "qualifiedName": "Charting_Library.IPositionLineAdapter",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "onClose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "text",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "setPrice",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "price",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "number"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setQuantity",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "quantity",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "setText",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "IPositionLineAdapter",
+            "qualifiedName": "Charting_Library.IPositionLineAdapter",
+            "display": "IPositionLineAdapter",
+            "typeArguments": []
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "IWatchedValue",
+      "qualifiedName": "Charting_Library.IWatchedValue",
+      "kind": "interface",
+      "typeParameters": [
+        "T"
+      ],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "setValue",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "typeParameter",
+                "name": "T"
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "subscribe",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "callback",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "callback",
+                "name": null,
+                "qualifiedName": null,
+                "signatures": [
+                  {
+                    "typeParameters": [],
+                    "parameters": [
+                      {
+                        "name": "value",
+                        "optional": false,
+                        "rest": false,
+                        "type": {
+                          "kind": "typeParameter",
+                          "name": "T"
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "kind": "void"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "value",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "typeParameter",
+            "name": "T"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "widget",
+      "qualifiedName": "Charting_Library.widget",
+      "kind": "class",
+      "typeParameters": [],
+      "constructors": [
+        {
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "options",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "ChartingLibraryWidgetOptions",
+                "qualifiedName": "Charting_Library.ChartingLibraryWidgetOptions",
+                "display": "ChartingLibraryWidgetOptions",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "reference",
+            "name": "widget",
+            "qualifiedName": "Charting_Library.widget",
+            "display": "widget",
+            "typeArguments": []
+          }
+        }
+      ],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "activeChart",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "reference",
+            "name": "IChartWidgetApi",
+            "qualifiedName": "Charting_Library.IChartWidgetApi",
+            "display": "IChartWidgetApi",
+            "typeArguments": []
+          }
+        },
+        {
+          "name": "getLanguage",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "remove",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "void"
+          }
+        }
+      ],
+      "properties": [],
+      "indexSignatures": [],
+      "baseTypes": []
+    }
+  ],
+  "functions": [],
+  "globals": []
+}

@@ -27,22 +27,22 @@ internal sealed record SamplePaths(
         }
 
         configuredLibrary ??=
-            Environment.GetEnvironmentVariable("HTMLML_NATIVE_ENGINE_LIBRARY");
+            Environment.GetEnvironmentVariable("WEBSCENE_NATIVE_ENGINE_LIBRARY");
         var nativeLibrary = !string.IsNullOrWhiteSpace(configuredLibrary)
             ? Path.GetFullPath(configuredLibrary)
             : Path.Combine(AppContext.BaseDirectory, NativeLibraryFileName());
         if (!File.Exists(nativeLibrary))
         {
             throw new FileNotFoundException(
-                "The HtmlML native engine was not found. Pass "
+                "The WebScene native engine was not found. Pass "
                 + $"--native-library /absolute/path/to/{NativeLibraryFileName()} "
-                + "or set HTMLML_NATIVE_ENGINE_LIBRARY.",
+                + "or set WEBSCENE_NATIVE_ENGINE_LIBRARY.",
                 nativeLibrary);
         }
 
         var cache = configuredCache ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HtmlML",
+            "WebScene",
             "NativeTradingViewTerminal",
             "v8-cache");
         Directory.CreateDirectory(cache);
@@ -51,8 +51,8 @@ internal sealed record SamplePaths(
 
     internal static string NativeLibraryFileName()
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? "htmlml_native_engine.dll"
+            ? "webscene_native_engine.dll"
             : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                ? "libhtmlml_native_engine.dylib"
-                : "libhtmlml_native_engine.so";
+                ? "libwebscene_native_engine.dylib"
+                : "libwebscene_native_engine.so";
 }

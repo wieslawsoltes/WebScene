@@ -333,7 +333,7 @@ public sealed class CssPositionedOverlayTests
             var dismiss = HostTestUtilities.GetElement(document.createElement("button"));
             dismiss.className = "dismiss";
             dismiss.textContent = "Got it!";
-            dismiss.__htmlMlAddExternalEventListener(
+            dismiss.__webSceneAddExternalEventListener(
                 "click",
                 new RemoveElementListener(hint),
                 capture: false,

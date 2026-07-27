@@ -5,7 +5,7 @@
 
 ## Context
 
-HtmlML has a working managed DOM/CSS/JavaScript/Avalonia engine with broad behavioral,
+WebScene has a working managed DOM/CSS/JavaScript/Avalonia engine with broad behavioral,
 pixel, component-integration, and curated WPT coverage. The native V8 scene-engine work removes
 hot-path managed dispatch and UI-thread DOM/CSS work, but it is intentionally a subset
 while compatibility is established.
@@ -17,7 +17,7 @@ make native failures difficult to classify.
 
 ## Decision
 
-HtmlML supports both execution modes as first-class product modes:
+WebScene supports both execution modes as first-class product modes:
 
 1. **Managed mode** remains supported. It is the compatibility implementation and the
    differential oracle for behavior already covered by its tests.
@@ -39,7 +39,7 @@ HtmlML supports both execution modes as first-class product modes:
    fixtures and WPT. Every newly fixed product defect receives a reduced shared
    regression where practical and an exact-reference assertion in the owning product.
 7. Products expose their own managed facades and domain contracts for both modes.
-   HtmlML owns engine selection primitives, JavaScript affinity, rendering/input,
+   WebScene owns engine selection primitives, JavaScript affinity, rendering/input,
    diagnostics, lifecycle, and persistent compilation-unit caches; product wrappers,
    assets, commands, and data adapters remain outside this repository.
 

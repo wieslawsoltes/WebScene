@@ -14,7 +14,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using HtmlML.Core;
+using WebScene.Core;
 
 namespace JavaScript.Avalonia;
 
@@ -23,7 +23,7 @@ namespace JavaScript.Avalonia;
 /// DOM presentation remains in this package while scheduling, frames, viewport,
 /// resources, clipboard and normalized input are reached through these contracts.
 /// </summary>
-internal sealed class AvaloniaHostServices : IHtmlMlHostServices, IDisposable
+internal sealed class AvaloniaHostServices : IWebSceneHostServices, IDisposable
 {
     private readonly TopLevel _topLevel;
     private readonly AvaloniaViewport _viewport;
@@ -31,8 +31,8 @@ internal sealed class AvaloniaHostServices : IHtmlMlHostServices, IDisposable
     public AvaloniaHostServices(TopLevel topLevel)
     {
         _topLevel = topLevel ?? throw new ArgumentNullException(nameof(topLevel));
-        RootHandle = HtmlMlBackendHandle.Create(topLevel);
-        Dispatcher = new AvaloniaHtmlMlDispatcher();
+        RootHandle = WebSceneBackendHandle.Create(topLevel);
+        Dispatcher = new AvaloniaWebSceneDispatcher();
         Clock = new StopwatchClock();
         Frames = new AvaloniaFrameScheduler(topLevel);
         _viewport = new AvaloniaViewport(topLevel);
@@ -44,23 +44,23 @@ internal sealed class AvaloniaHostServices : IHtmlMlHostServices, IDisposable
         Input = InputSource;
     }
 
-    public HtmlMlBackendHandle RootHandle { get; }
+    public WebSceneBackendHandle RootHandle { get; }
 
     internal TopLevel TopLevel => _topLevel;
 
-    public IHtmlMlDispatcher Dispatcher { get; }
+    public IWebSceneDispatcher Dispatcher { get; }
 
-    public IHtmlMlClock Clock { get; }
+    public IWebSceneClock Clock { get; }
 
-    public IHtmlMlFrameScheduler Frames { get; }
+    public IWebSceneFrameScheduler Frames { get; }
 
-    public IHtmlMlViewport Viewport { get; }
+    public IWebSceneViewport Viewport { get; }
 
-    public IHtmlMlResourceLoader Resources { get; }
+    public IWebSceneResourceLoader Resources { get; }
 
-    public IHtmlMlClipboard Clipboard { get; }
+    public IWebSceneClipboard Clipboard { get; }
 
-    public IHtmlMlInputSource Input { get; }
+    public IWebSceneInputSource Input { get; }
 
     internal AvaloniaResourceLoader ResourceLoader { get; }
 
@@ -79,7 +79,7 @@ internal sealed class AvaloniaHostServices : IHtmlMlHostServices, IDisposable
         }
     }
 
-    private sealed class StopwatchClock : IHtmlMlClock
+    private sealed class StopwatchClock : IWebSceneClock
     {
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 
@@ -87,38 +87,38 @@ internal sealed class AvaloniaHostServices : IHtmlMlHostServices, IDisposable
     }
 }
 
-internal sealed class AvaloniaHtmlMlDispatcher : IHtmlMlDispatcher
+internal sealed class AvaloniaWebSceneDispatcher : IWebSceneDispatcher
 {
     public bool CheckAccess() => Dispatcher.UIThread.CheckAccess();
 
     public void VerifyAccess() => Dispatcher.UIThread.VerifyAccess();
 
-    public void Post(Action callback, HtmlMlDispatchPriority priority = HtmlMlDispatchPriority.Default)
+    public void Post(Action callback, WebSceneDispatchPriority priority = WebSceneDispatchPriority.Default)
     {
         ArgumentNullException.ThrowIfNull(callback);
         Dispatcher.UIThread.Post(callback, MapPriority(priority));
     }
 
-    public IHtmlMlScheduledWork Schedule(
+    public IWebSceneScheduledWork Schedule(
         TimeSpan delay,
         Action callback,
-        HtmlMlDispatchPriority priority = HtmlMlDispatchPriority.Default)
+        WebSceneDispatchPriority priority = WebSceneDispatchPriority.Default)
     {
         ArgumentNullException.ThrowIfNull(callback);
         return new AvaloniaScheduledWork(delay, callback, MapPriority(priority));
     }
 
-    internal static DispatcherPriority MapPriority(HtmlMlDispatchPriority priority)
+    internal static DispatcherPriority MapPriority(WebSceneDispatchPriority priority)
         => priority switch
         {
-            HtmlMlDispatchPriority.Send => DispatcherPriority.Send,
-            HtmlMlDispatchPriority.Input => DispatcherPriority.Input,
-            HtmlMlDispatchPriority.Render => DispatcherPriority.Render,
-            HtmlMlDispatchPriority.Background => DispatcherPriority.Background,
+            WebSceneDispatchPriority.Send => DispatcherPriority.Send,
+            WebSceneDispatchPriority.Input => DispatcherPriority.Input,
+            WebSceneDispatchPriority.Render => DispatcherPriority.Render,
+            WebSceneDispatchPriority.Background => DispatcherPriority.Background,
             _ => DispatcherPriority.Default
         };
 
-    private sealed class AvaloniaScheduledWork : IHtmlMlScheduledWork
+    private sealed class AvaloniaScheduledWork : IWebSceneScheduledWork
     {
         private readonly DispatcherTimer _timer;
         private bool _disposed;
@@ -165,7 +165,7 @@ internal sealed class AvaloniaHtmlMlDispatcher : IHtmlMlDispatcher
     }
 }
 
-internal sealed class AvaloniaFrameScheduler : IHtmlMlFrameScheduler, IDisposable
+internal sealed class AvaloniaFrameScheduler : IWebSceneFrameScheduler, IDisposable
 {
     private readonly TopLevel _topLevel;
     private readonly SortedDictionary<long, Action<TimeSpan>> _pending = new();
@@ -175,14 +175,14 @@ internal sealed class AvaloniaFrameScheduler : IHtmlMlFrameScheduler, IDisposabl
 
     public AvaloniaFrameScheduler(TopLevel topLevel) => _topLevel = topLevel;
 
-    public HtmlMlFrameRequest RequestFrame(Action<TimeSpan> callback)
+    public WebSceneFrameRequest RequestFrame(Action<TimeSpan> callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
         ObjectDisposedException.ThrowIf(_disposed, this);
         var id = Interlocked.Increment(ref _sequence);
         _pending.Add(id, callback);
         EnsureFrameScheduled();
-        return new HtmlMlFrameRequest(id);
+        return new WebSceneFrameRequest(id);
     }
 
     private void EnsureFrameScheduled()
@@ -225,7 +225,7 @@ internal sealed class AvaloniaFrameScheduler : IHtmlMlFrameScheduler, IDisposabl
         });
     }
 
-    public bool CancelFrame(HtmlMlFrameRequest request) => _pending.Remove(request.Value);
+    public bool CancelFrame(WebSceneFrameRequest request) => _pending.Remove(request.Value);
 
     public void Dispose()
     {
@@ -235,11 +235,11 @@ internal sealed class AvaloniaFrameScheduler : IHtmlMlFrameScheduler, IDisposabl
     }
 }
 
-internal sealed class AvaloniaViewport : IHtmlMlViewport, IDisposable
+internal sealed class AvaloniaViewport : IWebSceneViewport, IDisposable
 {
     private readonly TopLevel _topLevel;
     private Func<Control?>? _documentViewportProvider;
-    private HtmlMlViewportMetrics _metrics;
+    private WebSceneViewportMetrics _metrics;
 
     public AvaloniaViewport(TopLevel topLevel)
     {
@@ -249,16 +249,16 @@ internal sealed class AvaloniaViewport : IHtmlMlViewport, IDisposable
         _topLevel.LayoutUpdated += OnLayoutUpdated;
     }
 
-    public HtmlMlViewportMetrics Metrics => ReadMetrics();
+    public WebSceneViewportMetrics Metrics => ReadMetrics();
 
-    public HtmlMlViewportMetrics HostMetrics => ReadHostMetrics();
+    public WebSceneViewportMetrics HostMetrics => ReadHostMetrics();
 
-    public event EventHandler<HtmlMlViewportChangedEventArgs>? Changed;
+    public event EventHandler<WebSceneViewportChangedEventArgs>? Changed;
 
     public void SetDocumentViewportProvider(Func<Control?> provider)
         => _documentViewportProvider = provider ?? throw new ArgumentNullException(nameof(provider));
 
-    private HtmlMlViewportMetrics ReadMetrics()
+    private WebSceneViewportMetrics ReadMetrics()
     {
         var viewport = _documentViewportProvider?.Invoke();
         var size = viewport is not null && viewport.Bounds.Width > 0 && viewport.Bounds.Height > 0
@@ -266,19 +266,19 @@ internal sealed class AvaloniaViewport : IHtmlMlViewport, IDisposable
             : _topLevel.ClientSize.Width > 0 && _topLevel.ClientSize.Height > 0
                 ? _topLevel.ClientSize
                 : _topLevel.Bounds.Size;
-        return new HtmlMlViewportMetrics(
-            new HtmlMlSize(size.Width, size.Height),
+        return new WebSceneViewportMetrics(
+            new WebSceneSize(size.Width, size.Height),
             Math.Max(1, _topLevel.RenderScaling),
             _topLevel.IsVisible);
     }
 
-    private HtmlMlViewportMetrics ReadHostMetrics()
+    private WebSceneViewportMetrics ReadHostMetrics()
     {
         var size = _topLevel.ClientSize.Width > 0 && _topLevel.ClientSize.Height > 0
             ? _topLevel.ClientSize
             : _topLevel.Bounds.Size;
-        return new HtmlMlViewportMetrics(
-            new HtmlMlSize(size.Width, size.Height),
+        return new WebSceneViewportMetrics(
+            new WebSceneSize(size.Width, size.Height),
             Math.Max(1, _topLevel.RenderScaling),
             _topLevel.IsVisible);
     }
@@ -297,7 +297,7 @@ internal sealed class AvaloniaViewport : IHtmlMlViewport, IDisposable
 
         var previous = _metrics;
         _metrics = current;
-        Changed?.Invoke(this, new HtmlMlViewportChangedEventArgs(previous, current));
+        Changed?.Invoke(this, new WebSceneViewportChangedEventArgs(previous, current));
     }
 
     public void Dispose()
@@ -309,11 +309,11 @@ internal sealed class AvaloniaViewport : IHtmlMlViewport, IDisposable
 }
 
 /// <summary>
-/// Loads HtmlML text resources from files, Avalonia assets, data URIs, or HTTP(S).
-/// Runtime adapters can share this service so resource policy stays in HtmlML
+/// Loads WebScene text resources from files, Avalonia assets, data URIs, or HTTP(S).
+/// Runtime adapters can share this service so resource policy stays in WebScene
 /// instead of being reimplemented by individual samples and host applications.
 /// </summary>
-public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
+public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
 {
     private static readonly HttpClient s_httpClient = new();
     private readonly List<string> _resourceSearchDirectories = new();
@@ -321,7 +321,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
 
     public string ScriptBaseDirectory { get; set; } = AppContext.BaseDirectory;
 
-    public HtmlMlTextResource LoadText(in HtmlMlResourceRequest request)
+    public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Specifier))
         {
@@ -336,7 +336,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
 
         if (specifier.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
-            return new HtmlMlTextResource(specifier, DecodeDataUri(specifier), specifier, null);
+            return new WebSceneTextResource(specifier, DecodeDataUri(specifier), specifier, null);
         }
 
         var resolved = ResolveAddress(specifier, request.BaseAddress);
@@ -349,7 +349,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
         {
             using var stream = AssetLoader.Open(resolved);
             using var reader = new StreamReader(stream);
-            return new HtmlMlTextResource(resolved.ToString(), reader.ReadToEnd(), resolved.ToString(), null);
+            return new WebSceneTextResource(resolved.ToString(), reader.ReadToEnd(), resolved.ToString(), null);
         }
 
         if (resolved.Scheme is "http" or "https")
@@ -387,7 +387,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
             var cachePolicy = ReadHttpCachePolicy(response, responseLastModified);
             if (response.StatusCode == HttpStatusCode.NotModified)
             {
-                return new HtmlMlTextResource(
+                return new WebSceneTextResource(
                     resolved.ToString(),
                     string.Empty,
                     resolved.ToString(),
@@ -401,7 +401,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
                 };
             }
             response.EnsureSuccessStatusCode();
-            return new HtmlMlTextResource(
+            return new WebSceneTextResource(
                 resolved.ToString(),
                 response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
                 resolved.ToString(),
@@ -586,7 +586,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
         return new Uri(Path.GetFullPath(Path.Combine(ScriptBaseDirectory, specifier)));
     }
 
-    private HtmlMlTextResource LoadFile(string path)
+    private WebSceneTextResource LoadFile(string path)
     {
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath) && string.IsNullOrEmpty(Path.GetExtension(fullPath)) && File.Exists(fullPath + ".js"))
@@ -610,7 +610,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
             _resourceSearchDirectories.Add(directory);
         }
 
-        return new HtmlMlTextResource(fullPath, File.ReadAllText(fullPath), fullPath, directory);
+        return new WebSceneTextResource(fullPath, File.ReadAllText(fullPath), fullPath, directory);
     }
 
     private bool TryResolvePackagedResource(string resourcePath, out string fullPath)
@@ -704,7 +704,7 @@ public sealed class AvaloniaResourceLoader : IHtmlMlResourceLoader
 
 internal readonly record struct AvaloniaBinaryResource(string CacheKey, byte[] Content, string DisplayName);
 
-internal sealed class AvaloniaClipboard : IHtmlMlClipboard
+internal sealed class AvaloniaClipboard : IWebSceneClipboard
 {
     private readonly TopLevel _topLevel;
     private readonly Dictionary<string, byte[]> _lastData = new(StringComparer.OrdinalIgnoreCase);
@@ -769,29 +769,29 @@ internal sealed class AvaloniaClipboard : IHtmlMlClipboard
     }
 }
 
-internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
+internal sealed class AvaloniaInputSource : IWebSceneInputSource, IDisposable
 {
     private readonly TopLevel _topLevel;
     private bool _attached;
-    private EventHandler<HtmlMlPointerInputEventArgs>? _pointer;
-    private EventHandler<HtmlMlKeyboardInputEventArgs>? _keyboard;
-    private EventHandler<HtmlMlTextInputEventArgs>? _textInput;
+    private EventHandler<WebScenePointerInputEventArgs>? _pointer;
+    private EventHandler<WebSceneKeyboardInputEventArgs>? _keyboard;
+    private EventHandler<WebSceneTextInputEventArgs>? _textInput;
 
     public AvaloniaInputSource(TopLevel topLevel) => _topLevel = topLevel;
 
-    public event EventHandler<HtmlMlPointerInputEventArgs>? Pointer
+    public event EventHandler<WebScenePointerInputEventArgs>? Pointer
     {
         add { _pointer += value; EnsureAttached(); }
         remove { _pointer -= value; }
     }
 
-    public event EventHandler<HtmlMlKeyboardInputEventArgs>? Keyboard
+    public event EventHandler<WebSceneKeyboardInputEventArgs>? Keyboard
     {
         add { _keyboard += value; EnsureAttached(); }
         remove { _keyboard -= value; }
     }
 
-    public event EventHandler<HtmlMlTextInputEventArgs>? TextInput
+    public event EventHandler<WebSceneTextInputEventArgs>? TextInput
     {
         add { _textInput += value; EnsureAttached(); }
         remove { _textInput -= value; }
@@ -815,35 +815,35 @@ internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
     }
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
-        => PublishPointer(args, HtmlMlPointerEventKind.Pressed);
+        => PublishPointer(args, WebScenePointerEventKind.Pressed);
 
     private void OnPointerMoved(object? sender, PointerEventArgs args)
-        => PublishPointer(args, HtmlMlPointerEventKind.Moved);
+        => PublishPointer(args, WebScenePointerEventKind.Moved);
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs args)
-        => PublishPointer(args, HtmlMlPointerEventKind.Released);
+        => PublishPointer(args, WebScenePointerEventKind.Released);
 
     private void OnPointerWheel(object? sender, PointerWheelEventArgs args)
-        => PublishPointer(args, HtmlMlPointerEventKind.Wheel, args.Delta);
+        => PublishPointer(args, WebScenePointerEventKind.Wheel, args.Delta);
 
-    private void PublishPointer(PointerEventArgs args, HtmlMlPointerEventKind kind, Vector delta = default)
+    private void PublishPointer(PointerEventArgs args, WebScenePointerEventKind kind, Vector delta = default)
     {
         var current = args.GetCurrentPoint(_topLevel);
         var properties = current.Properties;
         var modifiers = args.KeyModifiers;
-        var normalized = new HtmlMlPointerInputEventArgs
+        var normalized = new WebScenePointerInputEventArgs
         {
             Kind = kind,
             PointerType = args.Pointer.Type switch
             {
-                PointerType.Mouse => HtmlMlPointerType.Mouse,
-                PointerType.Touch => HtmlMlPointerType.Touch,
-                PointerType.Pen => HtmlMlPointerType.Pen,
-                _ => HtmlMlPointerType.Unknown
+                PointerType.Mouse => WebScenePointerType.Mouse,
+                PointerType.Touch => WebScenePointerType.Touch,
+                PointerType.Pen => WebScenePointerType.Pen,
+                _ => WebScenePointerType.Unknown
             },
             PointerId = args.Pointer.Id,
-            Position = new HtmlMlPoint(current.Position.X, current.Position.Y),
-            Delta = new HtmlMlPoint(delta.X, delta.Y),
+            Position = new WebScenePoint(current.Position.X, current.Position.Y),
+            Delta = new WebScenePoint(delta.X, delta.Y),
             Button = properties.PointerUpdateKind switch
             {
                 PointerUpdateKind.LeftButtonPressed or PointerUpdateKind.LeftButtonReleased => 0,
@@ -859,9 +859,9 @@ internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
             MetaKey = modifiers.HasFlag(KeyModifiers.Meta),
             ShiftKey = modifiers.HasFlag(KeyModifiers.Shift),
             SourceHandle = args.Source is { } source
-                ? HtmlMlBackendHandle.Create(source)
+                ? WebSceneBackendHandle.Create(source)
                 : default,
-            NativeEventHandle = HtmlMlBackendHandle.Create(args)
+            NativeEventHandle = WebSceneBackendHandle.Create(args)
         };
         _pointer?.Invoke(this, normalized);
         if (normalized.Handled)
@@ -877,7 +877,7 @@ internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
     private void PublishKeyboard(KeyEventArgs args, string type)
     {
         var modifiers = args.KeyModifiers;
-        var normalized = new HtmlMlKeyboardInputEventArgs
+        var normalized = new WebSceneKeyboardInputEventArgs
         {
             Type = type,
             Key = args.Key.ToString(),
@@ -888,9 +888,9 @@ internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
             MetaKey = modifiers.HasFlag(KeyModifiers.Meta),
             ShiftKey = modifiers.HasFlag(KeyModifiers.Shift),
             SourceHandle = args.Source is { } source
-                ? HtmlMlBackendHandle.Create(source)
+                ? WebSceneBackendHandle.Create(source)
                 : default,
-            NativeEventHandle = HtmlMlBackendHandle.Create(args)
+            NativeEventHandle = WebSceneBackendHandle.Create(args)
         };
         _keyboard?.Invoke(this, normalized);
         if (normalized.Handled)
@@ -901,13 +901,13 @@ internal sealed class AvaloniaInputSource : IHtmlMlInputSource, IDisposable
 
     private void OnTextInput(object? sender, TextInputEventArgs args)
     {
-        var normalized = new HtmlMlTextInputEventArgs
+        var normalized = new WebSceneTextInputEventArgs
         {
             Text = args.Text ?? string.Empty,
             SourceHandle = args.Source is { } source
-                ? HtmlMlBackendHandle.Create(source)
+                ? WebSceneBackendHandle.Create(source)
                 : default,
-            NativeEventHandle = HtmlMlBackendHandle.Create(args)
+            NativeEventHandle = WebSceneBackendHandle.Create(args)
         };
         _textInput?.Invoke(this, normalized);
         if (normalized.Handled)

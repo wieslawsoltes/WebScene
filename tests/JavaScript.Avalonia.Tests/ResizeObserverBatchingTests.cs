@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
-using HtmlML.JavaScript;
+using WebScene.JavaScript;
 using Xunit;
 
 namespace JavaScript.Avalonia.Tests;
@@ -30,15 +30,15 @@ public sealed class ResizeObserverBatchingTests
             second.Control.Height = 40;
             Dispatcher.UIThread.RunJobs();
 
-            var rectTarget = Assert.IsAssignableFrom<IHtmlMlDomClientRectsTarget>(first);
+            var rectTarget = Assert.IsAssignableFrom<IWebSceneDomClientRectsTarget>(first);
             Assert.True(rectTarget.TryReadClientRect(out var fastRect));
             var publicRect = Assert.Single(first.getClientRects());
             Assert.Equal(publicRect.width, fastRect.Width);
             Assert.Equal(publicRect.height, fastRect.Height);
 
             var callback = new CountingCallback();
-            first.__htmlMlObserveResize(callback);
-            second.__htmlMlObserveResize(callback);
+            first.__webSceneObserveResize(callback);
+            second.__webSceneObserveResize(callback);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(1, callback.Count);
 
@@ -54,8 +54,8 @@ public sealed class ResizeObserverBatchingTests
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(0, callback.Count);
 
-            first.__htmlMlUnobserveResize(callback);
-            second.__htmlMlUnobserveResize(callback);
+            first.__webSceneUnobserveResize(callback);
+            second.__webSceneUnobserveResize(callback);
         }
         finally
         {

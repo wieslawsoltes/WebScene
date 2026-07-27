@@ -3,7 +3,7 @@
 <title>Window EventTarget listener lifecycle</title>
 <body>
 <script>
-  const state = window.__htmlMlWptState = {
+  const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
   };
   function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -25,10 +25,10 @@
   test("removed window listeners receive no later event", () => {
     let count = 0;
     const listener = () => count++;
-    window.addEventListener("htmlml-window-probe", listener);
-    window.dispatchEvent(new Event("htmlml-window-probe"));
-    window.removeEventListener("htmlml-window-probe", listener);
-    window.dispatchEvent(new Event("htmlml-window-probe"));
+    window.addEventListener("webscene-window-probe", listener);
+    window.dispatchEvent(new Event("webscene-window-probe"));
+    window.removeEventListener("webscene-window-probe", listener);
+    window.dispatchEvent(new Event("webscene-window-probe"));
     assert(count === 1, `listener count was ${count}`);
   });
 

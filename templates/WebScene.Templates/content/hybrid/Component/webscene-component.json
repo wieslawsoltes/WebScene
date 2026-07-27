@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.hybrid",
+  "displayName": "WebScene Hybrid React Islands",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "input.pointer",
+    "input.keyboard",
+    "input.focus",
+    "host.commands",
+    "host.settings"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

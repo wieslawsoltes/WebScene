@@ -49,16 +49,16 @@ foreach ($patchPath in $patchPaths) {
     if ($LASTEXITCODE -eq 0) {
         & git -C $Source apply $patchPath
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to apply the HtmlML ClearScript patch: $patchPath"
+            throw "Failed to apply the WebScene ClearScript patch: $patchPath"
         }
-        Write-Host "Applied HtmlML ClearScript patch: $patchPath"
+        Write-Host "Applied WebScene ClearScript patch: $patchPath"
     }
     else {
         & git -C $Source apply --reverse --check $patchPath 2>$null
         if ($LASTEXITCODE -ne 0) {
-            throw "Cannot apply or recognize the HtmlML patch against ClearScript 7.5.1: $patchPath"
+            throw "Cannot apply or recognize the WebScene patch against ClearScript 7.5.1: $patchPath"
         }
-        Write-Host "HtmlML ClearScript patch is already applied: $patchPath"
+        Write-Host "WebScene ClearScript patch is already applied: $patchPath"
     }
 }
 
@@ -117,8 +117,8 @@ New-Item -ItemType Directory -Force -Path $Output | Out-Null
 & dotnet pack $packageProject `
     -c Release `
     -o $Output `
-    "-p:HtmlMlClearScriptNativeRid=$Rid" `
-    "-p:HtmlMlClearScriptNativePath=$nativePath"
+    "-p:WebSceneClearScriptNativeRid=$Rid" `
+    "-p:WebSceneClearScriptNativePath=$nativePath"
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to pack the ClearScript V8 native output for $Rid."
 }

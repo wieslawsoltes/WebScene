@@ -13,7 +13,7 @@ public sealed class V8FocusEventRegressionTests
     [Trait("Runtime", "V8Native")]
     public void DelegatedListenersObserveWptAlignedSameDocumentFocusTransition()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -42,7 +42,7 @@ public sealed class V8FocusEventRegressionTests
                 parent.append(first, second);
                 document.body.appendChild(parent);
 
-                const events = globalThis.__htmlMlFocusEvents = [];
+                const events = globalThis.__webSceneFocusEvents = [];
                 function record(event) {
                   events.push({
                     type: event.type,
@@ -67,7 +67,7 @@ public sealed class V8FocusEventRegressionTests
                 """, "v8-focus-event-wpt-normal-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlFocusEvents)")) ?? "[]");
+                "JSON.stringify(globalThis.__webSceneFocusEvents)")) ?? "[]");
             var events = result.RootElement.EnumerateArray().ToArray();
             Assert.Equal(
                 ["focus", "focusin", "focusin", "blur", "focusout", "focusout", "focus", "focusin", "focusin"],

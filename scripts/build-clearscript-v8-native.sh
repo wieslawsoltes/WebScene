@@ -84,9 +84,9 @@ for patch_path in "${PATCH_PATHS[@]}"; do
   patch_name="$(basename "$patch_path")"
   if git -C "$source_dir" apply --check "$patch_path" >/dev/null 2>&1; then
     git -C "$source_dir" apply "$patch_path"
-    echo "Applied HtmlML ClearScript patch: $patch_name"
+    echo "Applied WebScene ClearScript patch: $patch_name"
   elif git -C "$source_dir" apply --reverse --check "$patch_path" >/dev/null 2>&1; then
-    echo "HtmlML ClearScript patch is already applied: $patch_name"
+    echo "WebScene ClearScript patch is already applied: $patch_name"
   else
     echo "Cannot apply or recognize '$patch_name' against ClearScript 7.5.1." >&2
     exit 1
@@ -103,7 +103,7 @@ fi
   bash ./V8Update.sh "${v8_args[@]}"
 )
 
-# The HtmlML patch makes the native build verify the monolith produced above instead
+# The WebScene patch makes the native build verify the monolith produced above instead
 # of invoking V8Update.sh a second time and potentially replacing the reviewed cache.
 make -f "$source_dir/Unix/ClearScriptV8/Makefile" CPU="$cpu"
 

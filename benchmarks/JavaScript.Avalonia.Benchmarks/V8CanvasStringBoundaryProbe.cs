@@ -43,12 +43,12 @@ public static class V8CanvasStringBoundaryProbe
                 // values free, then enqueue a three-value string state command.
                 for (let index = 0; index < 8191; index++) context.beginPath();
                 context.fillStyle = '#123456';
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
 
                 // Leave four values free, then enqueue a five-value text command.
                 for (let index = 0; index < 8190; index++) context.beginPath();
                 context.fillText('packet-boundary', 1, 1);
-                __htmlMlFlushCanvases();
+                __webSceneFlushCanvases();
                 globalThis.canvasStringBoundaryPassed = true;
                 """, "v8-canvas-string-packet-boundary.js");
 

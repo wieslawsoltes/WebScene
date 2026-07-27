@@ -2,7 +2,7 @@ namespace JavaScript.Avalonia.ClearScript;
 
 /// <summary>
 /// Configures the ClearScript V8 runtime that executes JavaScript against the
-/// engine-neutral HtmlML browser host.
+/// engine-neutral WebScene browser host.
 /// </summary>
 public sealed class ClearScriptV8RuntimeOptions
 {

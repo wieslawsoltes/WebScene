@@ -4,52 +4,52 @@
     <IsPackable>true</IsPackable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <PackageId Condition="'$(HtmlMlClearScriptNativeRid)' != ''">JavaScript.Avalonia.ClearScript.Native.$(HtmlMlClearScriptNativeRid)</PackageId>
+    <PackageId Condition="'$(WebSceneClearScriptNativeRid)' != ''">JavaScript.Avalonia.ClearScript.Native.$(WebSceneClearScriptNativeRid)</PackageId>
     <PackageId Condition="'$(PackageId)' == ''">JavaScript.Avalonia.ClearScript.Native.Template</PackageId>
-    <Description>Reviewed patched ClearScript V8 native runtime for HtmlML trusted same-origin contexts.</Description>
+    <Description>Reviewed patched ClearScript V8 native runtime for WebScene trusted same-origin contexts.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>avalonia;javascript;v8;clearscript;native</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <HtmlMlClearScriptNativeRequired>true</HtmlMlClearScriptNativeRequired>
-    <HtmlMlClearScriptSourceTag>7.5.1</HtmlMlClearScriptSourceTag>
-    <HtmlMlClearScriptV8Revision>14.7.173.23</HtmlMlClearScriptV8Revision>
-    <HtmlMlClearScriptPatchPath>$(MSBuildThisFileDirectory)..\..\third-party\clearscript-patches\ClearScript-7.5.1-SharedContextSecurityToken.patch</HtmlMlClearScriptPatchPath>
-    <HtmlMlClearScriptTypedManagedAbiPatchPath>$(MSBuildThisFileDirectory)..\..\third-party\clearscript-patches\ClearScript-7.5.1-TypedManagedAbi.patch</HtmlMlClearScriptTypedManagedAbiPatchPath>
-    <HtmlMlClearScriptPackageMetadataDir>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/native-package/</HtmlMlClearScriptPackageMetadataDir>
-    <HtmlMlClearScriptNativeHashPath>$(HtmlMlClearScriptPackageMetadataDir)clearscript-native.sha256</HtmlMlClearScriptNativeHashPath>
-    <HtmlMlClearScriptPatchHashPath>$(HtmlMlClearScriptPackageMetadataDir)clearscript-patch.sha256</HtmlMlClearScriptPatchHashPath>
-    <HtmlMlClearScriptProvenancePath>$(HtmlMlClearScriptPackageMetadataDir)clearscript-provenance.txt</HtmlMlClearScriptProvenancePath>
-    <HtmlMlClearScriptRuntimeManifestPath>$(HtmlMlClearScriptPackageMetadataDir)clearscript-native-runtime.json</HtmlMlClearScriptRuntimeManifestPath>
-    <HtmlMlClearScriptRuntimePropsPath>$(HtmlMlClearScriptPackageMetadataDir)$(PackageId).props</HtmlMlClearScriptRuntimePropsPath>
+    <WebSceneClearScriptNativeRequired>true</WebSceneClearScriptNativeRequired>
+    <WebSceneClearScriptSourceTag>7.5.1</WebSceneClearScriptSourceTag>
+    <WebSceneClearScriptV8Revision>14.7.173.23</WebSceneClearScriptV8Revision>
+    <WebSceneClearScriptPatchPath>$(MSBuildThisFileDirectory)..\..\third-party\clearscript-patches\ClearScript-7.5.1-SharedContextSecurityToken.patch</WebSceneClearScriptPatchPath>
+    <WebSceneClearScriptTypedManagedAbiPatchPath>$(MSBuildThisFileDirectory)..\..\third-party\clearscript-patches\ClearScript-7.5.1-TypedManagedAbi.patch</WebSceneClearScriptTypedManagedAbiPatchPath>
+    <WebSceneClearScriptPackageMetadataDir>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/native-package/</WebSceneClearScriptPackageMetadataDir>
+    <WebSceneClearScriptNativeHashPath>$(WebSceneClearScriptPackageMetadataDir)clearscript-native.sha256</WebSceneClearScriptNativeHashPath>
+    <WebSceneClearScriptPatchHashPath>$(WebSceneClearScriptPackageMetadataDir)clearscript-patch.sha256</WebSceneClearScriptPatchHashPath>
+    <WebSceneClearScriptProvenancePath>$(WebSceneClearScriptPackageMetadataDir)clearscript-provenance.txt</WebSceneClearScriptProvenancePath>
+    <WebSceneClearScriptRuntimeManifestPath>$(WebSceneClearScriptPackageMetadataDir)clearscript-native-runtime.json</WebSceneClearScriptRuntimeManifestPath>
+    <WebSceneClearScriptRuntimePropsPath>$(WebSceneClearScriptPackageMetadataDir)$(PackageId).props</WebSceneClearScriptRuntimePropsPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <_HtmlMlReviewedPatch Include="$(HtmlMlClearScriptPatchPath)">
+    <_WebSceneReviewedPatch Include="$(WebSceneClearScriptPatchPath)">
       <PackageFileName>ClearScript-7.5.1-SharedContextSecurityToken.patch</PackageFileName>
-    </_HtmlMlReviewedPatch>
-    <_HtmlMlReviewedPatch Include="$(HtmlMlClearScriptTypedManagedAbiPatchPath)">
+    </_WebSceneReviewedPatch>
+    <_WebSceneReviewedPatch Include="$(WebSceneClearScriptTypedManagedAbiPatchPath)">
       <PackageFileName>ClearScript-7.5.1-TypedManagedAbi.patch</PackageFileName>
-    </_HtmlMlReviewedPatch>
+    </_WebSceneReviewedPatch>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="$(MSBuildThisFileDirectory)..\..\third-party\clearscript-patches\README.md"
           Pack="true" PackagePath="build\clearscript-patches\README.md" />
-    <None Include="$(HtmlMlClearScriptPatchPath)"
+    <None Include="$(WebSceneClearScriptPatchPath)"
           Pack="true" PackagePath="build\clearscript-patches\ClearScript-7.5.1-SharedContextSecurityToken.patch" />
-    <None Include="$(HtmlMlClearScriptTypedManagedAbiPatchPath)"
+    <None Include="$(WebSceneClearScriptTypedManagedAbiPatchPath)"
           Pack="true" PackagePath="build\clearscript-patches\ClearScript-7.5.1-TypedManagedAbi.patch" />
-    <None Include="$(HtmlMlClearScriptNativePath)"
+    <None Include="$(WebSceneClearScriptNativePath)"
           Pack="true"
-          PackagePath="runtimes\$(HtmlMlClearScriptNativeRid)\native\$(HtmlMlClearScriptNativeExpectedFileName)"
-          Condition="'$(HtmlMlClearScriptNativePath)' != ''" />
-    <None Include="$(HtmlMlClearScriptNativeHashPath)" Pack="true" PackagePath="build\clearscript-native.sha256" />
-    <None Include="$(HtmlMlClearScriptPatchHashPath)" Pack="true" PackagePath="build\clearscript-patch.sha256" />
-    <None Include="$(HtmlMlClearScriptProvenancePath)" Pack="true" PackagePath="build\clearscript-provenance.txt" />
-    <None Include="$(HtmlMlClearScriptRuntimeManifestPath)"
+          PackagePath="runtimes\$(WebSceneClearScriptNativeRid)\native\$(WebSceneClearScriptNativeExpectedFileName)"
+          Condition="'$(WebSceneClearScriptNativePath)' != ''" />
+    <None Include="$(WebSceneClearScriptNativeHashPath)" Pack="true" PackagePath="build\clearscript-native.sha256" />
+    <None Include="$(WebSceneClearScriptPatchHashPath)" Pack="true" PackagePath="build\clearscript-patch.sha256" />
+    <None Include="$(WebSceneClearScriptProvenancePath)" Pack="true" PackagePath="build\clearscript-provenance.txt" />
+    <None Include="$(WebSceneClearScriptRuntimeManifestPath)"
           Pack="true"
-          PackagePath="runtimes\$(HtmlMlClearScriptNativeRid)\native\clearscript-native-runtime.json" />
-    <None Include="$(HtmlMlClearScriptRuntimePropsPath)"
+          PackagePath="runtimes\$(WebSceneClearScriptNativeRid)\native\clearscript-native-runtime.json" />
+    <None Include="$(WebSceneClearScriptRuntimePropsPath)"
           Pack="true"
           PackagePath="buildTransitive\$(PackageId).props" />
     <None Include="JavaScript.Avalonia.ClearScript.Native.targets"
@@ -57,35 +57,35 @@
           PackagePath="buildTransitive\$(PackageId).targets" />
   </ItemGroup>
 
-  <Target Name="PrepareHtmlMlClearScriptNativePackage"
+  <Target Name="PrepareWebSceneClearScriptNativePackage"
           BeforeTargets="GenerateNuspec"
-          DependsOnTargets="ValidateHtmlMlClearScriptV8Native">
-    <MakeDir Directories="$(HtmlMlClearScriptPackageMetadataDir)" />
-    <GetFileHash Files="$(HtmlMlClearScriptNativePath)" Algorithm="SHA256">
-      <Output TaskParameter="Items" ItemName="_HtmlMlNativeHash" />
+          DependsOnTargets="ValidateWebSceneClearScriptV8Native">
+    <MakeDir Directories="$(WebSceneClearScriptPackageMetadataDir)" />
+    <GetFileHash Files="$(WebSceneClearScriptNativePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_WebSceneNativeHash" />
     </GetFileHash>
-    <GetFileHash Files="@(_HtmlMlReviewedPatch)" Algorithm="SHA256">
-      <Output TaskParameter="Items" ItemName="_HtmlMlReviewedPatchHash" />
+    <GetFileHash Files="@(_WebSceneReviewedPatch)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_WebSceneReviewedPatchHash" />
     </GetFileHash>
-    <WriteLinesToFile File="$(HtmlMlClearScriptNativeHashPath)"
-                      Lines="%(_HtmlMlNativeHash.FileHash)  $(HtmlMlClearScriptNativeExpectedFileName)"
+    <WriteLinesToFile File="$(WebSceneClearScriptNativeHashPath)"
+                      Lines="%(_WebSceneNativeHash.FileHash)  $(WebSceneClearScriptNativeExpectedFileName)"
                       Overwrite="true" />
-    <WriteLinesToFile File="$(HtmlMlClearScriptPatchHashPath)"
-                      Lines="@(_HtmlMlReviewedPatchHash->'%(FileHash)  %(PackageFileName)')"
+    <WriteLinesToFile File="$(WebSceneClearScriptPatchHashPath)"
+                      Lines="@(_WebSceneReviewedPatchHash->'%(FileHash)  %(PackageFileName)')"
                       Overwrite="true" />
-    <WriteLinesToFile File="$(HtmlMlClearScriptProvenancePath)"
-                      Lines="ClearScript source tag: $(HtmlMlClearScriptSourceTag);V8 revision: $(HtmlMlClearScriptV8Revision);RID: $(HtmlMlClearScriptNativeRid)"
+    <WriteLinesToFile File="$(WebSceneClearScriptProvenancePath)"
+                      Lines="ClearScript source tag: $(WebSceneClearScriptSourceTag);V8 revision: $(WebSceneClearScriptV8Revision);RID: $(WebSceneClearScriptNativeRid)"
                       Overwrite="true" />
     <PropertyGroup>
-      <HtmlMlClearScriptNativeHash>@(_HtmlMlNativeHash->'%(FileHash)')</HtmlMlClearScriptNativeHash>
+      <WebSceneClearScriptNativeHash>@(_WebSceneNativeHash->'%(FileHash)')</WebSceneClearScriptNativeHash>
     </PropertyGroup>
-    <WriteLinesToFile File="$(HtmlMlClearScriptRuntimeManifestPath)"
-                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(HtmlMlClearScriptNativeRid)&quot;,&quot;fileName&quot;:&quot;$(HtmlMlClearScriptNativeExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(HtmlMlClearScriptNativeHash)&quot;,&quot;clearScriptVersion&quot;:&quot;$(HtmlMlClearScriptSourceTag)&quot;,&quot;v8Revision&quot;:&quot;$(HtmlMlClearScriptV8Revision)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;}"
+    <WriteLinesToFile File="$(WebSceneClearScriptRuntimeManifestPath)"
+                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneClearScriptNativeRid)&quot;,&quot;fileName&quot;:&quot;$(WebSceneClearScriptNativeExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(WebSceneClearScriptNativeHash)&quot;,&quot;clearScriptVersion&quot;:&quot;$(WebSceneClearScriptSourceTag)&quot;,&quot;v8Revision&quot;:&quot;$(WebSceneClearScriptV8Revision)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;}"
                       Overwrite="true" />
-    <WriteLinesToFile File="$(HtmlMlClearScriptRuntimePropsPath)"
-                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;HtmlMlClearScriptPackagedRid&gt;$(HtmlMlClearScriptNativeRid)&lt;/HtmlMlClearScriptPackagedRid&gt;&lt;HtmlMlClearScriptPackagedFileName&gt;$(HtmlMlClearScriptNativeExpectedFileName)&lt;/HtmlMlClearScriptPackagedFileName&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
+    <WriteLinesToFile File="$(WebSceneClearScriptRuntimePropsPath)"
+                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;WebSceneClearScriptPackagedRid&gt;$(WebSceneClearScriptNativeRid)&lt;/WebSceneClearScriptPackagedRid&gt;&lt;WebSceneClearScriptPackagedFileName&gt;$(WebSceneClearScriptNativeExpectedFileName)&lt;/WebSceneClearScriptPackagedFileName&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
                       Overwrite="true" />
   </Target>
 
-  <Import Project="..\..\build\HtmlMlClearScriptV8Native.targets" />
+  <Import Project="..\..\build\WebSceneClearScriptV8Native.targets" />
 </Project>

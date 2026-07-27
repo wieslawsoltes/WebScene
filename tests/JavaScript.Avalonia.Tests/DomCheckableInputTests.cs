@@ -27,9 +27,9 @@ public sealed class DomCheckableInputTests
                 var click = new CheckedStateListener();
                 var inputEvent = new CountingEventListener();
                 var change = new CountingEventListener();
-                input.__htmlMlAddExternalEventListener("click", click, capture: false, once: false, passive: false);
-                input.__htmlMlAddExternalEventListener("input", inputEvent, capture: false, once: false, passive: false);
-                input.__htmlMlAddExternalEventListener("change", change, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("click", click, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("input", inputEvent, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("change", change, capture: false, once: false, passive: false);
                 document.EnsureStylesCurrent();
                 Dispatcher.UIThread.RunJobs();
 
@@ -71,8 +71,8 @@ public sealed class DomCheckableInputTests
                 HostTestUtilities.GetElement(host.Document.body).appendChild(input);
                 var click = new PreventingCheckedStateListener();
                 var change = new CountingEventListener();
-                input.__htmlMlAddExternalEventListener("click", click, capture: false, once: false, passive: false);
-                input.__htmlMlAddExternalEventListener("change", change, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("click", click, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("change", change, capture: false, once: false, passive: false);
                 host.Document.EnsureStylesCurrent();
                 Dispatcher.UIThread.RunJobs();
 
@@ -109,7 +109,7 @@ public sealed class DomCheckableInputTests
                 second.name = "source";
                 HostTestUtilities.GetElement(document.body).appendChild(first);
                 HostTestUtilities.GetElement(document.body).appendChild(second);
-                second.__htmlMlAddExternalEventListener(
+                second.__webSceneAddExternalEventListener(
                     "click",
                     new CountingEventListener(),
                     capture: false,
@@ -159,9 +159,9 @@ public sealed class DomCheckableInputTests
                 var click = new CheckedStateListener();
                 var inputEvent = new CountingEventListener();
                 var change = new CountingEventListener();
-                input.__htmlMlAddExternalEventListener("click", click, capture: false, once: false, passive: false);
-                input.__htmlMlAddExternalEventListener("input", inputEvent, capture: false, once: false, passive: false);
-                input.__htmlMlAddExternalEventListener("change", change, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("click", click, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("input", inputEvent, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("change", change, capture: false, once: false, passive: false);
                 document.EnsureStylesCurrent();
                 Dispatcher.UIThread.RunJobs();
 

@@ -4,7 +4,7 @@ using Microsoft.ClearScript;
 namespace JavaScript.Avalonia.ClearScript;
 
 /// <summary>
-/// Preserves ClearScript function identity when HtmlML retains DOM listeners or
+/// Preserves ClearScript function identity when WebScene retains DOM listeners or
 /// browser-task callbacks across calls into V8.
 /// </summary>
 public sealed class V8ExternalEventListener : IExternalDomEventListener, IExternalJavaScriptCallback
@@ -12,7 +12,7 @@ public sealed class V8ExternalEventListener : IExternalDomEventListener, IExtern
     private static int s_nextId;
     private static readonly bool s_traceCallbackErrors =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_TRACE_V8_CALLBACK_ERRORS"),
+            Environment.GetEnvironmentVariable("WEBSCENE_TRACE_V8_CALLBACK_ERRORS"),
             "1",
             StringComparison.Ordinal);
     private readonly ScriptObject _eventApplyCallback;
@@ -85,7 +85,7 @@ public sealed class V8ExternalEventListener : IExternalDomEventListener, IExtern
 }
 
 /// <summary>
-/// Adapts opaque ClearScript function objects to HtmlML's engine-neutral callback
+/// Adapts opaque ClearScript function objects to WebScene's engine-neutral callback
 /// and DOM-listener contracts.
 /// </summary>
 public sealed class V8ExternalEventListenerAdapter :

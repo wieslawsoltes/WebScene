@@ -81,9 +81,9 @@ public sealed class CssLayoutResizeSpikeTests
             new Rect(0, 0, 200, 100));
         var complete = AvaloniaCssLayoutProjection.Capture(root, new Size(200, 100));
 
-        Assert.NotEqual(HtmlML.Core.HtmlMlRect.Empty, direct.GetBox(child).BorderBox);
+        Assert.NotEqual(WebScene.Core.WebSceneRect.Empty, direct.GetBox(child).BorderBox);
         Assert.Throws<KeyNotFoundException>(() => direct.GetBox(grandchild));
-        Assert.NotEqual(HtmlML.Core.HtmlMlRect.Empty, complete.GetBox(grandchild).BorderBox);
+        Assert.NotEqual(WebScene.Core.WebSceneRect.Empty, complete.GetBox(grandchild).BorderBox);
     }
 
     private static Canvas CreateLegacyCanvasDocument(out Border positioned)

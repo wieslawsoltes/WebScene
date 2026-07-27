@@ -8,20 +8,20 @@
     <Description>Optional ClearScript V8 runtime for JavaScript.Avalonia.</Description>
     <PackageId>JavaScript.Avalonia.ClearScript</PackageId>
     <PackageTags>avalonia;javascript;v8;clearscript</PackageTags>
-    <RepositoryUrl>https://github.com/wieslawsoltes/HtmlML</RepositoryUrl>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\HtmlML.JavaScript\HtmlML.JavaScript.csproj" />
+    <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!--
       Deliberately use the managed V8 package rather than ClearScript.Complete.
       Complete transitively supplies stock native binaries for every RID, which can
-      silently bypass HtmlML's reviewed same-origin-context patch. Applications must
-      opt into an HtmlML-reviewed native asset separately.
+      silently bypass WebScene's reviewed same-origin-context patch. Applications must
+      opt into an WebScene-reviewed native asset separately.
     -->
     <PackageReference Include="Microsoft.ClearScript.V8" />
   </ItemGroup>

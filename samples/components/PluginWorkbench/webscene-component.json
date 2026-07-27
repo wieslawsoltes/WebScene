@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.pluginworkbench",
+  "displayName": "PluginWorkbench",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "input.pointer",
+    "host.commands",
+    "host.settings"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

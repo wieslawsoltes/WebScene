@@ -81,7 +81,7 @@ public sealed class V8DomTokenListWriteShadowTests
             using var resultDocument = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
                 "JSON.stringify(globalThis.__tokenWriteShadowResult)")) ?? "{}");
             using var metricsDocument = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlDescribeDomTokenListWriteShadowMetrics())")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneDescribeDomTokenListWriteShadowMetrics())")) ?? "{}");
             result = resultDocument.RootElement.Clone();
             return metricsDocument.RootElement.Clone();
         }
@@ -94,14 +94,14 @@ public sealed class V8DomTokenListWriteShadowTests
 
     private static bool HasNativeV8()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         return !string.IsNullOrWhiteSpace(nativePath) && File.Exists(nativePath);
     }
 
     private const string SimpleProbeScript = """
         const target = document.createElement('div');
         document.body.appendChild(target);
-        globalThis.__htmlMlResetDomTokenListWriteShadowMetrics();
+        globalThis.__webSceneResetDomTokenListWriteShadowMetrics();
         let passed = true;
         for (let index = 0; index < 100; index++) {
           passed = target.classList.toggle('compact', true) && passed;
@@ -115,7 +115,7 @@ public sealed class V8DomTokenListWriteShadowTests
     private const string InvalidationProbeScript = """
         const target = document.createElement('div');
         document.body.appendChild(target);
-        globalThis.__htmlMlResetDomTokenListWriteShadowMetrics();
+        globalThis.__webSceneResetDomTokenListWriteShadowMetrics();
         let passed = target.classList.toggle('compact', true);
         for (let index = 0; index < 99; index++) {
           passed = target.classList.toggle('compact', true) && passed;
@@ -139,7 +139,7 @@ public sealed class V8DomTokenListWriteShadowTests
         const invalidTarget = document.createElement('div');
         document.body.appendChild(target);
         document.body.appendChild(invalidTarget);
-        globalThis.__htmlMlResetDomTokenListWriteShadowMetrics();
+        globalThis.__webSceneResetDomTokenListWriteShadowMetrics();
         target.classList.value = 'b a';
         const firstOrder = target.className;
         target.classList.value = 'a b';

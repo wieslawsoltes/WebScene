@@ -13,7 +13,7 @@ public sealed class V8DocumentPrimitivesRegressionTests
     [Trait("Runtime", "V8Native")]
     public void LiveAndDetachedDocumentsExposeBrowserShapedStructureCollectionsAndCookies()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -60,7 +60,7 @@ public sealed class V8DocumentPrimitivesRegressionTests
                 const removedLinkLength = links.length;
                 document.body.prepend(link);
 
-                globalThis.__htmlMlDocumentPrimitiveResult = {
+                globalThis.__webSceneDocumentPrimitiveResult = {
                   detached: {
                     tags: [
                       detached.documentElement.tagName,
@@ -110,7 +110,7 @@ public sealed class V8DocumentPrimitivesRegressionTests
                 "document-primitives-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlDocumentPrimitiveResult)")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneDocumentPrimitiveResult)")) ?? "{}");
             var detached = result.RootElement.GetProperty("detached");
             Assert.Equal(["HTML", "HEAD", "BODY"], detached.GetProperty("tags")
                 .EnumerateArray().Select(static item => item.GetString()));

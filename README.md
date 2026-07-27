@@ -1,21 +1,21 @@
-# HtmlML
+# WebScene
 
-[![HtmlML NuGet](https://img.shields.io/nuget/vpre/HtmlML.svg)](https://www.nuget.org/packages/HtmlML/) [![HtmlML Backend NuGet](https://img.shields.io/nuget/vpre/HtmlML.Backend.Avalonia.svg)](https://www.nuget.org/packages/HtmlML.Backend.Avalonia/)
+[![WebScene NuGet](https://img.shields.io/nuget/vpre/WebScene.svg)](https://www.nuget.org/packages/WebScene/) [![WebScene Backend NuGet](https://img.shields.io/nuget/vpre/WebScene.Backend.Avalonia.svg)](https://www.nuget.org/packages/WebScene.Backend.Avalonia/)
 
-HtmlML is a native V8 and immutable-scene runtime for [Avalonia](https://avaloniaui.net/). Its flagship path runs JavaScript, DOM/CSS state, layout, input dispatch, Canvas, and SVG on a native engine thread, then publishes immutable scene diffs to the Avalonia compositor. This keeps hot UI work out of the managed object graph and UI dispatcher while preserving a browser-shaped compatibility surface for packaged React, TypeScript, and JavaScript components.
+WebScene is a native V8 and immutable-scene runtime for [Avalonia](https://avaloniaui.net/). Its flagship path runs JavaScript, DOM/CSS state, layout, input dispatch, Canvas, and SVG on a native engine thread, then publishes immutable scene diffs to the Avalonia compositor. This keeps hot UI work out of the managed object graph and UI dispatcher while preserving a browser-shaped compatibility surface for packaged React, TypeScript, and JavaScript components.
 
-Avalonia remains responsible for the application window, scene presentation, platform input, lifecycle, and native .NET integration. The result is a high-performance native desktop surface without Chromium, WebKit, Electron, or a WebView. HtmlML's HTML-like markup and DOM APIs are the compatibility layer and direct authoring surface, not a promise to run arbitrary websites or to reproduce a complete browser.
+Avalonia remains responsible for the application window, scene presentation, platform input, lifecycle, and native .NET integration. The result is a high-performance native desktop surface without Chromium, WebKit, Electron, or a WebView. WebScene's HTML-like markup and DOM APIs are the compatibility layer and direct authoring surface, not a promise to run arbitrary websites or to reproduce a complete browser.
 
 Compatibility is explicit and testable: managed ClearScript/Avalonia mode remains the behavioral oracle and compatibility fallback, while native support is promoted by shared conformance, rendering, input, and performance gates.
 
 The repository contains the runtime, component-hosting SDK, and Avalonia integration:
 
-- **HtmlML** – the HTML-like markup and direct authoring layer, with styling and Canvas support.
-- **HtmlML.Backend.Avalonia** – the Avalonia scene presenter, native runtime host, and managed presentation services.
-- **HtmlML.NativeEngine.Runtime** – RID-specific native V8/DOM/CSS/layout/scene runtime packages.
+- **WebScene** – the HTML-like markup and direct authoring layer, with styling and Canvas support.
+- **WebScene.Backend.Avalonia** – the Avalonia scene presenter, native runtime host, and managed presentation services.
+- **WebScene.NativeEngine.Runtime** – RID-specific native V8/DOM/CSS/layout/scene runtime packages.
 - **JavaScript.Avalonia.ClearScript** – the managed ClearScript/V8 compatibility engine, module loader, virtual-iframe runtime, and compilation cache.
-- **HtmlML.Sdk** – versioned component manifests, compatibility checks, offline assets, lifecycle diagnostics, and the capability-based host bridge.
-- **HtmlML.Sdk.Avalonia** – the XAML-first packaged React/TypeScript component host.
+- **WebScene.Sdk** – versioned component manifests, compatibility checks, offline assets, lifecycle diagnostics, and the capability-based host bridge.
+- **WebScene.Sdk.Avalonia** – the XAML-first packaged React/TypeScript component host.
 
 Together they make JavaScript UI components first-class citizens in native Avalonia applications, combining native-scene performance with an explicit and intentionally bounded web-platform profile.
 
@@ -39,22 +39,22 @@ This restriction is defined in the repository [LICENSE](LICENSE).
 
 | Path | Description |
 | --- | --- |
-| `src/HtmlML.Core` | UI-framework-neutral values and host/backend contracts. |
-| `src/HtmlML.Backend.Abstractions` | Backend manifests, validation, and capability negotiation. |
-| `src/HtmlML.Backend.Avalonia` | Current Avalonia presentation implementation. |
-| `src/HtmlML` | HtmlML markup library and HTML element implementations. |
+| `src/WebScene.Core` | UI-framework-neutral values and host/backend contracts. |
+| `src/WebScene.Backend.Abstractions` | Backend manifests, validation, and capability negotiation. |
+| `src/WebScene.Backend.Avalonia` | Current Avalonia presentation implementation. |
+| `src/WebScene` | WebScene markup library and HTML element implementations. |
 | `src/JavaScript.Avalonia` | Engine-neutral browser/DOM services for Avalonia. |
 | `src/JavaScript.Avalonia.ClearScript` | ClearScript/V8 execution adapter and shared compilation cache. |
-| `src/HtmlML.Sdk` | Portable Component Profile 1 product contracts and host bridge. |
-| `src/HtmlML.Sdk.Avalonia` | Avalonia `HtmlMlComponentHost` for packaged components. |
-| `tooling/htmlml` | Bounded TypeScript declarations, checker, and Vite/esbuild plugins. |
-| `templates/HtmlML.Templates` | Component-host, hybrid, and TypeScript `dotnet new` templates. |
+| `src/WebScene.Sdk` | Portable Component Profile 1 product contracts and host bridge. |
+| `src/WebScene.Sdk.Avalonia` | Avalonia `WebSceneComponentHost` for packaged components. |
+| `tooling/webscene` | Bounded TypeScript declarations, checker, and Vite/esbuild plugins. |
+| `templates/WebScene.Templates` | Component-host, hybrid, and TypeScript `dotnet new` templates. |
 | `samples/components` | Twelve versioned, offline component packages shared by backends. |
 | `samples/hosts/Avalonia` | Runnable `.csproj` hosts: the R5 catalog and three standalone product shapes. |
-| `third-party/clearscript` | ClearScript 7.5.1 source submodule on the HtmlML native patch branch. |
+| `third-party/clearscript` | ClearScript 7.5.1 source submodule on the WebScene native patch branch. |
 | `third-party/v8` | V8 14.7.173.23 source submodule on ClearScript's compatibility patch branch. |
-| `packaging/HtmlML.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
-| `samples/website` | HtmlML showcase demonstrating markup, styling, and canvas scripting. |
+| `packaging/WebScene.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
+| `samples/website` | WebScene showcase demonstrating markup, styling, and canvas scripting. |
 | `samples/JavaScriptPlayground` | Interactive playground with editable XAML, live preview, and JavaScript console for `JavaScript.Avalonia`. |
 | `samples/NativeRuntimeShowcase.*` | Native TradingView canvas and generated-.NET-API Monaco showcase for Avalonia and Uno. |
 
@@ -75,21 +75,21 @@ git submodule update --init --recursive
 
 ```bash
 # Restore and build everything (libraries + samples)
-dotnet build HtmlML.sln
+dotnet build WebScene.sln
 ```
 
 ### Running the samples
 
 ```bash
 # Browse and run all 12 R5 component packages
-dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog
+dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog
 
 # Run one of the copyable R5 product-shape hosts
 dotnet run --project samples/hosts/Avalonia/ComponentHost.Basic
 dotnet run --project samples/hosts/Avalonia/Hybrid.ReactIslands
 dotnet run --project samples/hosts/Avalonia/TypeScriptDesktop
 
-# HtmlML website sample
+# WebScene website sample
 dotnet run --project samples/website/website.csproj
 
 # JavaScript.Avalonia playground
@@ -109,13 +109,13 @@ native preparation command and optional environment overrides.
 
 ### Creating a React/TypeScript application
 
-After installing the `HtmlML.Templates` package, create one of the supported product
+After installing the `WebScene.Templates` package, create one of the supported product
 shapes:
 
 ```bash
-dotnet new htmlml-component-host -n MyComponentHost
-dotnet new htmlml-hybrid -n MyHybridApp
-dotnet new htmlml-typescript -n MyTypeScriptApp
+dotnet new webscene-component-host -n MyComponentHost
+dotnet new webscene-hybrid -n MyHybridApp
+dotnet new webscene-typescript -n MyTypeScriptApp
 cd MyTypeScriptApp/web
 npm install
 npm run build
@@ -124,8 +124,8 @@ dotnet run
 ```
 
 The web build runs the bounded compatibility checker and emits a versioned
-`htmlml-component.json`. Host services are available only through declared,
-asynchronous `htmlml.host.*` capabilities. Applications must also ship the reviewed
+`webscene-component.json`. Host services are available only through declared,
+asynchronous `webscene.host.*` capabilities. Applications must also ship the reviewed
 RID-specific ClearScript/V8 native package used by the component-host workflow.
 
 ### Consuming the libraries
@@ -145,8 +145,8 @@ An Avalonia host using the opt-in native scene engine on macOS ARM64 uses:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="HtmlML.Backend.Avalonia" Version="11.3.4-alpha.6" />
-  <PackageReference Include="HtmlML.NativeEngine.Runtime.osx-arm64" Version="11.3.4-alpha.6" />
+  <PackageReference Include="WebScene.Backend.Avalonia" Version="11.3.4-alpha.6" />
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="11.3.4-alpha.6" />
 </ItemGroup>
 ```
 
@@ -156,13 +156,13 @@ deferred while their pinned V8 builds move to faster, independently validated la
 
 ## Using the HTML-like authoring layer
 
-HtmlML also supports direct authoring with HTML-like tags (heading levels, paragraphs, lists, sections, navigation, Canvas, and more) mapped to Avalonia presentation services. Packaged React/TypeScript components normally enter through `HtmlMlComponentHost`; use this lower-level surface when you want to author the document directly:
+WebScene also supports direct authoring with HTML-like tags (heading levels, paragraphs, lists, sections, navigation, Canvas, and more) mapped to Avalonia presentation services. Packaged React/TypeScript components normally enter through `WebSceneComponentHost`; use this lower-level surface when you want to author the document directly:
 
 ```xml
 <html xmlns="https://github.com/avaloniaui"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       x:Class="Demo.index"
-      title="HtmlML Demo">
+      title="WebScene Demo">
   <head>
     <link rel="stylesheet" href="avares://website/Assets/demo.css" type="text/css" />
     <script type="text/javascript">
@@ -180,14 +180,14 @@ HtmlML also supports direct authoring with HTML-like tags (heading levels, parag
   </head>
   <body>
     <section class="card">
-      <h1>Hello from HtmlML</h1>
+      <h1>Hello from WebScene</h1>
       <canvas id="draw" width="400" height="200" />
     </section>
   </body>
 </html>
 ```
 
-HtmlML parses the markup, applies classes and inline styles, wires `<canvas>` pointers to JavaScript, and allows scripts to manipulate the resulting visual tree.
+WebScene parses the markup, applies classes and inline styles, wires `<canvas>` pointers to JavaScript, and allows scripts to manipulate the resulting visual tree.
 
 ## Using JavaScript.Avalonia directly
 
@@ -259,11 +259,11 @@ textBox.addEventListener('keydown', evt => {
 ## Architecture Overview
 
 ```text
-HtmlML.Sdk (components, profile, lifecycle, host bridge)
+WebScene.Sdk (components, profile, lifecycle, host bridge)
         ↓                         ↓
-HtmlML portable cores       JavaScript.Avalonia.ClearScript (V8)
+WebScene portable cores       JavaScript.Avalonia.ClearScript (V8)
         ↓                         ↓
-HtmlML.Backend.Avalonia + HtmlML.Sdk.Avalonia
+WebScene.Backend.Avalonia + WebScene.Sdk.Avalonia
 ```
 
 R0 through R5 are complete: the semantic cores are portable, Avalonia is the reference
@@ -272,7 +272,7 @@ component catalog are packaged and tested. The native V8/immutable-scene engine 
 performance path. The next milestone is to mature that path through real application
 lifecycle, compatibility, reliability, and certification evidence.
 
-HtmlML supports a managed ClearScript/Avalonia compatibility mode and a native V8 mode
+WebScene supports a managed ClearScript/Avalonia compatibility mode and a native V8 mode
 that publishes immutable scene diffs. See [Managed and native backends](docs/backends.md)
 for selection guidance, runtime packages, release automation, and the precise status of
 Uno, WPF, and direct GPU backend extensibility. The portable contracts are ready for
@@ -281,7 +281,7 @@ extraction before those backends are turnkey integrations.
 
 ## Roadmap
 
-HtmlML's immediate roadmap is to mature the native Avalonia product path: close
+WebScene's immediate roadmap is to mature the native Avalonia product path: close
 application lifecycle and reliability gaps, promote native capability groups through
 shared compatibility gates, complete differential and unsupported-feature evidence,
 and keep the reusable runtime boundary exercised by real private samples.
@@ -330,7 +330,7 @@ If your organisation requires a different licensing arrangement, please reach ou
 
 - [AvaloniaUI](https://github.com/AvaloniaUI/Avalonia) for the cross-platform UI framework.
 - [ClearScript](https://github.com/microsoft/ClearScript) for the V8 hosting layer.
-- [AngleSharp](https://anglesharp.github.io/) for HTML/CSS parsing used by HtmlML.
+- [AngleSharp](https://anglesharp.github.io/) for HTML/CSS parsing used by WebScene.
 
 ---
 

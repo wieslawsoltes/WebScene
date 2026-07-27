@@ -69,8 +69,8 @@ mkdir -p "$output_dir"
 dotnet pack "$PROJECT" \
   -c Release \
   -o "$output_dir" \
-  -p:HtmlMlClearScriptNativeRid="$rid" \
-  -p:HtmlMlClearScriptNativePath="$native_path"
+  -p:WebSceneClearScriptNativeRid="$rid" \
+  -p:WebSceneClearScriptNativePath="$native_path"
 
 cache_path="$output_dir/runtimes/$rid/native/$expected"
 mkdir -p "$(dirname "$cache_path")"

@@ -22,19 +22,19 @@ public sealed class CalendarDialogDeltaSpikeTests
         var parent = Append(document, "div", "compound-control");
         var input = Append(document, "input", null, parent);
         var sequence = new List<string>();
-        input.__htmlMlAddExternalEventListener(
+        input.__webSceneAddExternalEventListener(
             "focus",
             new FocusSequenceListener("focus@input", sequence),
             capture: false,
             once: false,
             passive: false);
-        input.__htmlMlAddExternalEventListener(
+        input.__webSceneAddExternalEventListener(
             "focusin",
             new FocusSequenceListener("focusin@input", sequence),
             capture: false,
             once: false,
             passive: false);
-        parent.__htmlMlAddExternalEventListener(
+        parent.__webSceneAddExternalEventListener(
             "focusin",
             new FocusSequenceListener("focusin@parent", sequence),
             capture: false,

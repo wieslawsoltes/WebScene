@@ -7,8 +7,8 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using HtmlML.Core;
-using HtmlML.Graphics;
+using WebScene.Core;
+using WebScene.Graphics;
 using SkiaSharp;
 using Svg.Skia;
 using Xunit;
@@ -23,14 +23,14 @@ public sealed class SvgSkiaSpikeTests
         var root = new SvgSceneNode(1, SvgSceneNodeKind.Group);
         root.Add(new SvgSceneNode(2, SvgSceneNodeKind.Rectangle)
         {
-            Bounds = new HtmlMlRect(0, 0, 10, 10),
-            Fill = new SvgPaint(HtmlMlColor.FromRgb(12, 34, 56))
+            Bounds = new WebSceneRect(0, 0, 10, 10),
+            Fill = new SvgPaint(WebSceneColor.FromRgb(12, 34, 56))
         });
-        var scene = new SvgScene(new HtmlMlRect(0, 0, 10, 10), root, 1);
+        var scene = new SvgScene(new WebSceneRect(0, 0, 10, 10), root, 1);
         var reference = new SvgReferenceRenderer();
-        reference.Render(scene, new HtmlMlSize(10, 10));
+        reference.Render(scene, new WebSceneSize(10, 10));
         var avalonia = new AvaloniaSvgSceneSurface();
-        avalonia.Render(scene, new HtmlMlSize(10, 10));
+        avalonia.Render(scene, new WebSceneSize(10, 10));
         var window = new Window { Width = 10, Height = 10, Content = avalonia };
 
         try
@@ -40,7 +40,7 @@ public sealed class SvgSkiaSpikeTests
             using var frame = Assert.IsAssignableFrom<Bitmap>(window.CaptureRenderedFrame());
             var pixels = CopyPixels(frame);
             var offset = (5 * frame.PixelSize.Width + 5) * 4;
-            var actual = new HtmlMlColor(pixels[offset + 3], pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+            var actual = new WebSceneColor(pixels[offset + 3], pixels[offset], pixels[offset + 1], pixels[offset + 2]);
 
             Assert.Equal(reference.Surface.GetPixel(5, 5), actual);
         }
@@ -130,7 +130,7 @@ public sealed class SvgSkiaSpikeTests
 
             var scene = Assert.IsType<SvgScene>(Assert.IsType<SvgLayoutPanel>(svg.Control).SceneProvider!());
             var paint = Assert.IsType<SvgPaint>(Assert.Single(scene.Root.Children).Fill);
-            Assert.Equal(HtmlMlColor.FromRgb(219, 219, 219), paint.Color);
+            Assert.Equal(WebSceneColor.FromRgb(219, 219, 219), paint.Color);
             window.Close();
         }
     }
@@ -177,13 +177,13 @@ public sealed class SvgSkiaSpikeTests
             var panel = Assert.IsType<SvgLayoutPanel>(svg.Control);
             var scene = Assert.IsType<SvgScene>(panel.SceneProvider!());
             var paint = Assert.IsType<SvgPaint>(Assert.Single(scene.Root.Children).Fill);
-            Assert.Equal(HtmlMlColor.FromRgb(219, 219, 219), paint.Color);
+            Assert.Equal(WebSceneColor.FromRgb(219, 219, 219), paint.Color);
 
             using var frame = Assert.IsAssignableFrom<Bitmap>(window.CaptureRenderedFrame());
             var pixels = CopyPixels(frame);
             var offset = (9 * frame.PixelSize.Width + 9) * 4;
-            var actual = new HtmlMlColor(pixels[offset + 3], pixels[offset], pixels[offset + 1], pixels[offset + 2]);
-            Assert.Equal(HtmlMlColor.FromRgb(219, 219, 219), actual);
+            var actual = new WebSceneColor(pixels[offset + 3], pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+            Assert.Equal(WebSceneColor.FromRgb(219, 219, 219), actual);
 
             var initialBuildCount = panel.SceneBuildCount;
             item.style.setProperty("color", "#00c080");
@@ -193,12 +193,12 @@ public sealed class SvgSkiaSpikeTests
             {
                 var recoloredPixels = CopyPixels(recolored);
                 var recoloredOffset = (9 * recolored.PixelSize.Width + 9) * 4;
-                var recoloredActual = new HtmlMlColor(
+                var recoloredActual = new WebSceneColor(
                     recoloredPixels[recoloredOffset + 3],
                     recoloredPixels[recoloredOffset],
                     recoloredPixels[recoloredOffset + 1],
                     recoloredPixels[recoloredOffset + 2]);
-                Assert.Equal(HtmlMlColor.FromRgb(0, 192, 128), recoloredActual);
+                Assert.Equal(WebSceneColor.FromRgb(0, 192, 128), recoloredActual);
             }
             Assert.True(panel.SceneBuildCount > initialBuildCount);
 
@@ -210,12 +210,12 @@ public sealed class SvgSkiaSpikeTests
             {
                 var explicitPixels = CopyPixels(explicitFill);
                 var explicitOffset = (9 * explicitFill.PixelSize.Width + 9) * 4;
-                var explicitActual = new HtmlMlColor(
+                var explicitActual = new WebSceneColor(
                     explicitPixels[explicitOffset + 3],
                     explicitPixels[explicitOffset],
                     explicitPixels[explicitOffset + 1],
                     explicitPixels[explicitOffset + 2]);
-                Assert.Equal(HtmlMlColor.FromRgb(192, 80, 32), explicitActual);
+                Assert.Equal(WebSceneColor.FromRgb(192, 80, 32), explicitActual);
             }
             Assert.True(panel.SceneBuildCount > recoloredBuildCount);
 
@@ -254,8 +254,8 @@ public sealed class SvgSkiaSpikeTests
             document.EnsureStylesCurrent();
             Dispatcher.UIThread.RunJobs();
             var scene = Assert.IsType<SvgScene>(Assert.IsType<SvgLayoutPanel>(svg.Control).SceneProvider!());
-            Assert.Equal(HtmlMlColor.FromRgb(128, 64, 32), Assert.IsType<SvgPaint>(scene.Root.Children[0].Fill).Color);
-            Assert.Equal(HtmlMlColor.FromRgb(36, 104, 172), Assert.IsType<SvgPaint>(scene.Root.Children[1].Fill).Color);
+            Assert.Equal(WebSceneColor.FromRgb(128, 64, 32), Assert.IsType<SvgPaint>(scene.Root.Children[0].Fill).Color);
+            Assert.Equal(WebSceneColor.FromRgb(36, 104, 172), Assert.IsType<SvgPaint>(scene.Root.Children[1].Fill).Color);
             window.Close();
         }
     }
@@ -319,7 +319,7 @@ public sealed class SvgSkiaSpikeTests
             Assert.True(imageNode.Resource.TryGet<IImage>(out _));
 
             var projection = new AvaloniaSvgSceneSurface();
-            projection.Render(scene, new HtmlMlSize(4, 4));
+            projection.Render(scene, new WebSceneSize(4, 4));
             var window = new Window { Width = 4, Height = 4, Content = projection };
             try
             {

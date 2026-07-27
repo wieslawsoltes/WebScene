@@ -13,7 +13,7 @@ public sealed class V8IframeIdentityRegressionTests
     [Trait("Runtime", "V8Native")]
     public void ConnectedSrcLessIframeSynchronouslyExposesMutableAboutBlankBodyIdentity()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -44,7 +44,7 @@ public sealed class V8IframeIdentityRegressionTests
                 document.body.appendChild(frameWrapper);
                 const frameWindow = iframe.contentWindow;
                 const frameDocument = iframe.contentDocument;
-                const state = globalThis.__htmlMlIframeIdentity = {
+                const state = globalThis.__webSceneIframeIdentity = {
                   hadDocumentSynchronously: !!frameDocument,
                   hadBodySynchronously: !!(frameDocument && frameDocument.body),
                   initialLocation: frameDocument && frameDocument.location.href,
@@ -79,7 +79,7 @@ public sealed class V8IframeIdentityRegressionTests
                 """, "v8-src-less-iframe-identity-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlIframeIdentity)")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneIframeIdentity)")) ?? "{}");
             var state = result.RootElement;
             Assert.True(state.GetProperty("hadDocumentSynchronously").GetBoolean());
             Assert.True(state.GetProperty("hadBodySynchronously").GetBoolean());

@@ -2,15 +2,15 @@
     x:Class="NativeMonacoEditor.MainWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:native="clr-namespace:HtmlML.Backends.Avalonia.Native;assembly=HtmlML.Backend.Avalonia"
+    xmlns:native="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia"
     Width="1100"
     Height="720"
     MinWidth="720"
     MinHeight="480"
     Background="#1E1E1E"
-    Title="HtmlML native Monaco editor">
+    Title="WebScene native Monaco editor">
   <Grid>
-    <native:NativeHtmlMlView x:Name="EditorHost" />
+    <native:NativeWebSceneView x:Name="EditorHost" />
     <Border
         x:Name="LoadFailure"
         IsVisible="False"

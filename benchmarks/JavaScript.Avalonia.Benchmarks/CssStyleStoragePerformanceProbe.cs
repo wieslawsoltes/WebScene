@@ -68,7 +68,7 @@ internal static class CssStyleStoragePerformanceProbe
             }
 
             Console.WriteLine(
-                $"HtmlML ordinary style storage ({elementCount} elements, {variantCount} variants)");
+                $"WebScene ordinary style storage ({elementCount} elements, {variantCount} variants)");
             Console.WriteLine(
                 $"Initial ensure: {elapsed.TotalMilliseconds:F3} ms, {allocated / 1024d:F2} KB");
             Console.WriteLine(
@@ -122,7 +122,7 @@ internal static class CssStyleStoragePerformanceProbe
                 var presentationReapplies =
                     document.ViewportPresentationReapplyElementCount - presentationReappliesBefore;
                 var mediaCacheDisabled = string.Equals(
-                    Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_MEDIA_QUERY_OUTCOME_CACHE"),
+                    Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_MEDIA_QUERY_OUTCOME_CACHE"),
                     "1",
                     StringComparison.Ordinal);
                 mediaResizePassed = mediaCacheDisabled ? computed >= elementCount : computed == 0 && cacheHits == 1;
@@ -133,11 +133,11 @@ internal static class CssStyleStoragePerformanceProbe
             }
 
             var sharingDisabled = string.Equals(
-                Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_STYLE_SHARING"),
+                Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_STYLE_SHARING"),
                 "1",
                 StringComparison.Ordinal);
             var templatesDisabled = string.Equals(
-                Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_CASCADE_TEMPLATE_CACHE"),
+                Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_CASCADE_TEMPLATE_CACHE"),
                 "1",
                 StringComparison.Ordinal);
             if (sharingDisabled && templatesDisabled)

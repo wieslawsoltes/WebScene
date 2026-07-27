@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HtmlML.Backend.Avalonia\HtmlML.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -15,5 +15,5 @@
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
-  <Import Project="..\..\build\HtmlMlClearScriptV8Native.targets" />
+  <Import Project="..\..\build\WebSceneClearScriptV8Native.targets" />
 </Project>

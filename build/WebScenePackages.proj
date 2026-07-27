@@ -1,0 +1,67 @@
+<Project>
+  <Import Project="..\Directory.Build.props" />
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <PackageOutputPath Condition="'$(PackageOutputPath)' == ''">$(MSBuildThisFileDirectory)..\artifacts\nuget-packages\</PackageOutputPath>
+    <WebScenePackageVersion Condition="'$(WebScenePackageVersion)' == '' and '$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</WebScenePackageVersion>
+    <WebScenePackageVersion Condition="'$(WebScenePackageVersion)' == ''">$(VersionPrefix)</WebScenePackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Core\WebScene.Core.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Css\WebScene.Css.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Dom\WebScene.Dom.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Graphics\WebScene.Graphics.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.JavaScript\WebScene.JavaScript.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene\WebScene.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Sdk\WebScene.Sdk.csproj" />
+    <_WebSceneManagedPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Sdk.Avalonia\WebScene.Sdk.Avalonia.csproj" />
+    <_WebSceneTemplatePackageProject Include="$(MSBuildThisFileDirectory)..\templates\WebScene.Templates\WebScene.Templates.csproj" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Backend.Abstractions" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Backend.Avalonia" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Core" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Css" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Dom" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Graphics" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.JavaScript" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Sdk" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Sdk.Avalonia" />
+    <_WebSceneExpectedManagedPackageId Include="WebScene.Templates" />
+    <_WebSceneExpectedManagedPackageId Include="JavaScript.Avalonia.ClearScript" />
+    <_WebSceneExpectedSymbolsPackageId Include="@(_WebSceneExpectedManagedPackageId)"
+                                     Exclude="WebScene.Templates" />
+  </ItemGroup>
+
+  <Target Name="PackManaged">
+    <Error Condition="'$(WebScenePackageVersion)' == ''"
+           Text="WebScenePackageVersion could not be resolved." />
+    <MakeDir Directories="$(PackageOutputPath)" />
+    <MSBuild Projects="@(_WebSceneManagedPackageProject)"
+             Targets="Restore;Pack"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);IncludeSymbols=true;SymbolPackageFormat=snupkg;ContinuousIntegrationBuild=$(ContinuousIntegrationBuild);WebSceneClearScriptNativeRequired=false;WebSceneClearScriptNativeRid=" />
+    <MSBuild Projects="@(_WebSceneTemplatePackageProject)"
+             Targets="Restore;Pack"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);IncludeSymbols=false;ContinuousIntegrationBuild=$(ContinuousIntegrationBuild)" />
+    <ItemGroup>
+      <_WebSceneMissingManagedPackage
+        Include="@(_WebSceneExpectedManagedPackageId)"
+        Condition="!Exists('$(PackageOutputPath)%(Identity).$(WebScenePackageVersion).nupkg')" />
+      <_WebSceneMissingSymbolsPackage
+        Include="@(_WebSceneExpectedSymbolsPackageId)"
+        Condition="!Exists('$(PackageOutputPath)%(Identity).$(WebScenePackageVersion).snupkg')" />
+    </ItemGroup>
+    <Error Condition="'@(_WebSceneMissingManagedPackage->Count())' != '0'"
+           Text="Missing managed/template packages at version $(WebScenePackageVersion): @(_WebSceneMissingManagedPackage)." />
+    <Error Condition="'@(_WebSceneMissingSymbolsPackage->Count())' != '0'"
+           Text="Missing managed symbol packages at version $(WebScenePackageVersion): @(_WebSceneMissingSymbolsPackage)." />
+    <Message Importance="high"
+             Text="Packed 12 WebScene managed/template packages at $(WebScenePackageVersion) to $(PackageOutputPath)." />
+  </Target>
+</Project>

@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Skia;
 
-namespace HtmlML.WebPlatformSubset.Runner;
+namespace WebScene.WebPlatformSubset.Runner;
 
 internal sealed class RunnerApp : Application
 {

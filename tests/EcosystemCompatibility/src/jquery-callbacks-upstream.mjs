@@ -12,7 +12,7 @@ globalThis.moduleTeardown = () => {
 import("../upstream/jquery/test/unit/callbacks.js")
   .then(() => runRegisteredQUnitTests())
   .catch(error => {
-    const state = globalThis.__htmlMlWptState;
+    const state = globalThis.__webSceneWptState;
     state.results.push({
       name: "jQuery callbacks upstream source load",
       status: "FAIL",

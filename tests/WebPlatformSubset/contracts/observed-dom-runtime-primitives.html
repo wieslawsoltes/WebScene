@@ -16,7 +16,7 @@
 <img id="parsed-image" src="fixture-data.svg" alt="fixture">
 <script id="element-script" type="application/json" defer>{}</script>
 <script>
-  const state = window.__htmlMlWptState = {
+  const state = window.__webSceneWptState = {
     complete: false,
     harness: null,
     results: [],
@@ -177,9 +177,9 @@
     });
 
     test("Storage getItem observes a preceding same-origin write", () => {
-      sessionStorage.setItem("htmlml-observed-runtime", "retained");
-      assert(sessionStorage.getItem("htmlml-observed-runtime") === "retained", "Storage.getItem did not return the written value");
-      sessionStorage.removeItem("htmlml-observed-runtime");
+      sessionStorage.setItem("webscene-observed-runtime", "retained");
+      assert(sessionStorage.getItem("webscene-observed-runtime") === "retained", "Storage.getItem did not return the written value");
+      sessionStorage.removeItem("webscene-observed-runtime");
     });
 
     await asyncTest("performance clock, timeout, interval, clearTimer, and animation frame advance", async () => {

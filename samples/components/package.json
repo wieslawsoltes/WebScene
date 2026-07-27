@@ -1,5 +1,5 @@
 {
-  "name": "htmlml-r5-sample-components",
+  "name": "webscene-r5-sample-components",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@htmlml/sdk": "file:../../tooling/htmlml",
+    "@webscene/sdk": "file:../../tooling/webscene",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

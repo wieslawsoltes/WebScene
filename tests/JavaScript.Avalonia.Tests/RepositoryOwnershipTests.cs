@@ -67,8 +67,8 @@ public sealed class RepositoryOwnershipTests
              directory is not null;
              directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "HtmlML.sln"))) return directory.FullName;
+            if (File.Exists(Path.Combine(directory.FullName, "WebScene.sln"))) return directory.FullName;
         }
-        throw new DirectoryNotFoundException("Could not locate HtmlML.sln.");
+        throw new DirectoryNotFoundException("Could not locate WebScene.sln.");
     }
 }

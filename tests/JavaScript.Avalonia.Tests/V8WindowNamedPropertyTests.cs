@@ -12,7 +12,7 @@ public sealed class V8WindowNamedPropertyTests
     [Trait("Runtime", "V8Native")]
     public void ElementIdIsAvailableAsAWindowNamedPropertyBeforeTheNextClassicScript()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -40,20 +40,20 @@ public sealed class V8WindowNamedPropertyTests
                 document.body.appendChild(collision);
                 """, "named-window-property-setup.js");
             runtime.Execute("""
-                globalThis.__htmlMlNamedTargetMatches =
+                globalThis.__webSceneNamedTargetMatches =
                   namedTarget === document.getElementById('namedTarget');
-                globalThis.__htmlMlNamedCollisionBeforeAssignment =
+                globalThis.__webSceneNamedCollisionBeforeAssignment =
                   test === document.getElementById('test');
                 test = function () { return 42; };
-                globalThis.__htmlMlNamedCollisionAfterAssignment = test();
+                globalThis.__webSceneNamedCollisionAfterAssignment = test();
                 """, "named-window-property-read.js");
 
             Assert.True(Convert.ToBoolean(
-                runtime.Engine.Evaluate("globalThis.__htmlMlNamedTargetMatches")));
+                runtime.Engine.Evaluate("globalThis.__webSceneNamedTargetMatches")));
             Assert.True(Convert.ToBoolean(
-                runtime.Engine.Evaluate("globalThis.__htmlMlNamedCollisionBeforeAssignment")));
+                runtime.Engine.Evaluate("globalThis.__webSceneNamedCollisionBeforeAssignment")));
             Assert.Equal(42, Convert.ToInt32(
-                runtime.Engine.Evaluate("globalThis.__htmlMlNamedCollisionAfterAssignment")));
+                runtime.Engine.Evaluate("globalThis.__webSceneNamedCollisionAfterAssignment")));
         }
         finally
         {

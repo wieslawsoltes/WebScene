@@ -17,8 +17,8 @@ internal static class V8ReactSchedulerProbe
     {
         BenchmarkApp.EnsureInitialized();
         var fixtureRoot = ParseString(args, "--react-root")
-                          ?? Environment.GetEnvironmentVariable("HTMLML_REACT_REPRO_ROOT")
-                          ?? "/tmp/htmlml-react-repro";
+                          ?? Environment.GetEnvironmentVariable("WEBSCENE_REACT_REPRO_ROOT")
+                          ?? "/tmp/webscene-react-repro";
         var reactPath = Path.Combine(fixtureRoot, "react", "umd", "react.production.min.js");
         var reactDomPath = Path.Combine(fixtureRoot, "react-dom", "umd", "react-dom.production.min.js");
         var itemCount = Math.Max(0, ParseInt(args, "--items", 180));
@@ -59,16 +59,16 @@ internal static class V8ReactSchedulerProbe
             var reactDom = File.ReadAllText(reactDomPath);
             var bootstrap = $$"""
                 (function () {
-                  const sequence = window.__htmlMlReactResourceSequence = [];
-                  window.__htmlMlReactProbeItemCount = {{itemCount}};
-                  window.__htmlMlReactSyncNestedRoots = {{syncNestedRoots.ToString().ToLowerInvariant()}};
-                  window.__htmlMlDomListenerOrder = [];
+                  const sequence = window.__webSceneReactResourceSequence = [];
+                  window.__webSceneReactProbeItemCount = {{itemCount}};
+                  window.__webSceneReactSyncNestedRoots = {{syncNestedRoots.ToString().ToLowerInvariant()}};
+                  window.__webSceneDomListenerOrder = [];
                   document.addEventListener('DOMContentLoaded', function () {
-                    window.__htmlMlDomListenerOrder.push('listener-1');
-                    Promise.resolve().then(function () { window.__htmlMlDomListenerOrder.push('microtask-1'); });
+                    window.__webSceneDomListenerOrder.push('listener-1');
+                    Promise.resolve().then(function () { window.__webSceneDomListenerOrder.push('microtask-1'); });
                   });
                   document.addEventListener('DOMContentLoaded', function () {
-                    window.__htmlMlDomListenerOrder.push('listener-2');
+                    window.__webSceneDomListenerOrder.push('listener-2');
                   });
                   function mountLifecycleRoot(eventName) {
                     sequence.push(eventName);
@@ -118,9 +118,9 @@ internal static class V8ReactSchedulerProbe
                 var appPath = Path.Combine(benchmarkRoot, "Fixtures", "v8-react-app.js");
                 bootstrap = $$"""
                     (function () {
-                      const sequence = window.__htmlMlReactResourceSequence = [];
-                      window.__htmlMlReactProbeItemCount = {{itemCount}};
-                      window.__htmlMlReactSyncNestedRoots = {{syncNestedRoots.ToString().ToLowerInvariant()}};
+                      const sequence = window.__webSceneReactResourceSequence = [];
+                      window.__webSceneReactProbeItemCount = {{itemCount}};
+                      window.__webSceneReactSyncNestedRoots = {{syncNestedRoots.ToString().ToLowerInvariant()}};
                       function load(source, label, completed) {
                         const script = document.createElement('script');
                         script.onload = function () { sequence.push(label + '-load'); completed(); };
@@ -138,11 +138,11 @@ internal static class V8ReactSchedulerProbe
                     """;
             }
             runtime.Execute($$"""
-                globalThis.__htmlMlReactFixture = {{JsonSerializer.Serialize(react)}};
-                globalThis.__htmlMlReactDomFixture = {{JsonSerializer.Serialize(reactDom)}};
-                globalThis.__htmlMlReactBootstrapFixture = {{JsonSerializer.Serialize(bootstrap)}};
-                globalThis.__htmlMlOwnerRead = function(index) { return 'owner-' + index; };
-                globalThis.__htmlMlOwnerSchedule = function(callback) {
+                globalThis.__webSceneReactFixture = {{JsonSerializer.Serialize(react)}};
+                globalThis.__webSceneReactDomFixture = {{JsonSerializer.Serialize(reactDom)}};
+                globalThis.__webSceneReactBootstrapFixture = {{JsonSerializer.Serialize(bootstrap)}};
+                globalThis.__webSceneOwnerRead = function(index) { return 'owner-' + index; };
+                globalThis.__webSceneOwnerSchedule = function(callback) {
                   setTimeout(callback, 0);
                 };
                 const iframe = document.createElement('iframe');
@@ -150,10 +150,10 @@ internal static class V8ReactSchedulerProbe
                 iframe.style.height = '480px';
                 document.body.appendChild(iframe);
                 const markup = {{(dynamicReactRuntime
-                    ? "'<!doctype html><html><body><script>' + __htmlMlReactBootstrapFixture + '</' + 'script></body></html>'"
-                    : "'<!doctype html><html><body>' + '<script>' + __htmlMlReactFixture + '</' + 'script>' + '<script>' + __htmlMlReactDomFixture + '</' + 'script>' + '<script>' + __htmlMlReactBootstrapFixture + '</' + 'script>' + '</body></html>'")}};
+                    ? "'<!doctype html><html><body><script>' + __webSceneReactBootstrapFixture + '</' + 'script></body></html>'"
+                    : "'<!doctype html><html><body>' + '<script>' + __webSceneReactFixture + '</' + 'script>' + '<script>' + __webSceneReactDomFixture + '</' + 'script>' + '<script>' + __webSceneReactBootstrapFixture + '</' + 'script>' + '</body></html>'")}};
                 iframe.src = URL.createObjectURL(new Blob([markup], { type: 'text/html' }));
-                window.__htmlMlReactFrame = iframe;
+                window.__webSceneReactFrame = iframe;
                 """, "v8-react-probe-owner.js");
 
             var started = Stopwatch.StartNew();
@@ -183,16 +183,16 @@ internal static class V8ReactSchedulerProbe
             var roots = frameDocument.querySelectorAll(".probe-root").Length;
             var resourceState = Convert.ToString(runtime.Engine.Evaluate("""
                 JSON.stringify({
-                  sequence: window.__htmlMlReactFrame.contentWindow.__htmlMlReactResourceSequence || [],
-                  scripts: window.__htmlMlReactFrame.contentDocument.querySelectorAll('script').length,
-                  chunkEvaluations: window.__htmlMlReactFrame.contentWindow.__htmlMlReactChunkEvaluationCount || 0,
-                  chunkOrder: window.__htmlMlReactFrame.contentWindow.__htmlMlReactChunkOrder || [],
-                  launcher: window.__htmlMlReactFrame.contentDocument.querySelector('#launcher-ready').textContent,
-                  lifecycle: Array.from(window.__htmlMlReactFrame.contentDocument.querySelectorAll('[data-lifecycle]')).map(function(node) { return node.textContent; }),
-                  listenerOrder: window.__htmlMlReactFrame.contentWindow.__htmlMlDomListenerOrder || [],
-                  rootDir: typeof window.__htmlMlReactFrame.contentDocument.documentElement.dir + ':' + String(window.__htmlMlReactFrame.contentDocument.documentElement.dir),
-                  buttonDir: typeof window.__htmlMlReactFrame.contentDocument.querySelector('button').dir + ':' + String(window.__htmlMlReactFrame.contentDocument.querySelector('button').dir),
-                  readyState: window.__htmlMlReactFrame.contentDocument.readyState
+                  sequence: window.__webSceneReactFrame.contentWindow.__webSceneReactResourceSequence || [],
+                  scripts: window.__webSceneReactFrame.contentDocument.querySelectorAll('script').length,
+                  chunkEvaluations: window.__webSceneReactFrame.contentWindow.__webSceneReactChunkEvaluationCount || 0,
+                  chunkOrder: window.__webSceneReactFrame.contentWindow.__webSceneReactChunkOrder || [],
+                  launcher: window.__webSceneReactFrame.contentDocument.querySelector('#launcher-ready').textContent,
+                  lifecycle: Array.from(window.__webSceneReactFrame.contentDocument.querySelectorAll('[data-lifecycle]')).map(function(node) { return node.textContent; }),
+                  listenerOrder: window.__webSceneReactFrame.contentWindow.__webSceneDomListenerOrder || [],
+                  rootDir: typeof window.__webSceneReactFrame.contentDocument.documentElement.dir + ':' + String(window.__webSceneReactFrame.contentDocument.documentElement.dir),
+                  buttonDir: typeof window.__webSceneReactFrame.contentDocument.querySelector('button').dir + ':' + String(window.__webSceneReactFrame.contentDocument.querySelector('button').dir),
+                  readyState: window.__webSceneReactFrame.contentDocument.readyState
                 })
                 """));
             Console.WriteLine(
@@ -200,7 +200,7 @@ internal static class V8ReactSchedulerProbe
                 $"labels=[{string.Join(", ", labels)}], resources={resourceState}, " +
                 $"elapsed={started.Elapsed.TotalMilliseconds:F1} ms");
             var listenerOrder = Convert.ToString(runtime.Engine.Evaluate(
-                "window.__htmlMlReactFrame.contentWindow.__htmlMlDomListenerOrder.join(',')"));
+                "window.__webSceneReactFrame.contentWindow.__webSceneDomListenerOrder.join(',')"));
             return roots == 7 && buttons.Length == 7 && labels.All(label => label.EndsWith(":31", StringComparison.Ordinal))
                 && string.Equals(
                     (frameDocument.querySelector("#launcher-ready") as AvaloniaDomElement)?.textContent,

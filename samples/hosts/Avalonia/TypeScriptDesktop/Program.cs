@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace HtmlML.Samples.TypeScriptDesktop;
+namespace WebScene.Samples.TypeScriptDesktop;
 
 internal static class Program
 {

@@ -28,12 +28,12 @@ public sealed class ScreenshotExportCompatibilityTests
             context.fillStyle = "#ef4444";
             context.fillRect(0, 0, 4, 3);
 
-            var dataUrl = canvas.__htmlMlCanvasToDataURL();
+            var dataUrl = canvas.__webSceneCanvasToDataURL();
             Assert.StartsWith("data:image/png;base64,", dataUrl, StringComparison.Ordinal);
             var exported = Convert.FromBase64String(dataUrl[(dataUrl.IndexOf(',') + 1)..]);
             Assert.Equal(PngSignature, exported.Take(PngSignature.Length));
 
-            HtmlMlDownloadRequestedEventArgs? download = null;
+            WebSceneDownloadRequestedEventArgs? download = null;
             host.DownloadRequested += (_, args) =>
             {
                 args.Handled = true;
@@ -62,7 +62,7 @@ public sealed class ScreenshotExportCompatibilityTests
     [Trait("Runtime", "V8Native")]
     public void ClipboardItemAndDownloadMatchCommonScreenshotApis()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -74,7 +74,7 @@ public sealed class ScreenshotExportCompatibilityTests
 
         using var host = new AvaloniaBrowserHost(window);
         using var runtime = new ClearScriptV8Runtime(host);
-        HtmlMlDownloadRequestedEventArgs? download = null;
+        WebSceneDownloadRequestedEventArgs? download = null;
         host.DownloadRequested += (_, args) =>
         {
             args.Handled = true;
@@ -84,8 +84,8 @@ public sealed class ScreenshotExportCompatibilityTests
         try
         {
             runtime.Execute("""
-                globalThis.__htmlMlScreenshotCopyState = 'pending';
-                globalThis.__htmlMlSvgObjectUrlState = 'pending';
+                globalThis.__webSceneScreenshotCopyState = 'pending';
+                globalThis.__webSceneSvgObjectUrlState = 'pending';
                 const svgDocument = new DOMParser().parseFromString(
                   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path fill="#fff" d="M0 0h8v8H0z"/></svg>',
                   'image/svg+xml');
@@ -94,8 +94,8 @@ public sealed class ScreenshotExportCompatibilityTests
                   serializedSvg
                 ], { type: 'image/svg+xml' }));
                 const image = new Image();
-                image.onload = function() { globalThis.__htmlMlSvgObjectUrlState = 'loaded'; };
-                image.onerror = function() { globalThis.__htmlMlSvgObjectUrlState = 'failed'; };
+                image.onload = function() { globalThis.__webSceneSvgObjectUrlState = 'loaded'; };
+                image.onerror = function() { globalThis.__webSceneSvgObjectUrlState = 'failed'; };
                 image.src = svgUrl;
                 const canvas = document.createElement('canvas');
                 canvas.width = 5;
@@ -112,22 +112,22 @@ public sealed class ScreenshotExportCompatibilityTests
                   navigator.clipboard.write([
                     new ClipboardItem({ 'image/png': Promise.resolve(blob) })
                   ]).then(
-                    function() { globalThis.__htmlMlScreenshotCopyState = 'copied'; },
-                    function(error) { globalThis.__htmlMlScreenshotCopyState = 'failed:' + error; }
+                    function() { globalThis.__webSceneScreenshotCopyState = 'copied'; },
+                    function(error) { globalThis.__webSceneScreenshotCopyState = 'failed:' + error; }
                   );
                 });
                 """, "screenshot-copy-download-compatibility.js");
 
             var timeout = Stopwatch.StartNew();
             while (timeout.Elapsed < TimeSpan.FromSeconds(3)
-                   && Convert.ToString(runtime.Engine.Evaluate("globalThis.__htmlMlScreenshotCopyState")) == "pending")
+                   && Convert.ToString(runtime.Engine.Evaluate("globalThis.__webSceneScreenshotCopyState")) == "pending")
             {
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(1);
             }
 
-            Assert.Equal("copied", Convert.ToString(runtime.Engine.Evaluate("globalThis.__htmlMlScreenshotCopyState")));
-            Assert.Equal("loaded", Convert.ToString(runtime.Engine.Evaluate("globalThis.__htmlMlSvgObjectUrlState")));
+            Assert.Equal("copied", Convert.ToString(runtime.Engine.Evaluate("globalThis.__webSceneScreenshotCopyState")));
+            Assert.Equal("loaded", Convert.ToString(runtime.Engine.Evaluate("globalThis.__webSceneSvgObjectUrlState")));
             var clipboardPng = host.Services.Clipboard.GetData("image/png");
             Assert.NotNull(clipboardPng);
             Assert.Equal(PngSignature, clipboardPng!.Take(PngSignature.Length));

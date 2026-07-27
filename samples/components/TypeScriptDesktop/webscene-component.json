@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.typescriptdesktop",
+  "displayName": "TypeScriptDesktop",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "svg",
+    "input.pointer",
+    "input.keyboard",
+    "input.focus",
+    "host.settings",
+    "host.notifications"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

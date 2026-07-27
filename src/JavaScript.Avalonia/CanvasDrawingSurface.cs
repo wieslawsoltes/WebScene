@@ -13,7 +13,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using HtmlML.JavaScript;
+using WebScene.JavaScript;
 
 namespace JavaScript.Avalonia;
 
@@ -22,20 +22,20 @@ namespace JavaScript.Avalonia;
 internal sealed class CanvasDrawingSurface : Control
 {
     private static readonly bool s_disableFillRectCoalescing =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_FILL_RECT_COALESCING"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_FILL_RECT_COALESCING"), "1", StringComparison.Ordinal);
     private static readonly bool s_enableCanvasInvalidationSuppression =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_ENABLE_CANVAS_INVALIDATION_SUPPRESSION"),
+            Environment.GetEnvironmentVariable("WEBSCENE_ENABLE_CANVAS_INVALIDATION_SUPPRESSION"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_enableNativeCanvasHotPath =
         !string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_AVALONIA_NATIVE_CANVAS_HOTPATH"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_AVALONIA_NATIVE_CANVAS_HOTPATH"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableLineDashReplayDeduplication =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_CANVAS_LINE_DASH_REPLAY_DEDUP"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CANVAS_LINE_DASH_REPLAY_DEDUP"),
             "1",
             StringComparison.Ordinal);
 
@@ -388,7 +388,7 @@ internal sealed class CanvasDrawingSurface : Control
     internal void InvalidateCanvasVisual()
     {
         // Avalonia already coalesces visual invalidations. The additional
-        // HtmlML flag can span an intermediate compositor render while a
+        // WebScene flag can span an intermediate compositor render while a
         // Canvas2D frame is still being replayed, suppressing the final damage
         // request and leaving correctly updated retained commands only partly
         // visible. Keep the old path solely as a diagnostic control.
@@ -526,10 +526,10 @@ internal abstract class CanvasDrawCommand
         yield return PortableCommand;
     }
 
-    protected static HtmlML.Core.HtmlMlRect ToPortableRect(Rect rect)
+    protected static WebScene.Core.WebSceneRect ToPortableRect(Rect rect)
         => new(rect.X, rect.Y, rect.Width, rect.Height);
 
-    protected static HtmlML.Core.HtmlMlPoint ToPortablePoint(Point point)
+    protected static WebScene.Core.WebScenePoint ToPortablePoint(Point point)
         => new(point.X, point.Y);
 
     internal virtual int LogicalCommandCount => 1;
@@ -1123,7 +1123,7 @@ internal sealed class DrawImageCommand : CanvasDrawCommand
             State.Model,
             SourceRectangle: ToPortableRect(_sourceRect),
             DestinationRectangle: ToPortableRect(_destinationRect),
-            Resource: HtmlML.Core.HtmlMlBackendHandle.Create(_image));
+            Resource: WebScene.Core.WebSceneBackendHandle.Create(_image));
 
     protected override void RenderCore(DrawingContext context)
     {
@@ -1193,7 +1193,7 @@ internal sealed class DrawCanvasSurfaceCommand : CanvasDrawCommand
             State.Model,
             SourceRectangle: ToPortableRect(_sourceRect),
             DestinationRectangle: ToPortableRect(_destinationRect),
-            Resource: HtmlML.Core.HtmlMlBackendHandle.Create(
+            Resource: WebScene.Core.WebSceneBackendHandle.Create(
                 CanvasDrawingSurface.CreatePortableDisplayListSnapshot(_commands)));
 
     protected override void RenderCore(DrawingContext context)
@@ -1318,7 +1318,7 @@ public sealed class CanvasImageData
     public byte[] data => Model.RgbaPixels;
 }
 
-public sealed class CanvasRenderingContext2D : IHtmlMlCanvasTextTarget, IHtmlMlCanvasBatchTarget
+public sealed class CanvasRenderingContext2D : IWebSceneCanvasTextTarget, IWebSceneCanvasBatchTarget
 {
     private readonly CanvasDrawingSurface _owner;
     private readonly Dictionary<string, CanvasCallMetric> _fastCallMetrics = new(StringComparer.Ordinal);
@@ -1951,10 +1951,10 @@ public sealed class CanvasRenderingContext2D : IHtmlMlCanvasTextTarget, IHtmlMlC
         return new CanvasTextMetrics(MeasureTextWidthCore(text));
     }
 
-    double IHtmlMlCanvasTextTarget.MeasureTextWidth(string text)
+    double IWebSceneCanvasTextTarget.MeasureTextWidth(string text)
         => MeasureTextWidthCore(text);
 
-    int IHtmlMlCanvasBatchTarget.ReplayCanvasBatch(
+    int IWebSceneCanvasBatchTarget.ReplayCanvasBatch(
         ReadOnlySpan<double> values,
         IReadOnlyList<string> strings)
         => AvaloniaCanvasBatchReplay.Replay(this, values, strings);
@@ -2584,8 +2584,8 @@ internal sealed record CanvasTextMeasurement(string Text, string Font, double Wi
 
 internal sealed class CanvasState
 {
-    public CanvasPaintModel FillPaint { get; set; } = new CanvasColorPaintModel(HtmlML.Core.HtmlMlColor.FromRgb(0, 0, 0));
-    public CanvasPaintModel StrokePaint { get; set; } = new CanvasColorPaintModel(HtmlML.Core.HtmlMlColor.FromRgb(0, 0, 0));
+    public CanvasPaintModel FillPaint { get; set; } = new CanvasColorPaintModel(WebScene.Core.WebSceneColor.FromRgb(0, 0, 0));
+    public CanvasPaintModel StrokePaint { get; set; } = new CanvasColorPaintModel(WebScene.Core.WebSceneColor.FromRgb(0, 0, 0));
     public IImmutableBrush? FillBrush => CanvasPaintParser.Project(FillPaint);
     public IImmutableBrush? StrokeBrush => CanvasPaintParser.Project(StrokePaint);
     public object? FillStyleValue { get; set; } = "#000000";
@@ -2717,7 +2717,7 @@ internal sealed class CanvasState
     internal static Matrix ToAvaloniaTransform(GraphicsTransform transform)
         => new(transform.M11, transform.M12, transform.M21, transform.M22, transform.M31, transform.M32);
 
-    internal static HtmlML.Core.HtmlMlColor ToPortableColor(Color color)
+    internal static WebScene.Core.WebSceneColor ToPortableColor(Color color)
         => new(color.A, color.R, color.G, color.B);
 
     internal static CanvasCompositeOperation ParseCompositeOperation(string? value)
@@ -3252,7 +3252,7 @@ internal static class CanvasPaintParser
             case IImmutableBrush immutable:
                 paint = immutable is ImmutableSolidColorBrush immutableSolid
                     ? new CanvasColorPaintModel(CanvasState.ToPortableColor(immutableSolid.Color))
-                    : new CanvasBackendPaintModel(HtmlML.Core.HtmlMlBackendHandle.Create(immutable));
+                    : new CanvasBackendPaintModel(WebScene.Core.WebSceneBackendHandle.Create(immutable));
                 stored = immutable;
                 return true;
             case ISolidColorBrush solidBrush:
@@ -3325,7 +3325,7 @@ public sealed class CanvasPattern
     }
 
     internal CanvasPatternPaintModel Model => new(
-        HtmlML.Core.HtmlMlBackendHandle.Create(_source),
+        WebScene.Core.WebSceneBackendHandle.Create(_source),
         _width,
         _height,
         _repetition,
@@ -3491,7 +3491,7 @@ internal static class CanvasMatrixParser
 
 public abstract class CanvasGradient
 {
-    private readonly List<HtmlML.Graphics.CanvasGradientStop> _stops = new();
+    private readonly List<WebScene.Graphics.CanvasGradientStop> _stops = new();
 
     public void addColorStop(double offset, string color)
     {
@@ -3502,12 +3502,12 @@ public abstract class CanvasGradient
 
         var clamped = Math.Clamp(offset, 0.0, 1.0);
         var parsed = CanvasColorParser.ParseColor(color, Colors.Transparent);
-        _stops.Add(new HtmlML.Graphics.CanvasGradientStop(
+        _stops.Add(new WebScene.Graphics.CanvasGradientStop(
             clamped,
-            new HtmlML.Core.HtmlMlColor(parsed.A, parsed.R, parsed.G, parsed.B)));
+            new WebScene.Core.WebSceneColor(parsed.A, parsed.R, parsed.G, parsed.B)));
     }
 
-    internal IReadOnlyList<HtmlML.Graphics.CanvasGradientStop> Stops => _stops;
+    internal IReadOnlyList<WebScene.Graphics.CanvasGradientStop> Stops => _stops;
 
     internal abstract CanvasGradientModel Model { get; }
 
@@ -3587,8 +3587,8 @@ public sealed class CanvasLinearGradient : CanvasGradient
     }
 
     internal override CanvasGradientModel Model => new CanvasLinearGradientModel(
-        new HtmlML.Core.HtmlMlPoint(_x0, _y0),
-        new HtmlML.Core.HtmlMlPoint(_x1, _y1),
+        new WebScene.Core.WebScenePoint(_x0, _y0),
+        new WebScene.Core.WebScenePoint(_x1, _y1),
         [.. Stops]);
 
     internal override IImmutableBrush ToImmutableBrush()
@@ -3615,9 +3615,9 @@ public sealed class CanvasRadialGradient : CanvasGradient
     }
 
     internal override CanvasGradientModel Model => new CanvasRadialGradientModel(
-        new HtmlML.Core.HtmlMlPoint(_x0, _y0),
+        new WebScene.Core.WebScenePoint(_x0, _y0),
         _r0,
-        new HtmlML.Core.HtmlMlPoint(_x1, _y1),
+        new WebScene.Core.WebScenePoint(_x1, _y1),
         _r1,
         [.. Stops]);
 
@@ -3873,7 +3873,7 @@ public sealed class CanvasPath2D
         }
 
         if (value is IDictionary<string, object?> genericDictionary
-            && genericDictionary.TryGetValue("__htmlMlNativePath2D", out var genericNative)
+            && genericDictionary.TryGetValue("__webSceneNativePath2D", out var genericNative)
             && genericNative is CanvasPath2D genericDictionaryPath)
         {
             path = genericDictionaryPath;
@@ -3881,8 +3881,8 @@ public sealed class CanvasPath2D
         }
 
         if (value is IDictionary dictionary
-            && dictionary.Contains("__htmlMlNativePath2D")
-            && dictionary["__htmlMlNativePath2D"] is CanvasPath2D dictionaryPath)
+            && dictionary.Contains("__webSceneNativePath2D")
+            && dictionary["__webSceneNativePath2D"] is CanvasPath2D dictionaryPath)
         {
             path = dictionaryPath;
             return true;

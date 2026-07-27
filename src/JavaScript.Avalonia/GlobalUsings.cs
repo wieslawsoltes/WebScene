@@ -1,3 +1,3 @@
-global using HtmlML.Css;
-global using HtmlML.Graphics;
-global using CascadeWinner = HtmlML.Css.CssCascadeWinner;
+global using WebScene.Css;
+global using WebScene.Graphics;
+global using CascadeWinner = WebScene.Css.CssCascadeWinner;

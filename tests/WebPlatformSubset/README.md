@@ -1,16 +1,16 @@
-# HtmlML Web Platform subset
+# WebScene Web Platform subset
 
 This directory implements the curated standards and connected-component test lane.
-It is deliberately a bounded **HtmlML component profile**, not a claim that HtmlML is
+It is deliberately a bounded **WebScene component profile**, not a claim that WebScene is
 a general-purpose browser or that every value of a listed CSS property is supported.
 
 ## Scope rule
 
 A WPT case enters this directory only when it maps to an observed connected-component
 capability or a prerequisite needed to make that capability correct. The profile
-uses four explicit states in `htmlml-component-profile.json`:
+uses four explicit states in `webscene-component-profile.json`:
 
-- `required`: published HtmlML component-profile behavior; failures make the runner fail;
+- `required`: published WebScene component-profile behavior; failures make the runner fail;
 - `candidate`: relevant tests being evaluated, but not yet part of the support claim;
 - `harnessBlocked`: relevant tests that need an adapter facility rather than a product fix;
 - `excluded`: intentionally unsupported areas and the reason they are out of scope.
@@ -33,12 +33,12 @@ Current evidence (2026-07-26): the complete required profile contains 110 docume
 and 434 assertions. The latest promotion requires selector APIs, element collections,
 and `parentElement` to preserve JavaScript node identity, uniqueness, and tree order.
 It was reduced from impossible duplicate structural paths in a hosted-component
-inventory, authorized unchanged in Chrome, and then passed unchanged in both HtmlML
+inventory, authorized unchanged in Chrome, and then passed unchanged in both WebScene
 adapters, including a 204-node deep id-less ancestry walk. This rules out a general core identity defect and keeps transient-locator
 handling in the private consumer. The preceding promotion requires rendered `innerText`
 block boundaries while preserving adjacent inline concatenation. It was reduced from a
 TradingView semantic-inventory accessible-name discrepancy, authorized unchanged in
-Chrome, and then passed unchanged in both HtmlML adapters. The earlier promotion requires
+Chrome, and then passed unchanged in both WebScene adapters. The earlier promotion requires
 stylesheet `visibility` inheritance,
 layout retention, focus rejection, hit-test rejection, and explicit descendant
 computed/interaction restoration; Chrome and native already passed, while the managed
@@ -161,7 +161,7 @@ remained in the composition denominator. Grid evidence:
 `artifacts/web-platform-required-display-restoration-promoted-v1-20260723/`.
 Auto-margin evidence:
 `artifacts/web-platform-required-auto-margin-promoted-v1-20260723/`,
-`artifacts/web-platform-auto-margins-wpt-htmlml-v2-20260723/`, and
+`artifacts/web-platform-auto-margins-wpt-webscene-v2-20260723/`, and
 `artifacts/ecosystem-consumers-auto-margin-native-fixed-v1-20260723/`.
 Custom-property evidence:
 `artifacts/web-platform-required-custom-property-promoted-v1-20260723/`,
@@ -177,7 +177,7 @@ raising that ecosystem lane to 449/450; only computed height retention for a tex
 inside a `display:none` subtree remains. Evidence:
 `artifacts/web-platform-required-box-edges-promoted-v1-20260723/`,
 `artifacts/web-platform-cssom-box-edges-chrome-final-v3-20260723/`,
-`artifacts/web-platform-cssom-box-edges-htmlml-final-v3-20260723/`, and
+`artifacts/web-platform-cssom-box-edges-webscene-final-v3-20260723/`, and
 `artifacts/ecosystem-consumers-box-edges-final-v4-20260723/`.
 
 The next staged reduction adds four assertions that separate computed dimensions from
@@ -218,7 +218,7 @@ It also requires bounded `document.open()/write()/close()` body replacement and 
 computed-style read from a hidden frame. Chrome, managed, and native pass 4/4, and the
 originating unchanged jQuery frame-element assertion now passes managed. Evidence:
 `artifacts/web-platform-iframe-document-chrome-v1-20260723/`,
-`artifacts/web-platform-iframe-document-htmlml-v5-20260723/`,
+`artifacts/web-platform-iframe-document-webscene-v5-20260723/`,
 `artifacts/web-platform-required-iframe-document-final-serial-v1-20260723/`, and
 `artifacts/ecosystem-consumers-iframe-document-v1-20260723/`.
 
@@ -356,11 +356,11 @@ hiding a one-pixel split between title and action-button outline segments. Evide
 `test_segmented_rounded_borders_share_an_unclipped_join`.
 
 The W3C CSS Validator is a stylesheet syntax checker, not a layout-engine conformance
-suite. It is useful for authoring diagnostics but is not included in HtmlML's engine
+suite. It is useful for authoring diagnostics but is not included in WebScene's engine
 pass ratio: valid CSS can still be cascaded, computed, laid out, or painted incorrectly.
 Engine-specific Gecko, WebKit, and Blink layout tests are discovery sources; a relevant
 case is reduced to an upstream WPT or a product-neutral contract before it becomes an
-HtmlML certification gate.
+WebScene certification gate.
 
 First-party documents under `contracts/` cover behavior that spans several standards
 or requires repeated lifecycle phases, such as responsive resize and resize-back.
@@ -407,7 +407,7 @@ The document preparation then:
 - managed documents run in a fresh trusted local V8 iframe context; native
   documents run in a fresh native engine instance against the same prepared source.
 
-Do not edit vendored cases to make HtmlML pass. Update them only by reviewing a new
+Do not edit vendored cases to make WebScene pass. Update them only by reviewing a new
 explicit WPT revision and refreshing the provenance metadata.
 
 ## Running
@@ -415,25 +415,25 @@ explicit WPT revision and refreshing the provenance metadata.
 From the repository root, run the managed compatibility lane with:
 
 ```sh
-HTMLML_CLEARSCRIPT_NATIVE=/Volumes/SSD/tmp/HtmlML-ClearScript-751/bin/Release/Unix/ClearScriptV8.osx-arm64.dylib \
-HTMLML_CLEARSCRIPT_RID=osx-arm64 \
-dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+WEBSCENE_CLEARSCRIPT_NATIVE=/Volumes/SSD/tmp/WebScene-ClearScript-751/bin/Release/Unix/ClearScriptV8.osx-arm64.dylib \
+WEBSCENE_CLEARSCRIPT_RID=osx-arm64 \
+dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release -- --engine managed --selection required
 ```
 
 After building the native spike, run the exact same profile through both engines:
 
 ```sh
-dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release -- \
   --engine both \
-  --native-library "$PWD/artifacts/native-engine-probe-v8/libhtmlml_native_engine.dylib" \
+  --native-library "$PWD/artifacts/native-engine-probe-v8/libwebscene_native_engine.dylib" \
   --native-cache-directory "$PWD/artifacts/native-engine-probe-v8/code-cache" \
   --selection required \
   --output "$PWD/TestResults/WebPlatformSubset-engine-matrix"
 ```
 
-Use `libhtmlml_native_engine.so` on Linux and `htmlml_native_engine.dll` on Windows.
+Use `libwebscene_native_engine.so` on Linux and `webscene_native_engine.dll` on Windows.
 The two result files are written below `managed/` and `native/`; each records its
 engine identity. The native cache option preserves the spike's persistent V8
 compilation-unit cache in the test lane.
@@ -442,15 +442,15 @@ Useful diagnostic forms:
 
 ```sh
 # See the manifest selection without loading V8.
-dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release -- --selection all --list
 
 # Run one family or path substring.
-dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release -- --selection all --test css-transforms
 
 # Report candidate behavior without making candidate failures gate the command.
-dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj \
+dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
   -c Release -- --selection candidate
 ```
 
@@ -473,7 +473,7 @@ For a single engine, the stable result file is written to
 `TestResults/WebPlatformSubset/results.json`.
 Failed reftests also produce `actual.png`, `reference.png`, and `diff.png`. Required
 failures return a nonzero exit code; candidate-only failures remain report-only.
-Native result documents use the versioned `htmlml-wpt-subset-result-v2` contract and
+Native result documents use the versioned `webscene-wpt-subset-result-v2` contract and
 embed the native engine ABI and library SHA-256. Certification accepts the artifact
 only when that identity exactly matches the supplied hosted-component evidence and
 when its result paths are the exact required set from the audited profile. Matching

@@ -44,7 +44,7 @@ public sealed class CssFontFaceTests
     public void RelativeDownloadedFaceReappliesDomAndIsSharedWithCanvas()
     {
         var sourceFont = FindPlatformTrueTypeFont();
-        var directory = Path.Combine(Path.GetTempPath(), "htmlml-font-face-test-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(Path.GetTempPath(), "webscene-font-face-test-" + Guid.NewGuid().ToString("N"));
         var fontsDirectory = Path.Combine(directory, "assets", "fonts");
         Directory.CreateDirectory(fontsDirectory);
         File.WriteAllBytes(
@@ -92,7 +92,7 @@ public sealed class CssFontFaceTests
             Dispatcher.UIThread.RunJobs();
 
             Assert.NotEqual(fallback, text.FontFamily);
-            Assert.StartsWith("fonts:htmlml-", text.FontFamily.ToString(), StringComparison.Ordinal);
+            Assert.StartsWith("fonts:webscene-", text.FontFamily.ToString(), StringComparison.Ordinal);
             text.Measure(Size.Infinity);
             Assert.NotEqual(fallbackWidth, text.DesiredSize.Width);
 
@@ -117,7 +117,7 @@ public sealed class CssFontFaceTests
     public void FaceMatchingUsesAuthoredStyleAndWeightInsteadOfOnlyFamilyName()
     {
         var sourceFont = FindPlatformTrueTypeFont();
-        var directory = Path.Combine(Path.GetTempPath(), "htmlml-font-match-test-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(Path.GetTempPath(), "webscene-font-match-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         File.Copy(sourceFont, Path.Combine(directory, "regular.ttf"));
         File.Copy(sourceFont, Path.Combine(directory, "bold-italic.ttf"));

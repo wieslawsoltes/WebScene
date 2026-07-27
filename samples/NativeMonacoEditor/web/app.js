@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "  return message;",
         "}",
         "",
-        "for (const name of [\"Avalonia\", \"HtmlML\", \"Monaco\"]) {",
+        "for (const name of [\"Avalonia\", \"WebScene\", \"Monaco\"]) {",
         "  console.log(greet(name));",
         "}"
       ].join("\n"),
@@ -36,8 +36,8 @@ document.addEventListener("DOMContentLoaded", () => {
     editor.layout();
     editor.focus();
     status.textContent = "8 lines · editable · JavaScript";
-    globalThis.__htmlMlMonacoEditor = editor;
-    globalThis.__htmlMlComponentReady = true;
+    globalThis.__webSceneMonacoEditor = editor;
+    globalThis.__webSceneComponentReady = true;
   } catch (error) {
     status.textContent = `Monaco failed: ${error.message || error}`;
     console.error(error);

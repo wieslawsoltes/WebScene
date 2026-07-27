@@ -16,13 +16,13 @@ if [[ -f "$icu_data" && -d "$build_dir" ]]; then
   ctest --test-dir "$build_dir" -C Release --output-on-failure
   native_test_status=$?
 
-  if ((native_test_status != 0)) && [[ -x "$build_dir/htmlml_native_engine_tests" ]]; then
+  if ((native_test_status != 0)) && [[ -x "$build_dir/webscene_native_engine_tests" ]]; then
     gdb \
       --batch \
       -ex "set pagination off" \
       -ex run \
       -ex "thread apply all bt" \
-      --args "$build_dir/htmlml_native_engine_tests" || true
+      --args "$build_dir/webscene_native_engine_tests" || true
   fi
 fi
 set -e

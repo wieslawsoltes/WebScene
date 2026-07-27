@@ -20,22 +20,22 @@ done
 
 if [[ -z "$package_version" ]]; then
   package_version="$(
-    dotnet msbuild "$repo_root/src/HtmlML.Core/HtmlML.Core.csproj" \
+    dotnet msbuild "$repo_root/src/WebScene.Core/WebScene.Core.csproj" \
       -getProperty:PackageVersion -nologo |
       tail -n 1 | tr -d '\r'
   )"
 fi
 if [[ -z "$package_version" ]]; then
-  echo "Unable to resolve the HtmlML package version." >&2
+  echo "Unable to resolve the WebScene package version." >&2
   exit 1
 fi
 
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
-dotnet msbuild "$repo_root/build/HtmlMlPackages.proj" \
+dotnet msbuild "$repo_root/build/WebScenePackages.proj" \
   -t:PackManaged \
   -p:Configuration=Release \
-  -p:HtmlMlPackageVersion="$package_version" \
+  -p:WebScenePackageVersion="$package_version" \
   -p:PackageOutputPath="$output_dir/" \
   -p:ContinuousIntegrationBuild="${CI:-false}" \
   -nologo

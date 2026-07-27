@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.headlesscomponenttests",
+  "displayName": "HeadlessComponentTests",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "canvas.2d",
+    "svg",
+    "input.pointer",
+    "input.keyboard",
+    "input.focus"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

@@ -96,7 +96,7 @@ result. Entry and byte limits bound both memory and disk storage.
 
 `Clear()` drops memory and metrics while preserving disk data. `ClearPersistent()` is
 the explicit destructive operation. The process-wide cache remains memory-only unless
-`HTMLML_V8_CACHE_DIRECTORY` is set; applications can instead construct and own a cache
+`WEBSCENE_V8_CACHE_DIRECTORY` is set; applications can instead construct and own a cache
 as above. `GetMetrics()` includes disk I/O and single-flight leader/waiter counters.
 
 Single-flight is deliberately process-local. Separate application processes can both
@@ -123,7 +123,7 @@ every target platform.
 
 This managed package intentionally depends on `Microsoft.ClearScript.V8` rather than
 `Microsoft.ClearScript.Complete`. The complete package supplies Microsoft's stock
-native binaries for every RID and could bypass HtmlML's reviewed context-sharing patch.
+native binaries for every RID and could bypass WebScene's reviewed context-sharing patch.
 Reference the RID-specific `JavaScript.Avalonia.ClearScript.Native.<rid>` package for a
 reviewed deployment, or provide the validated native path/RID explicitly during local
 development. The native package includes the exact patch, source/V8 provenance, and

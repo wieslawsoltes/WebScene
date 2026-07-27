@@ -83,7 +83,7 @@ async function createRuntime(sampleId) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     pretendToBeVisual: true,
     runScripts: 'outside-only',
-    url: 'https://htmlml.local/'
+    url: 'https://webscene.local/'
   });
   const { window } = dom;
   const invocations = [];
@@ -93,7 +93,7 @@ async function createRuntime(sampleId) {
       return Promise.resolve({ accepted: true });
     }
   });
-  window.htmlml = {
+  window.webscene = {
     profileVersion: '1.0',
     host: {
       commands: client('host.commands'),

@@ -24,6 +24,6 @@
     <PackageReference Include="AngleSharp.Css" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HtmlML\HtmlML.csproj" />
+    <ProjectReference Include="..\..\src\WebScene\WebScene.csproj" />
   </ItemGroup>
 </Project>

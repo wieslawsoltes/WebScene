@@ -13,7 +13,7 @@ public sealed class V8MouseEventDispatchRegressionTests
     [Trait("Runtime", "V8Native")]
     public void ConstructedMouseEventKeepsIdentityAndResetsDispatchState()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -41,7 +41,7 @@ public sealed class V8MouseEventDispatchRegressionTests
                 parent.addEventListener('click', event => { observed = event; });
                 const event = new MouseEvent('click', { bubbles: true });
                 target.dispatchEvent(event);
-                globalThis.__htmlMlMouseDispatchRegression = {
+                globalThis.__webSceneMouseDispatchRegression = {
                   constructor: event instanceof MouseEvent && event instanceof Event,
                   identity: observed === event,
                   target: event.target === target,
@@ -53,7 +53,7 @@ public sealed class V8MouseEventDispatchRegressionTests
                 """, "v8-mouse-event-dispatch-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlMouseDispatchRegression)")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneMouseDispatchRegression)")) ?? "{}");
             var state = result.RootElement;
             Assert.True(state.GetProperty("constructor").GetBoolean());
             Assert.True(state.GetProperty("identity").GetBoolean());

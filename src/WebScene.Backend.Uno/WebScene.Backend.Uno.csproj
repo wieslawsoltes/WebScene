@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>true</IsPackable>
+    <Description>The Uno Platform Skia backend for WebScene.</Description>
+    <PackageId>WebScene.Backend.Uno</PackageId>
+    <AssemblyName>WebScene.Backend.Uno</AssemblyName>
+    <RootNamespace>WebScene.Backends.Uno</RootNamespace>
+    <PackageTags>html;dom;css;canvas;svg;uno;skia;backend</PackageTags>
+    <DefineConstants>$(DefineConstants);WEBSCENE_UNO</DefineConstants>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
+    <ProjectReference Include="..\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
+    <ProjectReference Include="..\WebScene.Css\WebScene.Css.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Uno.WinUI" />
+    <PackageReference Include="Uno.WinUI.Graphics2DSK" />
+    <PackageReference Include="SkiaSharp" VersionOverride="3.119.2" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" VersionOverride="3.119.2" />
+    <PackageReference Include="Svg.Skia" VersionOverride="5.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The native scene reader and retained Skia renderer are shared with the
+         reference backend; WEBSCENE_UNO removes only Avalonia's surface adapter. -->
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneRuntime.cs" Link="NativeWebSceneRuntime.cs" />
+  </ItemGroup>
+</Project>

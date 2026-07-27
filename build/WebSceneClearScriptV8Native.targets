@@ -1,0 +1,43 @@
+<Project>
+  <PropertyGroup>
+    <WebSceneClearScriptSupportedRids>win-x86;win-x64;win-arm64;linux-x64;linux-arm;linux-arm64;osx-x64;osx-arm64</WebSceneClearScriptSupportedRids>
+    <WebSceneClearScriptNativeRidSupported Condition="'$(WebSceneClearScriptNativeRid)' != ''">$([System.String]::Copy(';$(WebSceneClearScriptSupportedRids);').Contains(';$(WebSceneClearScriptNativeRid);'))</WebSceneClearScriptNativeRidSupported>
+    <WebSceneClearScriptNativeExpectedFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('win-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).dll</WebSceneClearScriptNativeExpectedFileName>
+    <WebSceneClearScriptNativeExpectedFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('linux-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).so</WebSceneClearScriptNativeExpectedFileName>
+    <WebSceneClearScriptNativeExpectedFileName Condition="$([System.String]::Copy('$(WebSceneClearScriptNativeRid)').StartsWith('osx-'))">ClearScriptV8.$(WebSceneClearScriptNativeRid).dylib</WebSceneClearScriptNativeExpectedFileName>
+    <WebSceneClearScriptNativeActualFileName Condition="'$(WebSceneClearScriptNativePath)' != ''">$([System.IO.Path]::GetFileName('$(WebSceneClearScriptNativePath)'))</WebSceneClearScriptNativeActualFileName>
+  </PropertyGroup>
+
+  <Target Name="ValidateWebSceneClearScriptV8Native"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(WebSceneClearScriptNativeRequired)' == 'true' or '$(WebSceneClearScriptNativePath)' != '' or '$(WebSceneClearScriptNativeRid)' != ''">
+    <Error Condition="'$(WebSceneClearScriptNativeRequired)' == 'true' and ('$(WebSceneClearScriptNativePath)' == '' or '$(WebSceneClearScriptNativeRid)' == '')"
+           Text="The WebScene V8 build requires a reviewed patched ClearScript native library for '$(NETCoreSdkRuntimeIdentifier)'. Build/package it once to populate artifacts/v8-native/runtimes/&lt;rid&gt;/native, set WEBSCENE_CLEARSCRIPT_NATIVE, or pass WebSceneClearScriptNativePath." />
+    <Error Condition="'$(WebSceneClearScriptNativePath)' != '' and '$(WebSceneClearScriptNativeRid)' == ''"
+           Text="WebSceneClearScriptNativePath requires WebSceneClearScriptNativeRid." />
+    <Error Condition="'$(WebSceneClearScriptNativeRid)' != '' and '$(WebSceneClearScriptNativePath)' == ''"
+           Text="WebSceneClearScriptNativeRid requires WebSceneClearScriptNativePath." />
+    <Error Condition="'$(WebSceneClearScriptNativeRid)' != '' and '$(WebSceneClearScriptNativeRidSupported)' != 'True'"
+           Text="Unsupported ClearScript native RID '$(WebSceneClearScriptNativeRid)'. Supported RIDs: $(WebSceneClearScriptSupportedRids)." />
+    <Error Condition="'$(WebSceneClearScriptNativePath)' != '' and !Exists('$(WebSceneClearScriptNativePath)')"
+           Text="The configured patched ClearScript native library does not exist: $(WebSceneClearScriptNativePath)" />
+    <Error Condition="'$(WebSceneClearScriptNativeActualFileName)' != '' and '$(WebSceneClearScriptNativeActualFileName)' != '$(WebSceneClearScriptNativeExpectedFileName)'"
+           Text="ClearScript native file '$(WebSceneClearScriptNativeActualFileName)' does not match RID '$(WebSceneClearScriptNativeRid)'; expected '$(WebSceneClearScriptNativeExpectedFileName)'." />
+  </Target>
+
+  <Target Name="CopyWebSceneClearScriptV8Native"
+          AfterTargets="Build"
+          DependsOnTargets="ValidateWebSceneClearScriptV8Native"
+          Condition="'$(WebSceneClearScriptNativePath)' != '' and '$(WebSceneClearScriptNativeRid)' != '' and '$(WebSceneClearScriptNativeFromOutput)' != 'true'">
+    <Copy SourceFiles="$(WebSceneClearScriptNativePath)"
+          DestinationFiles="$(OutDir)runtimes/$(WebSceneClearScriptNativeRid)/native/$(WebSceneClearScriptNativeExpectedFileName)" />
+  </Target>
+
+  <Target Name="PublishWebSceneClearScriptV8Native"
+          AfterTargets="Publish"
+          DependsOnTargets="ValidateWebSceneClearScriptV8Native"
+          Condition="'$(WebSceneClearScriptNativePath)' != '' and '$(WebSceneClearScriptNativeRid)' != ''">
+    <Copy SourceFiles="$(WebSceneClearScriptNativePath)"
+          DestinationFiles="$(PublishDir)runtimes/$(WebSceneClearScriptNativeRid)/native/$(WebSceneClearScriptNativeExpectedFileName)" />
+  </Target>
+</Project>

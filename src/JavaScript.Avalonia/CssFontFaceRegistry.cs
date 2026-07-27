@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using Avalonia.Media;
 using Avalonia.Media.Fonts;
 using Avalonia.Platform;
-using HtmlML.Css;
+using WebScene.Css;
 
 namespace JavaScript.Avalonia;
 
@@ -160,8 +160,8 @@ internal sealed class CssFontFaceRegistry : IDisposable
             return true;
         }
 
-        var collectionKey = new Uri($"fonts:htmlml-{_registryId}-{entry.CollectionOrdinal}");
-        var collection = new HtmlMlDownloadedFontCollection(collectionKey, bytes);
+        var collectionKey = new Uri($"fonts:webscene-{_registryId}-{entry.CollectionOrdinal}");
+        var collection = new WebSceneDownloadedFontCollection(collectionKey, bytes);
         FontManager.Current.AddFontCollection(collection);
         if (collection.Count == 0)
         {
@@ -297,7 +297,7 @@ internal sealed class CssFontFaceRegistry : IDisposable
         internal string? BaseAddress { get; }
         internal int CollectionOrdinal { get; }
         internal CancellationTokenSource Cancellation { get; } = new();
-        internal HtmlMlDownloadedFontCollection? Collection { get; set; }
+        internal WebSceneDownloadedFontCollection? Collection { get; set; }
         internal Uri? CollectionKey { get; set; }
         internal FontFamily? LoadedFamily { get; set; }
         internal string? TemporaryPath { get; set; }
@@ -310,13 +310,13 @@ internal sealed class CssFontFaceRegistry : IDisposable
 /// This collection supplies downloaded bytes to the public font-manager stream
 /// seam while retaining the same bounded collection lifetime.
 /// </summary>
-internal sealed class HtmlMlDownloadedFontCollection : FontCollectionBase
+internal sealed class WebSceneDownloadedFontCollection : FontCollectionBase
 {
     private readonly Uri _key;
     private readonly byte[] _bytes;
     private readonly List<FontFamily> _families = new(1);
 
-    internal HtmlMlDownloadedFontCollection(Uri key, byte[] bytes)
+    internal WebSceneDownloadedFontCollection(Uri key, byte[] bytes)
     {
         _key = key;
         _bytes = bytes;

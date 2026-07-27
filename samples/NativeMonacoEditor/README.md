@@ -1,9 +1,9 @@
 # Native Monaco editor sample
 
 This sample hosts the unmodified Monaco Editor 0.56.0 core in
-`NativeHtmlMlView`. JavaScript tokenization supplies syntax highlighting, the
+`NativeWebSceneView`. JavaScript tokenization supplies syntax highlighting, the
 editor exposes line numbers and folding controls, and keyboard/text input is
-routed through the native HtmlML scene surface in a real Avalonia window.
+routed through the native WebScene scene surface in a real Avalonia window.
 
 The web build imports Monaco from npm and bundles it as a browser IIFE. It does
 not patch Monaco and contains no compatibility shims, visual text mirror, or
@@ -23,7 +23,7 @@ Run the sample against that exact native library:
 ```sh
 dotnet run --project samples/NativeMonacoEditor -c Release -- \
   --native-library \
-  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib"
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
 ```
 
 The first .NET build runs `npm install` and bundles the local Monaco dependency.
@@ -35,7 +35,7 @@ and a post-edit state:
 ```sh
 dotnet run --project samples/NativeMonacoEditor.Headless -c Release -- \
   --native-library \
-  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libhtmlml_native_engine.dylib" \
+  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib" \
   --output "$PWD/artifacts/monaco-headless"
 ```
 

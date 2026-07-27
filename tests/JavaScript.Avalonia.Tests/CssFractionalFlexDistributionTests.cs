@@ -7,7 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using HtmlML.Css;
+using WebScene.Css;
 using Xunit;
 
 namespace JavaScript.Avalonia.Tests;
@@ -228,7 +228,7 @@ public sealed class CssFractionalFlexDistributionTests
         Assert.Equal(height, actual.height, 9);
     }
 
-    private static void AssertPortableRect(HtmlML.Core.HtmlMlRect actual, double x, double y, double width, double height)
+    private static void AssertPortableRect(WebScene.Core.WebSceneRect actual, double x, double y, double width, double height)
     {
         Assert.Equal(x, actual.X, 9);
         Assert.Equal(y, actual.Y, 9);

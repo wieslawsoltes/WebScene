@@ -6,10 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HtmlML.Core\HtmlML.Core.csproj" />
-    <ProjectReference Include="..\..\src\HtmlML.Backend.Abstractions\HtmlML.Backend.Abstractions.csproj" />
-    <ProjectReference Include="..\..\src\HtmlML.Backend.Avalonia\HtmlML.Backend.Avalonia.csproj" />
-    <ProjectReference Include="..\..\src\HtmlML\HtmlML.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Core\WebScene.Core.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\WebScene\WebScene.csproj" />
     <ProjectReference Include="..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
   </ItemGroup>
   <ItemGroup>

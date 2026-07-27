@@ -16,11 +16,11 @@ using Avalonia.Threading;
 using JavaScript.Avalonia;
 using JavaScript.Avalonia.ClearScript;
 
-namespace HtmlML.WebPlatformSubset.Runner;
+namespace WebScene.WebPlatformSubset.Runner;
 
 internal sealed partial class WptSubsetRunner
 {
-    private const string ArtifactSchema = "htmlml-wpt-subset-result-v2";
+    private const string ArtifactSchema = "webscene-wpt-subset-result-v2";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -377,7 +377,7 @@ internal sealed partial class WptSubsetRunner
                 {
                     // Both prepared upstream documents and direct neutral
                     // contracts may create same-origin iframes. Certification
-                    // uses HtmlML's reviewed shared-context V8 build and must
+                    // uses WebScene's reviewed shared-context V8 build and must
                     // expose the same connected about:blank lifecycle in both
                     // lanes rather than making direct contracts silently less
                     // capable.
@@ -398,15 +398,15 @@ internal sealed partial class WptSubsetRunner
                     document.body.style.padding = '0';
                     document.body.style.overflow = 'hidden';
                     const frame = document.createElement('iframe');
-                    frame.id = 'htmlml-wpt-frame';
+                    frame.id = 'webscene-wpt-frame';
                     frame.style.display = 'block';
                     frame.style.border = '0';
                     frame.style.width = '{{_manifest.Viewport.Width}}px';
                     frame.style.height = '{{_manifest.Viewport.Height}}px';
                     document.body.appendChild(frame);
                     frame.src = URL.createObjectURL(new Blob([{{JsonSerializer.Serialize(html)}}], { type: 'text/html' }));
-                    window.__htmlMlWptFrame = frame;
-                    """, "htmlml-wpt-owner.js");
+                    window.__webSceneWptFrame = frame;
+                    """, "webscene-wpt-owner.js");
             }
             return new ManagedWptEngineEnvironment(window, host, runtime, directDocument);
         }
@@ -441,7 +441,7 @@ internal sealed partial class WptSubsetRunner
             document.body.style.padding = '0';
             document.body.style.overflow = 'hidden';
             document.body.innerHTML = {{JsonSerializer.Serialize(body)}};
-            """, "htmlml-contract-document.js");
+            """, "webscene-contract-document.js");
         for (var index = 0; index < styles.Count; index++)
         {
             runtime.Execute($$"""
@@ -450,16 +450,16 @@ internal sealed partial class WptSubsetRunner
                   style.textContent = {{JsonSerializer.Serialize(styles[index])}};
                   document.head.appendChild(style);
                 })();
-                """, $"htmlml-contract-style-{index}.js");
+                """, $"webscene-contract-style-{index}.js");
         }
         for (var index = 0; index < scripts.Count; index++)
         {
             if (!string.IsNullOrWhiteSpace(scripts[index]))
             {
-                runtime.Execute(scripts[index], $"htmlml-contract-inline-{index}.js");
+                runtime.Execute(scripts[index], $"webscene-contract-inline-{index}.js");
             }
         }
-        runtime.Execute("window.dispatchEvent(new Event('load'));", "htmlml-contract-load.js");
+        runtime.Execute("window.dispatchEvent(new Event('load'));", "webscene-contract-load.js");
     }
 
     private string PrepareTestHarnessDocument(string html, string path)
@@ -653,7 +653,7 @@ internal sealed partial class WptSubsetRunner
             // rewriting href to file:// silently left the required stylesheet
             // unapplied and produced false layout failures. Inline only the
             // exact pinned resource after its provenance check above.
-            return $"<style data-htmlml-source={JsonSerializer.Serialize(canonicalRelativePath)}>" +
+            return $"<style data-webscene-source={JsonSerializer.Serialize(canonicalRelativePath)}>" +
                    source +
                    "</style>";
         });
@@ -695,7 +695,7 @@ internal sealed partial class WptSubsetRunner
         ValidateUpstreamIntegrity();
         if (!string.Equals(_manifest.Runtime, "v8", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidDataException("The HtmlML component conformance profile must use the V8 runtime.");
+            throw new InvalidDataException("The WebScene component conformance profile must use the V8 runtime.");
         }
         if (_manifest.Viewport.DeviceScaleFactor != 1)
         {
@@ -973,7 +973,7 @@ internal sealed partial class WptSubsetRunner
 
     private const string HarnessPreamble = """
         (function () {
-          const state = window.__htmlMlWptState = {
+          const state = window.__webSceneWptState = {
             complete: false,
             harness: null,
             results: [],
@@ -988,8 +988,8 @@ internal sealed partial class WptSubsetRunner
           });
           let nextInputAction = 1;
           const inputResolvers = new Map();
-          window.__htmlMlWptInputActions = [];
-          window.__htmlMlCompleteInputAction = function (id, error) {
+          window.__webSceneWptInputActions = [];
+          window.__webSceneCompleteInputAction = function (id, error) {
             const pending = inputResolvers.get(Number(id));
             if (!pending) return;
             inputResolvers.delete(Number(id));
@@ -999,12 +999,12 @@ internal sealed partial class WptSubsetRunner
           function enqueueInputAction(type, target, value) {
             return new Promise(function (resolve, reject) {
               if (!target || !target.id) {
-                reject(new Error('HtmlML WPT input adapter requires an element target with an id'));
+                reject(new Error('WebScene WPT input adapter requires an element target with an id'));
                 return;
               }
               const id = nextInputAction++;
               inputResolvers.set(id, { resolve: resolve, reject: reject });
-              window.__htmlMlWptInputActions.push({
+              window.__webSceneWptInputActions.push({
                 id: id,
                 type: String(type),
                 targetId: String(target.id),
@@ -1043,7 +1043,7 @@ internal sealed partial class WptSubsetRunner
 
     private const string HarnessReporter = """
         (function () {
-          const state = window.__htmlMlWptState;
+          const state = window.__webSceneWptState;
           function statusName(status) {
             return ['PASS', 'FAIL', 'TIMEOUT', 'NOTRUN', 'PRECONDITION-FAILED'][status] || ('STATUS-' + status);
           }
@@ -1181,14 +1181,14 @@ internal sealed partial class WptSubsetRunner
         {
             var json = Convert.ToString(_runtime.Engine.Evaluate(_directDocument ? """
                 (function () {
-                  const queue = window.__htmlMlWptInputActions;
+                  const queue = window.__webSceneWptInputActions;
                   const action = queue && queue.length ? queue.shift() : null;
                   return action ? JSON.stringify(action) : null;
                 })()
                 """ : """
                 (function () {
-                  const frame = window.__htmlMlWptFrame;
-                  const queue = frame && frame.contentWindow && frame.contentWindow.__htmlMlWptInputActions;
+                  const frame = window.__webSceneWptFrame;
+                  const queue = frame && frame.contentWindow && frame.contentWindow.__webSceneWptInputActions;
                   const action = queue && queue.length ? queue.shift() : null;
                   return action ? JSON.stringify(action) : null;
                 })()
@@ -1205,7 +1205,7 @@ internal sealed partial class WptSubsetRunner
             {
                 var targetDocument = _directDocument
                     ? _host.Document
-                    : (_host.Document.querySelector("#htmlml-wpt-frame") as AvaloniaDomElement)?
+                    : (_host.Document.querySelector("#webscene-wpt-frame") as AvaloniaDomElement)?
                         .contentDocument as AvaloniaDomDocument
                       ?? throw new InvalidOperationException("WPT iframe document is unavailable.");
                 var target = targetDocument.querySelector("#" + action.TargetId) as AvaloniaDomElement
@@ -1246,9 +1246,9 @@ internal sealed partial class WptSubsetRunner
 
             var completionTarget = _directDocument
                 ? "window"
-                : "window.__htmlMlWptFrame.contentWindow";
+                : "window.__webSceneWptFrame.contentWindow";
             _runtime.Engine.Execute(
-                $"{completionTarget}.__htmlMlCompleteInputAction(" +
+                $"{completionTarget}.__webSceneCompleteInputAction(" +
                 $"{action.Id}, {JsonSerializer.Serialize(error)});");
         }
 
@@ -1452,22 +1452,22 @@ internal sealed partial class WptSubsetRunner
         public string? ReadState()
             => Convert.ToString(_runtime.Engine.Evaluate(_directDocument ? """
                 (function () {
-                  const state = window.__htmlMlWptState;
+                  const state = window.__webSceneWptState;
                   return state ? JSON.stringify(state) : null;
                 })()
                 """ : """
                 (function () {
-                  const frame = window.__htmlMlWptFrame;
-                  const state = frame && frame.contentWindow && frame.contentWindow.__htmlMlWptState;
+                  const frame = window.__webSceneWptFrame;
+                  const state = frame && frame.contentWindow && frame.contentWindow.__webSceneWptState;
                   return state ? JSON.stringify(state) : null;
                 })()
                 """));
 
         public bool IsFrameComplete()
             => _directDocument || Convert.ToBoolean(_runtime.Engine.Evaluate("""
-                Boolean(window.__htmlMlWptFrame &&
-                  window.__htmlMlWptFrame.contentDocument &&
-                  window.__htmlMlWptFrame.contentDocument.readyState === 'complete')
+                Boolean(window.__webSceneWptFrame &&
+                  window.__webSceneWptFrame.contentDocument &&
+                  window.__webSceneWptFrame.contentDocument.readyState === 'complete')
                 """));
 
         public void SettleFrame()
@@ -1479,7 +1479,7 @@ internal sealed partial class WptSubsetRunner
                 Dispatcher.UIThread.RunJobs();
                 return;
             }
-            var frame = _host.Document.querySelector("#htmlml-wpt-frame") as AvaloniaDomElement;
+            var frame = _host.Document.querySelector("#webscene-wpt-frame") as AvaloniaDomElement;
             if (frame?.contentDocument is not AvaloniaDomDocument frameDocument)
             {
                 return;

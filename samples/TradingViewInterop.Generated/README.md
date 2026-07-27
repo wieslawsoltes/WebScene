@@ -24,12 +24,12 @@ The generated C# includes:
 For a licensed installation, discover the same roots from the real package:
 
 ```bash
-node ../../tooling/htmlml/interop-discover.mjs \
+node ../../tooling/webscene/interop-discover.mjs \
   --declarations /licensed/charting_library/charting_library.d.ts \
   --declarations /licensed/charting_library/datafeed-api.d.ts \
-  --output obj/TradingViewApi.htmlml-interop-api.json \
+  --output obj/TradingViewApi.webscene-interop-api.json \
   --report-output obj/TradingViewApi.coverage.json \
-  --policy-output TradingView.htmlml-interop-policy.json \
+  --policy-output TradingView.webscene-interop-policy.json \
   --namespace MyApplication.TradingView \
   --fail-on-fallbacks
 ```
@@ -38,13 +38,13 @@ To discover every surface and immediately compile it through the reusable
 harness:
 
 ```bash
-node ../../tooling/htmlml/interop-validate.mjs \
+node ../../tooling/webscene/interop-validate.mjs \
   --declarations /licensed/charting_library/charting_library.d.ts \
   --declarations /licensed/charting_library/datafeed-api.d.ts \
   --output-dir obj/licensed-validation \
   --name TradingView \
   --namespace MyApplication.TradingView \
-  --compile-project ../../tests/HtmlML.JavaScript.Interop.Generator.Compile/HtmlML.JavaScript.Interop.Generator.Compile.csproj \
+  --compile-project ../../tests/WebScene.JavaScript.Interop.Generator.Compile/WebScene.JavaScript.Interop.Generator.Compile.csproj \
   --no-restore
 ```
 
@@ -63,6 +63,6 @@ proxy, or an inbound adapter.
 
 Include the API and policy JSON as MSBuild `AdditionalFiles`. Roslyn then emits
 the complete selected native-engine API during compilation. Package consumers
-can instead set `HtmlMLInteropApiManifest` and `HtmlMLInteropPolicy`; the
-`HtmlML.JavaScript.Interop.Generator` package adds and validates those
+can instead set `WebSceneInteropApiManifest` and `WebSceneInteropPolicy`; the
+`WebScene.JavaScript.Interop.Generator` package adds and validates those
 `AdditionalFiles` automatically.

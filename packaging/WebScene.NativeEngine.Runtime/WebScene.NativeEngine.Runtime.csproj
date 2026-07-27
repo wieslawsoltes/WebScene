@@ -1,0 +1,133 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackageId Condition="'$(WebSceneNativeEngineRid)' != ''">WebScene.NativeEngine.Runtime.$(WebSceneNativeEngineRid)</PackageId>
+    <PackageId Condition="'$(PackageId)' == ''">WebScene.NativeEngine.Runtime.Template</PackageId>
+    <Description>RID-specific native V8 DOM, CSS, layout and immutable-scene engine for WebScene.</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>webscene;dom;css;v8;native;runtime</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <WebSceneNativeEngineAbiVersion>2</WebSceneNativeEngineAbiVersion>
+    <WebSceneNativeEngineV8Revision>14.7.173.23</WebSceneNativeEngineV8Revision>
+    <WebSceneNativeEngineV8PointerCompression Condition="'$(WebSceneNativeEngineV8PointerCompression)' == ''">false</WebSceneNativeEngineV8PointerCompression>
+    <WebSceneNativeEngineV8SharedCage Condition="'$(WebSceneNativeEngineV8SharedCage)' == ''">false</WebSceneNativeEngineV8SharedCage>
+    <WebSceneNativeEngineV8OptimizeForSizeDefault Condition="'$(WebSceneNativeEngineV8OptimizeForSizeDefault)' == ''">false</WebSceneNativeEngineV8OptimizeForSizeDefault>
+    <WebSceneNativeEngineDenseLink Condition="'$(WebSceneNativeEngineDenseLink)' == ''">false</WebSceneNativeEngineDenseLink>
+    <WebSceneNativeEngineCertificationTelemetry>false</WebSceneNativeEngineCertificationTelemetry>
+    <WebSceneNativeEngineSupportedRids>osx-arm64;osx-x64;linux-arm64;linux-x64;win-arm64;win-x64</WebSceneNativeEngineSupportedRids>
+    <WebSceneNativeEngineExpectedFileName Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('osx-'))">libwebscene_native_engine.dylib</WebSceneNativeEngineExpectedFileName>
+    <WebSceneNativeEngineExpectedFileName Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('linux-'))">libwebscene_native_engine.so</WebSceneNativeEngineExpectedFileName>
+    <WebSceneNativeEngineExpectedFileName Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('win-'))">webscene_native_engine.dll</WebSceneNativeEngineExpectedFileName>
+    <WebSceneNativeEngineExpectedIcuFileName>icudtl.dat</WebSceneNativeEngineExpectedIcuFileName>
+    <WebSceneNativeEngineActualFileName Condition="'$(WebSceneNativeEnginePath)' != ''">$([System.IO.Path]::GetFileName('$(WebSceneNativeEnginePath)'))</WebSceneNativeEngineActualFileName>
+    <WebSceneNativeEngineActualIcuFileName Condition="'$(WebSceneNativeEngineIcuDataPath)' != ''">$([System.IO.Path]::GetFileName('$(WebSceneNativeEngineIcuDataPath)'))</WebSceneNativeEngineActualIcuFileName>
+    <WebSceneNativePackageMetadataDir>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/native-package/</WebSceneNativePackageMetadataDir>
+    <WebSceneNativeManifestPath>$(WebSceneNativePackageMetadataDir)webscene-native-runtime.json</WebSceneNativeManifestPath>
+    <WebSceneNativePropsPath>$(WebSceneNativePackageMetadataDir)WebScene.NativeEngine.Runtime.props</WebSceneNativePropsPath>
+    <WebSceneNativeV8LicensePackagePath>$(WebSceneNativePackageMetadataDir)V8-LICENSE.txt</WebSceneNativeV8LicensePackagePath>
+    <WebSceneNativeIcuLicensePackagePath>$(WebSceneNativePackageMetadataDir)ICU-LICENSE.txt</WebSceneNativeIcuLicensePackagePath>
+    <WebSceneNativeIXWebSocketLicensePackagePath>$(WebSceneNativePackageMetadataDir)IXWebSocket-LICENSE.txt</WebSceneNativeIXWebSocketLicensePackagePath>
+    <WebSceneNativeMbedTlsLicensePackagePath>$(WebSceneNativePackageMetadataDir)MbedTLS-LICENSE.txt</WebSceneNativeMbedTlsLicensePackagePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="WebScene.NativeEngine.Runtime.targets"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).targets" />
+    <None Include="$(WebSceneNativeEnginePath)"
+          Pack="true"
+          PackagePath="runtimes\$(WebSceneNativeEngineRid)\native\$(WebSceneNativeEngineExpectedFileName)"
+          Condition="'$(WebSceneNativeEnginePath)' != ''" />
+    <None Include="$(WebSceneNativeEngineIcuDataPath)"
+          Pack="true"
+          PackagePath="runtimes\$(WebSceneNativeEngineRid)\native\$(WebSceneNativeEngineExpectedIcuFileName)"
+          Condition="'$(WebSceneNativeEngineIcuDataPath)' != ''" />
+    <None Include="$(WebSceneNativeV8LicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses\V8-LICENSE.txt" />
+    <None Include="$(WebSceneNativeIcuLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses\ICU-LICENSE.txt" />
+    <None Include="$(WebSceneNativeIXWebSocketLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses\IXWebSocket-LICENSE.txt" />
+    <None Include="$(WebSceneNativeMbedTlsLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses\MbedTLS-LICENSE.txt"
+          Condition="'$(WebSceneNativeEngineMbedTlsLicensePath)' != ''" />
+    <None Include="$(WebSceneNativeManifestPath)"
+          Pack="true"
+          PackagePath="runtimes\$(WebSceneNativeEngineRid)\native\webscene-native-runtime.json" />
+    <None Include="$(WebSceneNativePropsPath)"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).props" />
+  </ItemGroup>
+
+  <Target Name="ValidateWebSceneNativeEnginePackage" BeforeTargets="GenerateNuspec">
+    <Error Condition="'$(WebSceneNativeEngineRid)' == '' or '$(WebSceneNativeEnginePath)' == '' or '$(WebSceneNativeEngineIcuDataPath)' == ''"
+           Text="Packing the native WebScene runtime requires WebSceneNativeEngineRid, WebSceneNativeEnginePath, and WebSceneNativeEngineIcuDataPath." />
+    <Error Condition="!$([System.String]::Copy(';$(WebSceneNativeEngineSupportedRids);').Contains(';$(WebSceneNativeEngineRid);'))"
+           Text="Unsupported WebScene native engine RID '$(WebSceneNativeEngineRid)'. Supported RIDs: $(WebSceneNativeEngineSupportedRids)." />
+    <Error Condition="!Exists('$(WebSceneNativeEnginePath)')"
+           Text="The configured WebScene native engine does not exist: $(WebSceneNativeEnginePath)" />
+    <Error Condition="!Exists('$(WebSceneNativeEngineIcuDataPath)')"
+           Text="The configured V8 ICU data does not exist: $(WebSceneNativeEngineIcuDataPath)" />
+    <Error Condition="!Exists('$(WebSceneNativeEngineV8LicensePath)') or !Exists('$(WebSceneNativeEngineIcuLicensePath)') or !Exists('$(WebSceneNativeEngineIXWebSocketLicensePath)')"
+           Text="Packing the native WebScene runtime requires valid V8, ICU, and IXWebSocket license files." />
+    <Error Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('win-')) and !Exists('$(WebSceneNativeEngineMbedTlsLicensePath)')"
+           Text="Packing a Windows native WebScene runtime requires a valid WebSceneNativeEngineMbedTlsLicensePath file." />
+    <Error Condition="'$(WebSceneNativeEngineActualFileName)' != '$(WebSceneNativeEngineExpectedFileName)'"
+           Text="Native engine file '$(WebSceneNativeEngineActualFileName)' does not match RID '$(WebSceneNativeEngineRid)'; expected '$(WebSceneNativeEngineExpectedFileName)'." />
+    <Error Condition="'$(WebSceneNativeEngineActualIcuFileName)' != '$(WebSceneNativeEngineExpectedIcuFileName)'"
+           Text="V8 ICU data file must be named '$(WebSceneNativeEngineExpectedIcuFileName)', not '$(WebSceneNativeEngineActualIcuFileName)'." />
+    <Error Condition="'$(WebSceneNativeEngineV8PointerCompression)' != 'true' and '$(WebSceneNativeEngineV8PointerCompression)' != 'false'"
+           Text="WebSceneNativeEngineV8PointerCompression must be the JSON boolean true or false." />
+    <Error Condition="'$(WebSceneNativeEngineV8SharedCage)' != 'true' and '$(WebSceneNativeEngineV8SharedCage)' != 'false'"
+           Text="WebSceneNativeEngineV8SharedCage must be the JSON boolean true or false." />
+    <Error Condition="'$(WebSceneNativeEngineV8OptimizeForSizeDefault)' != 'true' and '$(WebSceneNativeEngineV8OptimizeForSizeDefault)' != 'false'"
+           Text="WebSceneNativeEngineV8OptimizeForSizeDefault must be the JSON boolean true or false." />
+    <Error Condition="'$(WebSceneNativeEngineDenseLink)' != 'true' and '$(WebSceneNativeEngineDenseLink)' != 'false'"
+           Text="WebSceneNativeEngineDenseLink must be the JSON boolean true or false." />
+    <Error Condition="'$(WebSceneNativeEngineCertificationTelemetry)' != 'false'"
+           Text="Native runtime packages must compile certification telemetry out." />
+    <Error Condition="'$(WebSceneNativeEngineV8SharedCage)' == 'true' and '$(WebSceneNativeEngineV8PointerCompression)' != 'true'"
+           Text="A shared V8 compression cage requires pointer compression." />
+  </Target>
+
+  <Target Name="PrepareWebSceneNativeEnginePackage"
+          BeforeTargets="GenerateNuspec"
+          DependsOnTargets="ValidateWebSceneNativeEnginePackage">
+    <MakeDir Directories="$(WebSceneNativePackageMetadataDir)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineV8LicensePath)"
+          DestinationFiles="$(WebSceneNativeV8LicensePackagePath)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineIcuLicensePath)"
+          DestinationFiles="$(WebSceneNativeIcuLicensePackagePath)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineIXWebSocketLicensePath)"
+          DestinationFiles="$(WebSceneNativeIXWebSocketLicensePackagePath)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineMbedTlsLicensePath)"
+          DestinationFiles="$(WebSceneNativeMbedTlsLicensePackagePath)"
+          Condition="'$(WebSceneNativeEngineMbedTlsLicensePath)' != ''" />
+    <GetFileHash Files="$(WebSceneNativeEnginePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_WebSceneNativeEngineHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(WebSceneNativeEngineIcuDataPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_WebSceneNativeEngineIcuHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <WebSceneNativeEngineHash>@(_WebSceneNativeEngineHash->'%(FileHash)')</WebSceneNativeEngineHash>
+      <WebSceneNativeEngineIcuHash>@(_WebSceneNativeEngineIcuHash->'%(FileHash)')</WebSceneNativeEngineIcuHash>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(WebSceneNativeManifestPath)"
+                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;fileName&quot;:&quot;$(WebSceneNativeEngineExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(WebSceneNativeEngineHash)&quot;,&quot;icuFileName&quot;:&quot;$(WebSceneNativeEngineExpectedIcuFileName)&quot;,&quot;icuSha256&quot;:&quot;$(WebSceneNativeEngineIcuHash)&quot;,&quot;abiVersion&quot;:$(WebSceneNativeEngineAbiVersion),&quot;v8Revision&quot;:&quot;$(WebSceneNativeEngineV8Revision)&quot;,&quot;v8PointerCompression&quot;:$(WebSceneNativeEngineV8PointerCompression),&quot;v8SharedCage&quot;:$(WebSceneNativeEngineV8SharedCage),&quot;v8OptimizeForSizeDefault&quot;:$(WebSceneNativeEngineV8OptimizeForSizeDefault),&quot;denseLink&quot;:$(WebSceneNativeEngineDenseLink),&quot;certificationTelemetry&quot;:$(WebSceneNativeEngineCertificationTelemetry),&quot;configuration&quot;:&quot;$(Configuration)&quot;}"
+                      Overwrite="true" />
+    <WriteLinesToFile File="$(WebSceneNativePropsPath)"
+                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;WebSceneNativeEnginePackagedRid&gt;$(WebSceneNativeEngineRid)&lt;/WebSceneNativeEnginePackagedRid&gt;&lt;WebSceneNativeEnginePackagedFileName&gt;$(WebSceneNativeEngineExpectedFileName)&lt;/WebSceneNativeEnginePackagedFileName&gt;&lt;WebSceneNativeEnginePackagedIcuFileName&gt;$(WebSceneNativeEngineExpectedIcuFileName)&lt;/WebSceneNativeEnginePackagedIcuFileName&gt;&lt;WebSceneNativeEnginePackagedAbi&gt;$(WebSceneNativeEngineAbiVersion)&lt;/WebSceneNativeEnginePackagedAbi&gt;&lt;WebSceneNativeEngineV8PointerCompression&gt;$(WebSceneNativeEngineV8PointerCompression)&lt;/WebSceneNativeEngineV8PointerCompression&gt;&lt;WebSceneNativeEngineV8SharedCage&gt;$(WebSceneNativeEngineV8SharedCage)&lt;/WebSceneNativeEngineV8SharedCage&gt;&lt;WebSceneNativeEngineV8OptimizeForSizeDefault&gt;$(WebSceneNativeEngineV8OptimizeForSizeDefault)&lt;/WebSceneNativeEngineV8OptimizeForSizeDefault&gt;&lt;WebSceneNativeEngineDenseLink&gt;$(WebSceneNativeEngineDenseLink)&lt;/WebSceneNativeEngineDenseLink&gt;&lt;WebSceneNativeEngineCertificationTelemetry&gt;$(WebSceneNativeEngineCertificationTelemetry)&lt;/WebSceneNativeEngineCertificationTelemetry&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
+                      Overwrite="true" />
+  </Target>
+</Project>

@@ -1,5 +1,5 @@
 using Avalonia.Controls;
-using HtmlML.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia.Native;
 
 namespace NativeMonacoEditor;
 
@@ -20,7 +20,7 @@ public sealed partial class MainWindow : Window
             var documentPath = Path.Combine(AppContext.BaseDirectory, "index.html");
             var cachePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "HtmlML",
+                "WebScene",
                 "NativeMonacoEditor",
                 "v8-cache");
             await EditorHost.LoadAsync(
@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
         }
 
         var configured = Environment.GetEnvironmentVariable(
-            "HTMLML_NATIVE_ENGINE_LIBRARY");
+            "WEBSCENE_NATIVE_ENGINE_LIBRARY");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return Path.GetFullPath(configured);
@@ -68,14 +68,14 @@ public sealed partial class MainWindow : Window
         if (File.Exists(packaged)) return packaged;
 
         throw new FileNotFoundException(
-            "No HtmlML native engine was configured.",
+            "No WebScene native engine was configured.",
             packaged);
     }
 
     private static string NativeLibraryFileName()
         => OperatingSystem.IsWindows()
-            ? "htmlml_native_engine.dll"
+            ? "webscene_native_engine.dll"
             : OperatingSystem.IsMacOS()
-                ? "libhtmlml_native_engine.dylib"
-                : "libhtmlml_native_engine.so";
+                ? "libwebscene_native_engine.dylib"
+                : "libwebscene_native_engine.so";
 }

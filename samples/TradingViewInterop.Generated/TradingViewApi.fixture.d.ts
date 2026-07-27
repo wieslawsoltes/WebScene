@@ -1,4 +1,4 @@
-// Shape-only fixture for the HtmlML proof. The licensed TradingView declaration
+// Shape-only fixture for the WebScene proof. The licensed TradingView declaration
 // files are consumed locally and must not be copied into this repository.
 declare namespace Charting_Library {
   type ResolutionString = string;

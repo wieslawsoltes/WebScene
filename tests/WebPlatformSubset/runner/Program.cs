@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
-using HtmlML.WebPlatformSubset.Runner;
+using WebScene.WebPlatformSubset.Runner;
 
 var options = CommandLine.Parse(args);
 if (options.Engine == "both")
@@ -64,7 +64,7 @@ internal static class CommandLine
     internal static RunnerOptions Parse(string[] args)
     {
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        var manifestPath = Path.Combine(repositoryRoot, "tests", "WebPlatformSubset", "htmlml-component-profile.json");
+        var manifestPath = Path.Combine(repositoryRoot, "tests", "WebPlatformSubset", "webscene-component-profile.json");
         var outputDirectory = Path.Combine(repositoryRoot, "TestResults", "WebPlatformSubset");
         var selection = "required";
         string? filter = null;
@@ -152,24 +152,24 @@ internal static class CommandLine
     {
         for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "HtmlML.sln")))
+            if (File.Exists(Path.Combine(directory.FullName, "WebScene.sln")))
             {
                 return directory.FullName;
             }
         }
 
         var current = Directory.GetCurrentDirectory();
-        if (File.Exists(Path.Combine(current, "HtmlML.sln")))
+        if (File.Exists(Path.Combine(current, "WebScene.sln")))
         {
             return current;
         }
 
-        throw new DirectoryNotFoundException("Could not locate the HtmlML repository root.");
+        throw new DirectoryNotFoundException("Could not locate the WebScene repository root.");
     }
 
     private static void PrintHelp()
     {
-        Console.WriteLine("HtmlML component conformance subset runner");
+        Console.WriteLine("WebScene component conformance subset runner");
         Console.WriteLine("  --selection required|candidate|all  Tests to run (default: required)");
         Console.WriteLine("  --test <substring>                  Restrict to matching upstream paths");
         Console.WriteLine("  --timeout-seconds <seconds>         Per-document timeout (default: 10)");

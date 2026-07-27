@@ -1,9 +1,9 @@
-<Window x:Class="HtmlML.Samples.Hybrid.MainWindow"
+<Window x:Class="WebScene.Samples.Hybrid.MainWindow"
         xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:sdk="clr-namespace:HtmlML.Sdk.Avalonia;assembly=HtmlML.Sdk.Avalonia"
+        xmlns:sdk="clr-namespace:WebScene.Sdk.Avalonia;assembly=WebScene.Sdk.Avalonia"
         Width="1100" Height="700" MinWidth="760" MinHeight="480"
-        Title="HtmlML · Hybrid React Islands">
+        Title="WebScene · Hybrid React Islands">
   <Grid ColumnDefinitions="230,*" RowDefinitions="*,Auto">
     <Border Padding="20" Background="#152238">
       <StackPanel Spacing="14">
@@ -15,10 +15,10 @@
     </Border>
     <Grid Grid.Column="1" ColumnDefinitions="*,*" Margin="16">
       <Border Margin="0,0,8,0" BorderBrush="#415A77" BorderThickness="1" CornerRadius="8">
-        <sdk:HtmlMlComponentHost x:Name="PrimaryHost" PackagePath="Component" AutoMount="False" Margin="12" />
+        <sdk:WebSceneComponentHost x:Name="PrimaryHost" PackagePath="Component" AutoMount="False" Margin="12" />
       </Border>
       <Border Grid.Column="1" Margin="8,0,0,0" BorderBrush="#415A77" BorderThickness="1" CornerRadius="8">
-        <sdk:HtmlMlComponentHost x:Name="SecondaryHost" PackagePath="Component" AutoMount="False" Margin="12" />
+        <sdk:WebSceneComponentHost x:Name="SecondaryHost" PackagePath="Component" AutoMount="False" Margin="12" />
       </Border>
     </Grid>
     <Border Grid.Row="1" Grid.ColumnSpan="2" Padding="20,10" Background="#0E1828">

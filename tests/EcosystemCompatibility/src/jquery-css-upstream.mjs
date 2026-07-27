@@ -12,7 +12,7 @@ globalThis.includesModule = name => name === "css" || name === "offset";
 globalThis.baseURL = new URL("./", document.location.href).href;
 globalThis.QUnit.jQuerySelectors = true;
 globalThis.QUnit.jQuerySelectorsPos = false;
-globalThis.__htmlMlQUnitBlockedNames = new Set([
+globalThis.__webSceneQUnitBlockedNames = new Set([
   "show/hide shadow child nodes",
   "shadow toggle()"
 ]);
@@ -41,7 +41,7 @@ globalThis.QUnit.assert.t = function(message, selector, expectedIds) {
 import("../upstream/jquery/test/unit/css.js")
   .then(() => runRegisteredQUnitTests())
   .catch(error => {
-    const state = globalThis.__htmlMlWptState;
+    const state = globalThis.__webSceneWptState;
     state.results.push({
       name: "jQuery CSS upstream source load",
       status: "FAIL",

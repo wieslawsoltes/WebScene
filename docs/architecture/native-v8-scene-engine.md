@@ -10,7 +10,7 @@ off the Avalonia UI thread. Its goal is to remove repeated V8-to-managed host-ob
 dispatch from hot paths while keeping the managed engine as a supported compatibility
 implementation and differential oracle.
 
-HtmlML supplies browser-like primitives. Product libraries, bootstrap scripts, assets,
+WebScene supplies browser-like primitives. Product libraries, bootstrap scripts, assets,
 facades, data adapters, and exact-reference integration tests belong to the consuming
 application.
 
@@ -71,7 +71,7 @@ queue. Move and wheel events may be coalesced without crossing button, capture, 
 transitions. Down/up/cancel ordering is never coalesced.
 
 Avalonia also submits the compositor's monotonic frame timestamp through
-`HTMLML_INPUT_FRAME`. Each host frame releases the `requestAnimationFrame` callbacks
+`WEBSCENE_INPUT_FRAME`. Each host frame releases the `requestAnimationFrame` callbacks
 that were pending at its start; callbacks queued by those callbacks wait for a later
 frame. Consecutive frame records are latest-wins, and the native runtime retains a
 60 Hz timer only as a fallback for headless or offscreen hosts that do not provide
@@ -85,13 +85,13 @@ mode exposes an application-neutral command/evaluation boundary.
 ## Resources and readiness
 
 The host supplies an explicit resource root through
-`htmlml_engine_set_resource_root`. The generic resolver permits files below that root,
-supports relative and absolute resource URLs, and rejects parent traversal. HtmlML does
+`webscene_engine_set_resource_root`. The generic resolver permits files below that root,
+supports relative and absolute resource URLs, and rejects parent traversal. WebScene does
 not embed a product asset location or reference server URL.
 
-Components signal readiness through `globalThis.__htmlMlComponentReady`. Product-owned
+Components signal readiness through `globalThis.__webSceneComponentReady`. Product-owned
 facades may translate their library's readiness callback to that generic signal and can
-retain additional product diagnostics outside HtmlML.
+retain additional product diagnostics outside WebScene.
 
 ## Compilation cache
 

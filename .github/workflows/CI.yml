@@ -28,25 +28,25 @@ jobs:
       with:
         node-version: 22
     - name: Restore
-      run: dotnet restore HtmlML.sln
+      run: dotnet restore WebScene.sln
     - name: Build Release
-      run: dotnet build HtmlML.sln -c Release --no-restore -p:HtmlMlClearScriptNativeRequired=false -p:HtmlMlClearScriptNativeRid=
+      run: dotnet build WebScene.sln -c Release --no-restore -p:WebSceneClearScriptNativeRequired=false -p:WebSceneClearScriptNativeRid=
     - name: Portable Core contracts
-      run: dotnet test tests/HtmlML.Core.Tests/HtmlML.Core.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release --no-build
     - name: Portable JavaScript contracts
-      run: dotnet test tests/HtmlML.JavaScript.Tests/HtmlML.JavaScript.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.JavaScript.Tests/WebScene.JavaScript.Tests.csproj -c Release --no-build
     - name: Portable DOM contracts
-      run: dotnet test tests/HtmlML.Dom.Tests/HtmlML.Dom.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Dom.Tests/WebScene.Dom.Tests.csproj -c Release --no-build
     - name: Portable CSS and layout contracts
-      run: dotnet test tests/HtmlML.Css.Tests/HtmlML.Css.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Css.Tests/WebScene.Css.Tests.csproj -c Release --no-build
     - name: Portable graphics contracts
-      run: dotnet test tests/HtmlML.Graphics.Tests/HtmlML.Graphics.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Graphics.Tests/WebScene.Graphics.Tests.csproj -c Release --no-build
     - name: Backend authoring contracts
-      run: dotnet test tests/HtmlML.Backend.Abstractions.Tests/HtmlML.Backend.Abstractions.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj -c Release --no-build
     - name: React and TypeScript SDK contracts
-      run: dotnet test tests/HtmlML.Sdk.Tests/HtmlML.Sdk.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Sdk.Tests/WebScene.Sdk.Tests.csproj -c Release --no-build
     - name: TypeScript profile and bundler tooling
-      run: npm test --prefix tooling/htmlml
+      run: npm test --prefix tooling/webscene
     - name: Build and execute R5 component catalog
       run: |
         npm ci --prefix samples/components
@@ -54,23 +54,23 @@ jobs:
         npm run check --prefix samples/components
         npm test --prefix samples/components
     - name: R5 offline sample catalog
-      run: dotnet run --project tests/HtmlML.Sdk.SampleSmoke/HtmlML.Sdk.SampleSmoke.csproj -c Release --no-build
+      run: dotnet run --project tests/WebScene.Sdk.SampleSmoke/WebScene.Sdk.SampleSmoke.csproj -c Release --no-build
     - name: Architecture dependency gates
-      run: dotnet test tests/HtmlML.Architecture.Tests/HtmlML.Architecture.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release --no-build
     - name: Backend package smoke
-      run: dotnet run --project tests/HtmlML.Backend.PackageSmoke/HtmlML.Backend.PackageSmoke.csproj -c Release --no-build
+      run: dotnet run --project tests/WebScene.Backend.PackageSmoke/WebScene.Backend.PackageSmoke.csproj -c Release --no-build
     - name: Avalonia headless tests
       run: dotnet test tests/JavaScript.Avalonia.Tests/JavaScript.Avalonia.Tests.csproj -c Release --no-build
     - name: WPT manifest integrity
-      run: dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj -c Release --no-build -- --selection all --list
+      run: dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj -c Release --no-build -- --selection all --list
     - name: Native C++ portability build (without V8)
       run: >-
         cmake
-        -S experiments/HtmlML.NativeEngine.Probe
+        -S experiments/WebScene.NativeEngine.Probe
         -B artifacts/native-engine-portability
         -DCMAKE_BUILD_TYPE=Release
-        -DHTMLML_NATIVE_ENGINE_ENABLE_V8=OFF
-        -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF
+        -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=OFF
+        -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
     - name: Compile native C++ portability target
       run: cmake --build artifacts/native-engine-portability --config Release --parallel
 

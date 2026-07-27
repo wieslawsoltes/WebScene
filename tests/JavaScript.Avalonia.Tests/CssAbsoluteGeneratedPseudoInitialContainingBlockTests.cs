@@ -98,7 +98,7 @@ public sealed class CssAbsoluteGeneratedPseudoInitialContainingBlockTests
         Assert.Equal(Colors.White, ReadPixel(frame, 160, 79));
     }
 
-    private static (double X, double Y, double Width, double Height) ToTuple(HtmlML.Core.HtmlMlRect rect)
+    private static (double X, double Y, double Width, double Height) ToTuple(WebScene.Core.WebSceneRect rect)
         => (rect.X, rect.Y, rect.Width, rect.Height);
 
     private static Color ReadPixel(Bitmap bitmap, int x, int y)

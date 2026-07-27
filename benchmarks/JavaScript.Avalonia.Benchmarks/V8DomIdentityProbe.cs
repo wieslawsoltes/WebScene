@@ -17,7 +17,7 @@ internal static class V8DomIdentityProbe
 {
     internal const string MatrixScript = """
         (function () {
-          const scopeName = String(globalThis.__htmlMlIdentityScope || 'unknown');
+          const scopeName = String(globalThis.__webSceneIdentityScope || 'unknown');
           const container = document.createElement('div');
           container.id = 'identity-' + scopeName + '-container';
           const before = document.createElement('span');
@@ -28,7 +28,7 @@ internal static class V8DomIdentityProbe
 
           const marker = { scope: scopeName };
           const symbol = Symbol('identity-' + scopeName);
-          target.__htmlMlIdentityMarker = marker;
+          target.__webSceneIdentityMarker = marker;
           target[symbol] = marker;
           const state = {
             mutationDelivered: false,
@@ -46,7 +46,7 @@ internal static class V8DomIdentityProbe
                 state.mutationDelivered = true;
                 state.mutationTarget = record.target === container;
                 state.mutationAdded = added[added.indexOf(target)] === target;
-                state.mutationMarker = added[added.indexOf(target)].__htmlMlIdentityMarker === marker;
+                state.mutationMarker = added[added.indexOf(target)].__webSceneIdentityMarker === marker;
               }
             });
           }).observe(container, { childList: true });
@@ -54,7 +54,7 @@ internal static class V8DomIdentityProbe
           function recordEvent(event) {
             const valid = event.target === target &&
               event.currentTarget === target && this === target &&
-              event.target.__htmlMlIdentityMarker === marker;
+              event.target.__webSceneIdentityMarker === marker;
             if (event.type === 'identity-synthetic') state.syntheticEvent = valid;
             if (event.type === 'click') state.nativeEvent = valid;
           }
@@ -66,11 +66,11 @@ internal static class V8DomIdentityProbe
           target.dispatchEvent(new CustomEvent('identity-synthetic'));
           const computedStyle = getComputedStyle(target);
 
-          globalThis.__htmlMlIdentityTarget = target;
+          globalThis.__webSceneIdentityTarget = target;
           globalThis.__snapshotDomIdentityMatrix = function () {
             const queried = document.querySelector('#' + target.id);
             const byId = document.getElementById(target.id);
-            const descriptor = Object.getOwnPropertyDescriptor(target, '__htmlMlIdentityMarker');
+            const descriptor = Object.getOwnPropertyDescriptor(target, '__webSceneIdentityMarker');
             const ownKeys = Object.getOwnPropertyNames(target);
             const ownSymbols = Object.getOwnPropertySymbols(target);
             return {
@@ -92,8 +92,8 @@ internal static class V8DomIdentityProbe
               computedStyleMethod: typeof computedStyle.getPropertyValue === 'function',
               computedStyleValue: typeof computedStyle.getPropertyValue === 'function' &&
                 typeof computedStyle.getPropertyValue('display') === 'string',
-              expandoThroughQuery: queried.__htmlMlIdentityMarker === marker,
-              ownStringKey: ownKeys.indexOf('__htmlMlIdentityMarker') >= 0,
+              expandoThroughQuery: queried.__webSceneIdentityMarker === marker,
+              ownStringKey: ownKeys.indexOf('__webSceneIdentityMarker') >= 0,
               ownSymbolKey: ownSymbols.indexOf(symbol) >= 0 && target[symbol] === marker,
               descriptor: !!descriptor && descriptor.value === marker && descriptor.writable === true &&
                 descriptor.enumerable === true && descriptor.configurable === true,
@@ -130,9 +130,9 @@ internal static class V8DomIdentityProbe
 
         try
         {
-            runtime.Execute("globalThis.__htmlMlIdentityScope = 'owner';\n" + MatrixScript, "v8-owner-identity.js");
+            runtime.Execute("globalThis.__webSceneIdentityScope = 'owner';\n" + MatrixScript, "v8-owner-identity.js");
             var frameMarkup = "<!doctype html><html><body><script>" +
-                              "globalThis.__htmlMlIdentityScope = 'frame';\n" +
+                              "globalThis.__webSceneIdentityScope = 'frame';\n" +
                               MatrixScript +
                               "</script></body></html>";
             runtime.Execute(
@@ -141,7 +141,7 @@ internal static class V8DomIdentityProbe
                 "document.body.appendChild(iframe);" +
                 "iframe.src = URL.createObjectURL(new Blob([" + JsonSerializer.Serialize(frameMarkup) +
                 "], { type: 'text/html' }));" +
-                "window.__htmlMlIdentityFrame = iframe;",
+                "window.__webSceneIdentityFrame = iframe;",
                 "v8-frame-identity-owner.js");
 
             var timeout = Stopwatch.StartNew();
@@ -173,7 +173,7 @@ internal static class V8DomIdentityProbe
 
             var ownerJson = Convert.ToString(runtime.Engine.Evaluate("window.__snapshotDomIdentityMatrixJson()")) ?? "{}";
             var frameJson = Convert.ToString(runtime.Engine.Evaluate(
-                "window.__htmlMlIdentityFrame.contentWindow.__snapshotDomIdentityMatrixJson()")) ?? "{}";
+                "window.__webSceneIdentityFrame.contentWindow.__snapshotDomIdentityMatrixJson()")) ?? "{}";
             var ownerPassed = MatrixPassed(ownerJson, out var ownerFailures);
             var framePassed = MatrixPassed(frameJson, out var frameFailures);
             Console.WriteLine(

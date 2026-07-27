@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
-namespace HtmlML.Samples.ComponentHost;
+namespace WebScene.Samples.ComponentHost;
 
 public sealed partial class App : Application
 {

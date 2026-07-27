@@ -5,7 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using HtmlML.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia.Native;
 using SkiaSharp;
 
 namespace NativeTradingViewTerminal;
@@ -20,7 +20,7 @@ internal static class HeadlessProof
         var paths = SamplePaths.Resolve(arguments);
         var output = ReadOutput(arguments);
         Directory.CreateDirectory(output);
-        var view = new NativeHtmlMlView(useCompositionVisual: false);
+        var view = new NativeWebSceneView(useCompositionVisual: false);
         var window = new Window
         {
             Width = Width,
@@ -216,7 +216,7 @@ internal static class HeadlessProof
         }
     }
 
-    private static void InstallPointerCertification(NativeHtmlMlView view)
+    private static void InstallPointerCertification(NativeWebSceneView view)
     {
         var task = view.EvaluateJsonAsync("""
             (() => {
@@ -246,7 +246,7 @@ internal static class HeadlessProof
                   state.lastTarget = event.target?.tagName ?? null;
                 }, true);
               }
-              chartWindow.__htmlMlPointerCertification = state;
+              chartWindow.__webScenePointerCertification = state;
               return true;
             })()
             """);
@@ -259,7 +259,7 @@ internal static class HeadlessProof
     }
 
     private static string WaitForWebSocketEvidence(
-        NativeHtmlMlView view,
+        NativeWebSceneView view,
         Window window)
     {
         var timer = Stopwatch.StartNew();
@@ -279,7 +279,7 @@ internal static class HeadlessProof
                       .map(frame => frame.contentWindow)
                   ]
                     .map(realm =>
-                      realm?.__htmlMlWebSocketDiagnostics?.() ?? null)
+                      realm?.__webSceneWebSocketDiagnostics?.() ?? null)
                     .filter(Boolean)
                     .reduce((total, current) => ({
                       created: total.created + current.created,
@@ -301,7 +301,7 @@ internal static class HeadlessProof
                   pointerInput: Array.from(
                     document.querySelectorAll('iframe'))
                     .map(frame =>
-                      frame.contentWindow?.__htmlMlPointerCertification ?? null)
+                      frame.contentWindow?.__webScenePointerCertification ?? null)
                     .find(Boolean) ?? null,
                   bodyTextLength: document.body?.innerText?.length ?? 0,
                   elementCount: document.querySelectorAll('*').length,
@@ -539,12 +539,12 @@ internal static class HeadlessProof
                   frames: Array.from(document.querySelectorAll('iframe')).map(frame => ({
                     src: frame.src,
                     remoteResult:
-                      frame.getAttribute('data-htmlml-remote-result'),
+                      frame.getAttribute('data-webscene-remote-result'),
                     frameError:
-                      frame.getAttribute('data-htmlml-frame-error'),
+                      frame.getAttribute('data-webscene-frame-error'),
                     websocket:
                       frame.contentWindow
-                        ?.__htmlMlWebSocketDiagnostics?.() ?? null,
+                        ?.__webSceneWebSocketDiagnostics?.() ?? null,
                     rect: (() => {
                       const rect = frame.getBoundingClientRect();
                       return {
@@ -582,7 +582,7 @@ internal static class HeadlessProof
     }
 
     private static void PumpFrames(
-        NativeHtmlMlView view,
+        NativeWebSceneView view,
         Window window,
         TimeSpan duration)
     {

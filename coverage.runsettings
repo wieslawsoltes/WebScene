@@ -5,8 +5,8 @@
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <Include>[JavaScript.Avalonia]*,[HtmlML]*</Include>
-          <Exclude>[*.Tests]*,[*.Benchmarks]*,[HtmlML.Css]*,[HtmlML.Graphics]*</Exclude>
+          <Include>[JavaScript.Avalonia]*,[WebScene]*</Include>
+          <Exclude>[*.Tests]*,[*.Benchmarks]*,[WebScene.Css]*,[WebScene.Graphics]*</Exclude>
           <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
           <SkipAutoProps>true</SkipAutoProps>
           <DeterministicReport>true</DeterministicReport>

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <TrimMode>copyused</TrimMode>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>The complete Avalonia presentation backend for WebScene.</Description>
+    <PackageId>WebScene.Backend.Avalonia</PackageId>
+    <AssemblyName>WebScene.Backend.Avalonia</AssemblyName>
+    <RootNamespace>WebScene.Backends.Avalonia</RootNamespace>
+    <PackageTags>html;dom;css;canvas;svg;avalonia;backend</PackageTags>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
+    <ProjectReference Include="..\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
+    <ProjectReference Include="..\WebScene.Css\WebScene.Css.csproj" />
+    <ProjectReference Include="..\WebScene.Dom\WebScene.Dom.csproj" />
+    <ProjectReference Include="..\WebScene.Graphics\WebScene.Graphics.csproj" />
+    <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="AngleSharp.Css" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" />
+    <PackageReference Include="Svg.Skia" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Keep the proven implementation byte-for-byte on the hot path while its
+         package ownership moves. -->
+    <Compile Include="..\JavaScript.Avalonia\*.cs" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="webscene-backend.json"
+          Pack="true"
+          PackagePath="\"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

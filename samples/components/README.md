@@ -1,4 +1,4 @@
-# HtmlML R5 sample catalog
+# WebScene R5 sample catalog
 
 This directory is the backend-neutral asset catalog described by the strategic
 roadmap. Each scenario has a Component Profile 1 manifest, TypeScript source, and a
@@ -9,13 +9,13 @@ The runnable .NET projects live in `samples/hosts/Avalonia`, keeping these compo
 packages reusable by future backends. Start the graphical catalog with:
 
 ```bash
-dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog
+dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog
 ```
 
 Pass a sample id after `--` to select it at launch, for example:
 
 ```bash
-dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- Hybrid.ReactIslands
+dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- Hybrid.ReactIslands
 ```
 
 Build and execute the shared component catalog itself with:
@@ -33,7 +33,7 @@ meaningful rendered content, performs a scenario-specific interaction, checks ho
 calls where applicable, and verifies unmount cleanup. It also proves two React islands
 retain independent state.
 
-The Avalonia CI lane additionally runs `HtmlML.Sdk.SampleSmoke`, which validates all
+The Avalonia CI lane additionally runs `WebScene.Sdk.SampleSmoke`, which validates all
 twelve packages, checks their TypeScript against the bounded profile, rejects
 placeholder bundles, loads only declared offline assets, creates two instances, proves
 immutable cache reuse, and proves mutable state/lifecycle isolation. With a reviewed

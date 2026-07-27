@@ -16,8 +16,8 @@ internal static class V8ReactFocusProbe
     {
         BenchmarkApp.EnsureInitialized();
         var fixtureRoot = ParseString(args, "--react-root")
-                          ?? Environment.GetEnvironmentVariable("HTMLML_REACT_REPRO_ROOT")
-                          ?? "/tmp/htmlml-react-repro";
+                          ?? Environment.GetEnvironmentVariable("WEBSCENE_REACT_REPRO_ROOT")
+                          ?? "/tmp/webscene-react-repro";
         var development = args.Contains("--development", StringComparer.OrdinalIgnoreCase);
         var useAutoFocus = !args.Contains("--no-auto-focus", StringComparer.OrdinalIgnoreCase);
         var legacyFocusRoot = args.Contains("--legacy-focus-root", StringComparer.OrdinalIgnoreCase);
@@ -54,24 +54,24 @@ internal static class V8ReactFocusProbe
             var reactDom = File.ReadAllText(reactDomPath);
             var fixture = File.ReadAllText(fixturePath);
             runtime.Execute($$"""
-                globalThis.__htmlMlReactFixture = {{JsonSerializer.Serialize(react)}};
-                globalThis.__htmlMlReactDomFixture = {{JsonSerializer.Serialize(reactDom)}};
-                globalThis.__htmlMlReactFocusFixture = {{JsonSerializer.Serialize(fixture)}};
+                globalThis.__webSceneReactFixture = {{JsonSerializer.Serialize(react)}};
+                globalThis.__webSceneReactDomFixture = {{JsonSerializer.Serialize(reactDom)}};
+                globalThis.__webSceneReactFocusFixture = {{JsonSerializer.Serialize(fixture)}};
                 const iframe = document.createElement('iframe');
                 iframe.style.width = '480px';
                 iframe.style.height = '240px';
                 document.body.appendChild(iframe);
                 const bootstrap =
-                  'window.__htmlMlReactUseAutoFocus = {{useAutoFocus.ToString().ToLowerInvariant()}};' +
-                  'window.__htmlMlReactLegacyFocusRoot = {{legacyFocusRoot.ToString().ToLowerInvariant()}};' +
-                  'window.__htmlMlReactScheduleFromRender = {{scheduleFromRender.ToString().ToLowerInvariant()}};';
+                  'window.__webSceneReactUseAutoFocus = {{useAutoFocus.ToString().ToLowerInvariant()}};' +
+                  'window.__webSceneReactLegacyFocusRoot = {{legacyFocusRoot.ToString().ToLowerInvariant()}};' +
+                  'window.__webSceneReactScheduleFromRender = {{scheduleFromRender.ToString().ToLowerInvariant()}};';
                 const markup = '<!doctype html><html><body>' +
-                  '<script>' + __htmlMlReactFixture + '</' + 'script>' +
-                  '<script>' + __htmlMlReactDomFixture + '</' + 'script>' +
-                  '<script>' + bootstrap + __htmlMlReactFocusFixture + '</' + 'script>' +
+                  '<script>' + __webSceneReactFixture + '</' + 'script>' +
+                  '<script>' + __webSceneReactDomFixture + '</' + 'script>' +
+                  '<script>' + bootstrap + __webSceneReactFocusFixture + '</' + 'script>' +
                   '</body></html>';
                 iframe.src = URL.createObjectURL(new Blob([markup], { type: 'text/html' }));
-                window.__htmlMlReactFocusFrame = iframe;
+                window.__webSceneReactFocusFrame = iframe;
                 """, "v8-react-focus-owner.js");
 
             var started = Stopwatch.StartNew();
@@ -98,20 +98,20 @@ internal static class V8ReactFocusProbe
 
             var state = Convert.ToString(runtime.Engine.Evaluate("""
                 JSON.stringify({
-                  probe: window.__htmlMlReactFocusFrame.contentWindow.__htmlMlReactFocusState || null,
-                  activeId: window.__htmlMlReactFocusFrame.contentDocument.activeElement &&
-                    window.__htmlMlReactFocusFrame.contentDocument.activeElement.id || '',
-                  inputValue: window.__htmlMlReactFocusFrame.contentDocument.querySelector('#focus-probe-input') &&
-                    window.__htmlMlReactFocusFrame.contentDocument.querySelector('#focus-probe-input').value || '',
-                  readyState: window.__htmlMlReactFocusFrame.contentDocument.readyState
+                  probe: window.__webSceneReactFocusFrame.contentWindow.__webSceneReactFocusState || null,
+                  activeId: window.__webSceneReactFocusFrame.contentDocument.activeElement &&
+                    window.__webSceneReactFocusFrame.contentDocument.activeElement.id || '',
+                  inputValue: window.__webSceneReactFocusFrame.contentDocument.querySelector('#focus-probe-input') &&
+                    window.__webSceneReactFocusFrame.contentDocument.querySelector('#focus-probe-input').value || '',
+                  readyState: window.__webSceneReactFocusFrame.contentDocument.readyState
                 })
                 """));
             var passiveText = ReadText(frameDocument, "#passive-probe-state");
             var focusText = ReadText(frameDocument, "#focus-probe-state");
             var contractPassed = Convert.ToBoolean(runtime.Engine.Evaluate("""
                 (function () {
-                  const frame = window.__htmlMlReactFocusFrame;
-                  const probe = frame.contentWindow.__htmlMlReactFocusState;
+                  const frame = window.__webSceneReactFocusFrame;
+                  const probe = frame.contentWindow.__webSceneReactFocusState;
                   const contract = probe && probe.contract;
                   const input = frame.contentDocument.querySelector('#focus-probe-input');
                   return Boolean(contract &&
@@ -130,10 +130,10 @@ internal static class V8ReactFocusProbe
             var focusOrderPassed = Convert.ToBoolean(runtime.Engine.Evaluate(
                 (useAutoFocus, scheduleFromRender) switch
                 {
-                    (true, true) => "window.__htmlMlReactFocusFrame.contentWindow.__htmlMlReactFocusState.focusEvents.join(',') === 'document-capture,root-capture,render-microtask,microtask'",
-                    (true, false) => "window.__htmlMlReactFocusFrame.contentWindow.__htmlMlReactFocusState.focusEvents.join(',') === 'document-capture,root-capture,microtask'",
-                    (false, true) => "window.__htmlMlReactFocusFrame.contentWindow.__htmlMlReactFocusState.focusEvents.join(',') === 'render-microtask'",
-                    _ => "window.__htmlMlReactFocusFrame.contentWindow.__htmlMlReactFocusState.focusEvents.length === 0"
+                    (true, true) => "window.__webSceneReactFocusFrame.contentWindow.__webSceneReactFocusState.focusEvents.join(',') === 'document-capture,root-capture,render-microtask,microtask'",
+                    (true, false) => "window.__webSceneReactFocusFrame.contentWindow.__webSceneReactFocusState.focusEvents.join(',') === 'document-capture,root-capture,microtask'",
+                    (false, true) => "window.__webSceneReactFocusFrame.contentWindow.__webSceneReactFocusState.focusEvents.join(',') === 'render-microtask'",
+                    _ => "window.__webSceneReactFocusFrame.contentWindow.__webSceneReactFocusState.focusEvents.length === 0"
                 }));
             Console.WriteLine(
                 $"V8 React focus repro: autoFocus={useAutoFocus}, legacyFocusRoot={legacyFocusRoot}, " +

@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace HtmlML.Samples.ComponentHost;
+namespace WebScene.Samples.ComponentHost;
 
 public sealed partial class MainWindow : Window
 {
@@ -17,7 +17,7 @@ public sealed partial class MainWindow : Window
         try
         {
             PrimaryHost.MountComponent();
-            StatusText.Text = "Mounted dev.htmlml.componenthost-basic";
+            StatusText.Text = "Mounted dev.webscene.componenthost-basic";
         }
         catch (Exception exception)
         {

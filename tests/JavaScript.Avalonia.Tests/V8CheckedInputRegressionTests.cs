@@ -45,7 +45,7 @@ public sealed class V8CheckedInputRegressionTests
             let disabledClicks = 0;
             disabled.addEventListener('click', () => disabledClicks++);
             disabled.click();
-            globalThis.__htmlMlProgrammaticClick = {
+            globalThis.__webSceneProgrammaticClick = {
               checked: checkbox.checked,
               observed: observed,
               canceledChecked: canceled.checked,
@@ -56,7 +56,7 @@ public sealed class V8CheckedInputRegressionTests
             """, "v8-programmatic-checkable-click.js");
 
         using var result = JsonDocument.Parse(Convert.ToString(fixture.Runtime.Engine.Evaluate(
-            "JSON.stringify(globalThis.__htmlMlProgrammaticClick)")) ?? "{}");
+            "JSON.stringify(globalThis.__webSceneProgrammaticClick)")) ?? "{}");
         Assert.True(result.RootElement.GetProperty("checked").GetBoolean());
         Assert.Equal(
             ["click:true:false", "input:true", "change:true"],
@@ -89,7 +89,7 @@ public sealed class V8CheckedInputRegressionTests
             document.body.appendChild(second);
             const queried = [...document.querySelectorAll(':checked')];
             const lookedUp = ['first', 'second'].map(id => document.getElementById(id));
-            globalThis.__htmlMlCheckedIdentity = {
+            globalThis.__webSceneCheckedIdentity = {
               lengths: [queried.length, lookedUp.length],
               same: queried.map((node, index) => node === lookedUp[index]),
               created: first === lookedUp[0] && second === lookedUp[1]
@@ -97,7 +97,7 @@ public sealed class V8CheckedInputRegressionTests
             """, "v8-checked-query-identity.js");
 
         using var result = JsonDocument.Parse(Convert.ToString(fixture.Runtime.Engine.Evaluate(
-            "JSON.stringify(globalThis.__htmlMlCheckedIdentity)")) ?? "{}");
+            "JSON.stringify(globalThis.__webSceneCheckedIdentity)")) ?? "{}");
         Assert.Equal([2, 2], result.RootElement.GetProperty("lengths").EnumerateArray().Select(item => item.GetInt32()));
         Assert.All(result.RootElement.GetProperty("same").EnumerateArray(), item => Assert.True(item.GetBoolean()));
         Assert.True(result.RootElement.GetProperty("created").GetBoolean());
@@ -136,11 +136,11 @@ public sealed class V8CheckedInputRegressionTests
             option.selected = false;
             misleadingOption.selected = 'selected';
             const optionChanged = ids();
-            globalThis.__htmlMlCheckedState = { initial, typeRemoved, optionChanged };
+            globalThis.__webSceneCheckedState = { initial, typeRemoved, optionChanged };
             """, "v8-checked-state-semantics.js");
 
         using var result = JsonDocument.Parse(Convert.ToString(fixture.Runtime.Engine.Evaluate(
-            "JSON.stringify(globalThis.__htmlMlCheckedState)")) ?? "{}");
+            "JSON.stringify(globalThis.__webSceneCheckedState)")) ?? "{}");
         Assert.Equal(new string?[] { "option", "checkbox" }, Strings(result.RootElement.GetProperty("initial")));
         Assert.Equal(new string?[] { "option" }, Strings(result.RootElement.GetProperty("typeRemoved")));
         Assert.Equal(new string?[] { "misleading-option" }, Strings(result.RootElement.GetProperty("optionChanged")));
@@ -151,7 +151,7 @@ public sealed class V8CheckedInputRegressionTests
 
     private static Fixture CreateFixture()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return new Fixture(null, null, null);

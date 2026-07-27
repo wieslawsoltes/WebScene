@@ -73,31 +73,31 @@ internal static class V8LifecycleProbe
         {
             var baseline = ReadOwnerRetention(runtime.DescribeDomProxyRetention());
             runtime.Execute($$"""
-                globalThis.__htmlMlLifecycleTree = document.createElement('section');
+                globalThis.__webSceneLifecycleTree = document.createElement('section');
                 for (let index = 0; index < {{nodes}}; index++) {
                   const child = document.createElement('button');
                   child.textContent = 'node-' + index;
                   child.addEventListener('click', function() {});
-                  __htmlMlLifecycleTree.appendChild(child);
+                  __webSceneLifecycleTree.appendChild(child);
                 }
-                document.body.appendChild(__htmlMlLifecycleTree);
+                document.body.appendChild(__webSceneLifecycleTree);
                 """, "v8-lifecycle-attached-tree.js");
             Dispatcher.UIThread.RunJobs();
             var attached = ReadOwnerRetention(runtime.DescribeDomProxyRetention());
 
             runtime.Execute("""
-                __htmlMlLifecycleTree.remove();
-                globalThis.__htmlMlLifecycleTree = null;
+                __webSceneLifecycleTree.remove();
+                globalThis.__webSceneLifecycleTree = null;
                 """, "v8-lifecycle-detached-tree.js");
             runtime.CollectGarbage(exhaustive: true);
             runtime.CollectGarbage(exhaustive: true);
             var detached = ReadOwnerRetention(runtime.DescribeDomProxyRetention());
 
             runtime.Execute("""
-                globalThis.__htmlMlLifecycleFrame = document.createElement('iframe');
-                __htmlMlLifecycleFrame.id = 'v8-lifecycle-frame';
-                document.body.appendChild(__htmlMlLifecycleFrame);
-                __htmlMlLifecycleFrame.src = URL.createObjectURL(new Blob([
+                globalThis.__webSceneLifecycleFrame = document.createElement('iframe');
+                __webSceneLifecycleFrame.id = 'v8-lifecycle-frame';
+                document.body.appendChild(__webSceneLifecycleFrame);
+                __webSceneLifecycleFrame.src = URL.createObjectURL(new Blob([
                   '<!doctype html><html><body><div id="frame-ready">ready</div>' +
                   '<script>globalThis.frameCounter = 41; ' +
                   'document.body.addEventListener("click", function(){}); ' +
@@ -121,14 +121,14 @@ internal static class V8LifecycleProbe
                                      && runtime.ActiveFrameCount == 1;
 
             runtime.Execute("""
-                __htmlMlLifecycleFrame.contentWindow.requestAnimationFrame(function() {});
+                __webSceneLifecycleFrame.contentWindow.requestAnimationFrame(function() {});
                 """, "v8-lifecycle-frame-pending-raf.js");
             frameTasksAttached &= host.PendingExternalAnimationFrameCount
                                   >= baselineAnimationFrames + 1;
 
             runtime.Execute("""
-                __htmlMlLifecycleFrame.remove();
-                globalThis.__htmlMlLifecycleOwnerStillAlive = 41;
+                __webSceneLifecycleFrame.remove();
+                globalThis.__webSceneLifecycleOwnerStillAlive = 41;
                 """, "v8-lifecycle-frame-remove.js");
             Dispatcher.UIThread.RunJobs();
             var removedFrameReclaimed = runtime.ActiveFrameCount == 0
@@ -140,10 +140,10 @@ internal static class V8LifecycleProbe
                                         && iframe.GetContentDocument() is null
                                         && iframe.GetExternalContentWindowRuntime() is null
                                         && Convert.ToInt32(runtime.Engine.Evaluate(
-                                            "__htmlMlLifecycleOwnerStillAlive + 1")) == 42;
+                                            "__webSceneLifecycleOwnerStillAlive + 1")) == 42;
 
             runtime.Execute("""
-                document.body.appendChild(__htmlMlLifecycleFrame);
+                document.body.appendChild(__webSceneLifecycleFrame);
                 """, "v8-lifecycle-frame-reinsert.js");
             var (reinsertedIframe, reinsertedDocument) = WaitForFrame(host);
             var frameRemounted = removedFrameReclaimed
@@ -152,7 +152,7 @@ internal static class V8LifecycleProbe
                                  && !ReferenceEquals(firstWindow, reinsertedDocument.ExternalWindowContext)
                                  && runtime.ActiveFrameCount == 1
                                  && Convert.ToInt32(runtime.Engine.Evaluate(
-                                     "__htmlMlLifecycleFrame.contentWindow.frameCounter")) == 41;
+                                     "__webSceneLifecycleFrame.contentWindow.frameCounter")) == 41;
             runtime.CollectGarbage(exhaustive: true);
             var heap = runtime.GetHeapInfo();
 
@@ -209,19 +209,19 @@ internal static class V8LifecycleProbe
             first.Execute("globalThis.instanceToken = 'A'; globalThis.instanceCount = 1;");
             second.Execute("globalThis.instanceToken = 'B'; globalThis.instanceCount = 40;");
             first.Execute("""
-                globalThis.__htmlMlIsolationFrame = document.createElement('iframe');
-                __htmlMlIsolationFrame.id = 'v8-isolation-frame';
-                document.body.appendChild(__htmlMlIsolationFrame);
-                __htmlMlIsolationFrame.src = URL.createObjectURL(new Blob([
+                globalThis.__webSceneIsolationFrame = document.createElement('iframe');
+                __webSceneIsolationFrame.id = 'v8-isolation-frame';
+                document.body.appendChild(__webSceneIsolationFrame);
+                __webSceneIsolationFrame.src = URL.createObjectURL(new Blob([
                   '<!doctype html><html><body><div id="isolation-ready">A</div>' +
                   '<script>globalThis.frameInstanceToken = "A";<\/script></body></html>'
                 ], { type: 'text/html' }));
                 """, "v8-isolation-frame-a.js");
             second.Execute("""
-                globalThis.__htmlMlIsolationFrame = document.createElement('iframe');
-                __htmlMlIsolationFrame.id = 'v8-isolation-frame';
-                document.body.appendChild(__htmlMlIsolationFrame);
-                __htmlMlIsolationFrame.src = URL.createObjectURL(new Blob([
+                globalThis.__webSceneIsolationFrame = document.createElement('iframe');
+                __webSceneIsolationFrame.id = 'v8-isolation-frame';
+                document.body.appendChild(__webSceneIsolationFrame);
+                __webSceneIsolationFrame.src = URL.createObjectURL(new Blob([
                   '<!doctype html><html><body><div id="isolation-ready">B</div>' +
                   '<script>globalThis.frameInstanceToken = "B";<\/script></body></html>'
                 ], { type: 'text/html' }));
@@ -239,12 +239,12 @@ internal static class V8LifecycleProbe
                                     && second.ActiveFrameCount == 1
                                     && string.Equals(
                                         Convert.ToString(first.Engine.Evaluate(
-                                            "__htmlMlIsolationFrame.contentWindow.frameInstanceToken")),
+                                            "__webSceneIsolationFrame.contentWindow.frameInstanceToken")),
                                         "A",
                                         StringComparison.Ordinal)
                                     && string.Equals(
                                         Convert.ToString(second.Engine.Evaluate(
-                                            "__htmlMlIsolationFrame.contentWindow.frameInstanceToken")),
+                                            "__webSceneIsolationFrame.contentWindow.frameInstanceToken")),
                                         "B",
                                         StringComparison.Ordinal)
                                     && !ReferenceEquals(firstFrameDocument, secondFrameDocument)
@@ -273,7 +273,7 @@ internal static class V8LifecycleProbe
                                     && Convert.ToInt32(second.Engine.Evaluate("instanceCount")) == 42;
             var secondFrameIndependent = string.Equals(
                 Convert.ToString(second.Engine.Evaluate(
-                    "__htmlMlIsolationFrame.contentWindow.frameInstanceToken")),
+                    "__webSceneIsolationFrame.contentWindow.frameInstanceToken")),
                 "B",
                 StringComparison.Ordinal);
             var passed = framesIndependent && firstDetached && secondAttached

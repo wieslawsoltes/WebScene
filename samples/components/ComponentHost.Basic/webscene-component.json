@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dev.webscene.componenthost-basic",
+  "displayName": "ComponentHost.Basic",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout",
+    "canvas.2d",
+    "svg",
+    "input.pointer"
+  ],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}

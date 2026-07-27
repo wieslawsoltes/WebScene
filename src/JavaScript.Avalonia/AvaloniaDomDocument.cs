@@ -31,14 +31,14 @@ using Avalonia.Rendering.Composition.Animations;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using HtmlML.Core;
-using HtmlML.JavaScript;
+using WebScene.Core;
+using WebScene.JavaScript;
 using SkiaSharp;
 using Svg.Skia;
 
 namespace JavaScript.Avalonia;
 
-public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJavaScriptDocument
+public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IWebSceneJavaScriptDocument
 {
     private static readonly ConditionalWeakTable<RoutedEventArgs, PointerDispatchState> s_pointerDispatchStates = new();
     private static readonly ConditionalWeakTable<RoutedEventArgs, KeyboardDispatchState> s_keyboardDispatchStates = new();
@@ -47,17 +47,17 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     private static readonly Dictionary<int, WeakReference<AvaloniaDomDocument>> s_activePointerDocuments = new();
     private static readonly bool s_traceCssInvalidations =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_TRACE_CSS_INVALIDATIONS"),
+            Environment.GetEnvironmentVariable("WEBSCENE_TRACE_CSS_INVALIDATIONS"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableIterativeDocumentTraversal =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_ITERATIVE_DOCUMENT_TRAVERSAL"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_ITERATIVE_DOCUMENT_TRAVERSAL"),
             "1",
             StringComparison.Ordinal);
     protected static readonly bool DisableScopedPositionedLayoutReapply =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_SCOPED_POSITIONED_LAYOUT_REAPPLY"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_SCOPED_POSITIONED_LAYOUT_REAPPLY"),
             "1",
             StringComparison.Ordinal);
     private readonly Func<string, Control?>? _elementFactory;
@@ -105,7 +105,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     private readonly Dictionary<int, Point> _lastPointerPositions = new();
     private readonly Dictionary<int, Vector> _lastPointerMovements = new();
     private readonly HashSet<AvaloniaDomElement> _scheduledScriptElements = new();
-    private readonly List<HtmlMlResourceTimelineEntry> _resourceTimeline = new();
+    private readonly List<WebSceneResourceTimelineEntry> _resourceTimeline = new();
     private readonly List<string> _selectorMissDiagnostics = new();
     private readonly List<string> _eventDispatchDiagnostics = new();
     private long _layoutFlushRequestCount;
@@ -139,11 +139,11 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     /// </summary>
     public IExternalDomEventListenerAdapter? ExternalEventListenerAdapter { get; set; }
 
-    object IHtmlMlJavaScriptDocument.JavaScriptObject => this;
+    object IWebSceneJavaScriptDocument.JavaScriptObject => this;
 
-    object IHtmlMlJavaScriptDocument.Location => location;
+    object IWebSceneJavaScriptDocument.Location => location;
 
-    void IHtmlMlJavaScriptDocument.DetachExternalBrowsingContext(
+    void IWebSceneJavaScriptDocument.DetachExternalBrowsingContext(
         object frameElement,
         IExternalVirtualBrowsingContext context)
     {
@@ -164,7 +164,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     protected AvaloniaBrowserHost Host { get; }
 
     internal TopLevel HostTopLevel => Host.TopLevel;
-    internal HtmlMlViewportMetrics HostViewportMetrics => Host.Services.Viewport.HostMetrics;
+    internal WebSceneViewportMetrics HostViewportMetrics => Host.Services.Viewport.HostMetrics;
     internal bool DiagnosticLoggingEnabled => Host.EnableDiagnosticLogging;
     internal bool TargetOnlyInlineStylesEnabled =>
         Host.EnableTargetOnlyInlineStyles && Host.TargetOnlyInlineStylesArmed;
@@ -188,7 +188,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
 
         _resizeObserverBatchDeliveryScheduled = true;
-        Host.Services.Dispatcher.Post(DeliverResizeObserverCallbackBatch, HtmlMlDispatchPriority.Background);
+        Host.Services.Dispatcher.Post(DeliverResizeObserverCallbackBatch, WebSceneDispatchPriority.Background);
     }
 
     internal void ScheduleResizeObserverDelivery(AvaloniaDomElement target)
@@ -200,7 +200,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
 
         _resizeObserverTargetDeliveryScheduled = true;
-        Host.Services.Dispatcher.Post(DeliverResizeObserverTargets, HtmlMlDispatchPriority.Render);
+        Host.Services.Dispatcher.Post(DeliverResizeObserverTargets, WebSceneDispatchPriority.Render);
     }
 
     private void DeliverResizeObserverTargets()
@@ -215,7 +215,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         // a dispatcher work item for every observed element in a dense chart.
         if (Host.IsExecutingJavaScript)
         {
-            Host.Services.Dispatcher.Post(DeliverResizeObserverTargets, HtmlMlDispatchPriority.Background);
+            Host.Services.Dispatcher.Post(DeliverResizeObserverTargets, WebSceneDispatchPriority.Background);
             return;
         }
 
@@ -242,7 +242,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
 
         if (Host.IsExecutingJavaScript)
         {
-            Host.Services.Dispatcher.Post(DeliverResizeObserverCallbackBatch, HtmlMlDispatchPriority.Background);
+            Host.Services.Dispatcher.Post(DeliverResizeObserverCallbackBatch, WebSceneDispatchPriority.Background);
             return;
         }
 
@@ -537,7 +537,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         return null;
     }
 
-    public bool __htmlMlIsValidSelector(string selector)
+    public bool __webSceneIsValidSelector(string selector)
         => CssSelectorSyntaxParser.IsSupportedDomSelectorList(selector);
 
     public virtual object[] querySelectorAll(string selector)
@@ -1045,7 +1045,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
     }
 
-    internal IReadOnlyList<HtmlMlResourceTimelineEntry> ResourceTimeline => _resourceTimeline;
+    internal IReadOnlyList<WebSceneResourceTimelineEntry> ResourceTimeline => _resourceTimeline;
 
     internal void RecordResourceTimeline(string kind, string resourceType, string? source, string outcome = "")
     {
@@ -1055,7 +1055,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             return;
         }
 
-        _resourceTimeline.Add(new HtmlMlResourceTimelineEntry
+        _resourceTimeline.Add(new WebSceneResourceTimelineEntry
         {
             TimeMilliseconds = Host.GetTimestamp(),
             Kind = kind,
@@ -1068,7 +1068,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     internal string LoadTextResource(string href, string? baseHref)
         => Host.LoadTextResource(href, baseHref);
 
-    internal HtmlML.Core.HtmlMlTextResource LoadTextResourceDetails(string href, string? baseHref)
+    internal WebScene.Core.WebSceneTextResource LoadTextResourceDetails(string href, string? baseHref)
         => Host.LoadTextResourceDetails(href, baseHref);
 
     internal Task<AvaloniaBinaryResource> LoadBinaryResourceAsync(
@@ -1080,7 +1080,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     internal CssFontFaceRegistry FontFaces => _fontFaces;
 
     internal void PostFontFaceCompletion(Action completion)
-        => Host.Services.Dispatcher.Post(completion, HtmlMlDispatchPriority.Send);
+        => Host.Services.Dispatcher.Post(completion, WebSceneDispatchPriority.Send);
 
     internal void NotifyFontFacesChanged()
     {
@@ -1319,7 +1319,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     private static bool s_isFlushingLayout;
     private static readonly bool s_disableLayoutFlushFastPath =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_LAYOUT_FLUSH_FAST_PATH"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_LAYOUT_FLUSH_FAST_PATH"),
             "1",
             StringComparison.Ordinal);
 
@@ -1523,11 +1523,11 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
     }
 
-    public HtmlMlVisualSnapshot captureVisualSnapshot()
-        => HtmlMlDiagnostics.Capture(this);
+    public WebSceneVisualSnapshot captureVisualSnapshot()
+        => WebSceneDiagnostics.Capture(this);
 
-    public HtmlMlScreenshot captureScreenshot()
-        => HtmlMlDiagnostics.CaptureScreenshot(this);
+    public WebSceneScreenshot captureScreenshot()
+        => WebSceneDiagnostics.CaptureScreenshot(this);
 
     internal void NotifyHeadChanged()
     {
@@ -1593,7 +1593,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
                     script.DispatchResourceEvent("error");
                 });
             }
-        }, HtmlMlDispatchPriority.Send);
+        }, WebSceneDispatchPriority.Send);
     }
 
     internal void ScheduleResourceEvent(AvaloniaDomElement element, string eventName)
@@ -1607,7 +1607,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             {
                 Console.WriteLine($"Resource event completed: {eventName} {element.src ?? element.href}; onload={element.onload is not null}");
             }
-        }, HtmlMlDispatchPriority.Send);
+        }, WebSceneDispatchPriority.Send);
     }
 
     private void ExecuteScriptElement(AvaloniaDomElement script)
@@ -1759,7 +1759,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             _stylesheetUpdateScheduled = false;
             EnsureStylesCurrent();
             FlushPendingLayout();
-        }, HtmlMlDispatchPriority.Send);
+        }, WebSceneDispatchPriority.Send);
     }
 
     private void ScheduleLayoutUpdate()
@@ -1778,7 +1778,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         {
             _layoutUpdateScheduled = false;
             FlushPendingLayout();
-        }, HtmlMlDispatchPriority.Render);
+        }, WebSceneDispatchPriority.Render);
     }
 
     public virtual bool contains(object? node)
@@ -1908,7 +1908,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         return node;
     }
 
-    public DomMutationObserver __htmlMlCreateExternalMutationObserver(object callback)
+    public DomMutationObserver __webSceneCreateExternalMutationObserver(object callback)
     {
         var externalCallback = callback as IExternalJavaScriptCallback
                                ?? Host.ExternalCallbackAdapter?.GetCallback(callback, create: true)
@@ -1957,7 +1957,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
 
         var parsed = adapter!.GetEventListenerOptions(options);
-        __htmlMlAddExternalEventListener(
+        __webSceneAddExternalEventListener(
             type,
             listener,
             parsed.Capture,
@@ -1979,11 +1979,11 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
 
         var parsed = adapter!.GetEventListenerOptions(options);
-        __htmlMlRemoveExternalEventListener(type, listener, parsed.Capture);
+        __webSceneRemoveExternalEventListener(type, listener, parsed.Capture);
     }
 
 
-    public void __htmlMlAddExternalEventListener(
+    public void __webSceneAddExternalEventListener(
         string type,
         IExternalDomEventListener listener,
         bool capture,
@@ -2007,7 +2007,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             new EventListenerOptions(capture, once, passive)));
     }
 
-    public void __htmlMlRemoveExternalEventListener(
+    public void __webSceneRemoveExternalEventListener(
         string type,
         IExternalDomEventListener listener,
         bool capture)
@@ -2163,7 +2163,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
                 {
                     Host.Services.Dispatcher.Post(
                         frameDocument.RestoreViewportLayoutContract,
-                        HtmlMlDispatchPriority.Render);
+                        WebSceneDispatchPriority.Render);
                 }
             }
         }
@@ -2295,7 +2295,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         var notificationVersion = ++_actualFocusNotificationVersion;
         Host.Services.Dispatcher.Post(
             () => CompleteActualBlur(element, notificationVersion),
-            HtmlMlDispatchPriority.Input);
+            WebSceneDispatchPriority.Input);
     }
 
     private void CompleteActualBlur(AvaloniaDomElement element, long notificationVersion)
@@ -2429,7 +2429,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         Host.Services.Input.Pointer += OnHostPointerInput;
     }
 
-    private void OnHostPointerInput(object? sender, HtmlMlPointerInputEventArgs input)
+    private void OnHostPointerInput(object? sender, WebScenePointerInputEventArgs input)
     {
         if (!input.NativeEventHandle.TryGet<PointerEventArgs>(out var args) || args is null)
         {
@@ -2438,22 +2438,22 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
 
         switch (input.Kind)
         {
-            case HtmlMlPointerEventKind.Pressed when args is PointerPressedEventArgs pressed:
+            case WebScenePointerEventKind.Pressed when args is PointerPressedEventArgs pressed:
                 OnTopLevelPointerPressed(sender, pressed);
                 break;
-            case HtmlMlPointerEventKind.Moved:
+            case WebScenePointerEventKind.Moved:
                 OnTopLevelPointerMoved(sender, args);
                 break;
-            case HtmlMlPointerEventKind.Released when args is PointerReleasedEventArgs released:
+            case WebScenePointerEventKind.Released when args is PointerReleasedEventArgs released:
                 OnTopLevelPointerReleased(sender, released);
                 break;
-            case HtmlMlPointerEventKind.Wheel when args is PointerWheelEventArgs wheel:
+            case WebScenePointerEventKind.Wheel when args is PointerWheelEventArgs wheel:
                 OnTopLevelPointerWheelChanged(sender, wheel);
                 break;
         }
     }
 
-    private void OnHostKeyboardInput(object? sender, HtmlMlKeyboardInputEventArgs input)
+    private void OnHostKeyboardInput(object? sender, WebSceneKeyboardInputEventArgs input)
     {
         if (!input.NativeEventHandle.TryGet<KeyEventArgs>(out var args) || args is null)
         {
@@ -2470,7 +2470,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
     }
 
-    private void OnHostTextInput(object? sender, HtmlMlTextInputEventArgs input)
+    private void OnHostTextInput(object? sender, WebSceneTextInputEventArgs input)
     {
         if (input.NativeEventHandle.TryGet<TextInputEventArgs>(out var args) && args is not null)
         {
@@ -3302,7 +3302,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         // MutationObserver delivery is a microtask checkpoint. Queue it ahead
         // of iframe navigation/resource tasks posted by the same JavaScript
         // turn so observers can attach load handlers before navigation runs.
-        Host.Services.Dispatcher.Post(DeliverMutationRecords, HtmlMlDispatchPriority.Send);
+        Host.Services.Dispatcher.Post(DeliverMutationRecords, WebSceneDispatchPriority.Send);
     }
 
     private void DeliverMutationRecords()
@@ -3312,7 +3312,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         // stack, so explicitly preserve task run-to-completion here.
         if (Host.IsExecutingJavaScript)
         {
-            Host.Services.Dispatcher.Post(DeliverMutationRecords, HtmlMlDispatchPriority.Background);
+            Host.Services.Dispatcher.Post(DeliverMutationRecords, WebSceneDispatchPriority.Background);
             return;
         }
 
@@ -3375,7 +3375,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         {
             if (string.Equals(_readyState, "complete", StringComparison.Ordinal))
             {
-                Host.Services.Dispatcher.Post(completed, HtmlMlDispatchPriority.Background);
+                Host.Services.Dispatcher.Post(completed, WebSceneDispatchPriority.Background);
                 return;
             }
             _readyStateCompletionCallbacks.Add(completed);
@@ -3387,7 +3387,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
         }
 
         _readyStateScheduled = true;
-        Host.Services.Dispatcher.Post(CompleteReadyState, HtmlMlDispatchPriority.Background);
+        Host.Services.Dispatcher.Post(CompleteReadyState, WebSceneDispatchPriority.Background);
     }
 
     internal void MarkParserComplete()
@@ -3405,7 +3405,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
     {
         if (Host.IsExecutingJavaScript)
         {
-            Host.Services.Dispatcher.Post(CompleteReadyState, HtmlMlDispatchPriority.Background);
+            Host.Services.Dispatcher.Post(CompleteReadyState, WebSceneDispatchPriority.Background);
             return;
         }
 
@@ -4820,7 +4820,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
             // registration must get their browser-defined checkpoint first.
             if (Host.IsExecutingJavaScript)
             {
-                Host.Services.Dispatcher.Post(initializeFrame!, HtmlMlDispatchPriority.Background);
+                Host.Services.Dispatcher.Post(initializeFrame!, WebSceneDispatchPriority.Background);
                 return;
             }
 
@@ -4909,7 +4909,7 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
                 element.EndContentInitialization(initialized, frameDocument);
             }
         };
-        Host.Services.Dispatcher.Post(initializeFrame, HtmlMlDispatchPriority.Default);
+        Host.Services.Dispatcher.Post(initializeFrame, WebSceneDispatchPriority.Default);
     }
 
     internal void EnsureInitialIframeBrowsingContext(AvaloniaDomElement element)
@@ -5073,12 +5073,12 @@ public class AvaloniaDomDocument : DomDocumentCore<AvaloniaDomElement>, IHtmlMlJ
 internal sealed class VirtualIframeDomDocument : AvaloniaDomDocument
 {
     private static readonly bool s_enableFrameResizeCoalescing = string.Equals(
-        Environment.GetEnvironmentVariable("HTMLML_ENABLE_VIRTUAL_FRAME_RESIZE_COALESCING"),
+        Environment.GetEnvironmentVariable("WEBSCENE_ENABLE_VIRTUAL_FRAME_RESIZE_COALESCING"),
         "1",
         StringComparison.Ordinal);
     private static readonly TimeSpan s_frameResizeQuietPeriod = TimeSpan.FromMilliseconds(80);
     private readonly Control _root;
-    private IHtmlMlScheduledWork? _pendingFrameResizeEvent;
+    private IWebSceneScheduledWork? _pendingFrameResizeEvent;
     private bool _viewportResizeFramePending;
     public VirtualIframeDomDocument(AvaloniaBrowserHost host, Control root)
         : base(host, elementFactory: null, attachTopLevelHandlers: false)
@@ -5172,7 +5172,7 @@ internal sealed class VirtualIframeDomDocument : AvaloniaDomDocument
         _pendingFrameResizeEvent = Host.Services.Dispatcher.Schedule(
             s_frameResizeQuietPeriod,
             DeliverFrameResizeEvent,
-            HtmlMlDispatchPriority.Background);
+            WebSceneDispatchPriority.Background);
     }
 
     private void DeliverFrameResizeEvent()
@@ -5280,10 +5280,10 @@ internal sealed class DomEventRegistration
 
 public class AvaloniaDomElement :
     DomElementCore,
-    IHtmlMlDomRectTarget,
-    IHtmlMlDomClientRectsTarget,
-    IHtmlMlDomNumericTarget,
-    IHtmlMlDomIdentityTarget,
+    IWebSceneDomRectTarget,
+    IWebSceneDomClientRectsTarget,
+    IWebSceneDomNumericTarget,
+    IWebSceneDomIdentityTarget,
     IDomContainerElement<AvaloniaDomElement>,
     ICssSelectorNode
 {
@@ -5309,27 +5309,27 @@ public class AvaloniaDomElement :
         "padding-top", "padding-right", "padding-bottom", "padding-left"
     ];
     private static readonly bool s_disableStyleReadScope =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_STYLE_READ_SCOPE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_STYLE_READ_SCOPE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableLayoutReadFastPaths =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_LAYOUT_READ_FAST_PATHS"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_LAYOUT_READ_FAST_PATHS"), "1", StringComparison.Ordinal);
     private static readonly bool s_disablePresentationChangeSet =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_PRESENTATION_CHANGE_SET"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_PRESENTATION_CHANGE_SET"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableViewportLayoutInvalidationCoalescing =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_VIEWPORT_LAYOUT_INVALIDATION_COALESCING"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_VIEWPORT_LAYOUT_INVALIDATION_COALESCING"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableViewportLayoutChangeSet =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_VIEWPORT_LAYOUT_CHANGE_SET"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_VIEWPORT_LAYOUT_CHANGE_SET"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableComputedLayoutChangeSet =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_COMPUTED_LAYOUT_CHANGE_SET"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_COMPUTED_LAYOUT_CHANGE_SET"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableInlineStyleSpanParser =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_INLINE_STYLE_SPAN_PARSER"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_INLINE_STYLE_SPAN_PARSER"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableStyleSerializationBuilder =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_STYLE_SERIALIZATION_BUILDER"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_STYLE_SERIALIZATION_BUILDER"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableInlinePresentationBatching =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_INLINE_PRESENTATION_BATCHING"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_INLINE_PRESENTATION_BATCHING"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableRedundantInlineStyleWriteSuppression =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_REDUNDANT_INLINE_STYLE_WRITE_SUPPRESSION"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_REDUNDANT_INLINE_STYLE_WRITE_SUPPRESSION"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableNativePropertyCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_NATIVE_PROPERTY_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_NATIVE_PROPERTY_CACHE"), "1", StringComparison.Ordinal);
     private static readonly object s_nativePropertyCacheLock = new();
     private static readonly Dictionary<(Type ControlType, string PropertyName), AvaloniaProperty?> s_nativePropertyCache = new();
     private static readonly Dictionary<(Type ControlType, string PropertyName), PropertyInfo?> s_clrPropertyCache = new();
@@ -5401,10 +5401,10 @@ public class AvaloniaDomElement :
     private string? _cssTransformValue;
     private CssRotateTransition? _cssRotateTransition;
     private CssMatrixTransition? _cssMatrixTransition;
-    private HtmlMlFrameRequest _cssTransformFrameRequest;
+    private WebSceneFrameRequest _cssTransformFrameRequest;
     private CssScalarTransition? _cssOpacityTransition;
     private CssColorTransition? _cssColorTransition;
-    private HtmlMlFrameRequest _cssPaintFrameRequest;
+    private WebSceneFrameRequest _cssPaintFrameRequest;
     private double? _cssPresentedOpacity;
     private Color? _cssPresentedColor;
     private bool _hasComputedPresentation;
@@ -5504,7 +5504,7 @@ public class AvaloniaDomElement :
     }
 
     public AvaloniaDomElement(AvaloniaBrowserHost host, AvaloniaDomDocument ownerDocument, Control control)
-        : base(HtmlMlBackendHandle.Create(control))
+        : base(WebSceneBackendHandle.Create(control))
     {
         Host = host ?? throw new ArgumentNullException(nameof(host));
         OwnerDocument = ownerDocument ?? throw new ArgumentNullException(nameof(ownerDocument));
@@ -5837,7 +5837,7 @@ public class AvaloniaDomElement :
 
     public virtual object? getContext(string type, object? options) => getContext(type);
 
-    public string __htmlMlCanvasToDataURL(string? type = null, double? quality = null)
+    public string __webSceneCanvasToDataURL(string? type = null, double? quality = null)
     {
         if (!IsExplicitHtmlCanvasElement())
         {
@@ -5868,7 +5868,7 @@ public class AvaloniaDomElement :
     // Internal bridge used by the ResizeObserver shim. The callback is invoked
     // after Avalonia has processed a bounds/size mutation, instead of relying
     // solely on a compositor frame being scheduled.
-    public void __htmlMlObserveResize(object callback)
+    public void __webSceneObserveResize(object callback)
     {
         var externalCallback = callback as IExternalJavaScriptCallback
                                ?? Host.ExternalCallbackAdapter?.GetCallback(callback, create: true);
@@ -5886,7 +5886,7 @@ public class AvaloniaDomElement :
         }
     }
 
-    public void __htmlMlUnobserveResize(object callback)
+    public void __webSceneUnobserveResize(object callback)
     {
         var externalCallback = callback as IExternalJavaScriptCallback
                                ?? Host.ExternalCallbackAdapter?.GetCallback(callback, create: false);
@@ -6987,7 +6987,7 @@ public class AvaloniaDomElement :
     internal IExternalVirtualBrowsingContext? GetExternalContentWindowRuntime()
         => _externalContentWindowRuntime;
 
-    public object? __htmlMlExternalContentDocument
+    public object? __webSceneExternalContentDocument
         => _externalContentWindowRuntime is IExternalVirtualBrowsingContextDocumentView view
             ? view.Document
             : null;
@@ -7218,7 +7218,7 @@ public class AvaloniaDomElement :
     public virtual bool matches(string selector)
         => MatchesSelector(selector, this);
 
-    public bool __htmlMlIsValidSelector(string selector)
+    public bool __webSceneIsValidSelector(string selector)
         => CssSelectorSyntaxParser.IsSupportedDomSelectorList(selector);
 
     internal bool MatchesSelector(string selector, AvaloniaDomElement scopeElement)
@@ -7314,13 +7314,13 @@ public class AvaloniaDomElement :
         return HasLayoutBox() ? GetElementBounds() : default;
     }
 
-    HtmlMlRect IHtmlMlDomRectTarget.ReadBoundingClientRect()
+    WebSceneRect IWebSceneDomRectTarget.ReadBoundingClientRect()
     {
         var rect = GetBoundingClientRectValue();
-        return new HtmlMlRect(rect.X, rect.Y, rect.Width, rect.Height);
+        return new WebSceneRect(rect.X, rect.Y, rect.Width, rect.Height);
     }
 
-    bool IHtmlMlDomClientRectsTarget.TryReadClientRect(out HtmlMlRect rect)
+    bool IWebSceneDomClientRectsTarget.TryReadClientRect(out WebSceneRect rect)
     {
         if (s_disableLayoutReadFastPaths)
         {
@@ -7333,25 +7333,25 @@ public class AvaloniaDomElement :
         }
 
         var bounds = GetElementBounds();
-        rect = new HtmlMlRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        rect = new WebSceneRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         return true;
     }
 
-    double IHtmlMlDomNumericTarget.ReadDomNumericProperty(HtmlMlDomNumericProperty property)
+    double IWebSceneDomNumericTarget.ReadDomNumericProperty(WebSceneDomNumericProperty property)
         => property switch
         {
-            HtmlMlDomNumericProperty.Width => width,
-            HtmlMlDomNumericProperty.Height => height,
-            HtmlMlDomNumericProperty.ClientWidth => clientWidth,
-            HtmlMlDomNumericProperty.ClientHeight => clientHeight,
-            HtmlMlDomNumericProperty.OffsetWidth => offsetWidth,
-            HtmlMlDomNumericProperty.OffsetHeight => offsetHeight,
-            HtmlMlDomNumericProperty.OffsetTop => offsetTop,
-            HtmlMlDomNumericProperty.OffsetLeft => offsetLeft,
+            WebSceneDomNumericProperty.Width => width,
+            WebSceneDomNumericProperty.Height => height,
+            WebSceneDomNumericProperty.ClientWidth => clientWidth,
+            WebSceneDomNumericProperty.ClientHeight => clientHeight,
+            WebSceneDomNumericProperty.OffsetWidth => offsetWidth,
+            WebSceneDomNumericProperty.OffsetHeight => offsetHeight,
+            WebSceneDomNumericProperty.OffsetTop => offsetTop,
+            WebSceneDomNumericProperty.OffsetLeft => offsetLeft,
             _ => double.NaN
         };
 
-    long IHtmlMlDomIdentityTarget.HtmlMlDomIdentity => __htmlMlDomIdentity;
+    long IWebSceneDomIdentityTarget.WebSceneDomIdentity => __webSceneDomIdentity;
 
     public virtual DomRect[] getClientRects()
     {
@@ -8671,7 +8671,7 @@ public class AvaloniaDomElement :
         }
 
         var parsed = adapter!.GetEventListenerOptions(options);
-        __htmlMlAddExternalEventListener(
+        __webSceneAddExternalEventListener(
             type,
             listener,
             parsed.Capture,
@@ -8692,10 +8692,10 @@ public class AvaloniaDomElement :
         }
 
         var parsed = adapter!.GetEventListenerOptions(options);
-        __htmlMlRemoveExternalEventListener(type, listener, parsed.Capture);
+        __webSceneRemoveExternalEventListener(type, listener, parsed.Capture);
     }
 
-    public void __htmlMlAddExternalEventListener(
+    public void __webSceneAddExternalEventListener(
         string type,
         IExternalDomEventListener listener,
         bool capture,
@@ -8721,7 +8721,7 @@ public class AvaloniaDomElement :
             new EventListenerOptions(capture, once, passive)));
     }
 
-    public void __htmlMlRemoveExternalEventListener(
+    public void __webSceneRemoveExternalEventListener(
         string type,
         IExternalDomEventListener listener,
         bool capture)
@@ -9136,7 +9136,7 @@ public class AvaloniaDomElement :
                 _suppressNextNativeButtonClick = true;
                 Host.Services.Dispatcher.Post(
                     () => _suppressNextNativeButtonClick = false,
-                    HtmlMlDispatchPriority.Input);
+                    WebSceneDispatchPriority.Input);
             }
             OwnerDocument.DispatchPointerEvent(target, "click", e, bubbles: true, cancelable: true);
         }
@@ -9165,7 +9165,7 @@ public class AvaloniaDomElement :
         // still emits the normal events with a null relatedTarget.
         Host.Services.Dispatcher.Post(
             () => OwnerDocument.ClearPointerHover(target, e),
-            HtmlMlDispatchPriority.Input);
+            WebSceneDispatchPriority.Input);
     }
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -9252,7 +9252,7 @@ public class AvaloniaDomElement :
                         var scheduledVersion = Volatile.Read(ref _searchInputDebounceVersion);
                         Host.Services.Dispatcher.Post(
                             () => DispatchDebouncedSearchInput(scheduledVersion),
-                            HtmlMlDispatchPriority.Input);
+                            WebSceneDispatchPriority.Input);
                     });
                 Control.DetachedFromVisualTree += OnSearchInputDetached;
             }
@@ -9264,7 +9264,7 @@ public class AvaloniaDomElement :
         {
             Host.Services.Dispatcher.Post(
                 () => OwnerDocument.DispatchTextInputEvent(this, "input", e, bubbles: true, cancelable: false),
-                HtmlMlDispatchPriority.Input);
+                WebSceneDispatchPriority.Input);
         }
     }
 
@@ -10392,7 +10392,7 @@ public class AvaloniaDomElement :
         }
 
         return new SvgScene(
-            new HtmlMlRect(viewBox.X, viewBox.Y, viewBox.Width, viewBox.Height),
+            new WebSceneRect(viewBox.X, viewBox.Y, viewBox.Width, viewBox.Height),
             root,
             Interlocked.Increment(ref _svgSceneRevision),
             Control is SvgLayoutPanel { StretchViewBox: true });
@@ -10429,7 +10429,7 @@ public class AvaloniaDomElement :
             SvgSceneNodeKind.Circle => CircleBounds(element),
             SvgSceneNodeKind.Rectangle or SvgSceneNodeKind.Image => RectangleBounds(element),
             SvgSceneNodeKind.Text => TextBounds(element),
-            _ => HtmlMlRect.Empty
+            _ => WebSceneRect.Empty
         };
         var node = new SvgSceneNode(nextId++, kind)
         {
@@ -10442,7 +10442,7 @@ public class AvaloniaDomElement :
                 : null,
             Resource = kind == SvgSceneNodeKind.Image
                        && element.Control is Image { Source: IImage image }
-                ? HtmlMlBackendHandle.Create(image)
+                ? WebSceneBackendHandle.Create(image)
                 : default,
             Fill = ParseSvgPaint(fillValue, currentColor, opacity * ReadSvgNumber(element, "fill-opacity", 1)),
             Stroke = ParseSvgPaint(strokeValue, currentColor, opacity * ReadSvgNumber(element, "stroke-opacity", 1)),
@@ -10491,7 +10491,7 @@ public class AvaloniaDomElement :
         }
 
         return new SvgPaint(
-            new HtmlMlColor(color.A, color.R, color.G, color.B),
+            new WebSceneColor(color.A, color.R, color.G, color.B),
             Math.Clamp(opacity, 0, 1));
     }
 
@@ -10551,25 +10551,25 @@ public class AvaloniaDomElement :
             .Where(double.IsFinite)
             .ToArray();
 
-    private static HtmlMlRect CircleBounds(AvaloniaDomElement element)
+    private static WebSceneRect CircleBounds(AvaloniaDomElement element)
     {
         var cx = ReadSvgNumber(element, "cx", 0);
         var cy = ReadSvgNumber(element, "cy", 0);
         var radius = Math.Max(0, ReadSvgNumber(element, "r", 0));
-        return new HtmlMlRect(cx - radius, cy - radius, radius * 2, radius * 2);
+        return new WebSceneRect(cx - radius, cy - radius, radius * 2, radius * 2);
     }
 
-    private static HtmlMlRect RectangleBounds(AvaloniaDomElement element)
+    private static WebSceneRect RectangleBounds(AvaloniaDomElement element)
         => new(
             ReadSvgNumber(element, "x", 0),
             ReadSvgNumber(element, "y", 0),
             Math.Max(0, ReadSvgNumber(element, "width", 0)),
             Math.Max(0, ReadSvgNumber(element, "height", 0)));
 
-    private static HtmlMlRect TextBounds(AvaloniaDomElement element)
+    private static WebSceneRect TextBounds(AvaloniaDomElement element)
     {
         var size = Math.Max(1, ReadSvgNumber(element, "font-size", 16));
-        return new HtmlMlRect(
+        return new WebSceneRect(
             ReadSvgNumber(element, "x", 0),
             ReadSvgNumber(element, "y", 0) - size,
             0,
@@ -16271,7 +16271,7 @@ public sealed class AvaloniaDomImageElement : AvaloniaDomElement
         {
             if (Host.IsExecutingJavaScript)
             {
-                Host.Services.Dispatcher.Post(Deliver, HtmlMlDispatchPriority.Background);
+                Host.Services.Dispatcher.Post(Deliver, WebSceneDispatchPriority.Background);
                 return;
             }
 
@@ -16293,7 +16293,7 @@ public sealed class AvaloniaDomImageElement : AvaloniaDomElement
             }
         }
 
-        Host.Services.Dispatcher.Post(Deliver, HtmlMlDispatchPriority.Send);
+        Host.Services.Dispatcher.Post(Deliver, WebSceneDispatchPriority.Send);
     }
 
     private static byte[] ExtractRgbaPixels(Bitmap bitmap)
@@ -17078,7 +17078,7 @@ public sealed class DomDocumentImplementation
     }
 }
 
-public sealed class DocumentStyleProbe : DynamicObject, IHtmlMlCssStyleDeclarationTarget
+public sealed class DocumentStyleProbe : DynamicObject, IWebSceneCssStyleDeclarationTarget
 {
     private readonly Dictionary<string, string> _values = new(CssPropertyNameComparer.Instance);
     private readonly Action? _changed;
@@ -17187,7 +17187,7 @@ public sealed class DocumentStyleProbe : DynamicObject, IHtmlMlCssStyleDeclarati
     public bool supportsPropertyName(string propertyName)
         => CssPropertyCatalog.IsSupported(propertyName);
 
-    void IHtmlMlCssStyleDeclarationTarget.SetProperty(string propertyName, string? value)
+    void IWebSceneCssStyleDeclarationTarget.SetProperty(string propertyName, string? value)
         => SetProperty(propertyName, value);
 
     private void SetProperty(string propertyName, string? value)
@@ -17250,7 +17250,7 @@ public sealed class DocumentStyleProbe : DynamicObject, IHtmlMlCssStyleDeclarati
 public sealed class DomTokenList
 {
     private static readonly bool s_disableValueCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_DOM_TOKEN_VALUE_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_DOM_TOKEN_VALUE_CACHE"), "1", StringComparison.Ordinal);
     private readonly AvaloniaDomElement _element;
     private string? _cachedValue;
     private bool _cachedValueValid;
@@ -17531,7 +17531,7 @@ public sealed class DomStringMap : DomStringMapCore<AvaloniaDomDatasetAdapter>
     }
 }
 
-public sealed class CssStyleDeclaration : DynamicObject, IHtmlMlCssStyleDeclarationTarget
+public sealed class CssStyleDeclaration : DynamicObject, IWebSceneCssStyleDeclarationTarget
 {
     private readonly AvaloniaDomElement _element;
 
@@ -17587,7 +17587,7 @@ public sealed class CssStyleDeclaration : DynamicObject, IHtmlMlCssStyleDeclarat
     public bool supportsPropertyName(string propertyName)
         => CssPropertyCatalog.IsSupported(propertyName);
 
-    void IHtmlMlCssStyleDeclarationTarget.SetProperty(string propertyName, string? value)
+    void IWebSceneCssStyleDeclarationTarget.SetProperty(string propertyName, string? value)
         => _element.SetStyleProperty(propertyName, value);
 
     public void removeProperty(string propertyName)
@@ -17707,9 +17707,9 @@ public sealed class CssStyleDeclaration : DynamicObject, IHtmlMlCssStyleDeclarat
 }
 
 public sealed class CssComputedStyle : DynamicObject,
-    IHtmlMlComputedStyleTarget,
-    IHtmlMlComputedStylePropertySupportTarget,
-    IHtmlMlLiveComputedStyleTarget
+    IWebSceneComputedStyleTarget,
+    IWebSceneComputedStylePropertySupportTarget,
+    IWebSceneLiveComputedStyleTarget
 {
     private Dictionary<string, string> _values;
     private readonly Func<string, string>? _valueResolver;
@@ -17722,7 +17722,7 @@ public sealed class CssComputedStyle : DynamicObject,
     internal CssComputedStyle(Dictionary<string, string> values)
     {
         // Callers transfer an otherwise private, case-insensitive snapshot.
-        // ClearScript consumes IHtmlMlComputedStyleTarget directly, so eagerly
+        // ClearScript consumes IWebSceneComputedStyleTarget directly, so eagerly
         // cloning it and materializing a second camel-case dictionary made every
         // getComputedStyle read pay for two collections it never enumerated.
         _values = values;
@@ -17742,7 +17742,7 @@ public sealed class CssComputedStyle : DynamicObject,
 
     public int length => EnsureMaterialized().Count;
 
-    int IHtmlMlComputedStyleTarget.Length => length;
+    int IWebSceneComputedStyleTarget.Length => length;
 
     public override bool TryGetMember(GetMemberBinder binder, out object? result)
     {
@@ -17774,13 +17774,13 @@ public sealed class CssComputedStyle : DynamicObject,
         return GetResolvedValue(normalized);
     }
 
-    string IHtmlMlComputedStyleTarget.GetPropertyValue(string propertyName)
+    string IWebSceneComputedStyleTarget.GetPropertyValue(string propertyName)
         => getPropertyValue(propertyName) ?? string.Empty;
 
-    bool IHtmlMlComputedStylePropertySupportTarget.SupportsPropertyName(string propertyName)
+    bool IWebSceneComputedStylePropertySupportTarget.SupportsPropertyName(string propertyName)
         => CssPropertyCatalog.IsSupported(propertyName);
 
-    bool IHtmlMlLiveComputedStyleTarget.IsPropertyLive(string propertyName)
+    bool IWebSceneLiveComputedStyleTarget.IsPropertyLive(string propertyName)
     {
         if (string.IsNullOrWhiteSpace(propertyName))
         {
@@ -17802,7 +17802,7 @@ public sealed class CssComputedStyle : DynamicObject,
         return values.ElementAt(index).Key;
     }
 
-    string IHtmlMlComputedStyleTarget.Item(int index) => item(index);
+    string IWebSceneComputedStyleTarget.Item(int index) => item(index);
 
     public override IEnumerable<string> GetDynamicMemberNames()
         => EnsureMaterialized().Keys.Select(CssStyleDeclaration.ToCamelCase);
@@ -17857,9 +17857,9 @@ public sealed class DomMutationObserver : DomMutationObserverCore<AvaloniaDomEle
     }
 
     public void observe(object target)
-        => __htmlMlObserve(target, childList: true, attributes: false, subtree: false, attributeOldValue: false);
+        => __webSceneObserve(target, childList: true, attributes: false, subtree: false, attributeOldValue: false);
 
-    public void __htmlMlObserve(
+    public void __webSceneObserve(
         object target,
         bool childList,
         bool attributes,
@@ -17888,7 +17888,7 @@ public sealed class DomMutationObserver : DomMutationObserverCore<AvaloniaDomEle
 
     public object[] takeRecords() => TakeRecordsCore();
 
-    public void __htmlMlSetExternalObserver(object observer)
+    public void __webSceneSetExternalObserver(object observer)
     {
         _externalObserver = observer;
     }

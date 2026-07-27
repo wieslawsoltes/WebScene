@@ -13,7 +13,7 @@ public sealed class V8InputValueSelectionRegressionTests
     [Trait("Runtime", "V8Native")]
     public void DynamicValueAssignmentMatchesChromiumSelectionPlacement()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -32,7 +32,7 @@ public sealed class V8InputValueSelectionRegressionTests
                 const input = document.createElement('input');
                 input.value = 'abcdefghij';
                 document.body.appendChild(input);
-                const snapshots = globalThis.__htmlMlInputValueSelection = [];
+                const snapshots = globalThis.__webSceneInputValueSelection = [];
                 const record = label => snapshots.push([
                   label,
                   input.selectionStart,
@@ -54,7 +54,7 @@ public sealed class V8InputValueSelectionRegressionTests
                 """, "v8-input-value-selection-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlInputValueSelection)")) ?? "[]");
+                "JSON.stringify(globalThis.__webSceneInputValueSelection)")) ?? "[]");
             var snapshots = result.RootElement.EnumerateArray().ToArray();
             Assert.Equal(5, snapshots.Length);
             AssertSnapshot(snapshots[0], "dynamic-before-focus", 10, 10, "none");

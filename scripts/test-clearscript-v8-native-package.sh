@@ -40,16 +40,16 @@ if [[ ! -d "$feed" ]]; then
 fi
 
 feed="$(cd "$feed" && pwd)"
-restore_dir="$(mktemp -d "${TMPDIR:-/tmp}/htmlml-v8-package-smoke.XXXXXX")"
+restore_dir="$(mktemp -d "${TMPDIR:-/tmp}/webscene-v8-package-smoke.XXXXXX")"
 trap 'rm -rf "$restore_dir"' EXIT
 restore_config="$restore_dir/NuGet.config"
 dotnet new nugetconfig --output "$restore_dir" --force >/dev/null
 dotnet nuget add source "$feed" \
-  --name htmlml-v8-native \
+  --name webscene-v8-native \
   --configfile "$restore_config" >/dev/null
 
 dotnet run --project "$PROJECT" \
   -c Release \
-  -p:HtmlMlClearScriptNativeRid="$rid" \
-  -p:HtmlMlClearScriptNativePackageVersion="$version" \
+  -p:WebSceneClearScriptNativeRid="$rid" \
+  -p:WebSceneClearScriptNativePackageVersion="$version" \
   -p:RestoreConfigFile="$restore_config"

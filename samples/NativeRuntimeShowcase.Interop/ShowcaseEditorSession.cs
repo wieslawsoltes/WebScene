@@ -1,4 +1,4 @@
-using HtmlML.JavaScript.Interop;
+using WebScene.JavaScript.Interop;
 
 namespace NativeRuntimeShowcase.Interop;
 
@@ -25,13 +25,13 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             var ready = await _evaluateJsonAsync(
-                "Boolean(globalThis.__htmlMlComponentReady)",
-                "htmlml-showcase-editor-ready.js",
+                "Boolean(globalThis.__webSceneComponentReady)",
+                "webscene-showcase-editor-ready.js",
                 cancellationToken);
             if (string.Equals(ready, "true", StringComparison.Ordinal))
             {
                 var reference = await _invoker.GetGlobalObjectAsync(
-                    "__htmlMlMonacoEditor",
+                    "__webSceneMonacoEditor",
                     cancellationToken);
                 _editor = MonacoEditor.FromReference(_invoker, reference);
                 await using var model =
@@ -66,7 +66,7 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
             LanguageFor(fileName),
             cancellationToken);
         await _invoker.InvokeGlobalVoidAsync(
-            "__htmlMlShowcaseSetFileName",
+            "__webSceneShowcaseSetFileName",
             [JavaScriptArgument.From(fileName)],
             cancellationToken);
         await editor.LayoutAsync(cancellationToken);

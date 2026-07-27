@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace HtmlML.WebPlatformSubset.Runner;
+namespace WebScene.WebPlatformSubset.Runner;
 
 internal sealed class ProfileManifest
 {

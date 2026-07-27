@@ -93,7 +93,7 @@ export function createSampleLifecycle(
   return {
     mount(context = {}) {
       container = document.createElement('div');
-      container.id = `htmlml-${displayName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`;
+      container.id = `webscene-${displayName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`;
       container.style.minHeight = '100%';
       container.style.color = colors.ink;
       container.style.background = colors.canvas;

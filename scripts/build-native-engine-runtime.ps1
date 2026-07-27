@@ -19,10 +19,10 @@ if ([string]::IsNullOrWhiteSpace($Output)) {
 $cpu = if ($Rid -eq "win-arm64") { "arm64" } else { "x64" }
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $versionOutput = & dotnet msbuild `
-        (Join-Path $repoRoot "src/HtmlML.Core/HtmlML.Core.csproj") `
+        (Join-Path $repoRoot "src/WebScene.Core/WebScene.Core.csproj") `
         -getProperty:PackageVersion -nologo
     if ($LASTEXITCODE -ne 0) {
-        throw "Unable to evaluate the HtmlML package version."
+        throw "Unable to evaluate the WebScene package version."
     }
     $PackageVersion = ($versionOutput | Select-Object -Last 1).Trim()
 }
@@ -82,13 +82,13 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
         }
     }
     Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/clearscript/V8/V8Patch.txt")
-    Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/HtmlML.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
+    Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
     Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
     Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
 
     # Backslash-escaped quotes survive PowerShell's native argument marshalling
     # and reach GN as string delimiters (the form used by ClearScript itself).
-    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu
+    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-WebScene\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu
     Push-Location $V8Root
     try {
         & gn.bat gen "out/$cpu/Release" "--args=$gnArgs"
@@ -120,23 +120,23 @@ if (-not $hasPointerCompression -or -not $hasSharedCage) {
 }
 
 $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid"
-& cmake -S (Join-Path $repoRoot "experiments/HtmlML.NativeEngine.Probe") -B $buildDir `
+& cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
-    -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON `
-    -DHTMLML_V8_POINTER_COMPRESSION=ON `
-    -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
-    -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
-    -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON `
-    -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF `
-    "-DHTMLML_V8_ROOT=$V8Root"
-if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native HtmlML engine." }
+    -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
+    -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
+    -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
+    -DWEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON `
+    -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF `
+    "-DWEBSCENE_V8_ROOT=$V8Root"
+if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
 & cmake --build $buildDir --config Release --parallel
-if ($LASTEXITCODE -ne 0) { throw "Failed to build the native HtmlML engine." }
+if ($LASTEXITCODE -ne 0) { throw "Failed to build the native WebScene engine." }
 
-$nativePath = Join-Path $buildDir "Release/htmlml_native_engine.dll"
+$nativePath = Join-Path $buildDir "Release/webscene_native_engine.dll"
 if (-not (Test-Path $nativePath)) { throw "Native engine build did not produce '$nativePath'." }
-$ixWebSocketLicense = Join-Path $buildDir "_deps/htmlml_ixwebsocket-src/LICENSE.txt"
-$mbedTlsLicense = Join-Path $buildDir "_deps/htmlml_mbedtls-src/LICENSE"
+$ixWebSocketLicense = Join-Path $buildDir "_deps/webscene_ixwebsocket-src/LICENSE.txt"
+$mbedTlsLicense = Join-Path $buildDir "_deps/webscene_mbedtls-src/LICENSE"
 if (-not (Test-Path $ixWebSocketLicense)) {
     throw "IXWebSocket license was not found at '$ixWebSocketLicense'."
 }
@@ -145,25 +145,25 @@ if (-not (Test-Path $mbedTlsLicense)) {
 }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $packArguments = @(
-    "pack", (Join-Path $repoRoot "packaging/HtmlML.NativeEngine.Runtime/HtmlML.NativeEngine.Runtime.csproj"),
+    "pack", (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/WebScene.NativeEngine.Runtime.csproj"),
     "-c", "Release", "-o", $Output,
-    "-p:HtmlMlNativeEngineRid=$Rid",
-    "-p:HtmlMlNativeEnginePath=$nativePath",
-    "-p:HtmlMlNativeEngineIcuDataPath=$icuData",
-    "-p:HtmlMlNativeEngineV8LicensePath=$v8License",
-    "-p:HtmlMlNativeEngineIcuLicensePath=$icuLicense",
-    "-p:HtmlMlNativeEngineIXWebSocketLicensePath=$ixWebSocketLicense",
-    "-p:HtmlMlNativeEngineMbedTlsLicensePath=$mbedTlsLicense",
-    "-p:HtmlMlNativeEngineV8PointerCompression=true",
-    "-p:HtmlMlNativeEngineV8SharedCage=true",
-    "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true",
-    "-p:HtmlMlNativeEngineDenseLink=true"
+    "-p:WebSceneNativeEngineRid=$Rid",
+    "-p:WebSceneNativeEnginePath=$nativePath",
+    "-p:WebSceneNativeEngineIcuDataPath=$icuData",
+    "-p:WebSceneNativeEngineV8LicensePath=$v8License",
+    "-p:WebSceneNativeEngineIcuLicensePath=$icuLicense",
+    "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixWebSocketLicense",
+    "-p:WebSceneNativeEngineMbedTlsLicensePath=$mbedTlsLicense",
+    "-p:WebSceneNativeEngineV8PointerCompression=true",
+    "-p:WebSceneNativeEngineV8SharedCage=true",
+    "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
+    "-p:WebSceneNativeEngineDenseLink=true"
 )
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments
-if ($LASTEXITCODE -ne 0) { throw "Failed to pack the native HtmlML engine." }
+if ($LASTEXITCODE -ne 0) { throw "Failed to pack the native WebScene engine." }
 
-$packagePath = Join-Path $Output "HtmlML.NativeEngine.Runtime.$Rid.$PackageVersion.nupkg"
+$packagePath = Join-Path $Output "WebScene.NativeEngine.Runtime.$Rid.$PackageVersion.nupkg"
 if (-not (Test-Path $packagePath)) { throw "The RID package was not produced at '$packagePath'." }
 $packageSmokeDir = Join-Path $buildDir "package-smoke"
 if (Test-Path $packageSmokeDir) { Remove-Item -Recurse -Force $packageSmokeDir }
@@ -171,10 +171,10 @@ New-Item -ItemType Directory -Force -Path $packageSmokeDir | Out-Null
 $packageZip = Join-Path $buildDir "package-smoke.zip"
 Copy-Item $packagePath $packageZip -Force
 Expand-Archive -Path $packageZip -DestinationPath $packageSmokeDir -Force
-$packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/htmlml_native_engine.dll"
+$packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_native_engine.dll"
 
 & dotnet run `
-    --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj") `
+    --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
     -c Release -- `
     --engine native `
     --selection required `
@@ -184,7 +184,7 @@ $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/htmlml_nat
     --output (Join-Path $buildDir "wpt-results")
 if ($LASTEXITCODE -ne 0) { throw "Native package relocation smoke failed." }
 
-$consumerRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("htmlml-native-consumer-" + [Guid]::NewGuid().ToString("N"))
+$consumerRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("webscene-native-consumer-" + [Guid]::NewGuid().ToString("N"))
 $consumerDir = Join-Path $consumerRoot "consumer"
 $previousPackages = $env:NUGET_PACKAGES
 $env:NUGET_PACKAGES = Join-Path $consumerRoot "packages"
@@ -192,7 +192,7 @@ try {
     & dotnet new console --framework net8.0 --no-restore --output $consumerDir
     if ($LASTEXITCODE -ne 0) { throw "Failed to create the native package consumer smoke project." }
     $consumerProject = Join-Path $consumerDir "consumer.csproj"
-    & dotnet add $consumerProject package "HtmlML.NativeEngine.Runtime.$Rid" `
+    & dotnet add $consumerProject package "WebScene.NativeEngine.Runtime.$Rid" `
         --version $PackageVersion --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to add the native runtime package to a consumer." }
     & dotnet restore $consumerProject -r $Rid `
@@ -202,7 +202,7 @@ try {
     & dotnet build $consumerProject -c Release -r $Rid --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }
     $consumerOutput = Join-Path $consumerDir "bin/Release/net8.0/$Rid"
-    @("htmlml_native_engine.dll", "icudtl.dat", "htmlml-native-runtime.json") | ForEach-Object {
+    @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json") | ForEach-Object {
         if (-not (Test-Path (Join-Path $consumerOutput $_))) {
             throw "The runtime package did not copy '$_' to consumer output."
         }

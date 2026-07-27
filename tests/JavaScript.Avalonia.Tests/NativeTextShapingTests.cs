@@ -1,4 +1,4 @@
-using HtmlML.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia.Native;
 using Xunit;
 
 namespace JavaScript.Avalonia.Tests;

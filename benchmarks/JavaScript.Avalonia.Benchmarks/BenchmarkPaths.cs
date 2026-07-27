@@ -8,7 +8,7 @@ internal static class BenchmarkPaths
 
     private static string FindRepoRoot()
     {
-        var configured = Environment.GetEnvironmentVariable("HTMLML_REPO_ROOT");
+        var configured = Environment.GetEnvironmentVariable("WEBSCENE_REPO_ROOT");
         if (!string.IsNullOrWhiteSpace(configured) && IsRepoRoot(configured))
         {
             return Path.GetFullPath(configured);
@@ -26,10 +26,10 @@ internal static class BenchmarkPaths
         }
 
         throw new DirectoryNotFoundException(
-            "Could not locate the HtmlML repository. Set HTMLML_REPO_ROOT when running benchmarks externally.");
+            "Could not locate the WebScene repository. Set WEBSCENE_REPO_ROOT when running benchmarks externally.");
     }
 
     private static bool IsRepoRoot(string path)
-        => File.Exists(Path.Combine(path, "HtmlML.sln"))
+        => File.Exists(Path.Combine(path, "WebScene.sln"))
            && Directory.Exists(Path.Combine(path, "src", "JavaScript.Avalonia"));
 }

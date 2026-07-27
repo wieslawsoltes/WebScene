@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSource, readManifest, validateManifest } from '@htmlml/sdk/compatibility';
+import { checkSource, readManifest, validateManifest } from '@webscene/sdk/compatibility';
 
 const componentsRoot = dirname(fileURLToPath(import.meta.url));
 const catalog = JSON.parse(await readFile(join(componentsRoot, 'catalog.json'), 'utf8'));
@@ -9,7 +9,7 @@ let failures = 0;
 
 for (const sample of catalog.samples) {
   const root = join(componentsRoot, sample.id);
-  const manifest = await readManifest(join(root, 'htmlml-component.json'));
+  const manifest = await readManifest(join(root, 'webscene-component.json'));
   const manifestErrors = validateManifest(manifest);
   const sourcePath = join(root, 'src', 'main.tsx');
   const diagnostics = manifestErrors.map(message => ({ severity: 'error', message }))

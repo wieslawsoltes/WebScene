@@ -1,0 +1,39 @@
+{
+  "name": "@webscene/sdk",
+  "version": "1.0.0",
+  "description": "Bounded TypeScript profile, compatibility checker, and bundler integration for WebScene",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./runtime.mjs"
+    },
+    "./profile": "./types/profile.d.ts",
+    "./vite": "./vite.mjs",
+    "./esbuild": "./esbuild.mjs",
+    "./compatibility": "./compatibility.mjs",
+    "./interop-discovery": "./interop-discovery.mjs"
+  },
+  "types": "./types/index.d.ts",
+  "bin": {
+    "webscene-check": "./checker.mjs",
+    "webscene-interop-discover": "./interop-discover.mjs",
+    "webscene-interop-validate": "./interop-validate.mjs"
+  },
+  "files": [
+    "types",
+    "schemas",
+    "*.mjs",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

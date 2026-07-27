@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1.0",
+  "api": "MonacoApi.webscene-interop-api.json",
+  "apiFingerprint": "b3c15b8dfa5ee2213705a6008c719cd05ab771a25def7de65f0054229d359be8",
+  "namespace": "NativeRuntimeShowcase.Interop",
+  "typeMappings": {},
+  "functionsClassName": "MonacoApi",
+  "functions": [
+    {
+      "source": "monaco.editor.setModelLanguage",
+      "overload": 0,
+      "globalName": "monaco.editor.setModelLanguage",
+      "name": "SetModelLanguageAsync",
+      "include": true,
+      "omitOptionalParameters": false
+    }
+  ],
+  "globalProperties": [],
+  "models": [],
+  "adapters": [
+    {
+      "source": "monaco.editor.IStandaloneCodeEditor",
+      "name": "StandaloneCodeEditorAdapter",
+      "include": false,
+      "methods": [
+        {
+          "source": "focus",
+          "overload": 0,
+          "name": "FocusAsync",
+          "include": false
+        },
+        {
+          "source": "getModel",
+          "overload": 0,
+          "name": "GetModel",
+          "include": false
+        },
+        {
+          "source": "getValue",
+          "overload": 0,
+          "name": "GetValue",
+          "include": false
+        },
+        {
+          "source": "layout",
+          "overload": 0,
+          "name": "LayoutAsync",
+          "include": false
+        },
+        {
+          "source": "setValue",
+          "overload": 0,
+          "name": "SetValueAsync",
+          "include": false
+        }
+      ]
+    },
+    {
+      "source": "monaco.editor.ITextModel",
+      "name": "TextModelAdapter",
+      "include": false,
+      "methods": [
+        {
+          "source": "getValue",
+          "overload": 0,
+          "name": "GetValue",
+          "include": false
+        },
+        {
+          "source": "setValue",
+          "overload": 0,
+          "name": "SetValueAsync",
+          "include": false
+        }
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "source": "monaco.editor.IStandaloneCodeEditor",
+      "name": "MonacoEditor",
+      "include": true,
+      "constructor": null,
+      "constructors": [],
+      "properties": [],
+      "methods": [
+        {
+          "source": "focus",
+          "overload": 0,
+          "name": "FocusAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "getModel",
+          "overload": 0,
+          "name": "GetModelAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "getValue",
+          "overload": 0,
+          "name": "GetValueAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "layout",
+          "overload": 0,
+          "name": "LayoutAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "setValue",
+          "overload": 0,
+          "name": "SetValueAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        }
+      ]
+    },
+    {
+      "source": "monaco.editor.ITextModel",
+      "name": "MonacoTextModel",
+      "include": true,
+      "constructor": null,
+      "constructors": [],
+      "properties": [],
+      "methods": [
+        {
+          "source": "getValue",
+          "overload": 0,
+          "name": "GetValueAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "setValue",
+          "overload": 0,
+          "name": "SetValueAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        }
+      ]
+    }
+  ]
+}

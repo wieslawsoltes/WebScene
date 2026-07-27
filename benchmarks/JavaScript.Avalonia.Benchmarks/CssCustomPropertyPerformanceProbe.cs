@@ -139,7 +139,7 @@ internal static class CssCustomPropertyPerformanceProbe
                 .getPropertyValue("--ui-lib-positioner-anchor-left");
 
             Console.WriteLine(
-                $"HtmlML custom-property subtree spike ({iterations} mutation(s), 44 elements)");
+                $"WebScene custom-property subtree spike ({iterations} mutation(s), 44 elements)");
             Console.WriteLine(
                 $"Style work: recomputes={recomputes}, computed={computed}, applied={applied}, " +
                 $"presentation-applied={presentationApplied}, " +
@@ -173,13 +173,13 @@ internal static class CssCustomPropertyPerformanceProbe
                 $"passive-anchor={passiveAnchor} expected={expectedAnchor}");
 
             var expectedComputesPerPass = string.Equals(
-                Environment.GetEnvironmentVariable("HTMLML_DISABLE_CUSTOM_PROPERTY_CONSUMER_INVALIDATION"),
+                Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CUSTOM_PROPERTY_CONSUMER_INVALIDATION"),
                 "1",
                 StringComparison.Ordinal)
                     ? 44
                     : 4;
             var expectedInlinePresentationsPerPass = string.Equals(
-                Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_INLINE_PRESENTATION_BATCHING"),
+                Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_INLINE_PRESENTATION_BATCHING"),
                 "1",
                 StringComparison.Ordinal)
                     ? 13

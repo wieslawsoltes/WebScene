@@ -15,16 +15,16 @@ semantics without turning Avalonia into an accidental transitive dependency.
 Dependencies point from backend and engine adapters toward portable contracts:
 
 ```text
-backend / engine adapter -> runtime semantics -> HtmlML.Core
+backend / engine adapter -> runtime semantics -> WebScene.Core
 ```
 
-`HtmlML.Core` contains only BCL-based values and contracts. It may not reference a UI
+`WebScene.Core` contains only BCL-based values and contracts. It may not reference a UI
 framework or JavaScript engine. `JavaScript.Avalonia` consumes it during the seam-first
 migration. Later DOM, CSS, graphics and JavaScript projects may depend on Core but may
 not depend on a backend package.
 
 Assembly creation follows proven seams, not a desired folder diagram. Public package
-names beyond `HtmlML.Core` remain provisional until their contracts survive Avalonia
+names beyond `WebScene.Core` remain provisional until their contracts survive Avalonia
 and a second direct backend.
 
 ## Consequences

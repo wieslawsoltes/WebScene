@@ -1,29 +1,29 @@
 <Project>
   <PropertyGroup>
-    <HtmlMlClearScriptPackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</HtmlMlClearScriptPackageRoot>
-    <HtmlMlClearScriptPackageAsset>$(HtmlMlClearScriptPackageRoot)runtimes\$(HtmlMlClearScriptPackagedRid)\native\$(HtmlMlClearScriptPackagedFileName)</HtmlMlClearScriptPackageAsset>
-    <HtmlMlClearScriptPackageManifest>$(HtmlMlClearScriptPackageRoot)runtimes\$(HtmlMlClearScriptPackagedRid)\native\clearscript-native-runtime.json</HtmlMlClearScriptPackageManifest>
+    <WebSceneClearScriptPackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</WebSceneClearScriptPackageRoot>
+    <WebSceneClearScriptPackageAsset>$(WebSceneClearScriptPackageRoot)runtimes\$(WebSceneClearScriptPackagedRid)\native\$(WebSceneClearScriptPackagedFileName)</WebSceneClearScriptPackageAsset>
+    <WebSceneClearScriptPackageManifest>$(WebSceneClearScriptPackageRoot)runtimes\$(WebSceneClearScriptPackagedRid)\native\clearscript-native-runtime.json</WebSceneClearScriptPackageManifest>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(HtmlMlClearScriptPackagedRid)' != ''">
-    <Content Include="$(HtmlMlClearScriptPackageAsset)"
-             Link="$(HtmlMlClearScriptPackagedFileName)"
+  <ItemGroup Condition="'$(WebSceneClearScriptPackagedRid)' != ''">
+    <Content Include="$(WebSceneClearScriptPackageAsset)"
+             Link="$(WebSceneClearScriptPackagedFileName)"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="$(HtmlMlClearScriptPackageManifest)"
+    <Content Include="$(WebSceneClearScriptPackageManifest)"
              Link="clearscript-native-runtime.json"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <Target Name="ValidateHtmlMlClearScriptRuntimePackage"
+  <Target Name="ValidateWebSceneClearScriptRuntimePackage"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(HtmlMlClearScriptPackagedRid)' != ''">
-    <Error Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != '$(HtmlMlClearScriptPackagedRid)'"
-           Text="HtmlML ClearScript runtime package RID '$(HtmlMlClearScriptPackagedRid)' does not match target RuntimeIdentifier '$(RuntimeIdentifier)'." />
-    <Error Condition="!Exists('$(HtmlMlClearScriptPackageAsset)')"
-           Text="HtmlML ClearScript runtime package is corrupt; the native asset is missing: $(HtmlMlClearScriptPackageAsset)" />
-    <Error Condition="!Exists('$(HtmlMlClearScriptPackageManifest)')"
-           Text="HtmlML ClearScript runtime package is corrupt; its manifest is missing: $(HtmlMlClearScriptPackageManifest)" />
+          Condition="'$(WebSceneClearScriptPackagedRid)' != ''">
+    <Error Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != '$(WebSceneClearScriptPackagedRid)'"
+           Text="WebScene ClearScript runtime package RID '$(WebSceneClearScriptPackagedRid)' does not match target RuntimeIdentifier '$(RuntimeIdentifier)'." />
+    <Error Condition="!Exists('$(WebSceneClearScriptPackageAsset)')"
+           Text="WebScene ClearScript runtime package is corrupt; the native asset is missing: $(WebSceneClearScriptPackageAsset)" />
+    <Error Condition="!Exists('$(WebSceneClearScriptPackageManifest)')"
+           Text="WebScene ClearScript runtime package is corrupt; its manifest is missing: $(WebSceneClearScriptPackageManifest)" />
   </Target>
 </Project>

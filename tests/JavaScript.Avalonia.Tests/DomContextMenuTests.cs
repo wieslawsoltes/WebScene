@@ -30,7 +30,7 @@ public sealed class DomContextMenuTests
                          "pointerup", "mouseup", "auxclick"
                      })
             {
-                hit.__htmlMlAddExternalEventListener(
+                hit.__webSceneAddExternalEventListener(
                     type,
                     new SequenceListener(sequence),
                     capture: false,
@@ -40,13 +40,13 @@ public sealed class DomContextMenuTests
 
             var contextAtTarget = new ContextMenuListener(hit, preventDefault: true);
             var contextAtParent = new ContextMenuListener(hit, preventDefault: false);
-            hit.__htmlMlAddExternalEventListener(
+            hit.__webSceneAddExternalEventListener(
                 "contextmenu",
                 contextAtTarget,
                 capture: false,
                 once: false,
                 passive: false);
-            parent.__htmlMlAddExternalEventListener(
+            parent.__webSceneAddExternalEventListener(
                 "contextmenu",
                 contextAtParent,
                 capture: false,

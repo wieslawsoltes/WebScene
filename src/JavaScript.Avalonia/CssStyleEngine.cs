@@ -30,45 +30,45 @@ internal sealed class CssStyleEngine
     private const int MaximumCompiledStylesheetCacheCharacters = 8 * 1024 * 1024;
     private const int MaximumSingleCompiledStylesheetCharacters = 2 * 1024 * 1024;
     private static readonly bool s_profileCss =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_CSS_PROFILE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_CSS_PROFILE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableCandidateRuleScratch =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_CANDIDATE_SCRATCH"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_CANDIDATE_SCRATCH"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableSharedCustomProperties =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_SHARED_CUSTOM_PROPERTIES"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_SHARED_CUSTOM_PROPERTIES"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableComputedStyleScratch =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_COMPUTED_STYLE_SCRATCH"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_COMPUTED_STYLE_SCRATCH"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableCascadeWinnerScratch =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_WINNER_SCRATCH"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_WINNER_SCRATCH"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableOrderedWinnerScratch =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_ORDERED_WINNER_SCRATCH"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_ORDERED_WINNER_SCRATCH"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableMatchedRuleCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_MATCHED_RULE_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_MATCHED_RULE_CACHE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableAppendOnlyStylesheetUpdates =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_APPEND_ONLY_STYLESHEET_UPDATES"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_APPEND_ONLY_STYLESHEET_UPDATES"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableScopedAppendStylesheetCascade =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_SCOPED_APPEND_STYLESHEET_CASCADE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_SCOPED_APPEND_STYLESHEET_CASCADE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableScopedClassInvalidation =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_SCOPED_CLASS_INVALIDATION"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_SCOPED_CLASS_INVALIDATION"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableCustomPropertyConsumerInvalidation =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CUSTOM_PROPERTY_CONSUMER_INVALIDATION"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CUSTOM_PROPERTY_CONSUMER_INVALIDATION"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableInlineStyleClassificationSpans =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_INLINE_STYLE_CLASSIFICATION_SPANS"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_INLINE_STYLE_CLASSIFICATION_SPANS"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableOrdinaryStyleSharing =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_STYLE_SHARING"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_STYLE_SHARING"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableCascadeTemplateCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_CASCADE_TEMPLATE_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_CASCADE_TEMPLATE_CACHE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableStylesheetNormalizationGuards =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_STYLESHEET_NORMALIZATION_GUARDS"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_STYLESHEET_NORMALIZATION_GUARDS"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableCompiledStylesheetCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_COMPILED_STYLESHEET_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_COMPILED_STYLESHEET_CACHE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableMediaQueryOutcomeCache =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_MEDIA_QUERY_OUTCOME_CACHE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_MEDIA_QUERY_OUTCOME_CACHE"), "1", StringComparison.Ordinal);
     private static readonly bool s_disableViewportPresentationChangeSet =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_CSS_VIEWPORT_PRESENTATION_CHANGE_SET"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_CSS_VIEWPORT_PRESENTATION_CHANGE_SET"), "1", StringComparison.Ordinal);
     private static readonly bool s_traceInlineStyles =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_TRACE_INLINE_STYLES"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_TRACE_INLINE_STYLES"), "1", StringComparison.Ordinal);
     private static readonly bool s_traceChildListInvalidation =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_TRACE_CSS_INVALIDATIONS"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_TRACE_CSS_INVALIDATIONS"), "1", StringComparison.Ordinal);
     private static readonly object s_compiledStylesheetCacheGate = new();
     private static readonly Dictionary<string, CachedStyleSheet> s_compiledStylesheetCache =
         new(StringComparer.Ordinal);
@@ -4063,11 +4063,11 @@ internal sealed class CssStyleEngine
         CssPropertyValueStore Values,
         CssPropertyNameSet Declarations);
 
-    private const string BorderCascadeProxyPrefix = "-htmlml-border-cascade:";
-    private const string BorderRadiusCascadeProxyPrefix = "-htmlml-border-radius-cascade:";
-    private const string GridPlacementCascadeProxyPrefix = "-htmlml-grid-placement-cascade:";
-    private const string ListStyleCascadeProxyPrefix = "-htmlml-list-style-cascade:";
-    private const string OutlineCascadeProxyPrefix = "-htmlml-outline-cascade:";
+    private const string BorderCascadeProxyPrefix = "-webscene-border-cascade:";
+    private const string BorderRadiusCascadeProxyPrefix = "-webscene-border-radius-cascade:";
+    private const string GridPlacementCascadeProxyPrefix = "-webscene-grid-placement-cascade:";
+    private const string ListStyleCascadeProxyPrefix = "-webscene-list-style-cascade:";
+    private const string OutlineCascadeProxyPrefix = "-webscene-outline-cascade:";
 
     private static void SetWinner(
         IDictionary<string, CascadeWinner> winners,
@@ -5407,7 +5407,7 @@ internal sealed class CssStyleEngine
     private sealed record CachedStyleSheet(
         string Css,
         IReadOnlyList<ParsedRule> Rules,
-        IReadOnlyList<HtmlML.Css.CssCompiledFontFace> FontFaces);
+        IReadOnlyList<WebScene.Css.CssCompiledFontFace> FontFaces);
 
 }
 
@@ -5431,7 +5431,7 @@ internal sealed class CssComplexSelector
 {
     private static readonly bool s_disablePortableMatcher =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_PORTABLE_SELECTOR_MATCHER"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_PORTABLE_SELECTOR_MATCHER"),
             "1",
             StringComparison.Ordinal);
     private readonly CssSelectorSyntax _portableSyntax;
@@ -5863,7 +5863,7 @@ internal sealed record CssPseudoSelector(string Name, string? Argument, bool IsE
 {
     private static readonly bool s_disableArgumentSelectorCache =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_PSEUDO_ARGUMENT_SELECTOR_CACHE"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_PSEUDO_ARGUMENT_SELECTOR_CACHE"),
             "1",
             StringComparison.Ordinal);
     private CssComplexSelector[]? _argumentSelectors;

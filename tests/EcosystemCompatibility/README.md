@@ -1,4 +1,4 @@
-# HtmlML ecosystem-consumer compatibility lane
+# WebScene ecosystem-consumer compatibility lane
 
 This non-gating discovery lane composes the certified browser primitives through
 real, version-pinned JavaScript component stacks. It complements WPT; it does not turn
@@ -31,7 +31,7 @@ validity and feature detection, computed style, detached construction, show/hide
 cascade display, relative values, unit conversion, box geometry, custom properties,
 and rendered visibility. Reducing the first failures produced the product-neutral
 `cssom-inline-declaration-validity.html` contract and fixed eight upstream assertions
-in each HtmlML adapter. A subsequent display-lifecycle reduction closes eight more
+in each WebScene adapter. A subsequent display-lifecycle reduction closes eight more
 unchanged native assertions by distinguishing inline, inline-block, and list-item and
 making offset geometry ancestor-aware. SCRIPT raw-text tokenization, selector API
 SyntaxError semantics (including borrowed prototype methods), Window.name, and hidden
@@ -48,7 +48,7 @@ whitespace, importance and overwrite rules, detached STYLE activation, and the
 CSSStyleDeclaration named-property fallback. The subsequent box-edge reduction covers
 padding shorthand/longhand mutation and removal, border
 shorthand/style/width/physical-side composition, content-box computed dimensions, and
-synchronous border-box geometry. Chrome and both HtmlML adapters pass its nine
+synchronous border-box geometry. Chrome and both WebScene adapters pass its nine
 assertions, and the complete unchanged jQuery numeric box-edge allowlist now passes
 natively. The next two neutral reductions distinguish computed dimensions from
 suppressed geometry beneath `display:none` and preserve numeric z-index CSSOM values
@@ -103,17 +103,17 @@ evidence directory.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be
-reduced to an upstream WPT or a product-neutral HtmlML contract before changing an
+reduced to an upstream WPT or a product-neutral WebScene contract before changing an
 engine primitive.
 
-Install the exact lock and run Chrome plus both HtmlML adapters:
+Install the exact lock and run Chrome plus both WebScene adapters:
 
 ```sh
 cd tests/EcosystemCompatibility
 npm ci
 npm test -- \
   --engine all \
-  --native-library /absolute/path/to/libhtmlml_native_engine.dylib \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
   --output /absolute/path/to/new/evidence-directory
 ```
 

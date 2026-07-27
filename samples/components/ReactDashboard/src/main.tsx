@@ -21,7 +21,7 @@ function App(): React.ReactNode {
   const [loading, setLoading] = useState(true);
   const [overlay, setOverlay] = useState(false);
   useEffect(() => {
-    htmlml.host.network.invoke('request', { url: 'app://dashboard/data' }).catch(() => undefined);
+    webscene.host.network.invoke('request', { url: 'app://dashboard/data' }).catch(() => undefined);
     const handle = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(handle);
   }, []);

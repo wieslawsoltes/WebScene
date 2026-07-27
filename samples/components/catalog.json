@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "profileVersion": "1.0",
-  "backend": "HtmlML.Backend.Avalonia",
+  "backend": "WebScene.Backend.Avalonia",
   "samples": [
     {
       "id": "ComponentHost.Basic",
@@ -15,7 +15,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- ComponentHost.Basic",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- ComponentHost.Basic",
       "expectedInteractions": "mount, click, pixel, disposal",
       "diagnostics": [
         "component lifecycle",
@@ -23,8 +23,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "Hybrid.ReactIslands",
@@ -38,7 +38,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- Hybrid.ReactIslands",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- Hybrid.ReactIslands",
       "expectedInteractions": "state isolation and native/JS round trip",
       "diagnostics": [
         "component lifecycle",
@@ -46,8 +46,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "TypeScriptDesktop",
@@ -61,7 +61,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- TypeScriptDesktop",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- TypeScriptDesktop",
       "expectedInteractions": "template build, package, forms and dialog",
       "diagnostics": [
         "component lifecycle",
@@ -69,8 +69,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "ReactDashboard",
@@ -84,7 +84,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- ReactDashboard",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- ReactDashboard",
       "expectedInteractions": "narrow/wide/DPI and async data",
       "diagnostics": [
         "component lifecycle",
@@ -92,8 +92,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "PluginWorkbench",
@@ -107,7 +107,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- PluginWorkbench",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- PluginWorkbench",
       "expectedInteractions": "capability denial and unload/reload",
       "diagnostics": [
         "component lifecycle",
@@ -115,8 +115,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "MultiInstanceWorkstation",
@@ -130,7 +130,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- MultiInstanceWorkstation",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- MultiInstanceWorkstation",
       "expectedInteractions": "shared cache, isolated state and peer disposal",
       "diagnostics": [
         "component lifecycle",
@@ -138,8 +138,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "WebToNativeMigration",
@@ -153,7 +153,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- WebToNativeMigration",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- WebToNativeMigration",
       "expectedInteractions": "shared business state and focus transfer",
       "diagnostics": [
         "component lifecycle",
@@ -161,8 +161,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "OfflineKiosk",
@@ -176,7 +176,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- OfflineKiosk",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- OfflineKiosk",
       "expectedInteractions": "network-disabled launch and asset audit",
       "diagnostics": [
         "component lifecycle",
@@ -184,8 +184,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "HeadlessComponentTests",
@@ -199,7 +199,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- HeadlessComponentTests",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- HeadlessComponentTests",
       "expectedInteractions": "DOM, input and reference rendering",
       "diagnostics": [
         "component lifecycle",
@@ -207,8 +207,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "HostBridge.Services",
@@ -222,7 +222,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- HostBridge.Services",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- HostBridge.Services",
       "expectedInteractions": "grant, deny, cancellation and exception translation",
       "diagnostics": [
         "component lifecycle",
@@ -230,8 +230,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "AccessibilityGallery",
@@ -245,7 +245,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- AccessibilityGallery",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- AccessibilityGallery",
       "expectedInteractions": "automation metadata and keyboard order",
       "diagnostics": [
         "component lifecycle",
@@ -253,8 +253,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     },
     {
       "id": "CanvasWorkbench.Advanced",
@@ -268,7 +268,7 @@
         "Avalonia": "supported"
       },
       "offlineAssets": true,
-      "launchCommand": "dotnet run --project samples/hosts/Avalonia/HtmlML.Sdk.SampleCatalog -- CanvasWorkbench.Advanced",
+      "launchCommand": "dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog -- CanvasWorkbench.Advanced",
       "expectedInteractions": "canvas drawing, menus, overlays, and input lifecycle",
       "diagnostics": [
         "component lifecycle",
@@ -276,8 +276,8 @@
         "cache",
         "host bridge"
       ],
-      "testCommand": "dotnet run --project tests/HtmlML.Sdk.SampleSmoke",
-      "packagingNotes": "Assets are local and declared by htmlml-component.json."
+      "testCommand": "dotnet run --project tests/WebScene.Sdk.SampleSmoke",
+      "packagingNotes": "Assets are local and declared by webscene-component.json."
     }
   ]
 }

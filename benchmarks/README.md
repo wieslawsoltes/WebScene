@@ -1,9 +1,9 @@
-# HtmlML performance probes
+# WebScene performance probes
 
 The benchmark project contains product-neutral V8, DOM, CSS, lifecycle,
 compilation-cache, React, iframe, and native-package probes. It requires a reviewed
-HtmlML ClearScript native build for the current RID, resolved by
-`build/HtmlMlClearScriptV8Native.targets`.
+WebScene ClearScript native build for the current RID, resolved by
+`build/WebSceneClearScriptV8Native.targets`.
 
 Run BenchmarkDotNet benchmarks with:
 
@@ -27,11 +27,11 @@ dotnet run --project benchmarks/JavaScript.Avalonia.Benchmarks -c Release -- pro
 dotnet run --project benchmarks/JavaScript.Avalonia.Benchmarks -c Release -- probe css-style-storage
 ```
 
-When overriding `HTMLML_CLEARSCRIPT_NATIVE`, point it at the canonical binary under
+When overriding `WEBSCENE_CLEARSCRIPT_NATIVE`, point it at the canonical binary under
 the executing app's `bin/.../runtimes/<rid>/native` directory after building with
-`HtmlMlClearScriptNativePath`. Loading two V8 images in one process is unsupported.
+`WebSceneClearScriptNativePath`. Loading two V8 images in one process is unsupported.
 
-The `HTMLML_DISABLE_*` environment variables are diagnostic A/B controls for retained
+The `WEBSCENE_DISABLE_*` environment variables are diagnostic A/B controls for retained
 optimization paths; production defaults remain enabled. Probe-specific switches are
 documented by their command-line parsers. Use `--help` for BenchmarkDotNet filters. An
 unknown focused probe exits with code 2 and prints the valid probe names.

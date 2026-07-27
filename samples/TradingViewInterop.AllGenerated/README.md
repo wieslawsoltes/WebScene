@@ -8,10 +8,10 @@ code paths.
 Regenerate it with:
 
 ```bash
-node ../../tooling/htmlml/interop-discover.mjs \
+node ../../tooling/webscene/interop-discover.mjs \
   --declarations ../TradingViewInterop.Generated/TradingViewApi.fixture.d.ts \
-  --output TradingViewAllApi.htmlml-interop-api.json \
-  --policy-output TradingViewAll.htmlml-interop-policy.json \
+  --output TradingViewAllApi.webscene-interop-api.json \
+  --policy-output TradingViewAll.webscene-interop-policy.json \
   --report-output TradingViewAllApi.coverage.json \
   --namespace TradingViewInterop.AllGenerated \
   --include-all-models \

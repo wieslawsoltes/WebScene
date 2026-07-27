@@ -36,7 +36,7 @@ jobs:
         REQUESTED_PUBLISH: ${{ inputs.publish }}
       run: |
         version="$(
-          dotnet msbuild src/HtmlML.Core/HtmlML.Core.csproj \
+          dotnet msbuild src/WebScene.Core/WebScene.Core.csproj \
             -getProperty:PackageVersion -nologo |
             tail -n 1 | tr -d '\r'
         )"
@@ -127,9 +127,9 @@ jobs:
       run: |
         docker build \
           --platform linux/amd64 \
-          --file packaging/HtmlML.NativeEngine.Runtime/Dockerfile.linux-x64 \
-          --tag htmlml-native-linux-builder:ubuntu-22.04 \
-          packaging/HtmlML.NativeEngine.Runtime
+          --file packaging/WebScene.NativeEngine.Runtime/Dockerfile.linux-x64 \
+          --tag webscene-native-linux-builder:ubuntu-22.04 \
+          packaging/WebScene.NativeEngine.Runtime
     - id: v8-cache-key
       name: Resolve pinned V8 SDK cache identity
       shell: bash
@@ -147,9 +147,9 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
         restore-keys: |
-          htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+          webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
     - id: restored-v8-sdk
       name: Validate restored V8 SDK compatibility
       shell: bash
@@ -204,12 +204,12 @@ jobs:
         docker run --rm \
           --platform linux/amd64 \
           --user "$(id -u):$(id -g)" \
-          --env HOME=/tmp/htmlml-home \
-          --env DOTNET_CLI_HOME=/tmp/htmlml-home \
-          --env NUGET_PACKAGES=/tmp/htmlml-home/.nuget/packages \
+          --env HOME=/tmp/webscene-home \
+          --env DOTNET_CLI_HOME=/tmp/webscene-home \
+          --env NUGET_PACKAGES=/tmp/webscene-home/.nuget/packages \
           --volume "$GITHUB_WORKSPACE:/workspace" \
           --workdir /workspace \
-          htmlml-native-linux-builder:ubuntu-22.04 \
+          webscene-native-linux-builder:ubuntu-22.04 \
           bash -lc "
             mkdir -p \"\$HOME\"
             scripts/build-native-engine-runtime-linux-container.sh \
@@ -268,7 +268,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
-        key: htmlml-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/HtmlML.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
@@ -346,19 +346,19 @@ jobs:
     - name: Restore clean package consumer
       shell: bash
       run: |
-        dotnet restore tests/HtmlML.Runtime.PackageSmoke/HtmlML.Runtime.PackageSmoke.csproj \
+        dotnet restore tests/WebScene.Runtime.PackageSmoke/WebScene.Runtime.PackageSmoke.csproj \
           -p:RuntimeIdentifier='${{ matrix.rid }}' \
-          -p:HtmlMlPackageVersion='${{ needs.metadata.outputs.package-version }}' \
-          --configfile tests/HtmlML.Runtime.PackageSmoke/NuGet.config
+          -p:WebScenePackageVersion='${{ needs.metadata.outputs.package-version }}' \
+          --configfile tests/WebScene.Runtime.PackageSmoke/NuGet.config
     - name: Build and run clean package consumer
       shell: bash
       run: |
         dotnet run \
-          --project tests/HtmlML.Runtime.PackageSmoke/HtmlML.Runtime.PackageSmoke.csproj \
+          --project tests/WebScene.Runtime.PackageSmoke/WebScene.Runtime.PackageSmoke.csproj \
           -c Release \
           -r '${{ matrix.rid }}' \
           --no-restore \
-          -p:HtmlMlPackageVersion='${{ needs.metadata.outputs.package-version }}'
+          -p:WebScenePackageVersion='${{ needs.metadata.outputs.package-version }}'
 
   publish:
     name: Publish to NuGet.org

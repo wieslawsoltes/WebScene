@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <HtmlMlUsesSharedPackageReadme>true</HtmlMlUsesSharedPackageReadme>
+    <WebSceneUsesSharedPackageReadme>true</WebSceneUsesSharedPackageReadme>
   </PropertyGroup>
-  <ItemGroup Condition="'$(HtmlMlUsesSharedPackageReadme)' == 'true'">
+  <ItemGroup Condition="'$(WebSceneUsesSharedPackageReadme)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)docs\nuget\README.md"
           Pack="true"
           PackagePath="README.md"

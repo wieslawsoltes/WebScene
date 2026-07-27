@@ -2,13 +2,13 @@
     x:Class="NativeTradingViewTerminal.MainWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:native="clr-namespace:HtmlML.Backends.Avalonia.Native;assembly=HtmlML.Backend.Avalonia"
+    xmlns:native="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia"
     Width="1440"
     Height="900"
     MinWidth="960"
     MinHeight="640"
     Background="#101216"
-    Title="HtmlML · Native TradingView Terminal">
+    Title="WebScene · Native TradingView Terminal">
   <Grid RowDefinitions="Auto,*,Auto">
     <Border
         Padding="12"
@@ -19,7 +19,7 @@
         <TextBlock
             FontSize="17"
             FontWeight="SemiBold"
-            Text="TradingView Terminal on HtmlML" />
+            Text="TradingView Terminal on WebScene" />
         <TextBlock
             Foreground="#AEB5C2"
             Text="Hosted JavaScript application · native V8 DOM · native C++ WebSocket transport" />
@@ -34,7 +34,7 @@
         BorderThickness="1"
         CornerRadius="6"
         ClipToBounds="True">
-      <native:NativeHtmlMlView x:Name="TerminalHost" />
+      <native:NativeWebSceneView x:Name="TerminalHost" />
     </Border>
 
     <Border
@@ -50,7 +50,7 @@
             x:Name="StatusText"
             VerticalAlignment="Center"
             FontWeight="SemiBold"
-            Text="Starting native HtmlML…" />
+            Text="Starting native WebScene…" />
         <TextBlock
             x:Name="DiagnosticsText"
             Grid.Column="1"

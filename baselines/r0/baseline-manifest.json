@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "baselineId": "htmlml-r0-2026-07-15",
+  "baselineId": "webscene-r0-2026-07-15",
   "description": "Protected pre-extraction behavior, compatibility, coverage and performance lanes.",
   "coverageFloor": "coverage-floor.json",
   "evidenceArtifact": "evidence-summary.json",
@@ -9,21 +9,21 @@
       "id": "release-build",
       "classification": "automated-ci",
       "required": true,
-      "command": "dotnet build HtmlML.sln -c Release --no-restore -p:HtmlMlClearScriptNativeRequired=false -p:HtmlMlClearScriptNativeRid=",
+      "command": "dotnet build WebScene.sln -c Release --no-restore -p:WebSceneClearScriptNativeRequired=false -p:WebSceneClearScriptNativeRid=",
       "artifact": "logs/release-build.log"
     },
     {
       "id": "portable-core-contracts",
       "classification": "automated-ci",
       "required": true,
-      "command": "dotnet test tests/HtmlML.Core.Tests/HtmlML.Core.Tests.csproj -c Release --no-build --settings coverage-core.runsettings --collect:\"XPlat Code Coverage\"",
+      "command": "dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release --no-build --settings coverage-core.runsettings --collect:\"XPlat Code Coverage\"",
       "artifact": "coverage/core/**/coverage.cobertura.xml"
     },
     {
       "id": "architecture-dependencies",
       "classification": "automated-ci",
       "required": true,
-      "command": "dotnet test tests/HtmlML.Architecture.Tests/HtmlML.Architecture.Tests.csproj -c Release --no-restore",
+      "command": "dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release --no-restore",
       "artifact": "logs/architecture-tests.log"
     },
     {
@@ -37,7 +37,7 @@
       "id": "wpt-manifest-list",
       "classification": "automated-ci",
       "required": true,
-      "command": "dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj -c Release --no-build -- --selection all --list",
+      "command": "dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj -c Release --no-build -- --selection all --list",
       "artifact": "logs/wpt-list.log"
     },
     {
@@ -55,7 +55,7 @@
       "classification": "target-host",
       "required": true,
       "prerequisite": "Reviewed ClearScript V8 native binary for the target RID",
-      "command": "dotnet run --project tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj -c Release -- --selection required",
+      "command": "dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj -c Release -- --selection required",
       "artifact": "wpt/results.json"
     },
     {

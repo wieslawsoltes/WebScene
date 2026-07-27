@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace HtmlML.WebPlatformSubset.Runner;
+namespace WebScene.WebPlatformSubset.Runner;
 
 internal static class HtmlScriptSemantics
 {
@@ -56,7 +56,7 @@ internal static class HtmlScriptSemantics
         Regex styleRegex)
     {
         var inertScripts = new List<(string Placeholder, string Markup)>();
-        var placeholderPrefix = "__HTMLML_INERT_SCRIPT_PLACEHOLDER_";
+        var placeholderPrefix = "__WEBSCENE_INERT_SCRIPT_PLACEHOLDER_";
         while (markup.Contains(placeholderPrefix, StringComparison.Ordinal))
         {
             placeholderPrefix = "_" + placeholderPrefix;

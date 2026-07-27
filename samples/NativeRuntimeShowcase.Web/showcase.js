@@ -4,12 +4,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let fileName = "GeneratedMonacoApi.cs";
 
   const initialValue = [
-    "using HtmlML.JavaScript.Interop;",
+    "using WebScene.JavaScript.Interop;",
     "using NativeRuntimeShowcase.Interop;",
     "",
     "var invoker = new NativeJavaScriptInvoker(view.EvaluateJsonAsync);",
     "var reference = await invoker.GetGlobalObjectAsync(",
-    "    \"__htmlMlMonacoEditor\");",
+    "    \"__webSceneMonacoEditor\");",
     "await using var editor = MonacoEditor.FromReference(invoker, reference);",
     "",
     "// MonacoEditor is generated from MonacoApi.d.ts at build time.",
@@ -40,15 +40,15 @@ document.addEventListener("DOMContentLoaded", () => {
       status.textContent = `${fileName} · ${lines} lines · editable`;
     };
     editor.onDidChangeModelContent(updateStatus);
-    globalThis.__htmlMlShowcaseSetFileName = name => {
+    globalThis.__webSceneShowcaseSetFileName = name => {
       fileName = name || "Untitled";
       updateStatus();
     };
     editor.layout();
     editor.focus();
     updateStatus();
-    globalThis.__htmlMlMonacoEditor = editor;
-    globalThis.__htmlMlComponentReady = true;
+    globalThis.__webSceneMonacoEditor = editor;
+    globalThis.__webSceneComponentReady = true;
   } catch (error) {
     status.textContent = `Monaco failed: ${error.message || error}`;
     console.error(error);

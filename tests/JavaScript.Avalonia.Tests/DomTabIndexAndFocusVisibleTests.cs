@@ -82,13 +82,13 @@ public sealed class DomTabIndexAndFocusVisibleTests
         using var fixture = new Fixture();
         var span = fixture.Append("span");
         var events = new List<string>();
-        span.__htmlMlAddExternalEventListener(
+        span.__webSceneAddExternalEventListener(
             "focus",
             new RecordingListener(events, "focus"),
             capture: false,
             once: false,
             passive: false);
-        span.__htmlMlAddExternalEventListener(
+        span.__webSceneAddExternalEventListener(
             "focusin",
             new RecordingListener(events, "focusin"),
             capture: false,

@@ -26,7 +26,7 @@
 <body>
 <div id="monaco-lines"></div>
 <script>
-  const state = window.__htmlMlWptState = {
+  const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
   };
   function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -43,10 +43,10 @@
   }
 
   test("encoding and custom-element primitives are available", () => {
-    class HtmlMlMonacoElement extends HTMLElement {}
-    customElements.define("htmlml-monaco-element", HtmlMlMonacoElement);
+    class WebSceneMonacoElement extends HTMLElement {}
+    customElements.define("webscene-monaco-element", WebSceneMonacoElement);
     assert(
-      customElements.get("htmlml-monaco-element") === HtmlMlMonacoElement,
+      customElements.get("webscene-monaco-element") === WebSceneMonacoElement,
       "customElements did not preserve the registered constructor");
     assert(
       new TextDecoder().decode(
@@ -73,7 +73,7 @@
     layer.innerHTML =
       '<div class="view-line" style="top:0px"><span class="keyword">const</span> answer = 42;</div>'
       + '<div class="view-line" style="top:19px"><span class="keyword">function</span> greet() {</div>'
-      + '<div class="view-line" style="top:38px">  return <span class="string">"HtmlML"</span>;</div>';
+      + '<div class="view-line" style="top:38px">  return <span class="string">"WebScene"</span>;</div>';
     const originalMiddle = layer.children[1];
     const backwards = [];
     for (let node = layer.lastChild; node; node = node.previousSibling) {

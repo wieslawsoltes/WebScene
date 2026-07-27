@@ -313,7 +313,7 @@ public sealed class CssAbsoluteInlineStaticPositionSpikeTests
     private static void AssertRect(DomRect rect, double x, double y, double width, double height)
         => Assert.Equal((x, y, width, height), (rect.left, rect.top, rect.width, rect.height));
 
-    private static (double X, double Y, double Width, double Height) RectTuple(HtmlML.Core.HtmlMlRect rect)
+    private static (double X, double Y, double Width, double Height) RectTuple(WebScene.Core.WebSceneRect rect)
         => (rect.X, rect.Y, rect.Width, rect.Height);
 
     private static AvaloniaDomElement Append(

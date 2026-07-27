@@ -4,7 +4,7 @@
 <style>
   html, body { margin: 0; padding: 0; }
   #host {
-    font-family: HtmlMlFontProbe, sans-serif;
+    font-family: WebSceneFontProbe, sans-serif;
     font-size: 20px;
     font-weight: 700;
     line-height: 30px;
@@ -21,7 +21,7 @@
 <body>
 <div id="host"><button id="control">Inherited control text</button></div>
 <script>
-  const state = window.__htmlMlWptState = {
+  const state = window.__webSceneWptState = {
     complete: false,
     harness: null,
     results: [],
@@ -60,13 +60,13 @@
     assert(controlStyle.fontWeight === expectedWeight,
       "font-weight did not inherit: " + controlStyle.fontWeight);
     assert(controlStyle.fontFamily === hostStyle.fontFamily
-        && controlStyle.fontFamily.includes("HtmlMlFontProbe"),
+        && controlStyle.fontFamily.includes("WebSceneFontProbe"),
       "font-family did not inherit: " + controlStyle.fontFamily
         + " vs " + hostStyle.fontFamily);
     assert(controlStyle.getPropertyValue("font-weight") === expectedWeight,
       "getPropertyValue(font-weight) disagreed: "
         + controlStyle.getPropertyValue("font-weight"));
-    assert(controlStyle.getPropertyValue("font-family").includes("HtmlMlFontProbe"),
+    assert(controlStyle.getPropertyValue("font-family").includes("WebSceneFontProbe"),
       "getPropertyValue(font-family) lost the inherited family: "
         + controlStyle.getPropertyValue("font-family"));
   }

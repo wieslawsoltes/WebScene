@@ -1,4 +1,4 @@
-# ADR 0004: Backends own dispatch; HtmlML owns ordering
+# ADR 0004: Backends own dispatch; WebScene owns ordering
 
 - **Status:** Accepted
 - **Date:** 2026-07-15
@@ -6,14 +6,14 @@
 ## Context
 
 Avalonia, WPF, WinUI, Uno and ProGPU have different dispatchers and frame lifecycles.
-HtmlML still needs browser-compatible task ordering, non-reentrant callbacks and
+WebScene still needs browser-compatible task ordering, non-reentrant callbacks and
 deterministic disposal with timers, rAF and observers pending.
 
 ## Decision
 
-`IHtmlMlDispatcher`, `IHtmlMlFrameScheduler`, `IHtmlMlClock` and
-`HtmlMlBackendHostBase` define the seam. Backends execute native mutations on their UI
-dispatcher. HtmlML chooses semantic priority and task ordering. Calls that mutate a
+`IWebSceneDispatcher`, `IWebSceneFrameScheduler`, `IWebSceneClock` and
+`WebSceneBackendHostBase` define the seam. Backends execute native mutations on their UI
+dispatcher. WebScene chooses semantic priority and task ordering. Calls that mutate a
 mounted backend verify dispatcher access.
 
 The lifetime is:

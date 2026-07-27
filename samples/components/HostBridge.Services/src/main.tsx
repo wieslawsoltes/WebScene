@@ -4,9 +4,9 @@ import { Badge, Card, SampleHeader, buttonStyle, colors, createSampleLifecycle, 
 const services = [
   ['commands', 'Run command', 'execute', { command: 'refresh' }],
   ['settings', 'Read setting', 'get', { key: 'theme' }],
-  ['notifications', 'Notify', 'show', { message: 'Hello from HtmlML' }],
+  ['notifications', 'Notify', 'show', { message: 'Hello from WebScene' }],
   ['network', 'Policy request', 'request', { url: 'app://sample/data' }],
-  ['clipboard', 'Copy text', 'writeText', { text: 'HtmlML bridge' }],
+  ['clipboard', 'Copy text', 'writeText', { text: 'WebScene bridge' }],
   ['files', 'Select file', 'pick', { extensions: ['.json'] }]
 ] as const;
 
@@ -16,7 +16,7 @@ function App(): React.ReactNode {
     const [capability, , method, argumentsValue] = service;
     setResults(values => ({ ...values, [capability]: 'Pending…' }));
     try {
-      await htmlml.host[capability].invoke(method, argumentsValue);
+      await webscene.host[capability].invoke(method, argumentsValue);
       setResults(values => ({ ...values, [capability]: 'Completed' }));
     } catch {
       setResults(values => ({ ...values, [capability]: 'Translated error' }));

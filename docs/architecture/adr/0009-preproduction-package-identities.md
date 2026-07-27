@@ -7,14 +7,14 @@
 ## Context
 
 R4 originally retained a `JavaScript.Avalonia` type-forwarding package so existing
-binary and XAML consumers could migrate to `HtmlML.Backend.Avalonia`. HtmlML is still
+binary and XAML consumers could migrate to `WebScene.Backend.Avalonia`. WebScene is still
 pre-production and has no supported external package consumers, so carrying both
 identities would create documentation, testing, publishing, and dependency-graph
 surface without protecting a real compatibility commitment.
 
 ## Decision
 
-The Avalonia implementation ships only as `HtmlML.Backend.Avalonia`. Projects, XAML
+The Avalonia implementation ships only as `WebScene.Backend.Avalonia`. Projects, XAML
 assembly qualifiers, package smokes, and samples reference that assembly directly.
 The implementation may retain its current CLR namespace until a deliberate namespace
 naming pass, but no `JavaScript.Avalonia` package or assembly is produced.

@@ -5,8 +5,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using HtmlML.Core;
-using HtmlML.JavaScript;
+using WebScene.Core;
+using WebScene.JavaScript;
 using JavaScript.Avalonia;
 using Microsoft.ClearScript;
 using Microsoft.ClearScript.JavaScript;
@@ -47,7 +47,7 @@ public readonly record struct V8TypedManagedAbiMetrics(
 /// V8 context while same-origin contexts retain direct JavaScript object identity.
 /// </summary>
 public sealed class ClearScriptV8Runtime :
-    IHtmlMlJavaScriptRuntime,
+    IWebSceneJavaScriptRuntime,
     IExternalVirtualBrowsingContextFactory,
     IExternalWindowEventDispatcher,
     IDisposable
@@ -60,9 +60,9 @@ public sealed class ClearScriptV8Runtime :
     private static readonly object s_typedManagedAbiLock = new();
     private static readonly ConcurrentDictionary<long, WeakReference<object>>
         s_typedManagedAbiTargets = new();
-    private static readonly HtmlMlReadDomNumericPropertyCallback s_typedManagedAbiCallback =
+    private static readonly WebSceneReadDomNumericPropertyCallback s_typedManagedAbiCallback =
         ReadDomNumericPropertyFromNative;
-    private static readonly HtmlMlWriteDomRectCallback s_typedManagedAbiRectCallback =
+    private static readonly WebSceneWriteDomRectCallback s_typedManagedAbiRectCallback =
         WriteDomRectFromNative;
     private static bool s_typedManagedAbiRegistered;
     private static long s_typedManagedAbiRegistrations;
@@ -73,72 +73,72 @@ public sealed class ClearScriptV8Runtime :
 
     private static readonly bool s_enableTypedManagedAbi =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_ENABLE_V8_TYPED_MANAGED_ABI"),
+            Environment.GetEnvironmentVariable("WEBSCENE_ENABLE_V8_TYPED_MANAGED_ABI"),
             "1",
             StringComparison.Ordinal);
 
     private static readonly bool s_disableFastMethodCacheLookup =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_FAST_METHOD_CACHE_LOOKUP"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_FAST_METHOD_CACHE_LOOKUP"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableCanvasFacade =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_CANVAS_FACADE"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_CANVAS_FACADE"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableTypedDomRect =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_TYPED_DOM_RECT"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_TYPED_DOM_RECT"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableTypedDomClientRects =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_TYPED_DOM_CLIENT_RECTS"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_TYPED_DOM_CLIENT_RECTS"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableTypedDomNumericProperties =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_TYPED_DOM_NUMERIC_PROPERTIES"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_TYPED_DOM_NUMERIC_PROPERTIES"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disablePrimitiveTextMetrics =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_PRIMITIVE_TEXT_METRICS"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_PRIMITIVE_TEXT_METRICS"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableResultClassificationCache =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_RESULT_CLASSIFICATION_CACHE"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_RESULT_CLASSIFICATION_CACHE"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_traceDomPropertyAccess =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_TRACE_V8_DOM_PROPERTY_ACCESS"),
+            Environment.GetEnvironmentVariable("WEBSCENE_TRACE_V8_DOM_PROPERTY_ACCESS"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableStableDomPropertyCache =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_STABLE_DOM_PROPERTY_CACHE"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_STABLE_DOM_PROPERTY_CACHE"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableMissingDomPropertyCache =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_MISSING_DOM_PROPERTY_CACHE"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_MISSING_DOM_PROPERTY_CACHE"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableStyleWriteShadow =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_STYLE_WRITE_SHADOW"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_STYLE_WRITE_SHADOW"),
             "1",
             StringComparison.Ordinal);
     private static readonly bool s_disableAllocationFreeCanvasCommandWrites =
         string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_DISABLE_V8_ALLOCATION_FREE_CANVAS_COMMAND_WRITES"),
+            Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_V8_ALLOCATION_FREE_CANVAS_COMMAND_WRITES"),
             "1",
             StringComparison.Ordinal);
 
-    private readonly IHtmlMlJavaScriptHost _host;
+    private readonly IWebSceneJavaScriptHost _host;
     private readonly V8Runtime _runtime;
     private readonly V8ScriptEngine _engine;
     private readonly V8ExternalEventListenerAdapter _callbackAdapter;
@@ -163,7 +163,7 @@ public sealed class ClearScriptV8Runtime :
     private bool _disposed;
 
     public ClearScriptV8Runtime(
-        IHtmlMlJavaScriptHost host,
+        IWebSceneJavaScriptHost host,
         ClearScriptV8RuntimeOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -184,7 +184,7 @@ public sealed class ClearScriptV8Runtime :
         _runtime = new V8Runtime();
         EnsureTypedManagedAbiRegistered();
         _engine = _runtime.CreateScriptEngine(
-            "htmlml-owner",
+            "webscene-owner",
             V8ScriptEngineFlags.AddPerformanceObject);
         try
         {
@@ -211,12 +211,12 @@ public sealed class ClearScriptV8Runtime :
                 _enableTypedComputedStyleAccess,
                 _enableTypedInlineStyleWrites,
                 _enableCanvasStateDeduplication);
-            _requireFrom = (ScriptObject)_engine.Script.__htmlMlRequireFrom;
-            _flushCanvases = (ScriptObject)_engine.Script.__htmlMlFlushCanvases;
+            _requireFrom = (ScriptObject)_engine.Script.__webSceneRequireFrom;
+            _flushCanvases = (ScriptObject)_engine.Script.__webSceneFlushCanvases;
             _ownerWindowContext = (ScriptObject)_engine.Evaluate("globalThis");
             _ownerWindowDispatch = (ScriptObject)_ownerWindowContext.GetProperty("dispatchEvent");
             _ownerWindowRefreshNamedProperties =
-                (ScriptObject)_ownerWindowContext.GetProperty("__htmlMlRefreshWindowNamedProperties");
+                (ScriptObject)_ownerWindowContext.GetProperty("__webSceneRefreshWindowNamedProperties");
             host.Document.ExternalWindowContext = _ownerWindowContext;
             host.Document.ExternalWindowEventDispatcher = this;
         }
@@ -246,13 +246,13 @@ public sealed class ClearScriptV8Runtime :
     }
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate double HtmlMlReadDomNumericPropertyCallback(long nodeId, int property);
+    private delegate double WebSceneReadDomNumericPropertyCallback(long nodeId, int property);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate sbyte HtmlMlWriteDomRectCallback(long nodeId, int kind, IntPtr values);
+    private delegate sbyte WebSceneWriteDomRectCallback(long nodeId, int kind, IntPtr values);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate sbyte HtmlMlRegisterTypedManagedAbiCallback(
+    private delegate sbyte WebSceneRegisterTypedManagedAbiCallback(
         int version,
         IntPtr readDomNumericProperty,
         IntPtr writeDomRect);
@@ -273,29 +273,29 @@ public sealed class ClearScriptV8Runtime :
             if (s_configuredNativeLibraryHandle == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
-                    "The typed managed ABI requires an explicitly resolved HtmlML ClearScript native library.");
+                    "The typed managed ABI requires an explicitly resolved WebScene ClearScript native library.");
             }
             if (!NativeLibrary.TryGetExport(
                     s_configuredNativeLibraryHandle,
-                    "HtmlMlTypedManagedAbi_Register",
+                    "WebSceneTypedManagedAbi_Register",
                     out var registerAddress))
             {
                 throw new InvalidOperationException(
-                    "The configured ClearScript native library does not expose HtmlMlTypedManagedAbi_Register.");
+                    "The configured ClearScript native library does not expose WebSceneTypedManagedAbi_Register.");
             }
 
-            var register = Marshal.GetDelegateForFunctionPointer<HtmlMlRegisterTypedManagedAbiCallback>(
+            var register = Marshal.GetDelegateForFunctionPointer<WebSceneRegisterTypedManagedAbiCallback>(
                 registerAddress);
             var callbackAddress = Marshal.GetFunctionPointerForDelegate(s_typedManagedAbiCallback);
             var rectCallbackAddress = Marshal.GetFunctionPointerForDelegate(s_typedManagedAbiRectCallback);
             if (register(1, callbackAddress, rectCallbackAddress) == 0)
             {
-                throw new InvalidOperationException("The ClearScript native library rejected HtmlML typed ABI version 1.");
+                throw new InvalidOperationException("The ClearScript native library rejected WebScene typed ABI version 1.");
             }
 
             s_typedManagedAbiRegistered = true;
             Console.Error.WriteLine(
-                "[HtmlML V8 native] enabled typed managed ABI v1 " +
+                "[WebScene V8 native] enabled typed managed ABI v1 " +
                 "(numeric DOM reads and client rectangles).");
         }
     }
@@ -303,17 +303,17 @@ public sealed class ClearScriptV8Runtime :
     private static long RegisterTypedManagedAbiTarget(object element)
     {
         if (!s_typedManagedAbiRegistered
-            || element is not IHtmlMlDomIdentityTarget identity
-            || (element is not IHtmlMlDomNumericTarget
-                && element is not IHtmlMlDomRectTarget
-                && element is not IHtmlMlDomClientRectsTarget))
+            || element is not IWebSceneDomIdentityTarget identity
+            || (element is not IWebSceneDomNumericTarget
+                && element is not IWebSceneDomRectTarget
+                && element is not IWebSceneDomClientRectsTarget))
         {
             return 0;
         }
 
-        s_typedManagedAbiTargets[identity.HtmlMlDomIdentity] = new WeakReference<object>(element);
+        s_typedManagedAbiTargets[identity.WebSceneDomIdentity] = new WeakReference<object>(element);
         Interlocked.Increment(ref s_typedManagedAbiRegistrations);
-        return identity.HtmlMlDomIdentity;
+        return identity.WebSceneDomIdentity;
     }
 
     private static double ReadDomNumericPropertyFromNative(long nodeId, int property)
@@ -323,9 +323,9 @@ public sealed class ClearScriptV8Runtime :
         {
             if (s_typedManagedAbiTargets.TryGetValue(nodeId, out var reference)
                 && reference.TryGetTarget(out var value)
-                && value is IHtmlMlDomNumericTarget target)
+                && value is IWebSceneDomNumericTarget target)
             {
-                return target.ReadDomNumericProperty((HtmlMlDomNumericProperty)property);
+                return target.ReadDomNumericProperty((WebSceneDomNumericProperty)property);
             }
 
             s_typedManagedAbiTargets.TryRemove(nodeId, out _);
@@ -354,13 +354,13 @@ public sealed class ClearScriptV8Runtime :
                 return 0;
             }
 
-            HtmlMlRect rect;
-            if (kind == 0 && value is IHtmlMlDomRectTarget boundingTarget)
+            WebSceneRect rect;
+            if (kind == 0 && value is IWebSceneDomRectTarget boundingTarget)
             {
                 rect = boundingTarget.ReadBoundingClientRect();
             }
             else if (kind == 1
-                     && value is IHtmlMlDomClientRectsTarget clientTarget
+                     && value is IWebSceneDomClientRectsTarget clientTarget
                      && clientTarget.TryReadClientRect(out rect))
             {
             }
@@ -404,8 +404,8 @@ public sealed class ClearScriptV8Runtime :
             configuredPath = s_configuredNativeLibraryPath;
             configuredRid = s_configuredNativeLibraryRid;
         }
-        configuredPath ??= Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
-        configuredRid ??= Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_RID");
+        configuredPath ??= Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
+        configuredRid ??= Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_RID");
         if (string.IsNullOrWhiteSpace(configuredPath))
         {
             configuredRid = RuntimeInformation.RuntimeIdentifier;
@@ -422,7 +422,7 @@ public sealed class ClearScriptV8Runtime :
             if (string.IsNullOrWhiteSpace(configuredPath) || !File.Exists(configuredPath))
             {
                 Console.Error.WriteLine(
-                    $"[HtmlML V8 native] requested '{libraryName}' by '{assembly.GetName().Name}'; " +
+                    $"[WebScene V8 native] requested '{libraryName}' by '{assembly.GetName().Name}'; " +
                     $"no bundled reviewed native asset was found for RID '{configuredRid}', " +
                     "using the platform resolver.");
                 return IntPtr.Zero;
@@ -439,21 +439,21 @@ public sealed class ClearScriptV8Runtime :
             }
 
             Console.Error.WriteLine(
-                $"[HtmlML V8 native] requested '{libraryName}' by '{assembly.GetName().Name}'; " +
+                $"[WebScene V8 native] requested '{libraryName}' by '{assembly.GetName().Name}'; " +
                 $"RID='{configuredRid}', path='{fullPath}', exists={File.Exists(fullPath)}, " +
                 $"appBase='{AppContext.BaseDirectory}'.");
             try
             {
                 s_configuredNativeLibraryHandle = NativeLibrary.Load(fullPath);
                 Console.Error.WriteLine(
-                    $"[HtmlML V8 native] loaded '{fullPath}' " +
+                    $"[WebScene V8 native] loaded '{fullPath}' " +
                     $"(handle=0x{s_configuredNativeLibraryHandle.ToInt64():x}).");
                 return s_configuredNativeLibraryHandle;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(
-                    $"[HtmlML V8 native] failed to load '{fullPath}': {ex}");
+                    $"[WebScene V8 native] failed to load '{fullPath}': {ex}");
                 throw;
             }
         }
@@ -493,7 +493,7 @@ public sealed class ClearScriptV8Runtime :
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException(
-                "The configured HtmlML ClearScript V8 native library was not found.",
+                "The configured WebScene ClearScript V8 native library was not found.",
                 fullPath);
         }
         lock (s_nativeLibraryResolverLock)
@@ -555,11 +555,11 @@ public sealed class ClearScriptV8Runtime :
         return Convert.ToString(_engine.Evaluate($$"""
             JSON.stringify((function() {
               const target = document.getElementById('chart_container') || document.documentElement;
-              const raw = target && target.__htmlMlRawHostObject;
-              const handle = raw ? Number(__htmlMlRegisterTypedManagedAbiTarget(raw)) || 0 : 0;
+              const raw = target && target.__webSceneRawHostObject;
+              const handle = raw ? Number(__webSceneRegisterTypedManagedAbiTarget(raw)) || 0 : 0;
               if (!raw || handle <= 0 ||
-                  typeof __htmlMlNativeReadDomNumericProperty !== 'function' ||
-                  typeof __htmlMlNativeWriteDomRect !== 'function') {
+                  typeof __webSceneNativeReadDomNumericProperty !== 'function' ||
+                  typeof __webSceneNativeWriteDomRect !== 'function') {
                 return { enabled: true, available: false };
               }
               const blocks = 8;
@@ -574,16 +574,16 @@ public sealed class ClearScriptV8Runtime :
                 for (let index = 0; index < perBlock; index++) checksum += callback();
                 return performance.now() - started;
               }
-              const genericRead = function() { return __htmlMlReadDomNumericProperty(raw, 2); };
-              const nativeRead = function() { return __htmlMlNativeReadDomNumericProperty(handle, 2); };
+              const genericRead = function() { return __webSceneReadDomNumericProperty(raw, 2); };
+              const nativeRead = function() { return __webSceneNativeReadDomNumericProperty(handle, 2); };
               const genericRectValues = new Float64Array(8);
               const nativeRectValues = new Float64Array(8);
               const genericRectRead = function() {
-                __htmlMlWriteBoundingClientRect(raw, genericRectValues);
+                __webSceneWriteBoundingClientRect(raw, genericRectValues);
                 return genericRectValues[2];
               };
               const nativeRectRead = function() {
-                __htmlMlNativeWriteDomRect(handle, 0, nativeRectValues);
+                __webSceneNativeWriteDomRect(handle, 0, nativeRectValues);
                 return nativeRectValues[2];
               };
               for (let warmup = 0; warmup < 1000; warmup++) {
@@ -646,7 +646,7 @@ public sealed class ClearScriptV8Runtime :
             requested.Insert(
                 0,
                 new V8CompilationSource(
-                    "htmlml-browser-runtime.js",
+                    "webscene-browser-runtime.js",
                     BrowserRuntimeSetup));
         }
         foreach (var source in requested)
@@ -674,7 +674,7 @@ public sealed class ClearScriptV8Runtime :
                             continue;
                         }
 
-                        compiler ??= new V8Runtime("htmlml-background-compiler");
+                        compiler ??= new V8Runtime("webscene-background-compiler");
                         using var script = compiler.Compile(
                             source.DocumentName,
                             source.Code,
@@ -721,7 +721,7 @@ public sealed class ClearScriptV8Runtime :
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         using var scope = _host.EnterExternalJavaScriptCall();
         _ownerWindowRefreshNamedProperties.InvokeAsFunction();
-        ExecuteCompiled(_engine, code, documentName ?? "htmlml-owner.js");
+        ExecuteCompiled(_engine, code, documentName ?? "webscene-owner.js");
     }
 
     /// <summary>
@@ -735,7 +735,7 @@ public sealed class ClearScriptV8Runtime :
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         using var scope = _host.EnterExternalJavaScriptCall();
         _ownerWindowRefreshNamedProperties.InvokeAsFunction();
-        return EvaluateCompiled(_engine, code, documentName ?? "htmlml-owner-eval.js");
+        return EvaluateCompiled(_engine, code, documentName ?? "webscene-owner-eval.js");
     }
 
     public object? Invoke(object callback, params object?[] arguments)
@@ -765,8 +765,8 @@ public sealed class ClearScriptV8Runtime :
     }
 
     public IExternalVirtualBrowsingContext Create(
-        IHtmlMlJavaScriptHost host,
-        IHtmlMlJavaScriptDocument frameDocument,
+        IWebSceneJavaScriptHost host,
+        IWebSceneJavaScriptDocument frameDocument,
         object frameElement)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -777,7 +777,7 @@ public sealed class ClearScriptV8Runtime :
         }
         var frameSequence = ++_frameSequence;
         var frameEngine = _runtime.CreateScriptEngine(
-            $"htmlml-frame-{frameSequence}",
+            $"webscene-frame-{frameSequence}",
             V8ScriptEngineFlags.AddPerformanceObject);
         V8ExternalEventListenerAdapter? frameCallbackAdapter = null;
         try
@@ -793,10 +793,10 @@ public sealed class ClearScriptV8Runtime :
                 _enableTypedComputedStyleAccess,
                 _enableTypedInlineStyleWrites,
                 _enableCanvasStateDeduplication);
-            var createFrameRuntime = (ScriptObject)frameEngine.Script.__htmlMlCreateFrameRuntime;
-            var ownerFrameElement = ((ScriptObject)_engine.Script.__htmlMlWrapHostObject)
+            var createFrameRuntime = (ScriptObject)frameEngine.Script.__webSceneCreateFrameRuntime;
+            var ownerFrameElement = ((ScriptObject)_engine.Script.__webSceneWrapHostObject)
                 .InvokeAsFunction(frameElement);
-            ((ScriptObject)_engine.Script.__htmlMlMarkExternalRealmView)
+            ((ScriptObject)_engine.Script.__webSceneMarkExternalRealmView)
                 .InvokeAsFunction(ownerFrameElement);
             var state = (ScriptObject)createFrameRuntime.InvokeAsFunction(
                 frameDocument.JavaScriptObject,
@@ -844,10 +844,10 @@ public sealed class ClearScriptV8Runtime :
               const reports = [];
               const collect = function(label, scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlDescribeDomProxyRetention === 'function') {
+                  if (scope && typeof scope.__webSceneDescribeDomProxyRetention === 'function') {
                     reports.push({
                       scope: label,
-                      retention: scope.__htmlMlDescribeDomProxyRetention()
+                      retention: scope.__webSceneDescribeDomProxyRetention()
                     });
                   }
                 } catch (_) {}
@@ -900,8 +900,8 @@ public sealed class ClearScriptV8Runtime :
               } catch (_) {}
               scopes.forEach(function(scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlResetDomPropertyAccessMetrics === 'function') {
-                    scope.__htmlMlResetDomPropertyAccessMetrics();
+                  if (scope && typeof scope.__webSceneResetDomPropertyAccessMetrics === 'function') {
+                    scope.__webSceneResetDomPropertyAccessMetrics();
                   }
                 } catch (_) {}
               });
@@ -918,10 +918,10 @@ public sealed class ClearScriptV8Runtime :
               const reports = [];
               const collect = function(label, scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlDescribeDomPropertyAccessMetrics === 'function') {
+                  if (scope && typeof scope.__webSceneDescribeDomPropertyAccessMetrics === 'function') {
                     reports.push({
                       scope: label,
-                      properties: scope.__htmlMlDescribeDomPropertyAccessMetrics({{limit}})
+                      properties: scope.__webSceneDescribeDomPropertyAccessMetrics({{limit}})
                     });
                   }
                 } catch (_) {}
@@ -950,8 +950,8 @@ public sealed class ClearScriptV8Runtime :
               } catch (_) {}
               scopes.forEach(function(scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlResetComputedStyleReadCacheMetrics === 'function') {
-                    scope.__htmlMlResetComputedStyleReadCacheMetrics();
+                  if (scope && typeof scope.__webSceneResetComputedStyleReadCacheMetrics === 'function') {
+                    scope.__webSceneResetComputedStyleReadCacheMetrics();
                   }
                 } catch (_) {}
               });
@@ -967,10 +967,10 @@ public sealed class ClearScriptV8Runtime :
               const reports = [];
               const collect = function(label, scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlDescribeComputedStyleReadCacheMetrics === 'function') {
+                  if (scope && typeof scope.__webSceneDescribeComputedStyleReadCacheMetrics === 'function') {
                     reports.push({
                       scope: label,
-                      metrics: scope.__htmlMlDescribeComputedStyleReadCacheMetrics()
+                      metrics: scope.__webSceneDescribeComputedStyleReadCacheMetrics()
                     });
                   }
                 } catch (_) {}
@@ -999,8 +999,8 @@ public sealed class ClearScriptV8Runtime :
               } catch (_) {}
               scopes.forEach(function(scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlResetDomTokenListWriteShadowMetrics === 'function') {
-                    scope.__htmlMlResetDomTokenListWriteShadowMetrics();
+                  if (scope && typeof scope.__webSceneResetDomTokenListWriteShadowMetrics === 'function') {
+                    scope.__webSceneResetDomTokenListWriteShadowMetrics();
                   }
                 } catch (_) {}
               });
@@ -1016,10 +1016,10 @@ public sealed class ClearScriptV8Runtime :
               const reports = [];
               const collect = function(label, scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlDescribeDomTokenListWriteShadowMetrics === 'function') {
+                  if (scope && typeof scope.__webSceneDescribeDomTokenListWriteShadowMetrics === 'function') {
                     reports.push({
                       scope: label,
-                      metrics: scope.__htmlMlDescribeDomTokenListWriteShadowMetrics()
+                      metrics: scope.__webSceneDescribeDomTokenListWriteShadowMetrics()
                     });
                   }
                 } catch (_) {}
@@ -1048,8 +1048,8 @@ public sealed class ClearScriptV8Runtime :
               } catch (_) {}
               scopes.forEach(function(scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlResetTypedInlineStyleWriteMetrics === 'function') {
-                    scope.__htmlMlResetTypedInlineStyleWriteMetrics();
+                  if (scope && typeof scope.__webSceneResetTypedInlineStyleWriteMetrics === 'function') {
+                    scope.__webSceneResetTypedInlineStyleWriteMetrics();
                   }
                 } catch (_) {}
               });
@@ -1065,10 +1065,10 @@ public sealed class ClearScriptV8Runtime :
               const reports = [];
               const collect = function(label, scope) {
                 try {
-                  if (scope && typeof scope.__htmlMlDescribeTypedInlineStyleWriteMetrics === 'function') {
+                  if (scope && typeof scope.__webSceneDescribeTypedInlineStyleWriteMetrics === 'function') {
                     reports.push({
                       scope: label,
-                      metrics: scope.__htmlMlDescribeTypedInlineStyleWriteMetrics()
+                      metrics: scope.__webSceneDescribeTypedInlineStyleWriteMetrics()
                     });
                   }
                 } catch (_) {}
@@ -1098,7 +1098,7 @@ public sealed class ClearScriptV8Runtime :
         _frames.Clear();
         TryInvoke(_flushCanvases);
         _canvasBatchSinks.Clear();
-        TryInvoke(_engine.Script.__htmlMlDisposeBrowsingContext as ScriptObject);
+        TryInvoke(_engine.Script.__webSceneDisposeBrowsingContext as ScriptObject);
         DetachFromHost();
         _callbackAdapter.Clear();
         TryDispose(_engine);
@@ -1171,7 +1171,7 @@ public sealed class ClearScriptV8Runtime :
         }
     }
 
-    private static void EnsureExternalRuntimeSlotsAreAvailable(IHtmlMlJavaScriptHost host)
+    private static void EnsureExternalRuntimeSlotsAreAvailable(IWebSceneJavaScriptHost host)
     {
         if (host.ExternalCallbackAdapter is not null
             || host.ExternalVirtualBrowsingContextFactory is not null
@@ -1180,7 +1180,7 @@ public sealed class ClearScriptV8Runtime :
             || host.Document.ExternalWindowEventDispatcher is not null)
         {
             throw new InvalidOperationException(
-                "The HtmlML host is already attached to an external JavaScript runtime.");
+                "The WebScene host is already attached to an external JavaScript runtime.");
         }
     }
 
@@ -1188,15 +1188,15 @@ public sealed class ClearScriptV8Runtime :
         V8Runtime runtime,
         V8ScriptEngine ownerEngine)
     {
-        using var frameProbe = runtime.CreateScriptEngine("htmlml-context-sharing-probe");
+        using var frameProbe = runtime.CreateScriptEngine("webscene-context-sharing-probe");
         ownerEngine.Execute(
-            "globalThis.__htmlMlContextSharingProbe = Object.freeze({ value: 41, add: function(value) { return this.value + value; } });");
+            "globalThis.__webSceneContextSharingProbe = Object.freeze({ value: 41, add: function(value) { return this.value + value; } });");
 
         try
         {
             frameProbe.Script.ownerWindow = ownerEngine.Script;
             var result = frameProbe.Evaluate(
-                "ownerWindow.__htmlMlContextSharingProbe.add(1)");
+                "ownerWindow.__webSceneContextSharingProbe.add(1)");
             if (Convert.ToInt32(result) != 42)
             {
                 throw new InvalidOperationException(
@@ -1207,13 +1207,13 @@ public sealed class ClearScriptV8Runtime :
         {
             throw new InvalidOperationException(
                 "Trusted same-origin V8 iframe sharing is unavailable. " +
-                "HtmlML currently requires the reviewed patched ClearScript native library; " +
+                "WebScene currently requires the reviewed patched ClearScript native library; " +
                 "stock ClearScript blocks owner/iframe objects. See third-party/clearscript-patches/README.md.",
                 exception);
         }
         finally
         {
-            ownerEngine.Execute("delete globalThis.__htmlMlContextSharingProbe;");
+            ownerEngine.Execute("delete globalThis.__webSceneContextSharingProbe;");
         }
     }
 
@@ -1227,47 +1227,47 @@ public sealed class ClearScriptV8Runtime :
         bool enableTypedInlineStyleWrites,
         bool enableCanvasStateDeduplication)
     {
-        engine.AddHostObject("__htmlMlOwnerDocument", _host.Document.JavaScriptObject);
-        engine.AddHostObject("__htmlMlWindowBackend", _host.BrowserWindow);
-        engine.AddHostObject("__htmlMlModuleBackend", new ModuleBackend(_host, _sharedCache));
+        engine.AddHostObject("__webSceneOwnerDocument", _host.Document.JavaScriptObject);
+        engine.AddHostObject("__webSceneWindowBackend", _host.BrowserWindow);
+        engine.AddHostObject("__webSceneModuleBackend", new ModuleBackend(_host, _sharedCache));
         engine.AddHostObject(
-            "__htmlMlCompileModuleFactory",
+            "__webSceneCompileModuleFactory",
             new Func<string, string, object?>((code, documentName) =>
                 EvaluateCompiled(engine, code, documentName)));
-        engine.AddHostObject("__htmlMlDomParserBackend", new DomParserBackend());
-        engine.AddHostType("__htmlMlUrlBackend", _host.UrlBackendType);
-        engine.AddHostObject("__htmlMlBase64Backend", new Base64Backend());
+        engine.AddHostObject("__webSceneDomParserBackend", new DomParserBackend());
+        engine.AddHostType("__webSceneUrlBackend", _host.UrlBackendType);
+        engine.AddHostObject("__webSceneBase64Backend", new Base64Backend());
         engine.AddHostObject(
-            "__htmlMlGetComputedStyleValue",
+            "__webSceneGetComputedStyleValue",
             new Func<object?, string, string>((style, propertyName) =>
-                style is IHtmlMlComputedStyleTarget computed
+                style is IWebSceneComputedStyleTarget computed
                     ? computed.GetPropertyValue(propertyName)
                     : string.Empty));
         engine.AddHostObject(
-            "__htmlMlGetComputedStyleLength",
+            "__webSceneGetComputedStyleLength",
             new Func<object?, int>(style =>
-                style is IHtmlMlComputedStyleTarget computed ? computed.Length : 0));
+                style is IWebSceneComputedStyleTarget computed ? computed.Length : 0));
         engine.AddHostObject(
-            "__htmlMlSupportsComputedStyleProperty",
+            "__webSceneSupportsComputedStyleProperty",
             new Func<object?, string, bool>((style, propertyName) =>
-                style is IHtmlMlComputedStylePropertySupportTarget supported
+                style is IWebSceneComputedStylePropertySupportTarget supported
                 && supported.SupportsPropertyName(propertyName)));
         engine.AddHostObject(
-            "__htmlMlIsComputedStylePropertyLive",
+            "__webSceneIsComputedStylePropertyLive",
             new Func<object?, string, bool>((style, propertyName) =>
-                style is IHtmlMlLiveComputedStyleTarget live
+                style is IWebSceneLiveComputedStyleTarget live
                 && live.IsPropertyLive(propertyName)));
         engine.AddHostObject(
-            "__htmlMlGetComputedStyleItem",
+            "__webSceneGetComputedStyleItem",
             new Func<object?, int, string>((style, index) =>
-                style is IHtmlMlComputedStyleTarget computed
+                style is IWebSceneComputedStyleTarget computed
                     ? computed.Item(index)
                     : string.Empty));
         engine.AddHostObject(
-            "__htmlMlTrySetInlineStyleProperty",
+            "__webSceneTrySetInlineStyleProperty",
             new Func<object?, string, string, bool>((style, propertyName, value) =>
             {
-                if (style is not IHtmlMlCssStyleDeclarationTarget target)
+                if (style is not IWebSceneCssStyleDeclarationTarget target)
                 {
                     return false;
                 }
@@ -1275,58 +1275,58 @@ public sealed class ClearScriptV8Runtime :
                 target.SetProperty(propertyName, value);
                 return true;
             }));
-        engine.AddHostObject("__htmlMlNow", new Func<double>(_host.GetPerformanceTimestamp));
+        engine.AddHostObject("__webSceneNow", new Func<double>(_host.GetPerformanceTimestamp));
         engine.AddHostObject(
-            "__htmlMlRegisterTypedManagedAbiTarget",
+            "__webSceneRegisterTypedManagedAbiTarget",
             new Func<object, long>(RegisterTypedManagedAbiTarget));
-        engine.Script.__htmlMlEnableCanvasBatching = _enableCanvasBatching;
-        engine.Script.__htmlMlEnableDomMethodCaching = enableDomMethodCaching;
-        engine.Script.__htmlMlEnableDomTokenListWriteShadow = enableDomTokenListWriteShadow;
-        engine.Script.__htmlMlEnableComputedStyleReadCaching = enableComputedStyleReadCaching;
-        engine.Script.__htmlMlEnableTypedComputedStyleAccess = enableTypedComputedStyleAccess;
-        engine.Script.__htmlMlEnableTypedInlineStyleWrites = enableTypedInlineStyleWrites;
-        engine.Script.__htmlMlEnableFastMethodCacheLookup = !s_disableFastMethodCacheLookup;
-        engine.Script.__htmlMlEnableCanvasFacade = !s_disableCanvasFacade;
-        engine.Script.__htmlMlEnableTypedDomRect = !s_disableTypedDomRect;
-        engine.Script.__htmlMlEnableTypedDomClientRects = !s_disableTypedDomClientRects;
-        engine.Script.__htmlMlEnableTypedDomNumericProperties = !s_disableTypedDomNumericProperties;
-        engine.Script.__htmlMlEnableTypedManagedAbi = s_typedManagedAbiRegistered;
-        engine.Script.__htmlMlEnablePrimitiveTextMetrics = !s_disablePrimitiveTextMetrics;
-        engine.Script.__htmlMlEnableResultClassificationCache = !s_disableResultClassificationCache;
-        engine.Script.__htmlMlTraceDomPropertyAccess = s_traceDomPropertyAccess;
-        engine.Script.__htmlMlEnableStableDomPropertyCache = !s_disableStableDomPropertyCache;
-        engine.Script.__htmlMlEnableMissingDomPropertyCache = !s_disableMissingDomPropertyCache;
-        engine.Script.__htmlMlEnableStyleWriteShadow =
+        engine.Script.__webSceneEnableCanvasBatching = _enableCanvasBatching;
+        engine.Script.__webSceneEnableDomMethodCaching = enableDomMethodCaching;
+        engine.Script.__webSceneEnableDomTokenListWriteShadow = enableDomTokenListWriteShadow;
+        engine.Script.__webSceneEnableComputedStyleReadCaching = enableComputedStyleReadCaching;
+        engine.Script.__webSceneEnableTypedComputedStyleAccess = enableTypedComputedStyleAccess;
+        engine.Script.__webSceneEnableTypedInlineStyleWrites = enableTypedInlineStyleWrites;
+        engine.Script.__webSceneEnableFastMethodCacheLookup = !s_disableFastMethodCacheLookup;
+        engine.Script.__webSceneEnableCanvasFacade = !s_disableCanvasFacade;
+        engine.Script.__webSceneEnableTypedDomRect = !s_disableTypedDomRect;
+        engine.Script.__webSceneEnableTypedDomClientRects = !s_disableTypedDomClientRects;
+        engine.Script.__webSceneEnableTypedDomNumericProperties = !s_disableTypedDomNumericProperties;
+        engine.Script.__webSceneEnableTypedManagedAbi = s_typedManagedAbiRegistered;
+        engine.Script.__webSceneEnablePrimitiveTextMetrics = !s_disablePrimitiveTextMetrics;
+        engine.Script.__webSceneEnableResultClassificationCache = !s_disableResultClassificationCache;
+        engine.Script.__webSceneTraceDomPropertyAccess = s_traceDomPropertyAccess;
+        engine.Script.__webSceneEnableStableDomPropertyCache = !s_disableStableDomPropertyCache;
+        engine.Script.__webSceneEnableMissingDomPropertyCache = !s_disableMissingDomPropertyCache;
+        engine.Script.__webSceneEnableStyleWriteShadow =
             !s_disableStyleWriteShadow && !s_disableStableDomPropertyCache;
-        engine.Script.__htmlMlEnableAllocationFreeCanvasCommandWrites =
+        engine.Script.__webSceneEnableAllocationFreeCanvasCommandWrites =
             !s_disableAllocationFreeCanvasCommandWrites;
-        engine.Script.__htmlMlTraceV8CallbackErrors = string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_TRACE_V8_CALLBACK_ERRORS"),
+        engine.Script.__webSceneTraceV8CallbackErrors = string.Equals(
+            Environment.GetEnvironmentVariable("WEBSCENE_TRACE_V8_CALLBACK_ERRORS"),
             "1",
             StringComparison.Ordinal);
-        engine.Script.__htmlMlEnableCanvasStateDeduplication = enableCanvasStateDeduplication;
-        engine.Script.__htmlMlEnableNativeResizeObserverNotifications =
+        engine.Script.__webSceneEnableCanvasStateDeduplication = enableCanvasStateDeduplication;
+        engine.Script.__webSceneEnableNativeResizeObserverNotifications =
             _enableNativeResizeObserverNotifications;
-        engine.AddHostObject("__htmlMlCallbackAdapter", callbackAdapter);
+        engine.AddHostObject("__webSceneCallbackAdapter", callbackAdapter);
         engine.AddHostObject(
-            "__htmlMlCreatePath2DBackend",
+            "__webSceneCreatePath2DBackend",
             new Func<object?, object>(_host.CreateCanvasPath));
         engine.AddHostObject(
-            "__htmlMlCreateCanvasBatchSink",
+            "__webSceneCreateCanvasBatchSink",
             new Func<object, V8CanvasBatchSink>(CreateCanvasBatchSink));
         engine.AddHostObject(
-            "__htmlMlWriteBoundingClientRect",
+            "__webSceneWriteBoundingClientRect",
             new Action<object, ITypedArray<double>>(WriteBoundingClientRect));
         engine.AddHostObject(
-            "__htmlMlWriteClientRect",
+            "__webSceneWriteClientRect",
             new Func<object, ITypedArray<double>, bool>(WriteClientRect));
         engine.AddHostObject(
-            "__htmlMlReadDomNumericProperty",
+            "__webSceneReadDomNumericProperty",
             new Func<object, int, double>(ReadDomNumericProperty));
         engine.AddHostObject(
-            "__htmlMlMeasureTextWidth",
+            "__webSceneMeasureTextWidth",
             new Func<object, string, double>(MeasureTextWidth));
-        ExecuteCompiled(engine, BrowserRuntimeSetup, "htmlml-browser-runtime.js");
+        ExecuteCompiled(engine, BrowserRuntimeSetup, "webscene-browser-runtime.js");
     }
 
     private void ExecuteCompiled(V8ScriptEngine engine, string code, string documentName)
@@ -1379,7 +1379,7 @@ public sealed class ClearScriptV8Runtime :
 
     private static double MeasureTextWidth(object context, string text)
     {
-        if (context is not IHtmlMlCanvasTextTarget target)
+        if (context is not IWebSceneCanvasTextTarget target)
         {
             throw new ArgumentException(
                 "The text measurement target is not a Canvas2D context.",
@@ -1393,7 +1393,7 @@ public sealed class ClearScriptV8Runtime :
         object element,
         ITypedArray<double> destination)
     {
-        if (element is not IHtmlMlDomRectTarget target)
+        if (element is not IWebSceneDomRectTarget target)
         {
             throw new ArgumentException(
                 "The bounding rectangle target is not a DOM element.",
@@ -1417,7 +1417,7 @@ public sealed class ClearScriptV8Runtime :
         object element,
         ITypedArray<double> destination)
     {
-        if (element is not IHtmlMlDomClientRectsTarget target)
+        if (element is not IWebSceneDomClientRectsTarget target)
         {
             return false;
         }
@@ -1440,8 +1440,8 @@ public sealed class ClearScriptV8Runtime :
     }
 
     private static double ReadDomNumericProperty(object element, int property)
-        => element is IHtmlMlDomNumericTarget target
-            ? target.ReadDomNumericProperty((HtmlMlDomNumericProperty)property)
+        => element is IWebSceneDomNumericTarget target
+            ? target.ReadDomNumericProperty((WebSceneDomNumericProperty)property)
             : double.NaN;
 
     private V8CanvasBatchSink CreateCanvasBatchSink(object context)
@@ -1456,13 +1456,13 @@ public sealed class ClearScriptV8Runtime :
         string scopeName)
     {
         var eventApply = (ScriptObject)engine.Evaluate(
-            "(function(callback, currentTarget, hostEvent, sourceEvent) { currentTarget = __htmlMlWrapHostObject(currentTarget); hostEvent = __htmlMlWrapHostObject(hostEvent); sourceEvent = sourceEvent == null && typeof __htmlMlWrapHostEvent === 'function' ? __htmlMlWrapHostEvent(hostEvent) : sourceEvent == null ? hostEvent : sourceEvent; const prepare = function() { if (sourceEvent === hostEvent) return; try { sourceEvent.target = __htmlMlWrapHostObject(hostEvent.target); sourceEvent.currentTarget = __htmlMlWrapHostObject(hostEvent.currentTarget); sourceEvent.eventPhase = Number(hostEvent.eventPhase) || 0; } catch (_) {} }; const sync = function() { if (sourceEvent === hostEvent) return; try { if (sourceEvent.defaultPrevented) hostEvent.preventDefault(); if (sourceEvent.__immediateStopped) hostEvent.stopImmediatePropagation(); else if (sourceEvent.cancelBubble) hostEvent.stopPropagation(); } catch (_) {} }; prepare(); try { return callback.call(currentTarget, sourceEvent); } finally { sync(); if (typeof __htmlMlFlushCanvases === 'function') __htmlMlFlushCanvases(); } })");
+            "(function(callback, currentTarget, hostEvent, sourceEvent) { currentTarget = __webSceneWrapHostObject(currentTarget); hostEvent = __webSceneWrapHostObject(hostEvent); sourceEvent = sourceEvent == null && typeof __webSceneWrapHostEvent === 'function' ? __webSceneWrapHostEvent(hostEvent) : sourceEvent == null ? hostEvent : sourceEvent; const prepare = function() { if (sourceEvent === hostEvent) return; try { sourceEvent.target = __webSceneWrapHostObject(hostEvent.target); sourceEvent.currentTarget = __webSceneWrapHostObject(hostEvent.currentTarget); sourceEvent.eventPhase = Number(hostEvent.eventPhase) || 0; } catch (_) {} }; const sync = function() { if (sourceEvent === hostEvent) return; try { if (sourceEvent.defaultPrevented) hostEvent.preventDefault(); if (sourceEvent.__immediateStopped) hostEvent.stopImmediatePropagation(); else if (sourceEvent.cancelBubble) hostEvent.stopPropagation(); } catch (_) {} }; prepare(); try { return callback.call(currentTarget, sourceEvent); } finally { sync(); if (typeof __webSceneFlushCanvases === 'function') __webSceneFlushCanvases(); } })");
         var eventBatchApply = (ScriptObject)engine.Evaluate(
-            "(function(callbacks, currentTarget, hostEvent, sourceEvent, control) { currentTarget = __htmlMlWrapHostObject(currentTarget); hostEvent = __htmlMlWrapHostObject(hostEvent); sourceEvent = sourceEvent == null && typeof __htmlMlWrapHostEvent === 'function' ? __htmlMlWrapHostEvent(hostEvent) : sourceEvent == null ? hostEvent : sourceEvent; const prepare = function() { if (sourceEvent === hostEvent) return; try { sourceEvent.target = __htmlMlWrapHostObject(hostEvent.target); sourceEvent.currentTarget = __htmlMlWrapHostObject(hostEvent.currentTarget); sourceEvent.eventPhase = Number(hostEvent.eventPhase) || 0; } catch (_) {} }; const sync = function() { if (sourceEvent === hostEvent) return; try { if (sourceEvent.defaultPrevented) hostEvent.preventDefault(); if (sourceEvent.__immediateStopped) hostEvent.stopImmediatePropagation(); else if (sourceEvent.cancelBubble) hostEvent.stopPropagation(); } catch (_) {} }; try { callbacks = Array.from(callbacks); for (let index = 0; index < callbacks.length; index++) { control.BeforeInvoke(index); prepare(); try { callbacks[index].call(currentTarget, sourceEvent); } catch (error) { control.ReportError(index, String(error && error.stack || error)); } finally { sync(); control.AfterInvoke(index); } if (control.ShouldStop) break; } } finally { if (typeof __htmlMlFlushCanvases === 'function') __htmlMlFlushCanvases(); } })");
+            "(function(callbacks, currentTarget, hostEvent, sourceEvent, control) { currentTarget = __webSceneWrapHostObject(currentTarget); hostEvent = __webSceneWrapHostObject(hostEvent); sourceEvent = sourceEvent == null && typeof __webSceneWrapHostEvent === 'function' ? __webSceneWrapHostEvent(hostEvent) : sourceEvent == null ? hostEvent : sourceEvent; const prepare = function() { if (sourceEvent === hostEvent) return; try { sourceEvent.target = __webSceneWrapHostObject(hostEvent.target); sourceEvent.currentTarget = __webSceneWrapHostObject(hostEvent.currentTarget); sourceEvent.eventPhase = Number(hostEvent.eventPhase) || 0; } catch (_) {} }; const sync = function() { if (sourceEvent === hostEvent) return; try { if (sourceEvent.defaultPrevented) hostEvent.preventDefault(); if (sourceEvent.__immediateStopped) hostEvent.stopImmediatePropagation(); else if (sourceEvent.cancelBubble) hostEvent.stopPropagation(); } catch (_) {} }; try { callbacks = Array.from(callbacks); for (let index = 0; index < callbacks.length; index++) { control.BeforeInvoke(index); prepare(); try { callbacks[index].call(currentTarget, sourceEvent); } catch (error) { control.ReportError(index, String(error && error.stack || error)); } finally { sync(); control.AfterInvoke(index); } if (control.ShouldStop) break; } } finally { if (typeof __webSceneFlushCanvases === 'function') __webSceneFlushCanvases(); } })");
         var eventComplete = (ScriptObject)engine.Evaluate(
             "(function(sourceEvent) { sourceEvent.currentTarget = null; sourceEvent.eventPhase = 0; })");
         var apply = (ScriptObject)engine.Evaluate(
-            "(function(callback, currentTarget, args) { try { return callback.apply(currentTarget, Array.from(args)); } finally { if (typeof __htmlMlFlushCanvases === 'function') __htmlMlFlushCanvases(); } })");
+            "(function(callback, currentTarget, args) { try { return callback.apply(currentTarget, Array.from(args)); } finally { if (typeof __webSceneFlushCanvases === 'function') __webSceneFlushCanvases(); } })");
         return new V8ExternalEventListenerAdapter(
             eventApply, eventBatchApply, eventComplete, apply, scopeName);
     }
@@ -1471,8 +1471,8 @@ public sealed class ClearScriptV8Runtime :
         IExternalVirtualBrowsingContext,
         IExternalVirtualBrowsingContextDocumentView
     {
-        private IHtmlMlJavaScriptHost? _host;
-        private IHtmlMlJavaScriptDocument? _document;
+        private IWebSceneJavaScriptHost? _host;
+        private IWebSceneJavaScriptDocument? _document;
         private object? _frameElement;
         private V8ExternalEventListenerAdapter? _callbackAdapter;
         private object? _window;
@@ -1488,8 +1488,8 @@ public sealed class ClearScriptV8Runtime :
         private Action<V8FrameBrowsingContext>? _onDisposed;
 
         internal V8FrameBrowsingContext(
-            IHtmlMlJavaScriptHost host,
-            IHtmlMlJavaScriptDocument document,
+            IWebSceneJavaScriptHost host,
+            IWebSceneJavaScriptDocument document,
             object frameElement,
             V8ScriptEngine engine,
             ScriptObject state,
@@ -1512,9 +1512,9 @@ public sealed class ClearScriptV8Runtime :
             _dispatch = (ScriptObject)state.GetProperty("dispatch");
             _refreshNamedProperties = (ScriptObject)state.GetProperty("refreshNamedProperties");
             _describe = (ScriptObject)state.GetProperty("describe");
-            _flushCanvases = (ScriptObject)engine.Script.__htmlMlFlushCanvases;
+            _flushCanvases = (ScriptObject)engine.Script.__webSceneFlushCanvases;
             _disposeBrowsingContext =
-                (ScriptObject)engine.Script.__htmlMlDisposeBrowsingContext;
+                (ScriptObject)engine.Script.__webSceneDisposeBrowsingContext;
         }
 
         public object Window => _window
@@ -1627,11 +1627,11 @@ public sealed class ClearScriptV8Runtime :
 
     public sealed class ModuleBackend
     {
-        private readonly IHtmlMlJavaScriptHost _host;
+        private readonly IWebSceneJavaScriptHost _host;
         private readonly ClearScriptV8SharedCache? _sharedCache;
 
         internal ModuleBackend(
-            IHtmlMlJavaScriptHost host,
+            IWebSceneJavaScriptHost host,
             ClearScriptV8SharedCache? sharedCache)
         {
             _host = host;
@@ -1675,17 +1675,17 @@ public sealed class ClearScriptV8Runtime :
 
     public sealed class DomParserBackend
     {
-        public object Parse(IHtmlMlJavaScriptDocument document, string markup, string mimeType)
+        public object Parse(IWebSceneJavaScriptDocument document, string markup, string mimeType)
             => document.ParseMarkupDocument(markup, mimeType);
     }
 
     public sealed class V8CanvasBatchSink
     {
-        private readonly IHtmlMlCanvasBatchTarget _target;
+        private readonly IWebSceneCanvasBatchTarget _target;
 
         public V8CanvasBatchSink(object context)
         {
-            _target = context as IHtmlMlCanvasBatchTarget
+            _target = context as IWebSceneCanvasBatchTarget
                 ?? throw new ArgumentException(
                     "The batch target is not a Canvas2D context.",
                     nameof(context));
@@ -1746,8 +1746,8 @@ public sealed class ClearScriptV8Runtime :
 
     private const string BrowserRuntimeSetup = """
         (function () {
-          const ownerDocument = __htmlMlOwnerDocument;
-          const windowBackend = __htmlMlWindowBackend;
+          const ownerDocument = __webSceneOwnerDocument;
+          const windowBackend = __webSceneWindowBackend;
           const moduleCache = new Map();
           const performanceObject = (function() {
             const nativePerformance = typeof Performance === 'object' &&
@@ -1758,7 +1758,7 @@ public sealed class ClearScriptV8Runtime :
               ? nativePerformance.timeOrigin
               : Date.now();
             const entries = [];
-            function now() { return nativePerformance ? nativePerformance.now() : __htmlMlNow(); }
+            function now() { return nativePerformance ? nativePerformance.now() : __webSceneNow(); }
             function remove(entryType, name) {
               for (let index = entries.length - 1; index >= 0; index--) {
                 if (entries[index].entryType === entryType &&
@@ -1800,7 +1800,7 @@ public sealed class ClearScriptV8Runtime :
           })();
           const hostToProxy = new WeakMap();
           const proxyToHost = new WeakMap();
-          const externalRealmViewMarker = Symbol.for('HtmlML.externalRealmView');
+          const externalRealmViewMarker = Symbol.for('WebScene.externalRealmView');
           const domIdentityToProxy = new Map();
           let nextDomIdentityToken = 1;
           const domIdentityFinalizer = typeof FinalizationRegistry === 'function'
@@ -1810,7 +1810,7 @@ public sealed class ClearScriptV8Runtime :
               })
             : null;
           const nonDomHostResults = new WeakSet();
-          const domPropertyAccessMetrics = __htmlMlTraceDomPropertyAccess ? new Map() : null;
+          const domPropertyAccessMetrics = __webSceneTraceDomPropertyAccess ? new Map() : null;
           const stableDomObjectProperties = new Set([
             'style', 'classList', 'dataset', 'ownerDocument', 'defaultView'
           ]);
@@ -1929,7 +1929,7 @@ public sealed class ClearScriptV8Runtime :
                   const token = String(arguments[index]);
                   recordHostWrite();
                   try { backend.add(token); }
-                  finally { if (__htmlMlEnableDomTokenListWriteShadow) shadowTokens = null; }
+                  finally { if (__webSceneEnableDomTokenListWriteShadow) shadowTokens = null; }
                 }
               },
               remove: function() {
@@ -1937,7 +1937,7 @@ public sealed class ClearScriptV8Runtime :
                   const token = String(arguments[index]);
                   recordHostWrite();
                   try { backend.remove(token); }
-                  finally { if (__htmlMlEnableDomTokenListWriteShadow) shadowTokens = null; }
+                  finally { if (__webSceneEnableDomTokenListWriteShadow) shadowTokens = null; }
                 }
               },
               contains: function(token) { return Boolean(backend.contains(String(token))); },
@@ -1946,10 +1946,10 @@ public sealed class ClearScriptV8Runtime :
                 if (arguments.length < 2) {
                   recordHostWrite();
                   try { return Boolean(backend.toggle(token)); }
-                  finally { if (__htmlMlEnableDomTokenListWriteShadow) shadowTokens = null; }
+                  finally { if (__webSceneEnableDomTokenListWriteShadow) shadowTokens = null; }
                 }
                 force = Boolean(force);
-                if (__htmlMlEnableDomTokenListWriteShadow &&
+                if (__webSceneEnableDomTokenListWriteShadow &&
                     canUseForcedToggleShadow(token) &&
                     currentTokens().has(token) === force) {
                   domTokenListWriteShadowMetrics.skippedWrites++;
@@ -1958,14 +1958,14 @@ public sealed class ClearScriptV8Runtime :
                 recordHostWrite();
                 try {
                   const result = Boolean(backend.toggle(token, force));
-                  if (__htmlMlEnableDomTokenListWriteShadow &&
+                  if (__webSceneEnableDomTokenListWriteShadow &&
                       canUseForcedToggleShadow(token) && shadowTokens !== null) {
                     if (result) shadowTokens.add(token);
                     else shadowTokens.delete(token);
                   }
                   return result;
                 } finally {
-                  if (__htmlMlEnableDomTokenListWriteShadow &&
+                  if (__webSceneEnableDomTokenListWriteShadow &&
                       !canUseForcedToggleShadow(token)) shadowTokens = null;
                 }
               },
@@ -1983,7 +1983,7 @@ public sealed class ClearScriptV8Runtime :
                   value = String(value || '');
                   recordHostWrite();
                   try { backend.SetFromString(value); }
-                  finally { if (__htmlMlEnableDomTokenListWriteShadow) shadowTokens = null; }
+                  finally { if (__webSceneEnableDomTokenListWriteShadow) shadowTokens = null; }
                 },
                 enumerable: true
               },
@@ -1999,7 +1999,7 @@ public sealed class ClearScriptV8Runtime :
                 }
               }
             });
-            Object.defineProperty(list, '__htmlMlInvalidateWriteShadow', {
+            Object.defineProperty(list, '__webSceneInvalidateWriteShadow', {
               value: invalidateWriteShadow,
               enumerable: false
             });
@@ -2007,13 +2007,13 @@ public sealed class ClearScriptV8Runtime :
             return list;
           }
 
-          globalThis.__htmlMlResetDomTokenListWriteShadowMetrics = function() {
+          globalThis.__webSceneResetDomTokenListWriteShadowMetrics = function() {
             domTokenListWriteShadowMetrics.hostWrites = 0;
             domTokenListWriteShadowMetrics.skippedWrites = 0;
             domTokenListWriteShadowMetrics.refreshes = 0;
             domTokenListWriteShadowMetrics.invalidations = 0;
           };
-          globalThis.__htmlMlDescribeDomTokenListWriteShadowMetrics = function() {
+          globalThis.__webSceneDescribeDomTokenListWriteShadowMetrics = function() {
             return {
               hostWrites: domTokenListWriteShadowMetrics.hostWrites,
               skippedWrites: domTokenListWriteShadowMetrics.skippedWrites,
@@ -2022,11 +2022,11 @@ public sealed class ClearScriptV8Runtime :
             };
           };
 
-          globalThis.__htmlMlResetTypedInlineStyleWriteMetrics = function() {
+          globalThis.__webSceneResetTypedInlineStyleWriteMetrics = function() {
             typedInlineStyleWriteMetrics.typedWrites = 0;
             typedInlineStyleWriteMetrics.fallbackWrites = 0;
           };
-          globalThis.__htmlMlDescribeTypedInlineStyleWriteMetrics = function() {
+          globalThis.__webSceneDescribeTypedInlineStyleWriteMetrics = function() {
             return {
               typedWrites: typedInlineStyleWriteMetrics.typedWrites,
               fallbackWrites: typedInlineStyleWriteMetrics.fallbackWrites
@@ -2051,21 +2051,21 @@ public sealed class ClearScriptV8Runtime :
             }
             function setStyleProperty(name, value) {
               const cacheKey = normalizeStylePropertyName(name);
-              if (__htmlMlEnableStyleWriteShadow &&
+              if (__webSceneEnableStyleWriteShadow &&
                   writtenValues.has(cacheKey) &&
                   writtenValues.get(cacheKey) === value) {
                 return;
               }
-              if (__htmlMlEnableTypedInlineStyleWrites &&
-                  __htmlMlTrySetInlineStyleProperty(backend, name, value)) {
+              if (__webSceneEnableTypedInlineStyleWrites &&
+                  __webSceneTrySetInlineStyleProperty(backend, name, value)) {
                 typedInlineStyleWriteMetrics.typedWrites++;
               } else {
                 backend.setProperty(name, value);
                 typedInlineStyleWriteMetrics.fallbackWrites++;
               }
-              if (__htmlMlEnableStyleWriteShadow) writtenValues.set(cacheKey, value);
+              if (__webSceneEnableStyleWriteShadow) writtenValues.set(cacheKey, value);
             }
-            Object.defineProperty(proxyTarget, '__htmlMlInvalidateWriteShadow', {
+            Object.defineProperty(proxyTarget, '__webSceneInvalidateWriteShadow', {
               value: invalidateWriteShadow,
               enumerable: false
             });
@@ -2090,7 +2090,7 @@ public sealed class ClearScriptV8Runtime :
                   return function(name) {
                     name = String(name);
                     const value = backend.getPropertyValue(name);
-                    if (__htmlMlEnableStyleWriteShadow) {
+                    if (__webSceneEnableStyleWriteShadow) {
                       writtenValues.set(
                         normalizeStylePropertyName(name),
                         value == null ? '' : String(value));
@@ -2114,7 +2114,7 @@ public sealed class ClearScriptV8Runtime :
                 }
                 if (!supportsStyleProperty(property)) return undefined;
                 const value = backend.getPropertyValue(property);
-                if (__htmlMlEnableStyleWriteShadow) {
+                if (__webSceneEnableStyleWriteShadow) {
                   writtenValues.set(
                     normalizeStylePropertyName(property),
                     value == null ? '' : String(value));
@@ -2153,7 +2153,7 @@ public sealed class ClearScriptV8Runtime :
 
           function wrapComputedStyle(raw) {
             if (raw && typeof raw === 'object' && computedStyleProxies.has(raw)) return raw;
-            if (__htmlMlEnableComputedStyleReadCaching && computedStyleToProxy.has(raw)) {
+            if (__webSceneEnableComputedStyleReadCaching && computedStyleToProxy.has(raw)) {
               computedStyleReadCacheMetrics.facadeHits++;
               return computedStyleToProxy.get(raw);
             }
@@ -2161,34 +2161,34 @@ public sealed class ClearScriptV8Runtime :
             const propertyValues = new Map();
             const getPropertyValue = function(propertyName) {
               propertyName = String(propertyName);
-              const isLive = Boolean(__htmlMlIsComputedStylePropertyLive(raw, propertyName));
-              if (__htmlMlEnableComputedStyleReadCaching && !isLive && propertyValues.has(propertyName)) {
+              const isLive = Boolean(__webSceneIsComputedStylePropertyLive(raw, propertyName));
+              if (__webSceneEnableComputedStyleReadCaching && !isLive && propertyValues.has(propertyName)) {
                 computedStyleReadCacheMetrics.valueHits++;
                 return propertyValues.get(propertyName);
               }
               computedStyleReadCacheMetrics.valueMisses++;
-              const value = String(__htmlMlGetComputedStyleValue(raw, propertyName) || '');
-              if (__htmlMlEnableComputedStyleReadCaching && !isLive) propertyValues.set(propertyName, value);
+              const value = String(__webSceneGetComputedStyleValue(raw, propertyName) || '');
+              if (__webSceneEnableComputedStyleReadCaching && !isLive) propertyValues.set(propertyName, value);
               return value;
             };
             const item = function(index) {
-              return String(__htmlMlGetComputedStyleItem(raw, Number(index) || 0) || '');
+              return String(__webSceneGetComputedStyleItem(raw, Number(index) || 0) || '');
             };
             const supportsNamedProperty = function(propertyName) {
               return typeof propertyName === 'string' &&
                 !propertyName.startsWith('--') &&
-                Boolean(__htmlMlSupportsComputedStyleProperty(raw, propertyName));
+                Boolean(__webSceneSupportsComputedStyleProperty(raw, propertyName));
             };
             const proxy = new Proxy({}, {
               get: function(target, property, receiver) {
                 if (property === 'getPropertyValue') return getPropertyValue;
                 if (property === 'getPropertyPriority') return function() { return ''; };
                 if (property === 'item') return item;
-                if (property === 'length') return Number(__htmlMlGetComputedStyleLength(raw)) || 0;
+                if (property === 'length') return Number(__webSceneGetComputedStyleLength(raw)) || 0;
                 if (property === 'cssText') return '';
                 if (property === Symbol.iterator) {
                   return function*() {
-                    const length = Number(__htmlMlGetComputedStyleLength(raw)) || 0;
+                    const length = Number(__webSceneGetComputedStyleLength(raw)) || 0;
                     for (let index = 0; index < length; index++) yield item(index);
                   };
                 }
@@ -2206,19 +2206,19 @@ public sealed class ClearScriptV8Runtime :
                 return Reflect.has(target, property) || supportsNamedProperty(property);
               }
             });
-            if (__htmlMlEnableComputedStyleReadCaching) computedStyleToProxy.set(raw, proxy);
+            if (__webSceneEnableComputedStyleReadCaching) computedStyleToProxy.set(raw, proxy);
             computedStyleProxies.add(proxy);
             return proxy;
           }
 
-          globalThis.__htmlMlResetComputedStyleReadCacheMetrics = function() {
+          globalThis.__webSceneResetComputedStyleReadCacheMetrics = function() {
             computedStyleReadCacheMetrics.facadeHits = 0;
             computedStyleReadCacheMetrics.typedMethodHits = 0;
             computedStyleReadCacheMetrics.facadeMisses = 0;
             computedStyleReadCacheMetrics.valueHits = 0;
             computedStyleReadCacheMetrics.valueMisses = 0;
           };
-          globalThis.__htmlMlDescribeComputedStyleReadCacheMetrics = function() {
+          globalThis.__webSceneDescribeComputedStyleReadCacheMetrics = function() {
             return {
               typedMethodHits: computedStyleReadCacheMetrics.typedMethodHits,
               facadeHits: computedStyleReadCacheMetrics.facadeHits,
@@ -2230,7 +2230,7 @@ public sealed class ClearScriptV8Runtime :
 
           function getDomIdentity(raw) {
             try {
-              const identity = raw.__htmlMlDomIdentity;
+              const identity = raw.__webSceneDomIdentity;
               return identity == null ? null : String(identity);
             } catch (_) {
               return null;
@@ -2380,10 +2380,10 @@ public sealed class ClearScriptV8Runtime :
             metric[field] += duration;
           }
 
-          globalThis.__htmlMlResetDomPropertyAccessMetrics = function() {
+          globalThis.__webSceneResetDomPropertyAccessMetrics = function() {
             if (domPropertyAccessMetrics !== null) domPropertyAccessMetrics.clear();
           };
-          globalThis.__htmlMlDescribeDomPropertyAccessMetrics = function(limit) {
+          globalThis.__webSceneDescribeDomPropertyAccessMetrics = function(limit) {
             if (domPropertyAccessMetrics === null) return [];
             const maximum = Math.max(1, Number(limit) || 40);
             return Array.from(domPropertyAccessMetrics.values()).sort(function(left, right) {
@@ -2395,7 +2395,7 @@ public sealed class ClearScriptV8Runtime :
                 || left.property.localeCompare(right.property);
             }).slice(0, maximum);
           };
-          globalThis.__htmlMlDescribeDomProxyRetention = function() {
+          globalThis.__webSceneDescribeDomProxyRetention = function() {
             sweepDisconnectedDomProxyRetention();
             const result = { entries: 0, strong: 0, weakLive: 0, weakDead: 0 };
             for (const entry of domIdentityToProxy.values()) {
@@ -2551,7 +2551,7 @@ public sealed class ClearScriptV8Runtime :
               // contentDocument and route methods through the wrong facade.
               if (value[externalRealmViewMarker] === true) return value;
             } catch (_) {}
-            if (__htmlMlEnableResultClassificationCache) {
+            if (__webSceneEnableResultClassificationCache) {
               if (hostToProxy.has(value)) return hostToProxy.get(value);
               if (nonDomHostResults.has(value)) return value;
             }
@@ -2576,7 +2576,7 @@ public sealed class ClearScriptV8Runtime :
                 return array;
               }
             } catch (_) {}
-            if (__htmlMlEnableResultClassificationCache) nonDomHostResults.add(value);
+            if (__webSceneEnableResultClassificationCache) nonDomHostResults.add(value);
             return value;
           }
 
@@ -2602,7 +2602,7 @@ public sealed class ClearScriptV8Runtime :
             if (raw == null || typeof raw !== 'object') return raw;
             if (canvasContextToProxy.has(raw)) return canvasContextToProxy.get(raw);
 
-            const sink = __htmlMlCreateCanvasBatchSink(raw);
+            const sink = __webSceneCreateCanvasBatchSink(raw);
             const buffer = new Float64Array(16384);
             const strings = [];
             const stringIndices = new Map();
@@ -2653,7 +2653,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function pushArguments(opcode, args) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(opcode, Array.from(args));
                 return;
               }
@@ -2665,7 +2665,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function push0(opcode) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(opcode, []);
                 return;
               }
@@ -2675,7 +2675,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function push1(opcode, first) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(opcode, [first]);
                 return;
               }
@@ -2686,7 +2686,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function push3(opcode, first, second, third) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(opcode, [first, second, third]);
                 return;
               }
@@ -2699,7 +2699,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function push6(opcode, first, second, third, fourth, fifth, sixth) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(opcode, [first, second, third, fourth, fifth, sixth]);
                 return;
               }
@@ -2715,7 +2715,7 @@ public sealed class ClearScriptV8Runtime :
             }
 
             function pushLineDash(values) {
-              if (!__htmlMlEnableAllocationFreeCanvasCommandWrites) {
+              if (!__webSceneEnableAllocationFreeCanvasCommandWrites) {
                 push(19, [values.length].concat(values));
                 return;
               }
@@ -2732,15 +2732,15 @@ public sealed class ClearScriptV8Runtime :
               flushCanvasBatches();
               const value = raw[property];
               const result = wrapResult(value(...Array.from(args, argument =>
-                argument && typeof argument === 'object' && argument.__htmlMlNativePath2D
-                  ? argument.__htmlMlNativePath2D
+                argument && typeof argument === 'object' && argument.__webSceneNativePath2D
+                  ? argument.__webSceneNativePath2D
                   : unwrapHost(argument))));
               deduplicatedState = Object.create(null);
               return result;
             }
 
             function shouldSkipStateWrite(property, value) {
-              if (!__htmlMlEnableCanvasStateDeduplication) return false;
+              if (!__webSceneEnableCanvasStateDeduplication) return false;
               if (!Object.prototype.hasOwnProperty.call(deduplicatedState, property)) return false;
               return Object.is(deduplicatedState[property], value);
             }
@@ -2767,11 +2767,11 @@ public sealed class ClearScriptV8Runtime :
             };
 
             function createMethod(property) {
-              if (__htmlMlEnablePrimitiveTextMetrics && property === 'measureText') {
+              if (__webSceneEnablePrimitiveTextMetrics && property === 'measureText') {
                 return function(text) {
                   flushCanvasBatches();
                   deduplicatedState = Object.create(null);
-                  return new TextMetricsResult(__htmlMlMeasureTextWidth(raw, String(text)));
+                  return new TextMetricsResult(__webSceneMeasureTextWidth(raw, String(text)));
                 };
               }
               if (property === 'save') {
@@ -2889,11 +2889,11 @@ public sealed class ClearScriptV8Runtime :
             }
 
             let proxy;
-            if (__htmlMlEnableCanvasFacade) {
+            if (__webSceneEnableCanvasFacade) {
               proxy = {};
               Object.defineProperties(proxy, {
-                __htmlMlRawHostObject: { value: raw, configurable: true },
-                __htmlMlFlushCanvas: { value: flush, configurable: true },
+                __webSceneRawHostObject: { value: raw, configurable: true },
+                __webSceneFlushCanvas: { value: flush, configurable: true },
                 canvas: { get: function() { return wrapHost(raw.canvas); }, configurable: true, enumerable: true }
               });
               const methodNames = [
@@ -2927,11 +2927,11 @@ public sealed class ClearScriptV8Runtime :
             } else {
               proxy = new Proxy({}, {
                 get: function(_, property) {
-                  if (property === '__htmlMlRawHostObject') return raw;
-                  if (property === '__htmlMlFlushCanvas') return flush;
+                  if (property === '__webSceneRawHostObject') return raw;
+                  if (property === '__webSceneFlushCanvas') return flush;
                   if (property === 'canvas') return wrapHost(raw.canvas);
                   if (property === 'font' || property === 'lineWidth' || property === 'textBaseline') return shadowState[property];
-                  if (__htmlMlEnableFastMethodCacheLookup && methods.has(property)) return methods.get(property);
+                  if (__webSceneEnableFastMethodCacheLookup && methods.has(property)) return methods.get(property);
                   let rawValue;
                   try { rawValue = raw[property]; } catch (_) { return undefined; }
                   if (typeof rawValue === 'function') {
@@ -2942,7 +2942,7 @@ public sealed class ClearScriptV8Runtime :
                 },
                 set: function(_, property, value) { return writeProperty(property, value); },
                 has: function(_, property) {
-                  if (property === '__htmlMlRawHostObject' || property === '__htmlMlFlushCanvas') return true;
+                  if (property === '__webSceneRawHostObject' || property === '__webSceneFlushCanvas') return true;
                   try { return property in raw; } catch (_) { return false; }
                 }
               });
@@ -2986,16 +2986,16 @@ public sealed class ClearScriptV8Runtime :
               const missingProperties = new Set();
             function invalidateClassListWriteShadow() {
               const classList = stableValues.get('classList');
-              if (classList && typeof classList.__htmlMlInvalidateWriteShadow === 'function') {
-                classList.__htmlMlInvalidateWriteShadow();
+              if (classList && typeof classList.__webSceneInvalidateWriteShadow === 'function') {
+                classList.__webSceneInvalidateWriteShadow();
               }
             }
             const raw = target;
             let typedManagedAbiHandle;
             function getTypedManagedAbiHandle() {
-              if (!__htmlMlEnableTypedManagedAbi) return 0;
+              if (!__webSceneEnableTypedManagedAbi) return 0;
               if (typedManagedAbiHandle === undefined) {
-                typedManagedAbiHandle = Number(__htmlMlRegisterTypedManagedAbiTarget(raw)) || 0;
+                typedManagedAbiHandle = Number(__webSceneRegisterTypedManagedAbiTarget(raw)) || 0;
               }
               return typedManagedAbiHandle;
             }
@@ -3003,7 +3003,7 @@ public sealed class ClearScriptV8Runtime :
             const proxy = new Proxy(proxyTarget, {
               get: function(local, property, receiver) {
                 recordDomPropertyAccess(property, 'accesses');
-                if (property === '__htmlMlRawHostObject') return raw;
+                if (property === '__webSceneRawHostObject') return raw;
                 if (property === 'constructor') return constructorForHost(raw);
                 if (property === 'elements') {
                   try {
@@ -3012,7 +3012,7 @@ public sealed class ClearScriptV8Runtime :
                 }
                 if (property === 'contentDocument') {
                   try {
-                    const externalDocument = raw.__htmlMlExternalContentDocument;
+                    const externalDocument = raw.__webSceneExternalContentDocument;
                     if (externalDocument != null) return wrapResult(externalDocument);
                   } catch (_) {}
                 }
@@ -3022,15 +3022,15 @@ public sealed class ClearScriptV8Runtime :
                 }
                 if (typeof property === 'string' && property.length > 2 && property.slice(0, 2) === 'on') return null;
                 if (property === 'clientTop' || property === 'clientLeft') return 0;
-                if (__htmlMlEnableFastMethodCacheLookup && __htmlMlEnableDomMethodCaching && methods.has(property)) {
+                if (__webSceneEnableFastMethodCacheLookup && __webSceneEnableDomMethodCaching && methods.has(property)) {
                   recordDomPropertyAccess(property, 'methodHits');
                   return methods.get(property);
                 }
-                if (__htmlMlEnableStableDomPropertyCache && stableValues.has(property)) {
+                if (__webSceneEnableStableDomPropertyCache && stableValues.has(property)) {
                   recordDomPropertyAccess(property, 'stableHits');
                   return stableValues.get(property);
                 }
-                if (__htmlMlEnableMissingDomPropertyCache && missingProperties.has(property)) {
+                if (__webSceneEnableMissingDomPropertyCache && missingProperties.has(property)) {
                   recordDomPropertyAccess(property, 'missingHits');
                   return undefined;
                 }
@@ -3054,16 +3054,16 @@ public sealed class ClearScriptV8Runtime :
                   case 'offsetTop': numericProperty = 6; break;
                   case 'offsetLeft': numericProperty = 7; break;
                 }
-                if (__htmlMlEnableTypedDomNumericProperties && numericProperty >= 0) {
+                if (__webSceneEnableTypedDomNumericProperties && numericProperty >= 0) {
                   let numericValue;
-                  if (__htmlMlEnableTypedManagedAbi &&
-                      typeof __htmlMlNativeReadDomNumericProperty === 'function') {
+                  if (__webSceneEnableTypedManagedAbi &&
+                      typeof __webSceneNativeReadDomNumericProperty === 'function') {
                     const handle = getTypedManagedAbiHandle();
                     numericValue = handle > 0
-                      ? __htmlMlNativeReadDomNumericProperty(handle, numericProperty)
+                      ? __webSceneNativeReadDomNumericProperty(handle, numericProperty)
                       : NaN;
                   } else {
-                    numericValue = __htmlMlReadDomNumericProperty(raw, numericProperty);
+                    numericValue = __webSceneReadDomNumericProperty(raw, numericProperty);
                   }
                   if (numericValue === numericValue) {
                     recordDomPropertyAccess(property, 'fastNumericHits');
@@ -3097,23 +3097,23 @@ public sealed class ClearScriptV8Runtime :
                     return Reflect.get(prototype, property, receiver);
                   }
                 }
-                if (__htmlMlEnableMissingDomPropertyCache && typeof value === 'undefined') {
+                if (__webSceneEnableMissingDomPropertyCache && typeof value === 'undefined') {
                   missingProperties.add(property);
                   return undefined;
                 }
                 if (property === 'dataset' && value != null) {
                   const wrappedDataset = wrapDomStringMap(value);
-                  if (__htmlMlEnableStableDomPropertyCache) stableValues.set(property, wrappedDataset);
+                  if (__webSceneEnableStableDomPropertyCache) stableValues.set(property, wrappedDataset);
                   return wrappedDataset;
                 }
                 if (property === 'classList' && value != null) {
                   const wrappedClassList = wrapDomTokenList(value);
-                  if (__htmlMlEnableStableDomPropertyCache) stableValues.set(property, wrappedClassList);
+                  if (__webSceneEnableStableDomPropertyCache) stableValues.set(property, wrappedClassList);
                   return wrappedClassList;
                 }
                 if (property === 'style' && value != null) {
                   const wrappedStyle = wrapCssStyleDeclaration(value);
-                  if (__htmlMlEnableStableDomPropertyCache) stableValues.set(property, wrappedStyle);
+                  if (__webSceneEnableStableDomPropertyCache) stableValues.set(property, wrappedStyle);
                   return wrappedStyle;
                 }
                 if (property === 'value') {
@@ -3130,21 +3130,21 @@ public sealed class ClearScriptV8Runtime :
                 }
                 if (typeof value === 'function') {
                   const createMethod = function() {
-                    if (__htmlMlEnableTypedComputedStyleAccess && property === 'getComputedStyle') {
+                    if (__webSceneEnableTypedComputedStyleAccess && property === 'getComputedStyle') {
                       return function(element) {
                         computedStyleReadCacheMetrics.typedMethodHits++;
                         return wrapComputedStyle(value(unwrapHost(element)));
                       };
                     }
-                    if (__htmlMlEnableTypedDomRect && property === 'getBoundingClientRect') {
+                    if (__webSceneEnableTypedDomRect && property === 'getBoundingClientRect') {
                         const values = new Float64Array(8);
                         return function() {
                           try {
                             const handle = getTypedManagedAbiHandle();
                             if (!(handle > 0 &&
-                                  typeof __htmlMlNativeWriteDomRect === 'function' &&
-                                  __htmlMlNativeWriteDomRect(handle, 0, values))) {
-                              __htmlMlWriteBoundingClientRect(raw, values);
+                                  typeof __webSceneNativeWriteDomRect === 'function' &&
+                                  __webSceneNativeWriteDomRect(handle, 0, values))) {
+                              __webSceneWriteBoundingClientRect(raw, values);
                             }
                             return new DOMRectResult(values);
                           } catch (_) {
@@ -3154,16 +3154,16 @@ public sealed class ClearScriptV8Runtime :
                           }
                         };
                     }
-                    if (__htmlMlEnableTypedDomRect &&
-                        __htmlMlEnableTypedDomClientRects &&
+                    if (__webSceneEnableTypedDomRect &&
+                        __webSceneEnableTypedDomClientRects &&
                         property === 'getClientRects') {
                         const values = new Float64Array(8);
                         return function() {
                           try {
                             const handle = getTypedManagedAbiHandle();
-                            const hasRect = handle > 0 && typeof __htmlMlNativeWriteDomRect === 'function'
-                              ? __htmlMlNativeWriteDomRect(handle, 1, values)
-                              : __htmlMlWriteClientRect(raw, values);
+                            const hasRect = handle > 0 && typeof __webSceneNativeWriteDomRect === 'function'
+                              ? __webSceneNativeWriteDomRect(handle, 1, values)
+                              : __webSceneWriteClientRect(raw, values);
                             return hasRect
                               ? [new DOMRectResult(values)]
                               : [];
@@ -3172,7 +3172,7 @@ public sealed class ClearScriptV8Runtime :
                           }
                       };
                     }
-                    if (__htmlMlEnableCanvasBatching && property === 'getContext') {
+                    if (__webSceneEnableCanvasBatching && property === 'getContext') {
                       let cached2dContext;
                       return function(type) {
                         const normalizedType = String(type || '').toLowerCase();
@@ -3195,7 +3195,7 @@ public sealed class ClearScriptV8Runtime :
                           args.length > 0) {
                         const selector = String(args[0]);
                         args[0] = selector;
-                        const validator = raw.__htmlMlIsValidSelector;
+                        const validator = raw.__webSceneIsValidSelector;
                         if (typeof validator === 'function' && !validator(selector)) {
                           throw new DOMException(
                             `Failed to execute '${String(property)}': '${selector}' is not a valid selector.`,
@@ -3230,7 +3230,7 @@ public sealed class ClearScriptV8Runtime :
                           property === 'replaceChildren' || property === 'remove') {
                         result = undefined;
                       }
-                      const wrappedResult = __htmlMlEnableCanvasBatching && property === 'getContext' && String(args[0] || '').toLowerCase() === '2d'
+                      const wrappedResult = __webSceneEnableCanvasBatching && property === 'getContext' && String(args[0] || '').toLowerCase() === '2d'
                         ? wrapCanvasContext(result)
                         : wrapResult(result);
                       if (property === 'appendChild' || property === 'insertBefore') {
@@ -3254,8 +3254,8 @@ public sealed class ClearScriptV8Runtime :
                           args.length > 0 &&
                           String(args[0]).toLowerCase() === 'style') {
                         const style = stableValues.get('style');
-                        if (style && typeof style.__htmlMlInvalidateWriteShadow === 'function') {
-                          style.__htmlMlInvalidateWriteShadow();
+                        if (style && typeof style.__webSceneInvalidateWriteShadow === 'function') {
+                          style.__webSceneInvalidateWriteShadow();
                         }
                       }
                       if ((property === 'setAttribute' || property === 'removeAttribute' ||
@@ -3268,12 +3268,12 @@ public sealed class ClearScriptV8Runtime :
                       return wrappedResult;
                     };
                   };
-                  if (!__htmlMlEnableDomMethodCaching) return createMethod();
+                  if (!__webSceneEnableDomMethodCaching) return createMethod();
                   if (!methods.has(property)) methods.set(property, createMethod());
                   return methods.get(property);
                 }
                 const wrappedValue = wrapResult(value);
-                if (__htmlMlEnableStableDomPropertyCache && stableDomObjectProperties.has(property)) {
+                if (__webSceneEnableStableDomPropertyCache && stableDomObjectProperties.has(property)) {
                   stableValues.set(property, wrappedValue);
                 }
                 return wrappedValue;
@@ -3376,14 +3376,14 @@ public sealed class ClearScriptV8Runtime :
           }
 
           function requireFrom(specifier, referrerDirectory) {
-            const source = __htmlMlModuleBackend.Resolve(String(specifier), referrerDirectory || null);
+            const source = __webSceneModuleBackend.Resolve(String(specifier), referrerDirectory || null);
             if (moduleCache.has(source.CacheKey)) return moduleCache.get(source.CacheKey).exports;
             const module = { exports: {} };
             moduleCache.set(source.CacheKey, module);
             const factorySource =
               '(function(require,exports,module,__filename,__dirname){\n' +
               source.Content + '\n})\n//# sourceURL=' + source.FileName;
-            const factory = __htmlMlCompileModuleFactory(
+            const factory = __webSceneCompileModuleFactory(
               factorySource,
               source.FileName + '#commonjs');
             const localRequire = function(child) { return requireFrom(child, source.Directory); };
@@ -3403,24 +3403,24 @@ public sealed class ClearScriptV8Runtime :
             this.timeStamp = performance.now();
           }
           Event.prototype.preventDefault = function() {
-            if (this.__htmlMlHostEvent) {
-              this.__htmlMlHostEvent.preventDefault();
+            if (this.__webSceneHostEvent) {
+              this.__webSceneHostEvent.preventDefault();
               return;
             }
             if (this.cancelable) this.defaultPrevented = true;
           };
           Event.prototype.stopPropagation = function() {
-            if (this.__htmlMlHostEvent) this.__htmlMlHostEvent.stopPropagation();
+            if (this.__webSceneHostEvent) this.__webSceneHostEvent.stopPropagation();
             this.cancelBubble = true;
           };
           Event.prototype.stopImmediatePropagation = function() {
-            if (this.__htmlMlHostEvent) this.__htmlMlHostEvent.stopImmediatePropagation();
+            if (this.__webSceneHostEvent) this.__webSceneHostEvent.stopImmediatePropagation();
             this.cancelBubble = true;
             this.__immediateStopped = true;
           };
           Event.prototype.composedPath = function() {
-            if (!this.__htmlMlHostEvent || typeof this.__htmlMlHostEvent.composedPath !== 'function') return [];
-            return Array.from(this.__htmlMlHostEvent.composedPath(), wrapHost);
+            if (!this.__webSceneHostEvent || typeof this.__webSceneHostEvent.composedPath !== 'function') return [];
+            return Array.from(this.__webSceneHostEvent.composedPath(), wrapHost);
           };
           const hostEventFacades = new WeakMap();
           function wrapHostEvent(hostEvent) {
@@ -3429,7 +3429,7 @@ public sealed class ClearScriptV8Runtime :
             if (facade) return facade;
             facade = Object.create(Event.prototype);
             Object.defineProperties(facade, {
-              __htmlMlHostEvent: { value: hostEvent },
+              __webSceneHostEvent: { value: hostEvent },
               type: { get: function() { return String(hostEvent.type || ''); }, configurable: true },
               target: { get: function() { return wrapHost(hostEvent.target); }, configurable: true },
               currentTarget: { get: function() { return wrapHost(hostEvent.currentTarget); }, configurable: true },
@@ -3441,9 +3441,9 @@ public sealed class ClearScriptV8Runtime :
               isTrusted: { get: function() { return Boolean(hostEvent.isTrusted); }, configurable: true },
               timeStamp: { get: function() { return Number(hostEvent.timeStamp) || 0; }, configurable: true },
               cancelBubble: {
-                get: function() { return Boolean(this.__htmlMlCancelBubble); },
+                get: function() { return Boolean(this.__webSceneCancelBubble); },
                 set: function(value) {
-                  this.__htmlMlCancelBubble = Boolean(value);
+                  this.__webSceneCancelBubble = Boolean(value);
                   if (value) hostEvent.stopPropagation();
                 },
                 configurable: true
@@ -3461,7 +3461,7 @@ public sealed class ClearScriptV8Runtime :
             hostEventFacades.set(hostEvent, facade);
             return facade;
           }
-          Object.defineProperty(globalThis, '__htmlMlWrapHostEvent', {
+          Object.defineProperty(globalThis, '__webSceneWrapHostEvent', {
             value: wrapHostEvent, configurable: true
           });
 
@@ -3765,10 +3765,10 @@ public sealed class ClearScriptV8Runtime :
             for (let offset = 0; offset < bytes.byteLength; offset += 32768) {
               binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + 32768));
             }
-            return __htmlMlBase64Backend.Encode(binary);
+            return __webSceneBase64Backend.Encode(binary);
           }
           function base64ToBytes(value) {
-            const binary = __htmlMlBase64Backend.Decode(String(value || ''));
+            const binary = __webSceneBase64Backend.Decode(String(value || ''));
             const bytes = new Uint8Array(binary.length);
             for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index) & 255;
             return bytes;
@@ -3824,7 +3824,7 @@ public sealed class ClearScriptV8Runtime :
             return String(type).toLowerCase() === 'image/png' || String(type).toLowerCase() === 'text/plain';
           };
           function Url(url, base) {
-            this.backend = new __htmlMlUrlBackend(String(url), base == null ? null : String(base));
+            this.backend = new __webSceneUrlBackend(String(url), base == null ? null : String(base));
           }
           ['href','protocol','host','hostname','port','pathname','search','hash','origin'].forEach(function(name) {
             Object.defineProperty(Url.prototype, name, { get: function() { return this.backend[name]; } });
@@ -3832,36 +3832,36 @@ public sealed class ClearScriptV8Runtime :
           Url.prototype.toString = function() { return String(this.backend.href); };
           Url.createObjectURL = function(blob) {
             if (blob instanceof Blob) {
-              return __htmlMlUrlBackend.createObjectURLBase64(bytesToBase64(blob.__bytes), blob.type);
+              return __webSceneUrlBackend.createObjectURLBase64(bytesToBase64(blob.__bytes), blob.type);
             }
-            return __htmlMlUrlBackend.createObjectURLText(String(blob == null ? '' : blob));
+            return __webSceneUrlBackend.createObjectURLText(String(blob == null ? '' : blob));
           };
-          Url.revokeObjectURL = function(url) { __htmlMlUrlBackend.revokeObjectURL(String(url)); };
+          Url.revokeObjectURL = function(url) { __webSceneUrlBackend.revokeObjectURL(String(url)); };
           function TextEncoder() {}
           TextEncoder.prototype.encode = function(value) { return Uint8Array.from(unescape(encodeURIComponent(String(value))).split('').map(function(c) { return c.charCodeAt(0); })); };
           function TextDecoder() {}
           TextDecoder.prototype.decode = function(value) { return decodeURIComponent(escape(String.fromCharCode.apply(null, Array.from(value || [])))); };
 
           function Path2D(pathInfo) {
-            this.__htmlMlNativePath2D = __htmlMlCreatePath2DBackend(
-              pathInfo && pathInfo.__htmlMlNativePath2D ? pathInfo.__htmlMlNativePath2D : pathInfo);
+            this.__webSceneNativePath2D = __webSceneCreatePath2DBackend(
+              pathInfo && pathInfo.__webSceneNativePath2D ? pathInfo.__webSceneNativePath2D : pathInfo);
           }
           Path2D.prototype.addPath = function(path, transform) {
-            if (!path || !path.__htmlMlNativePath2D) return;
+            if (!path || !path.__webSceneNativePath2D) return;
             const matrix = transform == null ? new DOMMatrix() : new DOMMatrix(transform);
-            this.__htmlMlNativePath2D.addPath(
-              path.__htmlMlNativePath2D,
+            this.__webSceneNativePath2D.addPath(
+              path.__webSceneNativePath2D,
               matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f);
           };
-          Path2D.prototype.closePath = function() { this.__htmlMlNativePath2D.closePath(); };
-          Path2D.prototype.moveTo = function(x, y) { this.__htmlMlNativePath2D.moveTo(x, y); };
-          Path2D.prototype.lineTo = function(x, y) { this.__htmlMlNativePath2D.lineTo(x, y); };
-          Path2D.prototype.bezierCurveTo = function(cp1x, cp1y, cp2x, cp2y, x, y) { this.__htmlMlNativePath2D.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y); };
-          Path2D.prototype.quadraticCurveTo = function(cpx, cpy, x, y) { this.__htmlMlNativePath2D.quadraticCurveTo(cpx, cpy, x, y); };
-          Path2D.prototype.arc = function(x, y, radius, startAngle, endAngle, counterClockwise) { this.__htmlMlNativePath2D.arc(x, y, radius, startAngle, endAngle, !!counterClockwise); };
-          Path2D.prototype.arcTo = function(x1, y1, x2, y2, radius) { this.__htmlMlNativePath2D.arcTo(x1, y1, x2, y2, radius); };
+          Path2D.prototype.closePath = function() { this.__webSceneNativePath2D.closePath(); };
+          Path2D.prototype.moveTo = function(x, y) { this.__webSceneNativePath2D.moveTo(x, y); };
+          Path2D.prototype.lineTo = function(x, y) { this.__webSceneNativePath2D.lineTo(x, y); };
+          Path2D.prototype.bezierCurveTo = function(cp1x, cp1y, cp2x, cp2y, x, y) { this.__webSceneNativePath2D.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y); };
+          Path2D.prototype.quadraticCurveTo = function(cpx, cpy, x, y) { this.__webSceneNativePath2D.quadraticCurveTo(cpx, cpy, x, y); };
+          Path2D.prototype.arc = function(x, y, radius, startAngle, endAngle, counterClockwise) { this.__webSceneNativePath2D.arc(x, y, radius, startAngle, endAngle, !!counterClockwise); };
+          Path2D.prototype.arcTo = function(x1, y1, x2, y2, radius) { this.__webSceneNativePath2D.arcTo(x1, y1, x2, y2, radius); };
           Path2D.prototype.ellipse = function() {};
-          Path2D.prototype.rect = function(x, y, width, height) { this.__htmlMlNativePath2D.rect(x, y, width, height); };
+          Path2D.prototype.rect = function(x, y, width, height) { this.__webSceneNativePath2D.rect(x, y, width, height); };
 
           function installWindow(scope, document, frameElement, parentWindow) {
             document = wrapHost(document);
@@ -3873,10 +3873,10 @@ public sealed class ClearScriptV8Runtime :
             const mutationObservers = new Set();
             let browsingContextDisposed = false;
             let messageChannelSequence = 0;
-            scope.__htmlMlMessageChannelTrace = [];
+            scope.__webSceneMessageChannelTrace = [];
             function traceMessageChannel(id, phase) {
-              if (!__htmlMlTraceV8CallbackErrors) return;
-              const trace = scope.__htmlMlMessageChannelTrace;
+              if (!__webSceneTraceV8CallbackErrors) return;
+              const trace = scope.__webSceneMessageChannelTrace;
               if (trace.length < 500) trace.push({ id: id, phase: phase, time: performanceObject.now() });
             }
             Object.defineProperties(scope, {
@@ -3923,12 +3923,12 @@ public sealed class ClearScriptV8Runtime :
                 });
               }
             }
-            Object.defineProperty(scope, '__htmlMlRefreshWindowNamedProperties', {
+            Object.defineProperty(scope, '__webSceneRefreshWindowNamedProperties', {
               value: refreshWindowNamedProperties,
               configurable: true
             });
             function adaptCallback(callback) {
-              return __htmlMlCallbackAdapter.GetCallback(callback, true);
+              return __webSceneCallbackAdapter.GetCallback(callback, true);
             }
             scope.setTimeout = function(callback, delay) {
               if (browsingContextDisposed) return 0;
@@ -4092,8 +4092,8 @@ public sealed class ClearScriptV8Runtime :
             scope.screen = screenObject;
             scope.console = console;
             scope.performance = performanceObject;
-            scope.atob = function(value) { return __htmlMlBase64Backend.Decode(String(value)); };
-            scope.btoa = function(value) { return __htmlMlBase64Backend.Encode(String(value)); };
+            scope.atob = function(value) { return __webSceneBase64Backend.Decode(String(value)); };
+            scope.btoa = function(value) { return __webSceneBase64Backend.Encode(String(value)); };
             scope.crypto = { getRandomValues: function(array) { for (let i = 0; i < array.length; i++) array[i] = Math.floor(Math.random() * 256); return array; } };
             scope.CSS = { supports: function() { return false; }, escape: cssEscape };
             scope.localStorage = scope.sessionStorage = (function() {
@@ -4103,7 +4103,7 @@ public sealed class ClearScriptV8Runtime :
             scope.Image = function() { return wrapHost(document.createElement('img')); };
             scope.DOMParser = function() {};
             scope.DOMParser.prototype.parseFromString = function(markup, mimeType) {
-              return wrapHost(__htmlMlDomParserBackend.Parse(
+              return wrapHost(__webSceneDomParserBackend.Parse(
                 unwrapHost(document),
                 String(markup),
                 String(mimeType || 'text/html')));
@@ -4117,18 +4117,18 @@ public sealed class ClearScriptV8Runtime :
             scope.MutationObserver = function(callback) {
               const observer = this;
               mutationObservers.add(this);
-              scope.__htmlMlExternalMutationObservers = (scope.__htmlMlExternalMutationObservers || 0) + 1;
-              this.backend = document.__htmlMlCreateExternalMutationObserver(adaptCallback(function(records) {
-                scope.__htmlMlExternalMutationDeliveries = (scope.__htmlMlExternalMutationDeliveries || 0) + 1;
+              scope.__webSceneExternalMutationObservers = (scope.__webSceneExternalMutationObservers || 0) + 1;
+              this.backend = document.__webSceneCreateExternalMutationObserver(adaptCallback(function(records) {
+                scope.__webSceneExternalMutationDeliveries = (scope.__webSceneExternalMutationDeliveries || 0) + 1;
                 callback(Array.from(records, wrapHost), observer);
               }));
-              this.backend.__htmlMlSetExternalObserver(this);
+              this.backend.__webSceneSetExternalObserver(this);
             };
             scope.MutationObserver.prototype.observe = function(target, options) {
               options = options || {};
               mutationObservers.add(this);
-              scope.__htmlMlExternalMutationObservations = (scope.__htmlMlExternalMutationObservations || 0) + 1;
-              this.backend.__htmlMlObserve(unwrapHost(target), Boolean(options.childList), Boolean(options.attributes), Boolean(options.subtree), Boolean(options.attributeOldValue));
+              scope.__webSceneExternalMutationObservations = (scope.__webSceneExternalMutationObservations || 0) + 1;
+              this.backend.__webSceneObserve(unwrapHost(target), Boolean(options.childList), Boolean(options.attributes), Boolean(options.subtree), Boolean(options.attributeOldValue));
             };
             scope.MutationObserver.prototype.disconnect = function() {
               this.backend.disconnect();
@@ -4184,7 +4184,7 @@ public sealed class ClearScriptV8Runtime :
             function deliverNativeResizeObservers() {
               for (const observer of Array.from(resizeObservers)) observer._deliver();
             }
-            scope.__htmlMlDisconnectResizeObservers = function() {
+            scope.__webSceneDisconnectResizeObservers = function() {
               for (const observer of Array.from(resizeObservers)) observer.disconnect();
               resizeObservers.clear();
             };
@@ -4226,10 +4226,10 @@ public sealed class ClearScriptV8Runtime :
               resizeObservers.add(this);
               const observation = { target: target, lastRect: null, nativeCallback: null };
               this._observations.push(observation);
-              if (__htmlMlEnableNativeResizeObserverNotifications &&
-                  typeof target.__htmlMlObserveResize === 'function') {
+              if (__webSceneEnableNativeResizeObserverNotifications &&
+                  typeof target.__webSceneObserveResize === 'function') {
                 observation.nativeCallback = deliverNativeResizeObservers;
-                target.__htmlMlObserveResize(observation.nativeCallback);
+                target.__webSceneObserveResize(observation.nativeCallback);
               } else {
                 const observer = this;
                 scope.setTimeout(function() { observer._deliver(); }, 0);
@@ -4241,8 +4241,8 @@ public sealed class ClearScriptV8Runtime :
               if (index < 0) return;
               const observation = this._observations[index];
               this._observations.splice(index, 1);
-              if (observation.nativeCallback && typeof target.__htmlMlUnobserveResize === 'function') {
-                target.__htmlMlUnobserveResize(observation.nativeCallback);
+              if (observation.nativeCallback && typeof target.__webSceneUnobserveResize === 'function') {
+                target.__webSceneUnobserveResize(observation.nativeCallback);
               }
               this._stopPollingIfUnused();
             };
@@ -4416,11 +4416,11 @@ public sealed class ClearScriptV8Runtime :
               this._queuedEntries.length = 0;
               return records;
             };
-            scope.__htmlMlDisconnectIntersectionObservers = function() {
+            scope.__webSceneDisconnectIntersectionObservers = function() {
               for (const observer of Array.from(intersectionObservers)) observer.disconnect();
               intersectionObservers.clear();
             };
-            scope.__htmlMlDisposeBrowsingContext = function() {
+            scope.__webSceneDisposeBrowsingContext = function() {
               if (browsingContextDisposed) return;
               browsingContextDisposed = true;
               for (const id of Array.from(timeoutIds)) windowBackend.clearTimeout(id);
@@ -4429,8 +4429,8 @@ public sealed class ClearScriptV8Runtime :
               intervalIds.clear();
               for (const id of Array.from(animationFrameIds)) windowBackend.cancelAnimationFrame(id);
               animationFrameIds.clear();
-              scope.__htmlMlDisconnectResizeObservers();
-              scope.__htmlMlDisconnectIntersectionObservers();
+              scope.__webSceneDisconnectResizeObservers();
+              scope.__webSceneDisconnectIntersectionObservers();
               for (const observer of Array.from(mutationObservers)) observer.disconnect();
               mutationObservers.clear();
               listeners.clear();
@@ -4547,7 +4547,7 @@ public sealed class ClearScriptV8Runtime :
                        property === 'matches' || property === 'closest') && args.length > 0) {
                     const selector = String(args[0]);
                     args[0] = selector;
-                    const validator = raw.__htmlMlIsValidSelector;
+                    const validator = raw.__webSceneIsValidSelector;
                     if (typeof validator === 'function' && !validator(selector)) {
                       throw new DOMException(
                         `Failed to execute '${String(property)}': '${selector}' is not a valid selector.`,
@@ -4635,9 +4635,9 @@ public sealed class ClearScriptV8Runtime :
                 const raw = unwrapHost(this);
                 const batch = canvasHostToBatch.get(raw);
                 if (batch) batch.flush();
-                if (arguments.length === 0) return String(raw.__htmlMlCanvasToDataURL());
-                if (arguments.length === 1) return String(raw.__htmlMlCanvasToDataURL(String(type)));
-                return String(raw.__htmlMlCanvasToDataURL(String(type), Number(quality)));
+                if (arguments.length === 0) return String(raw.__webSceneCanvasToDataURL());
+                if (arguments.length === 1) return String(raw.__webSceneCanvasToDataURL(String(type)));
+                return String(raw.__webSceneCanvasToDataURL(String(type), Number(quality)));
               }
             });
             Object.defineProperty(canvasPrototype, 'toBlob', {
@@ -4656,10 +4656,10 @@ public sealed class ClearScriptV8Runtime :
           }
 
           globalThis.require = function(specifier) { return requireFrom(specifier, null); };
-          globalThis.__htmlMlRequireFrom = requireFrom;
-          globalThis.__htmlMlFlushCanvases = flushCanvasBatches;
-          globalThis.__htmlMlWrapHostObject = wrapHost;
-          globalThis.__htmlMlMarkExternalRealmView = function(value) {
+          globalThis.__webSceneRequireFrom = requireFrom;
+          globalThis.__webSceneFlushCanvases = flushCanvasBatches;
+          globalThis.__webSceneWrapHostObject = wrapHost;
+          globalThis.__webSceneMarkExternalRealmView = function(value) {
             Object.defineProperty(value, externalRealmViewMarker, {
               value: true,
               configurable: false,
@@ -4670,7 +4670,7 @@ public sealed class ClearScriptV8Runtime :
           };
           installWindow(globalThis, ownerDocument, null, null);
 
-          globalThis.__htmlMlCreateFrameRuntime = function(frameDocument, frameElement, frameLocation, parentWindow) {
+          globalThis.__webSceneCreateFrameRuntime = function(frameDocument, frameElement, frameLocation, parentWindow) {
             const frame = globalThis;
             installWindow(frame, frameDocument, frameElement, parentWindow);
             Object.defineProperty(frame.document, externalRealmViewMarker, {
@@ -4684,7 +4684,7 @@ public sealed class ClearScriptV8Runtime :
               const href = String(frameLocation.href || '');
               const queryIndex = href.indexOf('?');
               // The browser-facing chart frame uses the opaque blob fragment
-              // for its bootstrap payload. HtmlML's resource URL keeps the
+              // for its bootstrap payload. WebScene's resource URL keeps the
               // equivalent query suffix so object-URL child resolution works.
               return href.startsWith('blob:') && queryIndex >= 0 && href.indexOf('#') < 0
                 ? href + '#' + href.slice(queryIndex + 1)
@@ -4715,7 +4715,7 @@ public sealed class ClearScriptV8Runtime :
             });
             return {
               window: frame,
-              refreshNamedProperties: frame.__htmlMlRefreshWindowNamedProperties,
+              refreshNamedProperties: frame.__webSceneRefreshWindowNamedProperties,
               dispatch: function(type, eventObject) {
                 const event = wrapHost(eventObject);
                 try { if (!event.type) event.type = String(type); } catch (_) {}

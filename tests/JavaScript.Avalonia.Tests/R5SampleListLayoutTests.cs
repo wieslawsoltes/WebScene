@@ -6,7 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using HtmlML.Css;
+using WebScene.Css;
 using System.Runtime.InteropServices;
 using Xunit;
 
@@ -253,7 +253,7 @@ public sealed class R5SampleListLayoutTests
         AssertPortableMarker(fixture.FirstItem, first);
         AssertPortableMarker(fixture.SecondItem, second);
 
-        void AssertPortableMarker(AvaloniaDomElement element, HtmlML.Core.HtmlMlRect item)
+        void AssertPortableMarker(AvaloniaDomElement element, WebScene.Core.WebSceneRect item)
         {
             var panel = Assert.IsType<CssLayoutPanel>(element.Control);
             Assert.True(snapshot.TryGetListMarkerBox(panel, out var marker));
@@ -287,7 +287,7 @@ public sealed class R5SampleListLayoutTests
             ["tr"] = "table-row",
             ["td"] = "table-cell",
             ["span"] = "inline",
-            ["htmlml-widget"] = "inline"
+            ["webscene-widget"] = "inline"
         };
         foreach (var pair in expected)
         {

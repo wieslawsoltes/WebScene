@@ -48,7 +48,7 @@ function chromeIdentity() {
 }
 
 async function launchChrome(executable) {
-  const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "htmlml-wpt-chrome-"));
+  const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "webscene-wpt-chrome-"));
   const child = spawn(executable, [
     "--headless=new",
     "--disable-background-networking",
@@ -169,7 +169,7 @@ async function runDocument(client, baseUrl, relativePath, timeoutSeconds, except
   let state = null;
   while (Date.now() < deadline) {
     try {
-      state = JSON.parse(await evaluate(client, "JSON.stringify(globalThis.__htmlMlWptState || null)"));
+      state = JSON.parse(await evaluate(client, "JSON.stringify(globalThis.__webSceneWptState || null)"));
       if (state?.complete) break;
     } catch { /* The execution context is replaced during navigation. */ }
     await delay(25);
@@ -236,7 +236,7 @@ try {
 
 const subtests = results.flatMap(result => result.subtests);
 const artifact = {
-  schema: "htmlml-wpt-contract-chrome-result-v1",
+  schema: "webscene-wpt-contract-chrome-result-v1",
   engine: "chrome",
   identity: identity.version,
   origin: contractServer.baseUrl,

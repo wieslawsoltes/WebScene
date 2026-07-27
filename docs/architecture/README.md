@@ -1,4 +1,4 @@
-# HtmlML architecture decisions
+# WebScene architecture decisions
 
 The accepted R0 decisions are recorded as ADRs so implementation changes can be
 reviewed against stable constraints rather than inferred from project names.

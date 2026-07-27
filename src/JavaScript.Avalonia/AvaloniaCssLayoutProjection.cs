@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using HtmlML.Core;
+using WebScene.Core;
 
 namespace JavaScript.Avalonia;
 
@@ -30,7 +30,7 @@ internal static class AvaloniaCssLayoutProjection
             remainingDepth: 1);
         var measured = new CssMeasurementEngine().Measure(
             portableRoot,
-            new HtmlMlSize(availableSize.Width, availableSize.Height),
+            new WebSceneSize(availableSize.Width, availableSize.Height),
             new AvaloniaIntrinsicMeasurer(controls, pseudoIds));
         return new Size(measured.Width, measured.Height);
     }
@@ -62,7 +62,7 @@ internal static class AvaloniaCssLayoutProjection
             remainingDepth: int.MaxValue);
         var snapshot = new CssArrangementEngine().Arrange(
             portableRoot,
-            new HtmlMlSize(viewport.Width, viewport.Height),
+            new WebSceneSize(viewport.Width, viewport.Height),
             Convert(inheritedAbsoluteContainingBlock),
             Convert(fixedContainingBlock));
         return new AvaloniaCssLayoutSnapshot(snapshot, controls, pseudoIds);
@@ -93,13 +93,13 @@ internal static class AvaloniaCssLayoutProjection
             remainingDepth: 1);
         var snapshot = new CssArrangementEngine().Arrange(
             portableRoot,
-            new HtmlMlSize(viewport.Width, viewport.Height),
+            new WebSceneSize(viewport.Width, viewport.Height),
             Convert(inheritedAbsoluteContainingBlock),
             Convert(fixedContainingBlock));
         return new AvaloniaCssLayoutSnapshot(snapshot, controls, pseudoIds);
     }
 
-    private static HtmlMlRect Convert(Rect rect)
+    private static WebSceneRect Convert(Rect rect)
         => new(rect.X, rect.Y, rect.Width, rect.Height);
 
     private static CssLayoutNode Build(
@@ -121,7 +121,7 @@ internal static class AvaloniaCssLayoutProjection
             {
                 ListMarker = new CssLayoutListMarker(
                     -id,
-                    new HtmlMlSize(marker.Size.Width, marker.Size.Height),
+                    new WebSceneSize(marker.Size.Width, marker.Size.Height),
                     marker.LineHeight,
                     marker.InlineAdvance,
                     marker.Position == CssListStylePosition.Outside)
@@ -237,10 +237,10 @@ internal static class AvaloniaCssLayoutProjection
             Order = generated.Order
         })
         {
-            IntrinsicSize = new HtmlMlSize(generated.IntrinsicSize.Width, generated.IntrinsicSize.Height)
+            IntrinsicSize = new WebSceneSize(generated.IntrinsicSize.Width, generated.IntrinsicSize.Height)
         };
 
-    private static HtmlMlSize ResolveProjectedIntrinsicSize(
+    private static WebSceneSize ResolveProjectedIntrinsicSize(
         Control control,
         CssLayoutStyle style,
         Size desired)
@@ -329,7 +329,7 @@ internal static class AvaloniaCssLayoutProjection
             {
                 var padding = style.Padding.Resolve(0, 0);
                 var border = style.Border.Resolve(0, 0);
-                return new HtmlMlSize(
+                return new WebSceneSize(
                     Math.Max(blockWidth, inlineWidth) + padding.Horizontal + border.Horizontal,
                     blockHeight + inlineHeight + padding.Vertical + border.Vertical);
             }
@@ -338,12 +338,12 @@ internal static class AvaloniaCssLayoutProjection
         if (style.Display is not (CssLayoutDisplay.Flex or CssLayoutDisplay.InlineFlex)
             || style.FlexDirection is not (CssLayoutFlexDirection.Row or CssLayoutFlexDirection.RowReverse))
         {
-            return new HtmlMlSize(desiredWidth, desiredHeight);
+            return new WebSceneSize(desiredWidth, desiredHeight);
         }
 
         if (control is not Panel panel)
         {
-            return new HtmlMlSize(desiredWidth, desiredHeight);
+            return new WebSceneSize(desiredWidth, desiredHeight);
         }
 
         var flowChildren = panel.Children
@@ -362,7 +362,7 @@ internal static class AvaloniaCssLayoutProjection
             .ToArray();
         if (flowChildren.Length == 0)
         {
-            return new HtmlMlSize(desiredWidth, desiredHeight);
+            return new WebSceneSize(desiredWidth, desiredHeight);
         }
 
         var contentWidth = 0d;
@@ -394,7 +394,7 @@ internal static class AvaloniaCssLayoutProjection
         }
         var ownPadding = style.Padding.Resolve(0, 0);
         var ownBorder = style.Border.Resolve(0, 0);
-        return new HtmlMlSize(
+        return new WebSceneSize(
             Math.Max(desiredWidth, contentWidth + ownPadding.Horizontal + ownBorder.Horizontal),
             Math.Max(desiredHeight, contentHeight + ownPadding.Vertical + ownBorder.Vertical));
     }
@@ -635,7 +635,7 @@ internal static class AvaloniaCssLayoutProjection
         IReadOnlyDictionary<(CssLayoutPanel Host, bool Before), long> pseudoIds)
         : ICssIntrinsicMeasurer
     {
-        public HtmlMlSize Measure(long nodeId, HtmlMlSize availableSize)
+        public WebSceneSize Measure(long nodeId, WebSceneSize availableSize)
         {
             if (!controls.TryGetValue(nodeId, out var control))
             {
@@ -650,15 +650,15 @@ internal static class AvaloniaCssLayoutProjection
                         ? pair.Key.Host.BeforePseudoElement
                         : pair.Key.Host.AfterPseudoElement;
                     return generated is null
-                        ? HtmlMlSize.Empty
-                        : new HtmlMlSize(
+                        ? WebSceneSize.Empty
+                        : new WebSceneSize(
                             generated.IntrinsicSize.Width,
                             generated.IntrinsicSize.Height);
                 }
-                return new HtmlMlSize(0, 0);
+                return new WebSceneSize(0, 0);
             }
             control.Measure(new Size(availableSize.Width, availableSize.Height));
-            return new HtmlMlSize(control.DesiredSize.Width, control.DesiredSize.Height);
+            return new WebSceneSize(control.DesiredSize.Width, control.DesiredSize.Height);
         }
     }
 }

@@ -1,6 +1,6 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using HtmlML;
+using WebScene;
 
 namespace wwwroot;
 

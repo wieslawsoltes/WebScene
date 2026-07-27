@@ -14,7 +14,7 @@
           <TextBlock
               FontSize="18"
               FontWeight="SemiBold"
-              Text="HtmlML native runtime showcase" />
+              Text="WebScene native runtime showcase" />
           <TextBlock
               Foreground="#AEB5C2"
               Text="Native V8 · retained canvas scene · generated .NET ↔ Monaco API · Uno Skia" />

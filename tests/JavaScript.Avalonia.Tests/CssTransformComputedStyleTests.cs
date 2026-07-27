@@ -124,7 +124,7 @@ public sealed class CssTransformComputedStyleTests
 
     private static bool HasNativeV8()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         return !string.IsNullOrWhiteSpace(nativePath) && File.Exists(nativePath);
     }
 

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <Description>Avalonia control host for packaged WebScene React and TypeScript components.</Description>
+    <PackageId>WebScene.Sdk.Avalonia</PackageId>
+    <PackageTags>webscene;react;typescript;avalonia;component-host</PackageTags>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WebScene.Sdk\WebScene.Sdk.csproj" />
+    <ProjectReference Include="..\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

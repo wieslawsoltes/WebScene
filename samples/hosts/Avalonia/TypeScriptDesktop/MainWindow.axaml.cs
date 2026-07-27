@@ -1,17 +1,17 @@
 using System.Text.Json;
 using Avalonia.Controls;
-using HtmlML.Sdk;
-using HtmlML.Sdk.Avalonia;
+using WebScene.Sdk;
+using WebScene.Sdk.Avalonia;
 
-namespace HtmlML.Samples.TypeScriptDesktop;
+namespace WebScene.Samples.TypeScriptDesktop;
 
 public sealed partial class MainWindow : Window
 {
     public MainWindow()
     {
         InitializeComponent();
-        PrimaryHost.RegisterHostCapability(CreateHandler(HtmlMlComponentCapabilities.Settings));
-        PrimaryHost.RegisterHostCapability(CreateHandler(HtmlMlComponentCapabilities.Notifications));
+        PrimaryHost.RegisterHostCapability(CreateHandler(WebSceneComponentCapabilities.Settings));
+        PrimaryHost.RegisterHostCapability(CreateHandler(WebSceneComponentCapabilities.Notifications));
         Opened += (_, _) => MountComponent();
         Closed += (_, _) => PrimaryHost.Dispose();
     }
@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
         try
         {
             PrimaryHost.MountComponent();
-            StatusText.Text = "Mounted dev.htmlml.typescriptdesktop";
+            StatusText.Text = "Mounted dev.webscene.typescriptdesktop";
         }
         catch (Exception exception)
         {
@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static HtmlMlDelegateCapabilityHandler CreateHandler(string capability)
+    private static WebSceneDelegateCapabilityHandler CreateHandler(string capability)
         => new(capability, (method, arguments, _) =>
             ValueTask.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(new { accepted = true, capability, method, arguments })));
 }

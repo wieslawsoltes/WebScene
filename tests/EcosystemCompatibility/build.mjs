@@ -39,14 +39,14 @@ const cases = [
     id: `jquery-attributes-upstream-${index + 1}`,
     entry: "src/jquery-attributes-upstream.mjs",
     title: `jQuery upstream attributes suite shard ${index + 1}/3`,
-    preamble: `<script>globalThis.__htmlMlQUnitShard={index:${index},count:3};</script>`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:3};</script>`,
     css: ""
   })),
   ...Array.from({ length: 4 }, (_, index) => ({
     id: `jquery-css-upstream-${index + 1}`,
     entry: "src/jquery-css-upstream.mjs",
     title: `jQuery upstream CSS suite shard ${index + 1}/4`,
-    preamble: `<script>globalThis.__htmlMlQUnitShard={index:${index},count:4};</script>`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
     css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
   })),
   {
@@ -146,7 +146,7 @@ for (const suite of upstreamSourceManifest.suites) {
   }
 }
 await writeFile(path.join(outputRoot, "provenance.json"), JSON.stringify({
-  schema: "htmlml-ecosystem-contract-provenance-v1",
+  schema: "webscene-ecosystem-contract-provenance-v1",
   packageLockSha256: createHash("sha256").update(lockBytes).digest("hex"),
   upstreamSourceManifestSha256: createHash("sha256").update(upstreamSourceManifestBytes).digest("hex"),
   upstreamFiles,

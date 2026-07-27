@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$ROOT_DIR/tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj"
+PROJECT="$ROOT_DIR/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj"
 
 rid=
 native_path=
@@ -40,11 +40,11 @@ if [[ ! -f "$native_path" ]]; then
   exit 1
 fi
 
-env -u HTMLML_CLEARSCRIPT_NATIVE -u HTMLML_CLEARSCRIPT_RID \
+env -u WEBSCENE_CLEARSCRIPT_NATIVE -u WEBSCENE_CLEARSCRIPT_RID \
 dotnet run --project "$PROJECT" \
   -c Release \
-  -p:HtmlMlClearScriptNativePath="$native_path" \
-  -p:HtmlMlClearScriptNativeRid="$rid" \
+  -p:WebSceneClearScriptNativePath="$native_path" \
+  -p:WebSceneClearScriptNativeRid="$rid" \
   -- \
   --selection required \
   --test position-absolute-chrome-bug-001 \

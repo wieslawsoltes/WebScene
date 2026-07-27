@@ -12,9 +12,9 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
-using HtmlML.Core;
-using HtmlML.JavaScript;
-using HtmlML.Backends.Avalonia;
+using WebScene.Core;
+using WebScene.JavaScript;
+using WebScene.Backends.Avalonia;
 
 namespace JavaScript.Avalonia;
 
@@ -71,9 +71,9 @@ public readonly record struct ResizeCallbackPerformanceMetrics(
     TimeSpan ObserverDuration,
     long ObserverAllocatedBytes);
 
-public sealed class HtmlMlDownloadRequestedEventArgs : EventArgs
+public sealed class WebSceneDownloadRequestedEventArgs : EventArgs
 {
-    internal HtmlMlDownloadRequestedEventArgs(string fileName, string contentType, byte[] data)
+    internal WebSceneDownloadRequestedEventArgs(string fileName, string contentType, byte[] data)
     {
         FileName = fileName;
         ContentType = contentType;
@@ -101,20 +101,20 @@ internal enum ResizeCallbackKind
 /// JavaScript values and compilation remain owned by the engine adapter.
 /// </summary>
 public class AvaloniaBrowserHost :
-    HtmlMlJavaScriptTaskSchedulerHost<AvaloniaBrowserHost>,
+    WebSceneJavaScriptTaskSchedulerHost<AvaloniaBrowserHost>,
     IDisposable,
-    IHtmlMlJavaScriptHost
+    IWebSceneJavaScriptHost
 {
     private readonly AvaloniaHostServices _hostServices;
     private readonly AvaloniaBackendHost _backend;
     private readonly List<JavaScriptExecutionMetric> _javaScriptExecutionMetrics = new();
     private readonly Dictionary<string, EventListenerMetric> _eventListenerMetrics = new(StringComparer.Ordinal);
     private readonly bool _traceEventListeners =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_TRACE_EVENT_LISTENERS"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_TRACE_EVENT_LISTENERS"), "1", StringComparison.Ordinal);
     private readonly bool _traceRafCallbacks =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_TRACE_RAF"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_TRACE_RAF"), "1", StringComparison.Ordinal);
     private readonly bool _disablePositionedLayoutReapply =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_DISABLE_POSITIONED_LAYOUT_REAPPLY"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_DISABLE_POSITIONED_LAYOUT_REAPPLY"), "1", StringComparison.Ordinal);
     private readonly Func<AvaloniaBrowserHost, AvaloniaDomDocument>? _documentFactory;
     private WindowJs? _windowObject;
     private object? _currentScript;
@@ -168,7 +168,7 @@ public class AvaloniaBrowserHost :
         _backend.Mount();
         _documentFactory = documentFactory;
         var targetOnlyFromEnvironment = string.Equals(
-            Environment.GetEnvironmentVariable("HTMLML_TARGET_ONLY_INLINE_STYLES"),
+            Environment.GetEnvironmentVariable("WEBSCENE_TARGET_ONLY_INLINE_STYLES"),
             "1",
             StringComparison.Ordinal);
         EnableTargetOnlyInlineStyles = enableTargetOnlyInlineStyles || targetOnlyFromEnvironment;
@@ -187,8 +187,8 @@ public class AvaloniaBrowserHost :
 
     public TopLevel TopLevel { get; }
     public AvaloniaDomDocument Document { get; }
-    public IHtmlMlBackendHost Backend => _backend;
-    public IHtmlMlHostServices Services => _hostServices;
+    public IWebSceneBackendHost Backend => _backend;
+    public IWebSceneHostServices Services => _hostServices;
     public WindowJs BrowserWindow => _windowObject ?? throw new ObjectDisposedException(nameof(AvaloniaBrowserHost));
     public LocationJs Location { get; }
     public string ScriptBaseDirectory
@@ -208,7 +208,7 @@ public class AvaloniaBrowserHost :
     public IExternalJavaScriptCallbackAdapter? ExternalCallbackAdapter { get; set; }
     public IExternalVirtualBrowsingContextFactory? ExternalVirtualBrowsingContextFactory { get; set; }
     public bool EnableDiagnosticLogging { get; set; } =
-        string.Equals(Environment.GetEnvironmentVariable("HTMLML_JS_CONSOLE"), "1", StringComparison.Ordinal);
+        string.Equals(Environment.GetEnvironmentVariable("WEBSCENE_JS_CONSOLE"), "1", StringComparison.Ordinal);
     public bool CollectPerformanceMetrics
     {
         get => CollectJavaScriptTaskPerformanceMetrics;
@@ -221,7 +221,7 @@ public class AvaloniaBrowserHost :
     public bool EnableIndexedAppendStylesheetMatching { get; }
     public bool TargetOnlyInlineStylesArmed => _targetOnlyInlineStylesArmed;
     public List<string> JavaScriptExceptionDiagnostics { get; } = new();
-    public event EventHandler<HtmlMlDownloadRequestedEventArgs>? DownloadRequested;
+    public event EventHandler<WebSceneDownloadRequestedEventArgs>? DownloadRequested;
     public IReadOnlyList<JavaScriptExecutionMetric> JavaScriptExecutionMetrics => _javaScriptExecutionMetrics;
     internal object? CurrentScript => _currentScript;
     internal bool TraceEventListeners => _traceEventListeners;
@@ -229,8 +229,8 @@ public class AvaloniaBrowserHost :
     protected override bool IsJavaScriptEngineExecuting => _jsCallDepth > 0;
     protected override bool IsJavaScriptTaskHostDisposed => _disposed;
     protected override bool TraceAnimationFrameCallbacks => _traceRafCallbacks;
-    protected override IHtmlMlDispatcher JavaScriptDispatcher => Services.Dispatcher;
-    protected override IHtmlMlFrameScheduler JavaScriptFrames => Services.Frames;
+    protected override IWebSceneDispatcher JavaScriptDispatcher => Services.Dispatcher;
+    protected override IWebSceneFrameScheduler JavaScriptFrames => Services.Frames;
     internal bool IsExecutingJavaScript => _jsCallDepth > 0 || IsProcessingTasks;
     internal long UserTasksEnqueued => TasksEnqueued;
     internal long UserTasksExecuted => TasksExecuted;
@@ -461,11 +461,11 @@ public class AvaloniaBrowserHost :
 
     public double GetPerformanceTimestamp() => Services.Clock.Elapsed.TotalMilliseconds;
 
-    IHtmlMlJavaScriptDocument IHtmlMlJavaScriptHost.Document => Document;
+    IWebSceneJavaScriptDocument IWebSceneJavaScriptHost.Document => Document;
 
-    object IHtmlMlJavaScriptHost.BrowserWindow => BrowserWindow;
+    object IWebSceneJavaScriptHost.BrowserWindow => BrowserWindow;
 
-    Type IHtmlMlJavaScriptHost.UrlBackendType => typeof(UrlJs);
+    Type IWebSceneJavaScriptHost.UrlBackendType => typeof(UrlJs);
 
     public object CreateCanvasPath(object? path) => new CanvasPath2D(path);
 
@@ -524,19 +524,19 @@ public class AvaloniaBrowserHost :
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(specifier);
         var resolved = Services.Resources.LoadText(
-            new HtmlMlResourceRequest(specifier, referrerDirectory, HtmlMlResourceKind.Script));
+            new WebSceneResourceRequest(specifier, referrerDirectory, WebSceneResourceKind.Script));
         return new ExternalJavaScriptSource(resolved.CacheKey, resolved.Content, resolved.DisplayName, resolved.Directory);
     }
 
     internal string LoadTextResource(string specifier, string? baseHref = null)
     {
         return Services.Resources.LoadText(
-            new HtmlMlResourceRequest(specifier, baseHref, HtmlMlResourceKind.Data)).Content;
+            new WebSceneResourceRequest(specifier, baseHref, WebSceneResourceKind.Data)).Content;
     }
 
-    internal HtmlMlTextResource LoadTextResourceDetails(string specifier, string? baseHref = null)
+    internal WebSceneTextResource LoadTextResourceDetails(string specifier, string? baseHref = null)
         => Services.Resources.LoadText(
-            new HtmlMlResourceRequest(specifier, baseHref, HtmlMlResourceKind.StyleSheet));
+            new WebSceneResourceRequest(specifier, baseHref, WebSceneResourceKind.StyleSheet));
 
     internal Task<AvaloniaBinaryResource> LoadBinaryResourceAsync(
         string specifier,
@@ -562,7 +562,7 @@ public class AvaloniaBrowserHost :
                 contentType = GetDataUriContentType(href);
             }
             var safeFileName = SanitizeDownloadFileName(fileName, contentType);
-            var requested = new HtmlMlDownloadRequestedEventArgs(safeFileName, contentType, content);
+            var requested = new WebSceneDownloadRequestedEventArgs(safeFileName, contentType, content);
             DownloadRequested?.Invoke(this, requested);
             if (requested.Handled)
             {
@@ -676,14 +676,14 @@ public class AvaloniaBrowserHost :
     {
         if (_windowResizeDispatchScheduled) return;
         _windowResizeDispatchScheduled = true;
-        Services.Dispatcher.Post(DispatchWindowResize, HtmlMlDispatchPriority.Background);
+        Services.Dispatcher.Post(DispatchWindowResize, WebSceneDispatchPriority.Background);
     }
 
     private void DispatchWindowResize()
     {
         if (IsExecutingJavaScript)
         {
-            Services.Dispatcher.Post(DispatchWindowResize, HtmlMlDispatchPriority.Background);
+            Services.Dispatcher.Post(DispatchWindowResize, WebSceneDispatchPriority.Background);
             return;
         }
         _windowResizeDispatchScheduled = false;
@@ -701,7 +701,7 @@ public class AvaloniaBrowserHost :
         {
             _positionedLayoutReapplyScheduled = false;
             if (!_disposed) Document.ReapplyAllPositionedLayout();
-        }, HtmlMlDispatchPriority.Render);
+        }, WebSceneDispatchPriority.Render);
     }
 
     private void ScheduleResizeStyleReconciliation()
@@ -713,7 +713,7 @@ public class AvaloniaBrowserHost :
         _resizeStyleReconciliationCancellation = cancellation;
         Services.Dispatcher.Post(
             () => _ = ReconcileResizeStylesAfterQuietPeriodAsync(generation, cancellation),
-            HtmlMlDispatchPriority.Background);
+            WebSceneDispatchPriority.Background);
     }
 
     private async Task ReconcileResizeStylesAfterQuietPeriodAsync(
@@ -759,7 +759,7 @@ public class AvaloniaBrowserHost :
                 }
                 cancellation.Dispose();
             }
-        }, HtmlMlDispatchPriority.Background);
+        }, WebSceneDispatchPriority.Background);
     }
 
     public void Dispose()
@@ -1046,13 +1046,13 @@ public class AvaloniaBrowserHost :
         public string origin => _uri.IsAbsoluteUri ? _uri.Scheme + "://" + _uri.Authority : "null";
         public static string createObjectURLText(string? text)
         {
-            var url = "blob:htmlml-" + Guid.NewGuid();
+            var url = "blob:webscene-" + Guid.NewGuid();
             s_objectUrls[url] = new ObjectUrlValue(Encoding.UTF8.GetBytes(text ?? string.Empty), "text/plain");
             return url;
         }
         public static string createObjectURLBase64(string? base64, string? contentType)
         {
-            var url = "blob:htmlml-" + Guid.NewGuid();
+            var url = "blob:webscene-" + Guid.NewGuid();
             s_objectUrls[url] = new ObjectUrlValue(
                 Convert.FromBase64String(base64 ?? string.Empty),
                 string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType);

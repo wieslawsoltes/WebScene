@@ -12,9 +12,9 @@ namespace JavaScript.Avalonia.Benchmarks;
 internal static class V8SharedCompilationCacheProbe
 {
     private const string SharedScript = """
-        globalThis.__htmlMlSharedCacheToken = String(__htmlMlInstanceToken);
-        globalThis.__htmlMlSharedCacheExecutions =
-          (globalThis.__htmlMlSharedCacheExecutions || 0) + 1;
+        globalThis.__webSceneSharedCacheToken = String(__webSceneInstanceToken);
+        globalThis.__webSceneSharedCacheExecutions =
+          (globalThis.__webSceneSharedCacheExecutions || 0) + 1;
         """;
 
     internal static int Run(string[] args)
@@ -28,12 +28,12 @@ internal static class V8SharedCompilationCacheProbe
         var callerThreadId = Environment.CurrentManagedThreadId;
         var temporaryDirectory = Path.Combine(
             Path.GetTempPath(),
-            "htmlml-v8-shared-cache-" + Guid.NewGuid().ToString("N"));
+            "webscene-v8-shared-cache-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         var modulePath = Path.Combine(temporaryDirectory, "shared-module.js");
-        var moduleContent = "globalThis.__htmlMlSharedModuleLoads = " +
-            "(globalThis.__htmlMlSharedModuleLoads || 0) + 1; " +
-            "module.exports = { loads: globalThis.__htmlMlSharedModuleLoads };\n";
+        var moduleContent = "globalThis.__webSceneSharedModuleLoads = " +
+            "(globalThis.__webSceneSharedModuleLoads || 0) + 1; " +
+            "module.exports = { loads: globalThis.__webSceneSharedModuleLoads };\n";
         File.WriteAllText(modulePath, moduleContent);
 
         var persistentRoot = Path.Combine(temporaryDirectory, "persistent");
@@ -106,7 +106,7 @@ internal static class V8SharedCompilationCacheProbe
             .ToHashSet(StringComparer.Ordinal);
         var editedSource = new V8CompilationSource(
             "v8-shared-cache-probe.js",
-            SharedScript + "\nglobalThis.__htmlMlEdited = true;");
+            SharedScript + "\nglobalThis.__webSceneEdited = true;");
         var editResult = ClearScriptV8Runtime.PrecompileAsync(
                 warmCache,
                 new[] { editedSource },
@@ -158,7 +158,7 @@ internal static class V8SharedCompilationCacheProbe
                 boundedCache,
                 Enumerable.Range(0, 3).Select(index => new V8CompilationSource(
                     $"v8-bounded-{index}.js",
-                    $"globalThis.__htmlMlBounded{index} = {index};")),
+                    $"globalThis.__webSceneBounded{index} = {index};")),
                 includeRuntimeBootstrap: false)
             .GetAwaiter()
             .GetResult();
@@ -206,18 +206,18 @@ internal static class V8SharedCompilationCacheProbe
                     host,
                     new ClearScriptV8RuntimeOptions { SharedCache = cache });
                 runtimes.Add(runtime);
-                runtime.Engine.Script.__htmlMlInstanceToken = $"chart-{index + 1}";
+                runtime.Engine.Script.__webSceneInstanceToken = $"chart-{index + 1}";
                 runtime.Execute(SharedScript, "v8-shared-cache-probe.js");
                 runtime.ExecuteOwnerScript("./shared-module.js");
             }
 
             var isolated = runtimes.Select((runtime, index) =>
                     string.Equals(
-                        Convert.ToString(runtime.Engine.Evaluate("globalThis.__htmlMlSharedCacheToken")),
+                        Convert.ToString(runtime.Engine.Evaluate("globalThis.__webSceneSharedCacheToken")),
                         $"chart-{index + 1}",
                         StringComparison.Ordinal)
-                    && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__htmlMlSharedCacheExecutions")) == 1
-                    && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__htmlMlSharedModuleLoads")) == 1)
+                    && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__webSceneSharedCacheExecutions")) == 1
+                    && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__webSceneSharedModuleLoads")) == 1)
                 .All(static passed => passed);
             var distinctRoots = hosts.Select(static host => host.Document)
                 .Distinct(ReferenceEqualityComparer.Instance)
@@ -232,8 +232,8 @@ internal static class V8SharedCompilationCacheProbe
                 runtime.Execute(SharedScript, "v8-shared-cache-probe.js");
             }
             var survivors = runtimes.All(runtime =>
-                Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__htmlMlSharedCacheExecutions")) == 2
-                && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__htmlMlSharedModuleLoads")) == 1);
+                Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__webSceneSharedCacheExecutions")) == 2
+                && Convert.ToInt32(runtime.Engine.Evaluate("globalThis.__webSceneSharedModuleLoads")) == 1);
 
             var metrics = cache.GetMetrics();
             var sharing = concurrentSingleFlight
@@ -294,7 +294,7 @@ internal static class V8SharedCompilationCacheProbe
         var sources = Enumerable.Range(0, 3)
             .Select(index => new V8CompilationSource(
                 $"v8-process-restart-{index}.js",
-                $"function htmlMlProcessRestart{index}(value){{return value+{index};}}"))
+                $"function webSceneProcessRestart{index}(value){{return value+{index};}}"))
             .ToArray();
         var result = ClearScriptV8Runtime.PrecompileAsync(
                 cache,
@@ -364,7 +364,7 @@ internal static class V8SharedCompilationCacheProbe
         var builder = new System.Text.StringBuilder(8 * 1024 * 1024);
         for (var index = 0; index < 100_000; index++)
         {
-            builder.Append("function htmlMlCacheProbe")
+            builder.Append("function webSceneCacheProbe")
                 .Append(index)
                 .Append("(value){return value+")
                 .Append(index)

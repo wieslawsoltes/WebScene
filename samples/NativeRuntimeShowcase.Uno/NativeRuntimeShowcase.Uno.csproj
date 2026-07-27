@@ -8,15 +8,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIdGuid>20E78A1B-E990-469B-AAD4-09E173F824E7</ApplicationIdGuid>
-    <ApplicationTitle>HtmlML Native Runtime Showcase</ApplicationTitle>
-    <ApplicationId>com.htmlml.nativeruntimeshowcase</ApplicationId>
+    <ApplicationTitle>WebScene Native Runtime Showcase</ApplicationTitle>
+    <ApplicationId>com.webscene.nativeruntimeshowcase</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HtmlML.Backend.Uno\HtmlML.Backend.Uno.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Backend.Uno\WebScene.Backend.Uno.csproj" />
     <ProjectReference Include="..\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj" />
     <PackageReference Include="SkiaSharp" VersionOverride="3.119.2" />
     <PackageReference Include="SkiaSharp.HarfBuzz" VersionOverride="3.119.2" />

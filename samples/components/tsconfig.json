@@ -6,7 +6,7 @@
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
-    "types": ["@htmlml/sdk", "@htmlml/sdk/profile"]
+    "types": ["@webscene/sdk", "@webscene/sdk/profile"]
   },
   "include": ["*/src/**/*.tsx", "shared/**/*.tsx"]
 }

@@ -15,7 +15,7 @@ public sealed class V8KeyboardEventRegressionTests
     {
         // ClearScript's reviewed native library is intentionally optional in
         // the portable unit-test lane. The V8 lane sets this path explicitly.
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -59,7 +59,7 @@ public sealed class V8KeyboardEventRegressionTests
                   ctrlKey: true,
                   repeat: true
                 });
-                const state = globalThis.__htmlMlKeyboardEventRegression = {
+                const state = globalThis.__webSceneKeyboardEventRegression = {
                   constructorShape:
                     typeof UIEvent === 'function' &&
                     typeof KeyboardEvent === 'function' &&
@@ -95,7 +95,7 @@ public sealed class V8KeyboardEventRegressionTests
                 """, "v8-keyboard-event-nested-click-regression.js");
 
             using var result = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlKeyboardEventRegression)")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneKeyboardEventRegression)")) ?? "{}");
             var state = result.RootElement;
             Assert.True(state.GetProperty("constructorShape").GetBoolean());
             Assert.Equal(1, state.GetProperty("listenerCalls").GetInt32());

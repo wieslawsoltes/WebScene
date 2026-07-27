@@ -29,8 +29,8 @@ public sealed class CssInvalidationOptimizationTests
             host.ArmTargetOnlyInlineStyles();
 
             var callback = new MutationRecordCallback();
-            var observer = document.__htmlMlCreateExternalMutationObserver(callback);
-            observer.__htmlMlObserve(
+            var observer = document.__webSceneCreateExternalMutationObserver(callback);
+            observer.__webSceneObserve(
                 element,
                 childList: false,
                 attributes: true,
@@ -2013,7 +2013,7 @@ public sealed class CssInvalidationOptimizationTests
             var firstTop = first.getBoundingClientRect().top;
             var firstOffsetTop = first.offsetTop;
             var scrollEvents = new CountingEventListener();
-            viewport.__htmlMlAddExternalEventListener(
+            viewport.__webSceneAddExternalEventListener(
                 "scroll",
                 scrollEvents,
                 capture: false,
@@ -2055,7 +2055,7 @@ public sealed class CssInvalidationOptimizationTests
             viewport.appendChild(content);
             body.appendChild(viewport);
             var scrollEvents = new CountingEventListener();
-            viewport.__htmlMlAddExternalEventListener(
+            viewport.__webSceneAddExternalEventListener(
                 "scroll",
                 scrollEvents,
                 capture: false,
@@ -2117,7 +2117,7 @@ public sealed class CssInvalidationOptimizationTests
             var input = HostTestUtilities.GetElement(document.createElement("input"));
             HostTestUtilities.GetElement(document.body).appendChild(input);
             var listener = new InputValueListener();
-            document.__htmlMlAddExternalEventListener(
+            document.__webSceneAddExternalEventListener(
                 "input",
                 listener,
                 capture: false,
@@ -2153,7 +2153,7 @@ public sealed class CssInvalidationOptimizationTests
             button.appendChild(icon);
             HostTestUtilities.GetElement(document.body).appendChild(button);
             var listener = new CountingEventListener();
-            button.__htmlMlAddExternalEventListener("click", listener, capture: false, once: false, passive: false);
+            button.__webSceneAddExternalEventListener("click", listener, capture: false, once: false, passive: false);
             document.EnsureStylesCurrent();
             Dispatcher.UIThread.RunJobs();
 
@@ -2197,13 +2197,13 @@ public sealed class CssInvalidationOptimizationTests
             textBox.CaretIndex = textBox.Text?.Length ?? 0;
             var listener = new StopPropagationListener();
             var inputListener = new InputValueListener();
-            input.__htmlMlAddExternalEventListener(
+            input.__webSceneAddExternalEventListener(
                 "keydown",
                 listener,
                 capture: false,
                 once: false,
                 passive: false);
-            input.__htmlMlAddExternalEventListener(
+            input.__webSceneAddExternalEventListener(
                 "input",
                 inputListener,
                 capture: false,

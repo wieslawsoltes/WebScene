@@ -28,16 +28,16 @@ while (($# > 0)); do
 done
 
 case "$rid" in
-  osx-arm64) expected_kernel=Darwin; expected_machine=arm64; cpu=arm64; native_name=libhtmlml_native_engine.dylib ;;
-  osx-x64) expected_kernel=Darwin; expected_machine=x86_64; cpu=x64; native_name=libhtmlml_native_engine.dylib ;;
-  linux-arm64) expected_kernel=Linux; expected_machine=aarch64; cpu=arm64; native_name=libhtmlml_native_engine.so ;;
-  linux-x64) expected_kernel=Linux; expected_machine=x86_64; cpu=x64; native_name=libhtmlml_native_engine.so ;;
+  osx-arm64) expected_kernel=Darwin; expected_machine=arm64; cpu=arm64; native_name=libwebscene_native_engine.dylib ;;
+  osx-x64) expected_kernel=Darwin; expected_machine=x86_64; cpu=x64; native_name=libwebscene_native_engine.dylib ;;
+  linux-arm64) expected_kernel=Linux; expected_machine=aarch64; cpu=arm64; native_name=libwebscene_native_engine.so ;;
+  linux-x64) expected_kernel=Linux; expected_machine=x86_64; cpu=x64; native_name=libwebscene_native_engine.so ;;
   *) usage; exit 1 ;;
 esac
 
 if [[ -z "$package_version" ]]; then
   package_version="$(
-    dotnet msbuild "$repo_root/src/HtmlML.Core/HtmlML.Core.csproj" \
+    dotnet msbuild "$repo_root/src/WebScene.Core/WebScene.Core.csproj" \
       -getProperty:PackageVersion -nologo |
       tail -n 1 | tr -d '\r'
   )"
@@ -98,16 +98,16 @@ if [[ -z "$v8_root" ]]; then
     fi
   }
   apply_patch_once "$v8_root" "$repo_root/third-party/clearscript/V8/V8Patch.txt"
-  apply_patch_once "$v8_root" "$repo_root/packaging/HtmlML.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
+  apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
   apply_patch_once "$v8_root/build" "$repo_root/third-party/clearscript/V8/BuildPatch.txt"
-  apply_patch_once "$v8_root/build" "$repo_root/packaging/HtmlML.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt"
+  apply_patch_once "$v8_root/build" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt"
   apply_patch_once "$v8_root/third_party/icu" "$repo_root/third-party/clearscript/V8/ICUPatch.txt"
 
   if [[ "$expected_kernel" == Linux ]]; then
     "$v8_root/build/linux/sysroot_scripts/install-sysroot.py" --arch="$cpu"
   fi
 
-  gn_args="chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"$cpu\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-HtmlML\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"$cpu\""
+  gn_args="chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"$cpu\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-WebScene\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"$cpu\""
   if [[ "$expected_kernel" == Linux ]]; then
     # Keep V8's bundled LLD for its host tools. The reviewed build patch above
     # disables only CREL emission so Ubuntu 22.04 can consume the V8 archive.
@@ -152,17 +152,17 @@ fi
 
 build_dir="$repo_root/artifacts/native-engine-runtime-build/$rid"
 cmake_args=(
-  -S "$repo_root/experiments/HtmlML.NativeEngine.Probe"
+  -S "$repo_root/experiments/WebScene.NativeEngine.Probe"
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE=Release
-  -DHTMLML_NATIVE_ENGINE_ENABLE_V8=ON
-  -DHTMLML_V8_POINTER_COMPRESSION=ON
-  -DHTMLML_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
-  -DHTMLML_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON
-  -DHTMLML_NATIVE_ENGINE_DENSE_LINK=ON
-  -DHTMLML_NATIVE_ENGINE_CERTIFICATION=OFF
-  -DHTMLML_V8_ROOT="$v8_root"
-  -DHTMLML_V8_OUTPUT_ROOT="$v8_output_root"
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_V8_POINTER_COMPRESSION=ON
+  -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
+  -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON
+  -DWEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON
+  -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
+  -DWEBSCENE_V8_ROOT="$v8_root"
+  -DWEBSCENE_V8_OUTPUT_ROOT="$v8_output_root"
 )
 if [[ "$expected_kernel" == Linux ]]; then
   # V8's Linux archive must be linked with LLD. The compiler is selectable so
@@ -189,7 +189,7 @@ if [[ ! -f "$native_path" ]]; then
   echo "Native engine build did not produce '$native_path'." >&2
   exit 1
 fi
-ixwebsocket_license="$build_dir/_deps/htmlml_ixwebsocket-src/LICENSE.txt"
+ixwebsocket_license="$build_dir/_deps/webscene_ixwebsocket-src/LICENSE.txt"
 if [[ ! -f "$ixwebsocket_license" ]]; then
   echo "IXWebSocket license was not found at '$ixwebsocket_license'." >&2
   exit 1
@@ -203,24 +203,24 @@ fi
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
 pack_args=(
-  "$repo_root/packaging/HtmlML.NativeEngine.Runtime/HtmlML.NativeEngine.Runtime.csproj"
+  "$repo_root/packaging/WebScene.NativeEngine.Runtime/WebScene.NativeEngine.Runtime.csproj"
   -c Release
   -o "$output_dir"
-  "-p:HtmlMlNativeEngineRid=$rid"
-  "-p:HtmlMlNativeEnginePath=$native_path"
-  "-p:HtmlMlNativeEngineIcuDataPath=$icu_data"
-  "-p:HtmlMlNativeEngineV8LicensePath=$v8_license"
-  "-p:HtmlMlNativeEngineIcuLicensePath=$icu_license"
-  "-p:HtmlMlNativeEngineIXWebSocketLicensePath=$ixwebsocket_license"
-  "-p:HtmlMlNativeEngineV8PointerCompression=true"
-  "-p:HtmlMlNativeEngineV8SharedCage=true"
-  "-p:HtmlMlNativeEngineV8OptimizeForSizeDefault=true"
-  "-p:HtmlMlNativeEngineDenseLink=true"
+  "-p:WebSceneNativeEngineRid=$rid"
+  "-p:WebSceneNativeEnginePath=$native_path"
+  "-p:WebSceneNativeEngineIcuDataPath=$icu_data"
+  "-p:WebSceneNativeEngineV8LicensePath=$v8_license"
+  "-p:WebSceneNativeEngineIcuLicensePath=$icu_license"
+  "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixwebsocket_license"
+  "-p:WebSceneNativeEngineV8PointerCompression=true"
+  "-p:WebSceneNativeEngineV8SharedCage=true"
+  "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true"
+  "-p:WebSceneNativeEngineDenseLink=true"
 )
 pack_args+=("-p:PackageVersion=$package_version")
 dotnet pack "${pack_args[@]}"
 
-package_path="$output_dir/HtmlML.NativeEngine.Runtime.$rid.$package_version.nupkg"
+package_path="$output_dir/WebScene.NativeEngine.Runtime.$rid.$package_version.nupkg"
 if [[ ! -f "$package_path" ]]; then
   echo "The RID package was not produced in '$output_dir'." >&2
   exit 1
@@ -232,7 +232,7 @@ cmake -E make_directory "$package_smoke_dir"
 package_native_path="$package_smoke_dir/runtimes/$rid/native/$native_name"
 
 dotnet run \
-  --project "$repo_root/tests/WebPlatformSubset/runner/HtmlML.WebPlatformSubset.Runner.csproj" \
+  --project "$repo_root/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj" \
   -c Release -- \
   --engine native \
   --selection required \
@@ -250,7 +250,7 @@ if [[ "$expected_kernel" == Linux ]]; then
 fi
 dotnet new console --framework "$consumer_framework" --no-restore --output "$consumer_dir"
 NUGET_PACKAGES="$consumer_root/packages" dotnet add "$consumer_dir/consumer.csproj" package \
-  "HtmlML.NativeEngine.Runtime.$rid" \
+  "WebScene.NativeEngine.Runtime.$rid" \
   --version "$package_version" \
   --no-restore
 NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
@@ -259,7 +259,7 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
   --source https://api.nuget.org/v3/index.json
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
-for copied_asset in "$native_name" icudtl.dat htmlml-native-runtime.json; do
+for copied_asset in "$native_name" icudtl.dat webscene-native-runtime.json; do
   copied_path="$consumer_dir/bin/Release/$consumer_framework/$rid/$copied_asset"
   if [[ ! -f "$copied_path" ]]; then
     echo "The runtime package did not copy '$copied_asset' to consumer output." >&2

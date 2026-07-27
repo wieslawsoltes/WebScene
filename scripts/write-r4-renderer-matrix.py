@@ -29,7 +29,7 @@ def main() -> int:
         "renderer": "Avalonia on ProGPU",
         "status": "not-configured",
         "supported": False,
-        "reason": "Set HTMLML_PROGPU_AVALONIA_SOURCE to an Avalonia feature/progpu checkout.",
+        "reason": "Set WEBSCENE_PROGPU_AVALONIA_SOURCE to an Avalonia feature/progpu checkout.",
     }
     if args.progpu_avalonia_source:
         props = args.progpu_avalonia_source / "build" / "ProGpuIntegration.props"
@@ -48,7 +48,7 @@ def main() -> int:
                     "status": "incompatible-version",
                     "reason": (
                         f"ProGPU integration {integration_version} exactly pins Avalonia "
-                        f"{required_avalonia}; HtmlML currently pins {current_avalonia}."
+                        f"{required_avalonia}; WebScene currently pins {current_avalonia}."
                     ),
                 }
             )
@@ -63,7 +63,7 @@ def main() -> int:
     evidence = {
         "schemaVersion": 1,
         "status": "pass-with-classified-optional-renderer",
-        "htmlMlAvaloniaVersion": current_avalonia,
+        "webSceneAvaloniaVersion": current_avalonia,
         "matrix": [
             {
                 "renderer": "Avalonia Skia/headless",

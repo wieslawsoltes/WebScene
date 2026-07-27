@@ -10,7 +10,7 @@ public sealed partial class App : Application
     {
         var window = new Window
         {
-            Title = "HtmlML · Native Runtime Showcase · Uno",
+            Title = "WebScene · Native Runtime Showcase · Uno",
             Content = new MainPage()
         };
         window.Activate();

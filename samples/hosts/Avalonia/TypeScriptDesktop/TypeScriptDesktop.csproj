@@ -12,12 +12,12 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\src\HtmlML.Sdk\HtmlML.Sdk.csproj" />
-    <ProjectReference Include="..\..\..\..\src\HtmlML.Sdk.Avalonia\HtmlML.Sdk.Avalonia.csproj" />
+    <ProjectReference Include="..\..\..\..\src\WebScene.Sdk\WebScene.Sdk.csproj" />
+    <ProjectReference Include="..\..\..\..\src\WebScene.Sdk.Avalonia\WebScene.Sdk.Avalonia.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\..\..\components\TypeScriptDesktop\htmlml-component.json" Link="Component\htmlml-component.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\components\TypeScriptDesktop\webscene-component.json" Link="Component\webscene-component.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\components\TypeScriptDesktop\dist\**\*" Link="Component\dist\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <Import Project="..\HtmlMlSampleNative.targets" />
+  <Import Project="..\WebSceneSampleNative.targets" />
 </Project>

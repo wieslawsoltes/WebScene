@@ -11,14 +11,14 @@ import xml.etree.ElementTree as ET
 
 
 PORTABLE = {
-    "HtmlML.Core",
-    "HtmlML.Dom",
-    "HtmlML.Css",
-    "HtmlML.Graphics",
-    "HtmlML.JavaScript",
-    "HtmlML.Backend.Abstractions",
+    "WebScene.Core",
+    "WebScene.Dom",
+    "WebScene.Css",
+    "WebScene.Graphics",
+    "WebScene.JavaScript",
+    "WebScene.Backend.Abstractions",
 }
-EXPECTED = PORTABLE | {"HtmlML.Backend.Avalonia"}
+EXPECTED = PORTABLE | {"WebScene.Backend.Avalonia"}
 
 
 def read_dependencies(package: pathlib.Path) -> tuple[str, set[str]]:
@@ -114,7 +114,7 @@ def main() -> int:
             dependency
             for dependency in transitive
             if dependency.startswith("Avalonia")
-            or dependency == "HtmlML.Backend.Avalonia"
+            or dependency == "WebScene.Backend.Avalonia"
         )
         if forbidden:
             portable_violations[package_id] = forbidden

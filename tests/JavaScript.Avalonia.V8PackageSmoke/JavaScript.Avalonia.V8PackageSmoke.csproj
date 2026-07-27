@@ -5,19 +5,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <RuntimeIdentifier Condition="'$(HtmlMlClearScriptNativeRid)' != ''">$(HtmlMlClearScriptNativeRid)</RuntimeIdentifier>
-    <HtmlMlClearScriptNativePackageId Condition="'$(HtmlMlClearScriptNativeRid)' != ''">JavaScript.Avalonia.ClearScript.Native.$(HtmlMlClearScriptNativeRid)</HtmlMlClearScriptNativePackageId>
+    <RuntimeIdentifier Condition="'$(WebSceneClearScriptNativeRid)' != ''">$(WebSceneClearScriptNativeRid)</RuntimeIdentifier>
+    <WebSceneClearScriptNativePackageId Condition="'$(WebSceneClearScriptNativeRid)' != ''">JavaScript.Avalonia.ClearScript.Native.$(WebSceneClearScriptNativeRid)</WebSceneClearScriptNativePackageId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ClearScript.V8" />
-    <PackageReference Include="$(HtmlMlClearScriptNativePackageId)"
-                      VersionOverride="$(HtmlMlClearScriptNativePackageVersion)"
-                      Condition="'$(HtmlMlClearScriptNativePackageId)' != '' and '$(HtmlMlClearScriptNativePackageVersion)' != ''" />
+    <PackageReference Include="$(WebSceneClearScriptNativePackageId)"
+                      VersionOverride="$(WebSceneClearScriptNativePackageVersion)"
+                      Condition="'$(WebSceneClearScriptNativePackageId)' != '' and '$(WebSceneClearScriptNativePackageVersion)' != ''" />
   </ItemGroup>
 
-  <Target Name="ValidateHtmlMlClearScriptNativePackageSmoke" BeforeTargets="PrepareForBuild">
-    <Error Condition="'$(HtmlMlClearScriptNativeRid)' == '' or '$(HtmlMlClearScriptNativePackageVersion)' == ''"
-           Text="Pass HtmlMlClearScriptNativeRid and HtmlMlClearScriptNativePackageVersion to run the V8 native package smoke." />
+  <Target Name="ValidateWebSceneClearScriptNativePackageSmoke" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(WebSceneClearScriptNativeRid)' == '' or '$(WebSceneClearScriptNativePackageVersion)' == ''"
+           Text="Pass WebSceneClearScriptNativeRid and WebSceneClearScriptNativePackageVersion to run the V8 native package smoke." />
   </Target>
 </Project>

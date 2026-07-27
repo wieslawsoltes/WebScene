@@ -259,7 +259,7 @@ internal static class AvaloniaCanvasDisplayListRenderer
     }
 
     private static Point AdjustTextOrigin(
-        HtmlML.Core.HtmlMlPoint authoredOrigin,
+        WebScene.Core.WebScenePoint authoredOrigin,
         FormattedText formatted,
         CanvasStateSnapshot state)
     {
@@ -339,10 +339,10 @@ internal static class AvaloniaCanvasDisplayListRenderer
         }
     }
 
-    private static Rect ToRect(HtmlML.Core.HtmlMlRect rect)
+    private static Rect ToRect(WebScene.Core.WebSceneRect rect)
         => new(rect.X, rect.Y, rect.Width, rect.Height);
 
-    private static bool HasArea(HtmlML.Core.HtmlMlRect rect)
+    private static bool HasArea(WebScene.Core.WebSceneRect rect)
         => rect.Width > 0 && rect.Height > 0;
 
     private sealed class CompiledCommand

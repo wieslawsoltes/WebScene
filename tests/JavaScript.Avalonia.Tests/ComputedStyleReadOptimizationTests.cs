@@ -82,7 +82,7 @@ public sealed class ComputedStyleReadOptimizationTests
     [Trait("Runtime", "V8Native")]
     public void V8RepeatedReadsPreserveCssomShapeThroughCachedSnapshot()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -152,7 +152,7 @@ public sealed class ComputedStyleReadOptimizationTests
             Assert.Equal("rgb(18, 52, 86)", result.RootElement.GetProperty("color").GetString());
             Assert.True(result.RootElement.GetProperty("length").GetInt32() > 0);
             using var metrics = JsonDocument.Parse(Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(globalThis.__htmlMlDescribeComputedStyleReadCacheMetrics())")) ?? "{}");
+                "JSON.stringify(globalThis.__webSceneDescribeComputedStyleReadCacheMetrics())")) ?? "{}");
             Assert.Equal(1_002, metrics.RootElement.GetProperty("typedMethodHits").GetInt32());
             Assert.Equal(1_000, metrics.RootElement.GetProperty("facadeHits").GetInt32());
             Assert.Equal(2, metrics.RootElement.GetProperty("facadeMisses").GetInt32());
@@ -177,7 +177,7 @@ public sealed class ComputedStyleReadOptimizationTests
     [Trait("Runtime", "V8Native")]
     public void V8ComputedStyleSeparatesMethodFallbackFromNamedProperties()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;
@@ -229,7 +229,7 @@ public sealed class ComputedStyleReadOptimizationTests
     [Trait("Runtime", "V8Native")]
     public void V8ComputedStyleSnapshotTracksDetachAndReattachLifecycle()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;

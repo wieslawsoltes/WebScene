@@ -1,5 +1,5 @@
 (function () {
-  const state = window.__htmlMlReactFocusState = {
+  const state = window.__webSceneReactFocusState = {
     passiveRenders: 0,
     passiveEffects: 0,
     focusRenders: 0,
@@ -66,7 +66,7 @@
 
     render() {
       state.focusRenders++;
-      if (window.__htmlMlReactScheduleFromRender && state.renderMicrotasks === 0) {
+      if (window.__webSceneReactScheduleFromRender && state.renderMicrotasks === 0) {
         state.renderMicrotasks++;
         Promise.resolve().then(function () {
           state.focusEvents.push('render-microtask');
@@ -77,7 +77,7 @@
         React.createElement('span', { id: 'focus-probe-state' }, 'focus:' + this.state.phase),
         React.createElement('input', {
           id: 'focus-probe-input',
-          autoFocus: window.__htmlMlReactUseAutoFocus,
+          autoFocus: window.__webSceneReactUseAutoFocus,
           value: 'value-' + this.state.phase,
           onChange: function () {}
         }));
@@ -113,7 +113,7 @@
   }, true);
 
   ReactDOM.createRoot(passiveMount).render(React.createElement(PassiveProbe));
-  if (window.__htmlMlReactLegacyFocusRoot) {
+  if (window.__webSceneReactLegacyFocusRoot) {
     focusRoot = { render: function (element) { ReactDOM.render(element, focusMount); } };
     ReactDOM.render(React.createElement(FocusProbe), focusMount);
   } else {

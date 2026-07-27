@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using HtmlML.JavaScript;
+using WebScene.JavaScript;
 using JavaScript.Avalonia;
 using Microsoft.ClearScript.V8;
 
@@ -91,7 +91,7 @@ public readonly record struct V8PrecompileResult(
 /// Bounded process-level cache for immutable script sources and V8 compilation data.
 /// Module exports, globals, DOM objects, and other mutable chart state are never shared.
 /// </summary>
-public sealed class ClearScriptV8SharedCache : IHtmlMlJavaScriptModuleCache
+public sealed class ClearScriptV8SharedCache : IWebSceneJavaScriptModuleCache
 {
     private const int PersistentSchemaVersion = 1;
     private const int PersistentHeaderLength = 8 + sizeof(int) + SHA256.HashSizeInBytes * 2 + sizeof(int);
@@ -277,7 +277,7 @@ public sealed class ClearScriptV8SharedCache : IHtmlMlJavaScriptModuleCache
         return source;
     }
 
-    ExternalJavaScriptSource IHtmlMlJavaScriptModuleCache.Resolve(
+    ExternalJavaScriptSource IWebSceneJavaScriptModuleCache.Resolve(
         string resolutionKey,
         Func<ExternalJavaScriptSource> resolver)
         => ResolveSource(resolutionKey, resolver);
@@ -366,7 +366,7 @@ public sealed class ClearScriptV8SharedCache : IHtmlMlJavaScriptModuleCache
 
     private static ClearScriptV8SharedCache CreateProcessWide()
     {
-        var persistentDirectory = Environment.GetEnvironmentVariable("HTMLML_V8_CACHE_DIRECTORY");
+        var persistentDirectory = Environment.GetEnvironmentVariable("WEBSCENE_V8_CACHE_DIRECTORY");
         return new ClearScriptV8SharedCache(new ClearScriptV8SharedCacheOptions
         {
             PersistentDirectory = string.IsNullOrWhiteSpace(persistentDirectory)
@@ -380,7 +380,7 @@ public sealed class ClearScriptV8SharedCache : IHtmlMlJavaScriptModuleCache
         var assembly = typeof(V8Runtime).Assembly;
         return string.Join(
             "|",
-            "htmlml-v8-cache",
+            "webscene-v8-cache",
             PersistentSchemaVersion,
             assembly.GetName().Version?.ToString() ?? "unknown",
             assembly.ManifestModule.ModuleVersionId,

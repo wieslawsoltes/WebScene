@@ -1,4 +1,4 @@
-export const state = globalThis.__htmlMlWptState = {
+export const state = globalThis.__webSceneWptState = {
   complete: false,
   harness: null,
   results: [],

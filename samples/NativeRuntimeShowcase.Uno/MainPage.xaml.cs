@@ -1,4 +1,4 @@
-using HtmlML.Backends.Uno.Native;
+using WebScene.Backends.Uno.Native;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NativeRuntimeShowcase.Interop;
@@ -9,8 +9,8 @@ namespace NativeRuntimeShowcase.Uno;
 
 public sealed partial class MainPage : Page
 {
-    private readonly UnoNativeHtmlMlView _terminal = new();
-    private readonly UnoNativeHtmlMlView _editor = new();
+    private readonly UnoNativeWebSceneView _terminal = new();
+    private readonly UnoNativeWebSceneView _editor = new();
     private readonly DispatcherTimer _diagnosticsTimer = new();
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();

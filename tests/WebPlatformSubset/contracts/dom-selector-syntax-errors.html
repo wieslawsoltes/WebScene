@@ -4,7 +4,7 @@
 <body>
 <div id="selector-root"><span class="item"></span></div>
 <script>
-  const state = window.__htmlMlWptState = {
+  const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
   };
 
@@ -43,27 +43,27 @@
   const item = root.querySelector(".item");
 
   test("Document selector APIs reject an unknown pseudo-class", () => {
-    assertSyntaxError(() => document.querySelector(":htmlml-unknown-pseudo"),
+    assertSyntaxError(() => document.querySelector(":webscene-unknown-pseudo"),
       "Document.querySelector");
-    assertSyntaxError(() => document.querySelectorAll(":htmlml-unknown-pseudo"),
+    assertSyntaxError(() => document.querySelectorAll(":webscene-unknown-pseudo"),
       "Document.querySelectorAll");
   });
 
   test("Element selector APIs reject an unknown pseudo-class", () => {
-    assertSyntaxError(() => root.querySelector(":htmlml-unknown-pseudo"),
+    assertSyntaxError(() => root.querySelector(":webscene-unknown-pseudo"),
       "Element.querySelector");
-    assertSyntaxError(() => root.querySelectorAll(":htmlml-unknown-pseudo"),
+    assertSyntaxError(() => root.querySelectorAll(":webscene-unknown-pseudo"),
       "Element.querySelectorAll");
   });
 
   test("matches and closest reject an unknown pseudo-class", () => {
-    assertSyntaxError(() => item.matches(":htmlml-unknown-pseudo"), "Element.matches");
-    assertSyntaxError(() => item.closest(":htmlml-unknown-pseudo"), "Element.closest");
+    assertSyntaxError(() => item.matches(":webscene-unknown-pseudo"), "Element.matches");
+    assertSyntaxError(() => item.closest(":webscene-unknown-pseudo"), "Element.closest");
   });
 
   test("malformed selectors and invalid selector lists throw SyntaxError", () => {
     assertSyntaxError(() => document.querySelector("["), "malformed querySelector");
-    assertSyntaxError(() => root.querySelectorAll("div, :htmlml-unknown-pseudo"),
+    assertSyntaxError(() => root.querySelectorAll("div, :webscene-unknown-pseudo"),
       "invalid selector list");
     assertSyntaxError(() => item.matches(""), "empty matches selector");
   });

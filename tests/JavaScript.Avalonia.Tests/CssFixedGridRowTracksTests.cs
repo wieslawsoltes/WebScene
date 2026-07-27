@@ -19,7 +19,7 @@ public sealed class CssFixedGridRowTracksTests
     [Trait("Runtime", "V8Native")]
     public void FixedPixelRowsDetermineNaturalGridHeightInsideVirtualIframe()
     {
-        var nativePath = Environment.GetEnvironmentVariable("HTMLML_CLEARSCRIPT_NATIVE");
+        var nativePath = Environment.GetEnvironmentVariable("WEBSCENE_CLEARSCRIPT_NATIVE");
         if (string.IsNullOrWhiteSpace(nativePath) || !File.Exists(nativePath))
         {
             return;

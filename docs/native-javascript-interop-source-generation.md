@@ -2,15 +2,15 @@
 
 ## Conclusion
 
-HtmlML can generate a strongly typed .NET facade for a JavaScript library from
+WebScene can generate a strongly typed .NET facade for a JavaScript library from
 the library's TypeScript declarations. The native engine should be the primary
 runtime boundary. Generated methods should call
-`htmlml_engine_evaluate_json` asynchronously, retain JavaScript objects through
+`webscene_engine_evaluate_json` asynchronously, retain JavaScript objects through
 isolate-local handles, and map JavaScript promises to `ValueTask<T>`.
 
 TradingView is a good candidate because its licensed package contains
 `charting_library/charting_library.d.ts` for the widget API and
-`charting_library/datafeed-api.d.ts` for the datafeed API. HtmlML must consume
+`charting_library/datafeed-api.d.ts` for the datafeed API. WebScene must consume
 these files from the application's local licensed copy; it must not redistribute
 them.
 
@@ -23,7 +23,7 @@ licensed charting_library.d.ts
  TypeScript compiler + type checker
               |
               v
- normalized complete HtmlML type graph
+ normalized complete WebScene type graph
               +
  editable library policy
               |
@@ -37,7 +37,7 @@ licensed charting_library.d.ts
  NativeJavaScriptInvoker
               |
               v
- htmlml_engine_evaluate_json -> native V8 isolate
+ webscene_engine_evaluate_json -> native V8 isolate
 ```
 
 The TypeScript compiler stage is intentionally separate from Roslyn. A regular
@@ -47,15 +47,15 @@ generator also should not start Node as a compiler side effect. The TypeScript
 stage therefore writes a deterministic JSON manifest before C# compilation;
 the incremental generator consumes that manifest as an `AdditionalFile`.
 
-`htmlml-interop-discover` is the first-stage proof:
+`webscene-interop-discover` is the first-stage proof:
 
 ```bash
-htmlml-interop-discover \
+webscene-interop-discover \
   --declarations /licensed/charting_library/charting_library.d.ts \
   --declarations /licensed/charting_library/datafeed-api.d.ts \
-  --output obj/tradingview.htmlml-interop-api.json \
+  --output obj/tradingview.webscene-interop-api.json \
   --report-output obj/tradingview.coverage.json \
-  --policy-output tradingview.htmlml-interop-policy.json \
+  --policy-output tradingview.webscene-interop-policy.json \
   --namespace MyApplication.TradingView \
   --fail-on-fallbacks
 ```
@@ -78,19 +78,19 @@ For an end-to-end license-holder validation, the repository provides one
 strict command that discovers every surface and compiles the resulting C#:
 
 ```bash
-node tooling/htmlml/interop-validate.mjs \
+node tooling/webscene/interop-validate.mjs \
   --declarations /licensed/charting_library/charting_library.d.ts \
   --declarations /licensed/charting_library/datafeed-api.d.ts \
   --output-dir obj/tradingview-validation \
   --name TradingView \
   --namespace MyApplication.TradingView \
-  --compile-project tests/HtmlML.JavaScript.Interop.Generator.Compile/HtmlML.JavaScript.Interop.Generator.Compile.csproj \
+  --compile-project tests/WebScene.JavaScript.Interop.Generator.Compile/WebScene.JavaScript.Interop.Generator.Compile.csproj \
   --no-restore
 ```
 
 The command generates an all-surface policy for the breadth gate. For a
 maintained application policy, pass
-`--policy-input MyApplication.TradingView.htmlml-interop-policy.json`.
+`--policy-input MyApplication.TradingView.webscene-interop-policy.json`.
 Fingerprint drift then fails explicitly and requires a policy review. Discovery
 fallbacks also fail by default; `--allow-fallbacks` is an explicit,
 review-required escape hatch.
@@ -100,14 +100,14 @@ wiring:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="HtmlML.JavaScript.Interop" Version="..." />
-  <PackageReference Include="HtmlML.JavaScript.Interop.Generator"
+  <PackageReference Include="WebScene.JavaScript.Interop" Version="..." />
+  <PackageReference Include="WebScene.JavaScript.Interop.Generator"
                     Version="..."
                     PrivateAssets="all" />
 </ItemGroup>
 <PropertyGroup>
-  <HtmlMLInteropApiManifest>Interop/TradingView.htmlml-interop-api.json</HtmlMLInteropApiManifest>
-  <HtmlMLInteropPolicy>Interop/TradingView.htmlml-interop-policy.json</HtmlMLInteropPolicy>
+  <WebSceneInteropApiManifest>Interop/TradingView.webscene-interop-api.json</WebSceneInteropApiManifest>
+  <WebSceneInteropPolicy>Interop/TradingView.webscene-interop-policy.json</WebSceneInteropPolicy>
 </PropertyGroup>
 ```
 
@@ -166,7 +166,7 @@ A small application-owned policy file is still required:
 - whether an object-shaped type is serialized data or a live JavaScript object;
 - callback ownership and event unsubscription policy;
 - overrides for intentionally dynamic `any`/`unknown` values, recursive
-  conditional types, and APIs that the native HtmlML browser profile does not
+  conditional types, and APIs that the native WebScene browser profile does not
   support.
 
 Unsupported or ambiguous shapes must produce generator diagnostics. They must
@@ -176,7 +176,7 @@ When several live union branches are represented by the same opaque object
 handle, the runtime cannot infer which TypeScript interface the object
 implements. The generator preserves those branches as
 `JavaScriptObjectReference`, preserves distinguishable JSON branches in the
-same union, and emits `HTMLMLJS003`. A policy mapping can replace the raw
+same union, and emits `WEBSCENEJS003`. A policy mapping can replace the raw
 handle when the library supplies a reliable discriminator.
 
 The policy format is library-independent. Applications can keep policies
@@ -201,7 +201,7 @@ owns:
 
 All user values and member names are JSON encoded. Generated code does not
 concatenate user input into executable JavaScript. `NativeJavaScriptInvoker`
-accepts the existing `NativeHtmlMlView.EvaluateJsonAsync` method directly:
+accepts the existing `NativeWebSceneView.EvaluateJsonAsync` method directly:
 
 ```csharp
 var interop = new NativeJavaScriptInvoker(view.EvaluateJsonAsync);

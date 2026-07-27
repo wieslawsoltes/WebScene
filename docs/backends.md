@@ -1,6 +1,6 @@
 # Managed and native backends
 
-HtmlML supports two engine modes. They share portable value types, capability names,
+WebScene supports two engine modes. They share portable value types, capability names,
 backend manifests, component-profile contracts, and a managed/native conformance suite.
 They do not yet share every host and renderer implementation.
 
@@ -8,13 +8,13 @@ They do not yet share every host and renderer implementation.
 
 | | Managed engine | Native engine |
 | --- | --- | --- |
-| JavaScript | ClearScript/V8 | V8 linked into the native HtmlML runtime |
+| JavaScript | ClearScript/V8 | V8 linked into the native WebScene runtime |
 | DOM, CSS, layout | Managed objects | Native engine thread |
 | Presentation today | Avalonia controls and drawing | Immutable native scene projected by a host renderer |
 | Application API calls | Direct managed APIs and ClearScript | Ordered command/evaluation calls on the engine queue |
 | Main strength | Compatibility, diagnostics, and straightforward .NET extension | Hot DOM/Canvas calls stay inside V8/native code; UI thread receives immutable scene diffs |
 | Main cost | Fine-grained JavaScript-to-managed calls can dominate component hot paths | A larger native distribution and a still-maturing compatibility surface |
-| Recommended use | General HtmlML applications and compatibility fallback | Opt-in workloads that have passed the native capability and performance gates |
+| Recommended use | General WebScene applications and compatibility fallback | Opt-in workloads that have passed the native capability and performance gates |
 
 Both modes remain first class. An application must select a mode explicitly; a native
 test failure is not hidden by silently falling back to managed mode.
@@ -23,14 +23,14 @@ test failure is not hidden by silently falling back to managed mode.
 
 The reference managed stack consists of:
 
-- `HtmlML.Core` for portable backend contracts and value types;
-- `HtmlML.Backend.Abstractions` for backend manifests and capability validation;
-- `HtmlML.Backend.Avalonia` for the current presentation implementation;
+- `WebScene.Core` for portable backend contracts and value types;
+- `WebScene.Backend.Abstractions` for backend manifests and capability validation;
+- `WebScene.Backend.Avalonia` for the current presentation implementation;
 - `JavaScript.Avalonia.ClearScript` for ClearScript/V8 execution, module loading,
   virtual frames, and the persistent compilation-unit cache.
 
 The managed DOM and presentation implementation is still coupled to Avalonia. In
-particular, `HtmlML.Backend.Avalonia` currently owns the implementation sources rather
+particular, `WebScene.Backend.Avalonia` currently owns the implementation sources rather
 than consuming a fully extracted, UI-neutral managed engine coordinator.
 
 ## Native backend
@@ -43,9 +43,9 @@ tables without converting the scene into a per-frame managed object graph.
 The native NuGet packages are RID-specific:
 
 ```xml
-<PackageReference Include="HtmlML.NativeEngine.Runtime.osx-arm64" Version="VERSION" />
-<PackageReference Include="HtmlML.NativeEngine.Runtime.linux-x64" Version="VERSION" />
-<PackageReference Include="HtmlML.NativeEngine.Runtime.win-x64" Version="VERSION" />
+<PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="VERSION" />
+<PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="VERSION" />
+<PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="VERSION" />
 ```
 
 Each package contains the native module, colocated V8 ICU data, third-party notices,
@@ -68,8 +68,8 @@ portable contracts, but it is not yet a turnkey backend SDK for Uno, WPF, or Pro
 
 Already portable and reusable:
 
-- `IHtmlMlBackendHost`, node handles, geometry, visibility, hit-test, invalidation,
-  and capability contracts in `HtmlML.Core`;
+- `IWebSceneBackendHost`, node handles, geometry, visibility, hit-test, invalidation,
+  and capability contracts in `WebScene.Core`;
 - backend manifest validation and capability negotiation;
 - portable DOM, CSS/layout, graphics, JavaScript, and component-profile contracts;
 - the managed/native conformance profile and deterministic test fixtures;
@@ -78,11 +78,11 @@ Already portable and reusable:
 Still required before claiming production-ready third-party implementations:
 
 1. Extract the managed DOM/CSS/layout coordinator from the Avalonia implementation so
-   it depends only on `IHtmlMlBackendHost`.
+   it depends only on `IWebSceneBackendHost`.
 2. Publish a managed native-engine host/ABI package with safe scene handles, typed
    read-only scene views, queueing, diagnostics, and lifetime validation. The current
    native adapter in the conformance runner is test-local.
-3. Move the production Avalonia native scene projector into a reusable HtmlML backend
+3. Move the production Avalonia native scene projector into a reusable WebScene backend
    package instead of leaving renderer orchestration to an application.
 4. Publish the backend conformance kit so an external package can run the same managed
    and native fixtures without copying test adapters.
@@ -105,9 +105,9 @@ WPF, or ProGPU support.
 Run the portable contract and architecture gates with:
 
 ```bash
-dotnet test tests/HtmlML.Core.Tests/HtmlML.Core.Tests.csproj -c Release
-dotnet test tests/HtmlML.Backend.Abstractions.Tests/HtmlML.Backend.Abstractions.Tests.csproj -c Release
-dotnet test tests/HtmlML.Architecture.Tests/HtmlML.Architecture.Tests.csproj -c Release
+dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release
+dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj -c Release
+dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release
 ```
 
 Run the native package build on a matching host with:
@@ -138,7 +138,7 @@ Manual runs can stop after verification. A tag named `vVERSION` publishes only w
 Configure the protected `nuget.org` GitHub environment with either:
 
 - `NUGET_USER` and a matching nuget.org trusted-publishing policy for repository
-  `wieslawsoltes/HtmlML`, workflow `native-runtime-packages.yml`, environment
+  `wieslawsoltes/WebScene`, workflow `native-runtime-packages.yml`, environment
   `nuget.org`; or
 - the legacy `NUGET_API_KEY` secret.
 

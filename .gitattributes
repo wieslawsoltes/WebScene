@@ -5,4 +5,4 @@
 # These files are compared or applied byte-for-byte on every build host.
 tests/WebPlatformSubset/upstream/** text eol=lf
 third-party/clearscript/V8/*.txt text eol=lf
-packaging/HtmlML.NativeEngine.Runtime/patches/*.txt text eol=lf
+packaging/WebScene.NativeEngine.Runtime/patches/*.txt text eol=lf

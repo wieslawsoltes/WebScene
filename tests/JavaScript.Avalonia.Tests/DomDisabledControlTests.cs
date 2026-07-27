@@ -75,7 +75,7 @@ public sealed class DomDisabledControlTests
                 input.disabled = true;
                 HostTestUtilities.GetElement(host.Document.body).appendChild(input);
                 var clicks = new CountingEventListener();
-                input.__htmlMlAddExternalEventListener("click", clicks, capture: false, once: false, passive: false);
+                input.__webSceneAddExternalEventListener("click", clicks, capture: false, once: false, passive: false);
                 host.Document.EnsureStylesCurrent();
                 Dispatcher.UIThread.RunJobs();
 

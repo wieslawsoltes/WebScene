@@ -124,7 +124,7 @@ public sealed class DomFocusEventTests
         string type,
         List<FocusSnapshot> events,
         AvaloniaDomDocument document)
-        => element.__htmlMlAddExternalEventListener(
+        => element.__webSceneAddExternalEventListener(
             type,
             new RecordingFocusListener(events, document),
             capture: false,

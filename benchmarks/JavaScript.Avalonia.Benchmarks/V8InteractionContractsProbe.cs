@@ -15,7 +15,7 @@ internal static class V8InteractionContractsProbe
 {
     private const string IntersectionObserverScript = """
         (function () {
-          const state = globalThis.__htmlMlIntersectionState = {
+          const state = globalThis.__webSceneIntersectionState = {
             available: typeof IntersectionObserver === 'function',
             deliveries: 0,
             entered: false,
@@ -136,7 +136,7 @@ internal static class V8InteractionContractsProbe
                 "document.body.appendChild(iframe);" +
                 "iframe.src = URL.createObjectURL(new Blob([" + JsonSerializer.Serialize(frameMarkup) +
                 "], { type: 'text/html' }));" +
-                "window.__htmlMlInteractionContractFrame = iframe;",
+                "window.__webSceneInteractionContractFrame = iframe;",
                 "v8-interaction-contract-frame-owner.js");
 
             var timeout = Stopwatch.StartNew();
@@ -145,12 +145,12 @@ internal static class V8InteractionContractsProbe
                 Thread.Sleep(8);
                 Dispatcher.UIThread.RunJobs();
                 var ownerDone = Convert.ToBoolean(runtime.Engine.Evaluate(
-                    "Boolean(window.__htmlMlIntersectionState && window.__htmlMlIntersectionState.done)"));
+                    "Boolean(window.__webSceneIntersectionState && window.__webSceneIntersectionState.done)"));
                 var frameDone = Convert.ToBoolean(runtime.Engine.Evaluate(
-                    "Boolean(window.__htmlMlInteractionContractFrame && " +
-                    "window.__htmlMlInteractionContractFrame.contentWindow && " +
-                    "window.__htmlMlInteractionContractFrame.contentWindow.__htmlMlIntersectionState && " +
-                    "window.__htmlMlInteractionContractFrame.contentWindow.__htmlMlIntersectionState.done)"));
+                    "Boolean(window.__webSceneInteractionContractFrame && " +
+                    "window.__webSceneInteractionContractFrame.contentWindow && " +
+                    "window.__webSceneInteractionContractFrame.contentWindow.__webSceneIntersectionState && " +
+                    "window.__webSceneInteractionContractFrame.contentWindow.__webSceneIntersectionState.done)"));
                 if (ownerDone && frameDone)
                 {
                     break;
@@ -166,9 +166,9 @@ internal static class V8InteractionContractsProbe
             Dispatcher.UIThread.RunJobs();
 
             var ownerJson = Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(window.__htmlMlIntersectionState)")) ?? "{}";
+                "JSON.stringify(window.__webSceneIntersectionState)")) ?? "{}";
             var frameJson = Convert.ToString(runtime.Engine.Evaluate(
-                "JSON.stringify(window.__htmlMlInteractionContractFrame.contentWindow.__htmlMlIntersectionState)")) ?? "{}";
+                "JSON.stringify(window.__webSceneInteractionContractFrame.contentWindow.__webSceneIntersectionState)")) ?? "{}";
             var ownerPassed = IntersectionStatePassed(ownerJson);
             var framePassed = IntersectionStatePassed(frameJson);
             Console.WriteLine(

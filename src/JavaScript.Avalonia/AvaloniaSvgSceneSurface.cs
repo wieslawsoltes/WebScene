@@ -2,12 +2,12 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using HtmlML.Core;
+using WebScene.Core;
 
 namespace JavaScript.Avalonia;
 
 /// <summary>Avalonia replay adapter for the portable retained SVG scene model.</summary>
-internal sealed class AvaloniaSvgSceneSurface : Control, IHtmlMlSvgSceneRenderer, IDomInfrastructureControl
+internal sealed class AvaloniaSvgSceneSurface : Control, IWebSceneSvgSceneRenderer, IDomInfrastructureControl
 {
     private SvgScene? _scene;
     private Func<SvgScene>? _sceneProvider;
@@ -32,7 +32,7 @@ internal sealed class AvaloniaSvgSceneSurface : Control, IHtmlMlSvgSceneRenderer
         InvalidateVisual();
     }
 
-    public void Render(SvgScene scene, HtmlMlSize surfaceSize)
+    public void Render(SvgScene scene, WebSceneSize surfaceSize)
     {
         _scene = scene ?? throw new ArgumentNullException(nameof(scene));
         Width = surfaceSize.Width;

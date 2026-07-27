@@ -13,7 +13,7 @@ backend to parse the source independently.
 ## Decision
 
 Canvas state and operations cross engine/backend boundaries as versioned numeric
-packets plus packet-local strings. `IHtmlMlCanvasPacketSink` is the initial typed seam;
+packets plus packet-local strings. `IWebSceneCanvasPacketSink` is the initial typed seam;
 the existing V8 batching protocol remains the reference. Capacity is reserved before
 string interning and replay validates headers, counts, lengths and indices.
 

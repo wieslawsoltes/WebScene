@@ -4,7 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Threading;
-using HtmlML.Core;
+using WebScene.Core;
 using System.Net;
 using System.Net.Http.Headers;
 using Xunit;
@@ -70,7 +70,7 @@ public sealed class HostServiceSeamTests
 
         Assert.Same(window, host.Services.RootHandle.GetRequired<TopLevel>());
         Assert.Same(element.Control, element.BackendHandle.GetRequired<Control>());
-        Assert.Equal(element.__htmlMlDomIdentity, element.DomNodeId.Value);
+        Assert.Equal(element.__webSceneDomIdentity, element.DomNodeId.Value);
         Assert.NotEqual(default, element.DomNodeId);
         Assert.True(host.Services.Dispatcher.CheckAccess());
         Assert.Equal(640, host.Services.Viewport.Metrics.ClientSize.Width);
@@ -92,10 +92,10 @@ public sealed class HostServiceSeamTests
         };
 
         var inline = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 "data:text/plain,hello%20portable%20runtime",
                 null,
-                HtmlMlResourceKind.Data));
+                WebSceneResourceKind.Data));
         var script = host.ResolveExternalScript("module-mutation-observer.js");
 
         Assert.Equal("hello portable runtime", inline.Content);
@@ -114,35 +114,35 @@ public sealed class HostServiceSeamTests
         };
 
         var base64 = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 "data:text/plain;base64,cG9ydGFibGU=",
                 null,
-                HtmlMlResourceKind.Data));
+                WebSceneResourceKind.Data));
         var extensionFallback = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 Path.Combine(fixtureDirectory, "module-mutation-observer"),
                 null,
-                HtmlMlResourceKind.Script));
+                WebSceneResourceKind.Script));
         var rootedBase = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 "module-mutation-observer.js",
                 Path.Combine(fixtureDirectory, "base.js"),
-                HtmlMlResourceKind.Script));
+                WebSceneResourceKind.Script));
         var relativeBase = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 "module-mutation-observer.js",
                 Path.Combine("Fixtures", "base.js"),
-                HtmlMlResourceKind.Script));
+                WebSceneResourceKind.Script));
         var absoluteBase = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
+            new WebSceneResourceRequest(
                 "module-mutation-observer.js",
                 new Uri(Path.Combine(fixtureDirectory, "base.js")).AbsoluteUri,
-                HtmlMlResourceKind.Script));
+                WebSceneResourceKind.Script));
         var packagedHttp = host.Services.Resources.LoadText(
-            new HtmlMlResourceRequest(
-                "https://htmlml.invalid/assets/module-mutation-observer.js",
+            new WebSceneResourceRequest(
+                "https://webscene.invalid/assets/module-mutation-observer.js",
                 null,
-                HtmlMlResourceKind.Script));
+                WebSceneResourceKind.Script));
 
         Assert.Equal("portable", base64.Content);
         Assert.Equal(extensionFallback.Content, rootedBase.Content);
@@ -151,16 +151,16 @@ public sealed class HostServiceSeamTests
         Assert.Equal(absoluteBase.Content, packagedHttp.Content);
         Assert.Throws<ArgumentException>(
             () => host.Services.Resources.LoadText(
-                new HtmlMlResourceRequest(" ", null, HtmlMlResourceKind.Data)));
+                new WebSceneResourceRequest(" ", null, WebSceneResourceKind.Data)));
         Assert.Throws<FormatException>(
             () => host.Services.Resources.LoadText(
-                new HtmlMlResourceRequest("data:text/plain", null, HtmlMlResourceKind.Data)));
+                new WebSceneResourceRequest("data:text/plain", null, WebSceneResourceKind.Data)));
         Assert.Throws<FileNotFoundException>(
             () => host.Services.Resources.LoadText(
-                new HtmlMlResourceRequest("missing-resource.js", null, HtmlMlResourceKind.Script)));
+                new WebSceneResourceRequest("missing-resource.js", null, WebSceneResourceKind.Script)));
         Assert.Throws<NotSupportedException>(
             () => host.Services.Resources.LoadText(
-                new HtmlMlResourceRequest("ftp://htmlml.invalid/file.js", null, HtmlMlResourceKind.Script)));
+                new WebSceneResourceRequest("ftp://webscene.invalid/file.js", null, WebSceneResourceKind.Script)));
     }
 
     [AvaloniaFact]
@@ -170,11 +170,11 @@ public sealed class HostServiceSeamTests
         using var host = new AvaloniaBrowserHost(window);
         var calls = new List<string>();
 
-        host.Services.Dispatcher.Post(() => calls.Add("send"), HtmlMlDispatchPriority.Send);
+        host.Services.Dispatcher.Post(() => calls.Add("send"), WebSceneDispatchPriority.Send);
         using var canceled = host.Services.Dispatcher.Schedule(
             TimeSpan.FromMilliseconds(1),
             () => calls.Add("canceled"),
-            HtmlMlDispatchPriority.Background);
+            WebSceneDispatchPriority.Background);
         canceled.Cancel();
         Dispatcher.UIThread.RunJobs();
 
@@ -190,8 +190,8 @@ public sealed class HostServiceSeamTests
         var calls = new List<string>();
 
         host.Services.Dispatcher.VerifyAccess();
-        host.Services.Dispatcher.Post(() => calls.Add("input"), HtmlMlDispatchPriority.Input);
-        host.Services.Dispatcher.Post(() => calls.Add("render"), HtmlMlDispatchPriority.Render);
+        host.Services.Dispatcher.Post(() => calls.Add("input"), WebSceneDispatchPriority.Input);
+        host.Services.Dispatcher.Post(() => calls.Add("render"), WebSceneDispatchPriority.Render);
         host.Services.Dispatcher.Post(() => calls.Add("default"));
         using var scheduled = host.Services.Dispatcher.Schedule(
             TimeSpan.FromMilliseconds(-1),
@@ -217,10 +217,10 @@ public sealed class HostServiceSeamTests
         Dispatcher.UIThread.RunJobs();
         var host = new AvaloniaBrowserHost(window);
         var services = host.Services;
-        var viewportChanges = new List<HtmlMlViewportChangedEventArgs>();
-        var textInputs = new List<HtmlMlTextInputEventArgs>();
-        var keyboardInputs = new List<HtmlMlKeyboardInputEventArgs>();
-        var pointerInputs = new List<HtmlMlPointerInputEventArgs>();
+        var viewportChanges = new List<WebSceneViewportChangedEventArgs>();
+        var textInputs = new List<WebSceneTextInputEventArgs>();
+        var keyboardInputs = new List<WebSceneKeyboardInputEventArgs>();
+        var pointerInputs = new List<WebScenePointerInputEventArgs>();
         services.Viewport.Changed += (_, args) => viewportChanges.Add(args);
         services.Input.TextInput += (_, args) =>
         {
@@ -286,9 +286,9 @@ public sealed class HostServiceSeamTests
         Assert.True(keyboardInputs[0].ControlKey);
         Assert.True(keyboardInputs[0].ShiftKey);
         var normalizedPointer = Assert.Single(pointerInputs);
-        Assert.Equal(HtmlMlPointerEventKind.Pressed, normalizedPointer.Kind);
-        Assert.Equal(HtmlMlPointerType.Mouse, normalizedPointer.PointerType);
-        Assert.Equal(new HtmlMlPoint(12, 18), normalizedPointer.Position);
+        Assert.Equal(WebScenePointerEventKind.Pressed, normalizedPointer.Kind);
+        Assert.Equal(WebScenePointerType.Mouse, normalizedPointer.PointerType);
+        Assert.Equal(new WebScenePoint(12, 18), normalizedPointer.Position);
         Assert.Equal(0, normalizedPointer.Button);
         Assert.Equal(1, normalizedPointer.Buttons);
         Assert.True(normalizedPointer.AltKey);
