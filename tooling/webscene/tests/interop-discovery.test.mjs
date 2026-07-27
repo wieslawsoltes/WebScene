@@ -66,7 +66,7 @@ test('committed TradingView proof manifest matches its declaration fixture', asy
     new URL('TradingViewApi.webscene-interop-api.json', sample),
     'utf8'));
   const actual = await discoverInteropSurface(
-    [declarations.pathname],
+    [fileURLToPath(declarations)],
     [
       'Charting_Library.widget',
       'Charting_Library.IChartWidgetApi',
@@ -84,7 +84,7 @@ test('discovers the complete TradingView-shaped type graph without hand-picked r
   const declarations = new URL(
     '../../../samples/TradingViewInterop.Generated/TradingViewApi.fixture.d.ts',
     import.meta.url);
-  const result = await discoverInteropSurface([declarations.pathname]);
+  const result = await discoverInteropSurface([fileURLToPath(declarations)]);
 
   assert.ok(result.types.length >= 30);
   assert.equal(result.roots.length, result.types.length);
@@ -270,7 +270,7 @@ test('scaffolds collision-free names and one canonical inbound overload', async 
   const declarations = new URL(
     '../../../tests/WebScene.JavaScript.Interop.Generator.Compile/GeneratorCapabilities.fixture.d.ts',
     import.meta.url);
-  const result = await discoverInteropSurface([declarations.pathname]);
+  const result = await discoverInteropSurface([fileURLToPath(declarations)]);
   const policy = configureInteropPolicy(
     scaffoldInteropPolicy(result, 'GeneratorCapabilities.Generated'),
     {
