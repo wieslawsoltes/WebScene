@@ -7,8 +7,10 @@
 <p align="center"><strong>Web components. Native performance.</strong></p>
 
 <p align="center">
-  Bring React, TypeScript, and JavaScript components into native application frameworks.
+  Bring React, TypeScript, and JavaScript components into native application frameworks—<strong>without a WebView or embedded browser.</strong>
 </p>
+
+<p align="center"><strong>No WebView · No embedded browser · No Chromium · No Electron</strong></p>
 
 <table align="center">
   <tr>
@@ -42,9 +44,9 @@
 
 ## Positioning
 
-**WebScene brings packaged web components into native application frameworks—including Avalonia, Uno Platform, WPF, WinUI, and Flutter.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
+**WebScene brings packaged web components into native application frameworks—including Avalonia, Uno Platform, WPF, WinUI, and Flutter—without embedding a browser.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
 
-WebScene is not a browser and does not embed Chromium, WebKit, Electron, or a WebView. Its native engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. The result is a browser-shaped component model backed by native rendering and application composition.
+**It is not a WebView, browser control, or embedded browser.** WebScene does not ship Chromium, WebKit, Electron, or a hidden browser process. Its native engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. The result is a browser-shaped component model backed by native rendering and application composition.
 
 The platform is designed for trusted, versioned, offline component bundles and application-owned experiences—not arbitrary websites or full browser compatibility. Avalonia is the reference implementation today; Uno Platform and Flutter provide integration proofs, while WPF and WinUI are planned presenters built on the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
 
@@ -66,6 +68,7 @@ This restriction is defined in the repository [LICENSE](LICENSE).
 
 ## Highlights
 
+- 🪶 **No embedded browser**: Deliver web-authored components without a WebView, Chromium/WebKit runtime, Electron shell, or hidden browser process.
 - 🚀 **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread and publish immutable, damage-aware scene diffs to a framework-native presenter.
 - ⚡ **Native application composition**: Combine web components with XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
 - 🧩 **Component hosting**: Mount versioned, offline React/TypeScript/JavaScript bundles through an engine-neutral component profile and framework host.
