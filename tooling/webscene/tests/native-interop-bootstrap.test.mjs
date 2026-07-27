@@ -23,7 +23,9 @@ test('native interop bootstrap separates JSON values from retained objects', asy
       plainValue: () => ({ value: 9 }),
       liveArray: () => [new Map([["id", 1]]), new Map([["id", 2]])],
       version: "1.2.3",
-      current: new Map([["active", true]])
+      current: new Map([["active", true]]),
+      pending: null,
+      plainObject: { active: true }
     };
   `, context);
   const bridge = context.__webSceneDotNetInterop;
@@ -53,6 +55,11 @@ test('native interop bootstrap separates JSON values from retained objects', asy
   assert.equal(bridge.getGlobalValue('TestLibrary.version'), '1.2.3');
   assert.ok(Number.isInteger(
     bridge.getGlobalObject('TestLibrary.current')));
+  assert.equal(
+    bridge.getOptionalGlobalObject('TestLibrary.pending'),
+    null);
+  assert.ok(Number.isInteger(
+    bridge.getOptionalGlobalObject('TestLibrary.plainObject')));
   const liveArray = bridge.invokeGlobalValue(
     'TestLibrary.liveArray',
     '[]');

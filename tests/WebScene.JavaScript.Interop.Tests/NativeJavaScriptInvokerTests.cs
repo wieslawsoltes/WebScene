@@ -221,6 +221,29 @@ public sealed class NativeJavaScriptInvokerTests
     }
 
     [Fact]
+    public async Task RetainsNullableGlobalObjectsWithoutJsonShaping()
+    {
+        await VerifyAsync("null", null);
+        await VerifyAsync("42", 42L);
+
+        static async Task VerifyAsync(string response, long? expectedHandle)
+        {
+        var invoker = new NativeJavaScriptInvoker((source, document, _) =>
+            Task.FromResult(document switch
+            {
+                "webscene-native-dotnet-interop.js" => "true",
+                "webscene-interop-get-optional-global-object.js" => response,
+                _ => throw new InvalidOperationException(document)
+            }));
+
+        var result = await invoker.GetGlobalAsync<JavaScriptObjectReference?>(
+            "Library.optionalWidget");
+
+        Assert.Equal(expectedHandle, result?.Id);
+        }
+    }
+
+    [Fact]
     public async Task ReturnedFunctionReferencesCanBeInvokedAndReleased()
     {
         var evaluations = new List<(string Source, string Document)>();

@@ -127,6 +127,12 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
             getGlobalObject(path) {
               return keep(globalValue(path));
             },
+            getOptionalGlobalObject(path) {
+              const value = globalValue(path);
+              return value === null || value === undefined
+                ? null
+                : keep(value);
+            },
             getGlobalValue(path) {
               return encodeCallbackValue(globalValue(path));
             },
@@ -407,6 +413,22 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
     {
         ValidateGlobalName(globalName);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        if (typeof(T) == typeof(JavaScriptObjectReference)
+            || Nullable.GetUnderlyingType(typeof(T))
+                == typeof(JavaScriptObjectReference))
+        {
+            var referenceJson = await EvaluateAsync(
+                $"globalThis.__webSceneDotNetInterop.getOptionalGlobalObject({JsonSerializer.Serialize(globalName)})",
+                "webscene-interop-get-optional-global-object.js",
+                cancellationToken).ConfigureAwait(false);
+            var handle = Deserialize<long?>(referenceJson);
+            if (handle is null)
+            {
+                return default;
+            }
+            object reference = new JavaScriptObjectReference(handle.Value);
+            return (T)reference;
+        }
         var json = await EvaluateAsync(
             $"globalThis.__webSceneDotNetInterop.getGlobalValue({JsonSerializer.Serialize(globalName)})",
             "webscene-interop-get-global-value.js",
