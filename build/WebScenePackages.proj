@@ -47,12 +47,16 @@
     <Error Condition="'$(WebScenePackageVersion)' == ''"
            Text="WebScenePackageVersion could not be resolved." />
     <MakeDir Directories="$(PackageOutputPath)" />
+    <MSBuild Projects="@(_WebSceneManagedPackageProject);@(_WebSceneNoSymbolsPackageProject)"
+             Targets="Restore"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);PackageVersion=$(WebScenePackageVersion);ContinuousIntegrationBuild=$(ContinuousIntegrationBuild);WebSceneClearScriptNativeRequired=false;WebSceneClearScriptNativeRid=" />
     <MSBuild Projects="@(_WebSceneManagedPackageProject)"
-             Targets="Restore;Pack"
+             Targets="Pack"
              BuildInParallel="false"
              Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);IncludeSymbols=true;SymbolPackageFormat=snupkg;ContinuousIntegrationBuild=$(ContinuousIntegrationBuild);WebSceneClearScriptNativeRequired=false;WebSceneClearScriptNativeRid=" />
     <MSBuild Projects="@(_WebSceneNoSymbolsPackageProject)"
-             Targets="Restore;Pack"
+             Targets="Pack"
              BuildInParallel="false"
              Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);IncludeSymbols=false;ContinuousIntegrationBuild=$(ContinuousIntegrationBuild)" />
     <ItemGroup>
