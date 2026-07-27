@@ -218,6 +218,29 @@ test('separates exported roots from private dependency declarations', async () =
     ['createApi']);
 });
 
+test('bounds recursive anonymous callback graphs without overflowing the type walker', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'webscene-interop-recursive-callback-'));
+  const declarations = join(root, 'workflow.d.ts');
+  await writeFile(declarations, `
+    export type RecursiveHandler<T> = (
+      state: { next?: RecursiveHandler<T>; value: T }
+    ) => RecursiveHandler<T>;
+    export interface WorkflowHost {
+      attach(handler: RecursiveHandler<{ id: string }>): void;
+    }
+  `);
+
+  const result = await discoverInteropSurface([declarations]);
+  const coverage = createInteropCoverageReport(result);
+  const host = result.types.find(
+    type => type.qualifiedName === 'WorkflowHost');
+
+  assert.equal(host.methods[0].parameters[0].type.kind, 'callback');
+  assert.ok(coverage.callbacks >= 1);
+  assert.ok(coverage.fallbacks.some(
+    fallback => fallback.text.includes('RecursiveHandler')));
+});
+
 test('strict discovery fails when a declaration requires an untyped fallback', async () => {
   const root = await mkdtemp(join(tmpdir(), 'webscene-interop-strict-'));
   const declarations = join(root, 'unsupported.d.ts');

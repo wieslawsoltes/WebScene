@@ -844,7 +844,7 @@ function describeConstructors(symbol, checker) {
     declaration);
 }
 
-function describeSignatures(signatures, checker, fallbackDeclaration) {
+function describeSignatures(signatures, checker, fallbackDeclaration, seen = new Set()) {
   return signatures.map(signature => ({
     typeParameters: signature.typeParameters?.map(parameter =>
       parameter.symbol?.getName() ?? checker.typeToString(parameter)) ?? [],
@@ -860,10 +860,11 @@ function describeSignatures(signatures, checker, fallbackDeclaration) {
           checker.getTypeOfSymbolAtLocation(
             parameter,
             parameterDeclaration ?? fallbackDeclaration),
-          checker)
+          checker,
+          seen)
       };
     }),
-    returns: describeType(checker.getReturnTypeOfSignature(signature), checker)
+    returns: describeType(checker.getReturnTypeOfSignature(signature), checker, seen)
   }));
 }
 
@@ -881,7 +882,7 @@ function describeIndexSignatures(type, checker) {
 }
 
 function describeType(type, checker, seen = new Set()) {
-  if (type.isThisType || checker.typeToString(type) === 'this') return { kind: 'this' };
+  if (type.isThisType) return { kind: 'this' };
   if (type.flags & ts.TypeFlags.String) return { kind: 'string' };
   if (type.flags & ts.TypeFlags.TemplateLiteral) return { kind: 'string' };
   if (type.flags & ts.TypeFlags.Number) return { kind: 'number' };
@@ -923,10 +924,7 @@ function describeType(type, checker, seen = new Set()) {
       kind: 'reference',
       name: declaredAliasName,
       qualifiedName: qualifiedName(declaredAlias),
-      display: checker.typeToString(
-        type,
-        undefined,
-        ts.TypeFormatFlags.NoTruncation),
+      display: safeTypeDisplay(type, checker, declaredAliasName),
       typeArguments: aliasArguments.map(item =>
         describeType(item, checker, new Set([...seen, declaredAlias])))
     };
@@ -1019,15 +1017,26 @@ function describeType(type, checker, seen = new Set()) {
 
   const callSignatures = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   if (callSignatures.length) {
+    const identity = typeIdentity(type);
+    if (seen.has(identity)) {
+      return {
+        kind: 'display',
+        text: safeTypeDisplay(type, checker, symbolName ?? 'recursive callback')
+      };
+    }
     return {
       kind: 'callback',
       name: symbolName === '__type' ? null : symbolName ?? null,
       qualifiedName: symbolName === '__type' ? null : symbol ? qualifiedName(symbol) : null,
-      signatures: describeSignatures(callSignatures, checker, symbol?.valueDeclaration)
+      signatures: describeSignatures(
+        callSignatures,
+        checker,
+        symbol?.valueDeclaration,
+        new Set([...seen, identity]))
     };
   }
 
-  const display = checker.typeToString(type, undefined, ts.TypeFormatFlags.NoTruncation);
+  const display = safeTypeDisplay(type, checker, symbolName ?? 'anonymous');
   if (symbolName && symbolName !== '__type' && !seen.has(symbol)) {
     return {
       kind: 'reference',
@@ -1046,6 +1055,14 @@ function describeType(type, checker, seen = new Set()) {
 }
 
 function describeInlineObject(type, checker, seen) {
+  const identity = typeIdentity(type);
+  if (seen.has(identity)) {
+    return {
+      kind: 'display',
+      text: safeTypeDisplay(type, checker, 'recursive object')
+    };
+  }
+  const nestedSeen = new Set([...seen, identity]);
   return {
     kind: 'inlineObject',
     properties: (type.getProperties?.() ?? []).map(property => {
@@ -1057,11 +1074,27 @@ function describeInlineObject(type, checker, seen) {
         type: describeType(
           checker.getTypeOfSymbolAtLocation(property, declaration),
           checker,
-          seen)
+          nestedSeen)
       };
     }),
     indexSignatures: describeIndexSignatures(type, checker)
   };
+}
+
+function typeIdentity(type) {
+  return typeof type.id === 'number' ? `type:${type.id}` : type;
+}
+
+function safeTypeDisplay(type, checker, fallback) {
+  try {
+    return checker.typeToString(
+      type,
+      undefined,
+      ts.TypeFormatFlags.NoTruncation);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    return fallback;
+  }
 }
 
 function qualifiedName(symbol) {
