@@ -15900,7 +15900,8 @@ struct v8_dom_runtime::implementation final {
     {
         const auto& rule = css_rules[index];
         const auto& selector = rule.selector();
-        if (selector.find("::selection") != std::string::npos) {
+        if (selector.find("::-webkit-scrollbar") != std::string::npos
+            || selector.find("::selection") != std::string::npos) {
             return;
         }
         index_hover_selector_dependencies(rule);
@@ -17821,21 +17822,8 @@ struct v8_dom_runtime::implementation final {
         };
         if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
         if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar", 3); kind != 0) return kind;
         if (const auto kind = split_suffix(":before", 1); kind != 0) return kind;
         return split_suffix(":after", 2);
-    }
-
-    static void apply_scrollbar_css_declaration(
-        node_style& style,
-        const css_declaration& declaration)
-    {
-        if (declaration.name != "display"
-            || (style.scrollbar_visibility_important && !declaration.important)) {
-            return;
-        }
-        style.scrollbar_hidden = trim_css(declaration.value) == "none";
-        style.scrollbar_visibility_important = declaration.important;
     }
 
     static void append_utf8_codepoint(std::string& result, uint32_t codepoint)
@@ -20033,8 +20021,6 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         node.style.important_property_mask = 0;
-        node.style.scrollbar_hidden = false;
-        node.style.scrollbar_visibility_important = false;
         if ((node.style.inline_property_mask & inline_position) == 0U) {
             node.style.position = position_mode::normal;
         }
@@ -20293,12 +20279,6 @@ struct v8_dom_runtime::implementation final {
         // declarations so `::before { background:var(--active-bg) }` resolves
         // the state variable authored on the active element.
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
-                for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
-                }
-                continue;
-            }
             auto& pseudo = pseudo_kind == 1
                 ? node.style.mutable_before_pseudo()
                 : node.style.mutable_after_pseudo();
@@ -20412,12 +20392,6 @@ struct v8_dom_runtime::implementation final {
             }
         }
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
-                for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
-                }
-                continue;
-            }
             auto& pseudo = pseudo_kind == 1
                 ? node.style.mutable_before_pseudo()
                 : node.style.mutable_after_pseudo();

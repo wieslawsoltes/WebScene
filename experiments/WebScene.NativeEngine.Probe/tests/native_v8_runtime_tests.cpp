@@ -4670,9 +4670,6 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
           const style = document.createElement('style');
           style.textContent = `
             .scroller { width:160px; height:64px; overflow-x:hidden; }
-            .scroller.no-scrollbar::-webkit-scrollbar {
-              display:none; width:0; height:0;
-            }
             .row { height:32px; }
             .title { display:block; width:80px; overflow:hidden; white-space:nowrap;
               font-size:14px; line-height:18px; }
@@ -4775,44 +4772,6 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
     require(
         observed_scrollbar_rail && observed_scrollbar_thumb,
         "native overflow viewport did not paint a proportional scrollbar at its bounded maximum");
-
-    const auto hidden_scrollbar_state = evaluate(engine, R"JS(
-        (() => {
-          __overflowScroller.classList.add('no-scrollbar');
-          return {
-            scrollTop: __overflowScroller.scrollTop,
-            scrollHeight: __overflowScroller.scrollHeight
-          };
-        })()
-    )JS", "native-hidden-scrollbar-state.js");
-    require(
-        hidden_scrollbar_state == R"({"scrollTop":96,"scrollHeight":160})",
-        "hiding the scrollbar changed overflow geometry or scroll position: "
-            + hidden_scrollbar_state);
-
-    webscene_engine_request_scene_checkpoint(engine);
-    auto hidden_scrollbar_painted = false;
-    for (auto attempt = 0; attempt < 100; ++attempt) {
-        const auto* scene = webscene_engine_acquire_latest_scene(engine);
-        if (scene != nullptr) {
-            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
-                const auto& command = scene->commands[index];
-                if (command.kind == 10U
-                    && (command.rgba == 0x7F7F7F40U
-                        || command.rgba == 0xA0A0A0D0U)
-                    && std::abs(command.x - 152.0F) < 0.1F) {
-                    hidden_scrollbar_painted = true;
-                }
-            }
-            webscene_scene_acknowledge(scene);
-            webscene_scene_release(scene);
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    }
-    require(
-        !hidden_scrollbar_painted,
-        "::-webkit-scrollbar { display:none } still painted the host overlay scrollbar");
 
     const auto boundary_events = evaluate(
         engine,
