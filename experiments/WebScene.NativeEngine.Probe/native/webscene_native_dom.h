@@ -543,6 +543,8 @@ struct node_style final {
     bool clip{false};
     bool scroll_x_enabled{false};
     bool scroll_y_enabled{false};
+    bool scrollbar_hidden{false};
+    bool scrollbar_visibility_important{false};
     bool visibility_hidden{false};
     bool visibility_specified{false};
     bool pointer_events_none{false};

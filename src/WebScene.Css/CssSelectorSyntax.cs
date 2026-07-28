@@ -99,7 +99,9 @@ public static class CssSelectorSyntaxParser
     {
         "before", "after", "first-letter", "first-line", "selection", "marker",
         "placeholder", "backdrop", "file-selector-button", "cue", "cue-region",
-        "grammar-error", "spelling-error", "target-text"
+        "grammar-error", "spelling-error", "target-text",
+        "-webkit-scrollbar", "-webkit-scrollbar-thumb", "-webkit-scrollbar-track",
+        "-webkit-scrollbar-corner"
     };
 
     public static IEnumerable<string> SplitSelectorList(string selectorText)

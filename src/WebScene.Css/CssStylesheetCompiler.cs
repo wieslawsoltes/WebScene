@@ -45,6 +45,7 @@ public static class CssStylesheetCompiler
     public const string ProtectedVariableShorthandPrefix = "--webscene-var-shorthand-";
     private const string ProtectedCssWideValuePrefix = "-webscene-css-wide-";
     private const string ProtectedCustomPropertyNamePrefix = "--webscene-custom-name-";
+    private const string ProtectedScrollbarPseudoClassPrefix = ".webscene-protected-scrollbar-pseudo-";
 
     public static CssStylesheetCompilation Compile(
         string css,
@@ -55,7 +56,8 @@ public static class CssStylesheetCompiler
         var started = collectPerformanceMetrics ? Stopwatch.GetTimestamp() : 0;
         var allocationStarted = collectPerformanceMetrics ? GC.GetAllocatedBytesForCurrentThread() : 0;
         var normalized = Normalize(CssSupportsProcessor.Process(css), disableNormalizationGuards);
-        var parserInput = ProtectCustomPropertyNamesForParser(normalized);
+        var parserInput = ProtectScrollbarPseudoElementsForParser(
+            ProtectCustomPropertyNamesForParser(normalized));
         var normalizationTicks = collectPerformanceMetrics ? Stopwatch.GetTimestamp() - started : 0;
         var normalizationAllocated = collectPerformanceMetrics
             ? GC.GetAllocatedBytesForCurrentThread() - allocationStarted
@@ -308,7 +310,8 @@ public static class CssStylesheetCompiler
             else if (rule is ICssStyleRule styleRule)
             {
                 if (string.IsNullOrWhiteSpace(styleRule.SelectorText)) continue;
-                foreach (var selectorText in CssSelectorSyntaxParser.SplitSelectorList(styleRule.SelectorText))
+                var restoredSelectorText = RestoreScrollbarPseudoElements(styleRule.SelectorText);
+                foreach (var selectorText in CssSelectorSyntaxParser.SplitSelectorList(restoredSelectorText))
                 {
                     if (!CssSelectorSyntaxParser.TryParse(selectorText, out var selector)) continue;
                     var declarations = new List<CssCascadeDeclaration>();
@@ -367,6 +370,28 @@ public static class CssStylesheetCompiler
                 }
             }
         }
+    }
+
+    private static string ProtectScrollbarPseudoElementsForParser(string css)
+    {
+        return Regex.Replace(
+            css,
+            @"::-(webkit-scrollbar(?:-(?:thumb|track|corner))?)",
+            match => ProtectedScrollbarPseudoClassPrefix
+                     + match.Groups[1].Value.Replace('-', '_')
+                     + "::before",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static string RestoreScrollbarPseudoElements(string selectorText)
+    {
+        return Regex.Replace(
+            selectorText,
+            Regex.Escape(ProtectedScrollbarPseudoClassPrefix)
+            + @"(?<name>webkit_scrollbar(?:_(?:thumb|track|corner))?)::before",
+            match => "::-"
+                     + match.Groups["name"].Value.Replace('_', '-'),
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static string ExpandLogicalAxisShorthand(

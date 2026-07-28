@@ -24,11 +24,11 @@
     },
     {
       "family": "overflow-scroll-viewports",
-      "required": ["finite scrollWidth/scrollHeight range", "scrollTop/scrollLeft saturation", "dynamic content-shrink re-clamping", "overflow descendant hit-test clipping", "idempotent boundary scrolling", "managed and native overlay scrollbar thumb paint", "thumb position follows bounded offset"],
+      "required": ["finite scrollWidth/scrollHeight range", "scrollTop/scrollLeft saturation", "dynamic content-shrink re-clamping", "overflow descendant hit-test clipping", "idempotent boundary scrolling", "managed and native overlay scrollbar thumb paint", "thumb position follows bounded offset", "::-webkit-scrollbar display:none suppresses host paint without changing geometry"],
       "candidate": [],
       "productEvidence": ["hosted component menus and dialogs", "public release-page viewport", "reported missing scrollbars and unbounded scrolling"],
       "coverage": ["contracts/overflow-scroll-viewport-clamp.html", "contracts/dom-document-cssom-hosted-page-primitives.html", "test_native_overflow_scrolling_and_nowrap", "test_loaded_document_keeps_html_and_body_cascade_distinct", "root document viewport scrolling regression", "native overflow clip and overlay scrollbar scene commands"],
-      "gap": "Chrome and both adapters pass the corrected product-neutral DOM contract; managed raster and native scene authority separately prove proportional overlay-thumb paint and movement. The contract deliberately follows queued browser scroll events and changes the positioned descendant while shrinking content so unrelated overflow cannot preserve the old range. This bounded overlay policy does not yet claim scrollbar dragging, CSS Scrollbars Styling, ::-webkit-scrollbar pseudo-elements, scroll snapping, smooth scrolling, overscroll behavior, nested scroll chaining, RTL scrollLeft models, or platform auto-hide timing. Evidence: artifacts/web-platform-overflow-scroll-chrome-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-managed-fixed-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-native-current-v2-20260723/results.json, OverflowViewportClipsHitTestingAndReclampsAfterExtentMutation, and test_native_overflow_scrolling_and_nowrap."
+      "gap": "Chrome and both adapters pass the corrected product-neutral DOM contract; managed raster and native scene authority separately prove proportional overlay-thumb paint and movement, plus author suppression through the base ::-webkit-scrollbar pseudo-element. The contract deliberately follows queued browser scroll events and changes the positioned descendant while shrinking content so unrelated overflow cannot preserve the old range. This bounded overlay policy does not yet claim scrollbar dragging, standard CSS Scrollbars Styling, thumb/track/corner pseudo-element paint customization, scroll snapping, smooth scrolling, overscroll behavior, nested scroll chaining, RTL scrollLeft models, or platform auto-hide timing. Evidence: artifacts/web-platform-overflow-scroll-chrome-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-managed-fixed-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-native-current-v2-20260723/results.json, OverflowViewportClipsHitTestingAndReclampsAfterExtentMutation, and test_native_overflow_scrolling_and_nowrap."
     },
     {
       "family": "logical-box-properties",
@@ -68,10 +68,10 @@
     },
     {
       "family": "transforms",
-      "required": ["ordered 2D transform lists", "translate", "scale and scaleX", "rotate", "negative offsets", "computed matrix serialization", "transformed bounding rectangles", "inverse transformed hit testing"],
+      "required": ["ordered 2D transform lists", "translate", "scale and scaleX", "rotate", "negative offsets", "computed matrix serialization", "transformed bounding rectangles", "inverse transformed hit testing", "ancestor rotation applies once to nested SVG paint"],
       "productEvidence": ["popup portals", "toolbar controls", "slideout menus", "settings tab underline"],
-      "coverage": ["css/css-transforms/scalex.html", "css/css-transforms/transform_translate_zero.html", "css/css-transforms/transform_translate_neg.html", "css/css-transforms/transform-scale-hittest.html", "CssTransformComputedStyleTests", "CssTransformedHitTestingTests"],
-      "gap": "The current native required lane passes scaleX, translate-zero, translate-negative, and transformed hit testing. Ordered mixed transform lists outside this pinned slice remain bounded by the product profile rather than claimed generally."
+      "coverage": ["css/css-transforms/scalex.html", "css/css-transforms/transform_translate_zero.html", "css/css-transforms/transform_translate_neg.html", "css/css-transforms/transform-scale-hittest.html", "CssTransformComputedStyleTests", "CssTransformedHitTestingTests", "test_toolbar_scroll_chevrons_use_single_rotation"],
+      "gap": "The current native required lane passes scaleX, translate-zero, translate-negative, transformed hit testing, and a toolbar-shaped wrapper rotation whose nested SVG paint inherits the transform exactly once. Ordered mixed transform lists outside this pinned slice remain bounded by the product profile rather than claimed generally."
     },
     {
       "family": "transitions-and-animation",

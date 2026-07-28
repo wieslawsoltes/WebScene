@@ -508,18 +508,6 @@ uint32_t resolved_foreground(const dom_node& node)
     return 0xD1D4DCFFU;
 }
 
-float resolved_transform_rotation(const dom_node& node)
-{
-    float result = 0;
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        const auto* animation = current->animation_runtime();
-        result += animation != nullptr && animation->transform_animation_initialized
-            ? animation->painted_transform_rotate_degrees
-            : current->style.transform_rotate_degrees;
-    }
-    return result;
-}
-
 void append_xml_escaped(std::string_view value, std::string& output, bool attribute)
 {
     for (const auto character : value) {
@@ -4566,7 +4554,7 @@ void native_document::append_scene(
                 0,
                 0,
                 0,
-                resolved_transform_rotation(node)});
+                0});
         }
         if (clip_contents) {
             commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
@@ -4624,7 +4612,7 @@ void native_document::append_scene(
                     0,
                     0,
                     0,
-                    resolved_transform_rotation(node)});
+                    0});
             }
             const auto stroke = node.attributes.contains("stroke")
                 ? node.attributes.at("stroke")
@@ -4646,7 +4634,7 @@ void native_document::append_scene(
                     0,
                     0,
                     0,
-                    resolved_transform_rotation(node)});
+                    0});
             }
         }
     }
@@ -4716,7 +4704,8 @@ void native_document::append_scene(
     // after the overflow clip so they remain visible above the clipped content.
     // They do not consume clientWidth/clientHeight, matching overlay scrollbars
     // on the certified macOS host.
-    if (paint_self && node.layout.width > 0 && node.layout.height > 0) {
+    if (paint_self && !node.style.scrollbar_hidden
+        && node.layout.width > 0 && node.layout.height > 0) {
         const auto border_left = resolve_length(
             node, node.style.border_left_width, node.layout.width, 0);
         const auto border_right = resolve_length(

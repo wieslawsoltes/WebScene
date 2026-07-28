@@ -4,6 +4,13 @@ namespace WebScene.Css.Tests;
 
 public sealed class CssSelectorSyntaxParserTests
 {
+    [Theory]
+    [InlineData(".scroller::-webkit-scrollbar")]
+    [InlineData(".scroller.no-scrollbar::-webkit-scrollbar-thumb")]
+    [InlineData("#panel::-webkit-scrollbar-track")]
+    public void AcceptsSupportedScrollbarPseudoElements(string selectorText)
+        => Assert.True(CssSelectorSyntaxParser.IsSupportedDomSelectorList(selectorText));
+
     [Fact]
     public void ParsesComplexSelectorAndSpecificity()
     {

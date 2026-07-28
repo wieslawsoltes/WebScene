@@ -2045,6 +2045,15 @@ public sealed class CssInvalidationOptimizationTests
             var document = host.Document;
             var body = HostTestUtilities.GetElement(document.body);
             body.style.cssText = "margin: 0; background: white";
+            var style = HostTestUtilities.GetElement(document.createElement("style"));
+            style.textContent = """
+                .no-scrollbar::-webkit-scrollbar {
+                    display: none;
+                    width: 0;
+                    height: 0;
+                }
+                """;
+            document.head.appendChild(style);
             var viewport = HostTestUtilities.GetElement(document.createElement("div"));
             viewport.style.cssText = "width: 120px; height: 60px; overflow: auto; background: white";
             var content = HostTestUtilities.GetElement(document.createElement("div"));
@@ -2090,6 +2099,18 @@ public sealed class CssInvalidationOptimizationTests
             var scrolledTrackStart = ReadPixel(scrolledFrame, 117, 6);
             var scrolledThumb = ReadPixel(scrolledFrame, 117, 50);
             Assert.True(scrolledThumb.A > scrolledTrackStart.A + 100);
+
+            viewport.className = "no-scrollbar";
+            document.EnsureStylesCurrent();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Empty(scrollPanel.Children.OfType<DomScrollIndicatorControl>());
+            Assert.Equal(140, viewport.scrollTop);
+
+            viewport.className = "";
+            document.EnsureStylesCurrent();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Single(scrollPanel.Children.OfType<DomScrollIndicatorControl>());
+            Assert.Equal(140, viewport.scrollTop);
 
             viewport.scrollTop = 1e6;
             Assert.Equal(1, scrollEvents.InvocationCount);

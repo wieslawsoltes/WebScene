@@ -4662,7 +4662,7 @@ void test_detached_style_retains_text_and_activates_when_connected(webscene_engi
 
 void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
 {
-    resize(engine, 320, 200, 40U);
+    resize(engine, 400, 200, 40U);
     const auto initial = evaluate(engine, R"JS(
         (() => {
           document.body.innerHTML = '';
@@ -4672,6 +4672,9 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             .scroller { width:160px; height:64px; overflow-x:hidden; }
             .scroller.no-scrollbar::-webkit-scrollbar {
               display:none; width:0; height:0;
+            }
+            .hidden-scroller {
+              position:absolute; left:180px; top:0; background:rgb(1, 2, 3);
             }
             .row { height:32px; }
             .title { display:block; width:80px; overflow:hidden; white-space:nowrap;
@@ -4778,38 +4781,57 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
 
     const auto hidden_scrollbar_state = evaluate(engine, R"JS(
         (() => {
-          __overflowScroller.classList.add('no-scrollbar');
+          const hiddenScroller = document.createElement('div');
+          hiddenScroller.className = 'scroller no-scrollbar hidden-scroller';
+          for (let index = 0; index < 5; index++) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.textContent = `Hidden ${index}`;
+            hiddenScroller.appendChild(row);
+          }
+          document.body.appendChild(hiddenScroller);
           return {
-            scrollTop: __overflowScroller.scrollTop,
-            scrollHeight: __overflowScroller.scrollHeight
+            clientHeight:hiddenScroller.clientHeight,
+            scrollHeight:hiddenScroller.scrollHeight
           };
         })()
     )JS", "native-hidden-scrollbar-state.js");
     require(
-        hidden_scrollbar_state == R"({"scrollTop":96,"scrollHeight":160})",
-        "hiding the scrollbar changed overflow geometry or scroll position: "
-            + hidden_scrollbar_state);
+        hidden_scrollbar_state == R"({"clientHeight":64,"scrollHeight":160})",
+        "author-hidden scrollbar changed overflow geometry: " + hidden_scrollbar_state);
 
     webscene_engine_request_scene_checkpoint(engine);
+    auto hidden_scrollbar_scene_observed = false;
     auto hidden_scrollbar_painted = false;
     for (auto attempt = 0; attempt < 100; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
+            auto hidden_scroller_node_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x010203FFU) {
+                    hidden_scrollbar_scene_observed = true;
+                    hidden_scroller_node_id = command.node_id;
+                }
+            }
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 if (command.kind == 10U
                     && (command.rgba == 0x7F7F7F40U
                         || command.rgba == 0xA0A0A0D0U)
-                    && std::abs(command.x - 152.0F) < 0.1F) {
+                    && command.node_id == hidden_scroller_node_id) {
                     hidden_scrollbar_painted = true;
                 }
             }
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
-            break;
+            if (hidden_scrollbar_scene_observed) break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
+    require(
+        hidden_scrollbar_scene_observed,
+        "author-hidden scrollbar scene was not published");
     require(
         !hidden_scrollbar_painted,
         "::-webkit-scrollbar { display:none } still painted the host overlay scrollbar");
@@ -4834,6 +4856,79 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
         bounded == expected_bounded,
         "repeated wheel input escaped the finite range or dispatched at an unchanged boundary: "
             + bounded);
+}
+
+void test_toolbar_scroll_chevrons_use_single_rotation(webscene_engine* engine)
+{
+    resize(engine, 320, 200, 44U);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin:0; }
+              .scrollTop {
+                position:absolute; left:20px; top:20px; width:40px; height:24px;
+                display:flex; align-items:center; justify-content:center;
+                background:rgb(17, 34, 51);
+              }
+              .scrollTop .iconWrap { transform:rotate(180deg); }
+              svg { width:10px; height:6px; }
+            </style>
+            <div class="scrollTop">
+              <div class="iconWrap">
+                <svg viewBox="0 0 10 6">
+                  <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor"/>
+                </svg>
+              </div>
+            </div>`;
+          const icon = document.querySelector('.iconWrap');
+          return {
+            transform:getComputedStyle(icon).transform,
+            svgWidth:icon.firstElementChild.getBoundingClientRect().width,
+            svgHeight:icon.firstElementChild.getBoundingClientRect().height
+          };
+        })()
+    )JS", "native-toolbar-scroll-chevron.js");
+    require(
+        result == R"JSON({"transform":"matrix(-1, 0, 0, -1, 0, 0)","svgWidth":10,"svgHeight":6})JSON",
+        "toolbar top-chevron layout or rotation was not established: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto current_scene_observed = false;
+    auto wrapper_rotation = false;
+    auto svg_rotation = 0.0F;
+    auto svg_observed = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            current_scene_observed = false;
+            wrapper_rotation = false;
+            svg_observed = false;
+            svg_rotation = 0;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x112233FFU) current_scene_observed = true;
+                if (command.kind == 19U
+                    && std::abs(command.stroke_width - 180.0F) < 0.1F) {
+                    wrapper_rotation = true;
+                }
+                if (command.kind == 6U) {
+                    svg_observed = true;
+                    svg_rotation = command.stroke_width;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+            if (current_scene_observed) break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(current_scene_observed, "toolbar top-chevron scene was not published");
+    require(wrapper_rotation, "toolbar top-chevron wrapper did not emit rotate(180deg)");
+    require(svg_observed, "toolbar top-chevron SVG was absent from the native scene");
+    require(
+        std::abs(svg_rotation) < 0.1F,
+        "toolbar top-chevron inherited its wrapper rotation twice");
 }
 
 void test_root_document_overflow_scrolls_and_paints_overlay(webscene_engine* engine)
@@ -8759,6 +8854,7 @@ int main()
     test_segmented_rounded_borders_share_an_unclipped_join(engine);
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
+    test_toolbar_scroll_chevrons_use_single_rotation(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);
     test_table_menu_row_cells_stay_horizontal_and_centered(engine);
     test_semantic_table_auto_layout_and_intrinsic_cell_content(engine);

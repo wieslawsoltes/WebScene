@@ -2045,6 +2045,7 @@ internal sealed class CssStyleEngine
         phaseAllocationStarted = collectPerformance ? GC.GetAllocatedBytesForCurrentThread() : 0;
         try
         {
+            ApplyScrollbarPseudoElement(element);
             ApplyGeneratedPseudoElements(element, computed);
         }
         finally
@@ -3467,6 +3468,45 @@ internal sealed class CssStyleEngine
         {
             panel.RefreshGeneratedPseudoElements();
         }
+    }
+
+    private void ApplyScrollbarPseudoElement(AvaloniaDomElement element)
+    {
+        if (element.Control is not CssLayoutPanel panel)
+        {
+            return;
+        }
+
+        var winners = RentCascadeWinners();
+        foreach (var rule in CollectCandidateRules(element, pseudoElements: true))
+        {
+            if (!rule.Selector.MatchesPseudoElement(
+                    element,
+                    _document,
+                    "-webkit-scrollbar"))
+            {
+                continue;
+            }
+
+            foreach (var declaration in rule.Declarations)
+            {
+                SetWinner(
+                    winners,
+                    declaration.Name,
+                    declaration.Value,
+                    declaration.Important,
+                    rule.Selector.Specificity,
+                    rule.SourceOrder);
+            }
+        }
+
+        var hidden = winners.TryGetValue("display", out var display)
+                     && string.Equals(
+                         display.Value.Trim(),
+                         "none",
+                         StringComparison.OrdinalIgnoreCase);
+        panel.SetScrollIndicatorVisibility(!hidden);
+        ReturnCascadeWinners(winners);
     }
 
     private IReadOnlyDictionary<string, string>? ComputePseudoElement(

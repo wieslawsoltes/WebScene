@@ -308,21 +308,23 @@ Downloadable WPT fonts/Ahem, word-spaced wrapping and RTL paint, and exact text 
 parity remain explicit work rather than being inferred from the bounded geometry.
 
 The required overflow viewport contract is a product-neutral reduction of the reported
-missing-scrollbar and unbounded-scrolling failures. Chrome and both adapters agree on a
+scrollbar and unbounded-scrolling failures. Chrome and both adapters agree on a
 finite extent, clamping at both boundaries, queued scroll events only when the offset
 changes, descendant hit-test clipping, and synchronous re-clamping when content shrinks
-or expands before an immediate `scrollTop` assignment. Chrome rejected the original
+or expands before an immediate `scrollTop` assignment. The contract now carries the
+author's `::-webkit-scrollbar { display: none }` rule; managed raster and native scene
+authority require that rule to suppress the host overlay without changing extent or
+offset, while retaining proportional default-thumb coverage when it is absent. Chrome rejected the original
 candidate because its vertical scrollbar caused horizontal overflow, its positioned
 tail legitimately preserved the shrunken extent, and it expected synchronous scroll
 events; those rejected bytes are retained and only the corrected browser-valid contract
-was promoted. Managed raster and native scene tests independently require a proportional
-visible overlay thumb at the start and bounded maximum. Evidence:
+was promoted. Evidence:
 `artifacts/web-platform-overflow-scroll-chrome-v1-20260723/results.json`,
 `artifacts/web-platform-overflow-scroll-chrome-v2-20260723/results.json`,
 `artifacts/web-platform-overflow-scroll-managed-fixed-v2-20260723/results.json`,
 `artifacts/web-platform-overflow-scroll-native-current-v2-20260723/results.json`, and
 `artifacts/web-platform-required-overflow-scroll-promoted-v1-20260723/{managed,native}/results.json`.
-Scrollbar dragging and styling, scroll snapping, smooth scrolling, overscroll behavior,
+Scrollbar dragging, thumb/track styling, scroll snapping, smooth scrolling, overscroll behavior,
 nested chaining, RTL `scrollLeft`, and platform auto-hide timing remain outside this
 bounded claim.
 

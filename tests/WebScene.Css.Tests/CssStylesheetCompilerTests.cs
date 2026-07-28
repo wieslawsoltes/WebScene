@@ -5,6 +5,19 @@ namespace WebScene.Css.Tests;
 public sealed class CssStylesheetCompilerTests
 {
     [Fact]
+    public void PreservesScrollbarPseudoElementRules()
+    {
+        var result = CssStylesheetCompiler.Compile(
+            ".scroller.no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }");
+
+        var rule = Assert.Single(result.Rules);
+        Assert.Equal("-webkit-scrollbar", Assert.Single(
+            rule.Selector.Parts[^1].Simple.Pseudos.Where(static pseudo => pseudo.IsElement)).Name);
+        Assert.Contains(rule.Declarations, static declaration =>
+            declaration.Name == "display" && declaration.Value == "none");
+    }
+
+    [Fact]
     public void CompilerProducesPortableSelectorsDeclarationsAndNestedMedia()
     {
         var result = CssStylesheetCompiler.Compile("""

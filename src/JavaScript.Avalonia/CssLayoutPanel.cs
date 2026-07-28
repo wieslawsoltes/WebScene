@@ -76,6 +76,7 @@ public class CssLayoutPanel : Panel, ICustomHitTest
     private string _overflowX = "visible";
     private string _overflowY = "visible";
     private bool _overflowRequiresClip;
+    private bool _scrollIndicatorVisible = true;
     private Vector _scrollOffset;
     private Size _scrollExtent;
     private Size? _documentScrollViewport;
@@ -498,6 +499,17 @@ public class CssLayoutPanel : Panel, ICustomHitTest
         InvalidateArrange();
     }
 
+    internal void SetScrollIndicatorVisibility(bool visible)
+    {
+        if (_scrollIndicatorVisible == visible)
+        {
+            return;
+        }
+
+        _scrollIndicatorVisible = visible;
+        UpdateScrollIndicator();
+    }
+
     internal void RefreshOverflowClipForFixedDescendants()
     {
         // A viewport-fixed descendant is laid out against the document viewport
@@ -593,14 +605,14 @@ public class CssLayoutPanel : Panel, ICustomHitTest
 
     private void UpdateScrollIndicator()
     {
-        if (!CanScrollVertically)
+        if (!CanScrollVertically || !_scrollIndicatorVisible)
         {
             if (_scrollIndicator is not null)
             {
                 Children.Remove(_scrollIndicator);
                 _scrollIndicator = null;
             }
-            if (_documentScrollViewport is null)
+            if (!CanScrollVertically && _documentScrollViewport is null)
             {
                 _scrollOffset = new Vector(_scrollOffset.X, 0);
             }

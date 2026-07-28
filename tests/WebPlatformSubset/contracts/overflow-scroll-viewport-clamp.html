@@ -8,6 +8,11 @@
     height: 60px;
     overflow: auto;
   }
+  #scroller::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
   #content {
     position: relative;
     width: 100px;
@@ -27,7 +32,7 @@
     complete: false, harness: null, results: [], errors: [], diagnostics: []
   };
   const result = {
-    name: "overflow viewport stays finite, clips descendants, and clamps every scroll lifecycle"
+    name: "author-hidden overflow viewport stays finite, clips descendants, and clamps every scroll lifecycle"
   };
   (async () => {
   try {
