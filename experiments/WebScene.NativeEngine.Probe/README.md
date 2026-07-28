@@ -84,6 +84,8 @@ stable `fillStyle`, composite mode, or shadow state.
   compilation-unit cache.
 - `webscene_engine_set_resource_root` provides the filesystem root used to resolve
   component-owned iframe, script, and stylesheet resources.
+- `webscene_engine_set_preferred_color_scheme` provides the host's effective
+  light/dark preference for CSS media queries and `Window.matchMedia`.
 - `webscene_engine_execute_script` and `webscene_engine_evaluate_json` are the generic
   JavaScript execution/interoperation boundary.
 - Component code sets `globalThis.__webSceneComponentReady = true` when its application

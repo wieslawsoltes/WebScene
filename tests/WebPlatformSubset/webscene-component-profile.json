@@ -992,9 +992,9 @@
     {
       "path": "contracts/css-media-query-primitives.html",
       "type": "contract",
-      "capabilities": ["media-type-all", "viewport-media-features", "orientation-media-feature", "hover-media-features", "pointer-media-features", "reduced-motion-media-feature"],
-      "evidence": ["observed-hosted-component-css-feature-audit"],
-      "reason": "Product-neutral assertions for every media type and media feature observed in the hosted-component corpus."
+      "capabilities": ["media-type-all", "viewport-media-features", "orientation-media-feature", "hover-media-features", "pointer-media-features", "reduced-motion-media-feature", "preferred-color-scheme-media-feature", "match-media-color-scheme"],
+      "evidence": ["observed-hosted-component-css-feature-audit", "tradingview-initial-theme"],
+      "reason": "Product-neutral assertions for every media type and media feature observed in the hosted-component corpus, including the host-provided preferred color scheme used for TradingView's initial theme."
     },
     {
       "path": "contracts/css-selector-primitives.html",

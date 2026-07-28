@@ -227,10 +227,10 @@
     },
     {
       "family": "component-media-queries",
-      "required": ["all media type", "viewport min/max dimensions", "landscape orientation", "hover and any-hover", "pointer and any-pointer", "no-preference reduced motion"],
-      "productEvidence": ["responsive chart controls", "pointer-specific component styles", "motion preference branches"],
-      "coverage": ["contracts/css-media-query-primitives.html"],
-      "gap": "The contract covers the exact media-query slice observed in the hosted-component corpus. Change events, print media, resolution, color-gamut, forced-colors, and the broader Media Queries specifications remain outside this claim."
+      "required": ["all media type", "viewport min/max dimensions", "landscape orientation", "hover and any-hover", "pointer and any-pointer", "no-preference reduced motion", "host-provided preferred color scheme in CSS and matchMedia"],
+      "productEvidence": ["responsive chart controls", "pointer-specific component styles", "motion preference branches", "TradingView initial theme"],
+      "coverage": ["contracts/css-media-query-primitives.html", "test_preferred_color_scheme_updates_css_and_match_media", "NativeWebSceneThemeTests"],
+      "gap": "The contract covers the exact media-query slice observed in the hosted-component corpus, including browser-authorized initial color preference and native host-driven light/dark recascade. MediaQueryList change events, print media, resolution, color-gamut, forced-colors, and the broader Media Queries specifications remain outside this claim."
     },
     {
       "family": "component-selectors",

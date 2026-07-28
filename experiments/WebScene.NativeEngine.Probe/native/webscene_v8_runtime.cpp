@@ -7966,8 +7966,10 @@ struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_layout : nullptr);
 #endif
-        const auto [width, height, device_scale_factor] = viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            viewport_provider();
         static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
         document.layout(width, height);
     }
 
@@ -16033,7 +16035,11 @@ struct v8_dom_runtime::implementation final {
         std::transform(query.begin(), query.end(), query.begin(), [](unsigned char character) {
             return static_cast<char>(std::tolower(character));
         });
-        const auto [viewport_width, viewport_height, device_scale_factor] = viewport_provider();
+        const auto [
+            viewport_width,
+            viewport_height,
+            device_scale_factor,
+            preferred_color_scheme] = viewport_provider();
         static_cast<void>(device_scale_factor);
         size_t alternative_start = 0;
         while (alternative_start <= query.size()) {
@@ -16084,6 +16090,11 @@ struct v8_dom_runtime::implementation final {
                     matches = value == "fine";
                 } else if (feature == "prefers-reduced-motion") {
                     matches = value == "no-preference";
+                } else if (feature == "prefers-color-scheme") {
+                    matches = value == (
+                        preferred_color_scheme == WEBSCENE_PREFERRED_COLOR_SCHEME_DARK
+                            ? "dark"
+                            : "light");
                 } else {
                     matches = false;
                 }
@@ -16550,7 +16561,8 @@ struct v8_dom_runtime::implementation final {
                 const auto feature = trim_css(std::string_view(condition).substr(0U, separator));
                 static const std::unordered_set<std::string> supported_features{
                     "max-width", "min-width", "max-height", "min-height", "orientation",
-                    "hover", "any-hover", "pointer", "any-pointer", "prefers-reduced-motion"};
+                    "hover", "any-hover", "pointer", "any-pointer",
+                    "prefers-reduced-motion", "prefers-color-scheme"};
                 const auto known = separator != std::string::npos
                     && supported_features.contains(feature);
                 record_feature(
@@ -16689,6 +16701,26 @@ struct v8_dom_runtime::implementation final {
             rule.media_matches = matches;
         }
         return changed;
+    }
+
+    bool refresh_media_environment()
+    {
+        if (!refresh_css_media_matches()) return true;
+
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        rebuild_css_rule_indexes_and_root_variables();
+        if (frame_context.IsEmpty()) {
+            auto local_context = context.Get(isolate);
+            v8::Context::Scope context_scope(local_context);
+            apply_css_rules_subtree(document.body());
+        } else {
+            auto local_frame_context = frame_context.Get(isolate);
+            v8::Context::Scope frame_scope(local_frame_context);
+            apply_css_rules_subtree(active_root());
+        }
+        document.mark_dirty();
+        return true;
     }
 
     static std::string resolve_css_resource_urls(
@@ -26023,9 +26055,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        const auto [width, height, device_scale_factor] = self->viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            self->viewport_provider();
         static_cast<void>(height);
         static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
         info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), width));
     }
 
@@ -26033,9 +26067,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        const auto [width, height, device_scale_factor] = self->viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            self->viewport_provider();
         static_cast<void>(width);
         static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
         info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), height));
     }
 
@@ -26069,9 +26105,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        const auto [width, height, device_scale_factor] = self->viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            self->viewport_provider();
         static_cast<void>(width);
         static_cast<void>(height);
+        static_cast<void>(preferred_color_scheme);
         info.GetReturnValue().Set(v8::Number::New(
             info.GetIsolate(),
             std::isfinite(device_scale_factor) && device_scale_factor > 0.0
@@ -26085,9 +26123,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        const auto [width, height, device_scale_factor] = self->viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            self->viewport_provider();
         static_cast<void>(height);
         static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
         info.GetReturnValue().Set(v8::Number::New(
             info.GetIsolate(),
             std::max(0.0F, width)));
@@ -26099,9 +26139,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
-        const auto [width, height, device_scale_factor] = self->viewport_provider();
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            self->viewport_provider();
         static_cast<void>(width);
         static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
         info.GetReturnValue().Set(v8::Number::New(
             info.GetIsolate(),
             std::max(0.0F, height)));
@@ -26491,6 +26533,12 @@ bool v8_dom_runtime::try_take_console_message(std::string& message)
 bool v8_dom_runtime::dispatch_resize()
 {
     return impl_->dispatch_resize()
+        && impl_->promote_pending_promise_error();
+}
+
+bool v8_dom_runtime::refresh_media_environment()
+{
+    return impl_->refresh_media_environment()
         && impl_->promote_pending_promise_error();
 }
 

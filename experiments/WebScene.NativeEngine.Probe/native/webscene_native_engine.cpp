@@ -473,6 +473,22 @@ struct webscene_engine final {
         return true;
     }
 
+    bool set_preferred_color_scheme(uint32_t preferred_color_scheme)
+    {
+        if (preferred_color_scheme != WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT
+            && preferred_color_scheme != WEBSCENE_PREFERRED_COLOR_SCHEME_DARK) {
+            return false;
+        }
+        const auto previous = preferred_color_scheme_.exchange(
+            preferred_color_scheme,
+            std::memory_order_acq_rel);
+        if (previous != preferred_color_scheme) {
+            preferred_color_scheme_changed_.store(true, std::memory_order_release);
+            wake_.notify_one();
+        }
+        return true;
+    }
+
     uint32_t cursor() const noexcept
     {
         return current_cursor_.load(std::memory_order_acquire);
@@ -1230,7 +1246,8 @@ private:
                 return webscene_native::v8_dom_runtime::viewport_metrics{
                     static_cast<float>(viewport_width_),
                     static_cast<float>(viewport_height_),
-                    device_scale_factor_};
+                    device_scale_factor_,
+                    preferred_color_scheme_.load(std::memory_order_acquire)};
             },
             compilation_cache_directory_,
             [this](
@@ -1350,6 +1367,16 @@ private:
                     std::memory_order_relaxed);
                 update_compilation_metrics();
                 hidden_low_memory_deadline.reset();
+            }
+            if (preferred_color_scheme_changed_.exchange(
+                    false,
+                    std::memory_order_acq_rel)
+                && runtime_ != nullptr) {
+                if (!runtime_->refresh_media_environment()) {
+                    script_errors_.fetch_add(1, std::memory_order_relaxed);
+                    set_last_error(runtime_->last_error());
+                }
+                changed = true;
             }
 #endif
             // Treat the latest coalesced viewport as a barrier for pointer work.
@@ -1905,7 +1932,9 @@ private:
                     || !inputs_.empty()
                     || resize_pending_.load(std::memory_order_acquire)
                     || low_memory_requested_.load(std::memory_order_acquire)
-                    || visibility_changed_.load(std::memory_order_acquire);
+                    || visibility_changed_.load(std::memory_order_acquire)
+                    || preferred_color_scheme_changed_.load(
+                        std::memory_order_acquire);
             });
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
@@ -2714,6 +2743,9 @@ private:
     std::atomic<bool> low_memory_requested_{false};
     std::atomic<bool> host_visible_{true};
     std::atomic<bool> visibility_changed_{false};
+    std::atomic<uint32_t> preferred_color_scheme_{
+        WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT};
+    std::atomic<bool> preferred_color_scheme_changed_{false};
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
@@ -3265,6 +3297,16 @@ uint8_t webscene_engine_request_low_memory(webscene_engine* engine)
 uint8_t webscene_engine_set_visible(webscene_engine* engine, uint8_t visible)
 {
     return engine != nullptr && engine->set_visible(visible != 0) ? 1U : 0U;
+}
+
+uint8_t webscene_engine_set_preferred_color_scheme(
+    webscene_engine* engine,
+    uint32_t preferred_color_scheme)
+{
+    return engine != nullptr
+        && engine->set_preferred_color_scheme(preferred_color_scheme)
+        ? 1U
+        : 0U;
 }
 
 const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine)

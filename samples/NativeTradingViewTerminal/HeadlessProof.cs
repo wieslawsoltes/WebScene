@@ -80,8 +80,11 @@ internal static class HeadlessProof
 
             using var document = JsonDocument.Parse(evidence);
             var root = document.RootElement;
+            var preferredColorScheme = root.GetProperty("preferredColorScheme");
             var websocket = root.GetProperty("websocket");
-            if (root.GetProperty("webSocketType").GetString() != "function"
+            if (!preferredColorScheme.GetProperty("dark").GetBoolean()
+                || preferredColorScheme.GetProperty("light").GetBoolean()
+                || root.GetProperty("webSocketType").GetString() != "function"
                 || !root.GetProperty("hasWidget").GetBoolean()
                 || websocket.GetProperty("created").GetInt32() < 1
                 || websocket.GetProperty("opened").GetInt32() < 1
@@ -272,6 +275,12 @@ internal static class HeadlessProof
                   url: location.href,
                   title: document.title,
                   readyState: document.readyState,
+                  preferredColorScheme: {
+                    dark:
+                      matchMedia('(prefers-color-scheme: dark)').matches,
+                    light:
+                      matchMedia('(prefers-color-scheme: light)').matches
+                  },
                   webSocketType: typeof WebSocket,
                   websocket: [
                     globalThis,

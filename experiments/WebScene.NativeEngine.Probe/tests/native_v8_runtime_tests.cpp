@@ -2132,6 +2132,64 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
     }
 }
 
+void test_preferred_color_scheme_updates_css_and_match_media(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const style = document.createElement('style');
+          style.textContent = `
+            #color-scheme-probe { --resolved-scheme: light; }
+            @media (prefers-color-scheme: dark) {
+              #color-scheme-probe { --resolved-scheme: dark; }
+            }
+          `;
+          document.body.appendChild(style);
+          const probe = document.createElement('div');
+          probe.id = 'color-scheme-probe';
+          document.body.appendChild(probe);
+          globalThis.__colorSchemeProbe = probe;
+        })()
+    )JS", "native-preferred-color-scheme-setup.js");
+
+    const auto read_state = [&] {
+        return evaluate(engine, R"JS(
+            ({
+              dark: matchMedia('(prefers-color-scheme: dark)').matches,
+              light: matchMedia('(prefers-color-scheme: light)').matches,
+              css: getComputedStyle(__colorSchemeProbe)
+                .getPropertyValue('--resolved-scheme').trim()
+            })
+        )JS", "native-preferred-color-scheme-state.js");
+    };
+
+    require(
+        read_state() == R"({"dark":false,"light":true,"css":"light"})",
+        "native media environment did not default to light");
+    require(
+        webscene_engine_set_preferred_color_scheme(engine, 2U) == 0U,
+        "native engine accepted an unknown preferred color scheme");
+    require(
+        webscene_engine_set_preferred_color_scheme(
+            engine,
+            WEBSCENE_PREFERRED_COLOR_SCHEME_DARK) != 0U,
+        "native engine rejected the dark preferred color scheme");
+    const auto dark = read_state();
+    require(
+        dark == R"({"dark":true,"light":false,"css":"dark"})",
+        "dark host preference did not update CSS and matchMedia: " + dark);
+
+    require(
+        webscene_engine_set_preferred_color_scheme(
+            engine,
+            WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT) != 0U,
+        "native engine rejected the light preferred color scheme");
+    const auto light = read_state();
+    require(
+        light == R"({"dark":false,"light":true,"css":"light"})",
+        "light host preference did not restore CSS and matchMedia: " + light);
+}
+
 void test_resize_listener_receives_window_event(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -8460,7 +8518,7 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
                 != std::string::npos
             && report.find(R"("feature":"at-rule:@media","classification":"supported")")
                 != std::string::npos
-            && report.find(R"("feature":"media-feature:prefers-color-scheme","classification":"unsupported")")
+            && report.find(R"("feature":"media-feature:prefers-color-scheme","classification":"supported")")
                 != std::string::npos
             && report.find(R"("feature":"at-rule:@supports","classification":"supported")")
                 != std::string::npos
@@ -8869,6 +8927,7 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
+    test_preferred_color_scheme_updates_css_and_match_media(engine);
     test_resize_listener_receives_window_event(engine);
     test_absolute_portal_centers_against_positioned_ancestor(engine);
     test_attribute_selector_invalidation(engine);

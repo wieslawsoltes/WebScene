@@ -16,6 +16,12 @@
   @media (prefers-reduced-motion: no-preference) {
     #probe { --reduced-motion: pass; }
   }
+  @media (prefers-color-scheme: light) {
+    #probe { --color-scheme: light; }
+  }
+  @media (prefers-color-scheme: dark) {
+    #probe { --color-scheme: dark; }
+  }
 </style>
 <body>
 <div id="probe"></div>
@@ -61,6 +67,20 @@
       assertSelected(style, property);
   });
   test("reduced motion preference query", () => assertSelected(style, "--reduced-motion"));
+  test("preferred color scheme reaches CSS and matchMedia", () => {
+    const light = matchMedia("(prefers-color-scheme: light)").matches;
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    if (light === dark) {
+      throw new Error("exactly one preferred color scheme must match");
+    }
+    const cssScheme = style.getPropertyValue("--color-scheme").trim();
+    const mediaScheme = dark ? "dark" : "light";
+    if (cssScheme !== mediaScheme) {
+      throw new Error(
+        "CSS resolved " + JSON.stringify(cssScheme)
+        + " while matchMedia resolved " + JSON.stringify(mediaScheme));
+    }
+  });
 
   const failure = state.results.find(result => result.status !== "PASS");
   state.harness = failure

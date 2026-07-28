@@ -96,6 +96,7 @@ public:
         float width{1};
         float height{1};
         double device_scale_factor{1};
+        uint32_t preferred_color_scheme{WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT};
     };
 
     struct resource_response final {
@@ -135,6 +136,7 @@ public:
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();
+    bool refresh_media_environment();
     bool dispatch_input(const webscene_input_event& event);
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using JavaScript.Avalonia;
 
@@ -25,11 +26,29 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     {
         _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual);
         Content = _surface;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
     }
 
     public string? Source { get; private set; }
 
     public INativeWebSceneRenderDiagnostics RenderDiagnostics => _surface;
+
+    internal static NativePreferredColorScheme ResolvePreferredColorScheme(
+        ThemeVariant themeVariant)
+        => themeVariant == ThemeVariant.Dark
+            ? NativePreferredColorScheme.Dark
+            : NativePreferredColorScheme.Light;
+
+    private void OnActualThemeVariantChanged(object? sender, EventArgs args)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine != IntPtr.Zero)
+        {
+            NativeWebSceneApi.EngineSetPreferredColorScheme(
+                engine,
+                ResolvePreferredColorScheme(ActualThemeVariant));
+        }
+    }
 
     public Task<string> EvaluateJsonAsync(
         string source,
@@ -107,7 +126,13 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
             _engine = engine;
             await Dispatcher.UIThread.InvokeAsync(
-                () => _surface.SetEngine(engine),
+                () =>
+                {
+                    NativeWebSceneApi.EngineSetPreferredColorScheme(
+                        engine,
+                        ResolvePreferredColorScheme(ActualThemeVariant));
+                    _surface.SetEngine(engine);
+                },
                 DispatcherPriority.Send);
 
             NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);

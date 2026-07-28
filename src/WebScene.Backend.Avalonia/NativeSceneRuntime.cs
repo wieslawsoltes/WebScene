@@ -4148,6 +4148,12 @@ internal struct InputEvent
     public double DeltaY;
 }
 
+internal enum NativePreferredColorScheme : uint
+{
+    Light = 0,
+    Dark = 1
+}
+
 internal static class NativeFrameInput
 {
     private const uint Frame = 5;
@@ -5599,6 +5605,13 @@ public static unsafe class NativeWebSceneApi
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_set_visible")]
     public static extern byte EngineSetVisible(IntPtr engine, byte visible);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_set_preferred_color_scheme")]
+    internal static extern byte EngineSetPreferredColorScheme(
+        IntPtr engine,
+        NativePreferredColorScheme preferredColorScheme);
 
     [DllImport(LibraryName, EntryPoint = "webscene_scene_release")]
     public static extern void SceneRelease(IntPtr scene);

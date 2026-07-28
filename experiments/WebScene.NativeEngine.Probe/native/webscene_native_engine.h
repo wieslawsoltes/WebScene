@@ -46,6 +46,11 @@ typedef enum webscene_cursor_kind {
     WEBSCENE_CURSOR_HELP = 7
 } webscene_cursor_kind;
 
+typedef enum webscene_preferred_color_scheme {
+    WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT = 0,
+    WEBSCENE_PREFERRED_COLOR_SCHEME_DARK = 1
+} webscene_preferred_color_scheme;
+
 enum {
     WEBSCENE_INPUT_MODIFIER_SHIFT = 1U << 0U,
     WEBSCENE_INPUT_MODIFIER_CONTROL = 1U << 1U,
@@ -556,6 +561,13 @@ WEBSCENE_API uint8_t webscene_engine_request_low_memory(webscene_engine* engine)
  * worker; returning visible before the deadline cancels it.
  */
 WEBSCENE_API uint8_t webscene_engine_set_visible(webscene_engine* engine, uint8_t visible);
+/*
+ * Updates the host's effective color preference. The worker re-evaluates CSS
+ * media rules and subsequent Window.matchMedia snapshots against this value.
+ */
+WEBSCENE_API uint8_t webscene_engine_set_preferred_color_scheme(
+    webscene_engine* engine,
+    uint32_t preferred_color_scheme);
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 WEBSCENE_API uint32_t webscene_engine_get_cursor(const webscene_engine* engine);
 WEBSCENE_API uint8_t webscene_engine_execute_script(
