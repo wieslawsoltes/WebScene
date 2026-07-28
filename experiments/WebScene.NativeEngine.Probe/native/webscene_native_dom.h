@@ -540,24 +540,26 @@ struct node_style final {
     }
     uint64_t inline_property_mask{0};
     uint64_t important_property_mask{0};
-    bool clip{false};
-    bool scroll_x_enabled{false};
-    bool scroll_y_enabled{false};
-    bool scrollbar_hidden{false};
-    bool scrollbar_visibility_important{false};
-    bool visibility_hidden{false};
-    bool visibility_specified{false};
-    bool pointer_events_none{false};
-    bool pointer_events_specified{false};
-    bool flex_wrap{false};
-    bool flex_reverse{false};
-    bool align_self_specified{false};
-    bool border_box{false};
+    bool clip : 1 {false};
+    bool scroll_x_enabled : 1 {false};
+    bool scroll_y_enabled : 1 {false};
+    bool scrollbar_hidden : 1 {false};
+    bool scrollbar_visibility_important : 1 {false};
+    bool visibility_hidden : 1 {false};
+    bool visibility_specified : 1 {false};
+    bool pointer_events_none : 1 {false};
+    bool pointer_events_specified : 1 {false};
+    bool flex_wrap : 1 {false};
+    bool flex_reverse : 1 {false};
+    bool align_self_specified : 1 {false};
+    bool border_box : 1 {false};
+    // Margin parsing passes these four flags by reference, so unlike the other
+    // hot boolean style state they remain addressable scalar values.
     bool margin_left_auto{false};
     bool margin_top_auto{false};
     bool margin_right_auto{false};
     bool margin_bottom_auto{false};
-    bool table_layout_fixed{false};
+    bool table_layout_fixed : 1 {false};
 private:
     void ensure_unique_pseudo_elements()
     {
