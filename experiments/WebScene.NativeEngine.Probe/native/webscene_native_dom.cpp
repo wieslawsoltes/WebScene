@@ -2811,10 +2811,10 @@ void native_document::layout_children(dom_node& parent)
             float_band_height = std::max(float_band_height, outer_height);
             maximum_flow_right = std::max(
                 maximum_flow_right,
-                x + child->layout.width + margin_right + parent.scroll_left);
+                x + child->layout.width + margin_right);
             maximum_flow_bottom = std::max(
                 maximum_flow_bottom,
-                float_band_y + outer_height + parent.scroll_top);
+                float_band_y + outer_height);
             maximum_float_bottom = std::max(
                 maximum_float_bottom,
                 float_band_y + outer_height);
@@ -3146,12 +3146,16 @@ void native_document::layout_children(dom_node& parent)
         const auto flow_height = propagates_document_overflow
             ? std::max(child->layout.height, child->scroll_content_height)
             : child->layout.height;
+        // Scroll translation is applied to `positioned`; `assigned` remains in
+        // the content's logical coordinate space. Extents must therefore use
+        // `assigned` directly. Adding the current offset here makes scrollWidth
+        // or scrollHeight grow on every relayout and creates an endless range.
         maximum_flow_right = std::max(
             maximum_flow_right,
-            assigned.x + flow_width + parent.scroll_left);
+            assigned.x + flow_width);
         maximum_flow_bottom = std::max(
             maximum_flow_bottom,
-            assigned.y + flow_height + parent.scroll_top);
+            assigned.y + flow_height);
         if (!horizontal) {
             cursor = assigned.y - content.y
                 + flow_height

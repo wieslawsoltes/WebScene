@@ -25,8 +25,21 @@
     width: 100px;
     height: 40px;
   }
+  #rowFlexScroller {
+    display: flex;
+    flex-direction: row;
+    width: 120px;
+    height: 60px;
+    overflow: auto;
+  }
+  #rowFlexContent {
+    flex: none;
+    width: 100px;
+    height: 160px;
+  }
 </style>
 <div id="scroller"><div id="content"><div id="tail"></div></div></div>
+<div id="rowFlexScroller"><div id="rowFlexContent"></div></div>
 <script>
   const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
@@ -39,6 +52,7 @@
     const scroller = document.getElementById("scroller");
     const content = document.getElementById("content");
     const tail = document.getElementById("tail");
+    const rowFlexScroller = document.getElementById("rowFlexScroller");
     const failures = [];
     const equal = (actual, expected, label) => {
       if (actual !== expected) failures.push(label + ": expected " + expected + ", got " + actual);
@@ -59,6 +73,19 @@
     equal(scroller.scrollHeight - scroller.clientHeight, 140, "finite maximum scroll offset");
     truthy(document.elementFromPoint(10, 170) !== tail,
       "off-viewport descendant was not clipped from hit testing");
+
+    equal(rowFlexScroller.clientHeight, 60, "row-flex viewport height");
+    equal(rowFlexScroller.scrollHeight, 160, "row-flex initial content extent");
+    rowFlexScroller.scrollTop = 1e6;
+    await renderingOpportunity();
+    equal(rowFlexScroller.scrollTop, 100, "row-flex overflow clamps to maximum");
+    equal(rowFlexScroller.scrollHeight, 160,
+      "row-flex extent does not absorb its current scroll offset");
+    rowFlexScroller.scrollTop = 1e6;
+    await renderingOpportunity();
+    equal(rowFlexScroller.scrollTop, 100, "repeated row-flex overflow remains bounded");
+    equal(rowFlexScroller.scrollHeight, 160,
+      "repeated row-flex scrolling does not grow its extent");
 
     scroller.scrollTop = 1e6;
     await renderingOpportunity();

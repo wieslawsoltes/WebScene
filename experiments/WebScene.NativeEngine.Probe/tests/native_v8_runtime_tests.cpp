@@ -4858,6 +4858,65 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_row_flex_vertical_scroll_extent_remains_bounded(webscene_engine* engine)
+{
+    resize(engine, 400, 200, 43U);
+    const auto initial = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const scroller = document.createElement('div');
+          scroller.style.cssText =
+            'display:flex;flex-direction:row;width:160px;height:64px;overflow:auto';
+          const content = document.createElement('div');
+          content.style.cssText = 'flex:none;width:80px;height:160px';
+          scroller.appendChild(content);
+          document.body.appendChild(scroller);
+          globalThis.__rowFlexScroller = scroller;
+          return {
+            clientHeight: scroller.clientHeight,
+            scrollHeight: scroller.scrollHeight,
+            scrollTop: scroller.scrollTop
+          };
+        })()
+    )JS", "native-row-flex-overflow-setup.js");
+    require(
+        initial == R"({"clientHeight":64,"scrollHeight":160,"scrollTop":0})",
+        "row-flex vertical overflow range was not established: " + initial);
+
+    const auto consumed_before_first_wheel = consumed_input_count(engine);
+    wheel_input(engine, 20, 20, 1000000, 43U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_first_wheel + 1,
+        "row-flex boundary wheel input was not consumed");
+    const auto first_boundary = evaluate(engine, R"JS(
+        ({
+          scrollHeight: __rowFlexScroller.scrollHeight,
+          scrollTop: __rowFlexScroller.scrollTop
+        })
+    )JS", "native-row-flex-overflow-first-boundary.js");
+    require(
+        first_boundary == R"({"scrollHeight":160,"scrollTop":96})",
+        "row-flex scroll extent grew after reaching its boundary: " + first_boundary);
+
+    const auto consumed_before_second_wheel = consumed_input_count(engine);
+    wheel_input(engine, 20, 20, 1000000, 44U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_second_wheel + 1,
+        "repeated row-flex boundary wheel input was not consumed");
+    const auto repeated_boundary = evaluate(engine, R"JS(
+        ({
+          scrollHeight: __rowFlexScroller.scrollHeight,
+          scrollTop: __rowFlexScroller.scrollTop
+        })
+    )JS", "native-row-flex-overflow-repeated-boundary.js");
+    require(
+        repeated_boundary == R"({"scrollHeight":160,"scrollTop":96})",
+        "repeated row-flex scrolling escaped the finite range: " + repeated_boundary);
+}
+
 void test_toolbar_scroll_chevrons_use_single_rotation(webscene_engine* engine)
 {
     resize(engine, 320, 200, 44U);
@@ -8854,6 +8913,7 @@ int main()
     test_segmented_rounded_borders_share_an_unclipped_join(engine);
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
+    test_row_flex_vertical_scroll_extent_remains_bounded(engine);
     test_toolbar_scroll_chevrons_use_single_rotation(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);
     test_table_menu_row_cells_stay_horizontal_and_centered(engine);
