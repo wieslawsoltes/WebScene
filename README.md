@@ -95,6 +95,10 @@
   </tbody>
 </table>
 
+<p align="center">
+  <a href="https://t.me/+RChokbByXQpkOTQ0"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?logo=telegram&amp;logoColor=white&amp;style=flat-square" alt="Telegram Community"></a>
+</p>
+
 ## What WebScene enables
 
 **WebScene is a native component runtime for bringing web-authored experiences into Flutter, Uno Platform, WPF, WinUI, Avalonia, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
