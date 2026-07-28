@@ -127,17 +127,67 @@ The WebScene product family includes:
 
 ## Highlights
 
-- 🚀 **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread and publish immutable, damage-aware scene diffs to a framework-native presenter.
-- 🌐 **Cross-framework presentation**: Target Flutter, Uno Platform, WPF, WinUI, and Avalonia through a shared runtime, portable contracts, and framework-specific presenters.
-- 🎛️ **High-fidelity existing controls**: Run sophisticated libraries such as Monaco Editor and TradingView with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
-- 🧬 **`.d.ts`-to-.NET interop**: Generate reviewable, strongly typed C# models, proxies, functions, globals, and callback adapters from TypeScript declaration files.
-- ⚡ **Native application composition**: Combine web components with XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
-- 🧩 **Component hosting**: Mount versioned, offline React/TypeScript/JavaScript bundles through an engine-neutral component profile and framework host.
-- 🧠 **Compatibility by contract**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines; promote support through conformance gates.
-- 🔌 **Capability-based host bridge**: Expose selected asynchronous .NET services to trusted components without giving them an implicit application-wide API.
-- 🕹️ **DOM and event integration**: Query and mutate the projected visual surface and route pointer, keyboard, text, focus, and routed-event behavior to JavaScript.
-- 🖼️ **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right shape.
-- 🪶 **Browserless integration**: Deliver web-authored components without a WebView or embedded browser runtime.
+- **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread, then publish immutable, damage-aware scene diffs to a framework-native presenter.
+- **Cross-framework presentation**: Target Flutter, Uno Platform, WPF, WinUI, and Avalonia through a shared runtime, portable contracts, and framework-specific presenters.
+- **High-fidelity component support**: Run sophisticated libraries such as Monaco Editor and TradingView with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
+- **Strongly typed .NET interop**: Generate reviewable C# models, proxies, functions, globals, and callback adapters from TypeScript declaration files.
+- **Native application composition**: Place web-authored components alongside XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
+- **Versioned component hosting**: Mount offline React, TypeScript, and JavaScript bundles through an engine-neutral component profile and framework host.
+- **Contract-based compatibility**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines, with support promoted through conformance gates.
+- **Capability-based host bridge**: Expose selected asynchronous .NET services to trusted components without granting an implicit application-wide API.
+- **DOM and event integration**: Query and mutate the projected visual surface while routing pointer, keyboard, text, focus, and routed-event behavior to JavaScript.
+- **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right abstraction.
+- **Browserless integration**: Deliver web-authored components without embedding a WebView or browser runtime.
+
+## WebScene compared with WebViews and browser-based solutions
+
+A WebView or embedded browser keeps the complete web stack and its renderer inside a
+browser-owned surface. The native application hosts and composites that surface, while
+the browser remains responsible for the DOM, CSS, layout, input, scripting, and
+painting.
+
+WebScene replaces that embedded surface with a component-oriented runtime and a native
+scene pipeline:
+
+```text
+WebView / embedded browser
+
+HTML + CSS + JavaScript
+        ↓
+Chromium, WebKit, or another browser engine
+        ↓
+Browser-owned rendered surface
+        ↓
+Native application composites the surface
+
+WebScene native engine
+
+HTML + CSS + JavaScript
+        ↓
+V8 + WebScene DOM, CSS, layout, events, Canvas, and SVG
+        ↓
+Immutable, damage-aware scene diff
+        ↓
+Framework presenter renders the scene as part of the native application
+```
+
+| Area | WebView or embedded browser | WebScene |
+| --- | --- | --- |
+| Runtime | Uses an operating-system browser engine or bundles one, such as Chromium or WebKit. | Uses V8 with WebScene's own DOM, CSS, layout, event, Canvas, SVG, and scene engine. |
+| Rendering | The browser paints into a browser-owned surface. | A framework presenter consumes immutable scene diffs and draws them through the host graphics stack. |
+| Application composition | Native UI is composed around an embedded browser view. | Web-authored components participate in the native application's rendering, input, lifecycle, and service boundaries. |
+| Host integration | Commonly crosses a WebView messaging or JavaScript bridge. | Uses portable contracts and an explicit capability-based host bridge. |
+| Content model | Suited to general web navigation and broad browser compatibility. | Designed for trusted, packaged, versioned components with declared compatibility requirements and offline assets. |
+| Compatibility | Inherits the mature Web Platform coverage of the selected browser engine. | Implements a tested Web Platform subset; support is capability-driven and promoted through conformance gates. |
+| Deployment | Depends on an installed system WebView or ships a browser runtime with the application. | Ships the WebScene runtime and the framework-specific presenter required by the selected backend. |
+
+WebScene is therefore not a wrapper around WebView2, `WKWebView`, CEF, Electron, or
+another browser control. It can run supported HTML, CSS, and JavaScript without an
+embedded browser by owning the browser-like semantics needed by the component and
+projecting the result into the native scene. This also means WebScene is not currently
+a drop-in browser for arbitrary public websites: applications should package trusted
+components and validate their required capabilities against the selected
+[managed or native backend](docs/backends.md).
 
 ## Proven with demanding web libraries
 
@@ -506,6 +556,9 @@ If your organisation requires a different licensing arrangement, please reach ou
 
 ## Acknowledgements
 
+- [Uno Platform](https://platform.uno/) for its cross-platform .NET application framework.
+- [WinUI](https://github.com/microsoft/microsoft-ui-xaml) for the native Windows UI framework.
+- [Flutter](https://flutter.dev/) for its cross-platform UI toolkit and embedder model.
 - [AvaloniaUI](https://github.com/AvaloniaUI/Avalonia) for the cross-platform UI framework.
 - [ClearScript](https://github.com/microsoft/ClearScript) for the V8 hosting layer.
 - [AngleSharp](https://anglesharp.github.io/) for HTML/CSS parsing used by WebScene.
