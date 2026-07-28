@@ -47,6 +47,23 @@ public static class CssPropertyCatalog
         return s_supported.Contains(Normalize(propertyName));
     }
 
+    /// <summary>
+    /// Returns whether a property stores a CSS color value rather than another
+    /// value whose name merely contains the word "color".
+    /// </summary>
+    public static bool IsColorValueProperty(string? propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName)
+            || propertyName.StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var normalized = Normalize(propertyName);
+        return normalized is "color" or "fill" or "stroke"
+               || normalized.EndsWith("-color", StringComparison.Ordinal);
+    }
+
     public static bool IsValidCssomValue(string propertyName, string value)
     {
         if (propertyName.StartsWith("--", StringComparison.Ordinal))

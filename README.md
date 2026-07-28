@@ -304,11 +304,11 @@ Add the Avalonia backend and the native runtime package matching the target plat
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.6" />
+  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.7" />
   <!-- Choose one runtime package for the target platform. -->
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.6" />
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.6" /> -->
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.6" /> -->
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.7" />
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.7" /> -->
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.7" /> -->
 </ItemGroup>
 ```
 

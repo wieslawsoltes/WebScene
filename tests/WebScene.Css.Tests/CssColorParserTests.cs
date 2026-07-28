@@ -42,4 +42,23 @@ public sealed class CssColorParserTests
     [InlineData("rgba(1, 2, 3, nope)")]
     public void RejectsUnsupportedOrMalformedColors(string? css)
         => Assert.False(CssColorParser.TryParseFunctionalColor(css, out _));
+
+    [Theory]
+    [InlineData("#FFFFFF", "rgb(255, 255, 255)")]
+    [InlineData("#0f08", "rgba(0, 255, 0, 0.533)")]
+    [InlineData("rgb(1,2,3)", "rgb(1, 2, 3)")]
+    [InlineData("rgba(1,2,3,.5)", "rgba(1, 2, 3, 0.5)")]
+    public void SerializesAuthoredColorsUsingBrowserCssomForm(string css, string expected)
+    {
+        Assert.True(CssColorParser.TrySerializeSpecifiedColor(css, out var serialized));
+        Assert.Equal(expected, serialized);
+    }
+
+    [Theory]
+    [InlineData("white")]
+    [InlineData("transparent")]
+    [InlineData("var(--accent)")]
+    [InlineData("not-a-color")]
+    public void PreservesColorKeywordsAndUnresolvedValues(string css)
+        => Assert.False(CssColorParser.TrySerializeSpecifiedColor(css, out _));
 }

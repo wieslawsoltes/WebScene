@@ -10794,6 +10794,11 @@ public class AvaloniaDomElement :
             {
                 value = null;
             }
+            else if (CssPropertyCatalog.IsColorValueProperty(normalized)
+                     && CssColorParser.TrySerializeSpecifiedColor(value, out var serializedColor))
+            {
+                value = serializedColor;
+            }
         }
         if (value is not null)
         {

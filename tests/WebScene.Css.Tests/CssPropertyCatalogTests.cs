@@ -6,6 +6,23 @@ namespace WebScene.Css.Tests;
 public sealed class CssPropertyCatalogTests
 {
     [Theory]
+    [InlineData("color")]
+    [InlineData("backgroundColor")]
+    [InlineData("border-left-color")]
+    [InlineData("fill")]
+    [InlineData("stroke")]
+    public void IdentifiesCssColorValueProperties(string propertyName)
+        => Assert.True(CssPropertyCatalog.IsColorValueProperty(propertyName));
+
+    [Theory]
+    [InlineData("--theme-color")]
+    [InlineData("color-scheme")]
+    [InlineData("print-color-adjust")]
+    [InlineData("background")]
+    public void DoesNotMisclassifyNonColorValueProperties(string propertyName)
+        => Assert.False(CssPropertyCatalog.IsColorValueProperty(propertyName));
+
+    [Theory]
     [InlineData("position")]
     [InlineData("backgroundAttachment")]
     [InlineData("grid-area")]

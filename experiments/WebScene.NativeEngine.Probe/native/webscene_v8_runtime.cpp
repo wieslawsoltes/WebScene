@@ -793,6 +793,44 @@ std::string canonical_css_property_name(std::string_view name)
     return result;
 }
 
+bool is_css_color_value_property(std::string_view name)
+{
+    const auto canonical_name = canonical_css_property_name(name);
+    return canonical_name == "color"
+        || canonical_name == "fill"
+        || canonical_name == "stroke"
+        || canonical_name.ends_with("-color");
+}
+
+std::string serialize_cssom_specified_value(
+    std::string_view property_name,
+    const std::string& value)
+{
+    if (!is_css_color_value_property(property_name)
+        || value.empty()
+        || value.front() != '#'
+        || (value.size() != 4U && value.size() != 5U
+            && value.size() != 7U && value.size() != 9U)) {
+        return value;
+    }
+
+    const auto color = native_document::parse_color(value);
+    const auto red = static_cast<unsigned>((color >> 24U) & 0xFFU);
+    const auto green = static_cast<unsigned>((color >> 16U) & 0xFFU);
+    const auto blue = static_cast<unsigned>((color >> 8U) & 0xFFU);
+    const auto alpha = static_cast<unsigned>(color & 0xFFU);
+    std::ostringstream stream;
+    if (alpha == 0xFFU) {
+        stream << "rgb(" << red << ", " << green << ", " << blue << ')';
+    } else {
+        const auto normalized_alpha = std::round(
+            static_cast<double>(alpha) / 255.0 * 1000.0) / 1000.0;
+        stream << "rgba(" << red << ", " << green << ", " << blue << ", "
+            << serialize_css_number(normalized_alpha) << ')';
+    }
+    return stream.str();
+}
+
 std::string css_property_idl_name(std::string_view name)
 {
     if (name == "float") return "cssFloat";
@@ -15655,7 +15693,9 @@ struct v8_dom_runtime::implementation final {
         }
 
         auto& authored = node.mutable_authored_style();
-        authored.declarations[declaration.name] = declaration.value;
+        authored.declarations[declaration.name] = serialize_cssom_specified_value(
+            declaration.name,
+            declaration.value);
         if (declaration.important) {
             authored.important_declarations.insert(declaration.name);
         } else {
@@ -15860,8 +15900,7 @@ struct v8_dom_runtime::implementation final {
     {
         const auto& rule = css_rules[index];
         const auto& selector = rule.selector();
-        if (selector.find("::-webkit-scrollbar") != std::string::npos
-            || selector.find("::selection") != std::string::npos) {
+        if (selector.find("::selection") != std::string::npos) {
             return;
         }
         index_hover_selector_dependencies(rule);
@@ -17782,8 +17821,21 @@ struct v8_dom_runtime::implementation final {
         };
         if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
         if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
+        if (const auto kind = split_suffix("::-webkit-scrollbar", 3); kind != 0) return kind;
         if (const auto kind = split_suffix(":before", 1); kind != 0) return kind;
         return split_suffix(":after", 2);
+    }
+
+    static void apply_scrollbar_css_declaration(
+        node_style& style,
+        const css_declaration& declaration)
+    {
+        if (declaration.name != "display"
+            || (style.scrollbar_visibility_important && !declaration.important)) {
+            return;
+        }
+        style.scrollbar_hidden = trim_css(declaration.value) == "none";
+        style.scrollbar_visibility_important = declaration.important;
     }
 
     static void append_utf8_codepoint(std::string& result, uint32_t codepoint)
@@ -19981,6 +20033,8 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         node.style.important_property_mask = 0;
+        node.style.scrollbar_hidden = false;
+        node.style.scrollbar_visibility_important = false;
         if ((node.style.inline_property_mask & inline_position) == 0U) {
             node.style.position = position_mode::normal;
         }
@@ -20239,6 +20293,12 @@ struct v8_dom_runtime::implementation final {
         // declarations so `::before { background:var(--active-bg) }` resolves
         // the state variable authored on the active element.
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            if (pseudo_kind == 3) {
+                for (const auto& declaration : rule->declarations()) {
+                    apply_scrollbar_css_declaration(node.style, declaration);
+                }
+                continue;
+            }
             auto& pseudo = pseudo_kind == 1
                 ? node.style.mutable_before_pseudo()
                 : node.style.mutable_after_pseudo();
@@ -20352,6 +20412,12 @@ struct v8_dom_runtime::implementation final {
             }
         }
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            if (pseudo_kind == 3) {
+                for (const auto& declaration : rule->declarations()) {
+                    apply_scrollbar_css_declaration(node.style, declaration);
+                }
+                continue;
+            }
             auto& pseudo = pseudo_kind == 1
                 ? node.style.mutable_before_pseudo()
                 : node.style.mutable_after_pseudo();
@@ -23458,7 +23524,9 @@ struct v8_dom_runtime::implementation final {
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
         auto& authored = node->mutable_authored_style();
-        authored.declarations[canonical_name] = value;
+        authored.declarations[canonical_name] = serialize_cssom_specified_value(
+            canonical_name,
+            value);
         authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
@@ -24565,7 +24633,9 @@ struct v8_dom_runtime::implementation final {
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
         auto& authored = node->mutable_authored_style();
-        authored.declarations[canonical_name] = value;
+        authored.declarations[canonical_name] = serialize_cssom_specified_value(
+            canonical_name,
+            value);
         authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the

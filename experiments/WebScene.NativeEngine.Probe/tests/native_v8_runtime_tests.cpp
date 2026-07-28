@@ -4387,6 +4387,37 @@ void test_cssom_serializes_resolved_numbers_without_trailing_zeroes(webscene_eng
         "specified and resolved CSSOM values were conflated: " + reflection);
 }
 
+void test_cssom_serializes_inline_hex_colors(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const target = document.createElement('div');
+          target.style.color = '#FFFFFF';
+          target.style.backgroundColor = '#12345680';
+          target.style.setProperty('--theme-color', '#FFFFFF');
+          const color = target.style.color;
+          const parserCompatible =
+            (/^rgb\s*\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/).test(color) ||
+            (/^rgba\s*\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+(?:\.\d+)?)\s*\)$/).test(color);
+          const result = {
+            color,
+            colorByName: target.style.getPropertyValue('color'),
+            background: target.style.backgroundColor,
+            parserCompatible,
+            cssText: target.style.cssText,
+            attribute: target.getAttribute('style'),
+            custom: target.style.getPropertyValue('--theme-color')
+          };
+          target.style.color = 'white';
+          result.keyword = target.style.color;
+          return result;
+        })()
+    )JS", "native-cssom-inline-hex-color.js");
+    require(
+        result == R"JSON({"color":"rgb(255, 255, 255)","colorByName":"rgb(255, 255, 255)","background":"rgba(18, 52, 86, 0.502)","parserCompatible":true,"cssText":"--theme-color: #FFFFFF; background-color: rgba(18, 52, 86, 0.502); color: rgb(255, 255, 255);","attribute":"--theme-color: #FFFFFF; background-color: rgba(18, 52, 86, 0.502); color: rgb(255, 255, 255);","custom":"#FFFFFF","keyword":"white"})JSON",
+        "inline hex colors were not serialized using browser CSSOM form: " + result);
+}
+
 void test_cssom_padding_assignment_updates_longhands_and_geometry(webscene_engine* engine)
 {
     const auto assigned = evaluate(engine, R"JS(
@@ -4639,6 +4670,9 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
           const style = document.createElement('style');
           style.textContent = `
             .scroller { width:160px; height:64px; overflow-x:hidden; }
+            .scroller.no-scrollbar::-webkit-scrollbar {
+              display:none; width:0; height:0;
+            }
             .row { height:32px; }
             .title { display:block; width:80px; overflow:hidden; white-space:nowrap;
               font-size:14px; line-height:18px; }
@@ -4741,6 +4775,44 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
     require(
         observed_scrollbar_rail && observed_scrollbar_thumb,
         "native overflow viewport did not paint a proportional scrollbar at its bounded maximum");
+
+    const auto hidden_scrollbar_state = evaluate(engine, R"JS(
+        (() => {
+          __overflowScroller.classList.add('no-scrollbar');
+          return {
+            scrollTop: __overflowScroller.scrollTop,
+            scrollHeight: __overflowScroller.scrollHeight
+          };
+        })()
+    )JS", "native-hidden-scrollbar-state.js");
+    require(
+        hidden_scrollbar_state == R"({"scrollTop":96,"scrollHeight":160})",
+        "hiding the scrollbar changed overflow geometry or scroll position: "
+            + hidden_scrollbar_state);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto hidden_scrollbar_painted = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind == 10U
+                    && (command.rgba == 0x7F7F7F40U
+                        || command.rgba == 0xA0A0A0D0U)
+                    && std::abs(command.x - 152.0F) < 0.1F) {
+                    hidden_scrollbar_painted = true;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        !hidden_scrollbar_painted,
+        "::-webkit-scrollbar { display:none } still painted the host overlay scrollbar");
 
     const auto boundary_events = evaluate(
         engine,
@@ -8675,6 +8747,7 @@ int main()
     test_transform_transition_uses_host_clock_for_translate_and_scale(engine);
     test_transform_transition_interpolates_from_none(engine);
     test_cssom_serializes_resolved_numbers_without_trailing_zeroes(engine);
+    test_cssom_serializes_inline_hex_colors(engine);
     test_cssom_padding_assignment_updates_longhands_and_geometry(engine);
     test_cssom_border_assignment_updates_longhands_and_geometry(engine);
     test_logical_inline_borders_reach_geometry(engine);

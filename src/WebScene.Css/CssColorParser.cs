@@ -6,6 +6,48 @@ namespace WebScene.Css;
 public static class CssColorParser
 {
     /// <summary>
+    /// Serializes authored hex and functional colors using the CSSOM form returned
+    /// by browser inline-style declarations. Color keywords are intentionally not
+    /// rewritten because browsers preserve their authored keyword spelling.
+    /// </summary>
+    public static bool TrySerializeSpecifiedColor(string? value, out string serialized)
+    {
+        serialized = string.Empty;
+        var normalized = value?.Trim() ?? string.Empty;
+        var isHex = normalized.StartsWith('#');
+        var isFunctional = normalized.StartsWith("rgb(", StringComparison.OrdinalIgnoreCase)
+                           || normalized.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase);
+        if ((!isHex && !isFunctional)
+            || !TryParseColor(normalized, out var color))
+        {
+            return false;
+        }
+
+        if (color.A == byte.MaxValue)
+        {
+            serialized = $"rgb({color.R}, {color.G}, {color.B})";
+            return true;
+        }
+
+        var alpha = color.A / 255d;
+        if (isFunctional
+            && normalized.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = normalized[(normalized.IndexOf('(') + 1)..^1]
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 4 && TryAlphaValue(parts[3], out var authoredAlpha))
+            {
+                alpha = authoredAlpha;
+            }
+        }
+
+        alpha = Math.Round(alpha, 3);
+        serialized =
+            $"rgba({color.R}, {color.G}, {color.B}, {alpha.ToString("0.###", CultureInfo.InvariantCulture)})";
+        return true;
+    }
+
+    /// <summary>
     /// Parses CSS hex colors, the supported comma-separated rgb()/rgba() forms,
     /// and the CSS gray/grey named-color aliases.
     /// </summary>
@@ -182,6 +224,18 @@ public static class CssColorParser
     private static bool TryAlpha(string text, out byte alpha)
     {
         alpha = byte.MaxValue;
+        if (!TryAlphaValue(text, out var normalized))
+        {
+            return false;
+        }
+
+        alpha = (byte)Math.Round(normalized * byte.MaxValue);
+        return true;
+    }
+
+    private static bool TryAlphaValue(string text, out double alpha)
+    {
+        alpha = 1;
         var percent = text.EndsWith('%');
         var numberText = percent ? text[..^1] : text;
         if (!double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
@@ -190,7 +244,7 @@ public static class CssColorParser
             return false;
         }
 
-        alpha = (byte)Math.Round(Math.Clamp(percent ? number / 100d : number, 0, 1) * byte.MaxValue);
+        alpha = Math.Clamp(percent ? number / 100d : number, 0, 1);
         return true;
     }
 }

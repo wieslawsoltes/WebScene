@@ -10,6 +10,41 @@ namespace JavaScript.Avalonia.Tests;
 public sealed class V8TypedInlineStyleWriteTests
 {
     [AvaloniaFact]
+    public void InlineHexColorUsesBrowserCssomSerializationWithoutNativeV8()
+    {
+        var window = new Window { Width = 320, Height = 180, Content = new CssLayoutPanel() };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        using var host = new AvaloniaBrowserHost(window);
+        try
+        {
+            var target = HostTestUtilities.GetElement(host.Document.createElement("div"));
+
+            target.style.setProperty("color", "#FFFFFF");
+
+            var color = target.style.getPropertyValue("color");
+            Assert.Equal("rgb(255, 255, 255)", color);
+            Assert.Matches(
+                @"^rgba?\s*\(\s*\d+,\s*\d+,\s*\d+(?:,\s*\d+(?:\.\d+)?)?\s*\)$",
+                color);
+            Assert.Equal("color: rgb(255, 255, 255)", target.style.cssText);
+            Assert.Equal("color: rgb(255, 255, 255)", target.getAttribute("style"));
+
+            target.style.setProperty("color", "white");
+            Assert.Equal("white", target.style.getPropertyValue("color"));
+
+            target.style.setProperty("--theme-color", "#FFFFFF");
+            Assert.Equal("#FFFFFF", target.style.getPropertyValue("--theme-color"));
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     [Trait("Runtime", "V8Native")]
     public void TypedAndFallbackWritesPreserveInlineStyleCssomAndComputedResults()
     {
@@ -34,6 +69,8 @@ public sealed class V8TypedInlineStyleWriteTests
         Assert.Equal("2px", enabled.Result.GetProperty("computedBorderRight").GetString());
         Assert.Equal("3px", enabled.Result.GetProperty("computedBorderBottom").GetString());
         Assert.Equal("4px", enabled.Result.GetProperty("computedBorderLeft").GetString());
+        Assert.Equal("rgb(255, 255, 255)", enabled.Result.GetProperty("inlineColor").GetString());
+        Assert.True(enabled.Result.GetProperty("tradingViewColorParserCompatible").GetBoolean());
         Assert.True(enabled.Metrics.GetProperty("typedWrites").GetInt32() > 0);
         Assert.Equal(0, enabled.Metrics.GetProperty("fallbackWrites").GetInt32());
         Assert.Equal(0, disabled.Metrics.GetProperty("typedWrites").GetInt32());
@@ -185,6 +222,11 @@ public sealed class V8TypedInlineStyleWriteTests
         const authoredBorder = target.style.getPropertyValue('border');
         target.style.borderStyle = 'solid';
         target.style.borderWidth = '1px 2px 3px 4px';
+        target.style.color = '#FFFFFF';
+        const inlineColor = target.style.color;
+        const tradingViewColorParserCompatible =
+          (/^rgb\s*\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/).test(inlineColor) ||
+          (/^rgba\s*\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+(?:\.\d+)?)\s*\)$/).test(inlineColor);
         const computed = getComputedStyle(target);
         globalThis.__typedInlineStyleWriteResult = {
           cssText: target.style.cssText,
@@ -200,6 +242,8 @@ public sealed class V8TypedInlineStyleWriteTests
           computedPaddingBottom: computed.paddingBottom,
           computedPaddingLeft: computed.paddingLeft,
           authoredBorder,
+          inlineColor,
+          tradingViewColorParserCompatible,
           computedBorderTop: computed.borderTopWidth,
           computedBorderRight: computed.borderRightWidth,
           computedBorderBottom: computed.borderBottomWidth,
