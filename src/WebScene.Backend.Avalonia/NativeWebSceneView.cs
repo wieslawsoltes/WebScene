@@ -33,6 +33,44 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public INativeWebSceneRenderDiagnostics RenderDiagnostics => _surface;
 
+    public string LastError
+        => _engine == IntPtr.Zero
+            ? string.Empty
+            : NativeWebSceneApi.GetLastError(_engine);
+
+    public string SceneDiagnostics
+        => _engine == IntPtr.Zero
+            ? string.Empty
+            : NativeWebSceneApi.GetSceneDiagnostics(_engine);
+
+    public string FirstIframeHtml
+        => _engine == IntPtr.Zero
+            ? string.Empty
+            : NativeWebSceneApi.GetFirstIframeHtml(_engine);
+
+    public string FeatureUseReport
+        => _engine == IntPtr.Zero
+            ? string.Empty
+            : NativeWebSceneApi.GetFeatureUse(_engine);
+
+    public string[] DrainConsoleMessages()
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            return [];
+        }
+        var messages = new List<string>();
+        while (NativeWebSceneApi.TryTakeConsoleMessage(
+                   engine,
+                   out var level,
+                   out var message))
+        {
+            messages.Add($"{level}\n{message}");
+        }
+        return messages.ToArray();
+    }
+
     internal static NativePreferredColorScheme ResolvePreferredColorScheme(
         ThemeVariant themeVariant)
         => themeVariant == ThemeVariant.Dark

@@ -1,5 +1,5 @@
-name: flutter_tradingview_example
-description: Private TradingView example for WebScene.Backend.Flutter.
+name: flutter_native_runtime_showcase
+description: Monaco and TradingView showcase for WebScene.Backend.Flutter.
 publish_to: none
 version: 1.0.0+1
 

@@ -47,11 +47,11 @@ memory-pressure, checkpoint, console, and scene acknowledgement behavior.
 The host app must allow JIT execution and access to the runtime and bridge
 paths. The included macOS example carries the required entitlements.
 
-## TradingView example
+## Monaco and TradingView example
 
-The `example` directory contains the private TradingView integration and its
-deterministic market-data host service. TradingView-specific behavior is kept
-out of the backend package.
+The `example` directory hosts both the checked-in Monaco Editor bundle and the
+private TradingView integration with its deterministic market-data host
+service. Library-specific behavior stays outside the backend package.
 
 ```shell
 ./example/tool/run_macos.sh

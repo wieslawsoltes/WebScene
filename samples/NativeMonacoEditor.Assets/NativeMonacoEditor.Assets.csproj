@@ -8,7 +8,8 @@
 
   <Target Name="BuildNativeMonacoAssets"
           BeforeTargets="Build"
-          Condition="!Exists('$(MonacoSourceDirectory)\Assets\monaco.js') or !Exists('$(MonacoSourceDirectory)\Assets\monaco.css') or !Exists('$(MonacoSourceDirectory)\Assets\codicon.ttf')">
+          Inputs="$(MonacoSourceDirectory)\web\editor-entry.js;$(MonacoSourceDirectory)\build-monaco.mjs;$(MonacoSourceDirectory)\package-lock.json"
+          Outputs="$(MonacoSourceDirectory)\Assets\monaco.js;$(MonacoSourceDirectory)\Assets\monaco.css;$(MonacoSourceDirectory)\Assets\codicon.ttf">
     <Exec WorkingDirectory="$(MonacoSourceDirectory)"
           Command="npm ci --no-audit --no-fund" />
     <Exec WorkingDirectory="$(MonacoSourceDirectory)"

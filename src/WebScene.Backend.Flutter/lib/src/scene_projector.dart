@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path_drawing/path_drawing.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -27,15 +30,36 @@ final class SceneApplyResult {
   final int revision;
 }
 
-final class WebSceneSceneProjector {
+final class WebSceneSceneProjector extends ChangeNotifier {
   final Map<int, _RetainedLayer> _layers = {};
+  final Map<String, _SvgPictureEntry> _svgPictures = {};
+  final List<_DomSvgPlacement> _domSvgPlacements = [];
   ui.Picture? _backdrop;
   ui.Picture? _overlay;
   int _revision = 0;
+  bool _disposed = false;
   double viewportWidth = 0;
   double viewportHeight = 0;
 
   int get revision => _revision;
+
+  @visibleForTesting
+  int get fullSvgPlacementCount => _domSvgPlacements.length;
+
+  @visibleForTesting
+  int get cachedSvgPictureCount =>
+      _svgPictures.values.where((entry) => entry.picture != null).length;
+
+  @visibleForTesting
+  int get failedSvgPictureCount =>
+      _svgPictures.values.where((entry) => entry.error != null).length;
+
+  @visibleForTesting
+  Future<void> waitForPendingSvgLoads() => Future.wait(
+        _svgPictures.values
+            .map((entry) => entry.pending)
+            .whereType<Future<void>>(),
+      );
 
   SceneApplyResult apply(Pointer<WebSceneSceneView> scenePointer) {
     final scene = scenePointer.ref;
@@ -130,6 +154,7 @@ final class WebSceneSceneProjector {
     }
     final overlay = _overlay;
     if (overlay != null) canvas.drawPicture(overlay);
+    _drawDomSvgPictures(canvas);
     canvas.restore();
   }
 
@@ -138,6 +163,7 @@ final class WebSceneSceneProjector {
     _overlay?.dispose();
     _backdrop = null;
     _overlay = null;
+    _domSvgPlacements.clear();
     for (final layer in _layers.values) {
       layer.dispose();
     }
@@ -147,7 +173,17 @@ final class WebSceneSceneProjector {
     viewportHeight = 0;
   }
 
-  void dispose() => reset();
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    reset();
+    for (final entry in _svgPictures.values) {
+      entry.picture?.dispose();
+    }
+    _svgPictures.clear();
+    super.dispose();
+  }
 
   bool _validateLayer(WebSceneSceneView scene, WebSceneCanvasLayer layer) =>
       layer.commandOffset <= scene.canvasCommandCount &&
@@ -156,6 +192,7 @@ final class WebSceneSceneProjector {
       layer.stringCount <= scene.stringCount - layer.stringOffset;
 
   ui.Picture _compileDom(WebSceneSceneView scene, {required bool foreground}) {
+    if (foreground) _domSvgPlacements.clear();
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
       recorder,
@@ -220,6 +257,8 @@ final class WebSceneSceneProjector {
         case 4 when foreground:
         case 5 when foreground:
           _drawDomSvgPath(canvas, scene, command, stroke: command.kind == 5);
+        case 6 when foreground:
+          _retainDomSvg(scene, command);
         case 7 when !foreground:
         case 10 when foreground:
           canvas.drawRRect(
@@ -252,6 +291,95 @@ final class WebSceneSceneProjector {
     return recorder.endRecording();
   }
 
+  void _retainDomSvg(
+    WebSceneSceneView scene,
+    WebSceneSceneCommand command,
+  ) {
+    final resource = _domString(scene, command.flags);
+    final separator = resource.indexOf('\t');
+    if (separator <= 0 || separator == resource.length - 1) return;
+    final viewBox = _numbers(resource.substring(0, separator));
+    if (viewBox.length < 4 ||
+        viewBox[2] == 0 ||
+        viewBox[3] == 0 ||
+        command.width <= 0 ||
+        command.height <= 0) {
+      return;
+    }
+    final markup = resource.substring(separator + 1);
+    _domSvgPlacements.add(
+      _DomSvgPlacement(
+        markup: markup,
+        viewBox: ui.Rect.fromLTWH(
+          viewBox[0],
+          viewBox[1],
+          viewBox[2],
+          viewBox[3],
+        ),
+        x: command.x,
+        y: command.y,
+        width: command.width,
+        height: command.height,
+        rotationDegrees: command.strokeWidth,
+      ),
+    );
+    _ensureSvgPicture(markup);
+  }
+
+  void _ensureSvgPicture(String markup) {
+    final entry = _svgPictures.putIfAbsent(markup, _SvgPictureEntry.new);
+    if (entry.pending != null || entry.picture != null || entry.error != null) {
+      return;
+    }
+    entry.pending = _loadSvgPicture(markup, entry);
+  }
+
+  Future<void> _loadSvgPicture(
+    String markup,
+    _SvgPictureEntry entry,
+  ) async {
+    try {
+      final picture = await vg.loadPicture(
+        SvgStringLoader(markup),
+        null,
+        clipViewbox: false,
+      );
+      if (_disposed) {
+        picture.picture.dispose();
+        return;
+      }
+      entry.picture = picture.picture;
+      notifyListeners();
+    } catch (error) {
+      entry.error = error;
+    }
+  }
+
+  void _drawDomSvgPictures(ui.Canvas canvas) {
+    for (final placement in _domSvgPlacements) {
+      final picture = _svgPictures[placement.markup]?.picture;
+      if (picture == null) continue;
+      canvas.save();
+      if (placement.rotationDegrees.abs() >= 0.001) {
+        final centerX = placement.x + placement.width / 2;
+        final centerY = placement.y + placement.height / 2;
+        canvas
+          ..translate(centerX, centerY)
+          ..rotate(placement.rotationDegrees * 3.141592653589793 / 180)
+          ..translate(-centerX, -centerY);
+      }
+      canvas
+        ..translate(placement.x, placement.y)
+        ..scale(
+          placement.width / placement.viewBox.width,
+          placement.height / placement.viewBox.height,
+        )
+        ..translate(-placement.viewBox.left, -placement.viewBox.top)
+        ..drawPicture(picture)
+        ..restore();
+    }
+  }
+
   void _drawDomText(
     ui.Canvas canvas,
     WebSceneSceneView scene,
@@ -261,7 +389,8 @@ final class WebSceneSceneProjector {
     if (parts.length != 6) return;
     final fontSize = double.tryParse(parts[0]);
     if (fontSize == null || fontSize <= 0) return;
-    final lineHeight = double.tryParse(parts[1]) ?? fontSize * 1.2;
+    final parsedLineHeight = double.tryParse(parts[1]) ?? 0;
+    final lineHeight = parsedLineHeight > 0 ? parsedLineHeight : fontSize * 1.2;
     final weight = (int.tryParse(parts[2]) ?? 400).clamp(1, 1000);
     final family = _firstFontFamily(parts[4]);
     final painter = TextPainter(
@@ -283,10 +412,26 @@ final class WebSceneSceneProjector {
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout(maxWidth: command.width.clamp(0, double.infinity));
-    final top = command.y + (command.height - painter.height) / 2;
+    final top = domTextPaintTop(
+      boxTop: command.y,
+      boxHeight: command.height,
+      paintedLineHeight: painter.height,
+      hasExplicitLineHeight: parsedLineHeight > 0,
+    );
     painter.paint(canvas, ui.Offset(command.x, top));
     painter.dispose();
   }
+
+  @visibleForTesting
+  static double domTextPaintTop({
+    required double boxTop,
+    required double boxHeight,
+    required double paintedLineHeight,
+    required bool hasExplicitLineHeight,
+  }) =>
+      boxTop +
+      ((boxHeight - paintedLineHeight) / 2).clamp(0, double.infinity) +
+      (hasExplicitLineHeight ? 0 : 3);
 
   void _drawDomSvgPath(
     ui.Canvas canvas,
@@ -335,7 +480,8 @@ final class WebSceneSceneProjector {
     canvas.drawRRect(_domRRect(command), paint);
   }
 
-  _RetainedLayer _compileLayer(WebSceneSceneView scene, WebSceneCanvasLayer layer) {
+  _RetainedLayer _compileLayer(
+      WebSceneSceneView scene, WebSceneCanvasLayer layer) {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
       recorder,
@@ -706,7 +852,8 @@ final class WebSceneSceneProjector {
         command.values[3],
       );
 
-  static void _applyDomRotation(ui.Canvas canvas, WebSceneSceneCommand command) {
+  static void _applyDomRotation(
+      ui.Canvas canvas, WebSceneSceneCommand command) {
     if (command.strokeWidth.abs() < 0.001) return;
     final centerX = command.x + command.width / 2;
     final centerY = command.y + command.height / 2;
@@ -940,6 +1087,32 @@ final class _RetainedLayer {
   final ui.Picture picture;
 
   void dispose() => picture.dispose();
+}
+
+final class _DomSvgPlacement {
+  const _DomSvgPlacement({
+    required this.markup,
+    required this.viewBox,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.rotationDegrees,
+  });
+
+  final String markup;
+  final ui.Rect viewBox;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final double rotationDegrees;
+}
+
+final class _SvgPictureEntry {
+  Future<void>? pending;
+  ui.Picture? picture;
+  Object? error;
 }
 
 final class _CanvasState {

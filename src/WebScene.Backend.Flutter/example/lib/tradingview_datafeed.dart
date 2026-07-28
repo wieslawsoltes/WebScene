@@ -28,30 +28,62 @@ final class TradingViewExampleDatafeed {
       && (!globalThis.TradingView || typeof globalThis.TradingView.widget !== "function")) {
     globalThis.__webScenePrimeTradingView();
   }
-  const existingWidget = globalThis.__tvWidget || globalThis.tvWidget;
-  if (typeof globalThis.onInstrumentChanged === "function") {
-    globalThis.onInstrumentChanged(
-      "AAPL",
-      "Apple Inc. (deterministic Flutter example)",
-      "NASDAQ",
-      0.01,
-      ${jsonEncode(_resolutions)});
-  } else if (existingWidget && typeof existingWidget.setSymbol === "function") {
-    existingWidget.setSymbol("NASDAQ:AAPL", "60", () => {});
-  } else {
-    const chart = existingWidget && existingWidget.activeChart && existingWidget.activeChart();
-    if (!chart || typeof chart.setSymbol !== "function") {
-      throw new Error("TradingView setSymbol API is unavailable");
-    }
-    chart.setSymbol("NASDAQ:AAPL", { interval: "60" });
-  }
+  const markReady = () => {
+    globalThis.__webSceneComponentReady = true;
+  };
   const readyWidget = globalThis.__tvWidget || globalThis.tvWidget
     || (typeof widget !== "undefined" ? widget : null);
   if (readyWidget && typeof readyWidget.onChartReady === "function") {
-    readyWidget.onChartReady(() => {
-      globalThis.__webSceneComponentReady = true;
-    });
+    readyWidget.onChartReady(markReady);
   }
+  // A published widget is not evidence that its frame rendered. Hosted builds
+  // may publish it while the datafeed bridge is still starting, so only use
+  // canvas creation as the fallback readiness signal.
+  let readinessAttempts = 0;
+  const awaitRenderedChart = () => {
+    const hasChartCanvas = Array.from(document.querySelectorAll("iframe"))
+      .some(frame => {
+        try {
+          return (frame.contentDocument?.querySelectorAll("canvas").length ?? 0) > 0;
+        } catch (_) {
+          return false;
+        }
+      });
+    if (hasChartCanvas) {
+      markReady();
+      return;
+    }
+    if (++readinessAttempts < 120) setTimeout(awaitRenderedChart, 250);
+  };
+  setTimeout(awaitRenderedChart, 250);
+
+  let symbolAttempts = 0;
+  const applySymbol = () => {
+    const publishedWidget = globalThis.__tvWidget || globalThis.tvWidget
+      || (typeof widget !== "undefined" ? widget : null);
+    if (typeof globalThis.onInstrumentChanged === "function") {
+      globalThis.onInstrumentChanged(
+        "AAPL",
+        "Apple Inc. (deterministic Flutter example)",
+        "NASDAQ",
+        0.01,
+        ${jsonEncode(_resolutions)});
+      return;
+    }
+    if (publishedWidget && typeof publishedWidget.setSymbol === "function") {
+      publishedWidget.setSymbol("NASDAQ:AAPL", "60", () => {});
+      return;
+    }
+    const chart = publishedWidget
+      && publishedWidget.activeChart
+      && publishedWidget.activeChart();
+    if (chart && typeof chart.setSymbol === "function") {
+      chart.setSymbol("NASDAQ:AAPL", { interval: "60" });
+      return;
+    }
+    if (++symbolAttempts < 40) setTimeout(applySymbol, 250);
+  };
+  applySymbol();
 })()
 ''', documentName: 'webscene-flutter-set-symbol.js'),
       ];

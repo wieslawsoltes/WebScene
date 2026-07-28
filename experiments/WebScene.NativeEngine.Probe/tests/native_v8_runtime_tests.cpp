@@ -919,7 +919,8 @@ void test_parallel_resource_prefetch()
                 </body></html>)"},
             {"https://prefetch.test/one.js", "globalThis.__prefetchValues = [1];"},
             {"https://prefetch.test/two.js", "globalThis.__prefetchValues.push(2);"},
-            {"https://prefetch.test/three.js", "globalThis.__prefetchValues.push(3);"}
+            {"https://prefetch.test/three.js", "globalThis.__prefetchValues.push(3);"},
+            {"https://prefetch.test/data.json", R"({"answer":42})"}
         }};
     const webscene_engine_options options{
         sizeof(webscene_engine_options),
@@ -955,6 +956,26 @@ void test_parallel_resource_prefetch()
     require(
         result == R"({"values":[1,2,3],"sources":["one.js","two.js","three.js"],"parented":true})",
         "prefetched scripts or their DOM nodes did not preserve document order");
+    execute(
+        engine,
+        R"JS(
+          globalThis.__fetchResult = null;
+          fetch("data.json")
+            .then(response => response.json().then(value => ({
+              ok: response.ok,
+              status: response.status,
+              answer: value.answer
+            })))
+            .then(value => { globalThis.__fetchResult = value; });
+        )JS",
+        "native-fetch-resource.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__fetchResult",
+            "native-fetch-resource-result.js")
+            == R"({"ok":true,"status":200,"answer":42})",
+        "fetch did not resolve a relative URL through the host resource loader");
     require(
         server.peak.load(std::memory_order_relaxed) >= 2,
         "external document resources were not fetched concurrently");
@@ -1742,6 +1763,15 @@ void test_resource_cache_policy_matrix()
     require(load_policy_value(offline) == 1, "offline resource initial load failed");
     offline.online = false;
     require(load_policy_value(offline) == 1, "permitted offline warm cache did not serve its body");
+    offline.online = true;
+    offline.value = 2;
+    offline.entity_tag = "\"v2\"";
+    require(
+        load_policy_value(offline) == 1,
+        "failed revalidation did not receive a short stale-cache backoff");
+    require(
+        offline.requests == 1,
+        "stale-cache backoff retried the recovered origin immediately");
 
     std::filesystem::remove_all(cache_directory, cleanup_error);
 }
@@ -2130,6 +2160,65 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
     if (narrow != R"({"width":320,"minWidth":"100%","narrow":true,"wide":false})") {
         fail("responsive rules did not recascade after resize: " + narrow);
     }
+}
+
+void test_responsive_unset_restores_auto_inset(webscene_engine* engine)
+{
+    resize(engine, 500, 687, 3);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .snackbar {
+                position: fixed;
+                display: flex;
+                inset-inline-start: 12px;
+                inset-inline-end: 12px;
+                justify-content: center;
+                top: 12px;
+              }
+              @media (min-width:568px) {
+                .snackbar { bottom: 12px; top: unset; }
+              }
+              .wrapper { display: contents; }
+              .box {
+                display: flex;
+                min-height: 40px;
+                width: fit-content;
+              }
+            </style>
+            <div class="snackbar">
+              <div class="wrapper"><div class="box">Saved</div></div>
+            </div>`;
+          globalThis.__testSnackbar =
+            document.querySelector('.snackbar');
+          globalThis.__testSnackbarBox =
+            document.querySelector('.box');
+        })()
+    )JS", "native-responsive-unset-inset-setup.js");
+
+    const auto compact = evaluate(engine, R"JS(
+        (() => {
+          const layer = __testSnackbar.getBoundingClientRect();
+          const box = __testSnackbarBox.getBoundingClientRect();
+          return [layer.y, layer.height, box.y, box.height];
+        })()
+    )JS", "native-responsive-unset-inset-compact.js");
+    require(
+        compact == "[12,40,12,40]",
+        "the compact snackbar did not retain its top inset: " + compact);
+
+    resize(engine, 694, 687, 4);
+    const auto wide = evaluate(engine, R"JS(
+        (() => {
+          const layer = __testSnackbar.getBoundingClientRect();
+          const box = __testSnackbarBox.getBoundingClientRect();
+          return [layer.y, layer.height, box.y, box.height];
+        })()
+    )JS", "native-responsive-unset-inset-wide.js");
+    require(
+        wide == "[635,40,635,40]",
+        "top:unset did not restore the auto inset for a bottom snackbar: " + wide);
 }
 
 void test_preferred_color_scheme_updates_css_and_match_media(webscene_engine* engine)
@@ -6411,6 +6500,7 @@ void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
     const auto outer = evaluate(engine, R"JS(
         (() => {
           sessionStorage.clear();
+          localStorage.clear();
           sessionStorage.setItem('view', 'calendar');
           sessionStorage.setItem('count', 1);
           sessionStorage.setItem('view', 'date');
@@ -6422,10 +6512,16 @@ void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
             missing: sessionStorage.getItem('missing')
           };
           sessionStorage.removeItem('count');
-          return { beforeRemove, length: sessionStorage.length, first: sessionStorage.key(0) };
+          localStorage.setItem('theme', 'dark');
+          return {
+            beforeRemove,
+            length: sessionStorage.length,
+            first: sessionStorage.key(0),
+            localTheme: localStorage.getItem('theme')
+          };
         })()
     )JS", "native-session-storage-outer.js");
-    if (outer != R"({"beforeRemove":{"length":2,"keys":["view","count",null],"view":"date","count":"1","missing":null},"length":1,"first":"view"})") {
+    if (outer != R"({"beforeRemove":{"length":2,"keys":["view","count",null],"view":"date","count":"1","missing":null},"length":1,"first":"view","localTheme":"dark"})") {
         fail("outer sessionStorage semantics regressed: " + outer);
     }
 
@@ -6439,8 +6535,10 @@ void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
             '<html><body><script>'
             + 'globalThis.__sessionStorageResult = {'
             + 'outerValue: sessionStorage.getItem("view"),'
-            + 'initialLength: sessionStorage.length};'
+            + 'initialLength: sessionStorage.length,'
+            + 'localTheme: localStorage.getItem("theme")};'
             + 'sessionStorage.setItem("go-to-date", "month");'
+            + 'localStorage.setItem("layout", "compact");'
             + 'globalThis.__sessionStorageResult.value = sessionStorage.getItem("go-to-date");'
             + 'globalThis.__sessionStorageResult.length = sessionStorage.length;'
             + '</script></body></html>');
@@ -6452,9 +6550,111 @@ void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
         engine,
         "globalThis.__sessionStorageFrame.contentWindow.__sessionStorageResult",
         "native-session-storage-frame-result.js");
-    if (frame != R"({"outerValue":null,"initialLength":0,"value":"month","length":1})") {
+    if (frame != R"({"outerValue":null,"initialLength":0,"localTheme":"dark","value":"month","length":1})") {
         fail("frame sessionStorage semantics or isolation regressed: " + frame);
     }
+    require(
+        evaluate(
+            engine,
+            "localStorage.getItem('layout')",
+            "native-local-storage-frame-sharing.js") == R"("compact")",
+        "same-origin localStorage did not remain shared between outer and frame contexts");
+}
+
+void test_window_post_message_is_queued(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          let state = 'initial';
+          addEventListener('message', () => {
+            state = 'delivered';
+            globalThis.__postMessageFinalState = state;
+          }, { once: true });
+          postMessage('idle-work', '*');
+          globalThis.__postMessageSynchronousState = state;
+        })()
+    )JS", "native-window-post-message-queue.js");
+    const auto result = evaluate(engine, R"JS(
+        ({
+          synchronous: globalThis.__postMessageSynchronousState,
+          final: globalThis.__postMessageFinalState
+        })
+    )JS", "native-window-post-message-queue-result.js");
+    require(
+        result == R"({"synchronous":"initial","final":"delivered"})",
+        "Window.postMessage delivered synchronously or missed its queued task: " + result);
+}
+
+void test_cross_frame_post_message_and_window_frames(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(
+            '<html><body><script>'
+            + 'globalThis.__messageListenerReady = true;'
+            + 'addEventListener("message", event => {'
+            + 'globalThis.__frameReceived = event.data;'
+            + 'parent.postMessage({'
+            + 'payload: event.data,'
+            + 'sourceIsParent: event.source === parent,'
+            + 'origin: event.origin'
+            + '}, "*");'
+            + '});'
+            + '</script></body></html>');
+          frameDocument.close();
+          globalThis.__postMessageFrame = frame;
+        })()
+    )JS", "native-cross-frame-post-message-setup.js");
+    require(
+        evaluate(
+            engine,
+            "(() => { const child = globalThis.__postMessageFrame.contentWindow; return { contains: Array.from(frames).includes(child), ready: typeof child.postMessage, listener: child.__messageListenerReady }; })()",
+            "native-cross-frame-post-message-ready.js")
+            == R"({"contains":true,"ready":"function","listener":true})",
+        "window.frames did not expose the hydrated child realm");
+    execute(engine, R"JS(
+        (() => {
+          globalThis.__crossFrameSynchronous = 'initial';
+          addEventListener('message', event => {
+            const child = globalThis.__postMessageFrame.contentWindow;
+            globalThis.__crossFrameResult = {
+              reply: event.data,
+              sourceIsFrame: event.source === child,
+              framesContainsChild: Array.from(frames).includes(child),
+              frameFocusType: typeof child.focus
+            };
+          }, { once: true });
+          globalThis.__postMessageFrame.contentWindow.postMessage(
+            'chart-datafeed-request',
+            '*');
+          globalThis.__crossFrameSynchronous =
+            globalThis.__crossFrameResult ? 'delivered' : 'initial';
+        })()
+    )JS", "native-cross-frame-post-message-send.js");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__postMessageFrame.contentWindow.__frameReceived",
+            "native-cross-frame-post-message-frame-result.js")
+            == R"("chart-datafeed-request")",
+        "the queued outer-to-frame message was not delivered");
+    const auto result = evaluate(engine, R"JS(
+        ({
+          synchronous: globalThis.__crossFrameSynchronous,
+          result: globalThis.__crossFrameResult
+        })
+    )JS", "native-cross-frame-post-message-result.js");
+    require(
+        result == R"({"synchronous":"initial","result":{"reply":{"payload":"chart-datafeed-request","sourceIsParent":true,"origin":"null"},"sourceIsFrame":true,"framesContainsChild":true,"frameFocusType":"function"}})",
+        "cross-frame Window.postMessage source/origin/frames semantics regressed: " + result);
+    execute(engine, R"JS(
+        globalThis.__postMessageFrame.remove();
+        delete globalThis.__postMessageFrame;
+    )JS", "native-cross-frame-post-message-cleanup.js");
 }
 
 void test_frame_resize_preserves_outer_percentage_height(webscene_engine* engine)
@@ -8574,7 +8774,7 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
             && report.find(R"("feature":"Performance.getEntriesByName","classification":"unsupported")")
                 != std::string::npos
             && report.find(R"("feature":"global:localStorage","classification":"unsupported")")
-                != std::string::npos
+                == std::string::npos
             && report.find(R"("classification":"unsupported")") != std::string::npos,
         "unsupported native decisions were absent from the structured report: " + report);
 
@@ -8927,6 +9127,7 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
+    test_responsive_unset_restores_auto_inset(engine);
     test_preferred_color_scheme_updates_css_and_match_media(engine);
     test_resize_listener_receives_window_event(engine);
     test_absolute_portal_centers_against_positioned_ancestor(engine);
@@ -9026,6 +9227,8 @@ int main()
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
     test_resize_updates_device_pixel_ratio(engine);
     test_session_storage_in_outer_and_frame_contexts(engine);
+    test_window_post_message_is_queued(engine);
+    test_cross_frame_post_message_and_window_frames(engine);
     test_frame_resize_preserves_outer_percentage_height(engine);
     test_inner_window_load_acknowledgement(engine);
     test_animation_frame_uses_host_frame(engine);

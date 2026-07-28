@@ -177,6 +177,41 @@ std::shared_ptr<std::string> load_response(
         last_error = "The engine requested an invalid resource URL.";
         return {};
     }
+    if (url.isFileURL) {
+        NSError* read_error = nil;
+        NSData* content =
+            [NSData dataWithContentsOfURL:url options:0 error:&read_error];
+        if (content == nil) {
+            last_error = read_error == nil
+                ? "The local WebScene resource could not be read."
+                : read_error.localizedDescription.UTF8String;
+            return {};
+        }
+
+        NSError* attributes_error = nil;
+        NSDictionary<NSFileAttributeKey, id>* attributes =
+            [NSFileManager.defaultManager attributesOfItemAtPath:url.path
+                                                           error:&attributes_error];
+        NSDate* modification_date =
+            attributes_error == nil ? attributes[NSFileModificationDate] : nil;
+        const int64_t modification = modification_date == nil
+            ? 0
+            : static_cast<int64_t>(modification_date.timeIntervalSince1970);
+        auto envelope = std::make_shared<std::string>();
+        envelope->reserve(22 + content.length);
+        envelope->push_back('\1');
+        envelope->push_back('\1');
+        append_u32(*envelope, 0);
+        append_i64(*envelope, modification);
+        append_i64(*envelope, 0);
+        envelope->append(
+            static_cast<const char*>(content.bytes),
+            static_cast<size_t>(content.length));
+        context->successful_resource_requests.fetch_add(
+            1,
+            std::memory_order_relaxed);
+        return envelope;
+    }
 
     NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"GET";

@@ -1,6 +1,7 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -549,6 +550,8 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public INativeWebSceneRenderDiagnostics RenderDiagnostics => _surface;
 
+    public EngineMetrics EngineMetrics => _surface.EngineMetrics;
+
     public Task<string> EvaluateJsonAsync(
         string source,
         string documentName = "native-host-evaluation.js",
@@ -674,8 +677,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
 internal sealed class UnoResourceLoader : IWebSceneResourceLoader
 {
-    private static readonly HttpClient Client = new();
-    private readonly ConcurrentDictionary<string, WebSceneTextResource> _cache = new(StringComparer.Ordinal);
+    private static readonly HttpClient Client = CreateHttpClient();
 
     public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
     {
@@ -710,21 +712,126 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 : Uri.UnescapeDataString(payload);
             return new WebSceneTextResource(address, dataContent, address, null);
         }
-        if (_cache.TryGetValue(address, out var cached))
+        if (uri.Scheme is not ("http" or "https"))
         {
-            return cached;
+            throw new NotSupportedException(
+                $"Unsupported WebScene resource scheme '{uri.Scheme}'.");
         }
 
-        using var response = Client.GetAsync(address).GetAwaiter().GetResult();
-        response.EnsureSuccessStatusCode();
-        var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        var resource = new WebSceneTextResource(address, content, address, null)
+        using var message = new HttpRequestMessage(HttpMethod.Get, uri)
         {
-            EntityTag = response.Headers.ETag?.Tag,
-            LastModified = response.Content.Headers.LastModified
+            Version = HttpVersion.Version20,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower
         };
-        _cache[address] = resource;
-        return resource;
+        if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
+            && EntityTagHeaderValue.TryParse(
+                request.IfNoneMatch,
+                out var entityTag))
+        {
+            message.Headers.IfNoneMatch.Add(entityTag);
+        }
+        if (request.IfModifiedSince is { } modifiedSince)
+        {
+            message.Headers.IfModifiedSince = modifiedSince;
+        }
+
+        using var response = Client.SendAsync(
+                message,
+                HttpCompletionOption.ResponseHeadersRead)
+            .GetAwaiter()
+            .GetResult();
+        var responseEntityTag =
+            response.Headers.ETag?.ToString() ?? request.IfNoneMatch;
+        var responseLastModified =
+            response.Content.Headers.LastModified ?? request.IfModifiedSince;
+        var cachePolicy = ReadHttpCachePolicy(
+            response,
+            responseLastModified);
+        if (response.StatusCode == HttpStatusCode.NotModified)
+        {
+            return new WebSceneTextResource(
+                address,
+                string.Empty,
+                address,
+                null)
+            {
+                EntityTag = responseEntityTag,
+                LastModified = responseLastModified,
+                FreshUntil = cachePolicy.FreshUntil,
+                IsCacheable = cachePolicy.IsCacheable,
+                NotModified = true
+            };
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"WebScene resource request for '{address}' returned "
+                + $"{(int)response.StatusCode} ({response.ReasonPhrase}).",
+                inner: null,
+                response.StatusCode);
+        }
+        var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return new WebSceneTextResource(address, content, address, null)
+        {
+            EntityTag = responseEntityTag,
+            LastModified = responseLastModified,
+            FreshUntil = cachePolicy.FreshUntil,
+            IsCacheable = cachePolicy.IsCacheable
+        };
+    }
+
+    internal static (DateTimeOffset? FreshUntil, bool IsCacheable)
+        ReadHttpCachePolicy(
+            HttpResponseMessage response,
+            DateTimeOffset? lastModified)
+    {
+        var cacheControl = response.Headers.CacheControl;
+        if (cacheControl?.NoStore == true)
+        {
+            return (null, false);
+        }
+        if (cacheControl?.NoCache == true)
+        {
+            return (null, true);
+        }
+
+        var receivedAt = DateTimeOffset.UtcNow;
+        var responseDate = response.Headers.Date ?? receivedAt;
+        var responseAge = response.Headers.Age ?? TimeSpan.Zero;
+        var apparentAge =
+            receivedAt > responseDate ? receivedAt - responseDate : TimeSpan.Zero;
+        var currentAge = responseAge > apparentAge ? responseAge : apparentAge;
+        TimeSpan? freshnessLifetime = cacheControl?.MaxAge;
+        if (freshnessLifetime is null
+            && response.Content.Headers.Expires is { } expires)
+        {
+            freshnessLifetime = expires - responseDate;
+        }
+        if (freshnessLifetime is null
+            && lastModified is { } modified
+            && responseDate > modified)
+        {
+            var heuristic =
+                TimeSpan.FromTicks((responseDate - modified).Ticks / 10);
+            freshnessLifetime = TimeSpan.FromTicks(Math.Clamp(
+                heuristic.Ticks,
+                TimeSpan.FromMinutes(1).Ticks,
+                TimeSpan.FromHours(1).Ticks));
+        }
+        if (freshnessLifetime is not { } lifetime || lifetime <= currentAge)
+        {
+            return (null, true);
+        }
+        return (receivedAt + lifetime - currentAge, true);
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient();
+        client.DefaultRequestHeaders.UserAgent.Add(
+            new ProductInfoHeaderValue("WebScene-Uno", "0.1"));
+        return client;
     }
 
     private static string Resolve(string specifier, string? baseAddress)

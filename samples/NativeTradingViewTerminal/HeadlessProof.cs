@@ -40,7 +40,17 @@ internal static class HeadlessProof
                     paths.CompilationCacheDirectory),
                 TimeSpan.FromSeconds(90));
 
-            _ = WaitForWebSocketEvidence(view, window);
+            var initialEvidence = WaitForWebSocketEvidence(view, window);
+            Console.WriteLine($"TradingView initial evidence: {initialEvidence}");
+            Console.WriteLine($"TradingView last error: {view.LastError}");
+            Console.WriteLine($"TradingView scene diagnostics: {view.SceneDiagnostics}");
+            Console.WriteLine($"TradingView feature use: {view.FeatureUseReport}");
+            Console.WriteLine(
+                "TradingView console: "
+                + JsonSerializer.Serialize(view.DrainConsoleMessages()));
+            File.WriteAllText(
+                Path.Combine(output, "first-iframe.html"),
+                view.FirstIframeHtml);
             InstallPointerCertification(view);
             var surface = (NativeSceneSurface)view.Content!;
             surface.SubmitAvaloniaPointerMove(700, 350);
@@ -565,6 +575,24 @@ internal static class HeadlessProof
                       frame.contentDocument?.querySelectorAll('*').length ?? 0,
                     canvasCount:
                       frame.contentDocument?.querySelectorAll('canvas').length ?? 0,
+                    bodyText:
+                      frame.contentDocument?.body?.innerText?.slice(0, 500) ?? null,
+                    bodyClass:
+                      frame.contentDocument?.body?.className ?? null,
+                    scripts: Array.from(
+                      frame.contentDocument?.querySelectorAll('script') ?? [])
+                      .map(script => ({
+                        src: script.src,
+                        textLength: script.textContent?.length ?? 0
+                      })),
+                    realm: frame.contentWindow ? {
+                      url: frame.contentWindow.location?.href ?? null,
+                      tradingViewType:
+                        typeof frame.contentWindow.TradingView,
+                      requireType: typeof frame.contentWindow.require,
+                      webpackType:
+                        typeof frame.contentWindow.webpackChunktradingview
+                    } : null,
                     readyState:
                       frame.contentDocument?.readyState ?? null
                   }))

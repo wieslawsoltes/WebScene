@@ -5,7 +5,7 @@ namespace NativeRuntimeShowcase.Interop;
 public static class ShowcasePaths
 {
     public const string TradingViewUrl =
-        "https://trading-terminal.tradingview-widget.com/";
+        "https://trading-terminal.tradingview-widget.com/?theme=dark";
 
     public static string ResolveNativeLibraryPath(
         IReadOnlyList<string> arguments)

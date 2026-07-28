@@ -55,7 +55,7 @@ class WebSceneView extends StatefulWidget {
 }
 
 class _WebSceneViewState extends State<WebSceneView>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final _projector = WebSceneSceneProjector();
   final _focusNode = FocusNode(debugLabel: 'WebScene');
   late WebSceneController _controller;
@@ -407,7 +407,7 @@ class _WebSceneViewState extends State<WebSceneView>
 }
 
 final class _WebScenePainter extends CustomPainter {
-  const _WebScenePainter(this.projector);
+  _WebScenePainter(this.projector) : super(repaint: projector);
 
   final WebSceneSceneProjector projector;
 

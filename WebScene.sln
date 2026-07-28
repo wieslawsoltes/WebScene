@@ -116,6 +116,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeRuntimeShowcase.Avalo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeRuntimeShowcase.Uno", "samples\NativeRuntimeShowcase.Uno\NativeRuntimeShowcase.Uno.csproj", "{90730C50-47A7-40EE-ABEA-553A955C4E36}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebScene.Backend.Uno.Tests", "tests\WebScene.Backend.Uno.Tests\WebScene.Backend.Uno.Tests.csproj", "{5A82948E-1878-4313-A0B5-F5C141984838}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -306,6 +308,10 @@ Global
 		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{90730C50-47A7-40EE-ABEA-553A955C4E36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A82948E-1878-4313-A0B5-F5C141984838}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A82948E-1878-4313-A0B5-F5C141984838}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A82948E-1878-4313-A0B5-F5C141984838}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A82948E-1878-4313-A0B5-F5C141984838}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -357,5 +363,6 @@ Global
 		{2B7DB2A7-267F-4CB1-9B8E-63A1943FB3FA} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
 		{F7A512C0-D70F-4255-9485-41AC859E4751} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
 		{90730C50-47A7-40EE-ABEA-553A955C4E36} = {EF896A23-AA5E-45BA-B843-B1F02D600D81}
+		{5A82948E-1878-4313-A0B5-F5C141984838} = {C84500EC-56E5-4305-90EE-065B9247D958}
 	EndGlobalSection
 EndGlobal

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using WebScene.Backends.Uno.Native;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,7 +18,11 @@ public sealed partial class MainPage : Page
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
     private StorageFile? _currentFile;
+    private bool _terminalLoaded;
+    private bool _terminalLoading;
     private bool _editorLoading;
+    private bool _terminalDiagnosticsReported;
+    private TimeSpan _terminalLoadElapsed;
 
     public MainPage()
     {
@@ -42,13 +47,7 @@ public sealed partial class MainPage : Page
                 await ShowEditorAsync();
                 return;
             }
-            StatusText.Text = "Loading hosted TradingView terminal…";
-            await _terminal.LoadAsync(
-                ShowcasePaths.TradingViewUrl,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "tradingview"));
-            _diagnosticsTimer.Start();
-            RefreshDiagnostics("TradingView terminal loaded");
+            await ShowTradingViewAsync();
         }
         catch (Exception error)
         {
@@ -56,12 +55,66 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void OnShowTradingView(object sender, RoutedEventArgs args)
+    private async void OnShowTradingView(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            await ShowTradingViewAsync();
+        }
+        catch (Exception error)
+        {
+            ShowFailure("Native TradingView startup failed", error);
+        }
+    }
+
+    private async Task ShowTradingViewAsync()
     {
         TerminalContent.Visibility = Visibility.Visible;
         EditorContent.Visibility = Visibility.Collapsed;
+        await WaitForLayoutAsync(TerminalContent);
+        await EnsureTerminalAsync();
         DocumentText.Text = ShowcasePaths.TradingViewUrl;
         RefreshDiagnostics("TradingView terminal");
+    }
+
+    private async Task EnsureTerminalAsync()
+    {
+        if (_terminalLoaded)
+        {
+            return;
+        }
+        if (_terminalLoading)
+        {
+            while (_terminalLoading)
+            {
+                await Task.Delay(16);
+            }
+            return;
+        }
+
+        _terminalLoading = true;
+        try
+        {
+            _nativeLibraryPath ??=
+                ShowcasePaths.ResolveNativeLibraryPath(_arguments);
+            StatusText.Text = "Loading hosted TradingView terminal…";
+            var started = Stopwatch.StartNew();
+            await _terminal.LoadAsync(
+                ShowcasePaths.TradingViewUrl,
+                _nativeLibraryPath,
+                ShowcasePaths.CacheDirectory("Uno", "tradingview"));
+            started.Stop();
+            _terminalLoadElapsed = started.Elapsed;
+            _terminalLoaded = true;
+            _diagnosticsTimer.Start();
+            Console.WriteLine(
+                $"[WebScene Uno] TradingView document loaded in "
+                + $"{_terminalLoadElapsed.TotalMilliseconds:F0} ms.");
+        }
+        finally
+        {
+            _terminalLoading = false;
+        }
     }
 
     private async void OnShowEditor(object sender, RoutedEventArgs args)
@@ -78,12 +131,24 @@ public sealed partial class MainPage : Page
 
     private async Task ShowEditorAsync()
     {
-        await EnsureEditorAsync();
         TerminalContent.Visibility = Visibility.Collapsed;
         EditorContent.Visibility = Visibility.Visible;
+        await WaitForLayoutAsync(EditorContent);
+        await EnsureEditorAsync();
         DocumentText.Text = _currentFile?.Path ?? "GeneratedMonacoApi.cs";
         StatusText.Text =
             "Monaco ready · generated C# facade: MonacoEditor + MonacoApi";
+    }
+
+    private static async Task WaitForLayoutAsync(FrameworkElement element)
+    {
+        for (var attempt = 0;
+            attempt < 10
+            && (element.ActualWidth <= 0 || element.ActualHeight <= 0);
+            attempt++)
+        {
+            await Task.Delay(16);
+        }
     }
 
     private async Task EnsureEditorAsync()
@@ -109,6 +174,7 @@ public sealed partial class MainPage : Page
             var documentPath = Path.Combine(
                 AppContext.BaseDirectory,
                 "index.html");
+            var started = Stopwatch.StartNew();
             await _editor.LoadAsync(
                 new Uri(documentPath).AbsoluteUri,
                 _nativeLibraryPath,
@@ -116,7 +182,14 @@ public sealed partial class MainPage : Page
             var session = new ShowcaseEditorSession(
                 _editor.EvaluateJsonAsync);
             await session.InitializeAsync();
+            started.Stop();
             _editorSession = session;
+            var metrics = _editor.EngineMetrics;
+            Console.WriteLine(
+                $"[WebScene Uno] Monaco ready in "
+                + $"{started.Elapsed.TotalMilliseconds:F0} ms; V8 cache="
+                + $"{metrics.CompilationPersistentHits}/"
+                + $"{metrics.CompilationRequests}.");
         }
         finally
         {
@@ -184,9 +257,19 @@ public sealed partial class MainPage : Page
     private void RefreshDiagnostics(string prefix)
     {
         var diagnostics = _terminal.RenderDiagnostics;
+        var metrics = _terminal.EngineMetrics;
         StatusText.Text =
             $"{prefix} · native scenes rendered={diagnostics.RenderedSceneCount} "
-            + $"published={diagnostics.PublishedSceneCount}";
+            + $"published={diagnostics.PublishedSceneCount} "
+            + $"load={_terminalLoadElapsed.TotalMilliseconds:F0}ms "
+            + $"V8 cache={metrics.CompilationPersistentHits}/"
+            + $"{metrics.CompilationRequests}";
+        if (!_terminalDiagnosticsReported
+            && diagnostics.RenderedSceneCount > 0)
+        {
+            _terminalDiagnosticsReported = true;
+            Console.WriteLine($"[WebScene Uno] {StatusText.Text}");
+        }
     }
 
     private void ShowFailure(string title, Exception error)
