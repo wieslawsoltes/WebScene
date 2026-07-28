@@ -97,6 +97,7 @@
 
 <p align="center">
   <a href="https://t.me/+RChokbByXQpkOTQ0"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?logo=telegram&amp;logoColor=white&amp;style=flat-square" alt="Telegram Community"></a>
+  <a href="https://www.reddit.com/r/WebScene/"><img src="https://img.shields.io/badge/Reddit-Community-FF4500?logo=reddit&amp;logoColor=white&amp;style=flat-square" alt="Reddit Community"></a>
 </p>
 
 ## What WebScene enables
