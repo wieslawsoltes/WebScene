@@ -108,7 +108,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v6-v8-15.3.10-partitionalloc-ubuntu22-lld-no-crel
+          v8_cache_generation: v7-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel
         - os: windows-latest
           rid: win-x64
           cpu: x64

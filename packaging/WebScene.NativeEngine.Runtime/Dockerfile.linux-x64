@@ -10,7 +10,8 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DOTNET_ROOT=/usr/share/dotnet \
     PATH=/usr/share/dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    CXX=g++ \
+    CC=gcc-12 \
+    CXX=g++-12 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     NUGET_XMLDOC_MODE=skip
@@ -23,6 +24,8 @@ RUN apt-get update \
         cmake \
         curl \
         gdb \
+        gcc-12 \
+        g++-12 \
         git \
         libfontconfig1 \
         libglib2.0-dev \
