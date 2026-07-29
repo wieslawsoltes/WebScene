@@ -25,6 +25,7 @@ RUN apt-get update \
         gdb \
         git \
         libfontconfig1 \
+        libglib2.0-dev \
         libssl-dev \
         lld \
         ninja-build \
