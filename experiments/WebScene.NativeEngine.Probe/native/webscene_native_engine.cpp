@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -26,6 +27,7 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -167,7 +169,11 @@ struct evaluation_request final {
     std::string source;
     std::string document_name;
     std::shared_ptr<evaluation_completion> completion;
+    uint64_t required_consumed_inputs{0};
 };
+
+using script_work_request =
+    std::variant<script_request, url_request, evaluation_request>;
 
 uint64_t mix_hash(uint64_t hash, uint64_t value)
 {
@@ -373,7 +379,10 @@ struct webscene_engine final {
         webscene_scene_published_callback scene_published_callback = nullptr,
         void* scene_published_user_data = nullptr,
         webscene_text_measure_callback text_measure_callback = nullptr,
-        void* text_measure_user_data = nullptr)
+        void* text_measure_user_data = nullptr,
+        webscene_host_request_available_callback
+            host_request_available_callback = nullptr,
+        void* host_request_available_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -384,6 +393,8 @@ struct webscene_engine final {
         , resource_load_user_data_(resource_load_user_data)
         , scene_published_callback_(scene_published_callback)
         , scene_published_user_data_(scene_published_user_data)
+        , host_request_available_callback_(host_request_available_callback)
+        , host_request_available_user_data_(host_request_available_user_data)
         , document_(text_measure_callback, text_measure_user_data)
         , worker_([this](std::stop_token token) { run(token); })
     {
@@ -392,7 +403,7 @@ struct webscene_engine final {
     ~webscene_engine()
     {
         worker_.request_stop();
-        wake_.notify_all();
+        signal_worker();
     }
 
     bool enqueue(const webscene_input_event& event)
@@ -412,7 +423,7 @@ struct webscene_engine final {
                 resize_pending_.store(true, std::memory_order_release);
             }
             enqueued_inputs_.fetch_add(1, std::memory_order_relaxed);
-            wake_.notify_one();
+            signal_worker();
             return true;
         }
 
@@ -422,7 +433,7 @@ struct webscene_engine final {
         }
 
         enqueued_inputs_.fetch_add(1, std::memory_order_relaxed);
-        wake_.notify_one();
+        signal_worker();
         return true;
     }
 
@@ -450,7 +461,7 @@ struct webscene_engine final {
         }
         submitted_resize_frame_pairs_.fetch_add(1, std::memory_order_relaxed);
         enqueued_inputs_.fetch_add(2, std::memory_order_relaxed);
-        wake_.notify_one();
+        signal_worker();
         return true;
     }
 
@@ -460,7 +471,7 @@ struct webscene_engine final {
         return false;
 #else
         low_memory_requested_.store(true, std::memory_order_release);
-        wake_.notify_one();
+        signal_worker();
         return true;
 #endif
     }
@@ -469,7 +480,7 @@ struct webscene_engine final {
     {
         host_visible_.store(visible, std::memory_order_release);
         visibility_changed_.store(true, std::memory_order_release);
-        wake_.notify_one();
+        signal_worker();
         return true;
     }
 
@@ -484,7 +495,7 @@ struct webscene_engine final {
             std::memory_order_acq_rel);
         if (previous != preferred_color_scheme) {
             preferred_color_scheme_changed_.store(true, std::memory_order_release);
-            wake_.notify_one();
+            signal_worker();
         }
         return true;
     }
@@ -492,6 +503,12 @@ struct webscene_engine final {
     uint32_t cursor() const noexcept
     {
         return current_cursor_.load(std::memory_order_acquire);
+    }
+
+    uint8_t animation_frame_demand() const noexcept
+    {
+        return host_animation_frame_requested_.load(
+            std::memory_order_acquire);
     }
 
     bool execute_script(
@@ -513,16 +530,22 @@ struct webscene_engine final {
             return false;
         }
         std::lock_guard lock(script_mutex_);
-        if (scripts_.size() >= 64) {
+        const auto pending_scripts = std::count_if(
+            script_work_.begin(),
+            script_work_.end(),
+            [](const auto& request) {
+                return std::holds_alternative<script_request>(request);
+            });
+        if (pending_scripts >= 64) {
             set_last_error("Native script queue is full");
             return false;
         }
-        scripts_.push_back(script_request{
+        script_work_.emplace_back(script_request{
             std::string(source, source_length),
             document_name == nullptr
                 ? std::string("native-engine.js")
                 : std::string(document_name, document_name_length)});
-        wake_.notify_one();
+        signal_worker();
         return true;
 #endif
     }
@@ -548,12 +571,18 @@ struct webscene_engine final {
             return false;
         }
         std::lock_guard lock(script_mutex_);
-        if (url_requests_.size() >= 8U) {
+        const auto pending_urls = std::count_if(
+            script_work_.begin(),
+            script_work_.end(),
+            [](const auto& request) {
+                return std::holds_alternative<url_request>(request);
+            });
+        if (pending_urls >= 8U) {
             set_last_error("Native document queue is full");
             return false;
         }
-        url_requests_.push_back({std::string(value, length)});
-        wake_.notify_one();
+        script_work_.emplace_back(url_request{std::string(value, length)});
+        signal_worker();
         return true;
 #endif
     }
@@ -585,18 +614,25 @@ struct webscene_engine final {
         auto completion = std::make_shared<evaluation_completion>();
         {
             std::lock_guard lock(script_mutex_);
-            if (evaluations_.size() >= 64) {
+            const auto pending_evaluations = std::count_if(
+                script_work_.begin(),
+                script_work_.end(),
+                [](const auto& request) {
+                    return std::holds_alternative<evaluation_request>(request);
+                });
+            if (pending_evaluations >= 64) {
                 set_last_error("Native evaluation queue is full");
                 return 0;
             }
-            evaluations_.push_back(evaluation_request{
+            script_work_.emplace_back(evaluation_request{
                 std::string(source, source_length),
                 document_name == nullptr
                     ? std::string("managed-chart-api.js")
                     : std::string(document_name, document_name_length),
-                completion});
+                completion,
+                enqueued_inputs_.load(std::memory_order_acquire)});
         }
-        wake_.notify_one();
+        signal_worker();
         std::unique_lock lock(completion->mutex);
         const auto timeout = std::chrono::milliseconds(
             std::clamp(timeout_milliseconds, 1U, 60'000U));
@@ -817,7 +853,7 @@ struct webscene_engine final {
             std::shared_ptr<const scene>{},
             std::memory_order_release);
         checkpoint_requested_.store(true, std::memory_order_release);
-        wake_.notify_one();
+        signal_worker();
         return true;
     }
 
@@ -1019,11 +1055,22 @@ struct webscene_engine final {
             process_resource_load_waiters_.load(std::memory_order_relaxed);
         result.resource_shared_bytes =
             process_resource_shared_bytes_.load(std::memory_order_relaxed);
-        if (result.struct_size >= sizeof(webscene_process_cache_metrics)) {
+        if (result.struct_size
+            >= offsetof(
+                webscene_process_cache_metrics,
+                shared_isolate_slot)) {
             result.script_source_memory_hits =
                 process_script_source_memory_hits_.load(std::memory_order_relaxed);
             result.script_source_shared_bytes =
                 process_script_source_shared_bytes_.load(std::memory_order_relaxed);
+        }
+        if (result.struct_size >= sizeof(webscene_process_cache_metrics)) {
+            result.shared_isolate_slot =
+                shared_isolate_slot_.load(std::memory_order_relaxed);
+            result.shared_isolate_active_contexts =
+                shared_isolate_active_contexts_.load(std::memory_order_relaxed);
+            result.shared_isolate_peak_contexts =
+                shared_isolate_peak_contexts_.load(std::memory_order_relaxed);
         }
     }
 
@@ -1211,6 +1258,34 @@ struct webscene_engine final {
     }
 
 private:
+    void update_host_animation_frame_demand() noexcept
+    {
+        auto demand = document_.has_active_animations()
+            ? uint8_t{2U}
+            : uint8_t{0U};
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        if (runtime_ != nullptr) {
+            demand |= runtime_->host_animation_frame_demand();
+        }
+#endif
+        host_animation_frame_requested_.store(
+            demand,
+            std::memory_order_release);
+    }
+
+    void signal_worker() noexcept
+    {
+        {
+            // This is an auto-reset event, not an unlatched condition-variable
+            // edge. Mutating the predicate under the wait mutex closes the
+            // producer's check-to-sleep race while still coalescing any number
+            // of signals into one immediate worker wake.
+            std::lock_guard lock(wake_mutex_);
+            wake_pending_ = true;
+        }
+        wake_.notify_one();
+    }
+
     bool take_latest_resize(
         webscene_input_event& result,
         uint64_t& consumed_count,
@@ -1310,6 +1385,12 @@ private:
                     buffer.data() + envelope_header_size + response_tag_length,
                     required - envelope_header_size - response_tag_length);
                 return true;
+            },
+            [this] {
+                if (host_request_available_callback_ != nullptr) {
+                    host_request_available_callback_(
+                        host_request_available_user_data_);
+                }
             });
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
@@ -1774,69 +1855,85 @@ private:
                 set_last_error(runtime_->last_error());
             }
 
-            std::vector<script_request> scripts;
-            {
-                std::lock_guard lock(script_mutex_);
-                scripts.swap(scripts_);
-            }
             if (runtime_ != nullptr) {
                 std::lock_guard lock(configuration_mutex_);
                 runtime_->set_resource_root(resource_root_);
             }
-            std::vector<url_request> urls;
+            std::deque<script_work_request> script_work;
             {
                 std::lock_guard lock(script_mutex_);
-                urls.swap(url_requests_);
+                script_work.swap(script_work_);
             }
-            for (const auto& request : urls) {
-                if (runtime_ != nullptr && runtime_->load_url(request.url)) {
-                    native_scene_active_ = true;
-                    frame_scripts_executed_.store(
-                        runtime_->frame_scripts_executed(),
-                        std::memory_order_relaxed);
-                    frame_script_errors_.store(
-                        runtime_->frame_script_errors(),
-                        std::memory_order_relaxed);
-                    update_compilation_metrics();
-                    set_last_error(runtime_->frame_script_errors() == 0
-                        ? std::string{}
-                        : runtime_->frame_last_error());
-                } else {
-                    script_errors_.fetch_add(1, std::memory_order_relaxed);
-                    set_last_error(runtime_ == nullptr
-                        ? "V8 runtime is unavailable"
-                        : runtime_->last_error());
-                    update_compilation_metrics();
+            for (auto iterator = script_work.begin();
+                 iterator != script_work.end();
+                 ++iterator) {
+                auto& request = *iterator;
+                if (auto* url = std::get_if<url_request>(&request)) {
+                    if (runtime_ != nullptr && runtime_->load_url(url->url)) {
+                        native_scene_active_ = true;
+                        frame_scripts_executed_.store(
+                            runtime_->frame_scripts_executed(),
+                            std::memory_order_relaxed);
+                        frame_script_errors_.store(
+                            runtime_->frame_script_errors(),
+                            std::memory_order_relaxed);
+                        update_compilation_metrics();
+                        set_last_error(runtime_->frame_script_errors() == 0
+                            ? std::string{}
+                            : runtime_->frame_last_error());
+                    } else {
+                        script_errors_.fetch_add(1, std::memory_order_relaxed);
+                        set_last_error(runtime_ == nullptr
+                            ? "V8 runtime is unavailable"
+                            : runtime_->last_error());
+                        update_compilation_metrics();
+                    }
+                    changed = true;
+                    continue;
                 }
-                changed = true;
-            }
-            for (const auto& script : scripts) {
-                if (runtime_ != nullptr && runtime_->execute(script.source, script.document_name)) {
-                    executed_scripts_.fetch_add(1, std::memory_order_relaxed);
-                    native_scene_active_ = true;
-                    frame_scripts_executed_.store(runtime_->frame_scripts_executed(), std::memory_order_relaxed);
-                    frame_script_errors_.store(runtime_->frame_script_errors(), std::memory_order_relaxed);
-                    update_compilation_metrics();
-                    update_component_readiness();
-                    set_last_error(runtime_->frame_script_errors() == 0
-                        ? std::string{}
-                        : runtime_->frame_last_error());
-                } else {
-                    script_errors_.fetch_add(1, std::memory_order_relaxed);
-                    set_last_error(runtime_ == nullptr
-                        ? "V8 runtime is unavailable"
-                        : runtime_->last_error());
-                    update_compilation_metrics();
+                if (auto* script = std::get_if<script_request>(&request)) {
+                    if (runtime_ != nullptr
+                        && runtime_->execute(
+                            script->source,
+                            script->document_name)) {
+                        executed_scripts_.fetch_add(1, std::memory_order_relaxed);
+                        native_scene_active_ = true;
+                        frame_scripts_executed_.store(
+                            runtime_->frame_scripts_executed(),
+                            std::memory_order_relaxed);
+                        frame_script_errors_.store(
+                            runtime_->frame_script_errors(),
+                            std::memory_order_relaxed);
+                        update_compilation_metrics();
+                        update_component_readiness();
+                        set_last_error(runtime_->frame_script_errors() == 0
+                            ? std::string{}
+                            : runtime_->frame_last_error());
+                    } else {
+                        script_errors_.fetch_add(1, std::memory_order_relaxed);
+                        set_last_error(runtime_ == nullptr
+                            ? "V8 runtime is unavailable"
+                            : runtime_->last_error());
+                        update_compilation_metrics();
+                    }
+                    changed = true;
+                    continue;
                 }
-                changed = true;
-            }
-
-            std::vector<evaluation_request> evaluations;
-            {
-                std::lock_guard lock(script_mutex_);
-                evaluations.swap(evaluations_);
-            }
-            for (auto& evaluation : evaluations) {
+                auto& evaluation = std::get<evaluation_request>(request);
+                if (consumed_inputs_.load(std::memory_order_acquire)
+                    < evaluation.required_consumed_inputs) {
+                    // A producer can enqueue input after this worker iteration
+                    // has drained the input queues but before it swaps script
+                    // work. Preserve API order without blocking the worker:
+                    // prepend this evaluation and all later work so the next
+                    // iteration consumes the input first.
+                    std::lock_guard lock(script_mutex_);
+                    script_work_.insert(
+                        script_work_.begin(),
+                        std::make_move_iterator(iterator),
+                        std::make_move_iterator(script_work.end()));
+                    break;
+                }
                 std::string result;
                 const auto succeeded = runtime_ != nullptr
                     && runtime_->evaluate_json(
@@ -1861,6 +1958,7 @@ private:
             }
 #endif
 
+            update_host_animation_frame_demand();
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
             // A resize and its host RAF are one browser rendering opportunity.
@@ -1925,9 +2023,24 @@ private:
             }
 #endif
 
+            // Producers notify wake_ for immediate dispatch. Retain one display
+            // interval as a safety watchdog for V8/platform task sources that
+            // do not yet expose a notification edge.
+            auto idle_wait = std::chrono::milliseconds(16);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            if (runtime_ != nullptr) {
+                idle_wait = runtime_->recommended_idle_wait(idle_wait);
+            }
+#endif
             std::unique_lock lock(wake_mutex_);
-            wake_.wait_for(lock, std::chrono::milliseconds(2), [this, &token, &deferred_input] {
-                return token.stop_requested()
+            wake_.wait_for(lock, idle_wait, [this, &token, &deferred_input] {
+                // Every script-queue producer latches wake_pending_ after it
+                // enqueues work. Do not inspect script_work_ while holding the
+                // wake mutex: producers can signal while holding script_mutex_,
+                // and taking the locks in the opposite order deadlocks shared
+                // isolate startup.
+                return wake_pending_
+                    || token.stop_requested()
                     || deferred_input.has_value()
                     || !inputs_.empty()
                     || resize_pending_.load(std::memory_order_acquire)
@@ -1936,6 +2049,7 @@ private:
                     || preferred_color_scheme_changed_.load(
                         std::memory_order_acquire);
             });
+            wake_pending_ = false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         runtime_.reset();
@@ -2124,6 +2238,15 @@ private:
         process_script_source_shared_bytes_.store(
             runtime_->process_script_source_shared_bytes(),
             std::memory_order_relaxed);
+        shared_isolate_slot_.store(
+            runtime_->shared_isolate_slot(),
+            std::memory_order_relaxed);
+        shared_isolate_active_contexts_.store(
+            runtime_->shared_isolate_active_contexts(),
+            std::memory_order_relaxed);
+        shared_isolate_peak_contexts_.store(
+            runtime_->shared_isolate_peak_contexts(),
+            std::memory_order_relaxed);
         resource_cache_requests_.store(runtime_->resource_cache_requests(), std::memory_order_relaxed);
         resource_cache_hits_.store(runtime_->resource_cache_hits(), std::memory_order_relaxed);
         resource_cache_misses_.store(runtime_->resource_cache_misses(), std::memory_order_relaxed);
@@ -2141,10 +2264,12 @@ private:
         // metrics are diagnostic snapshots, not scheduling inputs; keep the cached
         // ABI view reasonably fresh without placing the census on the hot path.
         const auto memory_metrics_now = std::chrono::steady_clock::now();
+        constexpr auto memory_metrics_refresh_interval =
+            std::chrono::seconds(5);
         if (last_memory_metrics_update_
                 != std::chrono::steady_clock::time_point{}
             && memory_metrics_now - last_memory_metrics_update_
-                < std::chrono::seconds(1)) {
+                < memory_metrics_refresh_interval) {
             return;
         }
         last_memory_metrics_update_ = memory_metrics_now;
@@ -2729,6 +2854,9 @@ private:
     void* resource_load_user_data_{nullptr};
     webscene_scene_published_callback scene_published_callback_{nullptr};
     void* scene_published_user_data_{nullptr};
+    webscene_host_request_available_callback
+        host_request_available_callback_{nullptr};
+    void* host_request_available_user_data_{nullptr};
     mutable std::mutex configuration_mutex_;
     std::string resource_root_;
     input_ring inputs_;
@@ -2746,18 +2874,18 @@ private:
     std::atomic<uint32_t> preferred_color_scheme_{
         WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT};
     std::atomic<bool> preferred_color_scheme_changed_{false};
+    std::atomic<uint8_t> host_animation_frame_requested_{0U};
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
 #endif
-    std::vector<script_request> scripts_;
-    std::vector<url_request> url_requests_;
-    std::vector<evaluation_request> evaluations_;
+    std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
     std::shared_ptr<const scene> latest_{};
     std::atomic<bool> ordered_scene_consumer_{false};
     std::condition_variable wake_;
     std::mutex wake_mutex_;
+    bool wake_pending_{false};
     uint64_t next_revision_{1};
     uint64_t last_input_sequence_{0};
     double viewport_width_{1000};
@@ -2802,6 +2930,10 @@ private:
     std::atomic<uint64_t> process_resource_shared_bytes_{0};
     std::atomic<uint64_t> process_script_source_memory_hits_{0};
     std::atomic<uint64_t> process_script_source_shared_bytes_{0};
+    std::atomic<uint64_t> shared_isolate_slot_{
+        std::numeric_limits<uint64_t>::max()};
+    std::atomic<uint64_t> shared_isolate_active_contexts_{1};
+    std::atomic<uint64_t> shared_isolate_peak_contexts_{1};
     std::atomic<uint64_t> v8_total_heap_bytes_{0};
     std::atomic<uint64_t> v8_used_heap_bytes_{0};
     std::atomic<uint64_t> v8_executable_heap_bytes_{0};
@@ -3098,7 +3230,11 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
             offsetof(webscene_engine_options, text_measure_callback);
         const auto has_scene_published_callback =
             options->struct_size >= scene_callback_options_size;
+        constexpr auto text_measure_options_size =
+            offsetof(webscene_engine_options, host_request_available_callback);
         const auto has_text_measure_callback =
+            options->struct_size >= text_measure_options_size;
+        const auto has_host_request_available_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -3108,7 +3244,13 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
             has_scene_published_callback ? options->scene_published_callback : nullptr,
             has_scene_published_callback ? options->scene_published_user_data : nullptr,
             has_text_measure_callback ? options->text_measure_callback : nullptr,
-            has_text_measure_callback ? options->text_measure_user_data : nullptr);
+            has_text_measure_callback ? options->text_measure_user_data : nullptr,
+            has_host_request_available_callback
+                ? options->host_request_available_callback
+                : nullptr,
+            has_host_request_available_callback
+                ? options->host_request_available_user_data
+                : nullptr);
     } catch (...) {
         return nullptr;
     }
@@ -3159,6 +3301,12 @@ uint8_t webscene_engine_enqueue_resize_frame(
 uint32_t webscene_engine_get_cursor(const webscene_engine* engine)
 {
     return engine == nullptr ? WEBSCENE_CURSOR_DEFAULT : engine->cursor();
+}
+
+uint8_t webscene_engine_requires_animation_frame(
+    const webscene_engine* engine)
+{
+    return engine == nullptr ? 0U : engine->animation_frame_demand();
 }
 
 uint8_t webscene_engine_execute_script(

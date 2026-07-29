@@ -164,6 +164,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private double _lastPointerX;
     private double _lastPointerY;
     private bool _frameLoopActive;
+    private bool _presentationActive = true;
     private bool _pointerDown;
     private int _lastCursorKind = -1;
     private int _compositionProjectionActive;
@@ -262,8 +263,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         {
             return;
         }
-        NativeWebSceneApi.EngineSetVisible(_engine, 1);
+        NativeWebSceneApi.EngineSetVisible(_engine, _presentationActive ? (byte)1 : (byte)0);
         StartProjection();
+        if (!_presentationActive)
+        {
+            PauseProjection();
+        }
         SubmitResize(Bounds.Width, Bounds.Height);
     }
 
@@ -300,7 +305,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void OnSurfaceDetached(object? sender, VisualTreeAttachmentEventArgs args)
     {
-        _frameLoopActive = false;
+        PauseProjection();
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
@@ -323,6 +328,65 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             // V8 heap pages on this surface's worker. Reattachment cancels it.
             NativeWebSceneApi.EngineSetVisible(_engine, 0);
         }
+    }
+
+    /// <summary>
+    /// Explicitly controls whether an attached surface has presentation deadlines.
+    /// Inactive surfaces retain their last presentation, stop their frame clock,
+    /// and enter the native engine's debounced hidden-memory policy. Reactivation
+    /// cancels pending reclamation and resumes from a full scene checkpoint.
+    /// </summary>
+    public void SetPresentationActive(bool active)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.InvokeAsync(
+                    () => SetPresentationActive(active),
+                    DispatcherPriority.Send)
+                .GetAwaiter()
+                .GetResult();
+            return;
+        }
+        if (_presentationActive == active)
+        {
+            return;
+        }
+
+        _presentationActive = active;
+        var engine = _engine;
+        if (engine == IntPtr.Zero || VisualRoot is null)
+        {
+            return;
+        }
+
+        if (!active)
+        {
+            PauseProjection();
+            NativeWebSceneApi.EngineSetVisible(engine, 0);
+            return;
+        }
+
+        NativeWebSceneApi.EngineSetVisible(engine, 1);
+        NativeWebSceneApi.EngineRequestSceneCheckpoint(engine);
+        if (_customVisual is not null)
+        {
+            _customVisual.SendHandlerMessage(
+                NativeSceneCompositionMessage.ResumeAnimationFrames);
+            _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.SceneWake);
+        }
+        else if (!_frameLoopActive)
+        {
+            _frameLoopActive = true;
+            RequestNextFrame();
+        }
+        InvalidateVisual();
+    }
+
+    private void PauseProjection()
+    {
+        _frameLoopActive = false;
+        _customVisual?.SendHandlerMessage(
+            NativeSceneCompositionMessage.PauseAnimationFrames);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -672,7 +736,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         topLevel.RequestAnimationFrame(timestamp =>
         {
             if (!_frameLoopActive) return;
-            if (_submitAnimationFrames)
+            if (_submitAnimationFrames
+                && NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) != 0)
             {
                 NativeFrameInput.Submit(_engine, timestamp.TotalMilliseconds);
             }
@@ -1283,7 +1348,13 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 ref NativeSceneCompositionHandler.FullInvalidationCount),
             SuppressedLiveResizeAnimationFrames: Volatile.Read(
                 ref NativeSceneCompositionHandler
-                    .SuppressedLiveResizeAnimationFrameCount));
+                    .SuppressedLiveResizeAnimationFrameCount),
+            SubmittedAnimationFrames: Volatile.Read(
+                ref NativeSceneCompositionHandler.SubmittedAnimationFrameCount),
+            SkippedEmptyAnimationFrames: Volatile.Read(
+                ref NativeSceneCompositionHandler.SkippedEmptyAnimationFrameCount),
+            LastAnimationFrameDemand: Volatile.Read(
+                ref NativeSceneCompositionHandler.LastAnimationFrameDemand));
 
     public static (
         double DiffApplyMilliseconds,
@@ -1352,7 +1423,10 @@ public readonly record struct NativeCompositionFlowMetrics(
     long InvalidationCalls,
     long DamageRectangles,
     long FullInvalidations,
-    long SuppressedLiveResizeAnimationFrames);
+    long SuppressedLiveResizeAnimationFrames,
+    long SubmittedAnimationFrames,
+    long SkippedEmptyAnimationFrames,
+    int LastAnimationFrameDemand);
 
 internal sealed class LivePerformanceHud : Border
 {
@@ -1636,6 +1710,9 @@ internal sealed unsafe class NativeSceneCompositionHandler(
     public static long DamageRectangleCount;
     public static long FullInvalidationCount;
     public static long SuppressedLiveResizeAnimationFrameCount;
+    public static long SubmittedAnimationFrameCount;
+    public static long SkippedEmptyAnimationFrameCount;
+    public static int LastAnimationFrameDemand;
 
     public override void OnMessage(object message)
     {
@@ -1753,9 +1830,19 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         if (frameTimestamp
             > Interlocked.Read(ref _liveResizeFrameDeadlineTimestamp))
         {
-            NativeFrameInput.Submit(
-                _engine,
-                frameTimestamp * 1000.0 / Stopwatch.Frequency);
+            var demand = NativeWebSceneApi.EngineRequiresAnimationFrame(_engine);
+            Volatile.Write(ref LastAnimationFrameDemand, demand);
+            if (demand != 0)
+            {
+                Interlocked.Increment(ref SubmittedAnimationFrameCount);
+                NativeFrameInput.Submit(
+                    _engine,
+                    frameTimestamp * 1000.0 / Stopwatch.Frequency);
+            }
+            else
+            {
+                Interlocked.Increment(ref SkippedEmptyAnimationFrameCount);
+            }
         }
         else
         {
@@ -4426,6 +4513,9 @@ public struct ProcessCacheMetrics
     public ulong ResourceSharedBytes;
     public ulong ScriptSourceMemoryHits;
     public ulong ScriptSourceSharedBytes;
+    public ulong SharedIsolateSlot;
+    public ulong SharedIsolateActiveContexts;
+    public ulong SharedIsolatePeakContexts;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -4523,6 +4613,8 @@ internal struct EngineOptions
     public IntPtr ScenePublishedUserData;
     public IntPtr TextMeasureCallback;
     public IntPtr TextMeasureUserData;
+    public IntPtr HostRequestAvailableCallback;
+    public IntPtr HostRequestAvailableUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -4865,6 +4957,10 @@ public static unsafe class NativeWebSceneApi
     private static readonly TextMeasureCallback TextMeasure = MeasureText;
     private static readonly IntPtr TextMeasureAddress =
         Marshal.GetFunctionPointerForDelegate(TextMeasure);
+    private static readonly HostRequestAvailableCallback HostRequestAvailable =
+        NotifyHostRequestAvailable;
+    private static readonly IntPtr HostRequestAvailableAddress =
+        Marshal.GetFunctionPointerForDelegate(HostRequestAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -4914,14 +5010,16 @@ public static unsafe class NativeWebSceneApi
         uint simulatedChartCommandCount,
         string? compilationCacheDirectory,
         IWebSceneResourceLoader resourceLoader,
-        Action<NativeScenePublished> scenePublished)
+        Action<NativeScenePublished> scenePublished,
+        Action? hostRequestAvailable = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
         var directoryBytes = string.IsNullOrWhiteSpace(compilationCacheDirectory)
             ? []
             : Encoding.UTF8.GetBytes(compilationCacheDirectory);
-        var bridgeHandle = GCHandle.Alloc(new ResourceBridge(resourceLoader, scenePublished));
+        var bridgeHandle = GCHandle.Alloc(
+            new ResourceBridge(resourceLoader, scenePublished, hostRequestAvailable));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -4937,7 +5035,13 @@ public static unsafe class NativeWebSceneApi
                     ScenePublishedCallback = ScenePublishedAddress,
                     ScenePublishedUserData = GCHandle.ToIntPtr(bridgeHandle),
                     TextMeasureCallback = TextMeasureAddress,
-                    TextMeasureUserData = GCHandle.ToIntPtr(bridgeHandle)
+                    TextMeasureUserData = GCHandle.ToIntPtr(bridgeHandle),
+                    HostRequestAvailableCallback = hostRequestAvailable is null
+                        ? IntPtr.Zero
+                        : HostRequestAvailableAddress,
+                    HostRequestAvailableUserData = hostRequestAvailable is null
+                        ? IntPtr.Zero
+                        : GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -5017,6 +5121,23 @@ public static unsafe class NativeWebSceneApi
         float letterSpacing,
         float wordSpacing,
         ref NativeTextMetrics metrics);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void HostRequestAvailableCallback(IntPtr userData);
+
+    private static void NotifyHostRequestAvailable(IntPtr userData)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyHostRequestAvailable();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene native host request notification] {error}");
+        }
+    }
 
     private static byte MeasureText(
         IntPtr userData,
@@ -5120,7 +5241,8 @@ public static unsafe class NativeWebSceneApi
 
     private sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
-        Action<NativeScenePublished> scenePublished)
+        Action<NativeScenePublished> scenePublished,
+        Action? hostRequestAvailable)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
@@ -5130,6 +5252,9 @@ public static unsafe class NativeWebSceneApi
 
         public void NotifyScenePublished(NativeScenePublished scene)
             => scenePublished(scene);
+
+        public void NotifyHostRequestAvailable()
+            => hostRequestAvailable?.Invoke();
 
         public nuint Copy(
             uint kind,
@@ -5317,6 +5442,11 @@ public static unsafe class NativeWebSceneApi
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_get_cursor")]
     public static extern uint EngineGetCursor(IntPtr engine);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_requires_animation_frame")]
+    public static extern byte EngineRequiresAnimationFrame(IntPtr engine);
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_execute_script")]
     private static extern byte EngineExecuteScript(

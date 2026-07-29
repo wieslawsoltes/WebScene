@@ -283,6 +283,13 @@ typedef uint8_t (*webscene_text_measure_callback)(
     float word_spacing,
     webscene_text_metrics* metrics);
 
+/*
+ * Edge notification emitted after a managed host request is queued. The
+ * callback runs on the engine worker and must only signal non-blocking host
+ * work; requests are still consumed through webscene_engine_take_host_request.
+ */
+typedef void (*webscene_host_request_available_callback)(void* user_data);
+
 typedef struct webscene_engine_options {
     uint32_t struct_size;
     uint32_t simulated_chart_command_count;
@@ -294,6 +301,8 @@ typedef struct webscene_engine_options {
     void* scene_published_user_data;
     webscene_text_measure_callback text_measure_callback;
     void* text_measure_user_data;
+    webscene_host_request_available_callback host_request_available_callback;
+    void* host_request_available_user_data;
 } webscene_engine_options;
 
 typedef struct webscene_engine_metrics {
@@ -422,6 +431,10 @@ typedef struct webscene_process_cache_metrics {
     /* ABI v2 tail; immutable external script-source sharing. */
     uint64_t script_source_memory_hits;
     uint64_t script_source_shared_bytes;
+    /* ABI v3 tail; stable shared-isolate pool ownership diagnostics. */
+    uint64_t shared_isolate_slot;
+    uint64_t shared_isolate_active_contexts;
+    uint64_t shared_isolate_peak_contexts;
 } webscene_process_cache_metrics;
 
 /*
@@ -570,6 +583,13 @@ WEBSCENE_API uint8_t webscene_engine_set_preferred_color_scheme(
     uint32_t preferred_color_scheme);
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 WEBSCENE_API uint32_t webscene_engine_get_cursor(const webscene_engine* engine);
+/*
+ * Returns a demand bitmask for the next compositor frame: bit 0 is a pending
+ * JavaScript RAF, bit 1 is a native CSS animation, and bit 2 is a focused
+ * caret. Zero means a host frame would be empty.
+ */
+WEBSCENE_API uint8_t webscene_engine_requires_animation_frame(
+    const webscene_engine* engine);
 WEBSCENE_API uint8_t webscene_engine_execute_script(
     webscene_engine* engine,
     const char* source,

@@ -1322,6 +1322,8 @@ private:
         bool inherited_pointer_events_none,
         bool ignore_own_clip = false) noexcept;
     bool is_connected(const dom_node& node) const noexcept;
+    bool participates_in_animation_frame(
+        const dom_node& node) const noexcept;
 
     // DOM nodes require stable addresses but are frequently created and
     // detached in component workloads. Allocate fixed-size nodes in bounded
@@ -1342,6 +1344,8 @@ private:
     double animation_frame_timestamp_ms_{0};
     double last_animation_advance_timestamp_ms_{
         std::numeric_limits<double>::quiet_NaN()};
+    mutable bool active_animation_demand_cache_{false};
+    mutable bool active_animation_demand_cache_valid_{false};
     std::vector<transition_event_record> transition_events_;
     webscene_text_measure_callback text_measure_callback_{nullptr};
     void* text_measure_user_data_{nullptr};

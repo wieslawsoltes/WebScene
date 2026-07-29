@@ -11,6 +11,12 @@ include(FetchContent)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
+# CMake 3.24's CMP0138 makes CheckIPOSupported validate with the caller's
+# compiler and linker flags. ThinLTO needs this so the check uses Chromium LLD
+# with the same versioned bitcode toolchain as V8.
+if(POLICY CMP0138)
+    cmake_policy(SET CMP0138 NEW)
+endif()
 
 if(MSVC)
     # V8's Windows monolith uses the static CRT. Set the directory default
@@ -33,10 +39,16 @@ option(WEBSCENE_V8_POINTER_COMPRESSION
     "Compile the embedder ABI for a pointer-compressed V8 monolith" OFF)
 option(WEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE
     "Compile the embedder ABI for V8's process-wide shared compression cage" OFF)
+option(WEBSCENE_V8_DIRECT_HANDLE
+    "Compile the embedder ABI for a V8 monolith built with direct handles" OFF)
 option(WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT
     "Enable V8's optimize-for-size process policy unless the host overrides it" OFF)
+option(WEBSCENE_V8_PARTITION_ALLOC
+    "Configure a V8 monolith built with PartitionAlloc and its malloc shim" OFF)
 option(WEBSCENE_NATIVE_ENGINE_DENSE_LINK
     "Dead-strip unused native code and expose only the WebScene C ABI" OFF)
+option(WEBSCENE_NATIVE_ENGINE_THIN_LTO
+    "Enable ThinLTO for the WebScene native engine and its V8 monolith link" OFF)
 option(WEBSCENE_NATIVE_ENGINE_CERTIFICATION
     "Include certification telemetry, diagnostic snapshots, and native profiling hooks" OFF)
 
@@ -148,9 +160,26 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         target_compile_definitions(webscene_native_engine PRIVATE
             V8_COMPRESS_POINTERS_IN_SHARED_CAGE)
     endif()
+    if(WEBSCENE_V8_DIRECT_HANDLE)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            V8_ENABLE_DIRECT_HANDLE)
+    endif()
     if(WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=1)
+    endif()
+    if(WEBSCENE_V8_PARTITION_ALLOC)
+        if(NOT EXISTS
+            "${WEBSCENE_V8_OUTPUT_ROOT}/gen/third_party/partition_alloc/src/partition_alloc/buildflags.h")
+            message(FATAL_ERROR
+                "WEBSCENE_V8_PARTITION_ALLOC requires a V8 output built with "
+                "PartitionAlloc")
+        endif()
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_V8_PARTITION_ALLOC=1)
+        target_include_directories(webscene_native_engine SYSTEM PRIVATE
+            "${WEBSCENE_V8_ROOT}/third_party/partition_alloc/src"
+            "${WEBSCENE_V8_OUTPUT_ROOT}/gen/third_party/partition_alloc/src")
     endif()
     target_link_libraries(webscene_native_engine PRIVATE
         "${WEBSCENE_V8_MONOLITH}"
@@ -175,6 +204,8 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             webscene_native_engine
             ixwebsocket)
         add_test(NAME webscene_native_engine_tests COMMAND webscene_native_engine_tests)
+        set_tests_properties(webscene_native_engine_tests PROPERTIES
+            ENVIRONMENT "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1")
     endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")
@@ -202,6 +233,32 @@ if(MSVC)
 else()
     target_compile_options(webscene_native_engine PRIVATE
         -Wall -Wextra -Wpedantic -fno-rtti -Wno-deprecated-declarations)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_THIN_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT WEBSCENE_THIN_LTO_SUPPORTED
+        OUTPUT WEBSCENE_THIN_LTO_ERROR
+        LANGUAGES C CXX)
+    if(NOT WEBSCENE_THIN_LTO_SUPPORTED)
+        message(FATAL_ERROR
+            "WebScene native engine: ThinLTO is unavailable: "
+            "${WEBSCENE_THIN_LTO_ERROR}")
+    endif()
+    set_property(TARGET webscene_native_engine PROPERTY
+        INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # Chromium's ThinLTO V8 archive uses split LTO units and whole-program
+        # vtable optimization. Every bitcode input in the final link must use
+        # the same unit-splitting mode.
+        target_compile_options(webscene_native_engine PRIVATE
+            -fsplit-lto-unit
+            -fwhole-program-vtables)
+        target_link_options(webscene_native_engine PRIVATE
+            -fsplit-lto-unit
+            -fwhole-program-vtables)
+    endif()
+    message(STATUS "WebScene native engine: ThinLTO enabled")
 endif()
 
 if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)

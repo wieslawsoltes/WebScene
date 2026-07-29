@@ -7,6 +7,11 @@
 #include <v8.h>
 #include <v8-profiler.h>
 
+#if defined(WEBSCENE_V8_PARTITION_ALLOC)
+#include "partition_alloc/partition_root.h"
+#include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -14,6 +19,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstdint>
 #include <deque>
@@ -30,6 +36,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -974,6 +981,31 @@ std::vector<css_length> parse_simple_grid_tracks(const std::string& value)
 void initialize_v8_process()
 {
     std::call_once(v8_initialize_once, [] {
+#if defined(WEBSCENE_V8_PARTITION_ALLOC)
+        // Standalone V8's d8 shell performs this initialization before
+        // entering V8. Without it, PartitionAlloc's process root has no
+        // thread cache and allocation-heavy multi-context resize becomes
+        // serialized on the central partition lock.
+        allocator_shim::ConfigurePartitionsForTesting();
+        auto* partition =
+            allocator_shim::internal::PartitionAllocMalloc::Allocator();
+        partition->EnableThreadCacheIfSupported();
+        // PartitionAlloc's 512-byte default preserves the lock-avoidance win
+        // for the chart workload without retaining the larger per-thread
+        // buckets selected by d8's throughput-oriented 32 KiB policy.
+        constexpr size_t default_thread_cache_large_size_threshold = 512;
+        const auto thread_cache_large_size_threshold = static_cast<size_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_PARTITION_ALLOC_THREAD_CACHE_MAX_BYTES")
+                .value_or(default_thread_cache_large_size_threshold));
+        partition_alloc::ThreadCache::SetLargestCachedSize(
+            thread_cache_large_size_threshold);
+        constexpr int foreground_dirty_bytes_shift = 2;
+        constexpr int foreground_slot_span_ring_size = 1 << 10;
+        partition->AdjustSlotSpanRing(
+            foreground_slot_span_ring_size,
+            foreground_dirty_bytes_shift);
+#endif
         bool optimize_for_size = false;
 #if defined(WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT)
         optimize_for_size = true;
@@ -985,6 +1017,29 @@ void initialize_v8_process()
         }
         if (optimize_for_size) {
             v8::V8::SetFlagsFromString("--optimize-for-size");
+        }
+        if (const auto preconfigured_old_space_mib =
+                unsigned_environment_value(
+                    "WEBSCENE_V8_PRECONFIGURED_OLD_SPACE_MIB");
+            preconfigured_old_space_mib.has_value()) {
+            // V8 15.3 raised this process-wide startup policy from 0 to
+            // 32 MiB. The higher value avoids an early full-GC feedback
+            // cycle and is the better Release-JIT tradeoff, while zero
+            // recovers about 12 MiB of V8 heap across two isolates in the
+            // NativeAOT four-chart workload. Keep the upstream default unless
+            // the host selects the measured AOT policy before process prewarm.
+            constexpr uint64_t maximum_preconfigured_old_space_mib = 4096U;
+            const auto bounded_value = std::min(
+                *preconfigured_old_space_mib,
+                maximum_preconfigured_old_space_mib);
+            const auto flag = "--preconfigured-old-space-size="
+                + std::to_string(bounded_value);
+            v8::V8::SetFlagsFromString(flag.c_str());
+        }
+        if (const auto* experimental_flags =
+                std::getenv("WEBSCENE_V8_EXPERIMENTAL_FLAGS");
+            experimental_flags != nullptr && experimental_flags[0] != '\0') {
+            v8::V8::SetFlagsFromString(experimental_flags);
         }
 #if defined(WEBSCENE_V8_ICU_DATA_FILENAME)
         const auto icu_data_path =
@@ -1044,7 +1099,7 @@ v8::Local<v8::String> js_string(v8::Isolate* isolate, const char* value)
         .ToLocalChecked();
 }
 
-v8::Local<v8::String> js_dom_string(v8::Isolate* isolate, std::string_view value)
+std::vector<uint16_t> decode_wtf8_to_utf16(std::string_view value)
 {
     std::vector<uint16_t> units;
     units.reserve(value.size());
@@ -1090,6 +1145,12 @@ v8::Local<v8::String> js_dom_string(v8::Isolate* isolate, std::string_view value
         }
         index += length;
     }
+    return units;
+}
+
+v8::Local<v8::String> js_dom_string(v8::Isolate* isolate, std::string_view value)
+{
+    const auto units = decode_wtf8_to_utf16(value);
     return v8::String::NewFromTwoByte(
         isolate,
         units.data(),
@@ -1729,8 +1790,49 @@ struct v8_dom_runtime::implementation final {
         std::shared_ptr<const immutable_text_source> source_;
     };
 
+    class shared_external_two_byte_source final
+        : public v8::String::ExternalStringResource {
+    public:
+        explicit shared_external_two_byte_source(
+            std::shared_ptr<const std::vector<uint16_t>> source)
+            : source_(std::move(source))
+        {
+        }
+
+        const uint16_t* data() const override
+        {
+            return source_->data();
+        }
+
+        size_t length() const override
+        {
+            return source_->size();
+        }
+
+        size_t EstimateMemoryUsage() const override
+        {
+            return sizeof(*this);
+        }
+
+        void EstimateSharedMemoryUsage(
+            SharedMemoryUsageRecorder* recorder) const override
+        {
+            recorder->RecordSharedMemoryUsage(
+                source_->data(),
+                source_->size() * sizeof(uint16_t));
+        }
+
+    private:
+        std::shared_ptr<const std::vector<uint16_t>> source_;
+    };
+
     struct process_script_source_entry final {
         std::weak_ptr<const immutable_text_source> source;
+        uint64_t access{0U};
+    };
+
+    struct process_two_byte_script_source_entry final {
+        std::weak_ptr<const std::vector<uint16_t>> source;
         uint64_t access{0U};
     };
 
@@ -1766,14 +1868,387 @@ struct v8_dom_runtime::implementation final {
         bool from_fresh_cache{false};
     };
 
+    struct shared_isolate_state final {
+        v8::ArrayBuffer::Allocator* allocator{nullptr};
+        v8::Isolate* isolate{nullptr};
+        size_t slot_index{0U};
+        std::atomic<size_t> active_contexts{0U};
+        std::atomic<size_t> peak_contexts{0U};
+        std::unordered_map<std::string, compilation_cache_entry> compilation_cache;
+        std::deque<std::string> compilation_cache_order;
+        size_t compilation_cache_bytes{0U};
+        ~shared_isolate_state()
+        {
+            if (isolate != nullptr) {
+                {
+                    v8::Locker locker(isolate);
+                    v8::Isolate::Scope isolate_scope(isolate);
+                    for (auto& [key, entry] : compilation_cache) {
+                        static_cast<void>(key);
+                        entry.script.Reset();
+                    }
+                    compilation_cache.clear();
+                    compilation_cache_order.clear();
+                }
+                isolate->Dispose();
+            }
+            delete allocator;
+        }
+    };
+
+    struct shared_isolate_configuration final {
+        size_t initial_count{1U};
+        size_t maximum_count{1U};
+        size_t context_capacity{2U};
+        size_t warm_count{1U};
+        std::chrono::milliseconds warm_lease{15000};
+    };
+
+    static shared_isolate_configuration shared_isolate_config()
+    {
+        shared_isolate_configuration result;
+        result.initial_count = static_cast<size_t>(std::clamp<uint64_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_SHARED_ISOLATE_COUNT").value_or(1U),
+            1U,
+            16U));
+        const auto hardware_limit = static_cast<uint64_t>(
+            std::max(1U, std::thread::hardware_concurrency()));
+        result.maximum_count = static_cast<size_t>(std::clamp<uint64_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_SHARED_ISOLATE_MAX_COUNT")
+                .value_or(hardware_limit),
+            result.initial_count,
+            64U));
+        result.context_capacity = static_cast<size_t>(std::clamp<uint64_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_SHARED_ISOLATE_CAPACITY").value_or(2U),
+            1U,
+            64U));
+        result.warm_count = static_cast<size_t>(std::clamp<uint64_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_SHARED_ISOLATE_WARM_COUNT")
+                .value_or(result.initial_count),
+            0U,
+            result.maximum_count));
+        result.warm_lease = std::chrono::milliseconds(std::clamp<uint64_t>(
+            unsigned_environment_value(
+                "WEBSCENE_V8_SHARED_ISOLATE_WARM_LEASE_MS").value_or(15000U),
+            0U,
+            300000U));
+        return result;
+    }
+
+    struct shared_isolate_pool_state final {
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::vector<std::weak_ptr<shared_isolate_state>> isolates;
+        std::vector<std::shared_ptr<shared_isolate_state>> warm_isolates;
+        std::vector<std::chrono::steady_clock::time_point> warm_deadlines;
+        bool stopping{false};
+        bool reaper_running{false};
+        std::thread reaper;
+
+        ~shared_isolate_pool_state()
+        {
+            {
+                std::lock_guard lock(mutex);
+                stopping = true;
+            }
+            condition.notify_one();
+            if (reaper.joinable()) reaper.join();
+            warm_isolates.clear();
+        }
+
+        void ensure_size(size_t size)
+        {
+            if (isolates.size() < size) isolates.resize(size);
+            if (warm_isolates.size() < size) warm_isolates.resize(size);
+            if (warm_deadlines.size() < size) warm_deadlines.resize(size);
+        }
+
+        void ensure_reaper()
+        {
+            if (reaper_running) return;
+            if (reaper.joinable()) reaper.join();
+            reaper_running = true;
+            reaper = std::thread([this] { reap_expired_isolates(); });
+        }
+
+        void reap_expired_isolates() noexcept
+        {
+            std::unique_lock lock(mutex);
+            while (!stopping) {
+                const auto now = std::chrono::steady_clock::now();
+                auto next_deadline =
+                    std::chrono::steady_clock::time_point::max();
+                std::vector<std::shared_ptr<shared_isolate_state>> expired;
+                for (size_t index = 0U;
+                    index < warm_isolates.size();
+                    ++index) {
+                    auto& state = warm_isolates[index];
+                    if (state == nullptr) continue;
+                    if (state->active_contexts.load(
+                            std::memory_order_relaxed) != 0U) {
+                        state.reset();
+                        warm_deadlines[index] = {};
+                        continue;
+                    }
+                    if (warm_deadlines[index] <= now) {
+                        expired.push_back(std::move(state));
+                        warm_deadlines[index] = {};
+                        isolates[index].reset();
+                    } else {
+                        next_deadline =
+                            std::min(next_deadline, warm_deadlines[index]);
+                    }
+                }
+
+                if (!expired.empty()) {
+                    lock.unlock();
+                    expired.clear();
+                    lock.lock();
+                    continue;
+                }
+                if (next_deadline
+                    == std::chrono::steady_clock::time_point::max()) {
+                    reaper_running = false;
+                    return;
+                } else {
+                    condition.wait_until(lock, next_deadline);
+                }
+            }
+            reaper_running = false;
+        }
+    };
+
+    static shared_isolate_pool_state& shared_isolate_pool()
+    {
+        static shared_isolate_pool_state pool;
+        return pool;
+    }
+
+    class optional_isolate_locker final {
+    public:
+        optional_isolate_locker(v8::Isolate* isolate, bool enabled)
+        {
+            if (enabled && isolate != nullptr) locker_.emplace(isolate);
+        }
+
+        void reset() noexcept
+        {
+            locker_.reset();
+        }
+
+    private:
+        std::optional<v8::Locker> locker_;
+    };
+
+    static constexpr int runtime_context_embedder_slot = 2;
+
+    static std::shared_ptr<shared_isolate_state> acquire_shared_isolate()
+    {
+        const auto config = shared_isolate_config();
+        auto& pool = shared_isolate_pool();
+        std::vector<std::shared_ptr<shared_isolate_state>> expired;
+        std::unique_lock lock(pool.mutex);
+        pool.ensure_size(config.maximum_count);
+        const auto now = std::chrono::steady_clock::now();
+        for (size_t index = 0U; index < pool.warm_isolates.size(); ++index) {
+            auto& state = pool.warm_isolates[index];
+            if (state == nullptr || pool.warm_deadlines[index] > now) continue;
+            expired.push_back(std::move(state));
+            pool.warm_deadlines[index] = {};
+            pool.isolates[index].reset();
+        }
+
+        std::shared_ptr<shared_isolate_state> recycled_hole;
+        std::shared_ptr<shared_isolate_state> available;
+        std::shared_ptr<shared_isolate_state> overflow;
+        size_t recycled_hole_contexts{0U};
+        size_t available_contexts = std::numeric_limits<size_t>::max();
+        size_t overflow_contexts = std::numeric_limits<size_t>::max();
+        size_t first_empty_slot = config.maximum_count;
+        size_t live_isolates = 0U;
+        for (size_t index = 0U; index < config.maximum_count; ++index) {
+            auto state = pool.isolates[index].lock();
+            if (state == nullptr) {
+                if (first_empty_slot == config.maximum_count) {
+                    first_empty_slot = index;
+                }
+                continue;
+            }
+
+            ++live_isolates;
+            const auto active =
+                state->active_contexts.load(std::memory_order_relaxed);
+            const auto peak =
+                state->peak_contexts.load(std::memory_order_relaxed);
+            if (active < peak
+                && active < config.context_capacity
+                && (recycled_hole == nullptr
+                    || active > recycled_hole_contexts)) {
+                recycled_hole = state;
+                recycled_hole_contexts = active;
+            }
+            if (active < config.context_capacity
+                && (available == nullptr || active < available_contexts)) {
+                available = state;
+                available_contexts = active;
+            }
+            if (overflow == nullptr || active < overflow_contexts) {
+                overflow = state;
+                overflow_contexts = active;
+            }
+        }
+
+        // Refill a slot vacated by a destroyed context before changing the
+        // shard topology. During initial population, however, create one
+        // context in each initially configured shard before adding a second
+        // context. Once those shards reach capacity, grow lazily up to the
+        // configured maximum. This preserves startup/interaction parallelism
+        // for the four-chart 1/1 -> 2/2 case, supports larger dynamic chart
+        // counts, and makes close/reopen placement deterministic.
+        if (recycled_hole != nullptr) {
+            const auto slot = recycled_hole->slot_index;
+            if (slot < pool.warm_isolates.size()
+                && pool.warm_isolates[slot] == recycled_hole) {
+                pool.warm_isolates[slot].reset();
+                pool.warm_deadlines[slot] = {};
+                pool.condition.notify_one();
+            }
+            recycled_hole->active_contexts.fetch_add(
+                1U,
+                std::memory_order_relaxed);
+            return recycled_hole;
+        }
+        if (live_isolates >= config.initial_count && available != nullptr) {
+            const auto slot = available->slot_index;
+            if (slot < pool.warm_isolates.size()
+                && pool.warm_isolates[slot] == available) {
+                pool.warm_isolates[slot].reset();
+                pool.warm_deadlines[slot] = {};
+                pool.condition.notify_one();
+            }
+            const auto active = available->active_contexts.fetch_add(
+                1U,
+                std::memory_order_relaxed) + 1U;
+            auto peak = available->peak_contexts.load(std::memory_order_relaxed);
+            while (active > peak
+                && !available->peak_contexts.compare_exchange_weak(
+                    peak,
+                    active,
+                    std::memory_order_relaxed)) {
+            }
+            return available;
+        }
+        if (live_isolates >= config.maximum_count && overflow != nullptr) {
+            const auto active = overflow->active_contexts.fetch_add(
+                1U,
+                std::memory_order_relaxed) + 1U;
+            auto peak = overflow->peak_contexts.load(std::memory_order_relaxed);
+            while (active > peak
+                && !overflow->peak_contexts.compare_exchange_weak(
+                    peak,
+                    active,
+                    std::memory_order_relaxed)) {
+            }
+            return overflow;
+        }
+
+        if (first_empty_slot == config.maximum_count) return {};
+        auto state = std::make_shared<shared_isolate_state>();
+        state->slot_index = first_empty_slot;
+        state->allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+        v8::Isolate::CreateParams params;
+        params.array_buffer_allocator = state->allocator;
+        if (const auto maximum_heap_mib =
+                unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
+            maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
+            const auto initial_heap_mib =
+                unsigned_environment_value("WEBSCENE_V8_INITIAL_HEAP_MIB").value_or(0);
+            params.constraints.ConfigureDefaultsFromHeapSize(
+                initial_heap_mib * 1024U * 1024U,
+                *maximum_heap_mib * 1024U * 1024U);
+        }
+        state->isolate = v8::Isolate::New(params);
+        if (state->isolate == nullptr) return {};
+        state->active_contexts.store(1U, std::memory_order_relaxed);
+        state->peak_contexts.store(1U, std::memory_order_relaxed);
+        pool.isolates[first_empty_slot] = state;
+        return state;
+    }
+
+    static void release_shared_isolate(
+        const std::shared_ptr<shared_isolate_state>& state) noexcept
+    {
+        if (state == nullptr) return;
+        const auto config = shared_isolate_config();
+        auto& pool = shared_isolate_pool();
+        std::shared_ptr<shared_isolate_state> evicted;
+        {
+            std::lock_guard lock(pool.mutex);
+            const auto active =
+                state->active_contexts.load(std::memory_order_relaxed);
+            if (active == 0U) return;
+            const auto remaining = active - 1U;
+            state->active_contexts.store(
+                remaining,
+                std::memory_order_relaxed);
+            if (remaining != 0U
+                || config.warm_count == 0U
+                || config.warm_lease.count() == 0) {
+                return;
+            }
+
+            pool.ensure_size(std::max(
+                config.maximum_count,
+                state->slot_index + 1U));
+            size_t warm_count = 0U;
+            size_t oldest_slot = pool.warm_isolates.size();
+            auto oldest_deadline =
+                std::chrono::steady_clock::time_point::max();
+            for (size_t index = 0U;
+                index < pool.warm_isolates.size();
+                ++index) {
+                if (pool.warm_isolates[index] == nullptr) continue;
+                ++warm_count;
+                if (pool.warm_deadlines[index] < oldest_deadline) {
+                    oldest_deadline = pool.warm_deadlines[index];
+                    oldest_slot = index;
+                }
+            }
+            if (warm_count >= config.warm_count
+                && oldest_slot < pool.warm_isolates.size()) {
+                evicted = std::move(pool.warm_isolates[oldest_slot]);
+                pool.warm_deadlines[oldest_slot] = {};
+                pool.isolates[oldest_slot].reset();
+            }
+
+            pool.warm_isolates[state->slot_index] = state;
+            pool.warm_deadlines[state->slot_index] =
+                std::chrono::steady_clock::now() + config.warm_lease;
+            pool.isolates[state->slot_index] = state;
+            pool.ensure_reaper();
+            pool.condition.notify_one();
+        }
+    }
+
+    optional_isolate_locker lock_shared_isolate() const
+    {
+        return optional_isolate_locker(isolate, shared_isolate != nullptr);
+    }
+
     implementation(
         native_document& document_value,
         std::function<v8_dom_runtime::viewport_metrics()> viewport_provider_value,
         std::string compilation_cache_directory_value,
-        resource_loader resource_loader_value)
+        resource_loader resource_loader_value,
+        std::function<void()> host_request_available_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
+        , host_request_available(std::move(host_request_available_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -1808,6 +2283,7 @@ struct v8_dom_runtime::implementation final {
         // handles or disposing the isolate. Socket callbacks never touch V8,
         // but they may still be appending to the native delivery queue.
         websocket_transport.shutdown();
+        auto isolate_locker = lock_shared_isolate();
         websocket_bindings.clear();
         if (isolate != nullptr && !compilation_cache_directory.empty()) {
             v8::Isolate::Scope isolate_scope(isolate);
@@ -1863,16 +2339,32 @@ struct v8_dom_runtime::implementation final {
             cpu_profiler = nullptr;
         }
 #endif
-        if (isolate != nullptr) {
+        if (isolate != nullptr && shared_isolate == nullptr) {
             isolate->Dispose();
-            isolate = nullptr;
         }
+        isolate = nullptr;
         delete allocator;
         allocator = nullptr;
+        // The final shared owner disposes the isolate. Release the recursive
+        // V8 lock first so its destructor never observes an already-disposed
+        // isolate.
+        isolate_locker.reset();
+        release_shared_isolate(shared_isolate);
+        shared_isolate.reset();
     }
 
     static implementation* current(v8::Isolate* isolate)
     {
+        const auto local_context = isolate->GetCurrentContext();
+        if (!local_context.IsEmpty()) {
+            if (auto* owner = static_cast<implementation*>(
+                    local_context->GetAlignedPointerFromEmbedderData(
+                        runtime_context_embedder_slot,
+                        v8::kEmbedderDataTypeTagDefault));
+                owner != nullptr) {
+                return owner;
+            }
+        }
         return static_cast<implementation*>(isolate->GetData(0));
     }
 
@@ -2525,24 +3017,30 @@ struct v8_dom_runtime::implementation final {
     {
         prune_persistent_compilation_cache();
         initialize_v8_process();
-        allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-        v8::Isolate::CreateParams params;
-        params.array_buffer_allocator = allocator;
-        if (const auto maximum_heap_mib =
-                unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
-            maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
-            const auto initial_heap_mib =
-                unsigned_environment_value("WEBSCENE_V8_INITIAL_HEAP_MIB").value_or(0);
-            params.constraints.ConfigureDefaultsFromHeapSize(
-                initial_heap_mib * 1024U * 1024U,
-                *maximum_heap_mib * 1024U * 1024U);
+        if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
+            shared_isolate = acquire_shared_isolate();
+            isolate = shared_isolate == nullptr ? nullptr : shared_isolate->isolate;
+        } else {
+            allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+            v8::Isolate::CreateParams params;
+            params.array_buffer_allocator = allocator;
+            if (const auto maximum_heap_mib =
+                    unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
+                maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
+                const auto initial_heap_mib =
+                    unsigned_environment_value("WEBSCENE_V8_INITIAL_HEAP_MIB").value_or(0);
+                params.constraints.ConfigureDefaultsFromHeapSize(
+                    initial_heap_mib * 1024U * 1024U,
+                    *maximum_heap_mib * 1024U * 1024U);
+            }
+            isolate = v8::Isolate::New(params);
         }
-        isolate = v8::Isolate::New(params);
         if (isolate == nullptr) {
             last_error = "V8 isolate creation failed";
             return false;
         }
-        isolate->SetData(0, this);
+        auto isolate_locker = lock_shared_isolate();
+        isolate->SetData(0, shared_isolate == nullptr ? this : nullptr);
         if (std::getenv("WEBSCENE_V8_MEMORY_SAVER") != nullptr) {
             isolate->SetMemorySaverMode(true);
         }
@@ -2568,6 +3066,10 @@ struct v8_dom_runtime::implementation final {
             v8::PropertyHandlerFlags::kNonMasking));
         auto local_context = v8::Context::New(isolate, nullptr, global_template);
         local_context->SetSecurityToken(js_string(isolate, "webscene-native-origin"));
+        local_context->SetAlignedPointerInEmbedderData(
+            runtime_context_embedder_slot,
+            this,
+            v8::kEmbedderDataTypeTagDefault);
         local_context->SetAlignedPointerInEmbedderData(
             1,
             &document.body(),
@@ -4928,10 +5430,15 @@ struct v8_dom_runtime::implementation final {
     {
         v8::Local<v8::String> json;
         if (!v8::JSON::Stringify(local_context, request).ToLocal(&json)) return false;
-        std::lock_guard lock(host_request_mutex);
-        constexpr size_t maximum_host_requests = 1024U;
-        if (host_requests.size() >= maximum_host_requests) return false;
-        host_requests.push_back(to_utf8(isolate, json));
+        {
+            std::lock_guard lock(host_request_mutex);
+            constexpr size_t maximum_host_requests = 1024U;
+            if (host_requests.size() >= maximum_host_requests) return false;
+            host_requests.push_back(to_utf8(isolate, json));
+        }
+        // Notify after releasing the queue lock: the host may immediately call
+        // back into try_take_host_request from another thread.
+        if (host_request_available) host_request_available();
         return true;
     }
 
@@ -5084,6 +5591,7 @@ struct v8_dom_runtime::implementation final {
 
     bool execute(const std::string& source, const std::string& document_name)
     {
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
@@ -5100,11 +5608,6 @@ struct v8_dom_runtime::implementation final {
 
     bool load_url(const std::string& url)
     {
-        v8::Isolate::Scope isolate_scope(isolate);
-        v8::HandleScope handle_scope(isolate);
-        auto local_context = context.Get(isolate);
-        v8::Context::Scope context_scope(local_context);
-
         std::string html;
         std::string resolved_url;
         if (!load_text_resource(
@@ -5117,6 +5620,28 @@ struct v8_dom_runtime::implementation final {
             return false;
         }
         document_base_address = resolved_url;
+        const auto stylesheets = parse_frame_stylesheets(html);
+        const auto scripts = parse_frame_scripts(html);
+        for (const auto& href : stylesheets) {
+            start_resource_prefetch(
+                href,
+                document_base_address,
+                WEBSCENE_RESOURCE_STYLESHEET);
+        }
+        for (const auto& script : scripts) {
+            if (!script.source.empty()) {
+                start_resource_prefetch(
+                    script.source,
+                    document_base_address,
+                    WEBSCENE_RESOURCE_SCRIPT);
+            }
+        }
+
+        auto isolate_locker = lock_shared_isolate();
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        auto local_context = context.Get(isolate);
+        v8::Context::Scope context_scope(local_context);
         set_context_location(local_context, local_context->Global(), resolved_url);
         auto outer_document = document_object.Get(isolate);
         outer_document->Set(
@@ -5127,20 +5652,6 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "currentScript"),
             v8::Null(isolate)).Check();
-
-        const auto stylesheets = parse_frame_stylesheets(html);
-        const auto scripts = parse_frame_scripts(html);
-        for (const auto& href : stylesheets) {
-            start_resource_prefetch(href, document_base_address, WEBSCENE_RESOURCE_STYLESHEET);
-        }
-        for (const auto& script : scripts) {
-            if (!script.source.empty()) {
-                start_resource_prefetch(
-                    script.source,
-                    document_base_address,
-                    WEBSCENE_RESOURCE_SCRIPT);
-            }
-        }
 
         auto& viewport_root = document.body();
         record_feature(
@@ -5401,6 +5912,7 @@ struct v8_dom_runtime::implementation final {
         const std::string& document_name,
         std::string& result)
     {
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
@@ -5809,6 +6321,18 @@ struct v8_dom_runtime::implementation final {
             });
     }
 
+    bool has_waiting_animation_frame_task() const noexcept
+    {
+        return std::any_of(
+            timers.begin(),
+            timers.end(),
+            [](const auto& timer) {
+                return timer.animation_frame
+                    && timer.deadline
+                        == std::chrono::steady_clock::time_point::max();
+            });
+    }
+
     bool drain_animation_frame_task()
     {
         const auto now = std::chrono::steady_clock::now();
@@ -5948,6 +6472,7 @@ struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto resize_started = std::chrono::steady_clock::now();
 #endif
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         {
@@ -5998,75 +6523,91 @@ struct v8_dom_runtime::implementation final {
         }
 
         if (frame_context.IsEmpty()) return true;
-        auto local_frame_context = frame_context.Get(isolate);
-        v8::Context::Scope frame_scope(local_frame_context);
+        {
+            auto local_frame_context = frame_context.Get(isolate);
+            v8::Context::Scope frame_scope(local_frame_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-        v8::Local<v8::String> cpu_profile_title;
-        auto cpu_profile_started = false;
-        if (cpu_profiler != nullptr
-            && (profile_bindings || !resize_cpu_profile_captured)) {
-            cpu_profile_title = js_string(isolate, "webscene-resize-listener");
-            cpu_profile_started = cpu_profiler->StartProfiling(cpu_profile_title, true)
-                == v8::CpuProfilingStatus::kStarted;
-        }
-        const auto stop_cpu_profile = [&] {
-            if (!cpu_profile_started) return;
-            if (auto* profile = cpu_profiler->StopProfiling(cpu_profile_title); profile != nullptr) {
-                summarize_resize_cpu_profile(*profile);
-                profile->Delete();
+            v8::Local<v8::String> cpu_profile_title;
+            auto cpu_profile_started = false;
+            if (cpu_profiler != nullptr
+                && (profile_bindings || !resize_cpu_profile_captured)) {
+                cpu_profile_title = js_string(isolate, "webscene-resize-listener");
+                cpu_profile_started = cpu_profiler->StartProfiling(cpu_profile_title, true)
+                    == v8::CpuProfilingStatus::kStarted;
             }
-            cpu_profile_started = false;
-            resize_cpu_profile_captured = true;
-            // Starting and stopping V8's profiler on every resize is itself
-            // expensive enough to halve an otherwise 60 Hz stream. The
-            // low-overhead mode deliberately captures one representative
-            // callback, then removes the profiler from the live isolate.
-            if (!profile_bindings && cpu_profiler != nullptr) {
-                cpu_profiler->Dispose();
-                cpu_profiler = nullptr;
-            }
-        };
-        const auto binding_profile_before = binding_totals;
-#endif
-        auto listeners = frame_event_listeners.find("resize");
-        if (listeners != frame_event_listeners.end()) {
-            auto event = create_window_event(local_frame_context, "resize");
-            v8::Local<v8::Value> arguments[] = {event};
-            ++input_event_dispatch_count;
-            for (auto& listener : listeners->second) {
-                auto callback = listener.callback.Get(isolate);
-                if (callback.IsEmpty()) continue;
-                v8::TryCatch try_catch(isolate);
-                if (callback->Call(
-                        local_frame_context,
-                        local_frame_context->Global(),
-                        1,
-                        arguments).IsEmpty()) {
-#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-                    stop_cpu_profile();
-#endif
-                    last_error = describe_exception(try_catch, local_frame_context);
-                    return false;
+            const auto stop_cpu_profile = [&] {
+                if (!cpu_profile_started) return;
+                if (auto* profile = cpu_profiler->StopProfiling(cpu_profile_title); profile != nullptr) {
+                    summarize_resize_cpu_profile(*profile);
+                    profile->Delete();
                 }
-                ++input_callback_invocation_count;
-            }
-        }
-        isolate->PerformMicrotaskCheckpoint();
- #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-        stop_cpu_profile();
-        for (size_t index = 0; index < binding_category_count; ++index) {
-            last_resize_binding_profile[index] = binding_callback_stats{
-                binding_totals[index].calls - binding_profile_before[index].calls,
-                binding_totals[index].nanoseconds - binding_profile_before[index].nanoseconds};
-        }
+                cpu_profile_started = false;
+                resize_cpu_profile_captured = true;
+                // Starting and stopping V8's profiler on every resize is itself
+                // expensive enough to halve an otherwise 60 Hz stream. The
+                // low-overhead mode deliberately captures one representative
+                // callback, then removes the profiler from the live isolate.
+                if (!profile_bindings && cpu_profiler != nullptr) {
+                    cpu_profiler->Dispose();
+                    cpu_profiler = nullptr;
+                }
+            };
+            const auto binding_profile_before = binding_totals;
 #endif
+            auto listeners = frame_event_listeners.find("resize");
+            if (listeners != frame_event_listeners.end()) {
+                auto event = create_window_event(local_frame_context, "resize");
+                v8::Local<v8::Value> arguments[] = {event};
+                ++input_event_dispatch_count;
+                for (auto& listener : listeners->second) {
+                    auto callback = listener.callback.Get(isolate);
+                    if (callback.IsEmpty()) continue;
+                    v8::TryCatch try_catch(isolate);
+                    if (callback->Call(
+                            local_frame_context,
+                            local_frame_context->Global(),
+                            1,
+                            arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                        stop_cpu_profile();
+#endif
+                        last_error = describe_exception(try_catch, local_frame_context);
+                        return false;
+                    }
+                    ++input_callback_invocation_count;
+                }
+            }
+            isolate->PerformMicrotaskCheckpoint();
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            stop_cpu_profile();
+            for (size_t index = 0; index < binding_category_count; ++index) {
+                last_resize_binding_profile[index] = binding_callback_stats{
+                    binding_totals[index].calls - binding_profile_before[index].calls,
+                    binding_totals[index].nanoseconds - binding_profile_before[index].nanoseconds};
+            }
+#endif
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto frame_listeners_finished = std::chrono::steady_clock::now();
         last_resize_frame_listeners_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 frame_listeners_finished - outer_listeners_finished).count());
 #endif
-        ensure_layout();
+        if (shared_isolate != nullptr) {
+            isolate->Exit();
+            try {
+                {
+                    v8::Unlocker isolate_unlocker(isolate);
+                    ensure_layout();
+                }
+            } catch (...) {
+                isolate->Enter();
+                throw;
+            }
+            isolate->Enter();
+        } else {
+            ensure_layout();
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto layout_finished = std::chrono::steady_clock::now();
         last_resize_layout_ns = static_cast<uint64_t>(
@@ -7177,6 +7718,7 @@ struct v8_dom_runtime::implementation final {
     bool dispatch_input(const webscene_input_event& input)
     {
         current_input_sequence = input.sequence;
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = frame_context.IsEmpty()
@@ -8811,6 +9353,25 @@ struct v8_dom_runtime::implementation final {
                     || type == "application/ecmascript"
                     || type == "text/ecmascript";
                 if (!executable) return;
+            }
+        }
+        if (node.tag == "img") {
+            const auto source = node.attributes.find("src");
+            if (source != node.attributes.end()) {
+                const auto& image = node.replaced_image();
+                if (image.complete && image.source == source->second) return;
+            }
+            // Assigning src schedules an image load even while the element is
+            // detached. Appending that same element must not enqueue a second
+            // load or dispatch a duplicate load event. A pending task reads the
+            // node's latest src, so coalescing also handles src replacement.
+            if (std::any_of(
+                    connected_resources.begin(),
+                    connected_resources.end(),
+                    [&node](const auto& task) {
+                        return task.node == &node;
+                    })) {
+                return;
             }
         }
         auto resource_element =
@@ -17018,6 +17579,7 @@ struct v8_dom_runtime::implementation final {
     {
         if (!refresh_css_media_matches()) return true;
 
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         rebuild_css_rule_indexes_and_root_variables();
@@ -21814,6 +22376,41 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    void retain_shared_compiled_script(
+        const std::string& key,
+        const std::array<uint8_t, 32>& key_digest,
+        v8::Local<v8::UnboundScript> script,
+        size_t source_bytes)
+    {
+        if (shared_isolate == nullptr
+            || shared_isolate->compilation_cache.contains(key)) {
+            return;
+        }
+        compilation_cache_entry entry;
+        entry.script.Reset(isolate, script);
+        entry.key_digest = key_digest;
+        entry.source_bytes = source_bytes;
+        shared_isolate->compilation_cache_bytes += source_bytes;
+        shared_isolate->compilation_cache.emplace(key, std::move(entry));
+        shared_isolate->compilation_cache_order.push_back(key);
+        while (
+            shared_isolate->compilation_cache.size()
+                    > maximum_compilation_cache_entries
+            || shared_isolate->compilation_cache_bytes
+                    > maximum_compilation_cache_source_bytes) {
+            const auto oldest =
+                std::move(shared_isolate->compilation_cache_order.front());
+            shared_isolate->compilation_cache_order.pop_front();
+            const auto iterator =
+                shared_isolate->compilation_cache.find(oldest);
+            if (iterator == shared_isolate->compilation_cache.end()) continue;
+            shared_isolate->compilation_cache_bytes -=
+                iterator->second.source_bytes;
+            iterator->second.script.Reset();
+            shared_isolate->compilation_cache.erase(iterator);
+        }
+    }
+
     static bool is_ascii_script_source(std::string_view source) noexcept
     {
         return std::all_of(source.begin(), source.end(), [](char value) {
@@ -21826,11 +22423,6 @@ struct v8_dom_runtime::implementation final {
         std::string_view source,
         const std::shared_ptr<const immutable_text_source>& preferred_source = {})
     {
-        if (source.size() < minimum_shared_script_source_bytes
-            || !is_ascii_script_source(source)) {
-            return {};
-        }
-
         std::lock_guard lock(process_script_source_mutex);
         if (const auto known = process_script_sources.find(key);
             known != process_script_sources.end()) {
@@ -21880,6 +22472,55 @@ struct v8_dom_runtime::implementation final {
         return shared;
     }
 
+    std::shared_ptr<const std::vector<uint16_t>>
+    acquire_process_two_byte_script_source(
+        const std::string& key,
+        std::string_view source)
+    {
+        std::lock_guard lock(process_script_source_mutex);
+        if (const auto known = process_two_byte_script_sources.find(key);
+            known != process_two_byte_script_sources.end()) {
+            if (auto shared = known->second.source.lock();
+                shared != nullptr) {
+                known->second.access = ++process_script_source_access;
+                ++process_script_source_memory_hit_count;
+                process_script_source_shared_byte_count +=
+                    shared->size() * sizeof(uint16_t);
+                return shared;
+            }
+            process_two_byte_script_sources.erase(known);
+        }
+
+        auto shared = std::make_shared<const std::vector<uint16_t>>(
+            decode_wtf8_to_utf16(source));
+        process_two_byte_script_sources.emplace(
+            key,
+            process_two_byte_script_source_entry{
+                shared,
+                ++process_script_source_access});
+
+        if (process_two_byte_script_sources.size()
+            > maximum_process_script_source_entries) {
+            std::erase_if(
+                process_two_byte_script_sources,
+                [](const auto& candidate) {
+                    return candidate.second.source.expired();
+                });
+            while (process_two_byte_script_sources.size()
+                > maximum_process_script_source_entries) {
+                const auto oldest = std::min_element(
+                    process_two_byte_script_sources.begin(),
+                    process_two_byte_script_sources.end(),
+                    [](const auto& left, const auto& right) {
+                        return left.second.access < right.second.access;
+                    });
+                if (oldest == process_two_byte_script_sources.end()) break;
+                process_two_byte_script_sources.erase(oldest);
+            }
+        }
+        return shared;
+    }
+
     v8::Local<v8::String> create_script_source_value(
         const std::string& key,
         std::string_view source,
@@ -21889,20 +22530,38 @@ struct v8_dom_runtime::implementation final {
         // helper intentionally declines small or non-ASCII sources; moving the
         // sole mapped/aliased owner into that call would release its backing
         // storage and leave `source` dangling before NewFromUtf8 copies it.
-        if (auto shared = acquire_process_script_source(
-                key,
-                source,
-                preferred_source);
-            shared != nullptr) {
-            auto resource =
-                std::make_unique<shared_external_one_byte_source>(
-                    std::move(shared));
-            v8::Local<v8::String> external;
-            if (v8::String::NewExternalOneByte(isolate, resource.get())
-                    .ToLocal(&external)) {
-                // V8 owns and disposes the resource after this point.
-                static_cast<void>(resource.release());
-                return external;
+        if (source.size() >= minimum_shared_script_source_bytes) {
+            if (is_ascii_script_source(source)) {
+                if (auto shared = acquire_process_script_source(
+                        key,
+                        source,
+                        preferred_source);
+                    shared != nullptr) {
+                    auto resource =
+                        std::make_unique<shared_external_one_byte_source>(
+                            std::move(shared));
+                    v8::Local<v8::String> external;
+                    if (v8::String::NewExternalOneByte(
+                            isolate,
+                            resource.get()).ToLocal(&external)) {
+                        // V8 owns and disposes the resource after this point.
+                        static_cast<void>(resource.release());
+                        return external;
+                    }
+                }
+            } else if (
+                auto shared =
+                    acquire_process_two_byte_script_source(key, source);
+                shared != nullptr) {
+                auto resource =
+                    std::make_unique<shared_external_two_byte_source>(
+                        std::move(shared));
+                v8::Local<v8::String> external;
+                if (v8::String::NewExternalTwoByte(isolate, resource.get())
+                        .ToLocal(&external)) {
+                    static_cast<void>(resource.release());
+                    return external;
+                }
             }
         }
         return v8::String::NewFromUtf8(
@@ -21926,6 +22585,21 @@ struct v8_dom_runtime::implementation final {
             ++compilation_memory_hit_count;
             script = cached->second.script.Get(isolate)->BindToCurrentContext();
             return true;
+        }
+        if (shared_isolate != nullptr) {
+            const auto shared_cached =
+                shared_isolate->compilation_cache.find(key);
+            if (shared_cached != shared_isolate->compilation_cache.end()) {
+                ++compilation_memory_hit_count;
+                const auto unbound = shared_cached->second.script.Get(isolate);
+                retain_compiled_script(
+                    key,
+                    key_digest,
+                    unbound,
+                    shared_cached->second.source_bytes);
+                script = unbound->BindToCurrentContext();
+                return true;
+            }
         }
 
         const auto process_acquisition = acquire_process_compilation(key);
@@ -22017,6 +22691,11 @@ struct v8_dom_runtime::implementation final {
                     std::move(published_bytes));
             }
         }
+        retain_shared_compiled_script(
+            key,
+            key_digest,
+            unbound,
+            source.size());
         retain_compiled_script(key, key_digest, unbound, source.size());
         script = unbound->BindToCurrentContext();
         return true;
@@ -22743,6 +23422,10 @@ struct v8_dom_runtime::implementation final {
             v8::PropertyHandlerFlags::kNonMasking));
         auto local_frame_context = v8::Context::New(isolate, nullptr, frame_global_template);
         local_frame_context->SetSecurityToken(context.Get(isolate)->GetSecurityToken());
+        local_frame_context->SetAlignedPointerInEmbedderData(
+            runtime_context_embedder_slot,
+            this,
+            v8::kEmbedderDataTypeTagDefault);
         local_frame_context->SetAlignedPointerInEmbedderData(
             1,
             &frame_body,
@@ -26059,6 +26742,7 @@ struct v8_dom_runtime::implementation final {
     {
         auto events = document.take_transition_events();
         if (events.empty()) return true;
+        auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = frame_context.IsEmpty()
@@ -26572,6 +27256,7 @@ struct v8_dom_runtime::implementation final {
     resource_loader load_resource_callback;
     static constexpr size_t maximum_resource_prefetches = 16U;
     std::unordered_map<std::string, std::future<prefetched_resource>> prefetched_resources;
+    std::shared_ptr<shared_isolate_state> shared_isolate;
     v8::ArrayBuffer::Allocator* allocator{nullptr};
     v8::Isolate* isolate{nullptr};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -26625,6 +27310,7 @@ struct v8_dom_runtime::implementation final {
     std::vector<connected_resource_task> connected_resources;
     std::mutex host_request_mutex;
     std::deque<std::string> host_requests;
+    std::function<void()> host_request_available;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -26715,6 +27401,9 @@ struct v8_dom_runtime::implementation final {
     inline static std::unordered_map<
         std::string,
         process_script_source_entry> process_script_sources;
+    inline static std::unordered_map<
+        std::string,
+        process_two_byte_script_source_entry> process_two_byte_script_sources;
     inline static uint64_t process_script_source_access{0U};
     std::string compilation_cache_directory;
     std::unordered_map<std::string, compilation_cache_entry> compilation_cache;
@@ -26827,12 +27516,14 @@ v8_dom_runtime::v8_dom_runtime(
     native_document& document,
     std::function<viewport_metrics()> viewport_provider,
     std::string compilation_cache_directory,
-    resource_loader load_resource)
+    resource_loader load_resource,
+    std::function<void()> host_request_available)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
-        std::move(load_resource)))
+        std::move(load_resource),
+        std::move(host_request_available)))
 {
 }
 
@@ -26945,6 +27636,7 @@ void v8_dom_runtime::notify_low_memory()
 {
     if (impl_->isolate == nullptr) return;
     impl_->compact_retained_native_capacity();
+    auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     impl_->isolate->LowMemoryNotification();
 }
@@ -26982,6 +27674,7 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
 
 bool v8_dom_runtime::pump_animation_frame_task()
 {
+    auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
@@ -26995,8 +27688,21 @@ bool v8_dom_runtime::has_pending_animation_frame_task() const noexcept
     return impl_->has_due_animation_frame_task();
 }
 
+uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
+{
+    auto demand = impl_->has_waiting_animation_frame_task()
+        ? uint8_t{1U}
+        : uint8_t{0U};
+    if (impl_->is_text_control(impl_->active_element)
+        && impl_->active_element->mutable_form_control().input_focused) {
+        demand |= 4U;
+    }
+    return demand;
+}
+
 bool v8_dom_runtime::pump_task()
 {
+    auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
@@ -27015,8 +27721,28 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
         || impl_->has_due_timer();
 }
 
+std::chrono::milliseconds v8_dom_runtime::recommended_idle_wait(
+    std::chrono::milliseconds maximum) const noexcept
+{
+    const auto now = std::chrono::steady_clock::now();
+    auto wait = maximum;
+    for (const auto& timer : impl_->timers) {
+        // An unreleased requestAnimationFrame is woken by the host frame input,
+        // not by wall-clock polling.
+        if (timer.deadline == std::chrono::steady_clock::time_point::max()) {
+            continue;
+        }
+        if (timer.deadline <= now) return std::chrono::milliseconds::zero();
+        wait = std::min(
+            wait,
+            std::chrono::ceil<std::chrono::milliseconds>(timer.deadline - now));
+    }
+    return std::max(wait, std::chrono::milliseconds(1));
+}
+
 bool v8_dom_runtime::component_ready()
 {
+    auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
@@ -27030,11 +27756,24 @@ bool v8_dom_runtime::component_ready()
 
 std::string v8_dom_runtime::diagnostics()
 {
-#if !defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-    return "certification telemetry disabled at compile time";
-#else
     std::ostringstream description;
-    description << "resources=[";
+    if (impl_->shared_isolate != nullptr) {
+        description << "v8-shard={slot=" << impl_->shared_isolate->slot_index
+            << ",active="
+            << impl_->shared_isolate->active_contexts.load(
+                std::memory_order_relaxed)
+            << ",peak="
+            << impl_->shared_isolate->peak_contexts.load(
+                std::memory_order_relaxed)
+            << '}';
+    } else {
+        description << "v8-shard=dedicated";
+    }
+#if !defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    description << " | certification telemetry disabled at compile time";
+    return std::move(description).str();
+#else
+    description << " | resources=[";
     const auto start = impl_->loaded_resource_names.size() > 24U
         ? impl_->loaded_resource_names.size() - 24U
         : 0U;
@@ -27380,6 +28119,31 @@ uint64_t v8_dom_runtime::process_script_source_shared_bytes() const noexcept
     return impl_->process_script_source_shared_byte_count;
 }
 
+uint64_t v8_dom_runtime::shared_isolate_slot() const noexcept
+{
+    return impl_->shared_isolate == nullptr
+        ? std::numeric_limits<uint64_t>::max()
+        : static_cast<uint64_t>(impl_->shared_isolate->slot_index);
+}
+
+uint64_t v8_dom_runtime::shared_isolate_active_contexts() const noexcept
+{
+    return impl_->shared_isolate == nullptr
+        ? 1U
+        : static_cast<uint64_t>(
+            impl_->shared_isolate->active_contexts.load(
+                std::memory_order_relaxed));
+}
+
+uint64_t v8_dom_runtime::shared_isolate_peak_contexts() const noexcept
+{
+    return impl_->shared_isolate == nullptr
+        ? 1U
+        : static_cast<uint64_t>(
+            impl_->shared_isolate->peak_contexts.load(
+                std::memory_order_relaxed));
+}
+
 uint64_t v8_dom_runtime::resource_cache_requests() const noexcept
 {
     return impl_->resource_cache_request_count;
@@ -27424,6 +28188,7 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
 {
     memory_metrics result{};
     if (impl_->isolate != nullptr) {
+        auto isolate_locker = impl_->lock_shared_isolate();
         v8::HeapStatistics statistics;
         impl_->isolate->GetHeapStatistics(&statistics);
         result.total_heap_bytes = statistics.total_heap_size();
@@ -27433,13 +28198,23 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         result.external_bytes = statistics.external_memory();
         result.malloced_bytes = statistics.malloced_memory();
         result.peak_malloced_bytes = statistics.peak_malloced_memory();
-        v8::HeapCodeStatistics code_statistics;
-        if (impl_->isolate->GetHeapCodeAndMetadataStatistics(&code_statistics)) {
-            result.code_and_metadata_bytes = code_statistics.code_and_metadata_size();
-            result.bytecode_and_metadata_bytes =
-                code_statistics.bytecode_and_metadata_size();
-            result.external_script_source_bytes =
-                code_statistics.external_script_source_size();
+        // This API walks V8's code and metadata spaces. Four settled chart
+        // documents calling it periodically consumed measurable CPU even
+        // though these fields are diagnostic-only and ordinary production
+        // scheduling never reads them. Keep the detailed census available to
+        // certification, tests, and explicit profiling without placing it in
+        // the default runtime's recurring metrics path.
+        if (std::getenv("WEBSCENE_V8_DETAILED_MEMORY_METRICS") != nullptr) {
+            v8::HeapCodeStatistics code_statistics;
+            if (impl_->isolate->GetHeapCodeAndMetadataStatistics(
+                    &code_statistics)) {
+                result.code_and_metadata_bytes =
+                    code_statistics.code_and_metadata_size();
+                result.bytecode_and_metadata_bytes =
+                    code_statistics.bytecode_and_metadata_size();
+                result.external_script_source_bytes =
+                    code_statistics.external_script_source_size();
+            }
         }
         const auto add_space = [](
                                    uint64_t& used_total,

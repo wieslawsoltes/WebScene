@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -335,6 +336,216 @@ std::string diagnostics(webscene_engine* engine)
     return std::string(buffer.data(), copied - 1U);
 }
 
+size_t isolate_shard_slot(webscene_engine* engine)
+{
+    constexpr std::string_view source{"void 0"};
+    constexpr std::string_view name{"shared-isolate-slot-barrier.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            source.data(),
+            source.size(),
+            name.data(),
+            name.size()) != 0,
+        "V8 shard diagnostics barrier was rejected");
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_process_cache_metrics metrics{
+            sizeof(webscene_process_cache_metrics)};
+        require(
+            webscene_engine_get_process_cache_metrics(engine, &metrics) != 0,
+            "V8 shard process metrics were unavailable");
+        if (metrics.shared_isolate_slot
+            != std::numeric_limits<uint64_t>::max()) {
+            return static_cast<size_t>(metrics.shared_isolate_slot);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("V8 shard ownership was not published by the engine worker");
+}
+
+uint64_t isolate_shard_peak_contexts(webscene_engine* engine)
+{
+    constexpr std::string_view source{"void 0"};
+    constexpr std::string_view name{"shared-isolate-peak-barrier.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            source.data(),
+            source.size(),
+            name.data(),
+            name.size()) != 0,
+        "V8 shard peak diagnostics barrier was rejected");
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_process_cache_metrics metrics{
+            sizeof(webscene_process_cache_metrics)};
+        require(
+            webscene_engine_get_process_cache_metrics(engine, &metrics) != 0,
+            "V8 shard peak process metrics were unavailable");
+        if (metrics.shared_isolate_slot
+            != std::numeric_limits<uint64_t>::max()) {
+            return metrics.shared_isolate_peak_contexts;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("V8 shard peak occupancy was not published by the engine worker");
+}
+
+void test_shared_isolate_reuses_destroyed_context_slot()
+{
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") == nullptr) return;
+    const auto* count_value =
+        std::getenv("WEBSCENE_V8_SHARED_ISOLATE_COUNT");
+    if (count_value == nullptr
+        || std::strtoull(count_value, nullptr, 10) < 2U) {
+        return;
+    }
+
+    std::vector<webscene_engine*> engines(4U, nullptr);
+    for (auto*& engine : engines) {
+        engine = webscene_engine_create(0);
+        require(engine != nullptr, "shared-isolate lifecycle engine creation failed");
+    }
+    const std::array<size_t, 4> slots{
+        isolate_shard_slot(engines[0]),
+        isolate_shard_slot(engines[1]),
+        isolate_shard_slot(engines[2]),
+        isolate_shard_slot(engines[3])};
+    const auto slot_zero_count =
+        static_cast<size_t>(std::count(slots.begin(), slots.end(), 0U));
+    const auto slot_one_count =
+        static_cast<size_t>(std::count(slots.begin(), slots.end(), 1U));
+    require(
+        slot_zero_count == 2U && slot_one_count == 2U,
+        "initial four-engine placement did not preserve the 2/2 shard balance");
+
+    for (size_t index = 0; index < engines.size(); ++index) {
+        const auto expected_slot = slots[index];
+        webscene_engine_destroy(engines[index]);
+        engines[index] = nullptr;
+        auto* replacement = webscene_engine_create(0);
+        require(
+            replacement != nullptr,
+            "replacement shared-isolate engine creation failed");
+        require(
+            isolate_shard_slot(replacement) == expected_slot,
+            "replacement engine did not refill the randomly vacated shard slot");
+        engines[index] = replacement;
+    }
+
+    // A shard whose final two contexts close remains warm for a bounded
+    // lease. Reopening it must preserve the isolate's observed peak rather
+    // than constructing a fresh isolate that happens to occupy the same slot.
+    const auto warm_slot = slots.front();
+    std::array<size_t, 2> warm_indices{};
+    size_t warm_index_count = 0U;
+    for (size_t index = 0U; index < slots.size(); ++index) {
+        if (slots[index] == warm_slot) {
+            require(
+                warm_index_count < warm_indices.size(),
+                "more than two contexts occupied the warm-lease test shard");
+            warm_indices[warm_index_count++] = index;
+        }
+    }
+    require(
+        warm_index_count == warm_indices.size(),
+        "warm-lease test shard did not begin with two contexts");
+    for (const auto index : warm_indices) {
+        webscene_engine_destroy(engines[index]);
+        engines[index] = nullptr;
+    }
+    for (const auto index : warm_indices) {
+        engines[index] = webscene_engine_create(0);
+        require(
+            engines[index] != nullptr,
+            "warm shared-isolate replacement engine creation failed");
+        require(
+            isolate_shard_slot(engines[index]) == warm_slot,
+            "fully empty warm shard was not reused");
+    }
+    require(
+        isolate_shard_peak_contexts(engines[warm_indices.front()]) == 2U,
+        "fully empty shard was recreated instead of reused during its lease");
+
+    // Short leases are selected by the explicit shared-suite invocation so
+    // expiry can be covered without adding a long delay to ordinary tests.
+    const auto* warm_lease_value =
+        std::getenv("WEBSCENE_V8_SHARED_ISOLATE_WARM_LEASE_MS");
+    const auto warm_lease_milliseconds = warm_lease_value == nullptr
+        ? 0ULL
+        : std::strtoull(warm_lease_value, nullptr, 10);
+    if (warm_lease_milliseconds > 0U
+        && warm_lease_milliseconds <= 1000U) {
+        for (const auto index : warm_indices) {
+            webscene_engine_destroy(engines[index]);
+            engines[index] = nullptr;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(
+            warm_lease_milliseconds + 50U));
+        engines[warm_indices.front()] = webscene_engine_create(0);
+        require(
+            engines[warm_indices.front()] != nullptr,
+            "expired shared-isolate replacement engine creation failed");
+        require(
+            isolate_shard_slot(engines[warm_indices.front()]) == warm_slot,
+            "expired shard slot was not available for a fresh isolate");
+        require(
+            isolate_shard_peak_contexts(engines[warm_indices.front()]) == 1U,
+            "expired empty shard was retained beyond its warm lease");
+        engines[warm_indices.back()] = webscene_engine_create(0);
+        require(
+            engines[warm_indices.back()] != nullptr
+                && isolate_shard_slot(engines[warm_indices.back()])
+                    == warm_slot,
+            "fresh post-expiry shard did not refill to its context capacity");
+    }
+
+    const auto* maximum_count_value =
+        std::getenv("WEBSCENE_V8_SHARED_ISOLATE_MAX_COUNT");
+    const auto maximum_count = maximum_count_value != nullptr
+        ? std::strtoull(maximum_count_value, nullptr, 10)
+        : static_cast<unsigned long long>(
+            std::max(1U, std::thread::hardware_concurrency()));
+    if (maximum_count >= 10U) {
+        engines.reserve(20U);
+        while (engines.size() < 20U) {
+            auto* engine = webscene_engine_create(0);
+            require(
+                engine != nullptr,
+                "dynamic shared-isolate engine creation failed");
+            engines.push_back(engine);
+        }
+
+        std::array<size_t, 10> occupancy{};
+        for (auto* engine : engines) {
+            const auto slot = isolate_shard_slot(engine);
+            require(slot < occupancy.size(), "dynamic shard slot exceeded maximum");
+            ++occupancy[slot];
+        }
+        require(
+            std::all_of(
+                occupancy.begin(),
+                occupancy.end(),
+                [](size_t count) { return count == 2U; }),
+            "twenty dynamic engines did not preserve two contexts per shard");
+
+        for (size_t index = 0; index < engines.size(); ++index) {
+            const auto expected_slot = isolate_shard_slot(engines[index]);
+            webscene_engine_destroy(engines[index]);
+            engines[index] = webscene_engine_create(0);
+            require(
+                engines[index] != nullptr,
+                "dynamic replacement shared-isolate engine creation failed");
+            require(
+                isolate_shard_slot(engines[index]) == expected_slot,
+                "dynamic replacement did not refill the randomly vacated shard");
+        }
+    }
+
+    for (auto* engine : engines) {
+        if (engine != nullptr) webscene_engine_destroy(engine);
+    }
+}
+
 std::string feature_use(webscene_engine* engine)
 {
     const auto required = webscene_engine_copy_feature_use(engine, nullptr, 0);
@@ -438,6 +649,25 @@ void wait_for_consumed_inputs(
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     fail(failure_message);
+}
+
+void wait_for_animation_frame_demand(
+    webscene_engine* engine,
+    bool expected,
+    std::string_view failure_message)
+{
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        if ((webscene_engine_requires_animation_frame(engine) != 0)
+            == expected) {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail(
+        std::string(failure_message)
+        + " (demand="
+        + std::to_string(webscene_engine_requires_animation_frame(engine))
+        + ")");
 }
 
 void resize(
@@ -1504,9 +1734,14 @@ void test_process_wide_resource_load_single_flight()
     constexpr size_t engine_count = 4U;
     const auto shared_script =
         std::string{
+            "globalThis.__sharedResourceUnicode = \"🙂\";\n"
             "globalThis.__sharedResourceExecutions = "
             "(globalThis.__sharedResourceExecutions || 0) + 1;\n/*"}
         + std::string(128U * 1024U, 'x')
+        + "*/";
+    const auto shared_ascii_script =
+        std::string{"globalThis.__sharedAsciiResource = true;\n/*"}
+        + std::string(8U * 1024U, 'a')
         + "*/";
     const auto unique_suffix = std::to_string(
         std::chrono::steady_clock::now().time_since_epoch().count());
@@ -1516,8 +1751,10 @@ void test_process_wide_resource_load_single_flight()
     resource_server server{
         .content = {
             {document_url,
-                "<html><body><script src=\"shared.js\"></script></body></html>"},
-            {script_url, shared_script}
+                "<html><body><script src=\"shared.js\"></script>"
+                "<script src=\"shared-ascii.js\"></script></body></html>"},
+            {script_url, shared_script},
+            {origin + "shared-ascii.js", shared_ascii_script}
         }};
     const auto cache_directory = std::filesystem::temp_directory_path()
         / ("webscene-native-resource-single-flight-test-" + unique_suffix);
@@ -1555,7 +1792,9 @@ void test_process_wide_resource_load_single_flight()
                 "resource single-flight document load was rejected");
             results[index] = evaluate(
                 engines[index],
-                "globalThis.__sharedResourceExecutions",
+                "globalThis.__sharedResourceUnicode === \"🙂\" "
+                "&& globalThis.__sharedAsciiResource "
+                "? globalThis.__sharedResourceExecutions : -1",
                 "resource-single-flight-result-" + unique_suffix + ".js");
         });
     }
@@ -1591,26 +1830,30 @@ void test_process_wide_resource_load_single_flight()
             webscene_engine_get_memory_metrics(engines[index], &memory) != 0,
             "external script-source memory metrics were unavailable");
         require(
-            memory.v8_external_script_source_bytes >= shared_script.size(),
-            "large ASCII script source was copied into the V8 heap");
+            memory.v8_external_script_source_bytes
+                >= shared_script.size() + shared_ascii_script.size(),
+            "large UTF-8 script source was copied into the V8 heap");
         require(
             memory.process_resource_mapped_cache_bytes >= shared_script.size(),
             "large persisted script resource was not retained as file-backed memory");
     }
     require(
-        server.requests.load(std::memory_order_relaxed) == 2,
+        server.requests.load(std::memory_order_relaxed) == 3,
         "identical resources were loaded more than once across four engines");
-    require(leaders == 2U, "resource loads did not elect one producer per URL");
+    require(leaders == 3U, "resource loads did not elect one producer per URL");
     require(waiters > 0U, "concurrent resource loads did not record waiters");
     require(memory_hits > 0U, "resource waiters did not consume shared results");
     require(shared_bytes > 0U, "resource waiters did not share immutable response bytes");
-    require(
-        script_source_hits >= engine_count - 1U,
-        "identical live engines did not reuse the external script-source backing");
-    require(
-        script_source_shared_bytes
-            >= (engine_count - 1U) * shared_script.size(),
-        "shared external script-source bytes were not attributed");
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") == nullptr) {
+        require(
+            script_source_hits >= 2U * (engine_count - 1U),
+            "identical live engines did not reuse the external script-source backing");
+        require(
+            script_source_shared_bytes
+                >= (engine_count - 1U)
+                    * (shared_script.size() + shared_ascii_script.size()),
+            "shared external script-source bytes were not attributed");
+    }
 
     for (auto* engine : engines) webscene_engine_destroy(engine);
     std::error_code cleanup_error;
@@ -1926,11 +2169,15 @@ void test_persistent_compilation_cache_reuse()
         "process compilation-cache metrics were unavailable");
     require(
         second_metrics.compilation_persistent_hits >= 2U
-            || second_process_metrics.compilation_memory_hits >= 2U,
+            || second_process_metrics.compilation_memory_hits >= 2U
+            || (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr
+                && second_metrics.compilation_memory_hits >= 2U),
         "second engine did not reuse process or persisted V8 compilation data");
     require(
         second_metrics.compilation_cache_bytes_read > 0U
-            || second_process_metrics.compilation_shared_bytes > 0U,
+            || second_process_metrics.compilation_shared_bytes > 0U
+            || (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr
+                && second_metrics.compilation_memory_hits >= 2U),
         "second engine did not consume reusable V8 compilation data");
     webscene_engine_destroy(second);
 
@@ -2002,6 +2249,7 @@ void test_executed_compilation_units_enrich_persistent_cache()
         "hot-cache process metrics were unavailable");
     require(
         metrics.compilation_persistent_hits > 0U
+            || metrics.compilation_memory_hits > 0U
             || process_metrics.compilation_memory_hits > 0U,
         "hot compilation unit was not reused by the second engine");
     webscene_engine_destroy(second);
@@ -2093,15 +2341,24 @@ void test_process_wide_compilation_single_flight()
     require(
         leaders == 2U,
         "four engines did not elect exactly one producer for each cold compilation unit");
-    require(
-        memory_hits == (engine_count - 1U) * 2U,
-        "cold compilation results were not consumed by every non-producing isolate");
-    require(
-        waiters > 0U,
-        "the concurrent cold-start test did not observe compilation waiters");
-    require(
-        shared_bytes > 0U,
-        "non-producing isolates did not consume shared immutable cache bytes");
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") == nullptr) {
+        require(
+            memory_hits == (engine_count - 1U) * 2U,
+            "cold compilation results were not consumed by every non-producing isolate");
+    }
+    // A shared isolate intentionally serializes V8 compilation entry. The
+    // followers still reuse the producer's immutable cached data, but they can
+    // arrive after production completes rather than blocking as waiters.
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") == nullptr) {
+        require(
+            waiters > 0U,
+            "the concurrent cold-start test did not observe compilation waiters");
+    }
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") == nullptr) {
+        require(
+            shared_bytes > 0U,
+            "non-producing isolates did not consume shared immutable cache bytes");
+    }
     require(
         persistent_misses == 2U,
         "more than one engine read the cold persistent cache for a compilation unit");
@@ -4312,9 +4569,11 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
               #dot-b { animation-delay: 300ms; }
               #dot-c { animation-delay: 450ms; }
             </style>
-            <span id="dot-a" class="dot"></span>
-            <span id="dot-b" class="dot"></span>
-            <span id="dot-c" class="dot"></span>`;
+            <div id="dot-host">
+              <span id="dot-a" class="dot"></span>
+              <span id="dot-b" class="dot"></span>
+              <span id="dot-c" class="dot"></span>
+            </div>`;
         })()
     )JS", "opacity-keyframes-host-clock-setup.js");
 
@@ -4328,6 +4587,10 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     require(
         metadata == R"(["dot-pulse","1000ms","100ms","linear","infinite"])",
         "computed CSS animation metadata was not observable: " + metadata);
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "visible infinite CSS animation did not request a host frame");
 
     animation_frame_and_wait(engine, 550.0, 7021U);
     const auto first = evaluate(engine, R"JS(
@@ -4352,6 +4615,33 @@ void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     )JS", "opacity-keyframes-wrapped-frame.js");
     require(wrapped == "[0.867,0.775,0.55]",
         "infinite opacity animation did not wrap continuously: " + wrapped);
+
+    execute_and_wait(
+        engine,
+        "document.getElementById('dot-host').style.display = 'none'",
+        "opacity-keyframes-hide.js");
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "display:none CSS animations retained host-frame demand");
+
+    execute_and_wait(
+        engine,
+        "document.getElementById('dot-host').style.display = 'block'",
+        "opacity-keyframes-show.js");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "restored CSS animations did not resume host-frame demand");
+
+    execute_and_wait(
+        engine,
+        "document.body.innerHTML = '<div>static replacement</div>'",
+        "opacity-keyframes-detach.js");
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "detached CSS animations retained host-frame demand");
 }
 
 void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
@@ -6795,6 +7085,10 @@ void test_animation_frame_uses_host_frame(webscene_engine* engine)
             "globalThis.__hostFrameTimestamps.length",
             "native-host-animation-frame-ready.js") == "0",
         "requestAnimationFrame setup did not complete");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "pending requestAnimationFrame did not request a host frame");
 
     animation_frame(engine, 123.5, 5U);
     const auto first = evaluate(
@@ -6804,6 +7098,10 @@ void test_animation_frame_uses_host_frame(webscene_engine* engine)
     if (first != "[123.5]") {
         fail("host frame did not release exactly one requestAnimationFrame batch: " + first);
     }
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "nested requestAnimationFrame did not retain host-frame demand");
 
     animation_frame(engine, 456.25, 6U);
     const auto second = evaluate(
@@ -6813,6 +7111,10 @@ void test_animation_frame_uses_host_frame(webscene_engine* engine)
     if (second != "[123.5,456.25]") {
         fail("nested requestAnimationFrame did not wait for the next host frame: " + second);
     }
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "completed requestAnimationFrame chain retained host-frame demand");
 }
 
 void test_animation_frame_callback_list_timestamp_and_cancellation(webscene_engine* engine)
@@ -9084,6 +9386,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
     test_animation_runtime_is_cold_for_static_nodes();

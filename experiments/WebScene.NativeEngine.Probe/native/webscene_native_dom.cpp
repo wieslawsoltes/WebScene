@@ -5354,6 +5354,20 @@ bool native_document::is_connected(const dom_node& node) const noexcept
     return false;
 }
 
+bool native_document::participates_in_animation_frame(
+    const dom_node& node) const noexcept
+{
+    if (!is_connected(node)) return false;
+    for (auto* current = &node;
+         current != nullptr;
+         current = current->parent) {
+        if (current->style.display == display_mode::none) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool native_document::dirty() const noexcept
 {
     return dirty_;
@@ -5363,6 +5377,7 @@ void native_document::mark_dirty() noexcept
 {
     dirty_ = true;
     globally_dirty_ = true;
+    active_animation_demand_cache_valid_ = false;
     out_of_flow_geometry_dirty_roots_.clear();
 }
 
@@ -5432,6 +5447,7 @@ void native_document::update_style_animations(dom_node& node)
     if (!node.has_animation_runtime() && !node.style.has_animation_data()) {
         return;
     }
+    active_animation_demand_cache_valid_ = false;
     auto& animation = node.mutable_animation_runtime();
     const auto length_equal = [](css_length left, css_length right) {
         return left.unit == right.unit
@@ -5733,7 +5749,15 @@ bool native_document::advance_animations() noexcept
     for (auto& owner : nodes_) {
         auto& node = *owner;
         auto* animation_pointer = node.animation_runtime();
-        if (animation_pointer == nullptr) continue;
+        // Retained JS wrappers can keep detached nodes alive after a component
+        // replaces a subtree. Their CSS animation state must not keep the host
+        // frame clock alive, and display:none descendants have no painted
+        // timeline to advance. Reconnection/display restoration re-enters this
+        // path with the existing authored animation state.
+        if (animation_pointer == nullptr
+            || !participates_in_animation_frame(node)) {
+            continue;
+        }
         auto& animation = *animation_pointer;
         if (animation.transform_animation_active) {
             const auto previous_translate_x = animation.painted_transform_translate_x;
@@ -5989,20 +6013,28 @@ bool native_document::advance_animations() noexcept
     // still reflected in the retained layout coordinates and therefore remains
     // a geometry invalidation until translated boxes are represented separately.
     if (layout_changed) mark_dirty();
+    if (advanced) active_animation_demand_cache_valid_ = false;
     return advanced;
 }
 
 bool native_document::has_active_animations() const noexcept
 {
-    return std::any_of(nodes_.begin(), nodes_.end(), [](const auto& node) {
+    if (active_animation_demand_cache_valid_) {
+        return active_animation_demand_cache_;
+    }
+    active_animation_demand_cache_ =
+        std::any_of(nodes_.begin(), nodes_.end(), [this](const auto& node) {
         const auto* animation = node->animation_runtime();
-        return animation != nullptr
+        return participates_in_animation_frame(*node)
+            && animation != nullptr
             && (animation->transform_animation_active
                 || animation->opacity_animation_active
                 || animation->color_animation_active
                 || animation->opacity_keyframe_animation_active
                 || animation->rotation_keyframe_animation_active);
     });
+    active_animation_demand_cache_valid_ = true;
+    return active_animation_demand_cache_;
 }
 
 std::vector<native_document::transition_event_record>

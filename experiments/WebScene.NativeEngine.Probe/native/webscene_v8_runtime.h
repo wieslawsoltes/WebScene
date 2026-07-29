@@ -2,6 +2,7 @@
 
 #include "webscene_native_engine.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -119,7 +120,8 @@ public:
         native_document& document,
         std::function<viewport_metrics()> viewport_provider,
         std::string compilation_cache_directory = {},
-        resource_loader load_resource = {});
+        resource_loader load_resource = {},
+        std::function<void()> host_request_available = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
@@ -144,8 +146,11 @@ public:
     void signal_animation_frame(double timestamp_ms);
     bool pump_animation_frame_task();
     bool has_pending_animation_frame_task() const noexcept;
+    uint8_t host_animation_frame_demand() const noexcept;
     bool pump_task();
     bool has_pending_tasks() const noexcept;
+    std::chrono::milliseconds recommended_idle_wait(
+        std::chrono::milliseconds maximum) const noexcept;
     bool component_ready();
     std::string diagnostics();
     std::string event_diagnostics() const;
@@ -172,6 +177,9 @@ public:
     uint64_t process_resource_shared_bytes() const noexcept;
     uint64_t process_script_source_memory_hits() const noexcept;
     uint64_t process_script_source_shared_bytes() const noexcept;
+    uint64_t shared_isolate_slot() const noexcept;
+    uint64_t shared_isolate_active_contexts() const noexcept;
+    uint64_t shared_isolate_peak_contexts() const noexcept;
     uint64_t resource_cache_requests() const noexcept;
     uint64_t resource_cache_hits() const noexcept;
     uint64_t resource_cache_misses() const noexcept;
