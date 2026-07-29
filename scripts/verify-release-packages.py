@@ -195,6 +195,7 @@ def validate_native_runtime(
         "v8PointerCompression": True,
         "v8SharedCage": True,
         "v8OptimizeForSizeDefault": True,
+        "v8PartitionAlloc": False,
         "denseLink": True,
         "certificationTelemetry": False,
     }

@@ -7,16 +7,28 @@ param(
     [string] $Output,
     [string] $PackageVersion,
     [string] $V8Root,
-    [string] $V8Workspace
+    [string] $V8Workspace,
+    [string] $V8Revision = "14.7.173.23",
+    [switch] $UpstreamV8,
+    [switch] $ThinLto,
+    [switch] $PartitionAlloc
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$v8Revision = "14.7.173.23"
+$v8Revision = $V8Revision
 if ([string]::IsNullOrWhiteSpace($Output)) {
     $Output = Join-Path $repoRoot "artifacts/native-engine-runtime"
 }
 $cpu = if ($Rid -eq "win-arm64") { "arm64" } else { "x64" }
+$v8Configuration = if ($ThinLto) { "ReleaseThinLto" } else { "Release" }
+$v8Configuration += if ($PartitionAlloc) { "PartitionAlloc" } else { "" }
+$thinLtoValue = if ($ThinLto) { "true" } else { "false" }
+$thinLtoCMake = if ($ThinLto) { "ON" } else { "OFF" }
+$partitionAllocValue = if ($PartitionAlloc) { "true" } else { "false" }
+$partitionAllocCMake = if ($PartitionAlloc) { "ON" } else { "OFF" }
+$buildVariant = if ($ThinLto) { "-thinlto" } else { "" }
+$buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $versionOutput = & dotnet msbuild `
         (Join-Path $repoRoot "src/WebScene.Core/WebScene.Core.csproj") `
@@ -81,27 +93,35 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
             throw "Cannot apply or recognize V8 patch '$PatchPath' in '$Checkout'."
         }
     }
-    Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/clearscript/V8/V8Patch.txt")
-    Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
-    Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
-    Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
+    if (-not $UpstreamV8) {
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/clearscript/V8/V8Patch.txt")
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
+    }
+    if ($ThinLto) {
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ThinLtoPatch.txt")
+    }
+    if (-not $UpstreamV8) {
+        Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
+        Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
+    }
 
     # Backslash-escaped quotes survive PowerShell's native argument marshalling
     # and reach GN as string delimiters (the form used by ClearScript itself).
-    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto=false v8_embedder_string=\"-WebScene\" v8_enable_fuzztest=false v8_enable_partition_alloc=false v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu
+    $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto={1} v8_embedder_string=\"-WebScene\" v8_enable_fuzztest=false v8_enable_partition_alloc={2} v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu, $thinLtoValue, $partitionAllocValue
     Push-Location $V8Root
     try {
-        & gn.bat gen "out/$cpu/Release" "--args=$gnArgs"
+        & gn.bat gen "out/$cpu/$v8Configuration" "--args=$gnArgs"
         if ($LASTEXITCODE -ne 0) { throw "Failed to generate the V8 build." }
-        & ninja.exe -C "out/$cpu/Release" "obj/v8_monolith.lib"
+        & ninja.exe -C "out/$cpu/$v8Configuration" "obj/v8_monolith.lib"
         if ($LASTEXITCODE -ne 0) { throw "Failed to build the V8 monolith." }
     }
     finally { Pop-Location }
 }
 
-$v8Monolith = Join-Path $V8Root "out/$cpu/Release/obj/v8_monolith.lib"
-$icuData = Join-Path $V8Root "out/$cpu/Release/icudtl.dat"
-$v8Args = Join-Path $V8Root "out/$cpu/Release/args.gn"
+$v8OutputRoot = Join-Path $V8Root "out/$cpu/$v8Configuration"
+$v8Monolith = Join-Path $v8OutputRoot "obj/v8_monolith.lib"
+$icuData = Join-Path $v8OutputRoot "icudtl.dat"
+$v8Args = Join-Path $v8OutputRoot "args.gn"
 $v8License = Join-Path $V8Root "LICENSE"
 $icuLicense = Join-Path $V8Root "third_party/icu/LICENSE"
 @((Join-Path $V8Root "include/v8.h"), $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
@@ -118,17 +138,34 @@ $hasSharedCage = Select-String `
 if (-not $hasPointerCompression -or -not $hasSharedCage) {
     throw "The V8 SDK at '$V8Root' is not the required pointer-compressed shared-cage build."
 }
+$hasRequestedThinLto = Select-String `
+    -Path $v8Args `
+    -Pattern "^use_thin_lto\s*=\s*$thinLtoValue$" `
+    -Quiet
+if (-not $hasRequestedThinLto) {
+    throw "The V8 SDK at '$v8OutputRoot' does not match requested ThinLTO=$thinLtoValue."
+}
+$hasRequestedPartitionAlloc = Select-String `
+    -Path $v8Args `
+    -Pattern "^v8_enable_partition_alloc\s*=\s*$partitionAllocValue$" `
+    -Quiet
+if (-not $hasRequestedPartitionAlloc) {
+    throw "The V8 SDK at '$v8OutputRoot' does not match requested PartitionAlloc=$partitionAllocValue."
+}
 
-$buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid"
+$buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buildVariant"
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
     -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
+    "-DWEBSCENE_V8_PARTITION_ALLOC=$partitionAllocCMake" `
     -DWEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON `
+    "-DWEBSCENE_NATIVE_ENGINE_THIN_LTO=$thinLtoCMake" `
     -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF `
-    "-DWEBSCENE_V8_ROOT=$V8Root"
+    "-DWEBSCENE_V8_ROOT=$V8Root" `
+    "-DWEBSCENE_V8_OUTPUT_ROOT=$v8OutputRoot"
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
 & cmake --build $buildDir --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the native WebScene engine." }
@@ -157,7 +194,9 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8PointerCompression=true",
     "-p:WebSceneNativeEngineV8SharedCage=true",
     "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
-    "-p:WebSceneNativeEngineDenseLink=true"
+    "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
+    "-p:WebSceneNativeEngineDenseLink=true",
+    "-p:WebSceneNativeEngineThinLto=$thinLtoValue"
 )
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments

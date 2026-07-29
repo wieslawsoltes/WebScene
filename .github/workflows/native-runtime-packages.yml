@@ -96,19 +96,22 @@ jobs:
           cpu: arm64
           monolith: libv8_monolith.a
           script: unix
-          v8_cache_generation: v2
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v6-v8-15.3.10-partitionalloc
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
           monolith: libv8_monolith.a
           script: unix
-          v8_cache_generation: v5-ubuntu22-lld-no-crel
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v6-v8-15.3.10-partitionalloc-ubuntu22-lld-no-crel
         - os: windows-latest
           rid: win-x64
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
-          v8_cache_generation: v3-pointer-compressed
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v6-v8-15.3.10-partitionalloc
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -142,9 +145,9 @@ jobs:
       with:
         path: |
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/include
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/args.gn
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
@@ -155,18 +158,19 @@ jobs:
       shell: bash
       run: |
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
-        args="$root/out/${{ matrix.cpu }}/Release/args.gn"
-        monolith="$root/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}"
+        args="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn"
+        monolith="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}"
         args_are_compatible() {
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
+            && grep -Eq '^v8_enable_partition_alloc *= *true$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || grep -Eq '^use_lld *= *true$' "$args"; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
           && -f "$monolith" \
-          && -f "$root/out/${{ matrix.cpu }}/Release/icudtl.dat" \
+          && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
           && -f "$root/LICENSE" \
           && -f "$root/third_party/icu/LICENSE" ]] \
           && args_are_compatible; then
@@ -191,6 +195,9 @@ jobs:
           --rid '${{ matrix.rid }}' \
           --package-version '${{ needs.metadata.outputs.package-version }}' \
           --v8-root "$v8_root" \
+          --v8-revision '15.3.10' \
+          --upstream-v8 \
+          --partition-alloc \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
     - name: Build, pack, and test Linux runtime
       if: matrix.rid == 'linux-x64'
@@ -216,6 +223,9 @@ jobs:
               --rid '${{ matrix.rid }}' \
               --package-version '${{ needs.metadata.outputs.package-version }}' \
               --v8-root '$v8_root' \
+              --v8-revision '15.3.10' \
+              --upstream-v8 \
+              --partition-alloc \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
@@ -231,6 +241,9 @@ jobs:
           -Rid '${{ matrix.rid }}' `
           -PackageVersion '${{ needs.metadata.outputs.package-version }}' `
           -V8Root $v8Root `
+          -V8Revision '15.3.10' `
+          -UpstreamV8 `
+          -PartitionAlloc `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
@@ -238,18 +251,19 @@ jobs:
       shell: bash
       run: |
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
-        args="$root/out/${{ matrix.cpu }}/Release/args.gn"
-        monolith="$root/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}"
+        args="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn"
+        monolith="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}"
         args_are_compatible() {
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
+            && grep -Eq '^v8_enable_partition_alloc *= *true$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || grep -Eq '^use_lld *= *true$' "$args"; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
           && -f "$monolith" \
-          && -f "$root/out/${{ matrix.cpu }}/Release/icudtl.dat" \
+          && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
           && -f "$root/LICENSE" \
           && -f "$root/third_party/icu/LICENSE" ]] \
           && args_are_compatible; then
@@ -263,9 +277,9 @@ jobs:
       with:
         path: |
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/include
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/args.gn
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/obj/${{ matrix.monolith }}
-          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/Release/icudtl.dat
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}

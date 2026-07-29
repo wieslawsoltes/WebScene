@@ -1,0 +1,18 @@
+diff --git a/src/partition_alloc/BUILD.gn b/src/partition_alloc/BUILD.gn
+index d686498..834ae36 100644
+--- a/src/partition_alloc/BUILD.gn
++++ b/src/partition_alloc/BUILD.gn
+@@ -349,8 +349,11 @@ if (is_clang_or_gcc) {
+       # This is already set when we compile libc++, see
+       # buildtools/third_party/libc++/BUILD.gn. But it needs to be set here as
+       # well, since the shim defines the symbols, to prevent them being
+-      # exported.
+-      cflags = [ "-fvisibility-global-new-delete=force-hidden" ]
++      # exported. Xcode 26's system libc++ now explicitly declares these
++      # operators with default visibility, so force-hidden makes the
++      # declarations ill-formed. The final WebScene dylib export list still
++      # controls its public ABI.
++      cflags = []
+     }
+   }
+ 

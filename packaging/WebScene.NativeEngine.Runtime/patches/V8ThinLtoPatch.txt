@@ -1,0 +1,36 @@
+diff --git a/src/strings/owning-external-string-resource.h b/src/strings/owning-external-string-resource.h
+--- a/src/strings/owning-external-string-resource.h
++++ b/src/strings/owning-external-string-resource.h
+@@ -22,6 +22,13 @@
+ 
+ namespace v8::internal {
+ 
++#if V8_HAS_ATTRIBUTE_VISIBILITY
++#define V8_OWNING_EXTERNAL_STRING_RESOURCE_HIDDEN \
++  __attribute__((visibility("hidden")))
++#else
++#define V8_OWNING_EXTERNAL_STRING_RESOURCE_HIDDEN
++#endif
++
+ // A simple implementation of an external string resource that uniquely owns the
+ // string buffer.
+ //
+@@ -30,7 +37,8 @@
+ 
+ template <typename CharT, typename StdCharT, typename FlatStringCharT,
+           typename Base>
+-class OwningExternalStringResourceImpl : public Base {
++class V8_OWNING_EXTERNAL_STRING_RESOURCE_HIDDEN OwningExternalStringResourceImpl
++    : public Base {
+  public:
+   static_assert(sizeof(CharT) == sizeof(StdCharT));
+   static_assert(sizeof(CharT) == sizeof(FlatStringCharT));
+@@ -93,6 +101,8 @@
+     OwningExternalStringResourceImpl<base::uc16, char16_t, base::uc16,
+                                      v8::String::ExternalStringResource>;
+ 
++#undef V8_OWNING_EXTERNAL_STRING_RESOURCE_HIDDEN
++
+ }  // namespace v8::internal
+ 
+ #endif  // V8_STRINGS_OWNING_EXTERNAL_STRING_RESOURCE_H_
