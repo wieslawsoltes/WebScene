@@ -47,7 +47,7 @@ public partial class MainWindow : Window
 #endif
     private readonly TextDocument _xamlDocument = new();
     private readonly TextDocument _scriptDocument = new();
-    private readonly RegistryOptions _registryOptions = new(ThemeName.LightPlus);
+    private readonly RegistryOptions _registryOptions = new(ThemeName.DarkPlus);
     private CancellationTokenSource? _nativeMonacoCancellation;
     private Task? _nativeMonacoLoadTask;
     private int _nativeMonacoLoadVersion;
@@ -979,7 +979,7 @@ if (typeof globalThis !== 'undefined') {
     private void SetStatus(string message, bool isError)
     {
         StatusText.Text = message;
-        StatusText.Foreground = isError ? Brushes.DarkRed : Brushes.DarkGreen;
+        StatusText.Foreground = isError ? Brushes.IndianRed : Brushes.LightGreen;
     }
 
     protected override void OnLoaded(RoutedEventArgs e)
