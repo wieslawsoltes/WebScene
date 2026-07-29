@@ -7962,12 +7962,20 @@ void test_ordered_scene_consumer_preserves_two_diff_chain()
         webscene_engine_get_scene_flow_metrics(engine, &before_block) != 0,
         "ordered scene-flow metrics were unavailable");
     resize(engine, 403, 303, 3U);
-    std::this_thread::sleep_for(std::chrono::milliseconds(40));
     webscene_scene_flow_metrics after_block{sizeof(webscene_scene_flow_metrics)};
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        require(
+            webscene_engine_get_scene_flow_metrics(engine, &after_block) != 0,
+            "ordered scene-flow metrics became unavailable");
+        if (after_block.blocked_publications
+            > before_block.blocked_publications) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
     require(
-        webscene_engine_get_scene_flow_metrics(engine, &after_block) != 0
-            && after_block.blocked_publications
-                > before_block.blocked_publications,
+        after_block.blocked_publications
+            > before_block.blocked_publications,
         "ordered producer exceeded its two-scene bound");
 
     require(
