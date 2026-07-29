@@ -99,7 +99,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v6-v8-15.3.10-partitionalloc
+          v8_cache_generation: v7-v8-15.3.10-partitionalloc-complete
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
@@ -108,7 +108,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v7-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel
+          v8_cache_generation: v8-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel-complete
         - os: windows-latest
           rid: win-x64
           cpu: x64
@@ -154,8 +154,10 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/gen/third_party/partition_alloc/src
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
         restore-keys: |
           webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
@@ -166,6 +168,11 @@ jobs:
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         args="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn"
         monolith="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}"
+        partition_alloc_is_compatible() {
+          [[ '${{ matrix.partition_alloc }}' != 'true' ]] \
+            || { [[ -d "$root/third_party/partition_alloc/src" ]] \
+              && [[ -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/gen/third_party/partition_alloc/src/partition_alloc/buildflags.h" ]]; }
+        }
         args_are_compatible() {
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
@@ -180,7 +187,8 @@ jobs:
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
           && -f "$root/LICENSE" \
           && -f "$root/third_party/icu/LICENSE" ]] \
-          && args_are_compatible; then
+          && args_are_compatible \
+          && partition_alloc_is_compatible; then
           echo "ready=true" >> "$GITHUB_OUTPUT"
         else
           echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -258,6 +266,11 @@ jobs:
         root="artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         args="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn"
         monolith="$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}"
+        partition_alloc_is_compatible() {
+          [[ '${{ matrix.partition_alloc }}' != 'true' ]] \
+            || { [[ -d "$root/third_party/partition_alloc/src" ]] \
+              && [[ -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/gen/third_party/partition_alloc/src/partition_alloc/buildflags.h" ]]; }
+        }
         args_are_compatible() {
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
@@ -272,7 +285,8 @@ jobs:
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
           && -f "$root/LICENSE" \
           && -f "$root/third_party/icu/LICENSE" ]] \
-          && args_are_compatible; then
+          && args_are_compatible \
+          && partition_alloc_is_compatible; then
           echo "ready=true" >> "$GITHUB_OUTPUT"
         else
           echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -286,8 +300,10 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/args.gn
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/obj/${{ matrix.monolith }}
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/gen/third_party/partition_alloc/src
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
