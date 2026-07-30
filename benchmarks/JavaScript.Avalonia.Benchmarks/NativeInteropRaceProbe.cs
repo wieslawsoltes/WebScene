@@ -177,7 +177,11 @@ internal static class NativeInteropRaceProbe
     private static async Task<NativeInteropPoolMetrics> WaitForPoolDrainAsync(
         IntPtr engine)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        // Loaded hosted runners can take several seconds to retire the final
+        // cancelled promise results after every operation slot has drained.
+        // Keep the probe strict about leaked leases, but allow the worker time
+        // to finish returning those results to the pool.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         NativeInteropPoolMetrics metrics;
         do
         {
@@ -187,7 +191,7 @@ internal static class NativeInteropRaceProbe
             {
                 return metrics;
             }
-            await Task.Delay(1).ConfigureAwait(false);
+            await Task.Delay(10).ConfigureAwait(false);
         }
         while (DateTime.UtcNow < deadline);
         return metrics;
