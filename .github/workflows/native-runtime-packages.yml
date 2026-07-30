@@ -100,6 +100,8 @@ jobs:
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
           v8_cache_generation: v7-v8-15.3.10-partitionalloc-complete
+          v8_cache_script: scripts/build-native-engine-runtime.sh
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
@@ -109,6 +111,8 @@ jobs:
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
           v8_cache_generation: v11-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared
+          v8_cache_script: scripts/build-native-engine-runtime.sh
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt
         - os: windows-2022
           rid: win-x64
           cpu: x64
@@ -118,6 +122,8 @@ jobs:
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
           v8_cache_generation: v7-v8-15.3.10-pa-js-interceptor-layout
+          v8_cache_script: scripts/build-native-engine-runtime.ps1
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsJsInterceptorMapLayoutPatch.txt
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -158,7 +164,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
         restore-keys: |
           webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
     - id: restored-v8-sdk
@@ -312,7 +318,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
