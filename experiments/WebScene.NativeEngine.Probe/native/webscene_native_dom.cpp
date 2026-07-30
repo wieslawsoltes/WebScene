@@ -5373,8 +5373,19 @@ bool native_document::dirty() const noexcept
     return dirty_;
 }
 
+uint64_t native_document::scene_generation() const noexcept
+{
+    return scene_generation_;
+}
+
+void native_document::mark_scene_changed() noexcept
+{
+    ++scene_generation_;
+}
+
 void native_document::mark_dirty() noexcept
 {
+    mark_scene_changed();
     dirty_ = true;
     globally_dirty_ = true;
     active_animation_demand_cache_valid_ = false;
@@ -5389,6 +5400,7 @@ void native_document::mark_out_of_flow_geometry_dirty(dom_node& node) noexcept
         mark_dirty();
         return;
     }
+    mark_scene_changed();
     dirty_ = true;
     if (globally_dirty_) return;
 

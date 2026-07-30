@@ -30,6 +30,14 @@ public delegate ValueTask<object?> JavaScriptCallbackHandler(
 
 public interface IJavaScriptBidirectionalInvoker : IJavaScriptInvoker
 {
+    bool SupportsCallbackNotifications => false;
+
+    ValueTask WaitForCallbackAsync(
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromException(
+            new NotSupportedException(
+                "This JavaScript invoker does not expose callback notifications."));
+
     ValueTask<JavaScriptObjectReference> RegisterCallbackTargetAsync(
         IJavaScriptCallbackTarget target,
         IReadOnlyList<JavaScriptCallbackMethod> methods,

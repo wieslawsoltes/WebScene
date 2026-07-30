@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
@@ -4615,6 +4616,8 @@ internal struct EngineOptions
     public IntPtr TextMeasureUserData;
     public IntPtr HostRequestAvailableCallback;
     public IntPtr HostRequestAvailableUserData;
+    public IntPtr InteropCallbackAvailableCallback;
+    public IntPtr InteropCallbackAvailableUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -4946,6 +4949,10 @@ public static class NativeTextShaping
 
 public static unsafe class NativeWebSceneApi
 {
+    private const int EvaluationBufferSize = 1024 * 1024;
+    private static readonly ArrayPool<byte> EvaluationBufferPool =
+        ArrayPool<byte>.Create(EvaluationBufferSize, 8);
+
     private const string LibraryName = "webscene_native_engine";
     private static readonly object LibraryPathGate = new();
     private static readonly ConcurrentDictionary<IntPtr, GCHandle> EngineResourceBridges = new();
@@ -4961,6 +4968,10 @@ public static unsafe class NativeWebSceneApi
         NotifyHostRequestAvailable;
     private static readonly IntPtr HostRequestAvailableAddress =
         Marshal.GetFunctionPointerForDelegate(HostRequestAvailable);
+    private static readonly InteropCallbackAvailableCallback InteropCallbackAvailable =
+        NotifyInteropCallbackAvailable;
+    private static readonly IntPtr InteropCallbackAvailableAddress =
+        Marshal.GetFunctionPointerForDelegate(InteropCallbackAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -5011,7 +5022,8 @@ public static unsafe class NativeWebSceneApi
         string? compilationCacheDirectory,
         IWebSceneResourceLoader resourceLoader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable = null)
+        Action? hostRequestAvailable = null,
+        Action? interopCallbackAvailable = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -5019,7 +5031,11 @@ public static unsafe class NativeWebSceneApi
             ? []
             : Encoding.UTF8.GetBytes(compilationCacheDirectory);
         var bridgeHandle = GCHandle.Alloc(
-            new ResourceBridge(resourceLoader, scenePublished, hostRequestAvailable));
+            new ResourceBridge(
+                resourceLoader,
+                scenePublished,
+                hostRequestAvailable,
+                interopCallbackAvailable));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -5040,6 +5056,12 @@ public static unsafe class NativeWebSceneApi
                         ? IntPtr.Zero
                         : HostRequestAvailableAddress,
                     HostRequestAvailableUserData = hostRequestAvailable is null
+                        ? IntPtr.Zero
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    InteropCallbackAvailableCallback = interopCallbackAvailable is null
+                        ? IntPtr.Zero
+                        : InteropCallbackAvailableAddress,
+                    InteropCallbackAvailableUserData = interopCallbackAvailable is null
                         ? IntPtr.Zero
                         : GCHandle.ToIntPtr(bridgeHandle)
                 };
@@ -5125,6 +5147,9 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void HostRequestAvailableCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void InteropCallbackAvailableCallback(IntPtr userData);
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -5136,6 +5161,20 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native host request notification] {error}");
+        }
+    }
+
+    private static void NotifyInteropCallbackAvailable(IntPtr userData)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyInteropCallbackAvailable();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene native interop callback notification] {error}");
         }
     }
 
@@ -5242,7 +5281,8 @@ public static unsafe class NativeWebSceneApi
     private sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable)
+        Action? hostRequestAvailable,
+        Action? interopCallbackAvailable)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
@@ -5255,6 +5295,9 @@ public static unsafe class NativeWebSceneApi
 
         public void NotifyHostRequestAvailable()
             => hostRequestAvailable?.Invoke();
+
+        public void NotifyInteropCallbackAvailable()
+            => interopCallbackAvailable?.Invoke();
 
         public nuint Copy(
             uint kind,
@@ -5542,23 +5585,30 @@ public static unsafe class NativeWebSceneApi
     {
         var sourceBytes = Encoding.UTF8.GetBytes(source);
         var nameBytes = Encoding.UTF8.GetBytes(documentName);
-        var destination = new byte[1024 * 1024];
-        var required = EngineEvaluateJson(
-            engine,
-            sourceBytes,
-            (nuint)sourceBytes.Length,
-            nameBytes,
-            (nuint)nameBytes.Length,
-            destination,
-            (nuint)destination.Length,
-            timeoutMilliseconds);
-        if (required == 0 || required > (nuint)destination.Length)
+        var destination = EvaluationBufferPool.Rent(EvaluationBufferSize);
+        try
         {
-            json = string.Empty;
-            return false;
+            var required = EngineEvaluateJson(
+                engine,
+                sourceBytes,
+                (nuint)sourceBytes.Length,
+                nameBytes,
+                (nuint)nameBytes.Length,
+                destination,
+                (nuint)destination.Length,
+                timeoutMilliseconds);
+            if (required == 0 || required > (nuint)destination.Length)
+            {
+                json = string.Empty;
+                return false;
+            }
+            json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
+            return true;
         }
-        json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
-        return true;
+        finally
+        {
+            EvaluationBufferPool.Return(destination);
+        }
     }
 
     public static bool TryTakeHostRequest(IntPtr engine, out string request)

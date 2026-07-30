@@ -382,7 +382,10 @@ struct webscene_engine final {
         void* text_measure_user_data = nullptr,
         webscene_host_request_available_callback
             host_request_available_callback = nullptr,
-        void* host_request_available_user_data = nullptr)
+        void* host_request_available_user_data = nullptr,
+        webscene_interop_callback_available_callback
+            interop_callback_available_callback = nullptr,
+        void* interop_callback_available_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -395,6 +398,8 @@ struct webscene_engine final {
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)
         , host_request_available_user_data_(host_request_available_user_data)
+        , interop_callback_available_callback_(interop_callback_available_callback)
+        , interop_callback_available_user_data_(interop_callback_available_user_data)
         , document_(text_measure_callback, text_measure_user_data)
         , worker_([this](std::stop_token token) { run(token); })
     {
@@ -1391,6 +1396,12 @@ private:
                     host_request_available_callback_(
                         host_request_available_user_data_);
                 }
+            },
+            [this] {
+                if (interop_callback_available_callback_ != nullptr) {
+                    interop_callback_available_callback_(
+                        interop_callback_available_user_data_);
+                }
             });
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
@@ -1416,6 +1427,10 @@ private:
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            const auto starting_scene_generation =
+                document_.scene_generation();
+            const auto starting_component_ready =
+                component_ready_.load(std::memory_order_relaxed);
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
@@ -1837,7 +1852,6 @@ private:
                 frame_script_errors_.store(runtime_->frame_script_errors(), std::memory_order_relaxed);
                 update_compilation_metrics();
                 update_component_readiness();
-                changed = true;
             }
 
             if (document_.has_active_animations()) {
@@ -1954,11 +1968,14 @@ private:
                 }
                 evaluation.completion->ready.notify_all();
                 update_compilation_metrics();
-                changed = true;
             }
 #endif
 
             update_host_animation_frame_demand();
+            changed = changed
+                || document_.scene_generation() != starting_scene_generation
+                || component_ready_.load(std::memory_order_relaxed)
+                    != starting_component_ready;
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
             // A resize and its host RAF are one browser rendering opportunity.
@@ -2857,6 +2874,9 @@ private:
     webscene_host_request_available_callback
         host_request_available_callback_{nullptr};
     void* host_request_available_user_data_{nullptr};
+    webscene_interop_callback_available_callback
+        interop_callback_available_callback_{nullptr};
+    void* interop_callback_available_user_data_{nullptr};
     mutable std::mutex configuration_mutex_;
     std::string resource_root_;
     input_ring inputs_;
@@ -3234,7 +3254,11 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
             offsetof(webscene_engine_options, host_request_available_callback);
         const auto has_text_measure_callback =
             options->struct_size >= text_measure_options_size;
+        constexpr auto host_request_available_options_size =
+            offsetof(webscene_engine_options, interop_callback_available_callback);
         const auto has_host_request_available_callback =
+            options->struct_size >= host_request_available_options_size;
+        const auto has_interop_callback_available_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -3250,6 +3274,12 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_host_request_available_callback
                 ? options->host_request_available_user_data
+                : nullptr,
+            has_interop_callback_available_callback
+                ? options->interop_callback_available_callback
+                : nullptr,
+            has_interop_callback_available_callback
+                ? options->interop_callback_available_user_data
                 : nullptr);
     } catch (...) {
         return nullptr;

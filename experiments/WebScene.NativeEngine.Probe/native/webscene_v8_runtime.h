@@ -121,7 +121,8 @@ public:
         std::function<viewport_metrics()> viewport_provider,
         std::string compilation_cache_directory = {},
         resource_loader load_resource = {},
-        std::function<void()> host_request_available = {});
+        std::function<void()> host_request_available = {},
+        std::function<void()> interop_callback_available = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;

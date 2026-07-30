@@ -19,6 +19,14 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
           const promises = new Map();
           const callbackCalls = [];
           const callbackPromises = new Map();
+          const enqueueCallback = request => {
+            const wasEmpty = callbackCalls.length === 0;
+            callbackCalls.push(request);
+            if (wasEmpty
+                && typeof globalThis.__webSceneNotifyInteropCallbackAvailable === "function") {
+              globalThis.__webSceneNotifyInteropCallbackAvailable();
+            }
+          };
           const keep = value => {
             if ((typeof value !== "object" && typeof value !== "function") || value === null) {
               throw new TypeError("WebScene interop expected a JavaScript object result.");
@@ -278,10 +286,10 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
                       const promise = new Promise((resolve, reject) => {
                         callbackPromises.set(call, { resolve, reject });
                       });
-                      callbackCalls.push(request);
+                      enqueueCallback(request);
                       return promise;
                     }
-                    callbackCalls.push(request);
+                    enqueueCallback(request);
                     if (method.returnKind === "Synchronous") {
                       throw new Error(
                         `Synchronous reverse interop for ${method.name} requires a native host callback.`);
@@ -306,10 +314,10 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
                   const promise = new Promise((resolve, reject) => {
                     callbackPromises.set(call, { resolve, reject });
                   });
-                  callbackCalls.push(request);
+                  enqueueCallback(request);
                   return promise;
                 }
-                callbackCalls.push(request);
+                enqueueCallback(request);
                 if (returnKind === "Synchronous") {
                   throw new Error(
                     "Synchronous reverse function interop requires a native host callback.");
@@ -319,7 +327,7 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
             },
             createSynchronousFactory(target, resultHandle) {
               return keep(function (...actualArguments) {
-                callbackCalls.push({
+                enqueueCallback({
                   call: nextCallbackCall++,
                   target,
                   method: "invoke",
@@ -366,6 +374,7 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private readonly TimeSpan _promisePollInterval;
     private readonly TimeSpan _promiseTimeout;
+    private readonly Func<CancellationToken, ValueTask>? _waitForCallbackAsync;
     private readonly Dictionary<long, IJavaScriptCallbackTarget> _callbackTargets = [];
     private readonly Dictionary<long, long> _callbackTargetHandles = [];
     private long _nextCallbackTarget;
@@ -375,14 +384,25 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
         Func<string, string, CancellationToken, Task<string>> evaluateJsonAsync,
         JsonSerializerOptions? jsonOptions = null,
         TimeSpan? promisePollInterval = null,
-        TimeSpan? promiseTimeout = null)
+        TimeSpan? promiseTimeout = null,
+        Func<CancellationToken, ValueTask>? waitForCallbackAsync = null)
     {
         _evaluateJsonAsync = evaluateJsonAsync
             ?? throw new ArgumentNullException(nameof(evaluateJsonAsync));
         _jsonOptions = CreateJsonOptions(jsonOptions);
         _promisePollInterval = promisePollInterval ?? TimeSpan.FromMilliseconds(8);
         _promiseTimeout = promiseTimeout ?? TimeSpan.FromSeconds(30);
+        _waitForCallbackAsync = waitForCallbackAsync;
     }
+
+    public bool SupportsCallbackNotifications => _waitForCallbackAsync is not null;
+
+    public ValueTask WaitForCallbackAsync(
+        CancellationToken cancellationToken = default)
+        => _waitForCallbackAsync?.Invoke(cancellationToken)
+           ?? ValueTask.FromException(
+               new NotSupportedException(
+                   "This native JavaScript invoker was not configured with a callback signal."));
 
     private static JsonSerializerOptions CreateJsonOptions(
         JsonSerializerOptions? options)

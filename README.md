@@ -104,7 +104,7 @@
 
 **WebScene is a native component runtime for bringing web-authored experiences into Flutter, Uno Platform, WPF, WinUI, Avalonia, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
 
-- **Run advanced existing controls and libraries with high fidelity.** WebScene is exercised against an unchanged [Monaco Editor](docs/monaco-compatibilty.md) bundle and a live [TradingView terminal](samples/NativeRuntimeShowcase/README.md), covering demanding layout, text, Canvas/SVG, input, focus, observers, nested frames, and real-time data.
+- **Run advanced existing controls and libraries with high fidelity.** WebScene is exercised against an unchanged [Monaco Editor](docs/monaco-compatibilty.md) bundle and a [live charting terminal](samples/NativeRuntimeShowcase/README.md), covering demanding layout, text, Canvas/SVG, input, focus, observers, nested frames, and real-time data.
 - **Generate strongly typed .NET interop APIs from `.d.ts` files.** The TypeScript discovery tool emits the complete named type graph, an editable policy, and a coverage report; the Roslyn generator turns the reviewed surface into C# models, outbound proxies, functions, globals, and inbound adapters.
 - **Compose web and native UI as one application.** Components can call selected host services, participate in native input and lifecycle, and sit alongside XAML/C# or Flutter/Dart controls.
 
@@ -129,7 +129,7 @@ The WebScene product family includes:
 
 - **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread, then publish immutable, damage-aware scene diffs to a framework-native presenter.
 - **Cross-framework presentation**: Target Flutter, Uno Platform, WPF, WinUI, and Avalonia through a shared runtime, portable contracts, and framework-specific presenters.
-- **High-fidelity component support**: Run sophisticated libraries such as Monaco Editor and TradingView with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
+- **High-fidelity component support**: Run sophisticated libraries such as Monaco Editor and complex real-time charting terminals with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
 - **Strongly typed .NET interop**: Generate reviewable C# models, proxies, functions, globals, and callback adapters from TypeScript declaration files.
 - **Native application composition**: Place web-authored components alongside XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
 - **Versioned component hosting**: Mount offline React, TypeScript, and JavaScript bundles through an engine-neutral component profile and framework host.
@@ -200,20 +200,18 @@ framework-specific rewrite.
     <td width="50%">
       <img src="docs/assets/screenshots/monaco-editor.png" alt="Monaco Editor running through WebScene's native scene runtime" width="100%">
     </td>
-    <td width="50%">
-      <img src="docs/assets/screenshots/tradingview-terminal.jpg" alt="TradingView terminal public sample running through WebScene" width="100%">
-    </td>
+    <td width="50%" align="center"><strong>Live charting terminal</strong><br><sub>Real-time Canvas rendering in the native scene runtime</sub></td>
   </tr>
   <tr>
     <td align="center"><strong>Monaco Editor</strong><br><sub>Native text layout, syntax highlighting, editing, selection, and folding</sub></td>
-    <td align="center"><strong>TradingView terminal</strong><br><sub>Live charts, WebSockets, nested frames, toolbars, and interaction</sub></td>
+    <td align="center"><strong>Live charting terminal</strong><br><sub>Live charts, WebSockets, nested frames, toolbars, and interaction</sub></td>
   </tr>
 </table>
 
 | Existing library | Demonstrated behavior |
 | --- | --- |
 | [Monaco Editor](docs/monaco-compatibilty.md) | An unchanged Monaco 0.56.0 bundle with measured text and layout, DOM mutation, syntax highlighting, focus, pointer selection, typing, and code folding. |
-| [TradingView terminal](samples/NativeRuntimeShowcase/README.md) | A live hosted terminal using nested frames, Canvas rendering, WebSockets, pointer and keyboard input, responsive layout, and interactive controls. |
+| [Live charting terminal](samples/NativeRuntimeShowcase/README.md) | A live hosted terminal using nested frames, Canvas rendering, WebSockets, pointer and keyboard input, responsive layout, and interactive controls. |
 
 ## Generate typed .NET APIs from `.d.ts`
 
@@ -241,8 +239,8 @@ node tooling/webscene/interop-discover.mjs \
   --fail-on-fallbacks
 ```
 
-The [TradingView all-surface gate](samples/TradingViewInterop.AllGenerated/README.md)
-demonstrates full declaration discovery with no handwritten C#, while the
+The repository's generated-interop all-surface gate demonstrates full declaration
+discovery with no handwritten C#, while the
 [native runtime showcase](samples/NativeRuntimeShowcase/README.md) generates its
 Monaco .NET API from `MonacoApi.d.ts` at build time.
 
@@ -270,7 +268,7 @@ Monaco .NET API from `MonacoApi.d.ts` at build time.
 | `packaging/WebScene.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
 | `samples/website` | WebScene showcase demonstrating markup, styling, and canvas scripting. |
 | `samples/JavaScriptPlayground` | Interactive playground with editable XAML, live preview, and JavaScript console for `JavaScript.Avalonia`. |
-| `samples/NativeRuntimeShowcase.*` | Native TradingView canvas and generated-.NET-API Monaco showcase for Uno Platform and Avalonia. |
+| `samples/NativeRuntimeShowcase.*` | Native real-time chart canvas and generated-.NET-API Monaco showcase for Uno Platform and Avalonia. |
 
 ## Getting Started
 
@@ -359,11 +357,11 @@ Add the Avalonia backend and the native runtime package matching the target plat
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.9" />
+  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.11" />
   <!-- Choose one runtime package for the target platform. -->
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.9" />
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.9" /> -->
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.9" /> -->
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.11" />
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.11" /> -->
+  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.11" /> -->
 </ItemGroup>
 ```
 
@@ -520,13 +518,13 @@ host models. WPF and WinUI presenters follow once the scene-reader SDK and ABI a
 stable. Each framework integration should consume the same tested runtime rather than
 forking the DOM, CSS, JavaScript, or scene engines.
 
-The first lifecycle decision is complete. The private TradingView sample now destroys
+The first lifecycle decision is complete. The private high-complexity charting sample now destroys
 inactive engines and performs a clean warm-cache restart from retained host
 configuration. Its saved-layout restore path was removed after manual failure and
 after exceeding the ordinary warm-engine baseline. Clean restart was selected for
 reliability and simplicity rather than a universal latency advantage.
 
-The first normalized TradingView differential tranche has also produced and closed a
+The first normalized application differential tranche has also produced and closed a
 product-neutral engine defect: transitions between `transform:none` and a transform
 list now expose their painted forward and reverse matrices, backed by a required
 Chrome/managed/native contract. The current application graph classifies its complete

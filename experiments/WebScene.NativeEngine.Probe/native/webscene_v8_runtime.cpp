@@ -527,6 +527,52 @@ std::string_view display_mode_name(display_mode value)
     }
 }
 
+struct parsed_flex_flow
+{
+    flex_direction direction{flex_direction::row};
+    bool reverse{false};
+    bool wrap{false};
+};
+
+parsed_flex_flow parse_flex_flow(std::string_view value)
+{
+    parsed_flex_flow result{};
+    std::istringstream stream{std::string(value)};
+    std::string token;
+    while (stream >> token) {
+        std::transform(
+            token.begin(),
+            token.end(),
+            token.begin(),
+            [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+        if (token == "row" || token == "row-reverse"
+            || token == "column" || token == "column-reverse") {
+            result.direction = token == "row" || token == "row-reverse"
+                ? flex_direction::row : flex_direction::column;
+            result.reverse = token == "row-reverse" || token == "column-reverse";
+        } else if (token == "wrap" || token == "wrap-reverse") {
+            result.wrap = true;
+        } else if (token == "nowrap") {
+            result.wrap = false;
+        }
+    }
+    return result;
+}
+
+std::string flex_direction_name(const node_style& style)
+{
+    return style.direction == flex_direction::row
+        ? style.flex_reverse ? "row-reverse" : "row"
+        : style.flex_reverse ? "column-reverse" : "column";
+}
+
+std::string flex_wrap_name(const node_style& style)
+{
+    return style.flex_wrap ? "wrap" : "nowrap";
+}
+
 overflow_mode parse_overflow_mode(std::string_view value)
 {
     if (value == "hidden") return overflow_mode::hidden;
@@ -2249,11 +2295,13 @@ struct v8_dom_runtime::implementation final {
         std::function<v8_dom_runtime::viewport_metrics()> viewport_provider_value,
         std::string compilation_cache_directory_value,
         resource_loader resource_loader_value,
-        std::function<void()> host_request_available_value)
+        std::function<void()> host_request_available_value,
+        std::function<void()> interop_callback_available_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
+        , interop_callback_available(std::move(interop_callback_available_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -2371,6 +2419,15 @@ struct v8_dom_runtime::implementation final {
             }
         }
         return static_cast<implementation*>(isolate->GetData(0));
+    }
+
+    static void notify_interop_callback_available(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr && self->interop_callback_available) {
+            self->interop_callback_available();
+        }
     }
 
     struct feature_observation final {
@@ -3362,8 +3419,8 @@ struct v8_dom_runtime::implementation final {
         const char* properties[] = {
             "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
             "left", "top", "right", "bottom", "inset", "insetInlineStart", "insetInlineEnd",
-            "display", "position", "cssFloat", "flexDirection", "flexGrow", "flexShrink",
-            "flexBasis", "flexWrap",
+            "display", "position", "cssFloat", "flexDirection", "flexFlow",
+            "flexGrow", "flexShrink", "flexBasis", "flexWrap",
             "alignItems", "alignSelf", "justifyContent", "gap", "rowGap", "columnGap",
             "padding", "paddingInline", "paddingBlock",
             "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
@@ -4811,6 +4868,12 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "open"),
             v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "requestAnimationFrame"),
@@ -12638,8 +12701,17 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    static void mark_canvas_scene_changed()
+    {
+        auto* self = current(v8::Isolate::GetCurrent());
+        if (self != nullptr) {
+            self->document.mark_scene_changed();
+        }
+    }
+
     static void advance_canvas_generation(dom_node& node)
     {
+        mark_canvas_scene_changed();
         auto& canvas = node.mutable_canvas();
         ++canvas.generation;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -13678,6 +13750,7 @@ struct v8_dom_runtime::implementation final {
         canvas_command_kind kind,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -13695,6 +13768,7 @@ struct v8_dom_runtime::implementation final {
         uint32_t resource_id,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -13711,6 +13785,7 @@ struct v8_dom_runtime::implementation final {
         dom_node& node,
         const std::vector<double>& segments)
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(canvas_command_kind::set_line_dash);
         command.flags = static_cast<uint32_t>(segments.size() + 1U);
@@ -20641,6 +20716,14 @@ struct v8_dom_runtime::implementation final {
             node.style.direction = value == "row" || value == "row-reverse"
                 ? flex_direction::row : flex_direction::column;
             node.style.flex_reverse = value == "row-reverse" || value == "column-reverse";
+        } else if (name == "flex-flow"
+            && (!is_inline(inline_flex_direction) || !is_inline(inline_flex_wrap))) {
+            const auto flow = parse_flex_flow(value);
+            if (!is_inline(inline_flex_direction)) {
+                node.style.direction = flow.direction;
+                node.style.flex_reverse = flow.reverse;
+            }
+            if (!is_inline(inline_flex_wrap)) node.style.flex_wrap = flow.wrap;
         } else if (name == "flex-wrap" && !is_inline(inline_flex_wrap)) {
             node.style.flex_wrap = value == "wrap" || value == "wrap-reverse";
         } else if (name == "align-items" && !is_inline(inline_align_items)) {
@@ -22885,6 +22968,12 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "AbortController"), v8::FunctionTemplate::New(isolate, abort_controller_constructor)->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "matchMedia"), v8::Function::New(local_context, match_media).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "open"), v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -23763,14 +23852,19 @@ struct v8_dom_runtime::implementation final {
         if (name == "position") return inline_position;
         if (name == "float" || name == "cssFloat") return inline_float;
         if (name == "z-index" || name == "zIndex") return inline_z_index;
-        if (name == "flex-direction") return inline_flex_direction;
+        if (name == "flex-direction" || name == "flexDirection") {
+            return inline_flex_direction;
+        }
+        if (name == "flex-flow" || name == "flexFlow") {
+            return inline_flex_direction | inline_flex_wrap;
+        }
         if (name == "flex") {
             return inline_flex_grow | inline_flex_shrink | inline_flex_basis;
         }
         if (name == "flex-grow") return inline_flex_grow;
         if (name == "flex-shrink") return inline_flex_shrink;
         if (name == "flex-basis") return inline_flex_basis;
-        if (name == "flex-wrap") return inline_flex_wrap;
+        if (name == "flex-wrap" || name == "flexWrap") return inline_flex_wrap;
         if (name == "grid-template-columns" || name == "grid-template-rows"
             || name == "grid-area" || name == "grid-row"
             || name == "grid-row-start" || name == "grid-row-end"
@@ -24296,6 +24390,12 @@ struct v8_dom_runtime::implementation final {
             node.style.z_index = 0;
             node.style.z_index_auto = true;
             node.style.inline_property_mask &= ~inline_z_index;
+        } else if (name == "flexFlow" || name == "flex-flow") {
+            node.style.direction = flex_direction::row;
+            node.style.flex_reverse = false;
+            node.style.flex_wrap = false;
+            node.style.inline_property_mask &=
+                ~(inline_flex_direction | inline_flex_wrap);
         } else if (name == "flexDirection" || name == "flex-direction") {
             node.style.direction = flex_direction::row;
             node.style.flex_reverse = false;
@@ -24644,6 +24744,13 @@ struct v8_dom_runtime::implementation final {
                 ? flex_direction::row : flex_direction::column;
             node->style.flex_reverse = value == "row-reverse" || value == "column-reverse";
             node->style.inline_property_mask |= inline_flex_direction;
+        } else if (name == "flex-flow") {
+            const auto flow = parse_flex_flow(value);
+            node->style.direction = flow.direction;
+            node->style.flex_reverse = flow.reverse;
+            node->style.flex_wrap = flow.wrap;
+            node->style.inline_property_mask |=
+                inline_flex_direction | inline_flex_wrap;
         } else if (name == "flex-grow") {
             node->style.flex_grow = std::max(0.0F, std::strtof(value.c_str(), nullptr));
             node->style.inline_property_mask |= inline_flex_grow;
@@ -24986,8 +25093,15 @@ struct v8_dom_runtime::implementation final {
                 value = format_computed_length(node->style.row_gap, node->layout.height);
             } else if (name == "column-gap") {
                 value = format_computed_length(node->style.column_gap, node->layout.width);
+            } else if (name == "flex-direction") {
+                value = flex_direction_name(node->style);
+            } else if (name == "flex-flow") {
+                value = flex_direction_name(node->style) + " "
+                    + flex_wrap_name(node->style);
             } else if (name == "flex-basis") {
                 value = format_computed_length(node->style.flex_basis, node->layout.width);
+            } else if (name == "flex-wrap") {
+                value = flex_wrap_name(node->style);
             } else if (name == "grid-area") {
                 value = node->style.grid().area_value;
             } else if (name == "grid-row") {
@@ -25336,9 +25450,10 @@ struct v8_dom_runtime::implementation final {
             value = node->style.floating == float_mode::left ? "left"
                 : node->style.floating == float_mode::right ? "right" : "none";
         } else if (name == "flexDirection") {
-            value = node->style.direction == flex_direction::row
-                ? node->style.flex_reverse ? "row-reverse" : "row"
-                : node->style.flex_reverse ? "column-reverse" : "column";
+            value = flex_direction_name(node->style);
+        } else if (name == "flexFlow") {
+            value = flex_direction_name(node->style) + " "
+                + flex_wrap_name(node->style);
         } else if (name == "flexGrow") {
             value = serialize_css_number(node->style.flex_grow);
         } else if (name == "flexShrink") {
@@ -25346,7 +25461,7 @@ struct v8_dom_runtime::implementation final {
         } else if (name == "flexBasis") {
             value = format_computed_length(node->style.flex_basis, node->layout.width);
         } else if (name == "flexWrap") {
-            value = node->style.flex_wrap ? "wrap" : "nowrap";
+            value = flex_wrap_name(node->style);
         } else if (name == "alignItems") {
             value = node->style.align_items == align_mode::center ? "center"
                 : node->style.align_items == align_mode::start ? "flex-start"
@@ -25754,6 +25869,13 @@ struct v8_dom_runtime::implementation final {
                 ? flex_direction::row : flex_direction::column;
             node->style.flex_reverse = value == "row-reverse" || value == "column-reverse";
             node->style.inline_property_mask |= inline_flex_direction;
+        } else if (name == "flexFlow") {
+            const auto flow = parse_flex_flow(value);
+            node->style.direction = flow.direction;
+            node->style.flex_reverse = flow.reverse;
+            node->style.flex_wrap = flow.wrap;
+            node->style.inline_property_mask |=
+                inline_flex_direction | inline_flex_wrap;
         } else if (name == "flexGrow") {
             node->style.flex_grow = static_cast<float>(raw_value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0));
             node->style.inline_property_mask |= inline_flex_grow;
@@ -27316,6 +27438,7 @@ struct v8_dom_runtime::implementation final {
     std::mutex host_request_mutex;
     std::deque<std::string> host_requests;
     std::function<void()> host_request_available;
+    std::function<void()> interop_callback_available;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -27522,13 +27645,15 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<viewport_metrics()> viewport_provider,
     std::string compilation_cache_directory,
     resource_loader load_resource,
-    std::function<void()> host_request_available)
+    std::function<void()> host_request_available,
+    std::function<void()> interop_callback_available)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
         std::move(load_resource),
-        std::move(host_request_available)))
+        std::move(host_request_available),
+        std::move(interop_callback_available)))
 {
 }
 

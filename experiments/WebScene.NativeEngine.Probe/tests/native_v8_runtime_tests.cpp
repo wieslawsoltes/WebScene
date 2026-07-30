@@ -632,6 +632,67 @@ std::string evaluate(webscene_engine* engine, std::string_view source, std::stri
     return std::string(buffer.data(), required - 1U);
 }
 
+void notify_interop_callback_test(void* user_data)
+{
+    static_cast<std::atomic<uint32_t>*>(user_data)
+        ->fetch_add(1U, std::memory_order_relaxed);
+}
+
+void test_interop_callback_notification()
+{
+    struct previous_engine_options final {
+        uint32_t struct_size;
+        uint32_t simulated_chart_command_count;
+        const char* compilation_cache_directory;
+        size_t compilation_cache_directory_length;
+        webscene_resource_load_callback resource_load_callback;
+        void* resource_load_user_data;
+        webscene_scene_published_callback scene_published_callback;
+        void* scene_published_user_data;
+        webscene_text_measure_callback text_measure_callback;
+        void* text_measure_user_data;
+        webscene_host_request_available_callback host_request_available_callback;
+        void* host_request_available_user_data;
+    };
+    static_assert(
+        sizeof(previous_engine_options)
+        == offsetof(
+            webscene_engine_options,
+            interop_callback_available_callback));
+    previous_engine_options previous_options{};
+    previous_options.struct_size = sizeof(previous_engine_options);
+    auto* previous_engine = webscene_engine_create_with_options(
+        reinterpret_cast<const webscene_engine_options*>(&previous_options));
+    require(
+        previous_engine != nullptr,
+        "interop callback ABI rejected the previous engine options tail");
+    webscene_engine_destroy(previous_engine);
+
+    std::atomic<uint32_t> notifications{0U};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(webscene_engine_options);
+    options.interop_callback_available_callback =
+        notify_interop_callback_test;
+    options.interop_callback_available_user_data = &notifications;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "interop callback notification engine creation failed");
+
+    require(
+        evaluate(
+            engine,
+            "(() => {"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "return true;"
+            "})()",
+            "native-interop-callback-notification.js") == "true",
+        "native interop callback notification script did not complete");
+    require(
+        notifications.load(std::memory_order_relaxed) == 2U,
+        "native interop callback notification did not reach the host");
+    webscene_engine_destroy(engine);
+}
+
 uint64_t consumed_input_count(webscene_engine* engine)
 {
     webscene_engine_metrics metrics{};
@@ -3354,6 +3415,67 @@ void test_flex_basis_reserves_fixed_track(webscene_engine* engine)
     )JS", "native-flex-basis-track.js");
     if (result != "[30,12,243,12,80,\"none\",0,0,80,12,\"0\",\"1\"]") {
         fail("flex-basis did not remain confined to the flex main axis: " + result);
+    }
+}
+
+void test_flex_flow_shorthand_controls_layout_and_cssom(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const style = document.createElement('style');
+          style.textContent = `
+            .tabs {
+              display: flex;
+              flex-flow: column nowrap;
+              width: 206px;
+              height: 200px;
+            }
+            .tab { width: 206px; height: 40px; flex: 0 0 auto; }
+          `;
+          document.body.appendChild(style);
+          const tabs = document.createElement('div');
+          tabs.className = 'tabs';
+          const first = document.createElement('button');
+          const second = document.createElement('button');
+          first.className = second.className = 'tab';
+          tabs.appendChild(first);
+          tabs.appendChild(second);
+          document.body.appendChild(tabs);
+
+          const firstRect = first.getBoundingClientRect();
+          const secondRect = second.getBoundingClientRect();
+          const computed = getComputedStyle(tabs);
+          const stylesheetValues = [
+            computed.flexDirection,
+            computed.flexWrap,
+            computed.flexFlow,
+            computed.getPropertyValue('flex-flow'),
+            firstRect.x,
+            firstRect.y,
+            secondRect.x,
+            secondRect.y
+          ];
+
+          tabs.style.flexFlow = 'row-reverse wrap';
+          const inlineValues = [
+            tabs.style.flexFlow,
+            getComputedStyle(tabs).flexDirection,
+            getComputedStyle(tabs).flexWrap
+          ];
+          tabs.style.removeProperty('flex-flow');
+          const removedValues = [
+            tabs.style.flexFlow,
+            getComputedStyle(tabs).flexDirection,
+            getComputedStyle(tabs).flexWrap
+          ];
+          return [stylesheetValues, inlineValues, removedValues];
+        })()
+    )JS", "native-flex-flow-shorthand.js");
+    const auto expected =
+        R"([["column","nowrap","column nowrap","column nowrap",0,0,0,40],["row-reverse wrap","row-reverse","wrap"],["","column","nowrap"]])";
+    if (result != expected) {
+        fail("flex-flow shorthand diverged from CSS layout or CSSOM: " + result);
     }
 }
 
@@ -7895,6 +8017,87 @@ void test_scene_flow_is_attributed()
     webscene_engine_destroy(engine);
 }
 
+void test_read_only_evaluation_does_not_publish_scene()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "read-only evaluation engine creation failed");
+    execute_and_wait(
+        engine,
+        "document.body.textContent = 'ready'",
+        "read-only-evaluation-setup.js");
+
+    const webscene_scene_view* initial = nullptr;
+    for (auto attempt = 0; attempt < 100 && initial == nullptr; ++attempt) {
+        initial = webscene_engine_acquire_latest_scene(engine);
+        if (initial == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(initial != nullptr, "read-only evaluation fixture had no initial scene");
+    require(
+        webscene_scene_acknowledge(initial) != 0,
+        "read-only evaluation fixture could not acknowledge its initial scene");
+    webscene_scene_release(initial);
+
+    webscene_engine_metrics baseline{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* pending = webscene_engine_acquire_latest_scene(engine);
+        if (pending != nullptr) {
+            webscene_scene_acknowledge(pending);
+            webscene_scene_release(pending);
+        }
+        webscene_engine_get_metrics(engine, &baseline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        webscene_engine_metrics settled{};
+        webscene_engine_get_metrics(engine, &settled);
+        if (settled.published_scenes == baseline.published_scenes) {
+            baseline = settled;
+            break;
+        }
+    }
+    require(
+        evaluate(engine, "1 + 1", "read-only-evaluation.js") == "2",
+        "read-only evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    webscene_engine_metrics after_read{};
+    webscene_engine_get_metrics(engine, &after_read);
+    if (after_read.published_scenes != baseline.published_scenes) {
+        fail(
+            "read-only evaluation published an unchanged scene: before="
+            + std::to_string(baseline.published_scenes)
+            + ", after=" + std::to_string(after_read.published_scenes));
+    }
+
+    require(
+        evaluate(
+            engine,
+            "setTimeout(() => {}, 0); true",
+            "non-visual-task-evaluation.js") == "true",
+        "non-visual task evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    webscene_engine_get_metrics(engine, &after_read);
+    require(
+        after_read.published_scenes == baseline.published_scenes,
+        "a completed non-visual task published an unchanged scene");
+
+    require(
+        evaluate(
+            engine,
+            "document.body.textContent = 'changed'; true",
+            "mutating-evaluation.js") == "true",
+        "mutating evaluation returned the wrong value");
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        webscene_engine_get_metrics(engine, &after_read);
+        if (after_read.published_scenes > baseline.published_scenes) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after_read.published_scenes == baseline.published_scenes + 1U,
+        "mutating evaluation did not publish its dirty scene");
+    webscene_engine_destroy(engine);
+}
+
 void test_ordered_scene_consumer_preserves_two_diff_chain()
 {
     auto* engine = webscene_engine_create(64);
@@ -9394,6 +9597,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    test_interop_callback_notification();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
@@ -9458,6 +9662,7 @@ int main()
     test_single_fractional_grid_track_stays_one_column(engine);
     test_calc_percent_with_pixel_offset(engine);
     test_flex_basis_reserves_fixed_track(engine);
+    test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
     test_floats_share_a_bounded_formatting_line(engine);
     test_wrapped_flex_resolves_each_line_independently(engine);
@@ -9512,6 +9717,7 @@ int main()
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
     test_scene_flow_is_attributed();
+    test_read_only_evaluation_does_not_publish_scene();
     test_ordered_scene_consumer_preserves_two_diff_chain();
     test_keyboard_and_pointer_focus_modality();
     test_navigator_platform_and_wheel_modifiers(engine);
