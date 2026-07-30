@@ -254,6 +254,51 @@ void test_document_clear_releases_and_reinitializes_node_pool()
     }
 }
 
+void test_native_id_lookup_tracks_creation_erasure_and_clear()
+{
+    webscene_native::native_document document;
+    auto& retained = document.create_element("div");
+    auto& detached_root = document.create_element("section");
+    auto& detached_child = document.create_element("span");
+    const auto retained_id = retained.id;
+    const auto detached_root_id = detached_root.id;
+    const auto detached_child_id = detached_child.id;
+
+    require(
+        document.append_child(document.body(), retained)
+            && document.append_child(detached_root, detached_child),
+        "native-id fixture could not build its retained and detached trees");
+    require(
+        document.find_by_native_id(retained_id) == &retained
+            && document.find_by_native_id(detached_root_id) == &detached_root
+            && document.find_by_native_id(detached_child_id) == &detached_child,
+        "native-id direct index did not resolve newly-created nodes");
+
+    require(
+        document.erase_detached_subtree(detached_root) == 2,
+        "native-id fixture did not erase its detached subtree");
+    require(
+        document.find_by_native_id(retained_id) == &retained
+            && document.find_by_native_id(detached_root_id) == nullptr
+            && document.find_by_native_id(detached_child_id) == nullptr,
+        "native-id direct index retained erased subtree pointers");
+
+    auto& later = document.create_element("button");
+    const auto later_id = later.id;
+    require(
+        later_id > detached_child_id
+            && document.find_by_native_id(later_id) == &later,
+        "native-id direct index did not preserve monotonic sparse IDs");
+
+    document.clear();
+    require(
+        document.body().id == 1
+            && document.find_by_native_id(1) == &document.body()
+            && document.find_by_native_id(retained_id) == nullptr
+            && document.find_by_native_id(later_id) == nullptr,
+        "native-id direct index was not reset with its document");
+}
+
 void test_compact_attribute_collection_preserves_map_semantics()
 {
     webscene_native::attribute_collection left;
@@ -9605,6 +9650,7 @@ int main()
     test_textual_style_state_is_cold_and_copy_on_write();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
     test_document_clear_releases_and_reinitializes_node_pool();
+    test_native_id_lookup_tracks_creation_erasure_and_clear();
     test_compact_attribute_collection_preserves_map_semantics();
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
