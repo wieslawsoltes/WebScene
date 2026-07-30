@@ -2,42 +2,67 @@ diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
 index 1bf77351fa0..4efb1619c6c 100644
 --- a/src/objects/js-interceptor-map.h
 +++ b/src/objects/js-interceptor-map.h
-@@ -17,4 +17,8 @@ class InterceptorInfo;
+@@ -16,5 +16,11 @@ class InterceptorInfo;
+ 
  // Extended map for interceptor objects, it caches named and indexed
  // InterceptorInfo objects in the Map for faster access.
 +#if V8_CC_MSVC
++// V8_ABSTRACT_OBJECT gives the derived fields byte packing under MSVC. The
++// object still has its own V8 instance type through ExtendedMap.
 +V8_ABSTRACT_OBJECT class JSInterceptorMap : public ExtendedMap {
 +#else
  V8_OBJECT class JSInterceptorMap : public ExtendedMap {
 +#endif
   public:
-@@ -42,7 +42,19 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
-  public:
-+#if V8_CC_MSVC
-+  // Torque lays out ExtendedMap subclasses after
-+  // RoundUp(sizeof(ExtendedMap), kTaggedSize). clang-cl's MSVC ABI otherwise
-+  // reuses the three tail bytes after ExtendedMap::bit_field_ex_, shifting all
-+  // JSInterceptorMap fields away from their generated offsets. Claim those
-+  // logical base-class padding bytes explicitly in the derived layout.
-+  //
-+  // Remove this compatibility field when the pinned V8 revision contains the
-+  // equivalent upstream Windows layout fix.
-+  uint8_t extended_map_padding_[kTaggedSize - 1];
-+#endif
+@@ -43,6 +49,8 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
    uint8_t flags_;
    uint8_t extended_padding_[kTaggedSize - 2];
    TaggedMember<InterceptorInfo> named_interceptor_;
    TaggedMember<InterceptorInfo> indexed_interceptor_;
    TaggedMember<Cell> fast_case_validity_cell_;
++  // Make Torque account for the final byte before MSVC rounds the class size.
 +  uint8_t windows_tail_padding_;
  } V8_OBJECT_END;
 diff --git a/src/objects/js-interceptor-map.tq b/src/objects/js-interceptor-map.tq
-index f351cb0fb0a..8b8b088541e 100644
+index f351cb0fb0a..a7a3891c4f2 100644
 --- a/src/objects/js-interceptor-map.tq
 +++ b/src/objects/js-interceptor-map.tq
-@@ -19,4 +19,5 @@ extern class JSInterceptorMap extends ExtendedMap {
+@@ -19,4 +19,6 @@ extern class JSInterceptorMap extends ExtendedMap {
    // usages of Maps as a fast property transition handlers - it makes sure
    // that the prototype chain does not have the property added by the map.
    fast_case_validity_cell: Cell;
++  // Match the final byte of the C++ class before MSVC rounds its size.
 +  windows_tail_padding: uint8;
  }
+diff --git a/src/objects/map.h b/src/objects/map.h
+index 594d4c7c79a..b451009357b 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -1288,7 +1288,13 @@ V8_ABSTRACT_OBJECT class ExtendedMap : public Map {
+   static const int kStartOfStrongExtendedFieldsOffset;
+ 
+   std::atomic<uint8_t> bit_field_ex_;
++#if V8_CC_MSVC
++  // Model the base-class tail padding materialized by the MSVC ABI so Torque
++  // and C++ agree where ExtendedMap subclasses begin.
++  uint8_t windows_padding_[kTaggedSize - 1];
++#else
+   // Leaves kTaggedSize-1 unused bytes, they will be used by subclasses.
++#endif
+ } V8_OBJECT_END;
+ 
+ constexpr int ExtendedMapSizeForKind(ExtendedMapKind kind);
+diff --git a/src/objects/map.tq b/src/objects/map.tq
+index cb85e7788e6..6a189133dc3 100644
+--- a/src/objects/map.tq
++++ b/src/objects/map.tq
+@@ -116,7 +116,8 @@ bitfield struct ExtendedMapBitFields extends uint8 {
+ @doNotGenerateCast
+ extern class ExtendedMap extends Map {
+   bit_field_ex: ExtendedMapBitFields;
+-  // Leaves kTaggedSize-1 unused bytes, they will be used by subclasses.
++  // Match the tail padding materialized in the C++ base class by the MSVC ABI.
++  windows_padding[3]: uint8;
+ }
+ 
+ @export
