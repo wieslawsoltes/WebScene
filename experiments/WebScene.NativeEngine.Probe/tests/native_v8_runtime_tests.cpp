@@ -7956,6 +7956,87 @@ void test_scene_flow_is_attributed()
     webscene_engine_destroy(engine);
 }
 
+void test_read_only_evaluation_does_not_publish_scene()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "read-only evaluation engine creation failed");
+    execute_and_wait(
+        engine,
+        "document.body.textContent = 'ready'",
+        "read-only-evaluation-setup.js");
+
+    const webscene_scene_view* initial = nullptr;
+    for (auto attempt = 0; attempt < 100 && initial == nullptr; ++attempt) {
+        initial = webscene_engine_acquire_latest_scene(engine);
+        if (initial == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(initial != nullptr, "read-only evaluation fixture had no initial scene");
+    require(
+        webscene_scene_acknowledge(initial) != 0,
+        "read-only evaluation fixture could not acknowledge its initial scene");
+    webscene_scene_release(initial);
+
+    webscene_engine_metrics baseline{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* pending = webscene_engine_acquire_latest_scene(engine);
+        if (pending != nullptr) {
+            webscene_scene_acknowledge(pending);
+            webscene_scene_release(pending);
+        }
+        webscene_engine_get_metrics(engine, &baseline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        webscene_engine_metrics settled{};
+        webscene_engine_get_metrics(engine, &settled);
+        if (settled.published_scenes == baseline.published_scenes) {
+            baseline = settled;
+            break;
+        }
+    }
+    require(
+        evaluate(engine, "1 + 1", "read-only-evaluation.js") == "2",
+        "read-only evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    webscene_engine_metrics after_read{};
+    webscene_engine_get_metrics(engine, &after_read);
+    if (after_read.published_scenes != baseline.published_scenes) {
+        fail(
+            "read-only evaluation published an unchanged scene: before="
+            + std::to_string(baseline.published_scenes)
+            + ", after=" + std::to_string(after_read.published_scenes));
+    }
+
+    require(
+        evaluate(
+            engine,
+            "setTimeout(() => {}, 0); true",
+            "non-visual-task-evaluation.js") == "true",
+        "non-visual task evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    webscene_engine_get_metrics(engine, &after_read);
+    require(
+        after_read.published_scenes == baseline.published_scenes,
+        "a completed non-visual task published an unchanged scene");
+
+    require(
+        evaluate(
+            engine,
+            "document.body.textContent = 'changed'; true",
+            "mutating-evaluation.js") == "true",
+        "mutating evaluation returned the wrong value");
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        webscene_engine_get_metrics(engine, &after_read);
+        if (after_read.published_scenes > baseline.published_scenes) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after_read.published_scenes == baseline.published_scenes + 1U,
+        "mutating evaluation did not publish its dirty scene");
+    webscene_engine_destroy(engine);
+}
+
 void test_ordered_scene_consumer_preserves_two_diff_chain()
 {
     auto* engine = webscene_engine_create(64);
@@ -9574,6 +9655,7 @@ int main()
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
     test_scene_flow_is_attributed();
+    test_read_only_evaluation_does_not_publish_scene();
     test_ordered_scene_consumer_preserves_two_diff_chain();
     test_keyboard_and_pointer_focus_modality();
     test_navigator_platform_and_wheel_modifiers(engine);

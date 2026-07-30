@@ -12679,8 +12679,17 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    static void mark_canvas_scene_changed()
+    {
+        auto* self = current(v8::Isolate::GetCurrent());
+        if (self != nullptr) {
+            self->document.mark_scene_changed();
+        }
+    }
+
     static void advance_canvas_generation(dom_node& node)
     {
+        mark_canvas_scene_changed();
         auto& canvas = node.mutable_canvas();
         ++canvas.generation;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -13719,6 +13728,7 @@ struct v8_dom_runtime::implementation final {
         canvas_command_kind kind,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -13736,6 +13746,7 @@ struct v8_dom_runtime::implementation final {
         uint32_t resource_id,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -13752,6 +13763,7 @@ struct v8_dom_runtime::implementation final {
         dom_node& node,
         const std::vector<double>& segments)
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(canvas_command_kind::set_line_dash);
         command.flags = static_cast<uint32_t>(segments.size() + 1U);

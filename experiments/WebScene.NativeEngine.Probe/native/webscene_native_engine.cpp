@@ -1416,6 +1416,10 @@ private:
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            const auto starting_scene_generation =
+                document_.scene_generation();
+            const auto starting_component_ready =
+                component_ready_.load(std::memory_order_relaxed);
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
@@ -1837,7 +1841,6 @@ private:
                 frame_script_errors_.store(runtime_->frame_script_errors(), std::memory_order_relaxed);
                 update_compilation_metrics();
                 update_component_readiness();
-                changed = true;
             }
 
             if (document_.has_active_animations()) {
@@ -1954,11 +1957,14 @@ private:
                 }
                 evaluation.completion->ready.notify_all();
                 update_compilation_metrics();
-                changed = true;
             }
 #endif
 
             update_host_animation_frame_demand();
+            changed = changed
+                || document_.scene_generation() != starting_scene_generation
+                || component_ready_.load(std::memory_order_relaxed)
+                    != starting_component_ready;
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
             // A resize and its host RAF are one browser rendering opportunity.
