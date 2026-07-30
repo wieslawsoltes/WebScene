@@ -91,28 +91,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - os: macos-latest
-          rid: osx-arm64
-          cpu: arm64
-          monolith: libv8_monolith.a
-          script: unix
-          v8_revision: 15.3.10
-          partition_alloc: true
-          v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v7-v8-15.3.10-partitionalloc-complete
-          v8_cache_script: scripts/build-native-engine-runtime.sh
-          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt
-        - os: ubuntu-latest
-          rid: linux-x64
-          cpu: x64
-          monolith: libv8_monolith.a
-          script: unix
-          v8_revision: 15.3.10
-          partition_alloc: true
-          v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v11-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared
-          v8_cache_script: scripts/build-native-engine-runtime.sh
-          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt
         - os: windows-2022
           rid: win-x64
           cpu: x64
@@ -349,8 +327,6 @@ jobs:
         python3 scripts/verify-release-packages.py \
           artifacts/nuget-packages \
           --version '${{ needs.metadata.outputs.package-version }}' \
-          --native-rid osx-arm64 \
-          --native-rid linux-x64 \
           --native-rid win-x64 \
           --output artifacts/nuget-packages/release-packages.json
         shasum -a 256 \
@@ -375,10 +351,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - os: macos-latest
-          rid: osx-arm64
-        - os: ubuntu-latest
-          rid: linux-x64
         - os: windows-2022
           rid: win-x64
     runs-on: ${{ matrix.os }}
