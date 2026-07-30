@@ -3357,6 +3357,67 @@ void test_flex_basis_reserves_fixed_track(webscene_engine* engine)
     }
 }
 
+void test_flex_flow_shorthand_controls_layout_and_cssom(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const style = document.createElement('style');
+          style.textContent = `
+            .tabs {
+              display: flex;
+              flex-flow: column nowrap;
+              width: 206px;
+              height: 200px;
+            }
+            .tab { width: 206px; height: 40px; flex: 0 0 auto; }
+          `;
+          document.body.appendChild(style);
+          const tabs = document.createElement('div');
+          tabs.className = 'tabs';
+          const first = document.createElement('button');
+          const second = document.createElement('button');
+          first.className = second.className = 'tab';
+          tabs.appendChild(first);
+          tabs.appendChild(second);
+          document.body.appendChild(tabs);
+
+          const firstRect = first.getBoundingClientRect();
+          const secondRect = second.getBoundingClientRect();
+          const computed = getComputedStyle(tabs);
+          const stylesheetValues = [
+            computed.flexDirection,
+            computed.flexWrap,
+            computed.flexFlow,
+            computed.getPropertyValue('flex-flow'),
+            firstRect.x,
+            firstRect.y,
+            secondRect.x,
+            secondRect.y
+          ];
+
+          tabs.style.flexFlow = 'row-reverse wrap';
+          const inlineValues = [
+            tabs.style.flexFlow,
+            getComputedStyle(tabs).flexDirection,
+            getComputedStyle(tabs).flexWrap
+          ];
+          tabs.style.removeProperty('flex-flow');
+          const removedValues = [
+            tabs.style.flexFlow,
+            getComputedStyle(tabs).flexDirection,
+            getComputedStyle(tabs).flexWrap
+          ];
+          return [stylesheetValues, inlineValues, removedValues];
+        })()
+    )JS", "native-flex-flow-shorthand.js");
+    const auto expected =
+        R"([["column","nowrap","column nowrap","column nowrap",0,0,0,40],["row-reverse wrap","row-reverse","wrap"],["","column","nowrap"]])";
+    if (result != expected) {
+        fail("flex-flow shorthand diverged from CSS layout or CSSOM: " + result);
+    }
+}
+
 void test_font_relative_box_lengths_follow_inherited_font_context(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -9458,6 +9519,7 @@ int main()
     test_single_fractional_grid_track_stays_one_column(engine);
     test_calc_percent_with_pixel_offset(engine);
     test_flex_basis_reserves_fixed_track(engine);
+    test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
     test_floats_share_a_bounded_formatting_line(engine);
     test_wrapped_flex_resolves_each_line_independently(engine);
