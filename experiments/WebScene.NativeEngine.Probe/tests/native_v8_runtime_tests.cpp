@@ -632,6 +632,67 @@ std::string evaluate(webscene_engine* engine, std::string_view source, std::stri
     return std::string(buffer.data(), required - 1U);
 }
 
+void notify_interop_callback_test(void* user_data)
+{
+    static_cast<std::atomic<uint32_t>*>(user_data)
+        ->fetch_add(1U, std::memory_order_relaxed);
+}
+
+void test_interop_callback_notification()
+{
+    struct previous_engine_options final {
+        uint32_t struct_size;
+        uint32_t simulated_chart_command_count;
+        const char* compilation_cache_directory;
+        size_t compilation_cache_directory_length;
+        webscene_resource_load_callback resource_load_callback;
+        void* resource_load_user_data;
+        webscene_scene_published_callback scene_published_callback;
+        void* scene_published_user_data;
+        webscene_text_measure_callback text_measure_callback;
+        void* text_measure_user_data;
+        webscene_host_request_available_callback host_request_available_callback;
+        void* host_request_available_user_data;
+    };
+    static_assert(
+        sizeof(previous_engine_options)
+        == offsetof(
+            webscene_engine_options,
+            interop_callback_available_callback));
+    previous_engine_options previous_options{};
+    previous_options.struct_size = sizeof(previous_engine_options);
+    auto* previous_engine = webscene_engine_create_with_options(
+        reinterpret_cast<const webscene_engine_options*>(&previous_options));
+    require(
+        previous_engine != nullptr,
+        "interop callback ABI rejected the previous engine options tail");
+    webscene_engine_destroy(previous_engine);
+
+    std::atomic<uint32_t> notifications{0U};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(webscene_engine_options);
+    options.interop_callback_available_callback =
+        notify_interop_callback_test;
+    options.interop_callback_available_user_data = &notifications;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "interop callback notification engine creation failed");
+
+    require(
+        evaluate(
+            engine,
+            "(() => {"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "return true;"
+            "})()",
+            "native-interop-callback-notification.js") == "true",
+        "native interop callback notification script did not complete");
+    require(
+        notifications.load(std::memory_order_relaxed) == 2U,
+        "native interop callback notification did not reach the host");
+    webscene_engine_destroy(engine);
+}
+
 uint64_t consumed_input_count(webscene_engine* engine)
 {
     webscene_engine_metrics metrics{};
@@ -9536,6 +9597,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    test_interop_callback_notification();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();

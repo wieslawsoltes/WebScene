@@ -2290,11 +2290,13 @@ struct v8_dom_runtime::implementation final {
         std::function<v8_dom_runtime::viewport_metrics()> viewport_provider_value,
         std::string compilation_cache_directory_value,
         resource_loader resource_loader_value,
-        std::function<void()> host_request_available_value)
+        std::function<void()> host_request_available_value,
+        std::function<void()> interop_callback_available_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
+        , interop_callback_available(std::move(interop_callback_available_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -2412,6 +2414,15 @@ struct v8_dom_runtime::implementation final {
             }
         }
         return static_cast<implementation*>(isolate->GetData(0));
+    }
+
+    static void notify_interop_callback_available(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr && self->interop_callback_available) {
+            self->interop_callback_available();
+        }
     }
 
     struct feature_observation final {
@@ -4852,6 +4863,12 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "open"),
             v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "requestAnimationFrame"),
@@ -22946,6 +22963,12 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "AbortController"), v8::FunctionTemplate::New(isolate, abort_controller_constructor)->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "matchMedia"), v8::Function::New(local_context, match_media).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "open"), v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -27410,6 +27433,7 @@ struct v8_dom_runtime::implementation final {
     std::mutex host_request_mutex;
     std::deque<std::string> host_requests;
     std::function<void()> host_request_available;
+    std::function<void()> interop_callback_available;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -27616,13 +27640,15 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<viewport_metrics()> viewport_provider,
     std::string compilation_cache_directory,
     resource_loader load_resource,
-    std::function<void()> host_request_available)
+    std::function<void()> host_request_available,
+    std::function<void()> interop_callback_available)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
         std::move(load_resource),
-        std::move(host_request_available)))
+        std::move(host_request_available),
+        std::move(interop_callback_available)))
 {
 }
 

@@ -54,6 +54,11 @@ public sealed class JavaScriptCallbackPump : IAsyncDisposable
     {
         using (linked)
         {
+            if (invoker.SupportsCallbackNotifications)
+            {
+                await RunSignaledAsync(invoker, linked.Token).ConfigureAwait(false);
+                return;
+            }
             while (!linked.IsCancellationRequested)
             {
                 var handled = await invoker.PumpCallbackAsync(linked.Token)
@@ -62,6 +67,20 @@ public sealed class JavaScriptCallbackPump : IAsyncDisposable
                 {
                     await Task.Delay(idleDelay, linked.Token).ConfigureAwait(false);
                 }
+            }
+        }
+    }
+
+    private static async Task RunSignaledAsync(
+        IJavaScriptBidirectionalInvoker invoker,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await invoker.WaitForCallbackAsync(cancellationToken).ConfigureAwait(false);
+            while (await invoker.PumpCallbackAsync(cancellationToken)
+                       .ConfigureAwait(false))
+            {
             }
         }
     }

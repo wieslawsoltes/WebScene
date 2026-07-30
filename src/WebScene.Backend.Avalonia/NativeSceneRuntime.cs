@@ -4616,6 +4616,8 @@ internal struct EngineOptions
     public IntPtr TextMeasureUserData;
     public IntPtr HostRequestAvailableCallback;
     public IntPtr HostRequestAvailableUserData;
+    public IntPtr InteropCallbackAvailableCallback;
+    public IntPtr InteropCallbackAvailableUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -4966,6 +4968,10 @@ public static unsafe class NativeWebSceneApi
         NotifyHostRequestAvailable;
     private static readonly IntPtr HostRequestAvailableAddress =
         Marshal.GetFunctionPointerForDelegate(HostRequestAvailable);
+    private static readonly InteropCallbackAvailableCallback InteropCallbackAvailable =
+        NotifyInteropCallbackAvailable;
+    private static readonly IntPtr InteropCallbackAvailableAddress =
+        Marshal.GetFunctionPointerForDelegate(InteropCallbackAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -5016,7 +5022,8 @@ public static unsafe class NativeWebSceneApi
         string? compilationCacheDirectory,
         IWebSceneResourceLoader resourceLoader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable = null)
+        Action? hostRequestAvailable = null,
+        Action? interopCallbackAvailable = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -5024,7 +5031,11 @@ public static unsafe class NativeWebSceneApi
             ? []
             : Encoding.UTF8.GetBytes(compilationCacheDirectory);
         var bridgeHandle = GCHandle.Alloc(
-            new ResourceBridge(resourceLoader, scenePublished, hostRequestAvailable));
+            new ResourceBridge(
+                resourceLoader,
+                scenePublished,
+                hostRequestAvailable,
+                interopCallbackAvailable));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -5045,6 +5056,12 @@ public static unsafe class NativeWebSceneApi
                         ? IntPtr.Zero
                         : HostRequestAvailableAddress,
                     HostRequestAvailableUserData = hostRequestAvailable is null
+                        ? IntPtr.Zero
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    InteropCallbackAvailableCallback = interopCallbackAvailable is null
+                        ? IntPtr.Zero
+                        : InteropCallbackAvailableAddress,
+                    InteropCallbackAvailableUserData = interopCallbackAvailable is null
                         ? IntPtr.Zero
                         : GCHandle.ToIntPtr(bridgeHandle)
                 };
@@ -5130,6 +5147,9 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void HostRequestAvailableCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void InteropCallbackAvailableCallback(IntPtr userData);
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -5141,6 +5161,20 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native host request notification] {error}");
+        }
+    }
+
+    private static void NotifyInteropCallbackAvailable(IntPtr userData)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyInteropCallbackAvailable();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene native interop callback notification] {error}");
         }
     }
 
@@ -5247,7 +5281,8 @@ public static unsafe class NativeWebSceneApi
     private sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable)
+        Action? hostRequestAvailable,
+        Action? interopCallbackAvailable)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
@@ -5260,6 +5295,9 @@ public static unsafe class NativeWebSceneApi
 
         public void NotifyHostRequestAvailable()
             => hostRequestAvailable?.Invoke();
+
+        public void NotifyInteropCallbackAvailable()
+            => interopCallbackAvailable?.Invoke();
 
         public nuint Copy(
             uint kind,
