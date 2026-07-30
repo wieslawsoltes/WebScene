@@ -180,10 +180,18 @@ public sealed partial class MainPage : Page
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Uno", "monaco"));
             var session = new ShowcaseEditorSession(
-                _editor.EvaluateJsonAsync);
-            await session.InitializeAsync();
-            started.Stop();
-            _editorSession = session;
+                _editor.CreateJavaScriptInvoker());
+            try
+            {
+                await session.InitializeAsync();
+                started.Stop();
+                _editorSession = session;
+            }
+            catch
+            {
+                await session.DisposeAsync();
+                throw;
+            }
             var metrics = _editor.EngineMetrics;
             Console.WriteLine(
                 $"[WebScene Uno] Monaco ready in "

@@ -7,8 +7,9 @@ the library's TypeScript declarations. The native engine should be the primary
 runtime boundary. For binary-supported declaration shapes, generated methods
 now use static direct-invocation call sites and tagged codecs, retain JavaScript
 objects through isolate-local handles, and map JavaScript promises to
-`ValueTask<T>` without JSON or polling. `webscene_engine_evaluate_json` remains
-the compatibility boundary for unsupported shapes and arbitrary evaluation.
+`ValueTask<T>` without JSON or polling. ABI 3 is the only native interop
+boundary. Unsupported native shapes fail explicitly, while arbitrary
+evaluation returns the same leased tagged arena.
 
 TradingView is a good candidate because its licensed package contains
 `charting_library/charting_library.d.ts` for the widget API and
@@ -39,7 +40,7 @@ licensed charting_library.d.ts
  NativeJavaScriptInvoker
               |
               v
- webscene_engine_evaluate_json -> native V8 isolate
+ webscene_engine_begin_invoke_v3 -> native V8 isolate
 ```
 
 The TypeScript compiler stage is intentionally separate from Roslyn. A regular
@@ -129,17 +130,17 @@ fingerprint mismatches, and policy references to undiscovered declarations.
 | optional parameter | `JavaScriptOptional<T>` | preserves `undefined` separately from `null` |
 | optional property | `JavaScriptOptional<T>` | preserves an absent property separately from explicit `null` |
 | string-literal union | generated string-backed value type | tagged UTF-8 string where supported |
-| structural union of arbitrary width | `JavaScriptUnion<...>` | compatibility conversion until every branch has a tagged codec |
+| structural union of arbitrary width | `JavaScriptUnion<...>` | unsupported by the native invoker until every branch has a tagged codec |
 | array/readonly array | array/read-only list | tagged array, or policy-selected borrowed view |
 | tuple, including more than seven elements | C# value tuple | JavaScript array with positional conversion |
 | string/number index signature | typed `AdditionalProperties` dictionary | flattened JavaScript object properties |
 | `Map`, `Set`, DOM objects, typed arrays | `JavaScriptObjectReference` | retained isolate-local object handle |
 | overloads | C# overloads where unambiguous | same JavaScript member |
-| generic interface | generic proxy/model | retained object handle or compatibility path |
+| generic interface | generic proxy/model | retained object handle when codec-supported; otherwise unsupported by the native invoker |
 | callback parameter | function reference/typed `JavaScriptAction<T...>` or tuple action | retained function handle with arbitrary argument count |
 | ambient/exported function | generated static facade method | dotted global lookup and invocation |
 | exported/static value | generated static facade getter | dotted global value or promise lookup |
-| anonymous object in a member signature | generated structural record | compatibility path unless it has a generated tagged codec |
+| anonymous object in a member signature | generated structural record | tagged codec when supported; otherwise unsupported by the native invoker |
 | `T \| Promise<T>` | `ValueTask<T>` | `Promise.resolve` handles either result |
 | model containing live objects | public model plus internal wire model | nested handles become proxies using the active invoker |
 
@@ -189,35 +190,31 @@ with a different library version.
 
 ## Native runtime model
 
-The proof installs one bootstrap object in each native V8 isolate. That object
-owns:
+Each native V8 isolate owns:
 
 - a monotonically allocated object-handle table;
 - method dispatch through `Reflect.apply`, preserving the JavaScript receiver;
 - constructor dispatch through `Reflect.construct`;
-- a promise-result table for asynchronous library methods;
-- reverse-call queues for datafeed and broker adapters;
-- retained JavaScript callback functions;
-- synchronous factory functions for Trading Platform broker construction;
+- pending promise state completed directly through the native operation;
 - deterministic release of object handles.
 
-The compatibility path JSON-encodes user values and member names. Generated
-code does not concatenate user input into executable JavaScript.
-`NativeJavaScriptInvoker` can still accept the existing
-`NativeWebSceneView.EvaluateJsonAsync` method directly:
+Generated code does not concatenate user input into executable JavaScript.
+The public view creates the forward-only invoker directly:
 
 ```csharp
-var interop = new NativeJavaScriptInvoker(view.EvaluateJsonAsync);
+using var interop = view.CreateJavaScriptInvoker();
 var widget = await TradingViewWidget.CreateAsync(interop, options, cancellationToken);
 ```
 
-When a native binary transport is supplied, supported generated methods emit
-static call-site metadata, direct tagged request writers, and typed tagged
-result codecs. Native handle/global/member invocation and direct promise
-completion remove JSON, repeated script construction, parsing, polling, and
-intermediate managed values while retaining the same public generated .NET
-API. Unsupported declaration shapes use the compatibility implementation.
-Arbitrary evaluation and diagnostics remain on the JSON path.
+Supported generated methods emit static call-site metadata, direct tagged
+request writers, and typed tagged result codecs. Native
+handle/global/member invocation and direct promise completion remove JSON,
+repeated script construction, parsing, polling, and intermediate managed
+values while retaining the same public generated .NET API. Unsupported
+declaration shapes cannot run through `NativeJavaScriptInvoker`; they must gain
+a tagged codec first. Arbitrary evaluation and diagnostics use
+`begin_evaluate_v3`; `EvaluateTextAsync` materializes JSON-compatible text only
+after the tagged lease reaches managed code.
 
 ## Prototype status
 
@@ -241,8 +238,8 @@ Implemented:
   containers and generic typed dictionaries;
 - native async object/value/void/property/promise invocation;
 - native value/object/void/promise invocation for dotted global functions;
-- branch-aware runtime result encoding: arrays and plain objects remain JSON,
-  while live JavaScript objects are retained as handles;
+- branch-aware tagged result encoding: arrays and plain objects remain native
+  nodes, while live JavaScript objects are retained as handles;
 - direct generated global lookup and receiver-preserving member invocation
   over pooled tagged request/result arenas;
 - direct generated invocation for binary-supported dotted global functions,
@@ -257,10 +254,10 @@ Implemented:
   operation, and size-classed result records;
 - generated TradingView-shaped widget, chart, watched-value, trading primitive,
   datafeed, broker, broker-host, quote, and trading models;
-- reverse callback registration, typed callback invocation, a callback pump,
-  lossless optional callback arguments, arbitrary-width callback signatures,
-  synchronous no-argument adapter
-  results, and synchronous broker factories;
+- runtime-neutral reverse callback generation for non-native invokers,
+  including lossless optional callback arguments and arbitrary-width
+  signatures; the forward-only native invoker deliberately does not expose
+  this surface;
 - discovery, code-generation, native-dispatch, datafeed, broker, callback,
   promise-object, property, optional-argument, and generic-proxy tests.
 
@@ -273,16 +270,12 @@ explicit diagnostics rather than guessed mappings. This is a stress test of
 the generator, not a substitute for compiling the licensed TradingView
 declarations.
 
-Remaining production work:
+Follow-up work that does not change the ABI 3 merge contract:
 
-- extend the binary generator to all selected global functions, constructors,
-  properties, generic shapes, and discriminated unions;
-- add direct native callback take/complete operations to replace compatibility
-  JSON polling (callback handles already flow through direct generated calls);
-- provide a direct native synchronous callback for adapter methods that take
-  arguments and return synchronously. No-argument synchronous methods and
-  broker factories are already supported through cached values and native
-  JavaScript closures;
-- complete the weighted binary-versus-leased-UTF-8 end-to-end gate and broader
-  malformed-input fuzzing before promoting ABI 3;
+- extend tagged codecs to additional dynamic shapes when an application needs
+  them;
+- design a separate versioned tagged callback ABI if a native bidirectional
+  application is selected; do not restore JSON polling;
+- broaden randomized malformed-input fuzzing beyond the deterministic
+  regression suite;
 - generate optional `JsonSerializerContext` metadata for NativeAOT.

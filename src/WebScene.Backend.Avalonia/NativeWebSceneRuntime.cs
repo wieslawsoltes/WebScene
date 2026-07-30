@@ -7,11 +7,11 @@ namespace WebScene.Backends.Avalonia.Native;
 #endif
 
 /// <summary>
-/// Process-wide lifecycle operations for the ABI 2 native WebScene engine.
+/// Process-wide lifecycle operations for the ABI 3 native WebScene engine.
 /// </summary>
 public static class NativeWebSceneRuntime
 {
-    public const uint RequiredAbiVersion = 2;
+    public const uint RequiredAbiVersion = 3;
 
     private static readonly SemaphoreSlim PrewarmGate = new(1, 1);
     private static string? s_prewarmedLibraryPath;

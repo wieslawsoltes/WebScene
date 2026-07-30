@@ -4,17 +4,28 @@ namespace NativeRuntimeShowcase.Interop;
 
 public sealed class ShowcaseEditorSession : IAsyncDisposable
 {
-    private readonly Func<string, string, CancellationToken, Task<string>>
-        _evaluateJsonAsync;
     private readonly NativeJavaScriptInvoker _invoker;
     private MonacoEditor? _editor;
 
-    public ShowcaseEditorSession(
-        Func<string, string, CancellationToken, Task<string>> evaluateJsonAsync)
+    private static readonly JavaScriptBinaryCallSite s_readyCallSite = new(
+        JavaScriptBinaryOperation.GetGlobal,
+        "__webSceneComponentReady",
+        memberName: null,
+        JavaScriptBinaryResultMode.Value);
+    private static readonly JavaScriptBinaryCallSite s_editorCallSite = new(
+        JavaScriptBinaryOperation.GetGlobal,
+        "__webSceneMonacoEditor",
+        memberName: null,
+        JavaScriptBinaryResultMode.RetainedHandle);
+    private static readonly JavaScriptBinaryCallSite s_setFileNameCallSite = new(
+        JavaScriptBinaryOperation.InvokeGlobal,
+        "__webSceneShowcaseSetFileName",
+        memberName: null,
+        JavaScriptBinaryResultMode.Void);
+
+    public ShowcaseEditorSession(NativeJavaScriptInvoker invoker)
     {
-        _evaluateJsonAsync = evaluateJsonAsync
-            ?? throw new ArgumentNullException(nameof(evaluateJsonAsync));
-        _invoker = new NativeJavaScriptInvoker(evaluateJsonAsync);
+        _invoker = invoker ?? throw new ArgumentNullException(nameof(invoker));
     }
 
     public async Task InitializeAsync(
@@ -24,14 +35,23 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
         while (DateTime.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var ready = await _evaluateJsonAsync(
-                "Boolean(globalThis.__webSceneComponentReady)",
-                "webscene-showcase-editor-ready.js",
+            var ready = await _invoker.InvokeBinaryAsync<
+                JavaScriptBinaryVoid,
+                bool,
+                ReadyCodec>(
+                s_readyCallSite,
+                default,
+                new JavaScriptBinaryVoid(),
                 cancellationToken);
-            if (string.Equals(ready, "true", StringComparison.Ordinal))
+            if (ready)
             {
-                var reference = await _invoker.GetGlobalObjectAsync(
-                    "__webSceneMonacoEditor",
+                var reference = await _invoker.InvokeBinaryAsync<
+                    JavaScriptBinaryVoid,
+                    JavaScriptObjectReference,
+                    EditorCodec>(
+                    s_editorCallSite,
+                    default,
+                    new JavaScriptBinaryVoid(),
                     cancellationToken);
                 _editor = MonacoEditor.FromReference(_invoker, reference);
                 await using var model =
@@ -65,9 +85,10 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
             model,
             LanguageFor(fileName),
             cancellationToken);
-        await _invoker.InvokeGlobalVoidAsync(
-            "__webSceneShowcaseSetFileName",
-            [JavaScriptArgument.From(fileName)],
+        await _invoker.InvokeBinaryVoidAsync<FileNameArguments, FileNameCodec>(
+            s_setFileNameCallSite,
+            default,
+            new FileNameArguments(fileName),
             cancellationToken);
         await editor.LayoutAsync(cancellationToken);
         await editor.FocusAsync(cancellationToken);
@@ -79,10 +100,17 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_editor is not null)
+        try
         {
-            await _editor.DisposeAsync();
-            _editor = null;
+            if (_editor is not null)
+            {
+                await _editor.DisposeAsync();
+                _editor = null;
+            }
+        }
+        finally
+        {
+            _invoker.Dispose();
         }
     }
 
@@ -108,4 +136,55 @@ public sealed class ShowcaseEditorSession : IAsyncDisposable
             ".yaml" or ".yml" => "yaml",
             _ => "plaintext"
         };
+
+    private readonly record struct FileNameArguments(string Value);
+
+    private readonly struct ReadyCodec
+        : IJavaScriptBinaryCodec<JavaScriptBinaryVoid, bool>
+    {
+        public static uint EncodeArguments(
+            ref JavaScriptBinaryWriter writer,
+            in JavaScriptBinaryVoid arguments)
+            => writer.BeginArray(0);
+
+        public static bool DecodeResult(
+            JavaScriptBinaryValue value,
+            IJavaScriptInvoker invoker)
+            => value.Kind == JavaScriptBinaryValueKind.Boolean
+               && value.GetBoolean();
+    }
+
+    private readonly struct EditorCodec
+        : IJavaScriptBinaryCodec<
+            JavaScriptBinaryVoid,
+            JavaScriptObjectReference>
+    {
+        public static uint EncodeArguments(
+            ref JavaScriptBinaryWriter writer,
+            in JavaScriptBinaryVoid arguments)
+            => writer.BeginArray(0);
+
+        public static JavaScriptObjectReference DecodeResult(
+            JavaScriptBinaryValue value,
+            IJavaScriptInvoker invoker)
+            => value.GetHandle();
+    }
+
+    private readonly struct FileNameCodec
+        : IJavaScriptBinaryCodec<FileNameArguments, JavaScriptBinaryVoid>
+    {
+        public static uint EncodeArguments(
+            ref JavaScriptBinaryWriter writer,
+            in FileNameArguments arguments)
+        {
+            var root = writer.BeginArray(1);
+            writer.SetArrayItem(root, 0, writer.WriteString(arguments.Value));
+            return root;
+        }
+
+        public static JavaScriptBinaryVoid DecodeResult(
+            JavaScriptBinaryValue value,
+            IJavaScriptInvoker invoker)
+            => new();
+    }
 }

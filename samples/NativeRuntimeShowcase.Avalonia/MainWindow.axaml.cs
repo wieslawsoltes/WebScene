@@ -117,9 +117,17 @@ public sealed partial class MainWindow : Window
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Avalonia", "monaco"));
             var session = new ShowcaseEditorSession(
-                EditorHost.EvaluateJsonAsync);
-            await session.InitializeAsync();
-            _editorSession = session;
+                EditorHost.CreateJavaScriptInvoker());
+            try
+            {
+                await session.InitializeAsync();
+                _editorSession = session;
+            }
+            catch
+            {
+                await session.DisposeAsync();
+                throw;
+            }
         }
         finally
         {

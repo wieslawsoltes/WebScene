@@ -89,7 +89,7 @@ bool ensure_runtime(const char* path)
         dlclose(module);
         return false;
     }
-    if (loaded.get_abi_version() != 2) {
+    if (loaded.get_abi_version() != 3) {
         last_error = "The selected WebScene library does not implement ABI version 2.";
         dlclose(module);
         return false;

@@ -64,26 +64,24 @@ internal static class NativeInteropRaceProbe
                     "The native interop race fixture could not be installed.");
             }
 
-            var invoker = new NativeJavaScriptInvoker(
-                static (_, _, _) => Task.FromResult("null"));
             for (var batch = 0; batch < batches; batch++)
             {
                 var transport = new NativeJavaScriptBinaryTransport(engine);
+                var invoker = new NativeJavaScriptInvoker(transport);
                 var pending = new Task<double>[width];
                 for (var index = 0; index < pending.Length; index++)
                 {
-                    pending[index] = transport.InvokeAsync<
+                    pending[index] = invoker.InvokeBinaryAsync<
                             JavaScriptBinaryVoid,
                             double,
                             DelayedCodec>(
-                            invoker,
                             s_delayedCallSite,
                             default,
                             new JavaScriptBinaryVoid())
                         .AsTask();
                 }
 
-                transport.Dispose();
+                invoker.Dispose();
                 foreach (var task in pending)
                 {
                     try

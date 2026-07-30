@@ -169,6 +169,8 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
 & cmake --build $buildDir --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the native WebScene engine." }
+& ctest --test-dir $buildDir -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
 $nativePath = Join-Path $buildDir "Release/webscene_native_engine.dll"
 if (-not (Test-Path $nativePath)) { throw "Native engine build did not produce '$nativePath'." }
@@ -222,6 +224,19 @@ $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_n
     --native-cache-directory (Join-Path $buildDir "code-cache") `
     --output (Join-Path $buildDir "wpt-results")
 if ($LASTEXITCODE -ne 0) { throw "Native package relocation smoke failed." }
+
+$previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
+$env:WEBSCENE_NATIVE_ENGINE_PATH = $packageNativePath
+try {
+    & dotnet run `
+        --project (Join-Path $repoRoot "benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj") `
+        -c Release -- `
+        probe native-interop-race --batches 100 --width 32
+    if ($LASTEXITCODE -ne 0) { throw "Native interop cancellation race probe failed." }
+}
+finally {
+    $env:WEBSCENE_NATIVE_ENGINE_PATH = $previousNativeEnginePath
+}
 
 $consumerSmokeRoot = Join-Path $repoRoot "artifacts/native-engine-consumer-smoke"
 New-Item -ItemType Directory -Force -Path $consumerSmokeRoot | Out-Null

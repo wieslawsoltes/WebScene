@@ -8,7 +8,7 @@ Applications reference this package directly. The implementation currently retai
 the established `JavaScript.Avalonia` CLR namespace, but there is no separate
 `JavaScript.Avalonia` package or assembly.
 
-The package also owns the ABI 2 native presentation host under
+The package also owns the ABI 3 native presentation host under
 `WebScene.Backends.Avalonia.Native`:
 
 - `NativeWebSceneRuntime` validates and prewarms the native runtime.

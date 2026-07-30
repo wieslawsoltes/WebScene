@@ -39,7 +39,6 @@ public class GeneratedRealtimeChartInteropBenchmarks
         };
         """;
 
-    private readonly List<EngineState> _json = [];
     private readonly List<EngineState> _binary = [];
     private RealtimeChartBar _bar = null!;
 
@@ -68,12 +67,10 @@ public class GeneratedRealtimeChartInteropBenchmarks
         };
         for (var index = 0; index < EngineCount; index++)
         {
-            _json.Add(await CreateEngineAsync(binary: false));
-            _binary.Add(await CreateEngineAsync(binary: true));
+            _binary.Add(await CreateEngineAsync());
         }
         for (var iteration = 0; iteration < 64; iteration++)
         {
-            await JsonRealtimeUpdate();
             await BinaryRealtimeUpdate();
         }
     }
@@ -81,30 +78,16 @@ public class GeneratedRealtimeChartInteropBenchmarks
     [GlobalCleanup]
     public async Task Cleanup()
     {
-        foreach (var state in _json.Concat(_binary))
+        foreach (var state in _binary)
         {
             await state.Host.DisposeAsync();
-            state.Transport?.Dispose();
+            state.Transport.Dispose();
             NativeWebSceneApi.EngineDestroy(state.Engine);
-            state.EvaluateGate.Dispose();
-            state.Lifetime.Dispose();
         }
-        _json.Clear();
         _binary.Clear();
     }
 
     [Benchmark(Baseline = true)]
-    public async ValueTask JsonRealtimeUpdate()
-    {
-        for (var index = 0; index < _json.Count; index++)
-        {
-            await _json[index].Host.OnRealtimeUpdateAsync(
-                "subscriber-0",
-                _bar);
-        }
-    }
-
-    [Benchmark]
     public async ValueTask BinaryRealtimeUpdate()
     {
         for (var index = 0; index < _binary.Count; index++)
@@ -143,7 +126,7 @@ public class GeneratedRealtimeChartInteropBenchmarks
         return result;
     }
 
-    private static async Task<EngineState> CreateEngineAsync(bool binary)
+    private static async Task<EngineState> CreateEngineAsync()
     {
         var engine = NativeWebSceneApi.EngineCreate(
             simulatedChartCommandCount: 0,
@@ -165,69 +148,28 @@ public class GeneratedRealtimeChartInteropBenchmarks
                 "The native chart benchmark host could not be installed.");
         }
 
-        NativeJavaScriptBinaryTransport? transport = binary
-            ? new NativeJavaScriptBinaryTransport(engine)
-            : null;
-        var evaluateGate = new SemaphoreSlim(1, 1);
-        var lifetime = new CancellationTokenSource();
-        var invoker = new NativeJavaScriptInvoker(
-            async (source, documentName, cancellationToken) =>
-            {
-                await evaluateGate.WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                try
-                {
-                    using var linked =
-                        CancellationTokenSource.CreateLinkedTokenSource(
-                            cancellationToken,
-                            lifetime.Token);
-                    return await Task.Run(() =>
-                    {
-                        linked.Token.ThrowIfCancellationRequested();
-                        if (!NativeWebSceneApi.TryEvaluateJson(
-                                engine,
-                                source,
-                                documentName,
-                                out var json))
-                        {
-                            throw new InvalidOperationException(
-                                "Native JSON evaluation failed.");
-                        }
-                        return json;
-                    }, linked.Token).ConfigureAwait(false);
-                }
-                finally
-                {
-                    evaluateGate.Release();
-                }
-            },
-            binaryTransport: transport);
+        var transport = new NativeJavaScriptBinaryTransport(engine);
+        var invoker = new NativeJavaScriptInvoker(transport);
         try
         {
             var host = await JavaScriptGlobals.GetRealtimeChartHostAsync(invoker);
             return new EngineState(
                 engine,
                 transport,
-                host,
-                evaluateGate,
-                lifetime);
+                host);
         }
         catch
         {
-            transport?.Dispose();
+            transport.Dispose();
             NativeWebSceneApi.EngineDestroy(engine);
-            evaluateGate.Dispose();
-            lifetime.Dispose();
             throw;
         }
     }
 
     private sealed record EngineState(
         IntPtr Engine,
-        NativeJavaScriptBinaryTransport? Transport,
-        RealtimeChartHost Host,
-        SemaphoreSlim EvaluateGate,
-        CancellationTokenSource Lifetime);
+        NativeJavaScriptBinaryTransport Transport,
+        RealtimeChartHost Host);
 
     private sealed class EmptyResourceLoader : IWebSceneResourceLoader
     {

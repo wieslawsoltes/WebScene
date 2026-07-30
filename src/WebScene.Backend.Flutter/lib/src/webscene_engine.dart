@@ -47,9 +47,9 @@ final class WebSceneEngine {
 
     final runtime = DynamicLibrary.open(runtimeFile.absolute.path);
     final native = WebSceneNativeApi(runtime);
-    if (native.getAbiVersion() != 2) {
+    if (native.getAbiVersion() != 3) {
       throw StateError(
-        'WebScene ABI ${native.getAbiVersion()} is incompatible; expected ABI 2.',
+        'WebScene ABI ${native.getAbiVersion()} is incompatible; expected ABI 3.',
       );
     }
     final bridge = WebSceneBridgeApi(

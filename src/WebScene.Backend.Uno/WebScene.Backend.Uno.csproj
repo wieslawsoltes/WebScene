@@ -18,6 +18,7 @@
     <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
     <ProjectReference Include="..\WebScene.Css\WebScene.Css.csproj" />
+    <ProjectReference Include="..\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,6 +33,7 @@
     <!-- The native scene reader and retained Skia renderer are shared with the
          reference backend; WEBSCENE_UNO removes only Avalonia's surface adapter. -->
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropResult.cs" Link="NativeInteropResult.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneRuntime.cs" Link="NativeWebSceneRuntime.cs" />
   </ItemGroup>
 </Project>

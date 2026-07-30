@@ -82,7 +82,7 @@ public sealed class GeneratedTradingViewBindingTests
         Assert.Equal("remove", invoker.LastMethod);
     }
 
-    private sealed class RecordingInvoker : IJavaScriptInvoker
+    private sealed class RecordingInvoker : IJavaScriptBinaryInvoker
     {
         private long _nextHandle;
 
@@ -92,6 +92,136 @@ public sealed class GeneratedTradingViewBindingTests
         public IReadOnlyList<JavaScriptArgument> LastArguments { get; private set; } = [];
         public object? NextValue { get; set; }
         public bool LastInvocationWasPromise { get; private set; }
+
+        public ValueTask<TResult> InvokeBinaryAsync<
+            TArguments,
+            TResult,
+            TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, TResult>
+        {
+            RecordBinary<TArguments, TCodec>(callSite, in arguments);
+            object? result = typeof(TResult) switch
+            {
+                var type when type == typeof(TradingViewChart) =>
+                    TradingViewChart.FromReference(
+                        this,
+                        new JavaScriptObjectReference(++_nextHandle)),
+                var type when type == typeof(TradingViewOrderLine) =>
+                    TradingViewOrderLine.FromReference(
+                        this,
+                        new JavaScriptObjectReference(++_nextHandle)),
+                var type when type == typeof(TradingViewWatchedValue<double>) =>
+                    TradingViewWatchedValue<double>.FromReference(
+                        this,
+                        new JavaScriptObjectReference(++_nextHandle)),
+                _ => NextValue
+            };
+            return ValueTask.FromResult((TResult)result!);
+        }
+
+        public ValueTask InvokeBinaryVoidAsync<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
+        {
+            RecordBinary<TArguments, TCodec>(callSite, in arguments);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<JavaScriptBinaryResultLease>
+            InvokeBinaryBorrowedAsync<TArguments, TCodec>(
+                JavaScriptBinaryCallSite callSite,
+                JavaScriptObjectReference target,
+                TArguments arguments,
+                CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryArgumentsCodec<TArguments>
+            => throw new NotSupportedException();
+
+        private unsafe void RecordBinary<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            in TArguments arguments)
+            where TCodec : struct,
+            IJavaScriptBinaryArgumentsCodec<TArguments>
+        {
+            LastMethod = null;
+            LastProperty = null;
+            LastInvocationWasPromise =
+                (callSite.Flags & JavaScriptBinaryCallFlags.AwaitPromise) != 0;
+            var name = callSite.MemberNameUtf8 is null
+                ? null
+                : System.Text.Encoding.UTF8.GetString(
+                    callSite.MemberNameUtf8);
+            if (callSite.Operation
+                is JavaScriptBinaryOperation.GetProperty
+                    or JavaScriptBinaryOperation.SetProperty)
+            {
+                LastProperty = name;
+            }
+            else
+            {
+                LastMethod = name;
+            }
+
+            var writer = new JavaScriptBinaryWriter();
+            try
+            {
+                var root = TCodec.EncodeArguments(ref writer, in arguments);
+                fixed (JavaScriptBinaryValueData* values = writer.Values)
+                fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+                fixed (byte* utf8 = writer.Utf8)
+                {
+                    var rootValue = new JavaScriptBinaryValue(
+                        values,
+                        checked((uint)writer.Values.Length),
+                        edges,
+                        checked((uint)writer.Edges.Length),
+                        utf8,
+                        checked((uint)writer.Utf8.Length),
+                        root);
+                    var converted =
+                        new JavaScriptArgument[rootValue.Count];
+                    for (var index = 0; index < rootValue.Count; index++)
+                    {
+                        converted[index] = ToArgument(
+                            rootValue.GetArrayItem(index));
+                    }
+                    LastArguments = converted;
+                }
+            }
+            finally
+            {
+                writer.Dispose();
+            }
+        }
+
+        private static JavaScriptArgument ToArgument(
+            JavaScriptBinaryValue value)
+            => value.Kind switch
+            {
+                JavaScriptBinaryValueKind.Undefined =>
+                    JavaScriptArgument.Undefined,
+                JavaScriptBinaryValueKind.Null =>
+                    JavaScriptArgument.From<object?>(null),
+                JavaScriptBinaryValueKind.Boolean =>
+                    JavaScriptArgument.From(value.GetBoolean()),
+                JavaScriptBinaryValueKind.Number =>
+                    JavaScriptArgument.From(value.GetNumber()),
+                JavaScriptBinaryValueKind.String =>
+                    JavaScriptArgument.From(value.GetString()),
+                JavaScriptBinaryValueKind.Handle =>
+                    JavaScriptArgument.From(value.GetHandle()),
+                _ => throw new NotSupportedException(
+                    $"The test does not materialize {value.Kind} arguments.")
+            };
 
         public ValueTask<JavaScriptObjectReference> ConstructAsync(
             string globalName,

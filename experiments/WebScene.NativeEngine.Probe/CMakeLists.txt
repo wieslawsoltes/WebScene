@@ -205,7 +205,8 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             ixwebsocket)
         add_test(NAME webscene_native_engine_tests COMMAND webscene_native_engine_tests)
         set_tests_properties(webscene_native_engine_tests PROPERTIES
-            ENVIRONMENT "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1")
+            ENVIRONMENT
+                "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1;WEBSCENE_INTEROP_STRESS=1")
     endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")

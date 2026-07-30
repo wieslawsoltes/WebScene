@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
 using GeneratorCapabilities.Generated;
 using WebScene.JavaScript.Interop;
@@ -212,85 +214,6 @@ public sealed class GeneratedHandleReturnTests
     }
 
     [Fact]
-    public async Task GeneratedModelsMaterializeNestedRetainedValues()
-    {
-        var invoker = new NativeJavaScriptInvoker(
-            (source, document, _) => Task.FromResult(document switch
-            {
-                "webscene-native-dotnet-interop.js" => "true",
-                "webscene-interop-value.js" when source.Contains(
-                    "\"snapshot\"",
-                    StringComparison.Ordinal) =>
-                    """
-                    {
-                      "dispose":{"__webSceneHandle":601},
-                      "maybeWidget":{"__webSceneHandle":602},
-                      "title":"state",
-                      "tuple":["paired",{"__webSceneHandle":603}],
-                      "widget":{"__webSceneHandle":604},
-                      "widgets":[{"__webSceneHandle":605}]
-                    }
-                    """,
-                "webscene-interop-value.js" when source.Contains(
-                    "\"anonymousSnapshot\"",
-                    StringComparison.Ordinal) =>
-                    """
-                    {
-                      "title":"anonymous",
-                      "widget":{"__webSceneHandle":606}
-                    }
-                    """,
-                "webscene-interop-value.js" =>
-                    """
-                    {
-                      "value":{"__webSceneHandle":607},
-                      "values":[
-                        {"__webSceneHandle":608},
-                        {"__webSceneHandle":609}
-                      ]
-                    }
-                    """,
-                "webscene-interop-release.js" => "true",
-                _ => throw new InvalidOperationException(document)
-            }));
-        var widget = WidgetProxy.FromReference(
-            invoker,
-            new JavaScriptObjectReference(10));
-
-        var snapshot = await widget.SnapshotAsync();
-        var anonymous = await widget.AnonymousSnapshotAsync();
-        var envelope = await widget.WidgetEnvelopeAsync();
-
-        Assert.Equal("state", snapshot.Title);
-        Assert.Equal(601, snapshot.Dispose.Reference.Id);
-        Assert.True(snapshot.MaybeWidget.HasValue);
-        Assert.Equal(
-            602,
-            snapshot.MaybeWidget.Value?.JavaScriptReference.Id);
-        Assert.Equal(603, snapshot.Tuple.Item2.JavaScriptReference.Id);
-        Assert.Equal(604, snapshot.Widget.JavaScriptReference.Id);
-        Assert.Equal(605, Assert.Single(snapshot.Widgets).JavaScriptReference.Id);
-        Assert.Equal("anonymous", anonymous.Title);
-        Assert.Equal(606, anonymous.Widget.JavaScriptReference.Id);
-        Assert.Equal(607, envelope.Value.JavaScriptReference.Id);
-        Assert.Equal(
-            [608L, 609L],
-            envelope.Values.Select(value => value.JavaScriptReference.Id));
-
-        await snapshot.Dispose.DisposeAsync();
-        await snapshot.MaybeWidget.Value!.DisposeAsync();
-        await snapshot.Tuple.Item2.DisposeAsync();
-        await snapshot.Widget.DisposeAsync();
-        await snapshot.Widgets[0].DisposeAsync();
-        await anonymous.Widget.DisposeAsync();
-        await envelope.Value.DisposeAsync();
-        foreach (var value in envelope.Values)
-        {
-            await value.DisposeAsync();
-        }
-    }
-
-    [Fact]
     public void GeneratedOptionalPropertiesPreserveAbsentAndExplicitNull()
     {
         var invoker = new RecordingInvoker();
@@ -424,7 +347,7 @@ public sealed class GeneratedHandleReturnTests
                 "promise-property-object:ready",
                 "promise-property-object:readyDisposer",
                 "object:aliasedWidget",
-                "value:maybeAliasedWidget",
+                "object:maybeAliasedWidget",
                 "global-object:GeneratorCapabilities.createDisposer",
                 "global-promise-object:GeneratorCapabilities.loadDisposer",
                 "global-value:GeneratorCapabilities.maybeDisposer"
@@ -432,9 +355,375 @@ public sealed class GeneratedHandleReturnTests
             invoker.Calls);
     }
 
-    private sealed class RecordingInvoker : IJavaScriptInvoker
+    private sealed class RecordingInvoker : IJavaScriptBinaryInvoker
     {
         public List<string> Calls { get; } = [];
+
+        public ValueTask<TResult> InvokeBinaryAsync<
+            TArguments,
+            TResult,
+            TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, TResult>
+        {
+            var argumentJson = RecordBinary<TArguments, TCodec>(
+                callSite,
+                in arguments);
+            var resultJson = BinaryResultJson(callSite, argumentJson);
+            return ValueTask.FromResult(
+                DecodeBinaryResult<TArguments, TResult, TCodec>(resultJson));
+        }
+
+        public ValueTask InvokeBinaryVoidAsync<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
+        {
+            _ = RecordBinary<TArguments, TCodec>(callSite, in arguments);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<JavaScriptBinaryResultLease>
+            InvokeBinaryBorrowedAsync<TArguments, TCodec>(
+                JavaScriptBinaryCallSite callSite,
+                JavaScriptObjectReference target,
+                TArguments arguments,
+                CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryArgumentsCodec<TArguments>
+            => throw new NotSupportedException();
+
+        private string RecordBinary<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            in TArguments arguments)
+            where TCodec : struct,
+            IJavaScriptBinaryArgumentsCodec<TArguments>
+        {
+            var writer = new JavaScriptBinaryWriter();
+            try
+            {
+                var root = TCodec.EncodeArguments(ref writer, in arguments);
+                var argumentJson = ReadArgumentJson(ref writer, root);
+                var globalName = DecodeName(callSite.GlobalNameUtf8);
+                var memberName = DecodeName(callSite.MemberNameUtf8);
+                var promise =
+                    (callSite.Flags & JavaScriptBinaryCallFlags.AwaitPromise) != 0;
+                var call = callSite.Operation switch
+                {
+                    JavaScriptBinaryOperation.Construct =>
+                        $"construct:{globalName}:{FirstArgument(argumentJson)}",
+                    JavaScriptBinaryOperation.GetGlobal =>
+                        $"global-property-{ResultKind(callSite, promise)}:{globalName}",
+                    JavaScriptBinaryOperation.InvokeGlobal =>
+                        $"global-{ResultKind(callSite, promise)}:{globalName}",
+                    JavaScriptBinaryOperation.GetProperty =>
+                        promise
+                            ? $"promise-property-{ResultKind(callSite, false)}:{memberName}"
+                            : $"property:{memberName}",
+                    JavaScriptBinaryOperation.InvokeMember
+                        when callSite.ResultMode == JavaScriptBinaryResultMode.Void =>
+                        $"void:{memberName}:{JoinArguments(argumentJson)}",
+                    JavaScriptBinaryOperation.InvokeMember =>
+                        $"{(promise ? "promise-" : string.Empty)}{ResultKind(callSite, false)}:{memberName}",
+                    _ => throw new NotSupportedException(
+                        $"Unexpected binary test operation {callSite.Operation}.")
+                };
+                Calls.Add(call);
+                return argumentJson;
+            }
+            finally
+            {
+                writer.Dispose();
+            }
+        }
+
+        private static string ResultKind(
+            JavaScriptBinaryCallSite callSite,
+            bool promise)
+        {
+            var kind = callSite.ResultMode
+                == JavaScriptBinaryResultMode.RetainedHandle
+                ? "object"
+                : "value";
+            return promise ? "promise-" + kind : kind;
+        }
+
+        private static string DecodeName(byte[]? value)
+            => value is null ? string.Empty : Encoding.UTF8.GetString(value);
+
+        private static string FirstArgument(string arguments)
+        {
+            using var document = JsonDocument.Parse(arguments);
+            return document.RootElement.GetArrayLength() == 0
+                ? string.Empty
+                : document.RootElement[0].GetRawText();
+        }
+
+        private static string JoinArguments(string arguments)
+        {
+            using var document = JsonDocument.Parse(arguments);
+            return string.Join(
+                ",",
+                document.RootElement.EnumerateArray()
+                    .Select(static item => item.GetRawText()));
+        }
+
+        private static string BinaryResultJson(
+            JavaScriptBinaryCallSite callSite,
+            string arguments)
+        {
+            var name = DecodeName(
+                callSite.MemberNameUtf8 ?? callSite.GlobalNameUtf8);
+            return name switch
+            {
+                "GeneratorCapabilities.Controller" =>
+                    Handle(FirstArgument(arguments).StartsWith(
+                        "\"",
+                        StringComparison.Ordinal) ? 111 : 112),
+                "GeneratorCapabilities.Controller.fromId" => Handle(113),
+                "GeneratorCapabilities.Controller.current" => Handle(114),
+                "GeneratorCapabilities.currentController" => Handle(115),
+                "GeneratorCapabilities.Controller.ready" => Handle(116),
+                "GeneratorCapabilities.readyController" => Handle(117),
+                "GeneratorCapabilities.Controller.version" => "\"controller-1.0\"",
+                "GeneratorCapabilities.libraryVersion" => "\"library-2.0\"",
+                "GeneratorCapabilities.createDisposer" => Handle(108),
+                "GeneratorCapabilities.loadDisposer" => Handle(109),
+                "GeneratorCapabilities.maybeDisposer" => Handle(110),
+                "GeneratorCapabilities.widgetOrLabel" => Handle(305),
+                "GeneratorCapabilities.listWidgets" => Handles(209),
+                "GeneratorCapabilities.loadWidgets" => Handles(210),
+                "GeneratorCapabilities.widgets" => Handles(211),
+                "createDisposer" => Handle(101),
+                "createDisposerAsync" => Handle(102),
+                "maybeDisposer" => Handle(103),
+                "maybeDisposerAsync" => Handle(104),
+                "disposer" => Handle(105),
+                "aliasedWidget" => Handle(106),
+                "maybeAliasedWidget" => Handle(107),
+                "ready" => Handle(118),
+                "readyDisposer" => Handle(119),
+                "widgetOrLabel" => Handle(301),
+                "widgetsOrLabel" => Handles(302, 303),
+                "disposerOrLabel" => Handle(304),
+                "widgets" => Handles(201, 202),
+                "aliasedWidgets" => Handles(212),
+                "widgetsAsync" => Handles(203),
+                "maybeWidgets" => Handles(204),
+                "disposers" => Handles(205, 206),
+                "widgetRecord" => $$"""{"primary":{{Handle(216)}}}""",
+                "children" => Handles(207),
+                "readyChildren" => Handles(208),
+                "widgetDictionary" => $$"""{"primary":{{Handle(217)}}}""",
+                "genericWidgetDictionary" =>
+                    $$"""{"generic":{{Handle(221)}}}""",
+                "numericWidgetDictionary" => $$"""{"7":{{Handle(218)}}}""",
+                "mixedWidgetDictionary" =>
+                    $$"""{"primary":{{Handle(219)}},"secondary":{{Handle(220)}}}""",
+                "tuple" => """["plain",12.5]""",
+                "widgetTuple" => $$"""["retained",{{Handle(213)}}]""",
+                "singleWidgetTuple" => $$"""[{{Handle(214)}}]""",
+                "longTuple" =>
+                    $$"""["a",1,true,"b",2,false,"c",{{Handle(215)}}]""",
+                _ => throw new NotSupportedException(
+                    $"No binary test result is registered for '{name}'.")
+            };
+        }
+
+        private static string Handle(long value)
+            => $$"""{"__webSceneHandle":{{value}}}""";
+
+        private static string Handles(params long[] values)
+            => "[" + string.Join(",", values.Select(Handle)) + "]";
+
+        private unsafe TResult DecodeBinaryResult<
+            TArguments,
+            TResult,
+            TCodec>(string json)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, TResult>
+        {
+            using var document = JsonDocument.Parse(json);
+            var writer = new JavaScriptBinaryWriter();
+            try
+            {
+                var root = WriteJson(ref writer, document.RootElement);
+                fixed (JavaScriptBinaryValueData* values = writer.Values)
+                fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+                fixed (byte* utf8 = writer.Utf8)
+                {
+                    var value = new JavaScriptBinaryValue(
+                        values,
+                        checked((uint)writer.Values.Length),
+                        edges,
+                        checked((uint)writer.Edges.Length),
+                        utf8,
+                        checked((uint)writer.Utf8.Length),
+                        root);
+                    return TCodec.DecodeResult(value, this);
+                }
+            }
+            finally
+            {
+                writer.Dispose();
+            }
+        }
+
+        private static uint WriteJson(
+            ref JavaScriptBinaryWriter writer,
+            JsonElement value)
+        {
+            if (value.ValueKind == JsonValueKind.Object
+                && value.TryGetProperty("__webSceneHandle", out var handle)
+                && handle.TryGetInt64(out var handleId))
+            {
+                return writer.WriteHandle(new JavaScriptObjectReference(handleId));
+            }
+            return value.ValueKind switch
+            {
+                JsonValueKind.Null => writer.WriteNull(),
+                JsonValueKind.False => writer.WriteBoolean(false),
+                JsonValueKind.True => writer.WriteBoolean(true),
+                JsonValueKind.Number => writer.WriteNumber(value.GetDouble()),
+                JsonValueKind.String => writer.WriteString(value.GetString()!),
+                JsonValueKind.Array => WriteArray(ref writer, value),
+                JsonValueKind.Object => WriteObject(ref writer, value),
+                _ => writer.WriteUndefined()
+            };
+        }
+
+        private static uint WriteArray(
+            ref JavaScriptBinaryWriter writer,
+            JsonElement value)
+        {
+            var result = writer.BeginArray(value.GetArrayLength());
+            var index = 0;
+            foreach (var item in value.EnumerateArray())
+            {
+                writer.SetArrayItem(
+                    result,
+                    index++,
+                    WriteJson(ref writer, item));
+            }
+            return result;
+        }
+
+        private static uint WriteObject(
+            ref JavaScriptBinaryWriter writer,
+            JsonElement value)
+        {
+            var properties = value.EnumerateObject().ToArray();
+            var result = writer.BeginObject(properties.Length);
+            for (var index = 0; index < properties.Length; index++)
+            {
+                var property = properties[index];
+                writer.SetObjectProperty(
+                    result,
+                    index,
+                    Encoding.UTF8.GetBytes(property.Name),
+                    WriteJson(ref writer, property.Value));
+            }
+            return result;
+        }
+
+        private static string ReadArgumentJson(
+            ref JavaScriptBinaryWriter writer,
+            uint root)
+        {
+            var buffer = new ArrayBufferWriter<byte>();
+            using var json = new Utf8JsonWriter(buffer);
+            WriteBinaryJson(
+                json,
+                writer.Values,
+                writer.Edges,
+                writer.Utf8,
+                root);
+            json.Flush();
+            return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        }
+
+        private static void WriteBinaryJson(
+            Utf8JsonWriter writer,
+            ReadOnlySpan<JavaScriptBinaryValueData> values,
+            ReadOnlySpan<JavaScriptBinaryEdgeData> edges,
+            ReadOnlySpan<byte> utf8,
+            uint valueIndex)
+        {
+            var value = values[checked((int)valueIndex)];
+            switch (value.Kind)
+            {
+                case JavaScriptBinaryValueKind.Undefined:
+                    writer.WriteStartObject();
+                    writer.WriteBoolean("__webSceneUndefined", true);
+                    writer.WriteEndObject();
+                    break;
+                case JavaScriptBinaryValueKind.Null:
+                    writer.WriteNullValue();
+                    break;
+                case JavaScriptBinaryValueKind.Boolean:
+                    writer.WriteBooleanValue(value.Payload != 0);
+                    break;
+                case JavaScriptBinaryValueKind.Number:
+                    writer.WriteNumberValue(BitConverter.Int64BitsToDouble(
+                        unchecked((long)value.Payload)));
+                    break;
+                case JavaScriptBinaryValueKind.String:
+                    writer.WriteStringValue(utf8.Slice(
+                        checked((int)value.Offset),
+                        checked((int)value.Length)));
+                    break;
+                case JavaScriptBinaryValueKind.Handle:
+                    writer.WriteStartObject();
+                    writer.WriteNumber(
+                        "__webSceneHandle",
+                        unchecked((long)value.Payload));
+                    writer.WriteEndObject();
+                    break;
+                case JavaScriptBinaryValueKind.Array:
+                    writer.WriteStartArray();
+                    for (var index = 0U; index < value.Length; index++)
+                    {
+                        var edge = edges[
+                            checked((int)(value.Offset + index))];
+                        WriteBinaryJson(
+                            writer,
+                            values,
+                            edges,
+                            utf8,
+                            edge.ValueIndex);
+                    }
+                    writer.WriteEndArray();
+                    break;
+                case JavaScriptBinaryValueKind.Object:
+                    writer.WriteStartObject();
+                    for (var index = 0U; index < value.Length; index++)
+                    {
+                        var edge = edges[
+                            checked((int)(value.Offset + index))];
+                        writer.WritePropertyName(utf8.Slice(
+                            checked((int)edge.NameOffset),
+                            checked((int)edge.NameLength)));
+                        WriteBinaryJson(
+                            writer,
+                            values,
+                            edges,
+                            utf8,
+                            edge.ValueIndex);
+                    }
+                    writer.WriteEndObject();
+                    break;
+                default:
+                    throw new InvalidDataException(
+                        $"Unexpected binary value kind {value.Kind}.");
+            }
+        }
 
         public ValueTask<JavaScriptObjectReference> GetGlobalObjectAsync(
             string globalName,

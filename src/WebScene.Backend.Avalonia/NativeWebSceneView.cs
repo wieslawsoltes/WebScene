@@ -2,11 +2,12 @@ using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using JavaScript.Avalonia;
+using WebScene.JavaScript.Interop;
 
 namespace WebScene.Backends.Avalonia.Native;
 
 /// <summary>
-/// Hosts an arbitrary HTML document in WebScene's ABI 2 native DOM/runtime.
+/// Hosts an arbitrary HTML document in WebScene's ABI 3 native DOM/runtime.
 /// The native engine owns navigation, DOM, JavaScript, CSS, layout, and scene
 /// production; the attached Avalonia surface projects those scenes with Skia.
 /// </summary>
@@ -72,6 +73,22 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         return messages.ToArray();
     }
 
+    /// <summary>
+    /// Creates a generated-binding invoker backed only by the ABI 3 tagged
+    /// transport. Dispose the returned invoker before unloading this view.
+    /// </summary>
+    public NativeJavaScriptInvoker CreateJavaScriptInvoker()
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return new NativeJavaScriptInvoker(
+            new NativeJavaScriptBinaryTransport(engine));
+    }
+
     internal static NativePreferredColorScheme ResolvePreferredColorScheme(
         ThemeVariant themeVariant)
         => themeVariant == ThemeVariant.Dark
@@ -89,46 +106,38 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
-    public Task<string> EvaluateJsonAsync(
+    /// <summary>
+    /// Evaluates diagnostic JavaScript through the leased ABI 3 arena and
+    /// materializes JSON-compatible text on the managed side. Generated APIs
+    /// do not use this allocation-oriented diagnostic helper.
+    /// </summary>
+    public async Task<string> EvaluateTextAsync(
         string source,
         string documentName = "native-host-evaluation.js",
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
-        var engine = Volatile.Read(ref _engine);
-        if (engine == IntPtr.Zero)
-        {
-            throw new InvalidOperationException(
-                "The native WebScene document is not loaded.");
-        }
 
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!NativeWebSceneApi.TryEvaluateJson(
-                    engine,
-                    source,
-                    documentName,
-                    out var json))
-            {
-                throw new InvalidOperationException(
-                    $"Native WebScene evaluation failed: "
-                    + NativeWebSceneApi.GetLastError(engine));
-            }
-            return json;
-        }, cancellationToken);
+        using var lease = await EvaluateAsync(
+            source,
+            documentName,
+            cancellationToken).ConfigureAwait(false);
+        using var borrowed = lease.Borrow();
+        return NativeInteropJsonText.Serialize(borrowed.Root);
     }
 
     /// <summary>
-    /// Evaluates JavaScript through the experimental immutable-result ABI.
+    /// Evaluates JavaScript through the immutable ABI 3 result arena.
     /// Dispose the returned lease after materializing or borrowing its root.
     /// </summary>
-    public ValueTask<NativeInteropResultLease> EvaluateBinaryAsync(
+    public ValueTask<NativeInteropResultLease> EvaluateAsync(
         string source,
         string documentName = "native-host-binary-evaluation.js",
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
         var interop = Volatile.Read(ref _interop);
         if (interop is null)
         {
@@ -142,14 +151,14 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     /// Evaluates JavaScript and lets a generated struct codec materialize the
     /// final managed result directly from the immutable native arena.
     /// </summary>
-    public async ValueTask<T> EvaluateBinaryAsync<T, TDecoder>(
+    public async ValueTask<T> EvaluateAsync<T, TDecoder>(
         string source,
         TDecoder decoder,
         string documentName = "native-host-binary-evaluation.js",
         CancellationToken cancellationToken = default)
         where TDecoder : struct, INativeInteropValueDecoder<T>
     {
-        using var lease = await EvaluateBinaryAsync(
+        using var lease = await EvaluateAsync(
             source,
             documentName,
             cancellationToken).ConfigureAwait(false);

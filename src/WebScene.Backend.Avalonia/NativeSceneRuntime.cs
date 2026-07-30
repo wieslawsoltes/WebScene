@@ -4416,7 +4416,7 @@ internal struct NativeInteropEdgeData
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NativeInteropRequest
+internal unsafe struct NativeInteropEvaluateRequest
 {
     public uint StructSize;
     public uint Version;
@@ -4429,7 +4429,7 @@ internal unsafe struct NativeInteropRequest
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal unsafe struct NativeGeneratedInteropRequest
+internal unsafe struct NativeInteropInvokeRequest
 {
     public uint StructSize;
     public uint Version;
@@ -4462,7 +4462,7 @@ internal unsafe struct NativeInteropResultView
     public NativeInteropEdgeData* Edges;
     public byte* Utf8Bytes;
     public byte* ErrorBytes;
-    public void* LeaseToken;
+    public ulong LeaseId;
     public uint ValueCount;
     public uint EdgeCount;
     public uint Utf8ByteCount;
@@ -5070,9 +5070,6 @@ public static class NativeTextShaping
 
 public static unsafe class NativeWebSceneApi
 {
-    private const int EvaluationBufferSize = 1024 * 1024;
-    private static readonly ArrayPool<byte> EvaluationBufferPool =
-        ArrayPool<byte>.Create(EvaluationBufferSize, 8);
 
     private const string LibraryName = "webscene_native_engine";
     private static readonly object LibraryPathGate = new();
@@ -5584,50 +5581,41 @@ public static unsafe class NativeWebSceneApi
         byte[] documentName,
         nuint documentNameLength);
 
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_evaluate_json")]
-    private static extern nuint EngineEvaluateJson(
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_begin_evaluate_v3")]
+    internal static extern ulong EngineBeginEvaluateV3(
         IntPtr engine,
-        byte[] source,
-        nuint sourceLength,
-        byte[] documentName,
-        nuint documentNameLength,
-        byte[] destination,
-        nuint destinationCapacity,
-        uint timeoutMilliseconds);
-
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_begin_invoke_v1")]
-    internal static extern ulong EngineBeginInvokeV1(
-        IntPtr engine,
-        in NativeInteropRequest request,
+        in NativeInteropEvaluateRequest request,
         IntPtr completed,
         IntPtr userData);
 
     [DllImport(
         LibraryName,
-        EntryPoint = "webscene_engine_begin_generated_invoke_v2")]
-    internal static extern ulong EngineBeginGeneratedInvokeV2(
+        EntryPoint = "webscene_engine_begin_invoke_v3")]
+    internal static extern ulong EngineBeginInvokeV3(
         IntPtr engine,
-        in NativeGeneratedInteropRequest request,
+        in NativeInteropInvokeRequest request,
         IntPtr completed,
         IntPtr userData);
 
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_take_invoke_result_v1")]
-    internal static extern IntPtr EngineTakeInvokeResultV1(
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_take_invoke_result_v3")]
+    internal static extern IntPtr EngineTakeInvokeResultV3(
         IntPtr engine,
         ulong operationId);
 
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_cancel_invoke_v1")]
-    internal static extern byte EngineCancelInvokeV1(
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_cancel_invoke_v3")]
+    internal static extern byte EngineCancelInvokeV3(
         IntPtr engine,
         ulong operationId);
 
-    [DllImport(LibraryName, EntryPoint = "webscene_interop_result_release_v1")]
-    internal static extern void InteropResultReleaseV1(IntPtr result);
+    [DllImport(LibraryName, EntryPoint = "webscene_interop_result_release_v3")]
+    internal static extern void InteropResultReleaseV3(
+        IntPtr result,
+        ulong leaseId);
 
     [DllImport(
         LibraryName,
-        EntryPoint = "webscene_engine_get_interop_pool_metrics_v1")]
-    private static extern byte EngineGetInteropPoolMetricsV1(
+        EntryPoint = "webscene_engine_get_interop_pool_metrics_v3")]
+    private static extern byte EngineGetInteropPoolMetricsV3(
         IntPtr engine,
         ref NativeInteropPoolMetrics metrics);
 
@@ -5697,49 +5685,14 @@ public static unsafe class NativeWebSceneApi
             (nuint)nameBytes.Length) != 0;
     }
 
-    public static bool TryEvaluateJson(
-        IntPtr engine,
-        string source,
-        string documentName,
-        out string json,
-        uint timeoutMilliseconds = 5_000)
-    {
-        var sourceBytes = Encoding.UTF8.GetBytes(source);
-        var nameBytes = Encoding.UTF8.GetBytes(documentName);
-        var destination = EvaluationBufferPool.Rent(EvaluationBufferSize);
-        try
-        {
-            var required = EngineEvaluateJson(
-                engine,
-                sourceBytes,
-                (nuint)sourceBytes.Length,
-                nameBytes,
-                (nuint)nameBytes.Length,
-                destination,
-                (nuint)destination.Length,
-                timeoutMilliseconds);
-            if (required == 0 || required > (nuint)destination.Length)
-            {
-                json = string.Empty;
-                return false;
-            }
-            json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
-            return true;
-        }
-        finally
-        {
-            EvaluationBufferPool.Return(destination);
-        }
-    }
-
     public static NativeInteropPoolMetrics GetInteropPoolMetrics(IntPtr engine)
     {
         var metrics = new NativeInteropPoolMetrics
         {
             StructSize = (uint)Marshal.SizeOf<NativeInteropPoolMetrics>(),
-            Version = 1
+            Version = 3
         };
-        if (EngineGetInteropPoolMetricsV1(engine, ref metrics) == 0)
+        if (EngineGetInteropPoolMetricsV3(engine, ref metrics) == 0)
         {
             throw new InvalidOperationException(
                 "The experimental native interop metrics ABI is unavailable.");

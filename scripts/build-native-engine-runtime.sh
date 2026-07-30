@@ -345,6 +345,12 @@ dotnet run \
   --native-cache-directory "$build_dir/code-cache" \
   --output "$build_dir/wpt-results"
 
+WEBSCENE_NATIVE_ENGINE_PATH="$package_native_path" \
+  dotnet run \
+    --project "$repo_root/benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj" \
+    -c Release -- \
+    probe native-interop-race --batches 100 --width 32
+
 consumer_smoke_root="$repo_root/artifacts/native-engine-consumer-smoke"
 mkdir -p "$consumer_smoke_root"
 consumer_root="$(mktemp -d "$consumer_smoke_root/consumer.XXXXXX")"

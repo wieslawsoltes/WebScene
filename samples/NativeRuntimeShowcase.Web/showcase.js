@@ -7,14 +7,13 @@ document.addEventListener("DOMContentLoaded", () => {
     "using WebScene.JavaScript.Interop;",
     "using NativeRuntimeShowcase.Interop;",
     "",
-    "var invoker = new NativeJavaScriptInvoker(view.EvaluateJsonAsync);",
-    "var reference = await invoker.GetGlobalObjectAsync(",
-    "    \"__webSceneMonacoEditor\");",
-    "await using var editor = MonacoEditor.FromReference(invoker, reference);",
+    "await using var session = new ShowcaseEditorSession(",
+    "    view.CreateJavaScriptInvoker());",
+    "await session.InitializeAsync();",
     "",
     "// MonacoEditor is generated from MonacoApi.d.ts at build time.",
-    "await editor.SetValueAsync(await File.ReadAllTextAsync(path));",
-    "string editedText = await editor.GetValueAsync();"
+    "await session.OpenAsync(path, await File.ReadAllTextAsync(path));",
+    "string editedText = await session.ReadAsync();"
   ].join("\n");
 
   try {

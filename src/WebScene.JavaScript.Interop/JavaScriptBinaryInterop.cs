@@ -74,9 +74,8 @@ public sealed class JavaScriptBinaryCallSite
 }
 
 /// <summary>
-/// Optional fast path implemented by native invokers. Generated methods use
-/// this interface when present and retain their existing JSON implementation
-/// as a compatibility fallback.
+/// Direct tagged-value path implemented by native invokers. Generated methods
+/// use this interface when the selected runtime provides the ABI 3 transport.
 /// </summary>
 public interface IJavaScriptBinaryInvoker : IJavaScriptInvoker
 {
@@ -110,7 +109,8 @@ public interface IJavaScriptBinaryInvoker : IJavaScriptInvoker
 /// <summary>
 /// Engine-specific transport injected into <see cref="NativeJavaScriptInvoker"/>.
 /// It owns request copying, operation completion, native result decoding, and
-/// arena release while the invoker retains callback and compatibility logic.
+/// arena release while the invoker owns generated dispatch and transport
+/// lifetime.
 /// </summary>
 public interface IJavaScriptBinaryTransport : IDisposable
 {

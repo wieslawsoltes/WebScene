@@ -17,7 +17,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>webscene;web-components;dom;css;canvas;svg;v8;native;runtime;$(WebSceneNativeEngineRid)</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <WebSceneNativeEngineAbiVersion>2</WebSceneNativeEngineAbiVersion>
+    <WebSceneNativeEngineAbiVersion>3</WebSceneNativeEngineAbiVersion>
     <WebSceneNativeEngineV8Revision>14.7.173.23</WebSceneNativeEngineV8Revision>
     <WebSceneNativeEngineV8PointerCompression Condition="'$(WebSceneNativeEngineV8PointerCompression)' == ''">false</WebSceneNativeEngineV8PointerCompression>
     <WebSceneNativeEngineV8SharedCage Condition="'$(WebSceneNativeEngineV8SharedCage)' == ''">false</WebSceneNativeEngineV8SharedCage>

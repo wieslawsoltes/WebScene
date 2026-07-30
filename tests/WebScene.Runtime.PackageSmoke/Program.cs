@@ -41,15 +41,23 @@ try
     var export = NativeLibrary.GetExport(library, "webscene_engine_get_abi_version");
     var getAbiVersion = Marshal.GetDelegateForFunctionPointer<GetAbiVersion>(export);
     var abiVersion = getAbiVersion();
-    if (abiVersion != 2)
+    if (abiVersion != 3)
     {
-        return Fail($"The native runtime reported ABI {abiVersion}; expected 2.");
+        return Fail($"The native runtime reported ABI {abiVersion}; expected 3.");
     }
     if (manifestAbiVersion != abiVersion)
     {
         return Fail(
             $"The native runtime manifest declares ABI {manifestAbiVersion}, " +
             $"but the library exports ABI {abiVersion}.");
+    }
+    if (NativeLibrary.TryGetExport(
+            library,
+            "webscene_engine_evaluate_json",
+            out _))
+    {
+        return Fail(
+            "The removed synchronous JSON evaluation export is still present.");
     }
     var buildFeaturesExport = NativeLibrary.GetExport(
         library,

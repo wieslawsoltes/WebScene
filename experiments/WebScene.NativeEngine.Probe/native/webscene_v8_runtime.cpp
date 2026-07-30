@@ -1631,8 +1631,8 @@ struct v8_dom_runtime::implementation final {
     };
 
     struct pending_interop_promise final {
-        uint32_t result_mode{WEBSCENE_INTEROP_RESULT_VALUE_V2};
-        v8_dom_runtime::interop_completion_v2 completion;
+        uint32_t result_mode{WEBSCENE_INTEROP_RESULT_VALUE_V3};
+        v8_dom_runtime::interop_completion_v3 completion;
         v8::Global<v8::Promise> promise;
     };
 
@@ -5961,41 +5961,10 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
-    bool evaluate_json(
-        const std::string& source,
-        const std::string& document_name,
-        std::string& result)
-    {
-        auto isolate_locker = lock_shared_isolate();
-        v8::Isolate::Scope isolate_scope(isolate);
-        v8::HandleScope handle_scope(isolate);
-        auto local_context = context.Get(isolate);
-        v8::Context::Scope context_scope(local_context);
-        v8::TryCatch try_catch(isolate);
-        v8::Local<v8::Script> script;
-        v8::Local<v8::Value> value;
-        if (!compile_script(source, document_name, script)
-            || !script->Run(local_context).ToLocal(&value)) {
-            last_error = describe_exception(try_catch, local_context);
-            return false;
-        }
-        isolate->PerformMicrotaskCheckpoint();
-        if (!promote_pending_promise_error()) return false;
-        if (value->IsUndefined()) value = v8::Null(isolate);
-        v8::Local<v8::String> json;
-        if (!v8::JSON::Stringify(local_context, value).ToLocal(&json)) {
-            last_error = describe_exception(try_catch, local_context);
-            return false;
-        }
-        result = to_utf8(isolate, json);
-        last_error.clear();
-        return true;
-    }
-
     bool encode_interop_result_value(
         v8::Local<v8::Context> local_context,
         v8::Local<v8::Value> value,
-        interop_result_data_v1& result,
+        interop_result_data_v3& result,
         v8::TryCatch& try_catch)
     {
         constexpr uint32_t maximum_depth = 64U;
@@ -6034,15 +6003,15 @@ struct v8_dom_runtime::implementation final {
             result.values.push_back({});
             auto& node = result.values[index];
             if (current->IsUndefined()) {
-                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V3;
                 return true;
             }
             if (current->IsNull()) {
-                node.kind = WEBSCENE_INTEROP_VALUE_NULL_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_NULL_V3;
                 return true;
             }
             if (current->IsBoolean()) {
-                node.kind = WEBSCENE_INTEROP_VALUE_BOOLEAN_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_BOOLEAN_V3;
                 node.payload = current->BooleanValue(isolate) ? 1U : 0U;
                 return true;
             }
@@ -6050,10 +6019,10 @@ struct v8_dom_runtime::implementation final {
                 const auto number = current->NumberValue(local_context).FromMaybe(
                     std::numeric_limits<double>::quiet_NaN());
                 if (!std::isfinite(number)) {
-                    node.kind = WEBSCENE_INTEROP_VALUE_NULL_V1;
+                    node.kind = WEBSCENE_INTEROP_VALUE_NULL_V3;
                     return true;
                 }
-                node.kind = WEBSCENE_INTEROP_VALUE_NUMBER_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_NUMBER_V3;
                 node.payload = std::bit_cast<uint64_t>(number);
                 return true;
             }
@@ -6061,7 +6030,7 @@ struct v8_dom_runtime::implementation final {
                 const auto text = to_utf8(isolate, current.As<v8::String>());
                 uint32_t offset = 0;
                 if (!append_utf8(text, offset)) return false;
-                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V3;
                 node.offset = offset;
                 node.length = static_cast<uint32_t>(text.size());
                 return true;
@@ -6084,14 +6053,14 @@ struct v8_dom_runtime::implementation final {
                     local_context,
                     js_string(isolate, "__webSceneUndefined")).ToLocal(&marker)
                 && marker->IsTrue()) {
-                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V3;
                 return true;
             }
             if (object->Get(
                     local_context,
                     js_string(isolate, "__webSceneHandle")).ToLocal(&marker)
                 && marker->IsNumber()) {
-                node.kind = WEBSCENE_INTEROP_VALUE_HANDLE_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_HANDLE_V3;
                 node.payload = static_cast<uint64_t>(
                     marker->IntegerValue(local_context).FromMaybe(0));
                 return true;
@@ -6102,14 +6071,14 @@ struct v8_dom_runtime::implementation final {
                     current.As<v8::Date>()->ToISOString());
                 uint32_t offset = 0;
                 if (!append_utf8(text, offset)) return false;
-                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V1;
+                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V3;
                 node.offset = offset;
                 node.length = static_cast<uint32_t>(text.size());
                 return true;
             }
 
             ancestors.push_back(object);
-            std::vector<webscene_interop_edge_v1> children;
+            std::vector<webscene_interop_edge_v3> children;
             if (current->IsArray()) {
                 auto array = current.As<v8::Array>();
                 children.reserve(array->Length());
@@ -6128,7 +6097,7 @@ struct v8_dom_runtime::implementation final {
                     children.push_back({0U, 0U, child_index, 0U});
                 }
                 ancestors.pop_back();
-                result.values[index].kind = WEBSCENE_INTEROP_VALUE_ARRAY_V1;
+                result.values[index].kind = WEBSCENE_INTEROP_VALUE_ARRAY_V3;
             } else {
                 v8::Local<v8::Array> names;
                 if (!object->GetOwnPropertyNames(
@@ -6176,7 +6145,7 @@ struct v8_dom_runtime::implementation final {
                         0U});
                 }
                 ancestors.pop_back();
-                result.values[index].kind = WEBSCENE_INTEROP_VALUE_OBJECT_V1;
+                result.values[index].kind = WEBSCENE_INTEROP_VALUE_OBJECT_V3;
             }
 
             result.values[index].offset =
@@ -6194,7 +6163,7 @@ struct v8_dom_runtime::implementation final {
             last_error = encoding_error.empty()
                 ? describe_exception(try_catch, local_context)
                 : encoding_error;
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
@@ -6202,10 +6171,10 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
-    bool evaluate_interop_v1(
+    bool evaluate_interop_v3(
         const std::string& source,
         const std::string& document_name,
-        interop_result_data_v1& result)
+        interop_result_data_v3& result)
     {
         result.clear();
         auto isolate_locker = lock_shared_isolate();
@@ -6219,13 +6188,13 @@ struct v8_dom_runtime::implementation final {
         if (!compile_script(source, document_name, script)
             || !script->Run(local_context).ToLocal(&value)) {
             last_error = describe_exception(try_catch, local_context);
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
         isolate->PerformMicrotaskCheckpoint();
         if (!promote_pending_promise_error()) {
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
@@ -6240,16 +6209,16 @@ struct v8_dom_runtime::implementation final {
         uint32_t result_mode,
         v8::Local<v8::Context> local_context,
         v8::Local<v8::Value> value,
-        interop_result_data_v1& result)
+        interop_result_data_v3& result)
     {
         v8::TryCatch try_catch(isolate);
         result.clear();
-        if (result_mode == WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V2) {
+        if (result_mode == WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3) {
             if (value->IsNullOrUndefined()) {
                 result.values.push_back({
                     value->IsUndefined()
-                        ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V1
-                        : WEBSCENE_INTEROP_VALUE_NULL_V1,
+                        ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V3
+                        : WEBSCENE_INTEROP_VALUE_NULL_V3,
                     0U,
                     0U,
                     0U,
@@ -6261,7 +6230,7 @@ struct v8_dom_runtime::implementation final {
             if (!value->IsObject() && !value->IsFunction()) {
                 last_error =
                     "Generated native interop call did not return an object handle";
-                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
                 result.error = last_error;
                 return false;
             }
@@ -6270,7 +6239,7 @@ struct v8_dom_runtime::implementation final {
                 handle,
                 v8::Global<v8::Value>(isolate, value));
             result.values.push_back({
-                WEBSCENE_INTEROP_VALUE_HANDLE_V1,
+                WEBSCENE_INTEROP_VALUE_HANDLE_V3,
                 0U,
                 0U,
                 0U,
@@ -6279,9 +6248,9 @@ struct v8_dom_runtime::implementation final {
             last_error.clear();
             return true;
         }
-        if (result_mode == WEBSCENE_INTEROP_RESULT_VOID_V2) {
+        if (result_mode == WEBSCENE_INTEROP_RESULT_VOID_V3) {
             result.values.push_back({
-                WEBSCENE_INTEROP_VALUE_UNDEFINED_V1,
+                WEBSCENE_INTEROP_VALUE_UNDEFINED_V3,
                 0U,
                 0U,
                 0U,
@@ -6307,11 +6276,11 @@ struct v8_dom_runtime::implementation final {
         auto pending = std::move(iterator->second);
         pending_interop_promises.erase(iterator);
 
-        interop_result_data_v1 result;
+        interop_result_data_v3 result;
         if (rejected) {
             last_error = "JavaScript promise rejected: "
                 + to_utf8(isolate, value);
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
         } else {
             auto local_context = context.Get(isolate);
@@ -6357,15 +6326,15 @@ struct v8_dom_runtime::implementation final {
         uint32_t result_mode,
         v8::Local<v8::Context> local_context,
         v8::Local<v8::Promise> promise,
-        v8_dom_runtime::interop_completion_v2 completion,
-        interop_result_data_v1& result)
+        v8_dom_runtime::interop_completion_v3 completion,
+        interop_result_data_v3& result)
     {
         if (!completion
             || operation_id == 0U
             || pending_interop_promises.contains(operation_id)) {
             last_error =
                 "Generated native interop promise registration is invalid";
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
@@ -6399,7 +6368,7 @@ struct v8_dom_runtime::implementation final {
                 v8::True(isolate)).FromMaybe(false)) {
             last_error =
                 "Generated native interop promise metadata could not be created";
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
@@ -6420,7 +6389,7 @@ struct v8_dom_runtime::implementation final {
                 rejected).IsEmpty()) {
             last_error =
                 "Generated native interop promise handlers could not be registered";
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
             return false;
         }
@@ -6428,16 +6397,16 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
-    void cancel_interop_v2(uint64_t operation_id)
+    void cancel_interop_v3(uint64_t operation_id)
     {
         pending_interop_promises.erase(operation_id);
     }
 
-    interop_invoke_state_v2 invoke_interop_v2(
-        const interop_request_data_v2& request,
-        interop_result_data_v1& result,
+    interop_invoke_state_v3 invoke_interop_v3(
+        const interop_invoke_request_data_v3& request,
+        interop_result_data_v3& result,
         uint64_t operation_id,
-        v8_dom_runtime::interop_completion_v2 completion)
+        v8_dom_runtime::interop_completion_v3 completion)
     {
         constexpr uint32_t maximum_depth = 64U;
         result.clear();
@@ -6516,27 +6485,27 @@ struct v8_dom_runtime::implementation final {
             }
             const auto& node = request.values[index];
             switch (node.kind) {
-            case WEBSCENE_INTEROP_VALUE_UNDEFINED_V1:
+            case WEBSCENE_INTEROP_VALUE_UNDEFINED_V3:
                 decoded = v8::Undefined(isolate);
                 return true;
-            case WEBSCENE_INTEROP_VALUE_NULL_V1:
+            case WEBSCENE_INTEROP_VALUE_NULL_V3:
                 decoded = v8::Null(isolate);
                 return true;
-            case WEBSCENE_INTEROP_VALUE_BOOLEAN_V1:
+            case WEBSCENE_INTEROP_VALUE_BOOLEAN_V3:
                 decoded = v8::Boolean::New(isolate, node.payload != 0U);
                 return true;
-            case WEBSCENE_INTEROP_VALUE_NUMBER_V1:
+            case WEBSCENE_INTEROP_VALUE_NUMBER_V3:
                 decoded = v8::Number::New(
                     isolate,
                     std::bit_cast<double>(node.payload));
                 return true;
-            case WEBSCENE_INTEROP_VALUE_STRING_V1: {
+            case WEBSCENE_INTEROP_VALUE_STRING_V3: {
                 auto text = v8_string(utf8_view(node.offset, node.length));
                 if (text.IsEmpty()) return false;
                 decoded = text;
                 return true;
             }
-            case WEBSCENE_INTEROP_VALUE_HANDLE_V1: {
+            case WEBSCENE_INTEROP_VALUE_HANDLE_V3: {
                 if (!resolve_interop_handle(node.payload, decoded)) {
                     decoding_error =
                         "Generated native interop argument references a stale handle";
@@ -6544,8 +6513,8 @@ struct v8_dom_runtime::implementation final {
                 }
                 return true;
             }
-            case WEBSCENE_INTEROP_VALUE_ARRAY_V1:
-            case WEBSCENE_INTEROP_VALUE_OBJECT_V1:
+            case WEBSCENE_INTEROP_VALUE_ARRAY_V3:
+            case WEBSCENE_INTEROP_VALUE_OBJECT_V3:
                 break;
             default:
                 decoding_error =
@@ -6560,7 +6529,7 @@ struct v8_dom_runtime::implementation final {
                 return false;
             }
             ancestors.push_back(index);
-            if (node.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V1) {
+            if (node.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V3) {
                 auto array = v8::Array::New(
                     isolate,
                     static_cast<int>(node.length));
@@ -6617,9 +6586,9 @@ struct v8_dom_runtime::implementation final {
                     0U,
                     argument)) {
                 last_error = decoding_error;
-                result.status = WEBSCENE_INTEROP_RESULT_INVALID_REQUEST_V1;
+                result.status = WEBSCENE_INTEROP_RESULT_INVALID_REQUEST_V3;
                 result.error = last_error;
-                return interop_invoke_state_v2::failed;
+                return interop_invoke_state_v3::failed;
             }
             arguments.push_back(argument);
         }
@@ -6657,24 +6626,24 @@ struct v8_dom_runtime::implementation final {
 
         v8::Local<v8::Value> receiver = local_context->Global();
         v8::Local<v8::Value> value = v8::Undefined(isolate);
-        if (request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V2) {
+        if (request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V3) {
             if (interop_handles.erase(request.target_handle) == 0U) {
                 decoding_error =
                     "Generated native interop release references a stale handle";
             }
-        } else if (request.operation == WEBSCENE_INTEROP_GET_GLOBAL_V2) {
+        } else if (request.operation == WEBSCENE_INTEROP_GET_GLOBAL_V3) {
             if (!resolve_global(request.global_name, receiver, value)) {
                 decoding_error =
                     "Generated native interop global value was not found";
             }
-        } else if (request.operation == WEBSCENE_INTEROP_INVOKE_GLOBAL_V2
-            || request.operation == WEBSCENE_INTEROP_CONSTRUCT_V2) {
+        } else if (request.operation == WEBSCENE_INTEROP_INVOKE_GLOBAL_V3
+            || request.operation == WEBSCENE_INTEROP_CONSTRUCT_V3) {
             v8::Local<v8::Value> callable;
             if (!resolve_global(request.global_name, receiver, callable)
                 || !callable->IsFunction()) {
                 decoding_error =
                     "Generated native interop global function was not found";
-            } else if (request.operation == WEBSCENE_INTEROP_CONSTRUCT_V2) {
+            } else if (request.operation == WEBSCENE_INTEROP_CONSTRUCT_V3) {
                 v8::Local<v8::Object> instance;
                 if (!callable.As<v8::Function>()->NewInstance(
                         local_context,
@@ -6707,7 +6676,7 @@ struct v8_dom_runtime::implementation final {
                     decoding_error =
                         "Generated native interop member name is invalid";
                 } else if (request.operation
-                    == WEBSCENE_INTEROP_GET_PROPERTY_V2) {
+                    == WEBSCENE_INTEROP_GET_PROPERTY_V3) {
                     if (!object->Get(
                             local_context,
                             member).ToLocal(&value)) {
@@ -6715,7 +6684,7 @@ struct v8_dom_runtime::implementation final {
                             describe_exception(try_catch, local_context);
                     }
                 } else if (request.operation
-                    == WEBSCENE_INTEROP_SET_PROPERTY_V2) {
+                    == WEBSCENE_INTEROP_SET_PROPERTY_V3) {
                     if (arguments.size() != 1U
                         || !object->Set(
                             local_context,
@@ -6745,13 +6714,13 @@ struct v8_dom_runtime::implementation final {
         }
         if (!decoding_error.empty()) {
             last_error = std::move(decoding_error);
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
-            return interop_invoke_state_v2::failed;
+            return interop_invoke_state_v3::failed;
         }
 
         isolate->PerformMicrotaskCheckpoint();
-        if ((request.flags & WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2) != 0U
+        if ((request.flags & WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V3) != 0U
             && value->IsPromise()) {
             auto promise = value.As<v8::Promise>();
             if (promise->State() == v8::Promise::PromiseState::kPending) {
@@ -6762,30 +6731,30 @@ struct v8_dom_runtime::implementation final {
                         promise,
                         std::move(completion),
                         result)
-                    ? interop_invoke_state_v2::pending
-                    : interop_invoke_state_v2::failed;
+                    ? interop_invoke_state_v3::pending
+                    : interop_invoke_state_v3::failed;
             }
             if (promise->State() == v8::Promise::PromiseState::kRejected) {
                 last_error = "JavaScript promise rejected: "
                     + to_utf8(isolate, promise->Result());
-                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
                 result.error = last_error;
-                return interop_invoke_state_v2::failed;
+                return interop_invoke_state_v3::failed;
             }
             value = promise->Result();
         }
         if (!promote_pending_promise_error()) {
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
-            return interop_invoke_state_v2::failed;
+            return interop_invoke_state_v3::failed;
         }
         return encode_generated_interop_result(
                 request.result_mode,
                 local_context,
                 value,
                 result)
-            ? interop_invoke_state_v2::completed
-            : interop_invoke_state_v2::failed;
+            ? interop_invoke_state_v3::completed
+            : interop_invoke_state_v3::failed;
     }
 
     bool promote_pending_promise_error()
@@ -28162,9 +28131,9 @@ struct v8_dom_runtime::implementation final {
     v8::Global<v8::Object> document_object;
     v8::Global<v8::ObjectTemplate> document_template;
     v8::Global<v8::Context> frame_context;
-    // Keep native retained values disjoint from the compatibility JSON
-    // bridge's small positive JavaScript-number handles while remaining a
-    // positive Int64 (JavaScriptObjectReference reserves non-positive IDs).
+    // Keep native retained values in a high, positive Int64 range so they
+    // remain disjoint from host-provided handles
+    // (JavaScriptObjectReference reserves non-positive IDs).
     uint64_t next_interop_handle{UINT64_C(0x4000000000000000)};
     std::unordered_map<uint64_t, v8::Global<v8::Value>> interop_handles;
     std::unordered_map<uint64_t, std::unique_ptr<pending_interop_promise>>
@@ -28447,38 +28416,30 @@ void v8_dom_runtime::set_resource_root(std::string resource_root)
     impl_->resource_root = std::filesystem::path(std::move(resource_root)).lexically_normal();
 }
 
-bool v8_dom_runtime::evaluate_json(
+bool v8_dom_runtime::evaluate_interop_v3(
     const std::string& source,
     const std::string& document_name,
-    std::string& result)
+    interop_result_data_v3& result)
 {
-    return impl_->evaluate_json(source, document_name, result);
+    return impl_->evaluate_interop_v3(source, document_name, result);
 }
 
-bool v8_dom_runtime::evaluate_interop_v1(
-    const std::string& source,
-    const std::string& document_name,
-    interop_result_data_v1& result)
-{
-    return impl_->evaluate_interop_v1(source, document_name, result);
-}
-
-interop_invoke_state_v2 v8_dom_runtime::invoke_interop_v2(
-    const interop_request_data_v2& request,
-    interop_result_data_v1& result,
+interop_invoke_state_v3 v8_dom_runtime::invoke_interop_v3(
+    const interop_invoke_request_data_v3& request,
+    interop_result_data_v3& result,
     uint64_t operation_id,
-    interop_completion_v2 completion)
+    interop_completion_v3 completion)
 {
-    return impl_->invoke_interop_v2(
+    return impl_->invoke_interop_v3(
         request,
         result,
         operation_id,
         std::move(completion));
 }
 
-void v8_dom_runtime::cancel_interop_v2(uint64_t operation_id)
+void v8_dom_runtime::cancel_interop_v3(uint64_t operation_id)
 {
-    impl_->cancel_interop_v2(operation_id);
+    impl_->cancel_interop_v3(operation_id);
 }
 
 bool v8_dom_runtime::try_take_host_request(std::string& request)

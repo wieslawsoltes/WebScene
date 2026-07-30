@@ -319,7 +319,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var json = await NativeTradingViewHost.EvaluateJsonAsync("""
+            var json = await NativeTradingViewHost.EvaluateTextAsync("""
                 (() => {
                   const websocket = [
                     globalThis,

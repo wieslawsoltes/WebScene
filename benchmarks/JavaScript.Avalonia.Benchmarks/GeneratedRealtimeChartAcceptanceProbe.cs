@@ -28,10 +28,13 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
 
     internal static async Task<int> RunAsync(string[] args)
     {
-        var binary = string.Equals(
-            ReadOption(args, "--mode", "binary"),
-            "binary",
-            StringComparison.OrdinalIgnoreCase);
+        var mode = ReadOption(args, "--mode", "binary");
+        if (!string.Equals(mode, "binary", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "The JSON transport was removed; --mode must be 'binary'.",
+                nameof(args));
+        }
         var chartCount = ReadIntOption(args, "--charts", 4);
         var ticks = ReadIntOption(args, "--ticks", 600);
         var rate = ReadIntOption(args, "--rate", 60);
@@ -56,7 +59,7 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
         {
             for (var index = 0; index < chartCount; index++)
             {
-                engines.Add(await CreateEngineAsync(binary));
+                engines.Add(await CreateEngineAsync());
             }
 
             var bar = new RealtimeChartBar
@@ -122,7 +125,7 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
                 .ToArray();
             var result = new
             {
-                mode = binary ? "binary" : "json",
+                mode = "binary",
                 charts = chartCount,
                 ticks,
                 targetRatePerChart = rate,
@@ -214,10 +217,8 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
             foreach (var state in engines)
             {
                 await state.Host.DisposeAsync();
-                state.Transport?.Dispose();
+                state.Transport.Dispose();
                 NativeWebSceneApi.EngineDestroy(state.Engine);
-                state.EvaluateGate.Dispose();
-                state.Lifetime.Dispose();
             }
         }
     }
@@ -234,7 +235,7 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
         }
     }
 
-    private static async Task<EngineState> CreateEngineAsync(bool binary)
+    private static async Task<EngineState> CreateEngineAsync()
     {
         var engine = NativeWebSceneApi.EngineCreate(
             simulatedChartCommandCount: 0,
@@ -256,43 +257,8 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
                 "The native chart acceptance host could not be installed.");
         }
 
-        NativeJavaScriptBinaryTransport? transport = binary
-            ? new NativeJavaScriptBinaryTransport(engine)
-            : null;
-        var evaluateGate = new SemaphoreSlim(1, 1);
-        var lifetime = new CancellationTokenSource();
-        var invoker = new NativeJavaScriptInvoker(
-            async (source, documentName, cancellationToken) =>
-            {
-                await evaluateGate.WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                try
-                {
-                    using var linked =
-                        CancellationTokenSource.CreateLinkedTokenSource(
-                            cancellationToken,
-                            lifetime.Token);
-                    return await Task.Run(() =>
-                    {
-                        linked.Token.ThrowIfCancellationRequested();
-                        if (!NativeWebSceneApi.TryEvaluateJson(
-                                engine,
-                                source,
-                                documentName,
-                                out var json))
-                        {
-                            throw new InvalidOperationException(
-                                "Native JSON evaluation failed.");
-                        }
-                        return json;
-                    }, linked.Token).ConfigureAwait(false);
-                }
-                finally
-                {
-                    evaluateGate.Release();
-                }
-            },
-            binaryTransport: transport);
+        var transport = new NativeJavaScriptBinaryTransport(engine);
+        var invoker = new NativeJavaScriptInvoker(transport);
         try
         {
             var host =
@@ -300,16 +266,12 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
             return new EngineState(
                 engine,
                 transport,
-                host,
-                evaluateGate,
-                lifetime);
+                host);
         }
         catch
         {
-            transport?.Dispose();
+            transport.Dispose();
             NativeWebSceneApi.EngineDestroy(engine);
-            evaluateGate.Dispose();
-            lifetime.Dispose();
             throw;
         }
     }
@@ -344,10 +306,8 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
 
     private sealed record EngineState(
         IntPtr Engine,
-        NativeJavaScriptBinaryTransport? Transport,
-        RealtimeChartHost Host,
-        SemaphoreSlim EvaluateGate,
-        CancellationTokenSource Lifetime);
+        NativeJavaScriptBinaryTransport Transport,
+        RealtimeChartHost Host);
 
     private sealed class EmptyResourceLoader : IWebSceneResourceLoader
     {

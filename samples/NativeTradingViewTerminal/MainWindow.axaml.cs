@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var json = await TerminalHost.EvaluateJsonAsync("""
+            var json = await TerminalHost.EvaluateTextAsync("""
                 (() => {
                   const ws = [
                     globalThis,

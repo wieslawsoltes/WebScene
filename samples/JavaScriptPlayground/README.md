@@ -39,7 +39,7 @@ explicit reviewed binary above. Production packages are created per RID with
 see `third-party/clearscript-patches/README.md` for supported RIDs and verification.
 After execution, the status line reports `Script executed (V8)`.
 
-To launch directly into the native Monaco tab, pass the ABI 2 native WebScene engine:
+To launch directly into the native Monaco tab, pass the ABI 3 native WebScene engine:
 
 ```sh
 dotnet run --project samples/JavaScriptPlayground/JavaScriptPlayground.csproj \

@@ -9,6 +9,7 @@ using Avalonia.Platform;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
+using WebScene.Backends.Avalonia.Native;
 
 namespace WebScene.WebPlatformSubset.Runner;
 
@@ -55,6 +56,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly IntPtr _engine;
+    private readonly NativeInteropInvoker _interop;
     private readonly ViewportSettings _viewport;
     private readonly NativeSceneSnapshotRenderer _renderer = new();
     private ulong _sequence;
@@ -86,6 +88,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         {
             throw new InvalidOperationException("The native WebScene engine could not be created.");
         }
+        _interop = new NativeInteropInvoker(_engine);
 
         try
         {
@@ -254,6 +257,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         if (_disposed) return;
         _disposed = true;
         _renderer.Dispose();
+        _interop.Dispose();
         if (_engine != IntPtr.Zero) NativeApi.EngineDestroy(_engine);
     }
 
@@ -441,15 +445,22 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         // error across a successful evaluation, so read it before another
         // script can clear it. Without this barrier, an exception before WPT
         // registers its tests is misreported ten seconds later as a timeout.
-        if (!NativeApi.TryEvaluate(
-                _engine,
-                "null",
-                $"{documentName}.webscene-task-barrier.js",
-                out _))
+        try
+        {
+            using var result = _interop.InvokeAsync(
+                    "null",
+                    $"{documentName}.webscene-task-barrier.js",
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception exception)
         {
             throw new InvalidOperationException(
                 $"Native script barrier failed after '{documentName}': " +
-                NativeApi.GetLastError(_engine));
+                NativeApi.GetLastError(_engine),
+                exception);
         }
         var error = NativeApi.GetLastError(_engine);
         if (!string.IsNullOrWhiteSpace(error))
@@ -461,9 +472,24 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
 
     private string Evaluate(string source, string documentName)
     {
-        if (NativeApi.TryEvaluate(_engine, source, documentName, out var json)) return json;
-        throw new InvalidOperationException(
-            $"Native evaluation failed in '{documentName}': {NativeApi.GetLastError(_engine)}");
+        try
+        {
+            using var result = _interop.InvokeAsync(
+                    source,
+                    documentName,
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            return result.ToJsonText();
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(
+                $"Native evaluation failed in '{documentName}': " +
+                NativeApi.GetLastError(_engine),
+                error);
+        }
     }
 
     private void AcquireLatestScene(ulong waitForSequence)
@@ -1125,33 +1151,6 @@ internal static unsafe class NativeApi
         return EngineSetResourceRoot(engine, bytes, (nuint)bytes.Length) != 0;
     }
 
-    internal static bool TryEvaluate(
-        IntPtr engine,
-        string source,
-        string documentName,
-        out string json)
-    {
-        var sourceBytes = Encoding.UTF8.GetBytes(source);
-        var nameBytes = Encoding.UTF8.GetBytes(documentName);
-        var destination = new byte[1024 * 1024];
-        var required = EngineEvaluateJson(
-            engine,
-            sourceBytes,
-            (nuint)sourceBytes.Length,
-            nameBytes,
-            (nuint)nameBytes.Length,
-            destination,
-            (nuint)destination.Length,
-            5_000);
-        if (required == 0 || required > (nuint)destination.Length)
-        {
-            json = string.Empty;
-            return false;
-        }
-        json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
-        return true;
-    }
-
     internal static string GetLastError(IntPtr engine)
     {
         var required = EngineCopyLastError(engine, null, 0);
@@ -1185,17 +1184,6 @@ internal static unsafe class NativeApi
         IntPtr engine,
         byte[] root,
         nuint rootLength);
-
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_evaluate_json")]
-    private static extern nuint EngineEvaluateJson(
-        IntPtr engine,
-        byte[] source,
-        nuint sourceLength,
-        byte[] documentName,
-        nuint documentNameLength,
-        byte[] destination,
-        nuint destinationCapacity,
-        uint timeoutMilliseconds);
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_copy_last_error")]
     private static extern nuint EngineCopyLastError(

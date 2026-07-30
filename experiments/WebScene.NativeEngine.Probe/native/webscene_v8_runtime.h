@@ -13,17 +13,17 @@ namespace webscene_native {
 
 class native_document;
 
-struct interop_result_data_v1 final {
-    uint32_t status{WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1};
+struct interop_result_data_v3 final {
+    uint32_t status{WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3};
     uint32_t root_value_index{0};
-    std::vector<webscene_interop_value_v1> values;
-    std::vector<webscene_interop_edge_v1> edges;
+    std::vector<webscene_interop_value_v3> values;
+    std::vector<webscene_interop_edge_v3> edges;
     std::vector<char> utf8_bytes;
     std::string error;
 
     void clear()
     {
-        status = WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1;
+        status = WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3;
         root_value_index = 0;
         values.clear();
         edges.clear();
@@ -32,7 +32,7 @@ struct interop_result_data_v1 final {
     }
 };
 
-struct interop_request_data_v2 final {
+struct interop_invoke_request_data_v3 final {
     uint32_t operation{0};
     uint32_t flags{0};
     uint32_t result_mode{0};
@@ -40,12 +40,12 @@ struct interop_request_data_v2 final {
     uint32_t arguments_root{0};
     std::string global_name;
     std::string member_name;
-    std::vector<webscene_interop_value_v1> values;
-    std::vector<webscene_interop_edge_v1> edges;
+    std::vector<webscene_interop_value_v3> values;
+    std::vector<webscene_interop_edge_v3> edges;
     std::vector<char> utf8_bytes;
 };
 
-enum class interop_invoke_state_v2 : uint8_t {
+enum class interop_invoke_state_v3 : uint8_t {
     failed = 0,
     completed = 1,
     pending = 2
@@ -170,23 +170,19 @@ public:
     bool execute(const std::string& source, const std::string& document_name);
     bool load_url(const std::string& url);
     void set_resource_root(std::string resource_root);
-    bool evaluate_json(
+    bool evaluate_interop_v3(
         const std::string& source,
         const std::string& document_name,
-        std::string& result);
-    bool evaluate_interop_v1(
-        const std::string& source,
-        const std::string& document_name,
-        interop_result_data_v1& result);
-    using interop_completion_v2 =
-        std::function<void(interop_result_data_v1&&)>;
+        interop_result_data_v3& result);
+    using interop_completion_v3 =
+        std::function<void(interop_result_data_v3&&)>;
 
-    interop_invoke_state_v2 invoke_interop_v2(
-        const interop_request_data_v2& request,
-        interop_result_data_v1& result,
+    interop_invoke_state_v3 invoke_interop_v3(
+        const interop_invoke_request_data_v3& request,
+        interop_result_data_v3& result,
         uint64_t operation_id,
-        interop_completion_v2 completion);
-    void cancel_interop_v2(uint64_t operation_id);
+        interop_completion_v3 completion);
+    void cancel_interop_v3(uint64_t operation_id);
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();

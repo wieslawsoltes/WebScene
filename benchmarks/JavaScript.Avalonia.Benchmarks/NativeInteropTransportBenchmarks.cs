@@ -185,7 +185,7 @@ public unsafe class NativeInteropTransportBenchmarks
         *view = new NativeInteropResultView
         {
             StructSize = (uint)sizeof(NativeInteropResultView),
-            Version = 1,
+            Version = 3,
             Status = NativeInteropResultStatus.Succeeded,
             Values = nativeValues,
             ValueCount = checked((uint)values.Length),

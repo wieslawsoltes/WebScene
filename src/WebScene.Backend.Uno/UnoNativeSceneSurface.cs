@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Media;
 using Uno.WinUI.Graphics2DSK;
 using SkiaSharp;
 using WebScene.Core;
+using WebScene.JavaScript.Interop;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -538,6 +539,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 {
     private readonly UnoNativeSceneSurface _surface = new();
     private IntPtr _engine;
+    private NativeInteropInvoker? _interop;
 
     public UnoNativeWebSceneView()
     {
@@ -552,50 +554,62 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public EngineMetrics EngineMetrics => _surface.EngineMetrics;
 
-    public Task<string> EvaluateJsonAsync(
+    public NativeJavaScriptInvoker CreateJavaScriptInvoker()
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return new NativeJavaScriptInvoker(
+            new NativeJavaScriptBinaryTransport(engine));
+    }
+
+    public async Task<string> EvaluateTextAsync(
         string source,
         string documentName = "native-host-evaluation.js",
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var engine = Volatile.Read(ref _engine);
-            if (engine == IntPtr.Zero)
-            {
-                throw new InvalidOperationException(
-                    "The native WebScene document is not loaded.");
-            }
-            if (!NativeWebSceneApi.TryEvaluateJson(
-                    engine,
-                    source,
-                    documentName,
-                    out var json))
-            {
-                throw new InvalidOperationException(
-                    "Native WebScene evaluation failed: "
-                    + NativeWebSceneApi.GetLastError(engine));
-            }
-            return json;
-        }, cancellationToken);
+        using var lease = await EvaluateAsync(
+            source,
+            documentName,
+            cancellationToken).ConfigureAwait(false);
+        using var borrowed = lease.Borrow();
+        return NativeInteropJsonText.Serialize(borrowed.Root);
     }
 
-    public bool TryEvaluateJson(
+    public ValueTask<NativeInteropResultLease> EvaluateAsync(
         string source,
-        string documentName,
-        out string json,
-        uint timeoutMilliseconds = 5_000)
+        string documentName = "native-host-binary-evaluation.js",
+        CancellationToken cancellationToken = default)
     {
-        json = string.Empty;
-        return _engine != IntPtr.Zero
-            && NativeWebSceneApi.TryEvaluateJson(
-                _engine,
-                source,
-                documentName,
-                out json,
-                timeoutMilliseconds);
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
+        var interop = Volatile.Read(ref _interop);
+        if (interop is null)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return interop.InvokeAsync(source, documentName, cancellationToken);
+    }
+
+    public async ValueTask<T> EvaluateAsync<T, TDecoder>(
+        string source,
+        TDecoder decoder,
+        string documentName = "native-host-binary-evaluation.js",
+        CancellationToken cancellationToken = default)
+        where TDecoder : struct, INativeInteropValueDecoder<T>
+    {
+        using var lease = await EvaluateAsync(
+            source,
+            documentName,
+            cancellationToken).ConfigureAwait(false);
+        using var borrowed = lease.Borrow();
+        return decoder.Decode(borrowed.Root);
     }
 
     public bool TryTakeHostRequest(out string request)
@@ -632,6 +646,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         {
             throw new InvalidOperationException("The WebScene native engine could not be created.");
         }
+        _interop = new NativeInteropInvoker(_engine);
 
         _surface.SetEngine(_engine);
         if (!NativeWebSceneApi.TryLoadUrl(_engine, source))
@@ -642,17 +657,17 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        var documentBarrier = await Task.Run(() =>
-        {
-            return NativeWebSceneApi.TryEvaluateJson(
-                _engine,
+        var documentBarrierText = await EvaluateTextAsync(
                 "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
                 "webscene-uno-document-barrier.js",
-                out var json,
-                timeoutMilliseconds: 25_000)
-                && json.Contains("hasDocumentElement", StringComparison.Ordinal)
-                && json.Contains("hasBody", StringComparison.Ordinal);
-        }, timeout.Token);
+                timeout.Token).ConfigureAwait(false);
+        var documentBarrier =
+            documentBarrierText.Contains(
+                "hasDocumentElement",
+                StringComparison.Ordinal)
+            && documentBarrierText.Contains(
+                "hasBody",
+                StringComparison.Ordinal);
         if (!documentBarrier)
         {
             throw new InvalidOperationException(
@@ -666,6 +681,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         _surface.SetEngine(IntPtr.Zero);
+        Interlocked.Exchange(ref _interop, null)?.Dispose();
         if (_engine != IntPtr.Zero)
         {
             NativeWebSceneApi.EngineDestroy(_engine);

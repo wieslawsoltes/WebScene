@@ -54,7 +54,7 @@ internal static class Program
                 view.LoadAsync(source, options.NativeLibraryPath, cacheDirectory),
                 TimeSpan.FromSeconds(40));
             PumpFrames(view, window, TimeSpan.FromSeconds(4));
-            var stateTask = view.EvaluateJsonAsync("""
+            var stateTask = view.EvaluateTextAsync("""
                 ({
                   ready: globalThis.__webSceneComponentReady === true,
                   hasEditor: Boolean(globalThis.__webSceneMonacoEditor),
@@ -117,7 +117,7 @@ internal static class Program
             var surface = (NativeSceneSurface)view.Content!;
             SaveNativeFrame(surface, initialPath);
 
-            var installLiveInputDiagnosticsTask = view.EvaluateJsonAsync("""
+            var installLiveInputDiagnosticsTask = view.EvaluateTextAsync("""
                 (() => {
                   globalThis.__webSceneMonacoMouseDown = null;
                   globalThis.__webSceneMonacoEditor.onMouseDown(event => {
@@ -141,7 +141,7 @@ internal static class Program
                 Avalonia.Input.RawInputModifiers.None);
             window.KeyTextInput("Z");
             PumpFrames(view, window, TimeSpan.FromSeconds(2));
-            var liveClickTypeStateTask = view.EvaluateJsonAsync("""
+            var liveClickTypeStateTask = view.EvaluateTextAsync("""
                 ({
                   value: globalThis.__webSceneMonacoEditor?.getValue() ?? null,
                   position: globalThis.__webSceneMonacoEditor?.getPosition() ?? null,
@@ -191,7 +191,7 @@ internal static class Program
                 Avalonia.Input.MouseButton.Left,
                 Avalonia.Input.RawInputModifiers.None);
             PumpFrames(view, window, TimeSpan.FromSeconds(2));
-            var dragSelectionTask = view.EvaluateJsonAsync("""
+            var dragSelectionTask = view.EvaluateTextAsync("""
                 (() => {
                   const editor = globalThis.__webSceneMonacoEditor;
                   const selection = editor.getSelection();
@@ -222,7 +222,7 @@ internal static class Program
 
             window.KeyTextInput("drag-replaced");
             PumpFrames(view, window, TimeSpan.FromSeconds(1));
-            var resetTask = view.EvaluateJsonAsync("""
+            var resetTask = view.EvaluateTextAsync("""
                 (() => {
                   const editor = globalThis.__webSceneMonacoEditor;
                   const replaced = editor.getValue().includes('drag-replaced');
@@ -256,7 +256,7 @@ internal static class Program
                 surface,
                 "// typed through Avalonia native input\n");
             PumpFrames(view, window, TimeSpan.FromSeconds(3));
-            var editedStateTask = view.EvaluateJsonAsync("""
+            var editedStateTask = view.EvaluateTextAsync("""
                 ({
                   value: globalThis.__webSceneMonacoEditor?.getValue() ?? null,
                   lines: globalThis.__webSceneMonacoEditor?.getModel()?.getLineCount() ?? 0,
@@ -271,7 +271,7 @@ internal static class Program
                 "monaco-native-headless-edited.png");
             SaveNativeFrame(surface, editedPath);
 
-            var foldTask = view.EvaluateJsonAsync("""
+            var foldTask = view.EvaluateTextAsync("""
                 (() => {
                   const editor = globalThis.__webSceneMonacoEditor;
                   editor.setPosition({ lineNumber: 2, column: 1 });
@@ -281,7 +281,7 @@ internal static class Program
                 """);
             PumpUntil(foldTask, TimeSpan.FromSeconds(10));
             PumpFrames(view, window, TimeSpan.FromSeconds(2));
-            var foldedStateTask = view.EvaluateJsonAsync("""
+            var foldedStateTask = view.EvaluateTextAsync("""
                 ({
                   viewLines: document.querySelectorAll('.view-line').length,
                   modelLines:

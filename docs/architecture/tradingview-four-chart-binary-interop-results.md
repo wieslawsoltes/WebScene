@@ -14,8 +14,9 @@
 
 ## Compared paths
 
-The JSON control models the current StackWich boundary: `SemaphoreSlim`,
-linked cancellation, `Task.Run`, blocking `TryEvaluateJson`, generated
+The measured JSON control modeled the former StackWich boundary:
+`SemaphoreSlim`,
+linked cancellation, `Task.Run`, blocking JSON evaluation, generated
 JavaScript source, JSON argument parsing, and JSON result parsing.
 
 The candidate uses the generated `.d.ts` facade end to end:
@@ -33,7 +34,7 @@ dictionary node, or result-lease allocation on the materialized void hot path.
 
 ## Four-chart median results
 
-| Metric | Current JSON | Generated binary | Change |
+| Metric | Removed JSON control | Generated binary | Change |
 | --- | ---: | ---: | ---: |
 | Process CPU / 10 s | 856.9 ms | 604.3 ms | **-29.5%** |
 | Normalized process CPU | 8.57% | 6.04% | **-29.5%** |
@@ -48,7 +49,7 @@ Ten seconds at 60 Hz does not allocate enough to force a collection in either
 process. A same-duration 600 Hz/engine burst (24,000 calls) makes the GC effect
 visible:
 
-| Burst metric | Current JSON | Generated binary | Change |
+| Burst metric | Removed JSON control | Generated binary | Change |
 | --- | ---: | ---: | ---: |
 | Process CPU / 10 s | 4,007.2 ms | 3,098.0 ms | **-22.7%** |
 | Managed allocated bytes | 72,045,088 | 2,285,848 | **-96.8%** |
@@ -72,7 +73,7 @@ BenchmarkDotNet exercised the generated facade with 1, 4, and 8 warm engines.
 The operation includes request encoding, queueing, V8 invocation, completion,
 and result release.
 
-| Engines | JSON update | Binary update | JSON allocation | Binary allocation |
+| Engines | Removed JSON update | Binary update | JSON allocation | Binary allocation |
 | ---: | ---: | ---: | ---: | ---: |
 | 1 | 15.55 us | 10.98 us | 3,080 B | 174 B |
 | 4 | 59.45 us | 47.33 us | 11,984 B | 364 B |
@@ -97,7 +98,7 @@ cost grows with engine count, not with the 256-item payload.
 ## Correctness and stress
 
 The V8 test suite covers direct globals, receiver-preserving members, tagged
-DTO arguments, retained and stale handles, compatibility callback handles,
+DTO arguments, retained, stale, and host-provided handles,
 immediate and delayed promise fulfillment, delayed rejection, cancellation,
 engine destruction with a live result lease, malformed ranges, and pool reuse.
 
@@ -121,7 +122,7 @@ WEBSCENE_INTEROP_STRESS=1 \
   -C Release --output-on-failure
 ```
 
-Run one four-chart acceptance process:
+Run the retained forward-only four-chart binary acceptance process:
 
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
@@ -132,8 +133,12 @@ dotnet run \
   --mode binary --charts 4 --ticks 600 --rate 60
 ```
 
-Replace `--mode binary` with `--mode json` for the matched control. Run the
-BenchmarkDotNet matrix with:
+The JSON control and its public mode were removed after these measurements
+because the ABI was unreleased and the accepted design is forward-only.
+Commit `760d18a` preserves the matched pre-removal benchmark implementation and
+must be paired with its native library to reproduce the historical JSON
+column. The current BenchmarkDotNet command runs the binary regression across
+the 1/4/8-engine matrix:
 
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
@@ -167,6 +172,7 @@ serialization/parsing, transient strings, blocking `Task.Run`, and the
 associated GC pressure.
 
 This is strong evidence for adopting the generated binary path for hot,
-schema-known APIs. It is not evidence for removing JSON entirely:
-`TryEvaluateJson` remains appropriate for arbitrary evaluation, diagnostics,
-and compatibility tests.
+schema-known APIs. The unreleased native JSON ABI was subsequently removed.
+Arbitrary evaluation and diagnostics now use a leased tagged result too;
+JSON-compatible text is materialized only when a tooling caller explicitly
+requests it.

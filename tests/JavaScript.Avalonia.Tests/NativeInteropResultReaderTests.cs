@@ -177,7 +177,7 @@ public sealed unsafe class NativeInteropResultReaderTests
         => new()
         {
             StructSize = (uint)sizeof(NativeInteropResultView),
-            Version = 1,
+            Version = 3,
             Status = NativeInteropResultStatus.Succeeded,
             Values = values,
             ValueCount = checked((uint)valueCount),

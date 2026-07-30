@@ -231,7 +231,7 @@ internal static class HeadlessProof
 
     private static void InstallPointerCertification(NativeWebSceneView view)
     {
-        var task = view.EvaluateJsonAsync("""
+        var task = view.EvaluateTextAsync("""
             (() => {
               const chartWindow = Array.from(
                 document.querySelectorAll('iframe'))
@@ -280,7 +280,7 @@ internal static class HeadlessProof
         while (timer.Elapsed < TimeSpan.FromSeconds(45))
         {
             PumpFrames(view, window, TimeSpan.FromMilliseconds(250));
-            var evaluation = view.EvaluateJsonAsync("""
+            var evaluation = view.EvaluateTextAsync("""
                 ({
                   url: location.href,
                   title: document.title,

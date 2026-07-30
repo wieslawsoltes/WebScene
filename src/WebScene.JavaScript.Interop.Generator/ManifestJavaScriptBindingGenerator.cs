@@ -439,24 +439,28 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(invoker);");
         if (binarySupported)
         {
-            source.AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+            source.AppendLine("        var binaryInvoker = invoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+                .AppendLine("            ?? throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
                 .AppendLine("        {")
-                .Append("            return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
+                .AppendLine("            throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        }")
+                .Append("        return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
                 .Append(mapping.CSharpType).Append(", ").Append(binaryName)
                 .Append("Codec>(").Append(binaryName)
                 .AppendLine("CallSite, default, new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid(), cancellationToken);")
-                .AppendLine("        }")
-                .Append("        return ").Append(binaryName)
-                .AppendLine("JsonAsync(invoker, cancellationToken);")
-                .AppendLine("    }")
-                .AppendLine()
-                .Append("    private static async global::System.Threading.Tasks.ValueTask<")
-                .Append(mapping.CSharpType).Append("> ").Append(binaryName)
-                .AppendLine("JsonAsync(")
-                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,")
-                .AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
-                .AppendLine("    {");
+                .AppendLine("    }");
+            EmitBinaryGlobalPropertyCodec(
+                source,
+                generation,
+                effectiveType,
+                mapping,
+                binaryName,
+                property.GlobalName,
+                promise);
+            return;
         }
         if (mapping.IsBinding && mapping.IsNullable)
         {
@@ -519,17 +523,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
-        if (binarySupported)
-        {
-            EmitBinaryGlobalPropertyCodec(
-                source,
-                generation,
-                effectiveType,
-                mapping,
-                binaryName,
-                property.GlobalName,
-                promise);
-        }
     }
 
     private static void EmitBinaryGlobalPropertyCodec(
@@ -701,29 +694,20 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 returnsVoid,
                 returnMapping,
                 binaryName);
-            source.Append("        return ").Append(binaryName)
-                .Append("JsonAsync(invoker, ");
-            foreach (var parameter in parameters)
-            {
-                source.Append('@').Append(parameter.Name).Append(", ");
-            }
-            source.AppendLine("cancellationToken);")
-                .AppendLine("    }")
-                .AppendLine()
-                .Append("    private static async global::System.Threading.Tasks.ValueTask");
-            if (!returnsVoid)
-            {
-                source.Append('<').Append(returnMapping.CSharpType).Append('>');
-            }
-            source.Append(' ').Append(binaryName).AppendLine("JsonAsync(")
-                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,");
-            foreach (var parameter in parameters)
-            {
-                source.Append("        ").Append(parameter.Mapping.CSharpType)
-                    .Append(" @").Append(parameter.Name).AppendLine(",");
-            }
-            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
-                .AppendLine("    {");
+            source.AppendLine("    }");
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters,
+                returnsVoid,
+                effectiveReturn,
+                returnMapping,
+                binaryName,
+                operation: "InvokeGlobal",
+                globalName: function.GlobalName,
+                memberName: null,
+                promise: promise);
+            return;
         }
 
         var arguments = ArgumentArray(parameters.Select(parameter =>
@@ -873,21 +857,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
-        if (binarySupported)
-        {
-            EmitBinaryInvocationCodec(
-                source,
-                generation,
-                parameters,
-                returnsVoid,
-                effectiveReturn,
-                returnMapping,
-                binaryName,
-                operation: "InvokeGlobal",
-                globalName: function.GlobalName,
-                memberName: null,
-                promise: promise);
-        }
     }
 
     private static void EmitBinaryGlobalFunctionDispatch(
@@ -907,12 +876,17 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                   ", ",
                   parameters.Select(parameter => "@" + parameter.Name))
               + ")";
-        source.AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-            .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
-            .AppendLine("        {");
+        source.AppendLine("        var binaryInvoker = invoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+            .AppendLine("            ?? throw new global::System.NotSupportedException(")
+            .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+            .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
+            .AppendLine("        {")
+            .AppendLine("            throw new global::System.NotSupportedException(")
+            .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+            .AppendLine("        }");
         if (returnsVoid)
         {
-            source.Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+            source.Append("        return binaryInvoker.InvokeBinaryVoidAsync<")
                 .Append(argumentsType).Append(", ").Append(binaryName)
                 .Append("Codec>(").Append(binaryName)
                 .Append("CallSite, default, ")
@@ -921,7 +895,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         }
         else
         {
-            source.Append("            return binaryInvoker.InvokeBinaryAsync<")
+            source.Append("        return binaryInvoker.InvokeBinaryAsync<")
                 .Append(argumentsType).Append(", ")
                 .Append(returnMapping.CSharpType).Append(", ")
                 .Append(binaryName).Append("Codec>(")
@@ -930,7 +904,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .Append(arguments)
                 .AppendLine(", cancellationToken);");
         }
-        source.AppendLine("        }");
     }
 
     private static string GenerateAdapter(
@@ -2351,25 +2324,33 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             .AppendLine("    {");
         if (binarySupported)
         {
-            source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+            source.AppendLine("        var binaryInvoker = __webSceneInvoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+                .AppendLine("            ?? throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
                 .AppendLine("        {")
-                .Append("            return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
+                .AppendLine("            throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        }")
+                .Append("        return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
                 .Append(mapping.CSharpType).Append(", ").Append(binaryName)
                 .Append("Codec>(").Append(binaryName)
                 .AppendLine("CallSite, __webSceneReference, new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid(), cancellationToken);")
-                .AppendLine("        }")
-                .Append("        return ").Append(binaryName)
-                .AppendLine("JsonAsync(cancellationToken);")
-                .AppendLine("    }")
-                .AppendLine()
-                .Append("    private async global::System.Threading.Tasks.ValueTask<")
-                .Append(mapping.CSharpType).Append("> ").Append(binaryName)
-                .AppendLine("JsonAsync(")
-                .AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
-                .AppendLine("    {");
+                .AppendLine("    }");
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters: [],
+                returnsVoid: false,
+                effectiveReturn: effectiveType,
+                returnMapping: mapping,
+                binaryName: binaryName,
+                operation: "GetProperty",
+                globalName: null,
+                memberName: memberName,
+                promise: promise);
         }
-        if (mapping.IsBinding && mapping.IsNullable)
+        else if (mapping.IsBinding && mapping.IsNullable)
         {
             source.Append("        var reference = await __webSceneInvoker.")
                 .Append(valueInvocation)
@@ -2432,21 +2413,9 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .Append(Literal(memberName))
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
-        source.AppendLine("    }");
-        if (binarySupported)
+        if (!binarySupported)
         {
-            EmitBinaryInvocationCodec(
-                source,
-                generation,
-                parameters: [],
-                returnsVoid: false,
-                effectiveReturn: effectiveType,
-                returnMapping: mapping,
-                binaryName: binaryName,
-                operation: "GetProperty",
-                globalName: null,
-                memberName: memberName,
-                promise: promise);
+            source.AppendLine("    }");
         }
 
         var writable = !property.GetProperty("readonly").GetBoolean()
@@ -2479,17 +2448,43 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             .AppendLine("    {");
         if (binarySetterSupported)
         {
-            source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+            source.AppendLine("        var binaryInvoker = __webSceneInvoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+                .AppendLine("            ?? throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
                 .AppendLine("        {")
-                .Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+                .AppendLine("            throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        }")
+                .Append("        return binaryInvoker.InvokeBinaryVoidAsync<")
                 .Append(binarySetterName).Append("Arguments, ")
                 .Append(binarySetterName).Append("Codec>(")
                 .Append(binarySetterName)
                 .Append("CallSite, __webSceneReference, new ")
                 .Append(binarySetterName)
                 .AppendLine("Arguments(value), cancellationToken);")
-                .AppendLine("        }");
+                .AppendLine("    }");
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters:
+                [
+                    new MappedParameter(
+                        "value",
+                        setterMapping,
+                        Optional: false,
+                        Rest: false,
+                        effectiveType.Clone())
+                ],
+                returnsVoid: true,
+                effectiveReturn: effectiveType,
+                returnMapping: new TypeMapping("void", false),
+                binaryName: binarySetterName,
+                operation: "SetProperty",
+                globalName: null,
+                memberName: memberName,
+                promise: false);
+            return;
         }
         source.AppendLine("        return __webSceneInvoker.SetPropertyAsync(")
             .AppendLine("            __webSceneReference,")
@@ -2512,29 +2507,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         source
             .AppendLine("            cancellationToken);");
         source.AppendLine("    }");
-        if (binarySetterSupported)
-        {
-            EmitBinaryInvocationCodec(
-                source,
-                generation,
-                parameters:
-                [
-                    new MappedParameter(
-                        "value",
-                        setterMapping,
-                        Optional: false,
-                        Rest: false,
-                        effectiveType.Clone())
-                ],
-                returnsVoid: true,
-                effectiveReturn: effectiveType,
-                returnMapping: new TypeMapping("void", false),
-                binaryName: binarySetterName,
-                operation: "SetProperty",
-                globalName: null,
-                memberName: memberName,
-                promise: false);
-        }
     }
 
     private static void EmitConstructor(
@@ -2647,36 +2619,29 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                       parameters.Select(parameter => "@" + parameter.Name))
                   + ")";
             source.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(invoker);")
-                .AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+                .AppendLine("        var binaryInvoker = invoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+                .AppendLine("            ?? throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
                 .AppendLine("        {")
-                .Append("            return binaryInvoker.InvokeBinaryAsync<")
+                .AppendLine("            throw new global::System.NotSupportedException(")
+                .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+                .AppendLine("        }")
+                .Append("        return binaryInvoker.InvokeBinaryAsync<")
                 .Append(binaryArgumentsType).Append(", ")
                 .Append(BindingTypeName(binding)).Append(", ")
                 .Append(binaryName).Append("Codec>(")
                 .Append(binaryName).Append("CallSite, default, ")
                 .Append(binaryArguments).AppendLine(", cancellationToken);")
-                .AppendLine("        }")
-                .Append("        return ").Append(binaryName)
-                .Append("JsonAsync(invoker, ");
-            foreach (var parameter in parameters)
-            {
-                source.Append('@').Append(parameter.Name).Append(", ");
-            }
-            source.AppendLine("cancellationToken);")
-                .AppendLine("    }")
-                .AppendLine()
-                .Append("    private static async global::System.Threading.Tasks.ValueTask<")
-                .Append(BindingTypeName(binding)).Append("> ")
-                .Append(binaryName).AppendLine("JsonAsync(")
-                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,");
-            foreach (var parameter in parameters)
-            {
-                source.Append("        ").Append(parameter.CSharpType)
-                    .Append(" @").Append(parameter.Name).AppendLine(",");
-            }
-            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
-                .AppendLine("    {");
+                .AppendLine("    }");
+            EmitBinaryConstructorCodec(
+                source,
+                generation,
+                binding,
+                parameters,
+                binaryName,
+                globalName);
+            return;
         }
         source.Append("        return new ").Append(BindingTypeName(binding))
             .AppendLine("(invoker, await invoker.ConstructAsync(")
@@ -2690,16 +2655,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                     parameter.Rest)))).AppendLine(",")
             .AppendLine("            cancellationToken).ConfigureAwait(false));")
             .AppendLine("    }");
-        if (binarySupported)
-        {
-            EmitBinaryConstructorCodec(
-                source,
-                generation,
-                binding,
-                parameters,
-                binaryName,
-                globalName);
-        }
     }
 
     private static void EmitMethod(
@@ -2840,28 +2795,28 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 returnsVoid,
                 returnMapping,
                 binaryName);
-            source.Append("        return ").Append(binaryName)
-                .Append("JsonAsync(");
-            foreach (var parameter in parameters)
+            source.AppendLine("    }");
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters,
+                returnsVoid,
+                effectiveReturn,
+                returnMapping,
+                binaryName,
+                operation: "InvokeMember",
+                globalName: null,
+                memberName: memberName,
+                promise: promise);
+            if (borrowedName is not null)
             {
-                source.Append('@').Append(parameter.Name).Append(", ");
+                EmitBorrowedBinaryMethod(
+                    source,
+                    parameters,
+                    borrowedName,
+                    binaryName);
             }
-            source.AppendLine("cancellationToken);")
-                .AppendLine("    }")
-                .AppendLine()
-                .Append("    private async global::System.Threading.Tasks.ValueTask");
-            if (!returnsVoid)
-            {
-                source.Append('<').Append(returnMapping.CSharpType).Append('>');
-            }
-            source.Append(' ').Append(binaryName).AppendLine("JsonAsync(");
-            foreach (var parameter in parameters)
-            {
-                source.Append("        ").Append(parameter.Mapping.CSharpType)
-                    .Append(" @").Append(parameter.Name).AppendLine(",");
-            }
-            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
-                .AppendLine("    {");
+            return;
         }
 
         var arguments = ArgumentArray(parameters.Select(parameter =>
@@ -3012,29 +2967,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
-        if (binarySupported)
-        {
-            EmitBinaryInvocationCodec(
-                source,
-                generation,
-                parameters,
-                returnsVoid,
-                effectiveReturn,
-                returnMapping,
-                binaryName,
-                operation: "InvokeMember",
-                globalName: null,
-                memberName: memberName,
-                promise: promise);
-            if (borrowedName is not null)
-            {
-                EmitBorrowedBinaryMethod(
-                    source,
-                    parameters,
-                    borrowedName,
-                    binaryName);
-            }
-        }
     }
 
     private static void EmitBorrowedBinaryMethod(
@@ -3153,12 +3085,17 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                   ", ",
                   parameters.Select(parameter => "@" + parameter.Name))
               + ")";
-        source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
-            .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
-            .AppendLine("        {");
+        source.AppendLine("        var binaryInvoker = __webSceneInvoker as global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker")
+            .AppendLine("            ?? throw new global::System.NotSupportedException(")
+            .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+            .AppendLine("        if (!binaryInvoker.IsBinaryInteropAvailable)")
+            .AppendLine("        {")
+            .AppendLine("            throw new global::System.NotSupportedException(")
+            .AppendLine("                \"Generated JavaScript APIs require the binary ABI 3 transport.\");")
+            .AppendLine("        }");
         if (returnsVoid)
         {
-            source.Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+            source.Append("        return binaryInvoker.InvokeBinaryVoidAsync<")
                 .Append(argumentsType).Append(", ").Append(binaryName)
                 .Append("Codec>(").Append(binaryName)
                 .Append("CallSite, __webSceneReference, ")
@@ -3167,7 +3104,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         }
         else
         {
-            source.Append("            return binaryInvoker.InvokeBinaryAsync<")
+            source.Append("        return binaryInvoker.InvokeBinaryAsync<")
                 .Append(argumentsType).Append(", ")
                 .Append(returnMapping.CSharpType).Append(", ")
                 .Append(binaryName).Append("Codec>(")
@@ -3176,7 +3113,6 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .Append(arguments)
                 .AppendLine(", cancellationToken);");
         }
-        source.AppendLine("        }");
     }
 
     private static void EmitBinaryInvocationCodec(

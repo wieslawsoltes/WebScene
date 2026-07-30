@@ -1,11 +1,17 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks.Sources;
 using Microsoft.Win32.SafeHandles;
 using WebScene.JavaScript.Interop;
 
+#if WEBSCENE_UNO
+namespace WebScene.Backends.Uno.Native;
+#else
 namespace WebScene.Backends.Avalonia.Native;
+#endif
 
 /// <summary>
 /// Implemented by generated codecs that materialize a normal managed result
@@ -16,19 +22,29 @@ public interface INativeInteropValueDecoder<T>
     T Decode(NativeInteropValue value);
 }
 
-internal sealed class NativeInteropResultSafeHandle
+internal sealed unsafe class NativeInteropResultSafeHandle
     : SafeHandleZeroOrMinusOneIsInvalid
 {
+    private readonly ulong _leaseId;
+
     internal NativeInteropResultSafeHandle(IntPtr value)
         : base(ownsHandle: true)
     {
+        _leaseId = ((NativeInteropResultView*)value)->LeaseId;
         SetHandle(value);
     }
 
     protected override bool ReleaseHandle()
     {
-        NativeWebSceneApi.InteropResultReleaseV1(handle);
+        NativeWebSceneApi.InteropResultReleaseV3(handle, _leaseId);
         return true;
+    }
+
+    internal static void ReleaseRaw(IntPtr result)
+    {
+        if (result == IntPtr.Zero) return;
+        var view = (NativeInteropResultView*)result;
+        NativeWebSceneApi.InteropResultReleaseV3(result, view->LeaseId);
     }
 }
 
@@ -191,6 +207,17 @@ public sealed unsafe class NativeInteropResultLease : IDisposable
         }
     }
 
+    /// <summary>
+    /// Materializes this tagged result as JSON-compatible text for diagnostics
+    /// and compatibility tooling. Normal generated APIs decode the tagged
+    /// value directly and do not call this method.
+    /// </summary>
+    public string ToJsonText()
+    {
+        using var scope = Borrow();
+        return NativeInteropJsonText.Serialize(scope.Root);
+    }
+
     internal string GetError()
     {
         using var scope = Borrow();
@@ -318,7 +345,7 @@ public unsafe ref struct NativeInteropBorrowScope
     {
         if (view == null
             || view->StructSize < (uint)sizeof(NativeInteropResultView)
-            || view->Version != 1
+            || view->Version != 3
             || (view->Status == NativeInteropResultStatus.Succeeded
                 && view->RootValueIndex >= view->ValueCount)
             || (view->ValueCount != 0 && view->Values == null)
@@ -512,6 +539,75 @@ public readonly unsafe ref struct NativeInteropValue
     }
 }
 
+internal static class NativeInteropJsonText
+{
+    internal static string Serialize(NativeInteropValue value)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            WriteValue(writer, value);
+        }
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteValue(
+        Utf8JsonWriter writer,
+        NativeInteropValue value)
+    {
+        switch (value.Kind)
+        {
+            case NativeInteropValueKind.Undefined:
+            case NativeInteropValueKind.Null:
+                writer.WriteNullValue();
+                break;
+            case NativeInteropValueKind.Boolean:
+                writer.WriteBooleanValue(value.GetBoolean());
+                break;
+            case NativeInteropValueKind.Number:
+                var number = value.GetNumber();
+                if (double.IsFinite(number))
+                {
+                    writer.WriteNumberValue(number);
+                }
+                else
+                {
+                    writer.WriteNullValue();
+                }
+                break;
+            case NativeInteropValueKind.String:
+                writer.WriteStringValue(value.Utf8);
+                break;
+            case NativeInteropValueKind.Handle:
+                writer.WriteStartObject();
+                writer.WriteNumber("__webSceneHandle", value.GetHandle());
+                writer.WriteEndObject();
+                break;
+            case NativeInteropValueKind.Array:
+                writer.WriteStartArray();
+                for (var index = 0; index < value.Count; index++)
+                {
+                    WriteValue(writer, value.GetArrayItem(index));
+                }
+                writer.WriteEndArray();
+                break;
+            case NativeInteropValueKind.Object:
+                writer.WriteStartObject();
+                for (var index = 0; index < value.Count; index++)
+                {
+                    writer.WritePropertyName(
+                        value.GetObjectPropertyNameUtf8(index));
+                    WriteValue(writer, value.GetObjectPropertyValue(index));
+                }
+                writer.WriteEndObject();
+                break;
+            default:
+                throw new InvalidDataException(
+                    $"Unsupported native interop value kind {value.Kind}.");
+        }
+    }
+}
+
 /// <summary>
 /// Direct generated-call transport for an existing native WebScene engine.
 /// Callers must dispose it before destroying the engine.
@@ -611,11 +707,11 @@ public sealed class NativeJavaScriptBinaryTransport
             fixed (byte* globalNamePointer = globalName)
             fixed (byte* memberNamePointer = memberName)
             {
-                var request = new NativeGeneratedInteropRequest
+                var request = new NativeInteropInvokeRequest
                 {
                     StructSize =
-                        (uint)sizeof(NativeGeneratedInteropRequest),
-                    Version = 2,
+                        (uint)sizeof(NativeInteropInvokeRequest),
+                    Version = 3,
                     Operation = callSite.Operation,
                     Flags = callSite.Flags,
                     TargetHandle = target.IsEmpty
@@ -686,7 +782,7 @@ public sealed class NativeJavaScriptBinaryTransport
                 }
                 finally
                 {
-                    NativeWebSceneApi.InteropResultReleaseV1(result);
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                 }
             }
 
@@ -746,7 +842,7 @@ public sealed class NativeJavaScriptBinaryTransport
                 }
                 finally
                 {
-                    NativeWebSceneApi.InteropResultReleaseV1(result);
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                 }
             }
             catch (Exception error)
@@ -794,7 +890,7 @@ public sealed class NativeJavaScriptBinaryTransport
                 }
                 finally
                 {
-                    NativeWebSceneApi.InteropResultReleaseV1(result);
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                 }
                 return ValueTask.CompletedTask;
             }
@@ -850,7 +946,7 @@ public sealed class NativeJavaScriptBinaryTransport
                 }
                 finally
                 {
-                    NativeWebSceneApi.InteropResultReleaseV1(result);
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                 }
                 _core.SetResult(true);
             }
@@ -914,6 +1010,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
     private readonly HashSet<ulong> _earlyCompletions = [];
     private readonly IntPtr _engine;
     private readonly IntPtr _callbackData;
+    private int _beginsInFlight;
     private bool _disposed;
 
     public NativeInteropInvoker(IntPtr engine)
@@ -957,6 +1054,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(documentName);
 
         var slot = RentSlot(cancellationToken);
+        BeginBindingWindow();
         var sourceLength = System.Text.Encoding.UTF8.GetByteCount(source);
         var nameLength = System.Text.Encoding.UTF8.GetByteCount(documentName);
         var sourceBytes = ArrayPool<byte>.Shared.Rent(Math.Max(1, sourceLength));
@@ -972,16 +1070,16 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             fixed (byte* sourcePointer = sourceBytes)
             fixed (byte* namePointer = nameBytes)
             {
-                var request = new NativeInteropRequest
+                var request = new NativeInteropEvaluateRequest
                 {
-                    StructSize = (uint)sizeof(NativeInteropRequest),
-                    Version = 1,
+                    StructSize = (uint)sizeof(NativeInteropEvaluateRequest),
+                    Version = 3,
                     Source = sourcePointer,
                     SourceLength = (nuint)sourceLength,
                     DocumentName = namePointer,
                     DocumentNameLength = (nuint)nameLength
                 };
-                var operationId = NativeWebSceneApi.EngineBeginInvokeV1(
+                var operationId = NativeWebSceneApi.EngineBeginEvaluateV3(
                     _engine,
                     in request,
                     s_completedAddress,
@@ -1007,18 +1105,20 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         {
             ArrayPool<byte>.Shared.Return(sourceBytes);
             ArrayPool<byte>.Shared.Return(nameBytes);
+            EndBindingWindow();
         }
         return slot.AsValueTask();
     }
 
     internal ValueTask<IntPtr> InvokeGeneratedAsync(
-        in NativeGeneratedInteropRequest request,
+        in NativeInteropInvokeRequest request,
         CancellationToken cancellationToken)
     {
         var slot = RentSlot(cancellationToken);
+        BeginBindingWindow();
         try
         {
-            var operationId = NativeWebSceneApi.EngineBeginGeneratedInvokeV2(
+            var operationId = NativeWebSceneApi.EngineBeginInvokeV3(
                 _engine,
                 in request,
                 s_completedAddress,
@@ -1038,6 +1138,10 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         catch (Exception error)
         {
             slot.FailToBegin(error);
+        }
+        finally
+        {
+            EndBindingWindow();
         }
         return slot.AsValueTask();
     }
@@ -1134,11 +1238,38 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             if (_disposed) return;
             if (!_operations.TryGetValue(operationId, out slot))
             {
-                _earlyCompletions.Add(operationId);
+                if (_beginsInFlight != 0)
+                {
+                    _earlyCompletions.Add(operationId);
+                }
                 return;
             }
         }
         slot.Complete(operationId);
+    }
+
+    private void BeginBindingWindow()
+    {
+        lock (_gate)
+        {
+            _beginsInFlight++;
+        }
+    }
+
+    private void EndBindingWindow()
+    {
+        lock (_gate)
+        {
+            _beginsInFlight--;
+            if (_beginsInFlight == 0)
+            {
+                // Every operation ID returned by an overlapping begin call has
+                // now been bound. Any unmatched callback belongs to an
+                // operation that was already cancelled/returned and must not
+                // become an unbounded stale-ID set.
+                _earlyCompletions.Clear();
+            }
+        }
     }
 
     private OperationSlot RentSlot(CancellationToken cancellationToken)
@@ -1247,7 +1378,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 engine = _engine;
             }
 
-            var result = NativeWebSceneApi.EngineTakeInvokeResultV1(
+            var result = NativeWebSceneApi.EngineTakeInvokeResultV3(
                 engine,
                 operationId);
             if (result == IntPtr.Zero)
@@ -1276,7 +1407,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                             new ReadOnlySpan<byte>(
                                 view->ErrorBytes,
                                 checked((int)view->ErrorByteCount)));
-                    NativeWebSceneApi.InteropResultReleaseV1(result);
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                     _source.SetException(
                         new InvalidOperationException(error));
                     return;
@@ -1285,7 +1416,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             }
             catch (Exception error)
             {
-                NativeWebSceneApi.InteropResultReleaseV1(result);
+                NativeInteropResultSafeHandle.ReleaseRaw(result);
                 _source.SetException(error);
             }
         }
@@ -1313,7 +1444,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 if (operationId == 0) return;
                 _completionSet = true;
             }
-            NativeWebSceneApi.EngineCancelInvokeV1(engine, operationId);
+            NativeWebSceneApi.EngineCancelInvokeV3(engine, operationId);
             _source.SetException(new OperationCanceledException());
         }
 
@@ -1352,4 +1483,5 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         {
         }
     }
+
 }

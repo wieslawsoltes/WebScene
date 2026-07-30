@@ -86,8 +86,10 @@ stable `fillStyle`, composite mode, or shadow state.
   component-owned iframe, script, and stylesheet resources.
 - `webscene_engine_set_preferred_color_scheme` provides the host's effective
   light/dark preference for CSS media queries and `Window.matchMedia`.
-- `webscene_engine_execute_script` and `webscene_engine_evaluate_json` are the generic
-  JavaScript execution/interoperation boundary.
+- `webscene_engine_execute_script` is the fire-and-forget execution boundary.
+- `webscene_engine_begin_evaluate_v3` and
+  `webscene_engine_begin_invoke_v3` are the leased tagged-result
+  interoperation boundaries.
 - Component code sets `globalThis.__webSceneComponentReady = true` when its application
   lifecycle is ready. The generic scene flag and metric expose that state to a host.
 - `webscene_engine_acquire_latest_scene` returns an immutable pointer view. The host must
