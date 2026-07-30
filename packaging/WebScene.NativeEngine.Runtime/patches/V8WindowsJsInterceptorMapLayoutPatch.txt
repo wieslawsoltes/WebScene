@@ -1,7 +1,16 @@
 diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
-index 1620023..a46c44f 100644
+index 1bf77351fa0..da9f2ff178a 100644
 --- a/src/objects/js-interceptor-map.h
 +++ b/src/objects/js-interceptor-map.h
+@@ -17,4 +17,8 @@ class InterceptorInfo;
+ // Extended map for interceptor objects, it caches named and indexed
+ // InterceptorInfo objects in the Map for faster access.
++#if V8_CC_MSVC
++V8_ABSTRACT_OBJECT class JSInterceptorMap : public ExtendedMap {
++#else
+ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
++#endif
+  public:
 @@ -42,4 +42,15 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
   public:
 +#if V8_CC_MSVC
