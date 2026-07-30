@@ -8,8 +8,11 @@
 #include <v8-profiler.h>
 
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
+#include "partition_alloc/buildflags.h"
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #include "partition_alloc/partition_root.h"
 #include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
+#endif
 #endif
 
 #include <algorithm>
@@ -1028,6 +1031,7 @@ void initialize_v8_process()
 {
     std::call_once(v8_initialize_once, [] {
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
         // Standalone V8's d8 shell performs this initialization before
         // entering V8. Without it, PartitionAlloc's process root has no
         // thread cache and allocation-heavy multi-context resize becomes
@@ -1051,6 +1055,7 @@ void initialize_v8_process()
         partition->AdjustSlotSpanRing(
             foreground_slot_span_ring_size,
             foreground_dirty_bytes_shift);
+#endif
 #endif
         bool optimize_for_size = false;
 #if defined(WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT)

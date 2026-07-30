@@ -100,24 +100,30 @@ jobs:
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
           v8_cache_generation: v7-v8-15.3.10-partitionalloc-complete
+          v8_cache_script: scripts/build-native-engine-runtime.sh
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt
         - os: ubuntu-latest
           rid: linux-x64
           cpu: x64
           monolith: libv8_monolith.a
           script: unix
           v8_revision: 15.3.10
-          partition_alloc: false
-          v8_configuration: Release
-          v8_cache_generation: v10-v8-15.3.10-ubuntu22-gcc12-lld-no-crel-shared
-        - os: windows-latest
+          partition_alloc: true
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v11-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared
+          v8_cache_script: scripts/build-native-engine-runtime.sh
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt
+        - os: windows-2022
           rid: win-x64
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
-          v8_revision: 14.7.173.23
-          partition_alloc: false
-          v8_configuration: Release
-          v8_cache_generation: v4-v8-14.7-stable
+          v8_revision: 15.3.10
+          partition_alloc: true
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v8-v8-15.3.10-pa-windows-compat
+          v8_cache_script: scripts/build-native-engine-runtime.ps1
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -158,7 +164,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
         restore-keys: |
           webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
     - id: restored-v8-sdk
@@ -180,7 +186,9 @@ jobs:
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
                 && grep -Eq '^use_sysroot *= *false$' "$args" \
-                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args" \
+                && grep -Eq '^use_allocator_shim *= *false$' "$args" \
+                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
@@ -241,6 +249,7 @@ jobs:
               --v8-root '$v8_root' \
               --v8-revision '${{ matrix.v8_revision }}' \
               --upstream-v8 \
+              --partition-alloc \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
@@ -257,6 +266,8 @@ jobs:
           -PackageVersion '${{ needs.metadata.outputs.package-version }}' `
           -V8Root $v8Root `
           -V8Revision '${{ matrix.v8_revision }}' `
+          -UpstreamV8 `
+          -PartitionAlloc `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
@@ -278,7 +289,9 @@ jobs:
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
                 && grep -Eq '^use_sysroot *= *false$' "$args" \
-                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args" \
+                && grep -Eq '^use_allocator_shim *= *false$' "$args" \
+                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
@@ -305,7 +318,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'scripts/build-native-engine-runtime.ps1', 'packaging/WebScene.NativeEngine.Runtime/patches/**', 'third-party/clearscript/V8/*.txt') }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
@@ -366,7 +379,7 @@ jobs:
           rid: osx-arm64
         - os: ubuntu-latest
           rid: linux-x64
-        - os: windows-latest
+        - os: windows-2022
           rid: win-x64
     runs-on: ${{ matrix.os }}
     steps:
