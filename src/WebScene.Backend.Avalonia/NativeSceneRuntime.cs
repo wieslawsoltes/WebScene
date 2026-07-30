@@ -23,6 +23,7 @@ using JavaScript.Avalonia;
 #endif
 using WebScene.Core;
 using WebScene.Css;
+using WebScene.JavaScript.Interop;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
@@ -4375,6 +4376,128 @@ internal unsafe struct NativeSceneView
     public uint Reserved;
 }
 
+public enum NativeInteropValueKind : uint
+{
+    Undefined = 0,
+    Null = 1,
+    Boolean = 2,
+    Number = 3,
+    String = 4,
+    Array = 5,
+    Object = 6,
+    Handle = 7
+}
+
+internal enum NativeInteropResultStatus : uint
+{
+    Succeeded = 0,
+    JavaScriptError = 1,
+    Cancelled = 2,
+    InvalidRequest = 3
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeInteropValueData
+{
+    public NativeInteropValueKind Kind;
+    public uint Flags;
+    public uint Offset;
+    public uint Length;
+    public ulong Payload;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeInteropEdgeData
+{
+    public uint NameOffset;
+    public uint NameLength;
+    public uint ValueIndex;
+    public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeInteropRequest
+{
+    public uint StructSize;
+    public uint Version;
+    public byte* Source;
+    public nuint SourceLength;
+    public byte* DocumentName;
+    public nuint DocumentNameLength;
+    public uint Flags;
+    public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeGeneratedInteropRequest
+{
+    public uint StructSize;
+    public uint Version;
+    public JavaScriptBinaryOperation Operation;
+    public JavaScriptBinaryCallFlags Flags;
+    public ulong TargetHandle;
+    public byte* GlobalName;
+    public nuint GlobalNameLength;
+    public byte* MemberName;
+    public nuint MemberNameLength;
+    public JavaScriptBinaryValueData* Values;
+    public nuint ValueCount;
+    public JavaScriptBinaryEdgeData* Edges;
+    public nuint EdgeCount;
+    public byte* Utf8Bytes;
+    public nuint Utf8ByteCount;
+    public uint ArgumentsRoot;
+    public JavaScriptBinaryResultMode ResultMode;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeInteropResultView
+{
+    public uint StructSize;
+    public uint Version;
+    public NativeInteropResultStatus Status;
+    public uint Flags;
+    public ulong OperationId;
+    public NativeInteropValueData* Values;
+    public NativeInteropEdgeData* Edges;
+    public byte* Utf8Bytes;
+    public byte* ErrorBytes;
+    public void* LeaseToken;
+    public uint ValueCount;
+    public uint EdgeCount;
+    public uint Utf8ByteCount;
+    public uint ErrorByteCount;
+    public uint RootValueIndex;
+    public uint PooledCapacity;
+    public uint Reserved0;
+    public uint Reserved1;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeInteropPoolMetrics
+{
+    public uint StructSize;
+    public uint Version;
+    public ulong OutstandingResults;
+    public ulong PooledBytes;
+    public ulong PoolHits;
+    public ulong PoolMisses;
+    public ulong OversizeAllocations;
+    public ulong HighWaterOutstandingResults;
+    public ulong PooledRequestRecords;
+    public ulong RequestPoolHits;
+    public ulong RequestPoolMisses;
+    public ulong RequestOversizeAllocations;
+    public ulong ActiveOperationSlots;
+    public ulong AvailableOperationSlots;
+    public ulong OperationSlotHighWater;
+    public ulong PooledResultBytes4K;
+    public ulong PooledResultBytes16K;
+    public ulong PooledResultBytes64K;
+    public ulong PooledResultBytes256K;
+    public ulong PooledResultBytes1M;
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct EngineMetrics
 {
@@ -5472,6 +5595,42 @@ public static unsafe class NativeWebSceneApi
         nuint destinationCapacity,
         uint timeoutMilliseconds);
 
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_begin_invoke_v1")]
+    internal static extern ulong EngineBeginInvokeV1(
+        IntPtr engine,
+        in NativeInteropRequest request,
+        IntPtr completed,
+        IntPtr userData);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_begin_generated_invoke_v2")]
+    internal static extern ulong EngineBeginGeneratedInvokeV2(
+        IntPtr engine,
+        in NativeGeneratedInteropRequest request,
+        IntPtr completed,
+        IntPtr userData);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_take_invoke_result_v1")]
+    internal static extern IntPtr EngineTakeInvokeResultV1(
+        IntPtr engine,
+        ulong operationId);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_cancel_invoke_v1")]
+    internal static extern byte EngineCancelInvokeV1(
+        IntPtr engine,
+        ulong operationId);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_interop_result_release_v1")]
+    internal static extern void InteropResultReleaseV1(IntPtr result);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_get_interop_pool_metrics_v1")]
+    private static extern byte EngineGetInteropPoolMetricsV1(
+        IntPtr engine,
+        ref NativeInteropPoolMetrics metrics);
+
     [DllImport(LibraryName, EntryPoint = "webscene_engine_take_host_request")]
     private static extern nuint EngineTakeHostRequest(
         IntPtr engine,
@@ -5571,6 +5730,21 @@ public static unsafe class NativeWebSceneApi
         {
             EvaluationBufferPool.Return(destination);
         }
+    }
+
+    public static NativeInteropPoolMetrics GetInteropPoolMetrics(IntPtr engine)
+    {
+        var metrics = new NativeInteropPoolMetrics
+        {
+            StructSize = (uint)Marshal.SizeOf<NativeInteropPoolMetrics>(),
+            Version = 1
+        };
+        if (EngineGetInteropPoolMetricsV1(engine, ref metrics) == 0)
+        {
+            throw new InvalidOperationException(
+                "The experimental native interop metrics ABI is unavailable.");
+        }
+        return metrics;
     }
 
     public static bool TryTakeHostRequest(IntPtr engine, out string request)

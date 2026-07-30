@@ -1,9 +1,6 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
-
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
 #include "webscene_v8_runtime.h"
-#endif
 
 #include <algorithm>
 #include <array>
@@ -26,6 +23,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -49,6 +47,12 @@ static_assert(sizeof(webscene_canvas_command) == 80);
 static_assert(sizeof(webscene_scene_string) == 8);
 static_assert(sizeof(webscene_damage_rect) == 16);
 static_assert(sizeof(webscene_scene_view) == 136);
+static_assert(sizeof(webscene_interop_value_v1) == 24);
+static_assert(sizeof(webscene_interop_edge_v1) == 16);
+static_assert(sizeof(webscene_interop_request_v1) == 48);
+static_assert(sizeof(webscene_interop_request_v2) == 112);
+static_assert(sizeof(webscene_interop_result_view_v1) == 96);
+static_assert(sizeof(webscene_interop_pool_metrics_v1) == 152);
 
 class input_ring final {
 public:
@@ -172,8 +176,303 @@ struct evaluation_request final {
     uint64_t required_consumed_inputs{0};
 };
 
+class interop_result_pool_v1;
+
+std::mutex taken_interop_results_mutex;
+std::unordered_set<const webscene_interop_result_view_v1*>
+    taken_interop_results;
+
+struct interop_result_lease_v1 final {
+    webscene_interop_result_view_v1 view{};
+    webscene_native::interop_result_data_v1 data;
+    std::shared_ptr<interop_result_pool_v1> owner;
+
+    size_t retained_bytes() const noexcept
+    {
+        return sizeof(*this)
+            + data.values.capacity() * sizeof(webscene_interop_value_v1)
+            + data.edges.capacity() * sizeof(webscene_interop_edge_v1)
+            + data.utf8_bytes.capacity()
+            + data.error.capacity();
+    }
+
+    void publish(uint64_t operation_id)
+    {
+        const auto retained = retained_bytes();
+        view = webscene_interop_result_view_v1{
+            static_cast<uint32_t>(sizeof(webscene_interop_result_view_v1)),
+            1U,
+            data.status,
+            0U,
+            operation_id,
+            data.values.data(),
+            data.edges.data(),
+            data.utf8_bytes.data(),
+            data.error.data(),
+            this,
+            static_cast<uint32_t>(data.values.size()),
+            static_cast<uint32_t>(data.edges.size()),
+            static_cast<uint32_t>(data.utf8_bytes.size()),
+            static_cast<uint32_t>(data.error.size()),
+            data.root_value_index,
+            retained > std::numeric_limits<uint32_t>::max()
+                ? std::numeric_limits<uint32_t>::max()
+                : static_cast<uint32_t>(retained),
+            0U,
+            0U};
+    }
+};
+
+class interop_result_pool_v1 final
+    : public std::enable_shared_from_this<interop_result_pool_v1> {
+public:
+    static constexpr size_t maximum_pooled_bytes = 8U * 1024U * 1024U;
+    static constexpr size_t maximum_pooled_result_bytes = 1024U * 1024U;
+    static constexpr std::array<size_t, 5> size_classes{
+        4U * 1024U,
+        16U * 1024U,
+        64U * 1024U,
+        256U * 1024U,
+        1024U * 1024U};
+
+    std::unique_ptr<interop_result_lease_v1> acquire()
+    {
+        std::unique_ptr<interop_result_lease_v1> result;
+        {
+            std::lock_guard lock(mutex_);
+            for (size_t index = 0;
+                 index < available_by_size_class_.size();
+                 ++index) {
+                auto& available = available_by_size_class_[index];
+                if (available.empty()) continue;
+                result = std::move(available.back());
+                available.pop_back();
+                const auto retained = result->retained_bytes();
+                pooled_bytes_ = retained > pooled_bytes_
+                    ? 0U
+                    : pooled_bytes_ - retained;
+                pooled_bytes_by_size_class_[index] =
+                    retained > pooled_bytes_by_size_class_[index]
+                        ? 0U
+                        : pooled_bytes_by_size_class_[index] - retained;
+                pool_hits_.fetch_add(1U, std::memory_order_relaxed);
+                break;
+            }
+        }
+        if (!result) {
+            result = std::make_unique<interop_result_lease_v1>();
+            pool_misses_.fetch_add(1U, std::memory_order_relaxed);
+        }
+        result->data.clear();
+        result->owner = shared_from_this();
+        const auto outstanding = outstanding_results_.fetch_add(
+            1U,
+            std::memory_order_relaxed) + 1U;
+        auto high_water = high_water_outstanding_results_.load(
+            std::memory_order_relaxed);
+        while (outstanding > high_water
+            && !high_water_outstanding_results_.compare_exchange_weak(
+                high_water,
+                outstanding,
+                std::memory_order_relaxed)) {
+        }
+        return result;
+    }
+
+    void release(std::unique_ptr<interop_result_lease_v1> result)
+    {
+        outstanding_results_.fetch_sub(1U, std::memory_order_relaxed);
+        const auto retained = result->retained_bytes();
+        result->owner.reset();
+        if (retained > maximum_pooled_result_bytes) {
+            oversize_allocations_.fetch_add(1U, std::memory_order_relaxed);
+            return;
+        }
+        const auto size_class = static_cast<size_t>(std::distance(
+            size_classes.begin(),
+            std::lower_bound(
+                size_classes.begin(),
+                size_classes.end(),
+                retained)));
+        if (size_class >= size_classes.size()) {
+            oversize_allocations_.fetch_add(1U, std::memory_order_relaxed);
+            return;
+        }
+        std::lock_guard lock(mutex_);
+        if (retained > maximum_pooled_bytes - pooled_bytes_) return;
+        result->data.clear();
+        pooled_bytes_ += retained;
+        pooled_bytes_by_size_class_[size_class] += retained;
+        available_by_size_class_[size_class].push_back(std::move(result));
+    }
+
+    void read_metrics(webscene_interop_pool_metrics_v1& metrics) const
+    {
+        metrics.version = 1U;
+        metrics.outstanding_results =
+            outstanding_results_.load(std::memory_order_relaxed);
+        {
+            std::lock_guard lock(mutex_);
+            metrics.pooled_bytes = pooled_bytes_;
+            metrics.pooled_result_bytes_4k =
+                pooled_bytes_by_size_class_[0];
+            metrics.pooled_result_bytes_16k =
+                pooled_bytes_by_size_class_[1];
+            metrics.pooled_result_bytes_64k =
+                pooled_bytes_by_size_class_[2];
+            metrics.pooled_result_bytes_256k =
+                pooled_bytes_by_size_class_[3];
+            metrics.pooled_result_bytes_1m =
+                pooled_bytes_by_size_class_[4];
+        }
+        metrics.pool_hits = pool_hits_.load(std::memory_order_relaxed);
+        metrics.pool_misses = pool_misses_.load(std::memory_order_relaxed);
+        metrics.oversize_allocations =
+            oversize_allocations_.load(std::memory_order_relaxed);
+        metrics.high_water_outstanding_results =
+            high_water_outstanding_results_.load(std::memory_order_relaxed);
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::array<
+        std::vector<std::unique_ptr<interop_result_lease_v1>>,
+        size_classes.size()> available_by_size_class_;
+    std::array<size_t, size_classes.size()>
+        pooled_bytes_by_size_class_{};
+    size_t pooled_bytes_{0};
+    std::atomic<uint64_t> outstanding_results_{0};
+    std::atomic<uint64_t> pool_hits_{0};
+    std::atomic<uint64_t> pool_misses_{0};
+    std::atomic<uint64_t> oversize_allocations_{0};
+    std::atomic<uint64_t> high_water_outstanding_results_{0};
+};
+
+struct interop_operation_v1 final {
+    size_t pool_index{0};
+    uint64_t id{0};
+    webscene_interop_completed_callback_v1 completed{nullptr};
+    void* user_data{nullptr};
+    std::atomic<bool> cancelled{false};
+    std::atomic<bool> ready{false};
+    std::unique_ptr<interop_result_lease_v1> result;
+    bool in_use{false};
+
+    ~interop_operation_v1()
+    {
+        if (!result) return;
+        auto pool = result->owner;
+        pool->release(std::move(result));
+    }
+};
+
+struct interop_request_v1 final {
+    std::string source;
+    std::string document_name;
+    std::shared_ptr<interop_operation_v1> operation;
+    uint64_t required_consumed_inputs{0};
+};
+
+struct interop_request_v2 final {
+    webscene_native::interop_request_data_v2 request;
+    std::shared_ptr<interop_operation_v1> operation;
+    uint64_t required_consumed_inputs{0};
+};
+
+struct interop_cancel_request_v2 final {
+    uint64_t operation_id{0};
+    std::shared_ptr<interop_operation_v1> operation;
+};
+
 using script_work_request =
-    std::variant<script_request, url_request, evaluation_request>;
+    std::variant<
+        script_request,
+        url_request,
+        evaluation_request,
+        interop_request_v1,
+        interop_request_v2,
+        interop_cancel_request_v2>;
+
+bool validate_interop_request_v2(
+    const webscene_interop_request_v2& request,
+    std::string& error)
+{
+    constexpr size_t maximum_values = 1'000'000U;
+    constexpr size_t maximum_edges = 1'000'000U;
+    constexpr size_t maximum_utf8_bytes = 64U * 1024U * 1024U;
+    if (request.version != 2U
+        || request.operation < WEBSCENE_INTEROP_GET_GLOBAL_V2
+        || request.operation > WEBSCENE_INTEROP_RELEASE_HANDLE_V2
+        || request.result_mode > WEBSCENE_INTEROP_RESULT_VOID_V2
+        || (request.flags & ~WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2) != 0U
+        || request.value_count == 0U
+        || request.value_count > maximum_values
+        || request.edge_count > maximum_edges
+        || request.utf8_byte_count > maximum_utf8_bytes
+        || request.values == nullptr
+        || (request.edge_count != 0U && request.edges == nullptr)
+        || (request.utf8_byte_count != 0U && request.utf8_bytes == nullptr)
+        || request.arguments_root >= request.value_count
+        || request.values[request.arguments_root].kind
+            != WEBSCENE_INTEROP_VALUE_ARRAY_V1) {
+        error = "Generated native interop request header is invalid";
+        return false;
+    }
+    const auto needs_global =
+        request.operation == WEBSCENE_INTEROP_GET_GLOBAL_V2
+        || request.operation == WEBSCENE_INTEROP_INVOKE_GLOBAL_V2
+        || request.operation == WEBSCENE_INTEROP_CONSTRUCT_V2;
+    const auto needs_target =
+        request.operation == WEBSCENE_INTEROP_GET_PROPERTY_V2
+        || request.operation == WEBSCENE_INTEROP_SET_PROPERTY_V2
+        || request.operation == WEBSCENE_INTEROP_INVOKE_MEMBER_V2
+        || request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V2;
+    const auto needs_member =
+        request.operation == WEBSCENE_INTEROP_GET_PROPERTY_V2
+        || request.operation == WEBSCENE_INTEROP_SET_PROPERTY_V2
+        || request.operation == WEBSCENE_INTEROP_INVOKE_MEMBER_V2;
+    if ((needs_global
+            && (request.global_name == nullptr
+                || request.global_name_length == 0U))
+        || (needs_target && request.target_handle == 0U)
+        || (needs_member
+            && (request.member_name == nullptr
+                || request.member_name_length == 0U))) {
+        error = "Generated native interop call-site metadata is incomplete";
+        return false;
+    }
+    for (size_t index = 0; index < request.value_count; ++index) {
+        const auto& value = request.values[index];
+        if (value.kind > WEBSCENE_INTEROP_VALUE_HANDLE_V1) {
+            error = "Generated native interop request has an invalid value tag";
+            return false;
+        }
+        if (value.kind == WEBSCENE_INTEROP_VALUE_STRING_V1
+            && (value.offset > request.utf8_byte_count
+                || value.length > request.utf8_byte_count - value.offset)) {
+            error = "Generated native interop request has an invalid string range";
+            return false;
+        }
+        if ((value.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V1
+                || value.kind == WEBSCENE_INTEROP_VALUE_OBJECT_V1)
+            && (value.offset > request.edge_count
+                || value.length > request.edge_count - value.offset)) {
+            error = "Generated native interop request has an invalid edge range";
+            return false;
+        }
+    }
+    for (size_t index = 0; index < request.edge_count; ++index) {
+        const auto& edge = request.edges[index];
+        if (edge.value_index >= request.value_count
+            || edge.name_offset > request.utf8_byte_count
+            || edge.name_length
+                > request.utf8_byte_count - edge.name_offset) {
+            error = "Generated native interop request has an invalid edge";
+            return false;
+        }
+    }
+    return true;
+}
 
 uint64_t mix_hash(uint64_t hash, uint64_t value)
 {
@@ -654,6 +953,182 @@ struct webscene_engine final {
         }
         return required;
 #endif
+    }
+
+    uint64_t begin_invoke_v1(
+        const webscene_interop_request_v1* request,
+        webscene_interop_completed_callback_v1 completed,
+        void* user_data)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(request);
+        static_cast<void>(completed);
+        static_cast<void>(user_data);
+        set_last_error("Native engine was built without V8 support");
+        return 0U;
+#else
+        if (request == nullptr
+            || request->struct_size < sizeof(webscene_interop_request_v1)
+            || request->version != 1U
+            || request->source == nullptr
+            || request->source_length == 0U
+            || completed == nullptr) {
+            set_last_error("Native interop invocation request is invalid");
+            return 0U;
+        }
+        std::shared_ptr<interop_operation_v1> operation;
+        {
+            std::scoped_lock lock(script_mutex_, interop_mutex_);
+            const auto pending_interop = std::count_if(
+                script_work_.begin(),
+                script_work_.end(),
+                [](const auto& pending) {
+                    return std::holds_alternative<interop_request_v1>(pending)
+                        || std::holds_alternative<interop_request_v2>(pending);
+                });
+            if (pending_interop >= 64U) {
+                set_last_error("Native interop invocation queue is full");
+                return 0U;
+            }
+            operation = rent_interop_operation_locked(
+                completed,
+                user_data);
+            interop_operations_.emplace(operation->id, operation);
+            script_work_.emplace_back(interop_request_v1{
+                std::string(request->source, request->source_length),
+                request->document_name == nullptr
+                    ? std::string("native-interop-v1.js")
+                    : std::string(
+                        request->document_name,
+                        request->document_name_length),
+                operation,
+                enqueued_inputs_.load(std::memory_order_acquire)});
+        }
+        signal_worker();
+        return operation->id;
+#endif
+    }
+
+    uint64_t begin_generated_invoke_v2(
+        const webscene_interop_request_v2* request,
+        webscene_interop_completed_callback_v1 completed,
+        void* user_data)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(request);
+        static_cast<void>(completed);
+        static_cast<void>(user_data);
+        set_last_error("Native engine was built without V8 support");
+        return 0U;
+#else
+        std::string validation_error;
+        if (request == nullptr
+            || request->struct_size < sizeof(webscene_interop_request_v2)
+            || completed == nullptr
+            || !validate_interop_request_v2(*request, validation_error)) {
+            set_last_error(validation_error.empty()
+                ? "Generated native interop invocation request is invalid"
+                : std::move(validation_error));
+            return 0U;
+        }
+        std::shared_ptr<interop_operation_v1> operation;
+        auto copied = copy_interop_request(*request);
+        {
+            std::scoped_lock lock(script_mutex_, interop_mutex_);
+            const auto pending_interop = std::count_if(
+                script_work_.begin(),
+                script_work_.end(),
+                [](const auto& pending) {
+                    return std::holds_alternative<interop_request_v1>(pending)
+                        || std::holds_alternative<interop_request_v2>(pending);
+                });
+            if (pending_interop >= 64U) {
+                return_interop_request(std::move(copied));
+                set_last_error("Native interop invocation queue is full");
+                return 0U;
+            }
+            operation = rent_interop_operation_locked(
+                completed,
+                user_data);
+            interop_operations_.emplace(operation->id, operation);
+            script_work_.emplace_back(interop_request_v2{
+                std::move(copied),
+                operation,
+                enqueued_inputs_.load(std::memory_order_acquire)});
+        }
+        signal_worker();
+        return operation->id;
+#endif
+    }
+
+    const webscene_interop_result_view_v1* take_invoke_result_v1(
+        uint64_t operation_id)
+    {
+        std::lock_guard lock(interop_mutex_);
+        const auto iterator = interop_operations_.find(operation_id);
+        if (iterator == interop_operations_.end()
+            || !iterator->second->ready.load(std::memory_order_acquire)
+            || !iterator->second->result) {
+            return nullptr;
+        }
+        auto operation = iterator->second;
+        auto result = std::move(operation->result);
+        interop_operations_.erase(iterator);
+        return_interop_operation_locked(operation);
+        const auto* view = &result.release()->view;
+        {
+            std::lock_guard taken_lock(taken_interop_results_mutex);
+            taken_interop_results.insert(view);
+        }
+        return view;
+    }
+
+    bool cancel_invoke_v1(uint64_t operation_id)
+    {
+        {
+            std::scoped_lock lock(script_mutex_, interop_mutex_);
+            const auto iterator = interop_operations_.find(operation_id);
+            if (iterator == interop_operations_.end()) return false;
+            auto operation = iterator->second;
+            operation->cancelled.store(true, std::memory_order_release);
+            interop_operations_.erase(iterator);
+            script_work_.emplace_back(
+                interop_cancel_request_v2{
+                    operation_id,
+                    std::move(operation)});
+        }
+        signal_worker();
+        return true;
+    }
+
+    bool get_interop_pool_metrics_v1(
+        webscene_interop_pool_metrics_v1& metrics) const
+    {
+        if (metrics.struct_size < sizeof(webscene_interop_pool_metrics_v1)) {
+            return false;
+        }
+        interop_result_pool_->read_metrics(metrics);
+        {
+            std::lock_guard lock(interop_request_pool_mutex_);
+            metrics.pooled_request_records =
+                available_interop_requests_.size();
+        }
+        metrics.request_pool_hits =
+            interop_request_pool_hits_.load(std::memory_order_relaxed);
+        metrics.request_pool_misses =
+            interop_request_pool_misses_.load(std::memory_order_relaxed);
+        metrics.request_oversize_allocations =
+            interop_request_oversize_allocations_.load(
+                std::memory_order_relaxed);
+        {
+            std::lock_guard lock(interop_mutex_);
+            metrics.active_operation_slots = interop_operations_.size();
+            metrics.available_operation_slots =
+                available_interop_operation_slots_.size();
+            metrics.operation_slot_high_water =
+                interop_operation_slot_high_water_;
+        }
+        return true;
     }
 
     size_t copy_last_error(char* destination, size_t capacity) const
@@ -1258,6 +1733,157 @@ struct webscene_engine final {
     }
 
 private:
+    webscene_native::interop_request_data_v2 copy_interop_request(
+        const webscene_interop_request_v2& request)
+    {
+        webscene_native::interop_request_data_v2 copied;
+        {
+            std::lock_guard lock(interop_request_pool_mutex_);
+            if (!available_interop_requests_.empty()) {
+                copied = std::move(available_interop_requests_.back());
+                available_interop_requests_.pop_back();
+                ++interop_request_pool_hits_;
+            } else {
+                ++interop_request_pool_misses_;
+            }
+        }
+        copied.operation = request.operation;
+        copied.flags = request.flags;
+        copied.result_mode = request.result_mode;
+        copied.target_handle = request.target_handle;
+        copied.arguments_root = request.arguments_root;
+        copied.global_name.assign(
+            request.global_name == nullptr ? "" : request.global_name,
+            request.global_name == nullptr
+                ? 0U
+                : request.global_name_length);
+        copied.member_name.assign(
+            request.member_name == nullptr ? "" : request.member_name,
+            request.member_name == nullptr
+                ? 0U
+                : request.member_name_length);
+        copied.values.assign(
+            request.values,
+            request.values + request.value_count);
+        if (request.edge_count == 0U) {
+            copied.edges.clear();
+        } else {
+            copied.edges.assign(
+                request.edges,
+                request.edges + request.edge_count);
+        }
+        if (request.utf8_byte_count == 0U) {
+            copied.utf8_bytes.clear();
+        } else {
+            copied.utf8_bytes.assign(
+                request.utf8_bytes,
+                request.utf8_bytes + request.utf8_byte_count);
+        }
+        return copied;
+    }
+
+    void return_interop_request(
+        webscene_native::interop_request_data_v2&& request)
+    {
+        constexpr size_t maximum_pooled_request_bytes =
+            8U * 1024U * 1024U;
+        const auto retained =
+            request.global_name.capacity()
+            + request.member_name.capacity()
+            + request.values.capacity()
+                * sizeof(webscene_interop_value_v1)
+            + request.edges.capacity()
+                * sizeof(webscene_interop_edge_v1)
+            + request.utf8_bytes.capacity();
+        if (retained > maximum_pooled_request_bytes) {
+            ++interop_request_oversize_allocations_;
+            return;
+        }
+        request.global_name.clear();
+        request.member_name.clear();
+        request.values.clear();
+        request.edges.clear();
+        request.utf8_bytes.clear();
+        std::lock_guard lock(interop_request_pool_mutex_);
+        if (available_interop_requests_.size() >= 64U) return;
+        available_interop_requests_.push_back(std::move(request));
+    }
+
+    std::shared_ptr<interop_operation_v1> rent_interop_operation_locked(
+        webscene_interop_completed_callback_v1 completed,
+        void* user_data)
+    {
+        std::shared_ptr<interop_operation_v1> operation;
+        if (!available_interop_operation_slots_.empty()) {
+            const auto index = available_interop_operation_slots_.back();
+            available_interop_operation_slots_.pop_back();
+            operation = interop_operation_slots_[index];
+        } else {
+            operation = std::make_shared<interop_operation_v1>();
+            operation->pool_index = interop_operation_slots_.size();
+            interop_operation_slots_.push_back(operation);
+            interop_operation_slot_high_water_ = std::max(
+                interop_operation_slot_high_water_,
+                interop_operation_slots_.size());
+        }
+        operation->id = next_interop_operation_id_.fetch_add(
+            1U,
+            std::memory_order_relaxed);
+        operation->completed = completed;
+        operation->user_data = user_data;
+        operation->cancelled.store(false, std::memory_order_relaxed);
+        operation->ready.store(false, std::memory_order_relaxed);
+        operation->result.reset();
+        operation->in_use = true;
+        return operation;
+    }
+
+    void return_interop_operation_locked(
+        const std::shared_ptr<interop_operation_v1>& operation)
+    {
+        if (!operation || !operation->in_use) return;
+        operation->id = 0U;
+        operation->completed = nullptr;
+        operation->user_data = nullptr;
+        operation->cancelled.store(false, std::memory_order_relaxed);
+        operation->ready.store(false, std::memory_order_relaxed);
+        operation->result.reset();
+        operation->in_use = false;
+        available_interop_operation_slots_.push_back(
+            operation->pool_index);
+    }
+
+    void complete_interop_operation(
+        const std::shared_ptr<interop_operation_v1>& operation,
+        webscene_native::interop_result_data_v1&& data)
+    {
+        auto result = interop_result_pool_->acquire();
+        result->data = std::move(data);
+        result->publish(operation->id);
+
+        webscene_interop_completed_callback_v1 completed = nullptr;
+        void* completed_user_data = nullptr;
+        {
+            std::lock_guard lock(interop_mutex_);
+            const auto pending = interop_operations_.find(operation->id);
+            if (pending != interop_operations_.end()
+                && pending->second == operation
+                && !operation->cancelled.load(std::memory_order_acquire)) {
+                operation->result = std::move(result);
+                operation->ready.store(true, std::memory_order_release);
+                completed = operation->completed;
+                completed_user_data = operation->user_data;
+            }
+        }
+        if (result) {
+            auto pool = result->owner;
+            pool->release(std::move(result));
+        }
+        if (completed != nullptr) {
+            completed(completed_user_data, operation->id);
+        }
+    }
+
     void update_host_animation_frame_demand() noexcept
     {
         auto demand = document_.has_active_animations()
@@ -1916,6 +2542,154 @@ private:
                             : runtime_->last_error());
                         update_compilation_metrics();
                     }
+                    changed = true;
+                    continue;
+                }
+                if (auto* cancellation =
+                        std::get_if<interop_cancel_request_v2>(&request)) {
+                    if (runtime_ != nullptr) {
+                        runtime_->cancel_interop_v2(
+                            cancellation->operation_id);
+                    }
+                    {
+                        std::lock_guard lock(interop_mutex_);
+                        return_interop_operation_locked(
+                            cancellation->operation);
+                    }
+                    continue;
+                }
+                if (auto* interop = std::get_if<interop_request_v2>(&request)) {
+                    if (interop->operation->cancelled.load(
+                            std::memory_order_acquire)) {
+                        return_interop_request(
+                            std::move(interop->request));
+                        continue;
+                    }
+                    if (consumed_inputs_.load(std::memory_order_acquire)
+                        < interop->required_consumed_inputs) {
+                        std::lock_guard lock(script_mutex_);
+                        script_work_.insert(
+                            script_work_.begin(),
+                            std::make_move_iterator(iterator),
+                            std::make_move_iterator(script_work.end()));
+                        break;
+                    }
+
+                    webscene_native::interop_result_data_v1 result;
+                    auto state =
+                        webscene_native::interop_invoke_state_v2::failed;
+                    if (runtime_ == nullptr) {
+                        result.status =
+                            WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                        result.error = "V8 runtime is unavailable";
+                    } else {
+                        const std::weak_ptr<interop_operation_v1> operation =
+                            interop->operation;
+                        state = runtime_->invoke_interop_v2(
+                            interop->request,
+                            result,
+                            interop->operation->id,
+                            [this, operation](
+                                    webscene_native::interop_result_data_v1&&
+                                        completed_result) {
+                                const auto retained = operation.lock();
+                                if (!retained) return;
+                                complete_interop_operation(
+                                    retained,
+                                    std::move(completed_result));
+                            });
+                    }
+                    if (state
+                        == webscene_native::interop_invoke_state_v2::pending) {
+                        return_interop_request(
+                            std::move(interop->request));
+                        update_compilation_metrics();
+                        changed = true;
+                        continue;
+                    }
+                    if (state
+                            == webscene_native::interop_invoke_state_v2::failed
+                        && result.error.empty()) {
+                        result.status =
+                            WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                        result.error = runtime_ == nullptr
+                            ? "V8 runtime is unavailable"
+                            : runtime_->last_error();
+                    }
+                    if (state
+                        == webscene_native::interop_invoke_state_v2::completed) {
+                        update_component_readiness();
+                    }
+                    complete_interop_operation(
+                        interop->operation,
+                        std::move(result));
+                    return_interop_request(
+                        std::move(interop->request));
+                    update_compilation_metrics();
+                    changed = true;
+                    continue;
+                }
+                if (auto* interop = std::get_if<interop_request_v1>(&request)) {
+                    if (interop->operation->cancelled.load(
+                            std::memory_order_acquire)) {
+                        continue;
+                    }
+                    if (consumed_inputs_.load(std::memory_order_acquire)
+                        < interop->required_consumed_inputs) {
+                        std::lock_guard lock(script_mutex_);
+                        script_work_.insert(
+                            script_work_.begin(),
+                            std::make_move_iterator(iterator),
+                            std::make_move_iterator(script_work.end()));
+                        break;
+                    }
+
+                    auto result = interop_result_pool_->acquire();
+                    const auto succeeded = runtime_ != nullptr
+                        && runtime_->evaluate_interop_v1(
+                            interop->source,
+                            interop->document_name,
+                            result->data);
+                    if (runtime_ == nullptr) {
+                        result->data.status =
+                            WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                        result->data.error = "V8 runtime is unavailable";
+                    } else if (!succeeded && result->data.error.empty()) {
+                        result->data.status =
+                            WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                        result->data.error = runtime_->last_error();
+                    }
+                    if (succeeded) update_component_readiness();
+                    result->publish(interop->operation->id);
+
+                    webscene_interop_completed_callback_v1 completed = nullptr;
+                    void* completed_user_data = nullptr;
+                    {
+                        std::lock_guard lock(interop_mutex_);
+                        const auto pending = interop_operations_.find(
+                            interop->operation->id);
+                        if (pending != interop_operations_.end()
+                            && pending->second == interop->operation
+                            && !interop->operation->cancelled.load(
+                                std::memory_order_acquire)) {
+                            interop->operation->result = std::move(result);
+                            interop->operation->ready.store(
+                                true,
+                                std::memory_order_release);
+                            completed = interop->operation->completed;
+                            completed_user_data = interop->operation->user_data;
+                        }
+                    }
+                    if (result) {
+                        auto pool = result->owner;
+                        pool->release(std::move(result));
+                    }
+                    if (completed != nullptr) {
+                        completed(
+                            completed_user_data,
+                            interop->operation->id);
+                    }
+                    update_compilation_metrics();
                     changed = true;
                     continue;
                 }
@@ -2881,6 +3655,22 @@ private:
 #endif
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
+    std::shared_ptr<interop_result_pool_v1> interop_result_pool_{
+        std::make_shared<interop_result_pool_v1>()};
+    mutable std::mutex interop_mutex_;
+    std::unordered_map<uint64_t, std::shared_ptr<interop_operation_v1>>
+        interop_operations_;
+    std::vector<std::shared_ptr<interop_operation_v1>>
+        interop_operation_slots_;
+    std::vector<size_t> available_interop_operation_slots_;
+    size_t interop_operation_slot_high_water_{0};
+    mutable std::mutex interop_request_pool_mutex_;
+    std::vector<webscene_native::interop_request_data_v2>
+        available_interop_requests_;
+    std::atomic<uint64_t> interop_request_pool_hits_{0};
+    std::atomic<uint64_t> interop_request_pool_misses_{0};
+    std::atomic<uint64_t> interop_request_oversize_allocations_{0};
+    std::atomic<uint64_t> next_interop_operation_id_{1U};
     std::shared_ptr<const scene> latest_{};
     std::atomic<bool> ordered_scene_consumer_{false};
     std::condition_variable wake_;
@@ -3342,6 +4132,78 @@ size_t webscene_engine_evaluate_json(
             destination,
             destination_capacity,
             timeout_milliseconds);
+}
+
+uint64_t webscene_engine_begin_invoke_v1(
+    webscene_engine* engine,
+    const webscene_interop_request_v1* request,
+    webscene_interop_completed_callback_v1 completed,
+    void* user_data)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->begin_invoke_v1(request, completed, user_data);
+}
+
+uint64_t webscene_engine_begin_generated_invoke_v2(
+    webscene_engine* engine,
+    const webscene_interop_request_v2* request,
+    webscene_interop_completed_callback_v1 completed,
+    void* user_data)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->begin_generated_invoke_v2(
+            request,
+            completed,
+            user_data);
+}
+
+const webscene_interop_result_view_v1*
+webscene_engine_take_invoke_result_v1(
+    webscene_engine* engine,
+    uint64_t operation_id)
+{
+    return engine == nullptr
+        ? nullptr
+        : engine->take_invoke_result_v1(operation_id);
+}
+
+uint8_t webscene_engine_cancel_invoke_v1(
+    webscene_engine* engine,
+    uint64_t operation_id)
+{
+    return engine != nullptr && engine->cancel_invoke_v1(operation_id)
+        ? 1U
+        : 0U;
+}
+
+void webscene_interop_result_release_v1(
+    const webscene_interop_result_view_v1* result)
+{
+    if (result == nullptr) return;
+    {
+        std::lock_guard lock(taken_interop_results_mutex);
+        if (taken_interop_results.erase(result) == 0U) {
+            return;
+        }
+    }
+    auto lease = std::unique_ptr<interop_result_lease_v1>(
+        static_cast<interop_result_lease_v1*>(
+            const_cast<void*>(result->lease_token)));
+    auto pool = lease->owner;
+    pool->release(std::move(lease));
+}
+
+uint8_t webscene_engine_get_interop_pool_metrics_v1(
+    const webscene_engine* engine,
+    webscene_interop_pool_metrics_v1* metrics)
+{
+    return engine != nullptr
+        && metrics != nullptr
+        && engine->get_interop_pool_metrics_v1(*metrics)
+        ? 1U
+        : 0U;
 }
 
 size_t webscene_engine_take_host_request(

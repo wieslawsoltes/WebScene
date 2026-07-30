@@ -7,8 +7,19 @@ namespace WebScene.JavaScript.Interop;
 /// Handle-table invoker built for the native engine's asynchronous
 /// <c>webscene_engine_evaluate_json</c> boundary.
 /// </summary>
-public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalInvoker
+public sealed partial class NativeJavaScriptInvoker :
+    IJavaScriptBidirectionalInvoker,
+    IJavaScriptBinaryInvoker
 {
+    private const long FirstBinaryHandle = 0x4000000000000000L;
+
+    private static readonly JavaScriptBinaryCallSite s_binaryReleaseCallSite =
+        new(
+            JavaScriptBinaryOperation.ReleaseHandle,
+            globalName: null,
+            memberName: null,
+            JavaScriptBinaryResultMode.Void);
+
     private const string Bootstrap = """
         (() => {
           if (globalThis.__webSceneDotNetInterop) return true;
@@ -131,6 +142,9 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
             return promise;
           };
           globalThis.__webSceneDotNetInterop = Object.freeze({
+            getHandleValue(handle) {
+              return get(handle);
+            },
             getGlobalObject(path) {
               return keep(globalValue(path));
             },
@@ -362,6 +376,7 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
         """;
 
     private readonly Func<string, string, CancellationToken, Task<string>> _evaluateJsonAsync;
+    private readonly IJavaScriptBinaryTransport? _binaryTransport;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private readonly TimeSpan _promisePollInterval;
@@ -375,14 +390,67 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
         Func<string, string, CancellationToken, Task<string>> evaluateJsonAsync,
         JsonSerializerOptions? jsonOptions = null,
         TimeSpan? promisePollInterval = null,
-        TimeSpan? promiseTimeout = null)
+        TimeSpan? promiseTimeout = null,
+        IJavaScriptBinaryTransport? binaryTransport = null)
     {
         _evaluateJsonAsync = evaluateJsonAsync
             ?? throw new ArgumentNullException(nameof(evaluateJsonAsync));
         _jsonOptions = CreateJsonOptions(jsonOptions);
         _promisePollInterval = promisePollInterval ?? TimeSpan.FromMilliseconds(8);
         _promiseTimeout = promiseTimeout ?? TimeSpan.FromSeconds(30);
+        _binaryTransport = binaryTransport;
     }
+
+    public ValueTask<TResult> InvokeBinaryAsync<TArguments, TResult, TCodec>(
+        JavaScriptBinaryCallSite callSite,
+        JavaScriptObjectReference target,
+        TArguments arguments,
+        CancellationToken cancellationToken = default)
+        where TCodec : struct, IJavaScriptBinaryCodec<TArguments, TResult>
+        => (_binaryTransport
+            ?? throw new NotSupportedException(
+                "This native JavaScript invoker has no binary transport."))
+            .InvokeAsync<TArguments, TResult, TCodec>(
+                this,
+                callSite,
+                target,
+                arguments,
+                cancellationToken);
+
+    public bool IsBinaryInteropAvailable => _binaryTransport is not null;
+
+    public ValueTask InvokeBinaryVoidAsync<TArguments, TCodec>(
+        JavaScriptBinaryCallSite callSite,
+        JavaScriptObjectReference target,
+        TArguments arguments,
+        CancellationToken cancellationToken = default)
+        where TCodec : struct,
+        IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
+        => (_binaryTransport
+            ?? throw new NotSupportedException(
+                "This native JavaScript invoker has no binary transport."))
+            .InvokeVoidAsync<TArguments, TCodec>(
+                this,
+                callSite,
+                target,
+                arguments,
+                cancellationToken);
+
+    public ValueTask<JavaScriptBinaryResultLease>
+        InvokeBinaryBorrowedAsync<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+        where TCodec : struct, IJavaScriptBinaryArgumentsCodec<TArguments>
+        => (_binaryTransport
+            ?? throw new NotSupportedException(
+                "This native JavaScript invoker has no binary transport."))
+            .InvokeBorrowedAsync<TArguments, TCodec>(
+                callSite,
+                target,
+                arguments,
+                cancellationToken);
 
     private static JsonSerializerOptions CreateJsonOptions(
         JsonSerializerOptions? options)
@@ -815,11 +883,39 @@ public sealed partial class NativeJavaScriptInvoker : IJavaScriptBidirectionalIn
             }
         }
 
+        if (reference.Id >= FirstBinaryHandle && _binaryTransport is not null)
+        {
+            await _binaryTransport.InvokeVoidAsync<
+                    JavaScriptBinaryVoid,
+                    BinaryReleaseCodec>(
+                    this,
+                    s_binaryReleaseCallSite,
+                    reference,
+                    new JavaScriptBinaryVoid(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         await EvaluateAsync(
             $"globalThis.__webSceneDotNetInterop.release({reference.Id})",
             "webscene-interop-release.js",
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private readonly struct BinaryReleaseCodec
+        : IJavaScriptBinaryCodec<JavaScriptBinaryVoid, JavaScriptBinaryVoid>
+    {
+        public static uint EncodeArguments(
+            ref JavaScriptBinaryWriter writer,
+            in JavaScriptBinaryVoid arguments)
+            => writer.BeginArray(0);
+
+        public static JavaScriptBinaryVoid DecodeResult(
+            JavaScriptBinaryValue value,
+            IJavaScriptInvoker invoker)
+            => new();
     }
 
     public async ValueTask<JavaScriptObjectReference> RegisterCallbackTargetAsync(

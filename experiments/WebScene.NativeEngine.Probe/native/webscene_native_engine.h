@@ -19,6 +19,7 @@ extern "C" {
 
 typedef struct webscene_engine webscene_engine;
 typedef struct webscene_scene_view webscene_scene_view;
+typedef struct webscene_interop_result_view_v1 webscene_interop_result_view_v1;
 
 typedef enum webscene_input_kind {
     WEBSCENE_INPUT_POINTER_MOVE = 1,
@@ -186,6 +187,165 @@ typedef struct webscene_scene_string {
     uint32_t byte_offset;
     uint32_t byte_length;
 } webscene_scene_string;
+
+typedef enum webscene_interop_value_kind_v1 {
+    WEBSCENE_INTEROP_VALUE_UNDEFINED_V1 = 0,
+    WEBSCENE_INTEROP_VALUE_NULL_V1 = 1,
+    WEBSCENE_INTEROP_VALUE_BOOLEAN_V1 = 2,
+    WEBSCENE_INTEROP_VALUE_NUMBER_V1 = 3,
+    WEBSCENE_INTEROP_VALUE_STRING_V1 = 4,
+    WEBSCENE_INTEROP_VALUE_ARRAY_V1 = 5,
+    WEBSCENE_INTEROP_VALUE_OBJECT_V1 = 6,
+    WEBSCENE_INTEROP_VALUE_HANDLE_V1 = 7
+} webscene_interop_value_kind_v1;
+
+typedef enum webscene_interop_result_status_v1 {
+    WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1 = 0,
+    WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1 = 1,
+    WEBSCENE_INTEROP_RESULT_CANCELLED_V1 = 2,
+    WEBSCENE_INTEROP_RESULT_INVALID_REQUEST_V1 = 3
+} webscene_interop_result_status_v1;
+
+/*
+ * One fixed-layout value in an immutable interop result. For strings,
+ * offset/length address utf8_bytes. For arrays and objects they address the
+ * edge table. Boolean, number and retained-handle payloads use payload.
+ */
+typedef struct webscene_interop_value_v1 {
+    uint32_t kind;
+    uint32_t flags;
+    uint32_t offset;
+    uint32_t length;
+    uint64_t payload;
+} webscene_interop_value_v1;
+
+/*
+ * Array edges use value_index only. Object edges additionally address the
+ * UTF-8 property name. Indices and offsets are validated by the managed
+ * reader before constructing spans.
+ */
+typedef struct webscene_interop_edge_v1 {
+    uint32_t name_offset;
+    uint32_t name_length;
+    uint32_t value_index;
+    uint32_t reserved;
+} webscene_interop_edge_v1;
+
+/*
+ * Experimental invocation request. Version 1 currently accepts the same
+ * source/document pair as evaluate_json so result transport, pooling and
+ * scheduling can be measured independently before specialized member
+ * invocation operations are added.
+ */
+typedef struct webscene_interop_request_v1 {
+    uint32_t struct_size;
+    uint32_t version;
+    const char* source;
+    size_t source_length;
+    const char* document_name;
+    size_t document_name_length;
+    uint32_t flags;
+    uint32_t reserved;
+} webscene_interop_request_v1;
+
+typedef enum webscene_interop_operation_v2 {
+    WEBSCENE_INTEROP_GET_GLOBAL_V2 = 1,
+    WEBSCENE_INTEROP_INVOKE_GLOBAL_V2 = 2,
+    WEBSCENE_INTEROP_CONSTRUCT_V2 = 3,
+    WEBSCENE_INTEROP_GET_PROPERTY_V2 = 4,
+    WEBSCENE_INTEROP_SET_PROPERTY_V2 = 5,
+    WEBSCENE_INTEROP_INVOKE_MEMBER_V2 = 6,
+    WEBSCENE_INTEROP_RELEASE_HANDLE_V2 = 7
+} webscene_interop_operation_v2;
+
+typedef enum webscene_interop_result_mode_v2 {
+    WEBSCENE_INTEROP_RESULT_VALUE_V2 = 0,
+    WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V2 = 1,
+    WEBSCENE_INTEROP_RESULT_VOID_V2 = 2
+} webscene_interop_result_mode_v2;
+
+typedef enum webscene_interop_call_flags_v2 {
+    WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2 = 1
+} webscene_interop_call_flags_v2;
+
+/*
+ * Generated direct-invocation request. All pointers are copied before
+ * webscene_engine_begin_generated_invoke_v2 returns. String offsets in value
+ * nodes and object edges address utf8_bytes. arguments_root must identify an
+ * array whose items are the call arguments.
+ */
+typedef struct webscene_interop_request_v2 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t operation;
+    uint32_t flags;
+    uint64_t target_handle;
+    const char* global_name;
+    size_t global_name_length;
+    const char* member_name;
+    size_t member_name_length;
+    const webscene_interop_value_v1* values;
+    size_t value_count;
+    const webscene_interop_edge_v1* edges;
+    size_t edge_count;
+    const char* utf8_bytes;
+    size_t utf8_byte_count;
+    uint32_t arguments_root;
+    uint32_t result_mode;
+} webscene_interop_request_v2;
+
+typedef void (*webscene_interop_completed_callback_v1)(
+    void* user_data,
+    uint64_t operation_id);
+
+/*
+ * The result and every table/string pointer remain valid until
+ * webscene_interop_result_release_v1 is called. The result can outlive the
+ * engine that produced it.
+ */
+struct webscene_interop_result_view_v1 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t status;
+    uint32_t flags;
+    uint64_t operation_id;
+    const webscene_interop_value_v1* values;
+    const webscene_interop_edge_v1* edges;
+    const char* utf8_bytes;
+    const char* error_bytes;
+    const void* lease_token;
+    uint32_t value_count;
+    uint32_t edge_count;
+    uint32_t utf8_byte_count;
+    uint32_t error_byte_count;
+    uint32_t root_value_index;
+    uint32_t pooled_capacity;
+    uint32_t reserved0;
+    uint32_t reserved1;
+};
+
+typedef struct webscene_interop_pool_metrics_v1 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t outstanding_results;
+    uint64_t pooled_bytes;
+    uint64_t pool_hits;
+    uint64_t pool_misses;
+    uint64_t oversize_allocations;
+    uint64_t high_water_outstanding_results;
+    uint64_t pooled_request_records;
+    uint64_t request_pool_hits;
+    uint64_t request_pool_misses;
+    uint64_t request_oversize_allocations;
+    uint64_t active_operation_slots;
+    uint64_t available_operation_slots;
+    uint64_t operation_slot_high_water;
+    uint64_t pooled_result_bytes_4k;
+    uint64_t pooled_result_bytes_16k;
+    uint64_t pooled_result_bytes_64k;
+    uint64_t pooled_result_bytes_256k;
+    uint64_t pooled_result_bytes_1m;
+} webscene_interop_pool_metrics_v1;
 
 typedef struct webscene_damage_rect {
     float x;
@@ -605,6 +765,28 @@ WEBSCENE_API size_t webscene_engine_evaluate_json(
     char* destination,
     size_t destination_capacity,
     uint32_t timeout_milliseconds);
+WEBSCENE_API uint64_t webscene_engine_begin_invoke_v1(
+    webscene_engine* engine,
+    const webscene_interop_request_v1* request,
+    webscene_interop_completed_callback_v1 completed,
+    void* user_data);
+WEBSCENE_API uint64_t webscene_engine_begin_generated_invoke_v2(
+    webscene_engine* engine,
+    const webscene_interop_request_v2* request,
+    webscene_interop_completed_callback_v1 completed,
+    void* user_data);
+WEBSCENE_API const webscene_interop_result_view_v1*
+webscene_engine_take_invoke_result_v1(
+    webscene_engine* engine,
+    uint64_t operation_id);
+WEBSCENE_API uint8_t webscene_engine_cancel_invoke_v1(
+    webscene_engine* engine,
+    uint64_t operation_id);
+WEBSCENE_API void webscene_interop_result_release_v1(
+    const webscene_interop_result_view_v1* result);
+WEBSCENE_API uint8_t webscene_engine_get_interop_pool_metrics_v1(
+    const webscene_engine* engine,
+    webscene_interop_pool_metrics_v1* metrics);
 /*
  * Removes one actual managed-datafeed request from the native V8 bridge. The
  * payload is UTF-8 JSON. A too-small/null destination reports the required

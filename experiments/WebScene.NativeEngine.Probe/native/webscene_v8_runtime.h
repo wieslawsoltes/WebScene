@@ -7,10 +7,49 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace webscene_native {
 
 class native_document;
+
+struct interop_result_data_v1 final {
+    uint32_t status{WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1};
+    uint32_t root_value_index{0};
+    std::vector<webscene_interop_value_v1> values;
+    std::vector<webscene_interop_edge_v1> edges;
+    std::vector<char> utf8_bytes;
+    std::string error;
+
+    void clear()
+    {
+        status = WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1;
+        root_value_index = 0;
+        values.clear();
+        edges.clear();
+        utf8_bytes.clear();
+        error.clear();
+    }
+};
+
+struct interop_request_data_v2 final {
+    uint32_t operation{0};
+    uint32_t flags{0};
+    uint32_t result_mode{0};
+    uint64_t target_handle{0};
+    uint32_t arguments_root{0};
+    std::string global_name;
+    std::string member_name;
+    std::vector<webscene_interop_value_v1> values;
+    std::vector<webscene_interop_edge_v1> edges;
+    std::vector<char> utf8_bytes;
+};
+
+enum class interop_invoke_state_v2 : uint8_t {
+    failed = 0,
+    completed = 1,
+    pending = 2
+};
 
 // Initializes the process-wide V8 platform without allocating a DOM runtime or
 // isolate. Applications can call this during startup so the one-time V8 cost is
@@ -135,6 +174,19 @@ public:
         const std::string& source,
         const std::string& document_name,
         std::string& result);
+    bool evaluate_interop_v1(
+        const std::string& source,
+        const std::string& document_name,
+        interop_result_data_v1& result);
+    using interop_completion_v2 =
+        std::function<void(interop_result_data_v1&&)>;
+
+    interop_invoke_state_v2 invoke_interop_v2(
+        const interop_request_data_v2& request,
+        interop_result_data_v1& result,
+        uint64_t operation_id,
+        interop_completion_v2 completion);
+    void cancel_interop_v2(uint64_t operation_id);
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();

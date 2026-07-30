@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
@@ -630,6 +631,661 @@ std::string evaluate(webscene_engine* engine, std::string_view source, std::stri
         fail("evaluation failed: " + last_error(engine));
     }
     return std::string(buffer.data(), required - 1U);
+}
+
+struct interop_completion_probe final {
+    std::mutex mutex;
+    std::condition_variable ready;
+    uint64_t operation_id{0};
+};
+
+void interop_completed(void* user_data, uint64_t operation_id)
+{
+    auto& probe = *static_cast<interop_completion_probe*>(user_data);
+    {
+        std::lock_guard lock(probe.mutex);
+        probe.operation_id = operation_id;
+        // The probe is stack-owned by the waiter. Notify before releasing the
+        // mutex so a completion that wins the race with wait_for cannot leave
+        // the callback touching a condition_variable the waiter has destroyed.
+        probe.ready.notify_all();
+    }
+}
+
+const webscene_interop_result_view_v1* invoke_binary(
+    webscene_engine* engine,
+    std::string_view source,
+    std::string_view name)
+{
+    interop_completion_probe probe;
+    const webscene_interop_request_v1 request{
+        static_cast<uint32_t>(sizeof(webscene_interop_request_v1)),
+        1U,
+        source.data(),
+        source.size(),
+        name.data(),
+        name.size(),
+        0U,
+        0U};
+    const auto operation_id = webscene_engine_begin_invoke_v1(
+        engine,
+        &request,
+        interop_completed,
+        &probe);
+    require(operation_id != 0U, "binary invocation was rejected");
+    {
+        std::unique_lock lock(probe.mutex);
+        require(
+            probe.ready.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&probe] { return probe.operation_id != 0U; }),
+            "binary invocation did not complete");
+    }
+    require(
+        probe.operation_id == operation_id,
+        "binary invocation completed with a different operation ID");
+    const auto* result = webscene_engine_take_invoke_result_v1(
+        engine,
+        operation_id);
+    require(result != nullptr, "binary invocation result was unavailable");
+    require(
+        webscene_engine_take_invoke_result_v1(engine, operation_id) == nullptr,
+        "binary invocation result could be taken more than once");
+    return result;
+}
+
+const webscene_interop_result_view_v1* invoke_generated(
+    webscene_engine* engine,
+    const webscene_interop_request_v2& request)
+{
+    interop_completion_probe probe;
+    const auto operation_id = webscene_engine_begin_generated_invoke_v2(
+        engine,
+        &request,
+        interop_completed,
+        &probe);
+    require(
+        operation_id != 0U,
+        "generated binary invocation was rejected: " + last_error(engine));
+    {
+        std::unique_lock lock(probe.mutex);
+        require(
+            probe.ready.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&probe] { return probe.operation_id != 0U; }),
+            "generated binary invocation did not complete");
+    }
+    require(
+        probe.operation_id == operation_id,
+        "generated binary invocation completed with a different operation ID");
+    const auto* result = webscene_engine_take_invoke_result_v1(
+        engine,
+        operation_id);
+    require(
+        result != nullptr,
+        "generated binary invocation result was unavailable");
+    return result;
+}
+
+void test_generated_binary_invocation_uses_tagged_arguments(
+    webscene_engine* engine)
+{
+    execute_and_wait(
+        engine,
+        R"JS(
+          globalThis.__binaryHost = {
+            updates: [],
+            onRealtimeUpdate(subscriber, bar) {
+              this.updates.push({ subscriber, bar });
+              return bar.close;
+            },
+            invokeCallback(callback) { return callback(4); },
+            updateCount() { return this.updates.length; },
+            immediatePromise() { return Promise.resolve(73.25); },
+            delayedPromise() {
+              return new Promise(resolve =>
+                setTimeout(() => resolve(91.5), 5));
+            },
+            rejectedPromise() {
+              return new Promise((_resolve, reject) =>
+                setTimeout(() => reject(new Error("binary rejection")), 5));
+            },
+            cancellablePromise() {
+              return new Promise(resolve =>
+                setTimeout(() => resolve(1), 50));
+            }
+          };
+          globalThis.__compatibilityHandles = new Map([
+            [17, value => value * 2]
+          ]);
+          globalThis.__webSceneDotNetInterop = {
+            getHandleValue(handle) {
+              const value = globalThis.__compatibilityHandles.get(handle);
+              if (value === undefined) throw new Error("stale compatibility handle");
+              return value;
+            }
+          };
+        )JS",
+        "generated-binary-host.js");
+
+    const std::array<webscene_interop_value_v1, 1> empty_arguments{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V1, 0U, 0U, 0U, 0U}}};
+    const std::string_view global_name{"__binaryHost"};
+    const webscene_interop_request_v2 get_global{
+        static_cast<uint32_t>(sizeof(webscene_interop_request_v2)),
+        2U,
+        WEBSCENE_INTEROP_GET_GLOBAL_V2,
+        0U,
+        0U,
+        global_name.data(),
+        global_name.size(),
+        nullptr,
+        0U,
+        empty_arguments.data(),
+        empty_arguments.size(),
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V2};
+    const auto* global_result = invoke_generated(engine, get_global);
+    require(
+        global_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && global_result->value_count == 1U
+            && global_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V1,
+        "generated global lookup did not return a retained handle");
+    const auto handle = global_result->values[0].payload;
+    webscene_interop_result_release_v1(global_result);
+
+    constexpr std::string_view subscriber{"subscriber-7"};
+    constexpr std::string_view names{"timeopenhighlowclosevolume"};
+    const std::array<webscene_interop_value_v1, 9> values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V1, 0U, 0U, 2U, 0U},
+        {WEBSCENE_INTEROP_VALUE_STRING_V1, 0U, 0U,
+            static_cast<uint32_t>(subscriber.size()), 0U},
+        {WEBSCENE_INTEROP_VALUE_OBJECT_V1, 0U, 2U, 6U, 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(1785413968000.0)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(101.25)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(103.5)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(100.75)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(102.875)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(42.5)}
+    }};
+    const std::array<webscene_interop_edge_v1, 8> edges{{
+        {0U, 0U, 1U, 0U},
+        {0U, 0U, 2U, 0U},
+        {static_cast<uint32_t>(subscriber.size()), 4U, 3U, 0U},
+        {static_cast<uint32_t>(subscriber.size() + 4U), 4U, 4U, 0U},
+        {static_cast<uint32_t>(subscriber.size() + 8U), 4U, 5U, 0U},
+        {static_cast<uint32_t>(subscriber.size() + 12U), 3U, 6U, 0U},
+        {static_cast<uint32_t>(subscriber.size() + 15U), 5U, 7U, 0U},
+        {static_cast<uint32_t>(subscriber.size() + 20U), 6U, 8U, 0U}
+    }};
+    const auto utf8 = std::string(subscriber) + std::string(names);
+    constexpr std::string_view update_member{"onRealtimeUpdate"};
+    const webscene_interop_request_v2 update{
+        static_cast<uint32_t>(sizeof(webscene_interop_request_v2)),
+        2U,
+        WEBSCENE_INTEROP_INVOKE_MEMBER_V2,
+        0U,
+        handle,
+        nullptr,
+        0U,
+        update_member.data(),
+        update_member.size(),
+        values.data(),
+        values.size(),
+        edges.data(),
+        edges.size(),
+        utf8.data(),
+        utf8.size(),
+        0U,
+        WEBSCENE_INTEROP_RESULT_VALUE_V2};
+    const auto* update_result = invoke_generated(engine, update);
+    require(
+        update_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && update_result->value_count == 1U
+            && update_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V1
+            && std::bit_cast<double>(update_result->values[0].payload)
+                == 102.875,
+        "generated realtime update did not receive tagged DTO arguments");
+    webscene_interop_result_release_v1(update_result);
+
+    constexpr std::string_view count_member{"updateCount"};
+    auto count = get_global;
+    count.operation = WEBSCENE_INTEROP_INVOKE_MEMBER_V2;
+    count.target_handle = handle;
+    count.global_name = nullptr;
+    count.global_name_length = 0U;
+    count.member_name = count_member.data();
+    count.member_name_length = count_member.size();
+    count.result_mode = WEBSCENE_INTEROP_RESULT_VALUE_V2;
+    const auto* count_result = invoke_generated(engine, count);
+    require(
+        count_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && count_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V1
+            && std::bit_cast<double>(count_result->values[0].payload) == 1.0,
+        "generated member invocation did not preserve its receiver");
+    webscene_interop_result_release_v1(count_result);
+
+    const std::array<webscene_interop_value_v1, 2>
+        compatibility_handle_values{{
+            {WEBSCENE_INTEROP_VALUE_ARRAY_V1, 0U, 0U, 1U, 0U},
+            {WEBSCENE_INTEROP_VALUE_HANDLE_V1, 0U, 0U, 0U, 17U}
+        }};
+    const std::array<webscene_interop_edge_v1, 1>
+        compatibility_handle_edges{{{0U, 0U, 1U, 0U}}};
+    constexpr std::string_view callback_member{"invokeCallback"};
+    auto callback = count;
+    callback.member_name = callback_member.data();
+    callback.member_name_length = callback_member.size();
+    callback.values = compatibility_handle_values.data();
+    callback.value_count = compatibility_handle_values.size();
+    callback.edges = compatibility_handle_edges.data();
+    callback.edge_count = compatibility_handle_edges.size();
+    const auto* callback_result = invoke_generated(engine, callback);
+    require(
+        callback_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && callback_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V1
+            && std::bit_cast<double>(callback_result->values[0].payload)
+                == 8.0,
+        "generated invocation could not resolve a compatibility callback handle");
+    webscene_interop_result_release_v1(callback_result);
+
+    constexpr std::string_view promise_member{"immediatePromise"};
+    auto promise = count;
+    promise.flags = WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2;
+    promise.member_name = promise_member.data();
+    promise.member_name_length = promise_member.size();
+    const auto* promise_result = invoke_generated(engine, promise);
+    require(
+        promise_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && promise_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V1
+            && std::bit_cast<double>(promise_result->values[0].payload) == 73.25,
+        "generated immediate promise did not settle into its operation");
+    webscene_interop_result_release_v1(promise_result);
+
+    constexpr std::string_view delayed_promise_member{"delayedPromise"};
+    promise.member_name = delayed_promise_member.data();
+    promise.member_name_length = delayed_promise_member.size();
+    const auto* delayed_promise_result = invoke_generated(engine, promise);
+    require(
+        delayed_promise_result->status
+                == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && delayed_promise_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V1
+            && std::bit_cast<double>(
+                delayed_promise_result->values[0].payload) == 91.5,
+        "generated pending promise did not complete its native operation");
+    webscene_interop_result_release_v1(delayed_promise_result);
+
+    constexpr std::string_view rejected_promise_member{"rejectedPromise"};
+    promise.member_name = rejected_promise_member.data();
+    promise.member_name_length = rejected_promise_member.size();
+    const auto* rejected_promise_result = invoke_generated(engine, promise);
+    require(
+        rejected_promise_result->status
+                == WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1
+            && rejected_promise_result->error_byte_count != 0U,
+        "generated rejected promise did not fail its native operation");
+    webscene_interop_result_release_v1(rejected_promise_result);
+
+    constexpr std::string_view cancellable_promise_member{
+        "cancellablePromise"};
+    promise.member_name = cancellable_promise_member.data();
+    promise.member_name_length = cancellable_promise_member.size();
+    interop_completion_probe cancelled_probe;
+    const auto cancelled_operation =
+        webscene_engine_begin_generated_invoke_v2(
+            engine,
+            &promise,
+            interop_completed,
+            &cancelled_probe);
+    require(
+        cancelled_operation != 0U
+            && webscene_engine_cancel_invoke_v1(
+                engine,
+                cancelled_operation) != 0U,
+        "generated pending promise could not be cancelled");
+    std::this_thread::sleep_for(std::chrono::milliseconds(75));
+    {
+        std::lock_guard lock(cancelled_probe.mutex);
+        require(
+            cancelled_probe.operation_id == 0U
+                && webscene_engine_take_invoke_result_v1(
+                    engine,
+                    cancelled_operation) == nullptr,
+            "cancelled generated promise published a completion");
+    }
+
+    auto release = count;
+    release.operation = WEBSCENE_INTEROP_RELEASE_HANDLE_V2;
+    release.member_name = nullptr;
+    release.member_name_length = 0U;
+    release.result_mode = WEBSCENE_INTEROP_RESULT_VOID_V2;
+    const auto* release_result = invoke_generated(engine, release);
+    require(
+        release_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1,
+        "generated handle release failed");
+    webscene_interop_result_release_v1(release_result);
+
+    const auto* stale_result = invoke_generated(engine, count);
+    require(
+        stale_result->status == WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1,
+        "generated invocation accepted a stale handle");
+    webscene_interop_result_release_v1(stale_result);
+}
+
+void test_binary_interop_result_is_leased_and_pooled(webscene_engine* engine)
+{
+    webscene_interop_pool_metrics_v1 before{};
+    before.struct_size = static_cast<uint32_t>(sizeof(before));
+    require(
+        webscene_engine_get_interop_pool_metrics_v1(engine, &before) != 0,
+        "binary interop metrics were unavailable");
+
+    const auto* result = invoke_binary(
+        engine,
+        R"JS(({
+          symbol: "AAPL",
+          values: [true, 187.5, { __webSceneHandle: 42 }],
+          missing: { __webSceneUndefined: true }
+        }))JS",
+        "native-binary-interop-result.js");
+    require(
+        result->struct_size == sizeof(webscene_interop_result_view_v1)
+            && result->version == 1U
+            && result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && result->value_count >= 7U
+            && result->root_value_index < result->value_count,
+        "binary interop result header was invalid");
+    const auto& root = result->values[result->root_value_index];
+    require(
+        root.kind == WEBSCENE_INTEROP_VALUE_OBJECT_V1
+            && root.offset <= result->edge_count
+            && root.length <= result->edge_count - root.offset,
+        "binary interop root object was invalid");
+
+    bool saw_symbol = false;
+    bool saw_values = false;
+    bool saw_missing = false;
+    for (uint32_t index = 0; index < root.length; ++index) {
+        const auto& edge = result->edges[root.offset + index];
+        require(
+            edge.name_offset <= result->utf8_byte_count
+                && edge.name_length
+                    <= result->utf8_byte_count - edge.name_offset
+                && edge.value_index < result->value_count,
+            "binary interop object edge was invalid");
+        const std::string_view name(
+            result->utf8_bytes + edge.name_offset,
+            edge.name_length);
+        const auto& value = result->values[edge.value_index];
+        if (name == "symbol") {
+            saw_symbol = value.kind == WEBSCENE_INTEROP_VALUE_STRING_V1
+                && std::string_view(
+                    result->utf8_bytes + value.offset,
+                    value.length) == "AAPL";
+        } else if (name == "values") {
+            saw_values = value.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V1
+                && value.length == 3U;
+        } else if (name == "missing") {
+            saw_missing = value.kind == WEBSCENE_INTEROP_VALUE_UNDEFINED_V1;
+        }
+    }
+    require(
+        saw_symbol && saw_values && saw_missing,
+        "binary interop result lost tagged object values");
+
+    webscene_interop_pool_metrics_v1 leased{};
+    leased.struct_size = static_cast<uint32_t>(sizeof(leased));
+    require(
+        webscene_engine_get_interop_pool_metrics_v1(engine, &leased) != 0
+            && leased.outstanding_results
+                == before.outstanding_results + 1U,
+        "binary interop result lease was not attributed");
+
+    webscene_interop_result_release_v1(result);
+    webscene_interop_result_release_v1(result);
+    webscene_interop_pool_metrics_v1 released{};
+    released.struct_size = static_cast<uint32_t>(sizeof(released));
+    require(
+        webscene_engine_get_interop_pool_metrics_v1(engine, &released) != 0
+            && released.outstanding_results == before.outstanding_results
+            && released.pooled_bytes >= before.pooled_bytes,
+        "binary interop result was not returned to its pool");
+
+    const auto* reused = invoke_binary(
+        engine,
+        R"JS(["MSFT", 415.25])JS",
+        "native-binary-interop-reuse.js");
+    webscene_interop_result_release_v1(reused);
+    webscene_interop_pool_metrics_v1 after{};
+    after.struct_size = static_cast<uint32_t>(sizeof(after));
+    require(
+        webscene_engine_get_interop_pool_metrics_v1(engine, &after) != 0
+            && after.pool_hits > before.pool_hits,
+        "binary interop result pool did not reuse a released arena");
+}
+
+void test_binary_interop_preserves_json_edge_semantics(
+    webscene_engine* engine)
+{
+    const auto* result = invoke_binary(
+        engine,
+        R"JS(({
+          nullValue: null,
+          unicode: "AAPL-€-𐐷",
+          date: new Date(0),
+          numbers: [NaN, Infinity, -Infinity],
+          ordered: { z: 1, a: 2 }
+        }))JS",
+        "native-binary-interop-semantics.js");
+    require(
+        result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1,
+        "binary edge-semantics result failed");
+    const auto& root = result->values[result->root_value_index];
+    require(
+        root.kind == WEBSCENE_INTEROP_VALUE_OBJECT_V1
+            && root.length == 5U,
+        "binary edge-semantics root was invalid");
+    std::vector<std::string> names;
+    for (uint32_t index = 0; index < root.length; ++index) {
+        const auto& edge = result->edges[root.offset + index];
+        names.emplace_back(
+            result->utf8_bytes + edge.name_offset,
+            edge.name_length);
+        const auto& value = result->values[edge.value_index];
+        if (names.back() == "nullValue") {
+            require(
+                value.kind == WEBSCENE_INTEROP_VALUE_NULL_V1,
+                "binary null was not preserved");
+        } else if (names.back() == "unicode") {
+            require(
+                value.kind == WEBSCENE_INTEROP_VALUE_STRING_V1
+                    && std::string_view(
+                        result->utf8_bytes + value.offset,
+                        value.length) == "AAPL-€-𐐷",
+                "binary Unicode UTF-8 was not preserved");
+        } else if (names.back() == "date") {
+            require(
+                value.kind == WEBSCENE_INTEROP_VALUE_STRING_V1
+                    && std::string_view(
+                        result->utf8_bytes + value.offset,
+                        value.length)
+                        == "1970-01-01T00:00:00.000Z",
+                "binary Date conversion diverged from JSON");
+        } else if (names.back() == "numbers") {
+            require(
+                value.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V1
+                    && value.length == 3U,
+                "binary non-finite array was invalid");
+            for (uint32_t item = 0; item < value.length; ++item) {
+                const auto& child = result->values[
+                    result->edges[value.offset + item].value_index];
+                require(
+                    child.kind == WEBSCENE_INTEROP_VALUE_NULL_V1,
+                    "binary non-finite number did not match JSON null");
+            }
+        }
+    }
+    require(
+        names == std::vector<std::string>{
+            "nullValue",
+            "unicode",
+            "date",
+            "numbers",
+            "ordered"},
+        "binary object property order changed");
+    webscene_interop_result_release_v1(result);
+
+    const auto* undefined = invoke_binary(
+        engine,
+        "undefined",
+        "native-binary-interop-undefined.js");
+    require(
+        undefined->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
+            && undefined->values[undefined->root_value_index].kind
+                == WEBSCENE_INTEROP_VALUE_UNDEFINED_V1,
+        "binary root undefined was not tagged distinctly");
+    webscene_interop_result_release_v1(undefined);
+
+    const auto* cyclic = invoke_binary(
+        engine,
+        "(() => { const value = {}; value.self = value; return value; })()",
+        "native-binary-interop-cycle.js");
+    require(
+        cyclic->status == WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1,
+        "binary cyclic value did not fail explicitly");
+    webscene_interop_result_release_v1(cyclic);
+
+    const auto* exception = invoke_binary(
+        engine,
+        "(() => { throw new Error('binary exception'); })()",
+        "native-binary-interop-exception.js");
+    require(
+        exception->status == WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1
+            && exception->error_byte_count != 0U,
+        "binary JavaScript exception did not become an error result");
+    webscene_interop_result_release_v1(exception);
+}
+
+void test_binary_interop_result_outlives_engine()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "binary lease engine creation failed");
+    const auto* result = invoke_binary(
+        engine,
+        R"JS(({ value: "retained" }))JS",
+        "native-binary-interop-retained.js");
+    require(
+        result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1,
+        "retained binary result did not succeed");
+
+    webscene_engine_destroy(engine);
+    const auto& root = result->values[result->root_value_index];
+    require(
+        root.kind == WEBSCENE_INTEROP_VALUE_OBJECT_V1
+            && root.length == 1U,
+        "binary result became invalid when its engine was destroyed");
+    const auto& property = result->edges[root.offset];
+    const auto& value = result->values[property.value_index];
+    require(
+        value.kind == WEBSCENE_INTEROP_VALUE_STRING_V1
+            && std::string_view(
+                result->utf8_bytes + value.offset,
+                value.length) == "retained",
+        "binary result payload did not outlive its engine");
+    webscene_interop_result_release_v1(result);
+}
+
+void test_binary_interop_stress_when_requested(webscene_engine* engine)
+{
+    if (std::getenv("WEBSCENE_INTEROP_STRESS") == nullptr) return;
+
+    constexpr size_t operation_count = 100'000U;
+    constexpr size_t retained_lease_count = 32U;
+    std::array<const webscene_interop_result_view_v1*, retained_lease_count>
+        retained{};
+    execute_and_wait(
+        engine,
+        R"JS(
+          globalThis.__binaryStress = value => value % 3 === 0
+            ? Promise.resolve({ ok: true, value })
+            : ({ ok: true, value });
+        )JS",
+        "generated-binary-interop-stress-host.js");
+    std::array<webscene_interop_value_v1, 2> direct_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V1, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V1, 0U, 0U, 0U, 0U}
+    }};
+    const std::array<webscene_interop_edge_v1, 1> direct_edges{{
+        {0U, 0U, 1U, 0U}
+    }};
+    constexpr std::string_view direct_global{"__binaryStress"};
+    const webscene_interop_request_v2 direct_request{
+        static_cast<uint32_t>(sizeof(webscene_interop_request_v2)),
+        2U,
+        WEBSCENE_INTEROP_INVOKE_GLOBAL_V2,
+        WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2,
+        0U,
+        direct_global.data(),
+        direct_global.size(),
+        nullptr,
+        0U,
+        direct_values.data(),
+        direct_values.size(),
+        direct_edges.data(),
+        direct_edges.size(),
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_VALUE_V2};
+    for (size_t index = 0; index < operation_count; ++index) {
+        const auto slot = index % retained.size();
+        if (retained[slot] != nullptr) {
+            webscene_interop_result_release_v1(retained[slot]);
+        }
+        if (index % 2U == 0U) {
+            retained[slot] = invoke_binary(
+                engine,
+                index % 4U == 0U
+                    ? R"JS(({ ok: true, value: 42 }))JS"
+                    : R"JS(({ nested: { values: [1, 2, 3, 4] } }))JS",
+                "native-binary-interop-stress.js");
+        } else {
+            direct_values[1].payload =
+                std::bit_cast<uint64_t>(static_cast<double>(index));
+            retained[slot] = invoke_generated(engine, direct_request);
+        }
+    }
+    for (const auto* result : retained) {
+        webscene_interop_result_release_v1(result);
+    }
+
+    webscene_interop_pool_metrics_v1 metrics{};
+    metrics.struct_size = static_cast<uint32_t>(sizeof(metrics));
+    require(
+        webscene_engine_get_interop_pool_metrics_v1(engine, &metrics) != 0
+            && metrics.outstanding_results == 0U
+            && metrics.pooled_bytes <= 8U * 1024U * 1024U
+            && metrics.high_water_outstanding_results
+                >= retained_lease_count,
+        "binary interop stress violated pool bounds or leaked a lease");
 }
 
 uint64_t consumed_input_count(webscene_engine* engine)
@@ -9486,6 +10142,10 @@ int main()
     test_process_wide_compilation_single_flight();
     auto* engine = webscene_engine_create(64);
     require(engine != nullptr, "engine creation failed");
+    test_binary_interop_result_is_leased_and_pooled(engine);
+    test_binary_interop_preserves_json_edge_semantics(engine);
+    test_generated_binary_invocation_uses_tagged_arguments(engine);
+    test_binary_interop_stress_when_requested(engine);
     require(
         webscene_engine_request_low_memory(engine) != 0,
         "engine rejected an asynchronous low-memory request");
@@ -9617,5 +10277,6 @@ int main()
     test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(engine);
     test_rotation_keyframes_use_host_clock_and_wrap_continuously(engine);
     webscene_engine_destroy(engine);
+    test_binary_interop_result_outlives_engine();
     return 0;
 }

@@ -24,6 +24,7 @@
     <ProjectReference Include="..\WebScene.Dom\WebScene.Dom.csproj" />
     <ProjectReference Include="..\WebScene.Graphics\WebScene.Graphics.csproj" />
     <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
+    <ProjectReference Include="..\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <charconv>
 #include <cctype>
 #include <chrono>
@@ -1629,6 +1630,20 @@ struct v8_dom_runtime::implementation final {
         std::string error;
     };
 
+    struct interop_promise_callback_data final {
+        implementation* owner{nullptr};
+        uint64_t operation_id{0};
+        bool rejected{false};
+    };
+
+    struct pending_interop_promise final {
+        uint32_t result_mode{WEBSCENE_INTEROP_RESULT_VALUE_V2};
+        v8_dom_runtime::interop_completion_v2 completion;
+        v8::Global<v8::Promise> promise;
+        std::unique_ptr<interop_promise_callback_data> fulfilled;
+        std::unique_ptr<interop_promise_callback_data> rejected;
+    };
+
     struct frame_script final {
         std::string source;
         std::string code;
@@ -2347,6 +2362,7 @@ struct v8_dom_runtime::implementation final {
         resize_listeners.clear();
         timers.clear();
         pending_window_messages.clear();
+        pending_interop_promises.clear();
         pending_promise_rejections.clear();
         connected_resources.clear();
         resize_observers.clear();
@@ -5982,6 +5998,780 @@ struct v8_dom_runtime::implementation final {
         result = to_utf8(isolate, json);
         last_error.clear();
         return true;
+    }
+
+    bool encode_interop_result_value(
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Value> value,
+        interop_result_data_v1& result,
+        v8::TryCatch& try_catch)
+    {
+        constexpr uint32_t maximum_depth = 64U;
+        constexpr uint32_t maximum_values = 1'000'000U;
+        constexpr uint32_t maximum_utf8_bytes = 64U * 1024U * 1024U;
+
+        std::vector<v8::Local<v8::Object>> ancestors;
+        std::string encoding_error;
+        const auto append_utf8 = [&](std::string_view text, uint32_t& offset) {
+            if (text.size() > maximum_utf8_bytes
+                || result.utf8_bytes.size()
+                    > maximum_utf8_bytes - text.size()) {
+                encoding_error = "Native interop UTF-8 arena exceeded its 64 MiB limit";
+                return false;
+            }
+            offset = static_cast<uint32_t>(result.utf8_bytes.size());
+            result.utf8_bytes.insert(
+                result.utf8_bytes.end(),
+                text.begin(),
+                text.end());
+            return true;
+        };
+
+        std::function<bool(v8::Local<v8::Value>, uint32_t, uint32_t&)> encode;
+        encode = [&](v8::Local<v8::Value> current, uint32_t depth, uint32_t& index) {
+            if (depth > maximum_depth) {
+                encoding_error = "Native interop value exceeded the maximum depth";
+                return false;
+            }
+            if (result.values.size() >= maximum_values) {
+                encoding_error = "Native interop value exceeded the node limit";
+                return false;
+            }
+
+            index = static_cast<uint32_t>(result.values.size());
+            result.values.push_back({});
+            auto& node = result.values[index];
+            if (current->IsUndefined()) {
+                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V1;
+                return true;
+            }
+            if (current->IsNull()) {
+                node.kind = WEBSCENE_INTEROP_VALUE_NULL_V1;
+                return true;
+            }
+            if (current->IsBoolean()) {
+                node.kind = WEBSCENE_INTEROP_VALUE_BOOLEAN_V1;
+                node.payload = current->BooleanValue(isolate) ? 1U : 0U;
+                return true;
+            }
+            if (current->IsNumber()) {
+                const auto number = current->NumberValue(local_context).FromMaybe(
+                    std::numeric_limits<double>::quiet_NaN());
+                if (!std::isfinite(number)) {
+                    node.kind = WEBSCENE_INTEROP_VALUE_NULL_V1;
+                    return true;
+                }
+                node.kind = WEBSCENE_INTEROP_VALUE_NUMBER_V1;
+                node.payload = std::bit_cast<uint64_t>(number);
+                return true;
+            }
+            if (current->IsString()) {
+                const auto text = to_utf8(isolate, current.As<v8::String>());
+                uint32_t offset = 0;
+                if (!append_utf8(text, offset)) return false;
+                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V1;
+                node.offset = offset;
+                node.length = static_cast<uint32_t>(text.size());
+                return true;
+            }
+            if (!current->IsObject()) {
+                encoding_error = "Native interop cannot encode the returned JavaScript value";
+                return false;
+            }
+
+            auto object = current.As<v8::Object>();
+            for (const auto& ancestor : ancestors) {
+                if (ancestor == object) {
+                    encoding_error = "Converting circular structure to native interop value";
+                    return false;
+                }
+            }
+
+            v8::Local<v8::Value> marker;
+            if (object->Get(
+                    local_context,
+                    js_string(isolate, "__webSceneUndefined")).ToLocal(&marker)
+                && marker->IsTrue()) {
+                node.kind = WEBSCENE_INTEROP_VALUE_UNDEFINED_V1;
+                return true;
+            }
+            if (object->Get(
+                    local_context,
+                    js_string(isolate, "__webSceneHandle")).ToLocal(&marker)
+                && marker->IsNumber()) {
+                node.kind = WEBSCENE_INTEROP_VALUE_HANDLE_V1;
+                node.payload = static_cast<uint64_t>(
+                    marker->IntegerValue(local_context).FromMaybe(0));
+                return true;
+            }
+            if (current->IsDate()) {
+                const auto text = to_utf8(
+                    isolate,
+                    current.As<v8::Date>()->ToISOString());
+                uint32_t offset = 0;
+                if (!append_utf8(text, offset)) return false;
+                node.kind = WEBSCENE_INTEROP_VALUE_STRING_V1;
+                node.offset = offset;
+                node.length = static_cast<uint32_t>(text.size());
+                return true;
+            }
+
+            ancestors.push_back(object);
+            std::vector<webscene_interop_edge_v1> children;
+            if (current->IsArray()) {
+                auto array = current.As<v8::Array>();
+                children.reserve(array->Length());
+                for (uint32_t item_index = 0; item_index < array->Length(); ++item_index) {
+                    v8::Local<v8::Value> item;
+                    if (!array->Get(local_context, item_index).ToLocal(&item)) {
+                        ancestors.pop_back();
+                        encoding_error = describe_exception(try_catch, local_context);
+                        return false;
+                    }
+                    uint32_t child_index = 0;
+                    if (!encode(item, depth + 1U, child_index)) {
+                        ancestors.pop_back();
+                        return false;
+                    }
+                    children.push_back({0U, 0U, child_index, 0U});
+                }
+                ancestors.pop_back();
+                result.values[index].kind = WEBSCENE_INTEROP_VALUE_ARRAY_V1;
+            } else {
+                v8::Local<v8::Array> names;
+                if (!object->GetOwnPropertyNames(
+                        local_context,
+                        v8::PropertyFilter::ONLY_ENUMERABLE,
+                        v8::KeyConversionMode::kConvertToString).ToLocal(&names)) {
+                    ancestors.pop_back();
+                    encoding_error = describe_exception(try_catch, local_context);
+                    return false;
+                }
+                children.reserve(names->Length());
+                for (uint32_t property_index = 0;
+                     property_index < names->Length();
+                     ++property_index) {
+                    v8::Local<v8::Value> name_value;
+                    v8::Local<v8::Value> property_value;
+                    if (!names->Get(local_context, property_index).ToLocal(&name_value)
+                        || !object->Get(local_context, name_value).ToLocal(&property_value)) {
+                        ancestors.pop_back();
+                        encoding_error = describe_exception(try_catch, local_context);
+                        return false;
+                    }
+                    if (property_value->IsUndefined()
+                        || property_value->IsFunction()
+                        || property_value->IsSymbol()) {
+                        continue;
+                    }
+                    const auto name = to_utf8(
+                        isolate,
+                        name_value->ToString(local_context).ToLocalChecked());
+                    uint32_t name_offset = 0;
+                    if (!append_utf8(name, name_offset)) {
+                        ancestors.pop_back();
+                        return false;
+                    }
+                    uint32_t child_index = 0;
+                    if (!encode(property_value, depth + 1U, child_index)) {
+                        ancestors.pop_back();
+                        return false;
+                    }
+                    children.push_back({
+                        name_offset,
+                        static_cast<uint32_t>(name.size()),
+                        child_index,
+                        0U});
+                }
+                ancestors.pop_back();
+                result.values[index].kind = WEBSCENE_INTEROP_VALUE_OBJECT_V1;
+            }
+
+            result.values[index].offset =
+                static_cast<uint32_t>(result.edges.size());
+            result.values[index].length =
+                static_cast<uint32_t>(children.size());
+            result.edges.insert(
+                result.edges.end(),
+                children.begin(),
+                children.end());
+            return true;
+        };
+
+        if (!encode(value, 0U, result.root_value_index)) {
+            last_error = encoding_error.empty()
+                ? describe_exception(try_catch, local_context)
+                : encoding_error;
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
+        last_error.clear();
+        return true;
+    }
+
+    bool evaluate_interop_v1(
+        const std::string& source,
+        const std::string& document_name,
+        interop_result_data_v1& result)
+    {
+        result.clear();
+        auto isolate_locker = lock_shared_isolate();
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        auto local_context = context.Get(isolate);
+        v8::Context::Scope context_scope(local_context);
+        v8::TryCatch try_catch(isolate);
+        v8::Local<v8::Script> script;
+        v8::Local<v8::Value> value;
+        if (!compile_script(source, document_name, script)
+            || !script->Run(local_context).ToLocal(&value)) {
+            last_error = describe_exception(try_catch, local_context);
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
+        isolate->PerformMicrotaskCheckpoint();
+        if (!promote_pending_promise_error()) {
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
+        return encode_interop_result_value(
+            local_context,
+            value,
+            result,
+            try_catch);
+    }
+
+    bool encode_generated_interop_result(
+        uint32_t result_mode,
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Value> value,
+        interop_result_data_v1& result)
+    {
+        v8::TryCatch try_catch(isolate);
+        result.clear();
+        if (result_mode == WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V2) {
+            if (value->IsNullOrUndefined()) {
+                result.values.push_back({
+                    value->IsUndefined()
+                        ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V1
+                        : WEBSCENE_INTEROP_VALUE_NULL_V1,
+                    0U,
+                    0U,
+                    0U,
+                    0U});
+                result.root_value_index = 0U;
+                last_error.clear();
+                return true;
+            }
+            if (!value->IsObject() && !value->IsFunction()) {
+                last_error =
+                    "Generated native interop call did not return an object handle";
+                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                result.error = last_error;
+                return false;
+            }
+            const auto handle = next_interop_handle++;
+            interop_handles.emplace(
+                handle,
+                v8::Global<v8::Value>(isolate, value));
+            result.values.push_back({
+                WEBSCENE_INTEROP_VALUE_HANDLE_V1,
+                0U,
+                0U,
+                0U,
+                handle});
+            result.root_value_index = 0U;
+            last_error.clear();
+            return true;
+        }
+        if (result_mode == WEBSCENE_INTEROP_RESULT_VOID_V2) {
+            result.values.push_back({
+                WEBSCENE_INTEROP_VALUE_UNDEFINED_V1,
+                0U,
+                0U,
+                0U,
+                0U});
+            result.root_value_index = 0U;
+            last_error.clear();
+            return true;
+        }
+        return encode_interop_result_value(
+            local_context,
+            value,
+            result,
+            try_catch);
+    }
+
+    void settle_interop_promise(
+        uint64_t operation_id,
+        bool rejected,
+        v8::Local<v8::Value> value)
+    {
+        const auto iterator = pending_interop_promises.find(operation_id);
+        if (iterator == pending_interop_promises.end()) return;
+        auto pending = std::move(iterator->second);
+        pending_interop_promises.erase(iterator);
+
+        interop_result_data_v1 result;
+        if (rejected) {
+            last_error = "JavaScript promise rejected: "
+                + to_utf8(isolate, value);
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+        } else {
+            auto local_context = context.Get(isolate);
+            static_cast<void>(encode_generated_interop_result(
+                pending->result_mode,
+                local_context,
+                value,
+                result));
+        }
+        pending->completion(std::move(result));
+    }
+
+    static void interop_promise_settled(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.Data()->IsExternal()) return;
+        auto* data = static_cast<interop_promise_callback_data*>(
+            info.Data().As<v8::External>()->Value(
+                v8::kExternalPointerTypeTagDefault));
+        if (data == nullptr || data->owner == nullptr) return;
+        auto* owner = data->owner;
+        const auto operation_id = data->operation_id;
+        const auto rejected = data->rejected;
+        owner->settle_interop_promise(
+            operation_id,
+            rejected,
+            info.Length() == 0
+                ? v8::Undefined(info.GetIsolate())
+                : info[0]);
+    }
+
+    bool await_interop_promise(
+        uint64_t operation_id,
+        uint32_t result_mode,
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Promise> promise,
+        v8_dom_runtime::interop_completion_v2 completion,
+        interop_result_data_v1& result)
+    {
+        if (!completion
+            || operation_id == 0U
+            || pending_interop_promises.contains(operation_id)) {
+            last_error =
+                "Generated native interop promise registration is invalid";
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
+
+        auto pending = std::make_unique<pending_interop_promise>();
+        pending->result_mode = result_mode;
+        pending->completion = std::move(completion);
+        pending->promise.Reset(isolate, promise);
+        pending->fulfilled =
+            std::make_unique<interop_promise_callback_data>(
+                this,
+                operation_id,
+                false);
+        pending->rejected =
+            std::make_unique<interop_promise_callback_data>(
+                this,
+                operation_id,
+                true);
+
+        v8::Local<v8::Function> fulfilled;
+        v8::Local<v8::Function> rejected;
+        if (!v8::Function::New(
+                local_context,
+                interop_promise_settled,
+                v8::External::New(
+                    isolate,
+                    pending->fulfilled.get(),
+                    v8::kExternalPointerTypeTagDefault)).ToLocal(&fulfilled)
+            || !v8::Function::New(
+                local_context,
+                interop_promise_settled,
+                v8::External::New(
+                    isolate,
+                    pending->rejected.get(),
+                    v8::kExternalPointerTypeTagDefault)).ToLocal(&rejected)
+            || promise->Then(
+                local_context,
+                fulfilled,
+                rejected).IsEmpty()) {
+            last_error =
+                "Generated native interop promise handlers could not be registered";
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
+        pending_interop_promises.emplace(operation_id, std::move(pending));
+        return true;
+    }
+
+    void cancel_interop_v2(uint64_t operation_id)
+    {
+        pending_interop_promises.erase(operation_id);
+    }
+
+    interop_invoke_state_v2 invoke_interop_v2(
+        const interop_request_data_v2& request,
+        interop_result_data_v1& result,
+        uint64_t operation_id,
+        v8_dom_runtime::interop_completion_v2 completion)
+    {
+        constexpr uint32_t maximum_depth = 64U;
+        result.clear();
+        auto isolate_locker = lock_shared_isolate();
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        auto local_context = context.Get(isolate);
+        v8::Context::Scope context_scope(local_context);
+        v8::TryCatch try_catch(isolate);
+        std::string decoding_error;
+        std::vector<uint32_t> ancestors;
+
+        const auto utf8_view = [&](uint32_t offset, uint32_t length) {
+            return std::string_view(
+                request.utf8_bytes.data() + offset,
+                length);
+        };
+        const auto v8_string = [&](std::string_view value) {
+            v8::Local<v8::String> result_value;
+            if (!v8::String::NewFromUtf8(
+                    isolate,
+                    value.data(),
+                    v8::NewStringType::kNormal,
+                    static_cast<int>(value.size())).ToLocal(&result_value)) {
+                decoding_error =
+                    "Generated native interop UTF-8 value could not be decoded";
+            }
+            return result_value;
+        };
+        const auto resolve_interop_handle = [&](
+                uint64_t handle,
+                v8::Local<v8::Value>& resolved) {
+            const auto direct = interop_handles.find(handle);
+            if (direct != interop_handles.end()
+                && !direct->second.IsEmpty()) {
+                resolved = direct->second.Get(isolate);
+                return true;
+            }
+
+            v8::Local<v8::Value> bridge_value;
+            auto bridge_name = v8_string("__webSceneDotNetInterop");
+            if (bridge_name.IsEmpty()
+                || !local_context->Global()->Get(
+                    local_context,
+                    bridge_name).ToLocal(&bridge_value)
+                || !bridge_value->IsObject()) {
+                return false;
+            }
+            auto method_name = v8_string("getHandleValue");
+            v8::Local<v8::Value> method_value;
+            auto bridge = bridge_value.As<v8::Object>();
+            if (method_name.IsEmpty()
+                || !bridge->Get(
+                    local_context,
+                    method_name).ToLocal(&method_value)
+                || !method_value->IsFunction()) {
+                return false;
+            }
+            v8::Local<v8::Value> arguments[]{
+                v8::Number::New(isolate, static_cast<double>(handle))};
+            return method_value.As<v8::Function>()->Call(
+                local_context,
+                bridge,
+                1,
+                arguments).ToLocal(&resolved);
+        };
+
+        std::function<bool(uint32_t, uint32_t, v8::Local<v8::Value>&)> decode;
+        decode = [&](uint32_t index,
+                     uint32_t depth,
+                     v8::Local<v8::Value>& decoded) {
+            if (depth > maximum_depth || index >= request.values.size()) {
+                decoding_error =
+                    "Generated native interop argument exceeded its bounds";
+                return false;
+            }
+            const auto& node = request.values[index];
+            switch (node.kind) {
+            case WEBSCENE_INTEROP_VALUE_UNDEFINED_V1:
+                decoded = v8::Undefined(isolate);
+                return true;
+            case WEBSCENE_INTEROP_VALUE_NULL_V1:
+                decoded = v8::Null(isolate);
+                return true;
+            case WEBSCENE_INTEROP_VALUE_BOOLEAN_V1:
+                decoded = v8::Boolean::New(isolate, node.payload != 0U);
+                return true;
+            case WEBSCENE_INTEROP_VALUE_NUMBER_V1:
+                decoded = v8::Number::New(
+                    isolate,
+                    std::bit_cast<double>(node.payload));
+                return true;
+            case WEBSCENE_INTEROP_VALUE_STRING_V1: {
+                auto text = v8_string(utf8_view(node.offset, node.length));
+                if (text.IsEmpty()) return false;
+                decoded = text;
+                return true;
+            }
+            case WEBSCENE_INTEROP_VALUE_HANDLE_V1: {
+                if (!resolve_interop_handle(node.payload, decoded)) {
+                    decoding_error =
+                        "Generated native interop argument references a stale handle";
+                    return false;
+                }
+                return true;
+            }
+            case WEBSCENE_INTEROP_VALUE_ARRAY_V1:
+            case WEBSCENE_INTEROP_VALUE_OBJECT_V1:
+                break;
+            default:
+                decoding_error =
+                    "Generated native interop argument has an invalid value tag";
+                return false;
+            }
+
+            if (std::find(ancestors.begin(), ancestors.end(), index)
+                != ancestors.end()) {
+                decoding_error =
+                    "Generated native interop argument contains a cycle";
+                return false;
+            }
+            ancestors.push_back(index);
+            if (node.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V1) {
+                auto array = v8::Array::New(
+                    isolate,
+                    static_cast<int>(node.length));
+                for (uint32_t child = 0; child < node.length; ++child) {
+                    const auto& edge = request.edges[node.offset + child];
+                    v8::Local<v8::Value> item;
+                    if (!decode(edge.value_index, depth + 1U, item)
+                        || !array->Set(local_context, child, item).FromMaybe(false)) {
+                        ancestors.pop_back();
+                        if (decoding_error.empty()) {
+                            decoding_error =
+                                describe_exception(try_catch, local_context);
+                        }
+                        return false;
+                    }
+                }
+                ancestors.pop_back();
+                decoded = array;
+                return true;
+            }
+
+            auto object = v8::Object::New(isolate);
+            for (uint32_t child = 0; child < node.length; ++child) {
+                const auto& edge = request.edges[node.offset + child];
+                auto name = v8_string(
+                    utf8_view(edge.name_offset, edge.name_length));
+                v8::Local<v8::Value> property;
+                if (name.IsEmpty()
+                    || !decode(edge.value_index, depth + 1U, property)
+                    || !object->Set(
+                        local_context,
+                        name,
+                        property).FromMaybe(false)) {
+                    ancestors.pop_back();
+                    if (decoding_error.empty()) {
+                        decoding_error =
+                            describe_exception(try_catch, local_context);
+                    }
+                    return false;
+                }
+            }
+            ancestors.pop_back();
+            decoded = object;
+            return true;
+        };
+
+        const auto& root = request.values[request.arguments_root];
+        std::vector<v8::Local<v8::Value>> arguments;
+        arguments.reserve(root.length);
+        for (uint32_t index = 0; index < root.length; ++index) {
+            v8::Local<v8::Value> argument;
+            if (!decode(
+                    request.edges[root.offset + index].value_index,
+                    0U,
+                    argument)) {
+                last_error = decoding_error;
+                result.status = WEBSCENE_INTEROP_RESULT_INVALID_REQUEST_V1;
+                result.error = last_error;
+                return interop_invoke_state_v2::failed;
+            }
+            arguments.push_back(argument);
+        }
+
+        const auto resolve_global = [&](
+                std::string_view path,
+                v8::Local<v8::Value>& receiver,
+                v8::Local<v8::Value>& resolved) {
+            receiver = local_context->Global();
+            resolved = receiver;
+            size_t cursor = 0U;
+            while (cursor < path.size()) {
+                const auto separator = path.find('.', cursor);
+                const auto segment = path.substr(
+                    cursor,
+                    separator == std::string_view::npos
+                        ? path.size() - cursor
+                        : separator - cursor);
+                if (segment.empty() || !resolved->IsObject()) {
+                    return false;
+                }
+                receiver = resolved;
+                auto name = v8_string(segment);
+                if (name.IsEmpty()
+                    || !receiver.As<v8::Object>()->Get(
+                        local_context,
+                        name).ToLocal(&resolved)) {
+                    return false;
+                }
+                if (separator == std::string_view::npos) return true;
+                cursor = separator + 1U;
+            }
+            return !path.empty();
+        };
+
+        v8::Local<v8::Value> receiver = local_context->Global();
+        v8::Local<v8::Value> value = v8::Undefined(isolate);
+        if (request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V2) {
+            if (interop_handles.erase(request.target_handle) == 0U) {
+                decoding_error =
+                    "Generated native interop release references a stale handle";
+            }
+        } else if (request.operation == WEBSCENE_INTEROP_GET_GLOBAL_V2) {
+            if (!resolve_global(request.global_name, receiver, value)) {
+                decoding_error =
+                    "Generated native interop global value was not found";
+            }
+        } else if (request.operation == WEBSCENE_INTEROP_INVOKE_GLOBAL_V2
+            || request.operation == WEBSCENE_INTEROP_CONSTRUCT_V2) {
+            v8::Local<v8::Value> callable;
+            if (!resolve_global(request.global_name, receiver, callable)
+                || !callable->IsFunction()) {
+                decoding_error =
+                    "Generated native interop global function was not found";
+            } else if (request.operation == WEBSCENE_INTEROP_CONSTRUCT_V2) {
+                v8::Local<v8::Object> instance;
+                if (!callable.As<v8::Function>()->NewInstance(
+                        local_context,
+                        static_cast<int>(arguments.size()),
+                        arguments.data()).ToLocal(&instance)) {
+                    decoding_error =
+                        describe_exception(try_catch, local_context);
+                } else {
+                    value = instance;
+                }
+            } else if (!callable.As<v8::Function>()->Call(
+                    local_context,
+                    receiver,
+                    static_cast<int>(arguments.size()),
+                    arguments.data()).ToLocal(&value)) {
+                decoding_error =
+                    describe_exception(try_catch, local_context);
+            }
+        } else {
+            v8::Local<v8::Value> target;
+            if (!resolve_interop_handle(request.target_handle, target)
+                || !target->IsObject()) {
+                decoding_error =
+                    "Generated native interop call references a stale target handle";
+            } else {
+                receiver = target;
+                auto member = v8_string(request.member_name);
+                auto object = receiver.As<v8::Object>();
+                if (member.IsEmpty()) {
+                    decoding_error =
+                        "Generated native interop member name is invalid";
+                } else if (request.operation
+                    == WEBSCENE_INTEROP_GET_PROPERTY_V2) {
+                    if (!object->Get(
+                            local_context,
+                            member).ToLocal(&value)) {
+                        decoding_error =
+                            describe_exception(try_catch, local_context);
+                    }
+                } else if (request.operation
+                    == WEBSCENE_INTEROP_SET_PROPERTY_V2) {
+                    if (arguments.size() != 1U
+                        || !object->Set(
+                            local_context,
+                            member,
+                            arguments[0]).FromMaybe(false)) {
+                        decoding_error =
+                            "Generated native interop property assignment failed";
+                    }
+                } else {
+                    v8::Local<v8::Value> callable;
+                    if (!object->Get(
+                            local_context,
+                            member).ToLocal(&callable)
+                        || !callable->IsFunction()) {
+                        decoding_error =
+                            "Generated native interop member function was not found";
+                    } else if (!callable.As<v8::Function>()->Call(
+                            local_context,
+                            receiver,
+                            static_cast<int>(arguments.size()),
+                            arguments.data()).ToLocal(&value)) {
+                        decoding_error =
+                            describe_exception(try_catch, local_context);
+                    }
+                }
+            }
+        }
+        if (!decoding_error.empty()) {
+            last_error = std::move(decoding_error);
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return interop_invoke_state_v2::failed;
+        }
+
+        isolate->PerformMicrotaskCheckpoint();
+        if ((request.flags & WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V2) != 0U
+            && value->IsPromise()) {
+            auto promise = value.As<v8::Promise>();
+            if (promise->State() == v8::Promise::PromiseState::kPending) {
+                return await_interop_promise(
+                        operation_id,
+                        request.result_mode,
+                        local_context,
+                        promise,
+                        std::move(completion),
+                        result)
+                    ? interop_invoke_state_v2::pending
+                    : interop_invoke_state_v2::failed;
+            }
+            if (promise->State() == v8::Promise::PromiseState::kRejected) {
+                last_error = "JavaScript promise rejected: "
+                    + to_utf8(isolate, promise->Result());
+                result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+                result.error = last_error;
+                return interop_invoke_state_v2::failed;
+            }
+            value = promise->Result();
+        }
+        if (!promote_pending_promise_error()) {
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return interop_invoke_state_v2::failed;
+        }
+        return encode_generated_interop_result(
+                request.result_mode,
+                local_context,
+                value,
+                result)
+            ? interop_invoke_state_v2::completed
+            : interop_invoke_state_v2::failed;
     }
 
     bool promote_pending_promise_error()
@@ -27358,6 +28148,13 @@ struct v8_dom_runtime::implementation final {
     v8::Global<v8::Object> document_object;
     v8::Global<v8::ObjectTemplate> document_template;
     v8::Global<v8::Context> frame_context;
+    // Keep native retained values disjoint from the compatibility JSON
+    // bridge's small positive JavaScript-number handles while remaining a
+    // positive Int64 (JavaScriptObjectReference reserves non-positive IDs).
+    uint64_t next_interop_handle{UINT64_C(0x4000000000000000)};
+    std::unordered_map<uint64_t, v8::Global<v8::Value>> interop_handles;
+    std::unordered_map<uint64_t, std::unique_ptr<pending_interop_promise>>
+        pending_interop_promises;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> node_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> class_list_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> style_wrappers;
@@ -27642,6 +28439,32 @@ bool v8_dom_runtime::evaluate_json(
     std::string& result)
 {
     return impl_->evaluate_json(source, document_name, result);
+}
+
+bool v8_dom_runtime::evaluate_interop_v1(
+    const std::string& source,
+    const std::string& document_name,
+    interop_result_data_v1& result)
+{
+    return impl_->evaluate_interop_v1(source, document_name, result);
+}
+
+interop_invoke_state_v2 v8_dom_runtime::invoke_interop_v2(
+    const interop_request_data_v2& request,
+    interop_result_data_v1& result,
+    uint64_t operation_id,
+    interop_completion_v2 completion)
+{
+    return impl_->invoke_interop_v2(
+        request,
+        result,
+        operation_id,
+        std::move(completion));
+}
+
+void v8_dom_runtime::cancel_interop_v2(uint64_t operation_id)
+{
+    impl_->cancel_interop_v2(operation_id);
 }
 
 bool v8_dom_runtime::try_take_host_request(std::string& request)

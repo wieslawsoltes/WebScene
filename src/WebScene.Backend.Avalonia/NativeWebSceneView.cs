@@ -15,6 +15,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly NativeSceneSurface _surface;
     private IntPtr _engine;
+    private NativeInteropInvoker? _interop;
     private CancellationTokenSource? _navigationCancellation;
 
     public NativeWebSceneView()
@@ -119,6 +120,56 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Evaluates JavaScript through the experimental immutable-result ABI.
+    /// Dispose the returned lease after materializing or borrowing its root.
+    /// </summary>
+    public ValueTask<NativeInteropResultLease> EvaluateBinaryAsync(
+        string source,
+        string documentName = "native-host-binary-evaluation.js",
+        CancellationToken cancellationToken = default)
+    {
+        var interop = Volatile.Read(ref _interop);
+        if (interop is null)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return interop.InvokeAsync(source, documentName, cancellationToken);
+    }
+
+    /// <summary>
+    /// Evaluates JavaScript and lets a generated struct codec materialize the
+    /// final managed result directly from the immutable native arena.
+    /// </summary>
+    public async ValueTask<T> EvaluateBinaryAsync<T, TDecoder>(
+        string source,
+        TDecoder decoder,
+        string documentName = "native-host-binary-evaluation.js",
+        CancellationToken cancellationToken = default)
+        where TDecoder : struct, INativeInteropValueDecoder<T>
+    {
+        using var lease = await EvaluateBinaryAsync(
+            source,
+            documentName,
+            cancellationToken).ConfigureAwait(false);
+        using var borrowed = lease.Borrow();
+        return decoder.Decode(borrowed.Root);
+    }
+
+    public NativeInteropPoolMetrics InteropPoolMetrics
+    {
+        get
+        {
+            var engine = Volatile.Read(ref _engine);
+            if (engine == IntPtr.Zero)
+            {
+                return default;
+            }
+            return NativeWebSceneApi.GetInteropPoolMetrics(engine);
+        }
+    }
+
     public async Task LoadAsync(
         string source,
         string nativeLibraryPath,
@@ -163,6 +214,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            _interop = new NativeInteropInvoker(engine);
             await Dispatcher.UIThread.InvokeAsync(
                 () =>
                 {
@@ -251,15 +303,27 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         Source = null;
 
         var engine = _engine;
+        var interop = Interlocked.Exchange(ref _interop, null);
         _engine = IntPtr.Zero;
         if (engine == IntPtr.Zero)
         {
+            interop?.Dispose();
             return;
         }
 
+        interop?.CancelAll();
         await Dispatcher.UIThread.InvokeAsync(
             () => _surface.SetEngine(IntPtr.Zero),
             DispatcherPriority.Send);
-        await Task.Run(() => NativeWebSceneApi.EngineDestroy(engine)).ConfigureAwait(false);
+        try
+        {
+            await Task.Run(() => NativeWebSceneApi.EngineDestroy(engine)).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Engine destruction joins its worker, so no native completion can
+            // race the persistent pooled callback handles after this point.
+            interop?.Dispose();
+        }
     }
 }
