@@ -96,6 +96,7 @@ private:
 
 struct canvas_layer_version final {
     uint64_t generation{0};
+    uint64_t content_hash{0};
     uint32_t command_count{0};
     uint32_t string_count{0};
     float x{0};
@@ -103,7 +104,16 @@ struct canvas_layer_version final {
     float width{0};
     float height{0};
 
-    bool operator==(const canvas_layer_version&) const = default;
+    bool visually_equals(const canvas_layer_version& other) const noexcept
+    {
+        return content_hash == other.content_hash
+            && command_count == other.command_count
+            && string_count == other.string_count
+            && x == other.x
+            && y == other.y
+            && width == other.width
+            && height == other.height;
+    }
 };
 
 struct scene final {
@@ -178,6 +188,51 @@ using script_work_request =
 uint64_t mix_hash(uint64_t hash, uint64_t value)
 {
     hash ^= value + 0x9e3779b97f4a7c15ULL + (hash << 6U) + (hash >> 2U);
+    return hash;
+}
+
+uint64_t canvas_layer_content_hash(
+    const webscene_canvas_layer& layer,
+    const std::vector<webscene_canvas_command>& commands,
+    const std::vector<webscene_scene_string>& strings,
+    const std::vector<char>& string_bytes)
+{
+    auto hash = 1469598103934665603ULL;
+    const auto command_end =
+        static_cast<size_t>(layer.command_offset) + layer.command_count;
+    for (auto index = static_cast<size_t>(layer.command_offset);
+         index < command_end;
+         ++index) {
+        const auto& command = commands[index];
+        hash = mix_hash(
+            hash,
+            static_cast<uint64_t>(command.kind) << 32U | command.flags);
+        hash = mix_hash(
+            hash,
+            static_cast<uint64_t>(command.resource_id) << 32U
+                | command.reserved);
+        for (const auto value : command.data.values) {
+            hash = mix_hash(hash, std::bit_cast<uint64_t>(value));
+        }
+    }
+
+    const auto string_end =
+        static_cast<size_t>(layer.string_offset) + layer.string_count;
+    for (auto index = static_cast<size_t>(layer.string_offset);
+         index < string_end;
+         ++index) {
+        const auto& value = strings[index];
+        hash = mix_hash(hash, value.byte_length);
+        const auto byte_end =
+            static_cast<size_t>(value.byte_offset) + value.byte_length;
+        for (auto byte_index = static_cast<size_t>(value.byte_offset);
+             byte_index < byte_end;
+             ++byte_index) {
+            hash = mix_hash(
+                hash,
+                static_cast<uint8_t>(string_bytes[byte_index]));
+        }
+    }
     return hash;
 }
 
@@ -2702,8 +2757,14 @@ private:
                 next->damage_rects.push_back(webscene_damage_rect{x, y, damage_width, damage_height});
             };
             for (auto layer : all_layers) {
+                const auto content_hash = canvas_layer_content_hash(
+                    layer,
+                    all_canvas_commands,
+                    all_canvas_strings,
+                    all_canvas_string_bytes);
                 const canvas_layer_version version{
                     layer.generation,
+                    content_hash,
                     layer.command_count,
                     layer.string_count,
                     layer.x,
@@ -2712,7 +2773,9 @@ private:
                     layer.height};
                 next->full_layer_versions[layer.node_id] = version;
                 const auto old = acknowledged_layers.find(layer.node_id);
-                if (base_revision != 0 && old != acknowledged_layers.end() && old->second == version) {
+                if (base_revision != 0
+                    && old != acknowledged_layers.end()
+                    && old->second.visually_equals(version)) {
                     continue;
                 }
 
@@ -2759,7 +2822,13 @@ private:
 
             hash = mix_hash(hash, dom_hash);
             for (const auto& layer : all_layers) {
-                hash = mix_hash(hash, layer.generation);
+                const auto version =
+                    next->full_layer_versions.find(layer.node_id);
+                hash = mix_hash(
+                    hash,
+                    version == next->full_layer_versions.end()
+                        ? layer.generation
+                        : version->second.content_hash);
                 hash = mix_hash(
                     hash,
                     static_cast<uint64_t>(layer.node_id) << 32U | layer.command_count);
