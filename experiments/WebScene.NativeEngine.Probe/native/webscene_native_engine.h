@@ -254,7 +254,11 @@ typedef enum webscene_interop_operation_v3 {
     WEBSCENE_INTEROP_GET_PROPERTY_V3 = 4,
     WEBSCENE_INTEROP_SET_PROPERTY_V3 = 5,
     WEBSCENE_INTEROP_INVOKE_MEMBER_V3 = 6,
-    WEBSCENE_INTEROP_RELEASE_HANDLE_V3 = 7
+    WEBSCENE_INTEROP_RELEASE_HANDLE_V3 = 7,
+    WEBSCENE_INTEROP_CREATE_CALLBACK_TARGET_V3 = 8,
+    WEBSCENE_INTEROP_CREATE_CALLBACK_FUNCTION_V3 = 9,
+    WEBSCENE_INTEROP_CREATE_SYNCHRONOUS_FACTORY_V3 = 10,
+    WEBSCENE_INTEROP_INVOKE_FUNCTION_V3 = 11
 } webscene_interop_operation_v3;
 
 typedef enum webscene_interop_result_mode_v3 {
@@ -325,6 +329,59 @@ struct webscene_interop_result_view_v3 {
     uint32_t reserved1;
 };
 
+typedef enum webscene_interop_callback_return_kind_v3 {
+    WEBSCENE_INTEROP_CALLBACK_VOID_V3 = 0,
+    WEBSCENE_INTEROP_CALLBACK_PROMISE_V3 = 1,
+    WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3 = 2
+} webscene_interop_callback_return_kind_v3;
+
+/*
+ * Immutable JavaScript-to-managed callback invocation. The tagged argument
+ * arena remains valid until webscene_interop_callback_release_v3 receives the
+ * matching lease_id. Taken callback leases may outlive their engine.
+ */
+struct webscene_interop_callback_view_v3 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t call_id;
+    uint64_t target_id;
+    uint32_t method_id;
+    uint32_t return_kind;
+    const webscene_interop_value_v3* values;
+    const webscene_interop_edge_v3* edges;
+    const char* utf8_bytes;
+    uint64_t lease_id;
+    uint32_t value_count;
+    uint32_t edge_count;
+    uint32_t utf8_byte_count;
+    uint32_t arguments_root;
+    uint32_t pooled_capacity;
+    uint32_t reserved0;
+};
+
+/*
+ * Managed callback completion. All arena pointers are copied before
+ * webscene_engine_complete_callback_v3 returns. A successful completion uses
+ * root_value_index; a failed completion uses error_bytes.
+ */
+typedef struct webscene_interop_callback_completion_v3 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t call_id;
+    uint32_t succeeded;
+    uint32_t reserved;
+    const webscene_interop_value_v3* values;
+    size_t value_count;
+    const webscene_interop_edge_v3* edges;
+    size_t edge_count;
+    const char* utf8_bytes;
+    size_t utf8_byte_count;
+    const char* error_bytes;
+    size_t error_byte_count;
+    uint32_t root_value_index;
+    uint32_t reserved1;
+} webscene_interop_callback_completion_v3;
+
 typedef struct webscene_interop_pool_metrics_v3 {
     uint32_t struct_size;
     uint32_t version;
@@ -348,6 +405,10 @@ typedef struct webscene_interop_pool_metrics_v3 {
     uint64_t pooled_result_bytes_1m;
     uint64_t taken_result_leases;
     uint64_t operation_result_leases;
+    uint64_t queued_callbacks;
+    uint64_t taken_callback_leases;
+    uint64_t pending_callback_promises;
+    uint64_t callback_queue_high_water;
 } webscene_interop_pool_metrics_v3;
 
 typedef struct webscene_damage_rect {
@@ -788,6 +849,17 @@ WEBSCENE_API uint8_t webscene_engine_cancel_invoke_v3(
     uint64_t operation_id);
 WEBSCENE_API void webscene_interop_result_release_v3(
     const webscene_interop_result_view_v3* result,
+    uint64_t lease_id);
+WEBSCENE_API const webscene_interop_callback_view_v3*
+webscene_engine_take_callback_v3(webscene_engine* engine);
+WEBSCENE_API uint8_t webscene_engine_complete_callback_v3(
+    webscene_engine* engine,
+    const webscene_interop_callback_completion_v3* completion);
+WEBSCENE_API uint8_t webscene_engine_cancel_callback_v3(
+    webscene_engine* engine,
+    uint64_t call_id);
+WEBSCENE_API void webscene_interop_callback_release_v3(
+    const webscene_interop_callback_view_v3* callback,
     uint64_t lease_id);
 WEBSCENE_API uint8_t webscene_engine_get_interop_pool_metrics_v3(
     const webscene_engine* engine,

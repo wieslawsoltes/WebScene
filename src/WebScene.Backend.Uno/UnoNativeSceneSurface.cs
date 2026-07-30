@@ -540,6 +540,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     private readonly UnoNativeSceneSurface _surface = new();
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
+    private JavaScriptCallbackSignal? _interopCallbackSignal;
 
     public UnoNativeWebSceneView()
     {
@@ -562,8 +563,12 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             throw new InvalidOperationException(
                 "The native WebScene document is not loaded.");
         }
+        var callbackSignal = Volatile.Read(ref _interopCallbackSignal)
+            ?? throw new InvalidOperationException(
+                "The native callback signal is not available.");
         return new NativeJavaScriptInvoker(
-            new NativeJavaScriptBinaryTransport(engine));
+            new NativeJavaScriptBinaryTransport(engine),
+            callbackSignal.WaitAsync);
     }
 
     public async Task<string> EvaluateTextAsync(
@@ -637,15 +642,18 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             Directory.CreateDirectory(compilationCacheDirectory);
         }
 
+        var callbackSignal = new JavaScriptCallbackSignal();
         _engine = NativeWebSceneApi.EngineCreate(
             0,
             compilationCacheDirectory,
             new UnoResourceLoader(),
-            _surface.OnNativeScenePublished);
+            _surface.OnNativeScenePublished,
+            interopCallbackAvailable: callbackSignal.Notify);
         if (_engine == IntPtr.Zero)
         {
             throw new InvalidOperationException("The WebScene native engine could not be created.");
         }
+        _interopCallbackSignal = callbackSignal;
         _interop = new NativeInteropInvoker(_engine);
 
         _surface.SetEngine(_engine);
@@ -682,6 +690,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     {
         _surface.SetEngine(IntPtr.Zero);
         Interlocked.Exchange(ref _interop, null)?.Dispose();
+        Interlocked.Exchange(ref _interopCallbackSignal, null);
         if (_engine != IntPtr.Zero)
         {
             NativeWebSceneApi.EngineDestroy(_engine);

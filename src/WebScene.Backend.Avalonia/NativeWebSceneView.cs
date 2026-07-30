@@ -17,6 +17,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private readonly NativeSceneSurface _surface;
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
+    private JavaScriptCallbackSignal? _interopCallbackSignal;
     private CancellationTokenSource? _navigationCancellation;
 
     public NativeWebSceneView()
@@ -85,8 +86,12 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             throw new InvalidOperationException(
                 "The native WebScene document is not loaded.");
         }
+        var callbackSignal = Volatile.Read(ref _interopCallbackSignal)
+            ?? throw new InvalidOperationException(
+                "The native callback signal is not available.");
         return new NativeJavaScriptInvoker(
-            new NativeJavaScriptBinaryTransport(engine));
+            new NativeJavaScriptBinaryTransport(engine),
+            callbackSignal.WaitAsync);
     }
 
     internal static NativePreferredColorScheme ResolvePreferredColorScheme(
@@ -211,11 +216,13 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 .ConfigureAwait(false);
 
             var resourceLoader = new AvaloniaResourceLoader();
+            var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
                 compilationCacheDirectory,
                 resourceLoader,
-                _surface.OnNativeScenePublished);
+                _surface.OnNativeScenePublished,
+                interopCallbackAvailable: callbackSignal.Notify);
             if (engine == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
@@ -223,6 +230,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            _interopCallbackSignal = callbackSignal;
             _interop = new NativeInteropInvoker(engine);
             await Dispatcher.UIThread.InvokeAsync(
                 () =>
@@ -313,6 +321,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
         var engine = _engine;
         var interop = Interlocked.Exchange(ref _interop, null);
+        Interlocked.Exchange(ref _interopCallbackSignal, null);
         _engine = IntPtr.Zero;
         if (engine == IntPtr.Zero)
         {

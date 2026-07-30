@@ -73,6 +73,56 @@ public sealed class NativeJavaScriptInvokerTests
                 new JavaScriptBinaryVoid()));
     }
 
+    [Fact]
+    public async Task NativeInvokerInvokesFunctionHandlesThroughAbi3()
+    {
+        var transport = new RecordingTransport();
+        using var invoker = new NativeJavaScriptInvoker(transport);
+
+        await invoker.InvokeBinaryFunctionVoidAsync<
+            JavaScriptBinaryVoid,
+            VoidCodec>(
+            new JavaScriptObjectReference(81),
+            new JavaScriptBinaryVoid());
+
+        Assert.Equal(JavaScriptBinaryOperation.InvokeFunction, transport.LastCallSite?.Operation);
+        Assert.Equal(JavaScriptBinaryResultMode.Void, transport.LastCallSite?.ResultMode);
+        Assert.Equal(81, transport.LastTarget.Id);
+        Assert.Equal(1, transport.VoidCalls);
+    }
+
+    [Fact]
+    public async Task NativeInvokerRegistersTypedFunctionsAndFactories()
+    {
+        var transport = new RecordingTransport();
+        using var invoker = new NativeJavaScriptInvoker(transport);
+        var target = new NoopBinaryCallbackTarget();
+
+        await using var callback = await invoker.RegisterBinaryFunctionAsync(
+            target,
+            JavaScriptCallbackReturnKind.Promise);
+        Assert.Equal(
+            JavaScriptBinaryOperation.CreateCallbackFunction,
+            transport.LastCallSite?.Operation);
+        Assert.Equal(1, transport.LastTarget.Id);
+        Assert.Equal(42, callback.Reference.Id);
+
+        await callback.DisposeAsync();
+        Assert.Equal(
+            JavaScriptBinaryOperation.ReleaseHandle,
+            transport.LastCallSite?.Operation);
+
+        await using var factory =
+            await invoker.RegisterBinarySynchronousFactoryAsync(
+                new JavaScriptObjectReference(77),
+                target);
+        Assert.Equal(
+            JavaScriptBinaryOperation.CreateSynchronousFactory,
+            transport.LastCallSite?.Operation);
+        Assert.Equal(2, transport.LastTarget.Id);
+        Assert.Equal(42, factory.Reference.Id);
+    }
+
     private readonly struct NumberCodec :
         IJavaScriptBinaryCodec<JavaScriptBinaryVoid, double>
     {
@@ -85,6 +135,31 @@ public sealed class NativeJavaScriptInvokerTests
             JavaScriptBinaryValue value,
             IJavaScriptInvoker invoker)
             => value.GetNumber();
+    }
+
+    private readonly struct VoidCodec :
+        IJavaScriptBinaryCodec<JavaScriptBinaryVoid, JavaScriptBinaryVoid>
+    {
+        public static uint EncodeArguments(
+            ref JavaScriptBinaryWriter writer,
+            in JavaScriptBinaryVoid arguments)
+            => writer.BeginArray(0);
+
+        public static JavaScriptBinaryVoid DecodeResult(
+            JavaScriptBinaryValue value,
+            IJavaScriptInvoker invoker)
+            => new();
+    }
+
+    private sealed class NoopBinaryCallbackTarget
+        : IJavaScriptBinaryCallbackTarget
+    {
+        public ValueTask DispatchBinaryAsync(
+            uint methodId,
+            JavaScriptBinaryValue arguments,
+            JavaScriptBinaryCallbackCompletion completion,
+            CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
     }
 
     private sealed class RecordingTransport : IJavaScriptBinaryTransport
@@ -111,6 +186,11 @@ public sealed class NativeJavaScriptInvokerTests
         {
             LastCallSite = callSite;
             LastTarget = target;
+            if (typeof(TResult) == typeof(JavaScriptObjectReference))
+            {
+                return ValueTask.FromResult(
+                    (TResult)(object)new JavaScriptObjectReference(42));
+            }
             return ValueTask.FromResult((TResult)(object)42d);
         }
 

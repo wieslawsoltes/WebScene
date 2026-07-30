@@ -66,26 +66,19 @@ public sealed class GeneratedTradingViewAdapterTests
     }
 
     [Fact]
-    public async Task DatafeedAdapterDispatchesTradingViewCallbacksAndSerializesAsHandle()
+    public async Task DatafeedAdapterRegistersBinaryCallbacksAndSerializesAsHandle()
     {
-        var invoker = new RecordingBidirectionalInvoker();
+        var invoker = new RecordingBinaryBidirectionalInvoker();
         await using var datafeed = new TestDatafeed();
 
         var reference = await datafeed.RegisterAsync(invoker);
         Assert.Equal(99, reference.Id);
-        Assert.Contains(invoker.Methods, method => method.Name == "getBars");
-        Assert.Contains(invoker.Methods, method => method.Name == "subscribeQuotes");
-
-        using var arguments = JsonDocument.Parse("""[{"__webSceneHandle":42,"__webSceneKind":"function"}]""");
-        await invoker.Target!.DispatchAsync(
-            "onReady",
-            arguments.RootElement,
-            CancellationToken.None);
-
-        Assert.Equal(42, invoker.LastFunction.Id);
         Assert.Contains(
-            "\"supported_resolutions\":[\"1D\"]",
-            invoker.LastArguments.Single().Json);
+            invoker.BinaryMethods,
+            method => method.Name == "getBars");
+        Assert.Contains(
+            invoker.BinaryMethods,
+            method => method.Name == "subscribeQuotes");
 
         var options = new TradingViewWidgetOptions
         {
@@ -101,60 +94,94 @@ public sealed class GeneratedTradingViewAdapterTests
     }
 
     [Fact]
-    public async Task BrokerAdapterPublishesPromiseAndSynchronousMethodMetadata()
+    public async Task BrokerAdapterPublishesBinaryPromiseAndSynchronousMetadata()
     {
-        var invoker = new RecordingBidirectionalInvoker();
+        var invoker = new RecordingBinaryBidirectionalInvoker();
         await using var broker = new TestBroker();
         await broker.RegisterAsync(invoker);
 
         Assert.Contains(
-            invoker.Methods,
+            invoker.BinaryMethods,
             method => method is
             {
                 Name: "orders",
                 ReturnKind: JavaScriptCallbackReturnKind.Promise
             });
         Assert.Contains(
-            invoker.Methods,
+            invoker.BinaryMethods,
             method => method is
             {
                 Name: "accountManagerInfo",
                 ReturnKind: JavaScriptCallbackReturnKind.Synchronous
             });
         var accountInfo = Assert.Single(
-            invoker.Methods,
+            invoker.BinaryMethods,
             method => method.Name == "accountManagerInfo");
-        Assert.Contains("\"accountTitle\":\"Primary\"", accountInfo.SynchronousResult.Value);
+        Assert.True(accountInfo.HasSynchronousResult);
+    }
 
-        using var noArguments = JsonDocument.Parse("[]");
-        var result = await invoker.Target!.DispatchAsync(
-            "orders",
-            noArguments.RootElement,
-            CancellationToken.None);
-        var orders = Assert.IsAssignableFrom<IReadOnlyList<Order>>(result);
-        Assert.Single(orders);
-        Assert.Equal("order-1", orders[0].Id);
+    [Fact]
+    public async Task DatafeedBinaryAdapterInvokesFunctionHandleWithTaggedDto()
+    {
+        var invoker = new RecordingBinaryBidirectionalInvoker();
+        await using var datafeed = new TestDatafeed();
+        await datafeed.RegisterAsync(invoker);
 
-        TradingViewBrokerHost? host = null;
-        await using var factory = await invoker.RegisterSynchronousFactoryAsync(
-            broker.JavaScriptReference,
-            (arguments, _) =>
-            {
-                var reference = JavaScriptCallbackArguments.Get<JavaScriptObjectReference>(
+        var method = Assert.Single(
+            invoker.BinaryMethods,
+            candidate => candidate.Name == "onReady");
+        var writer = new JavaScriptBinaryWriter();
+        try
+        {
+            var root = writer.BeginArray(1);
+            writer.SetArrayItem(
+                root,
+                0,
+                writer.WriteHandle(new JavaScriptObjectReference(42)));
+            DispatchBinaryCallback(
+                invoker.BinaryTarget!,
+                method.MethodId,
+                ref writer,
+                root);
+        }
+        finally
+        {
+            writer.Dispose();
+        }
+
+        Assert.Equal(42, invoker.LastFunction.Id);
+        Assert.Equal("1D", invoker.LastSupportedResolution);
+        Assert.Equal(0, invoker.LegacyFunctionCalls);
+    }
+
+    private static unsafe void DispatchBinaryCallback(
+        IJavaScriptBinaryCallbackTarget target,
+        uint methodId,
+        ref JavaScriptBinaryWriter writer,
+        uint root)
+    {
+        fixed (JavaScriptBinaryValueData* values = writer.Values)
+        fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+        fixed (byte* utf8 = writer.Utf8)
+        {
+            var arguments = new JavaScriptBinaryValue(
+                values,
+                checked((uint)writer.Values.Length),
+                edges,
+                checked((uint)writer.Edges.Length),
+                utf8,
+                checked((uint)writer.Utf8.Length),
+                root);
+            var completion = new RecordingBinaryCompletion();
+            target.DispatchBinaryAsync(
+                    methodId,
                     arguments,
-                    0,
-                    invoker);
-                host = TradingViewBrokerHost.FromReference(invoker, reference);
-                return ValueTask.FromResult<object?>(null);
-            });
-        using var hostArguments = JsonDocument.Parse("""[{"__webSceneHandle":77}]""");
-        await invoker.FactoryCallback!(
-            hostArguments.RootElement,
-            CancellationToken.None);
-
-        Assert.Equal(99, invoker.FactoryResult.Id);
-        Assert.Equal(101, factory.Reference.Id);
-        Assert.Equal(77, host!.JavaScriptReference.Id);
+                    completion,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            Assert.True(completion.IsCompleted);
+        }
     }
 
     private sealed class TestDatafeed : TradingViewDatafeed
@@ -347,6 +374,204 @@ public sealed class GeneratedTradingViewAdapterTests
                 this,
                 new JavaScriptObjectReference(101)));
         }
+
+        public ValueTask<bool> PumpCallbackAsync(
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(false);
+
+        public ValueTask<JavaScriptObjectReference> ConstructAsync(
+            string globalName,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<JavaScriptObjectReference> InvokeObjectAsync(
+            JavaScriptObjectReference target,
+            string method,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<T?> InvokeAsync<T>(
+            JavaScriptObjectReference target,
+            string method,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<T?> InvokePromiseAsync<T>(
+            JavaScriptObjectReference target,
+            string method,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<JavaScriptObjectReference> InvokePromiseObjectAsync(
+            JavaScriptObjectReference target,
+            string method,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask InvokeVoidAsync(
+            JavaScriptObjectReference target,
+            string method,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask ReleaseAsync(
+            JavaScriptObjectReference reference,
+            CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingBinaryCompletion()
+        : JavaScriptBinaryCallbackCompletion(
+            JavaScriptCallbackReturnKind.Void)
+    {
+        protected override void CompleteSuccess(
+            ReadOnlySpan<JavaScriptBinaryValueData> values,
+            ReadOnlySpan<JavaScriptBinaryEdgeData> edges,
+            ReadOnlySpan<byte> utf8,
+            uint rootValueIndex)
+            => throw new InvalidOperationException();
+
+        protected override void CompleteFailure(string error)
+            => throw new InvalidOperationException(error);
+    }
+
+    private sealed class RecordingBinaryBidirectionalInvoker
+        : IJavaScriptBinaryBidirectionalInvoker
+    {
+        public IJavaScriptBinaryCallbackTarget? BinaryTarget { get; private set; }
+
+        public IReadOnlyList<JavaScriptBinaryCallbackMethod> BinaryMethods
+        {
+            get;
+            private set;
+        } = [];
+
+        public JavaScriptObjectReference LastFunction { get; private set; }
+
+        public string? LastSupportedResolution { get; private set; }
+
+        public int LegacyFunctionCalls { get; private set; }
+
+        public bool IsBinaryInteropAvailable => true;
+
+        public ValueTask<JavaScriptObjectReference>
+            RegisterBinaryCallbackTargetAsync(
+                IJavaScriptBinaryCallbackTarget target,
+                IReadOnlyList<JavaScriptBinaryCallbackMethod> methods,
+                CancellationToken cancellationToken = default)
+        {
+            BinaryTarget = target;
+            BinaryMethods = methods;
+            return ValueTask.FromResult(new JavaScriptObjectReference(99));
+        }
+
+        public unsafe ValueTask InvokeBinaryFunctionVoidAsync<
+            TArguments,
+            TCodec>(
+            JavaScriptObjectReference function,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
+        {
+            LastFunction = function;
+            var writer = new JavaScriptBinaryWriter();
+            try
+            {
+                var root = TCodec.EncodeArguments(ref writer, in arguments);
+                fixed (JavaScriptBinaryValueData* values = writer.Values)
+                fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+                fixed (byte* utf8 = writer.Utf8)
+                {
+                    var encoded = new JavaScriptBinaryValue(
+                        values,
+                        checked((uint)writer.Values.Length),
+                        edges,
+                        checked((uint)writer.Edges.Length),
+                        utf8,
+                        checked((uint)writer.Utf8.Length),
+                        root);
+                    Assert.Equal(JavaScriptBinaryValueKind.Array, encoded.Kind);
+                    Assert.Equal(1, encoded.Count);
+                    var configuration = encoded.GetArrayItem(0);
+                    var resolutions = configuration.GetRequiredProperty(
+                        "supported_resolutions"u8);
+                    LastSupportedResolution = resolutions
+                        .GetArrayItem(0)
+                        .GetString();
+                }
+            }
+            finally
+            {
+                writer.Dispose();
+            }
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<TResult> InvokeBinaryAsync<
+            TArguments,
+            TResult,
+            TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, TResult>
+            => throw new NotSupportedException();
+
+        public ValueTask InvokeBinaryVoidAsync<TArguments, TCodec>(
+            JavaScriptBinaryCallSite callSite,
+            JavaScriptObjectReference target,
+            TArguments arguments,
+            CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
+            => throw new NotSupportedException();
+
+        public ValueTask<JavaScriptBinaryResultLease>
+            InvokeBinaryBorrowedAsync<TArguments, TCodec>(
+                JavaScriptBinaryCallSite callSite,
+                JavaScriptObjectReference target,
+                TArguments arguments,
+                CancellationToken cancellationToken = default)
+            where TCodec : struct,
+            IJavaScriptBinaryArgumentsCodec<TArguments>
+            => throw new NotSupportedException();
+
+        public ValueTask InvokeFunctionVoidAsync(
+            JavaScriptObjectReference function,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+        {
+            LegacyFunctionCalls++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<T?> InvokeFunctionAsync<T>(
+            JavaScriptObjectReference function,
+            IReadOnlyList<JavaScriptArgument> arguments,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<JavaScriptObjectReference> RegisterCallbackTargetAsync(
+            IJavaScriptCallbackTarget target,
+            IReadOnlyList<JavaScriptCallbackMethod> methods,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public ValueTask<JavaScriptFunctionReference> RegisterFunctionAsync(
+            JavaScriptCallbackHandler callback,
+            JavaScriptCallbackReturnKind returnKind =
+                JavaScriptCallbackReturnKind.Void,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
 
         public ValueTask<bool> PumpCallbackAsync(
             CancellationToken cancellationToken = default)

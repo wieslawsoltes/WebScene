@@ -1641,6 +1641,10 @@ struct v8_dom_runtime::implementation final {
         v8::Global<v8::Promise> promise;
     };
 
+    struct pending_callback_promise final {
+        v8::Global<v8::Promise::Resolver> resolver;
+    };
+
     struct frame_script final {
         std::string source;
         std::string code;
@@ -2303,12 +2307,15 @@ struct v8_dom_runtime::implementation final {
         std::string compilation_cache_directory_value,
         resource_loader resource_loader_value,
         std::function<void()> host_request_available_value,
-        std::function<void()> interop_callback_available_value)
+        std::function<void()> interop_callback_available_value,
+        v8_dom_runtime::interop_callback_sink_v3
+            interop_callback_sink_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
         , interop_callback_available(std::move(interop_callback_available_value))
+        , interop_callback_sink(std::move(interop_callback_sink_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -2362,6 +2369,8 @@ struct v8_dom_runtime::implementation final {
         timers.clear();
         pending_window_messages.clear();
         pending_interop_promises.clear();
+        pending_callback_promises.clear();
+        interop_handles.clear();
         pending_promise_rejections.clear();
         connected_resources.clear();
         resize_observers.clear();
@@ -2427,15 +2436,6 @@ struct v8_dom_runtime::implementation final {
             }
         }
         return static_cast<implementation*>(isolate->GetData(0));
-    }
-
-    static void notify_interop_callback_available(
-        const v8::FunctionCallbackInfo<v8::Value>& info)
-    {
-        auto* self = current(info.GetIsolate());
-        if (self != nullptr && self->interop_callback_available) {
-            self->interop_callback_available();
-        }
     }
 
     struct feature_observation final {
@@ -4878,12 +4878,6 @@ struct v8_dom_runtime::implementation final {
             v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
         global->Set(
             local_context,
-            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
-            v8::Function::New(
-                local_context,
-                notify_interop_callback_available).ToLocalChecked()).Check();
-        global->Set(
-            local_context,
             js_string(isolate, "requestAnimationFrame"),
             v8::Function::New(local_context, request_animation_frame).ToLocalChecked()).Check();
         global->Set(
@@ -5987,7 +5981,8 @@ struct v8_dom_runtime::implementation final {
         v8::Local<v8::Context> local_context,
         v8::Local<v8::Value> value,
         interop_result_data_v3& result,
-        v8::TryCatch& try_catch)
+        v8::TryCatch& try_catch,
+        bool callback_arguments = false)
     {
         constexpr uint32_t maximum_depth = 64U;
         constexpr uint32_t maximum_values = 1'000'000U;
@@ -6057,6 +6052,15 @@ struct v8_dom_runtime::implementation final {
                 node.length = static_cast<uint32_t>(text.size());
                 return true;
             }
+            if (callback_arguments && current->IsFunction()) {
+                const auto handle = next_interop_handle++;
+                interop_handles.emplace(
+                    handle,
+                    v8::Global<v8::Value>(isolate, current));
+                node.kind = WEBSCENE_INTEROP_VALUE_HANDLE_V3;
+                node.payload = handle;
+                return true;
+            }
             if (!current->IsObject()) {
                 encoding_error = "Native interop cannot encode the returned JavaScript value";
                 return false;
@@ -6065,6 +6069,15 @@ struct v8_dom_runtime::implementation final {
             auto object = current.As<v8::Object>();
             for (const auto& ancestor : ancestors) {
                 if (ancestor == object) {
+                    if (callback_arguments) {
+                        const auto handle = next_interop_handle++;
+                        interop_handles.emplace(
+                            handle,
+                            v8::Global<v8::Value>(isolate, current));
+                        node.kind = WEBSCENE_INTEROP_VALUE_HANDLE_V3;
+                        node.payload = handle;
+                        return true;
+                    }
                     encoding_error = "Converting circular structure to native interop value";
                     return false;
                 }
@@ -6238,9 +6251,10 @@ struct v8_dom_runtime::implementation final {
         if (result_mode == WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3) {
             if (value->IsNullOrUndefined()) {
                 result.values.push_back({
-                    value->IsUndefined()
-                        ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V3
-                        : WEBSCENE_INTEROP_VALUE_NULL_V3,
+                    static_cast<uint32_t>(
+                        value->IsUndefined()
+                            ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V3
+                            : WEBSCENE_INTEROP_VALUE_NULL_V3),
                     0U,
                     0U,
                     0U,
@@ -6422,6 +6436,253 @@ struct v8_dom_runtime::implementation final {
     void cancel_interop_v3(uint64_t operation_id)
     {
         pending_interop_promises.erase(operation_id);
+    }
+
+    static void managed_callback_invoked(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* owner = current(info.GetIsolate());
+        if (owner == nullptr
+            || !owner->interop_callback_sink
+            || !info.Data()->IsArray()) {
+            return;
+        }
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        auto metadata = info.Data().As<v8::Array>();
+        v8::Local<v8::Value> target_value;
+        v8::Local<v8::Value> method_value;
+        v8::Local<v8::Value> return_kind_value;
+        if (!metadata->Get(local_context, 0U).ToLocal(&target_value)
+            || !target_value->IsBigInt()
+            || !metadata->Get(local_context, 1U).ToLocal(&method_value)
+            || !method_value->IsUint32()
+            || !metadata->Get(local_context, 2U).ToLocal(&return_kind_value)
+            || !return_kind_value->IsUint32()) {
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(isolate, "Native callback metadata is invalid")));
+            return;
+        }
+        bool lossless = false;
+        const auto target_id =
+            target_value.As<v8::BigInt>()->Uint64Value(&lossless);
+        const auto method_id = method_value.As<v8::Uint32>()->Value();
+        const auto return_kind =
+            return_kind_value.As<v8::Uint32>()->Value();
+        if (!lossless
+            || target_id == 0U
+            || return_kind > WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3) {
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(isolate, "Native callback metadata is invalid")));
+            return;
+        }
+
+        auto arguments = v8::Array::New(isolate, info.Length());
+        for (int index = 0; index < info.Length(); ++index) {
+            if (!arguments->Set(
+                    local_context,
+                    static_cast<uint32_t>(index),
+                    info[index]).FromMaybe(false)) {
+                isolate->ThrowException(v8::Exception::Error(
+                    js_string(
+                        isolate,
+                        "Native callback arguments could not be captured")));
+                return;
+            }
+        }
+        interop_callback_request_data_v3 request;
+        request.target_id = target_id;
+        request.method_id = method_id;
+        request.return_kind = return_kind;
+        v8::TryCatch try_catch(isolate);
+        if (!owner->encode_interop_result_value(
+                local_context,
+                arguments,
+                request.arguments,
+                try_catch,
+                true)) {
+            const auto error = owner->last_error.empty()
+                ? std::string("Native callback arguments could not be encoded")
+                : owner->last_error;
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(isolate, error.c_str())));
+            return;
+        }
+
+        v8::Local<v8::Promise::Resolver> resolver;
+        if (return_kind == WEBSCENE_INTEROP_CALLBACK_PROMISE_V3
+            && !v8::Promise::Resolver::New(
+                local_context).ToLocal(&resolver)) {
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(
+                    isolate,
+                    "Native callback promise could not be created")));
+            return;
+        }
+        const auto call_id =
+            owner->interop_callback_sink(std::move(request));
+        if (call_id == 0U) {
+            isolate->ThrowException(v8::Exception::Error(
+                js_string(
+                    isolate,
+                    "Native callback queue rejected the invocation")));
+            return;
+        }
+
+        if (return_kind == WEBSCENE_INTEROP_CALLBACK_PROMISE_V3) {
+            owner->pending_callback_promises.emplace(
+                call_id,
+                pending_callback_promise{
+                    v8::Global<v8::Promise::Resolver>(
+                        isolate,
+                        resolver)});
+            info.GetReturnValue().Set(resolver->GetPromise());
+            return;
+        }
+        if (return_kind == WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3) {
+            v8::Local<v8::Value> result;
+            if (metadata->Length() < 4U
+                || !metadata->Get(
+                    local_context,
+                    3U).ToLocal(&result)) {
+                isolate->ThrowException(v8::Exception::Error(
+                    js_string(
+                        isolate,
+                        "Synchronous native callbacks require a precomputed result")));
+                return;
+            }
+            info.GetReturnValue().Set(result);
+            return;
+        }
+        info.GetReturnValue().Set(v8::Undefined(isolate));
+    }
+
+    bool create_managed_callback_function(
+        v8::Local<v8::Context> local_context,
+        uint64_t target_id,
+        uint32_t method_id,
+        uint32_t return_kind,
+        v8::Local<v8::Value> synchronous_result,
+        v8::Local<v8::Function>& function)
+    {
+        if (target_id == 0U
+            || return_kind > WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3) {
+            last_error = "Native callback registration metadata is invalid";
+            return false;
+        }
+        const auto metadata_length =
+            return_kind == WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3
+            && !synchronous_result.IsEmpty()
+                ? 4
+                : 3;
+        auto metadata = v8::Array::New(isolate, metadata_length);
+        if (!metadata->Set(
+                local_context,
+                0U,
+                v8::BigInt::NewFromUnsigned(
+                    isolate,
+                    target_id)).FromMaybe(false)
+            || !metadata->Set(
+                local_context,
+                1U,
+                v8::Uint32::New(
+                    isolate,
+                    method_id)).FromMaybe(false)
+            || !metadata->Set(
+                local_context,
+                2U,
+                v8::Uint32::New(
+                    isolate,
+                    return_kind)).FromMaybe(false)
+            || (metadata_length == 4
+                && !metadata->Set(
+                    local_context,
+                    3U,
+                    synchronous_result).FromMaybe(false))
+            || !v8::Function::New(
+                local_context,
+                managed_callback_invoked,
+                metadata).ToLocal(&function)) {
+            last_error = "Native callback function could not be created";
+            return false;
+        }
+        return true;
+    }
+
+    bool complete_callback_v3(
+        interop_callback_completion_data_v3& completion)
+    {
+        constexpr uint32_t complete_callback_operation = 12U;
+        if (!completion.succeeded
+            && completion.error.size()
+                > std::numeric_limits<uint32_t>::max()) {
+            last_error = "Native callback error is too large";
+            return false;
+        }
+        interop_invoke_request_data_v3 request;
+        request.operation = complete_callback_operation;
+        request.flags = completion.succeeded ? 1U : 0U;
+        request.result_mode = WEBSCENE_INTEROP_RESULT_VOID_V3;
+        request.target_handle = completion.call_id;
+        request.values = std::move(completion.values);
+        request.edges = std::move(completion.edges);
+        request.utf8_bytes = std::move(completion.utf8_bytes);
+        uint32_t result_index = completion.root_value_index;
+        if (!completion.succeeded) {
+            const auto error_size = completion.error.size();
+            const auto offset =
+                static_cast<uint32_t>(request.utf8_bytes.size());
+            request.utf8_bytes.insert(
+                request.utf8_bytes.end(),
+                completion.error.begin(),
+                completion.error.end());
+            result_index = static_cast<uint32_t>(request.values.size());
+            request.values.push_back({
+                WEBSCENE_INTEROP_VALUE_STRING_V3,
+                0U,
+                offset,
+                static_cast<uint32_t>(error_size),
+                0U});
+        }
+        const auto edge_index =
+            static_cast<uint32_t>(request.edges.size());
+        request.edges.push_back({0U, 0U, result_index, 0U});
+        request.arguments_root =
+            static_cast<uint32_t>(request.values.size());
+        request.values.push_back({
+            WEBSCENE_INTEROP_VALUE_ARRAY_V3,
+            0U,
+            edge_index,
+            1U,
+            0U});
+        interop_result_data_v3 ignored;
+        const auto state = invoke_interop_v3(
+                request,
+                ignored,
+                0U,
+                {});
+        completion.values = std::move(request.values);
+        completion.edges = std::move(request.edges);
+        completion.utf8_bytes = std::move(request.utf8_bytes);
+        completion.values.clear();
+        completion.edges.clear();
+        completion.utf8_bytes.clear();
+        completion.error.clear();
+        return state == interop_invoke_state_v3::completed;
+    }
+
+    void cancel_callback_v3(uint64_t call_id)
+    {
+        interop_callback_completion_data_v3 completion;
+        completion.call_id = call_id;
+        completion.succeeded = false;
+        completion.error = "Managed callback was cancelled";
+        static_cast<void>(complete_callback_v3(completion));
+    }
+
+    uint64_t pending_callback_promise_count() const noexcept
+    {
+        return pending_callback_promises.size();
     }
 
     interop_invoke_state_v3 invoke_interop_v3(
@@ -6648,7 +6909,176 @@ struct v8_dom_runtime::implementation final {
 
         v8::Local<v8::Value> receiver = local_context->Global();
         v8::Local<v8::Value> value = v8::Undefined(isolate);
-        if (request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V3) {
+        constexpr uint32_t complete_callback_operation = 12U;
+        if (request.operation == complete_callback_operation) {
+            const auto pending =
+                pending_callback_promises.find(request.target_handle);
+            if (pending == pending_callback_promises.end()
+                || arguments.size() != 1U) {
+                decoding_error =
+                    "Native callback completion references a stale call";
+            } else {
+                auto resolver = pending->second.resolver.Get(isolate);
+                pending_callback_promises.erase(pending);
+                const auto succeeded = (request.flags & 1U) != 0U;
+                const auto settled = succeeded
+                    ? resolver->Resolve(local_context, arguments[0])
+                    : resolver->Reject(
+                        local_context,
+                        v8::Exception::Error(
+                            arguments[0]
+                                ->ToString(local_context)
+                                .ToLocalChecked()));
+                if (!settled.FromMaybe(false)) {
+                    decoding_error =
+                        "Native callback promise could not be settled";
+                }
+            }
+        } else if (request.operation
+            == WEBSCENE_INTEROP_CREATE_CALLBACK_TARGET_V3) {
+            if (arguments.size() != 1U || !arguments[0]->IsArray()) {
+                decoding_error = "Native callback target descriptors are invalid (count="
+                    + std::to_string(arguments.size())
+                    + ", array="
+                    + (arguments.empty() || !arguments[0]->IsArray()
+                        ? "false"
+                        : "true")
+                    + ")";
+            } else {
+                auto proxy = v8::Object::New(isolate);
+                auto descriptors = arguments[0].As<v8::Array>();
+                for (uint32_t index = 0;
+                     decoding_error.empty()
+                     && index < descriptors->Length();
+                     ++index) {
+                    v8::Local<v8::Value> descriptor_value;
+                    if (!descriptors->Get(
+                            local_context,
+                            index).ToLocal(&descriptor_value)
+                        || !descriptor_value->IsArray()) {
+                        decoding_error =
+                            "Native callback method descriptor is invalid";
+                        break;
+                    }
+                    auto descriptor = descriptor_value.As<v8::Array>();
+                    v8::Local<v8::Value> name_value;
+                    v8::Local<v8::Value> method_value;
+                    v8::Local<v8::Value> kind_value;
+                    if (descriptor->Length() < 3U
+                        || !descriptor->Get(
+                            local_context,
+                            0U).ToLocal(&name_value)
+                        || !name_value->IsString()
+                        || !descriptor->Get(
+                            local_context,
+                            1U).ToLocal(&method_value)
+                        || !method_value->IsNumber()
+                        || !descriptor->Get(
+                            local_context,
+                            2U).ToLocal(&kind_value)
+                        || !kind_value->IsNumber()) {
+                        decoding_error =
+                            "Native callback method descriptor is invalid";
+                        break;
+                    }
+                    const auto method_id =
+                        method_value->Uint32Value(
+                            local_context).FromMaybe(
+                                std::numeric_limits<uint32_t>::max());
+                    const auto return_kind =
+                        kind_value->Uint32Value(
+                            local_context).FromMaybe(
+                                std::numeric_limits<uint32_t>::max());
+                    v8::Local<v8::Value> synchronous_result;
+                    if (descriptor->Length() >= 4U
+                        && !descriptor->Get(
+                            local_context,
+                            3U).ToLocal(&synchronous_result)) {
+                        decoding_error =
+                            "Native callback synchronous result is invalid";
+                        break;
+                    }
+                    v8::Local<v8::Function> callback;
+                    if (!create_managed_callback_function(
+                            local_context,
+                            request.target_handle,
+                            method_id,
+                            return_kind,
+                            synchronous_result,
+                            callback)
+                        || !proxy->DefineOwnProperty(
+                            local_context,
+                            name_value.As<v8::String>(),
+                            callback,
+                            static_cast<v8::PropertyAttribute>(
+                                v8::ReadOnly
+                                | v8::DontDelete)).FromMaybe(false)) {
+                        decoding_error = last_error.empty()
+                            ? "Native callback method could not be defined"
+                            : last_error;
+                    }
+                }
+                value = proxy;
+            }
+        } else if (request.operation
+            == WEBSCENE_INTEROP_CREATE_CALLBACK_FUNCTION_V3) {
+            if (arguments.size() != 1U
+                || !arguments[0]->IsNumber()) {
+                decoding_error =
+                    "Native callback function metadata is invalid";
+            } else {
+                v8::Local<v8::Function> callback;
+                if (!create_managed_callback_function(
+                        local_context,
+                        request.target_handle,
+                        0U,
+                        arguments[0]->Uint32Value(
+                            local_context).FromMaybe(
+                                std::numeric_limits<uint32_t>::max()),
+                        {},
+                        callback)) {
+                    decoding_error = last_error;
+                } else {
+                    value = callback;
+                }
+            }
+        } else if (request.operation
+            == WEBSCENE_INTEROP_CREATE_SYNCHRONOUS_FACTORY_V3) {
+            if (arguments.size() != 1U) {
+                decoding_error =
+                    "Native synchronous factory metadata is invalid";
+            } else {
+                v8::Local<v8::Function> callback;
+                if (!create_managed_callback_function(
+                        local_context,
+                        request.target_handle,
+                        0U,
+                        WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3,
+                        arguments[0],
+                        callback)) {
+                    decoding_error = last_error;
+                } else {
+                    value = callback;
+                }
+            }
+        } else if (request.operation
+            == WEBSCENE_INTEROP_INVOKE_FUNCTION_V3) {
+            v8::Local<v8::Value> callable;
+            if (!resolve_interop_handle(
+                    request.target_handle,
+                    callable)
+                || !callable->IsFunction()) {
+                decoding_error =
+                    "Generated native interop function handle is stale";
+            } else if (!callable.As<v8::Function>()->Call(
+                    local_context,
+                    v8::Undefined(isolate),
+                    static_cast<int>(arguments.size()),
+                    arguments.data()).ToLocal(&value)) {
+                decoding_error =
+                    describe_exception(try_catch, local_context);
+            }
+        } else if (request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V3) {
             if (interop_handles.erase(request.target_handle) == 0U) {
                 decoding_error =
                     "Generated native interop release references a stale handle";
@@ -23741,12 +24171,6 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "AbortController"), v8::FunctionTemplate::New(isolate, abort_controller_constructor)->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "matchMedia"), v8::Function::New(local_context, match_media).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "open"), v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
-        global->Set(
-            local_context,
-            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
-            v8::Function::New(
-                local_context,
-                notify_interop_callback_available).ToLocalChecked()).Check();
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -28178,6 +28602,8 @@ struct v8_dom_runtime::implementation final {
     std::unordered_map<uint64_t, v8::Global<v8::Value>> interop_handles;
     std::unordered_map<uint64_t, std::unique_ptr<pending_interop_promise>>
         pending_interop_promises;
+    std::unordered_map<uint64_t, pending_callback_promise>
+        pending_callback_promises;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> node_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> class_list_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> style_wrappers;
@@ -28219,6 +28645,7 @@ struct v8_dom_runtime::implementation final {
     std::deque<std::string> host_requests;
     std::function<void()> host_request_available;
     std::function<void()> interop_callback_available;
+    v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -28426,14 +28853,16 @@ v8_dom_runtime::v8_dom_runtime(
     std::string compilation_cache_directory,
     resource_loader load_resource,
     std::function<void()> host_request_available,
-    std::function<void()> interop_callback_available)
+    std::function<void()> interop_callback_available,
+    interop_callback_sink_v3 interop_callback_sink)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
         std::move(load_resource),
         std::move(host_request_available),
-        std::move(interop_callback_available)))
+        std::move(interop_callback_available),
+        std::move(interop_callback_sink)))
 {
 }
 
@@ -28483,6 +28912,22 @@ interop_invoke_state_v3 v8_dom_runtime::invoke_interop_v3(
 void v8_dom_runtime::cancel_interop_v3(uint64_t operation_id)
 {
     impl_->cancel_interop_v3(operation_id);
+}
+
+bool v8_dom_runtime::complete_callback_v3(
+    interop_callback_completion_data_v3& completion)
+{
+    return impl_->complete_callback_v3(completion);
+}
+
+void v8_dom_runtime::cancel_callback_v3(uint64_t call_id)
+{
+    impl_->cancel_callback_v3(call_id);
+}
+
+uint64_t v8_dom_runtime::pending_callback_promises() const noexcept
+{
+    return impl_->pending_callback_promise_count();
 }
 
 bool v8_dom_runtime::try_take_host_request(std::string& request)

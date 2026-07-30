@@ -1582,58 +1582,494 @@ void notify_interop_callback_test(void* user_data)
         ->fetch_add(1U, std::memory_order_relaxed);
 }
 
-void test_interop_callback_notification()
+void test_binary_reverse_callback_is_leased_and_completed()
 {
-    struct previous_engine_options final {
-        uint32_t struct_size;
-        uint32_t simulated_chart_command_count;
-        const char* compilation_cache_directory;
-        size_t compilation_cache_directory_length;
-        webscene_resource_load_callback resource_load_callback;
-        void* resource_load_user_data;
-        webscene_scene_published_callback scene_published_callback;
-        void* scene_published_user_data;
-        webscene_text_measure_callback text_measure_callback;
-        void* text_measure_user_data;
-        webscene_host_request_available_callback host_request_available_callback;
-        void* host_request_available_user_data;
-    };
-    static_assert(
-        sizeof(previous_engine_options)
-        == offsetof(
-            webscene_engine_options,
-            interop_callback_available_callback));
-    previous_engine_options previous_options{};
-    previous_options.struct_size = sizeof(previous_engine_options);
-    auto* previous_engine = webscene_engine_create_with_options(
-        reinterpret_cast<const webscene_engine_options*>(&previous_options));
-    require(
-        previous_engine != nullptr,
-        "interop callback ABI rejected the previous engine options tail");
-    webscene_engine_destroy(previous_engine);
-
     std::atomic<uint32_t> notifications{0U};
     webscene_engine_options options{};
-    options.struct_size = sizeof(webscene_engine_options);
+    options.struct_size = sizeof(options);
     options.interop_callback_available_callback =
         notify_interop_callback_test;
     options.interop_callback_available_user_data = &notifications;
     auto* engine = webscene_engine_create_with_options(&options);
-    require(engine != nullptr, "interop callback notification engine creation failed");
+    require(engine != nullptr, "binary reverse callback engine creation failed");
 
+    constexpr std::string_view promise_name{"load"};
+    constexpr std::string_view void_name{"update"};
+    std::array<webscene_interop_value_v3, 10> registration_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 1U, 2U, 0U},
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 3U, 3U, 0U},
+        {WEBSCENE_INTEROP_VALUE_STRING_V3, 0U, 0U,
+            static_cast<uint32_t>(promise_name.size()), 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(7.0)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(
+                static_cast<double>(
+                    WEBSCENE_INTEROP_CALLBACK_PROMISE_V3))},
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 6U, 3U, 0U},
+        {WEBSCENE_INTEROP_VALUE_STRING_V3,
+            0U,
+            static_cast<uint32_t>(promise_name.size()),
+            static_cast<uint32_t>(void_name.size()), 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(8.0)},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(
+                static_cast<double>(
+                    WEBSCENE_INTEROP_CALLBACK_VOID_V3))}
+    }};
+    std::array<webscene_interop_edge_v3, 9> registration_edges{{
+        {0U, 0U, 1U, 0U},
+        {0U, 0U, 2U, 0U},
+        {0U, 0U, 6U, 0U},
+        {0U, 0U, 3U, 0U},
+        {0U, 0U, 4U, 0U},
+        {0U, 0U, 5U, 0U},
+        {0U, 0U, 7U, 0U},
+        {0U, 0U, 8U, 0U},
+        {0U, 0U, 9U, 0U}
+    }};
+    const auto registration_utf8 =
+        std::string(promise_name) + std::string(void_name);
+    const webscene_interop_invoke_request_v3 registration{
+        static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_CREATE_CALLBACK_TARGET_V3,
+        0U,
+        41U,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        registration_values.data(),
+        registration_values.size(),
+        registration_edges.data(),
+        registration_edges.size(),
+        registration_utf8.data(),
+        registration_utf8.size(),
+        0U,
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3};
+    const auto* registered = invoke_generated(engine, registration);
+    require(
+        registered->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && registered->value_count == 1U
+            && registered->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "binary callback target registration failed: "
+            + std::string(
+                registered->error_bytes == nullptr
+                    ? ""
+                    : registered->error_bytes,
+                registered->error_byte_count));
+    const auto callback_handle = registered->values[0].payload;
+    release_interop_result(registered);
+
+    execute_and_wait(
+        engine,
+        "globalThis.__installManagedBridge = value => { "
+        "globalThis.__managedBridge = value; };",
+        "binary-reverse-install.js");
+    std::array<webscene_interop_value_v3, 2> install_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_HANDLE_V3, 0U, 0U, 0U, callback_handle}
+    }};
+    const std::array<webscene_interop_edge_v3, 1> install_edges{{
+        {0U, 0U, 1U, 0U}
+    }};
+    constexpr std::string_view install_name{"__installManagedBridge"};
+    const webscene_interop_invoke_request_v3 install{
+        static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_INVOKE_GLOBAL_V3,
+        0U,
+        0U,
+        install_name.data(),
+        install_name.size(),
+        nullptr,
+        0U,
+        install_values.data(),
+        install_values.size(),
+        install_edges.data(),
+        install_edges.size(),
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_VOID_V3};
+    const auto* installed = invoke_generated(engine, install);
+    require(
+        installed->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3,
+        "binary callback target could not be passed to JavaScript");
+    release_interop_result(installed);
+
+    const auto notifications_before =
+        notifications.load(std::memory_order_relaxed);
+    execute_and_wait(
+        engine,
+        "globalThis.__managedResult = -1;"
+        "globalThis.__managedFunctionArgument = -1;"
+        "globalThis.__managedBridge.load("
+        "{ symbol: 'AAPL', nested: [1, true] }, "
+        "value => { globalThis.__managedFunctionArgument = value; })"
+        ".then(value => { globalThis.__managedResult = value; });"
+        "globalThis.__managedBridge.update(1);"
+        "globalThis.__managedBridge.update(2);",
+        "binary-reverse-call.js");
+
+    const webscene_interop_callback_view_v3* callback = nullptr;
+    for (auto attempt = 0; attempt < 250 && callback == nullptr; ++attempt) {
+        callback = webscene_engine_take_callback_v3(engine);
+        if (callback == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(callback != nullptr, "binary reverse callback was not queued");
+    require(
+        callback->struct_size == sizeof(webscene_interop_callback_view_v3)
+            && callback->version == 3U
+            && callback->target_id == 41U
+            && callback->method_id == 7U
+            && callback->return_kind
+                == WEBSCENE_INTEROP_CALLBACK_PROMISE_V3
+            && callback->arguments_root < callback->value_count
+            && callback->values[callback->arguments_root].kind
+                == WEBSCENE_INTEROP_VALUE_ARRAY_V3
+            && callback->values[callback->arguments_root].length == 2U,
+        "binary reverse callback metadata or argument root was invalid");
+    const auto& callback_root =
+        callback->values[callback->arguments_root];
+    const auto function_index =
+        callback->edges[callback_root.offset + 1U].value_index;
+    require(
+        function_index < callback->value_count
+            && callback->values[function_index].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "binary reverse callback did not retain a function argument");
+    const auto function_handle =
+        callback->values[function_index].payload;
+
+    std::array<webscene_interop_value_v3, 2> function_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(19.5)}
+    }};
+    const std::array<webscene_interop_edge_v3, 1> function_edges{{
+        {0U, 0U, 1U, 0U}
+    }};
+    const webscene_interop_invoke_request_v3 invoke_function{
+        static_cast<uint32_t>(
+            sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_INVOKE_FUNCTION_V3,
+        0U,
+        function_handle,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        function_values.data(),
+        function_values.size(),
+        function_edges.data(),
+        function_edges.size(),
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_VOID_V3};
+    const auto* function_invoked =
+        invoke_generated(engine, invoke_function);
+    require(
+        function_invoked->status
+            == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3,
+        "binary reverse callback function handle invocation failed");
+    release_interop_result(function_invoked);
     require(
         evaluate(
             engine,
-            "(() => {"
-            "__webSceneNotifyInteropCallbackAvailable();"
-            "__webSceneNotifyInteropCallbackAvailable();"
-            "return true;"
-            "})()",
-            "native-interop-callback-notification.js") == "true",
-        "native interop callback notification script did not complete");
+            "globalThis.__managedFunctionArgument",
+            "binary-reverse-function-result.js") == "19.5",
+        "binary reverse callback function did not receive tagged arguments");
+
+    const auto callback_call_id = callback->call_id;
+    const auto callback_lease = callback->lease_id;
+    webscene_interop_callback_release_v3(callback, callback_lease);
+    webscene_interop_callback_release_v3(callback, callback_lease);
+
+    const webscene_interop_value_v3 completion_value{
+        WEBSCENE_INTEROP_VALUE_NUMBER_V3,
+        0U,
+        0U,
+        0U,
+        std::bit_cast<uint64_t>(73.25)};
+    const webscene_interop_callback_completion_v3 completion{
+        static_cast<uint32_t>(
+            sizeof(webscene_interop_callback_completion_v3)),
+        3U,
+        callback_call_id,
+        1U,
+        0U,
+        &completion_value,
+        1U,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        0U,
+        0U};
     require(
-        notifications.load(std::memory_order_relaxed) == 2U,
-        "native interop callback notification did not reach the host");
+        webscene_engine_complete_callback_v3(
+            engine,
+            &completion) != 0U,
+        "binary reverse promise completion was rejected");
+    require(
+        webscene_engine_complete_callback_v3(
+            engine,
+            &completion) == 0U,
+        "binary reverse promise accepted a duplicate completion");
+
+    bool settled = false;
+    for (auto attempt = 0; attempt < 250 && !settled; ++attempt) {
+        settled = evaluate(
+            engine,
+            "globalThis.__managedResult",
+            "binary-reverse-result.js") == "73.25";
+        if (!settled) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(settled, "binary reverse promise did not settle in JavaScript");
+
+    std::array<const webscene_interop_callback_view_v3*, 2> void_callbacks{};
+    for (auto& queued : void_callbacks) {
+        for (auto attempt = 0; attempt < 250 && queued == nullptr; ++attempt) {
+            queued = webscene_engine_take_callback_v3(engine);
+            if (queued == nullptr) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        }
+        require(
+            queued != nullptr
+                && queued->target_id == 41U
+                && queued->method_id == 8U
+                && queued->return_kind
+                    == WEBSCENE_INTEROP_CALLBACK_VOID_V3,
+            "binary void reverse callback metadata was invalid");
+    }
+    require(
+        notifications.load(std::memory_order_relaxed)
+            == notifications_before + 1U,
+        "binary reverse callbacks were not notified on one empty-to-nonempty edge");
+    for (const auto* queued : void_callbacks) {
+        webscene_interop_callback_release_v3(
+            queued,
+            queued->lease_id);
+    }
+
+    const std::array<webscene_interop_value_v3, 1> release_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 0U, 0U}
+    }};
+    const auto release_handle = [&](uint64_t handle) {
+        const webscene_interop_invoke_request_v3 release{
+            static_cast<uint32_t>(
+                sizeof(webscene_interop_invoke_request_v3)),
+            3U,
+            WEBSCENE_INTEROP_RELEASE_HANDLE_V3,
+            0U,
+            handle,
+            nullptr,
+            0U,
+            nullptr,
+            0U,
+            release_values.data(),
+            release_values.size(),
+            nullptr,
+            0U,
+            nullptr,
+            0U,
+            0U,
+            WEBSCENE_INTEROP_RESULT_VOID_V3};
+        const auto* released = invoke_generated(engine, release);
+        require(
+            released->status
+                == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3,
+            "binary reverse callback handle release failed");
+        release_interop_result(released);
+    };
+
+    std::array<webscene_interop_value_v3, 2> function_registration_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(
+                static_cast<double>(
+                    WEBSCENE_INTEROP_CALLBACK_VOID_V3))}
+    }};
+    const std::array<webscene_interop_edge_v3, 1>
+        function_registration_edges{{{0U, 0U, 1U, 0U}}};
+    const webscene_interop_invoke_request_v3 function_registration{
+        static_cast<uint32_t>(
+            sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_CREATE_CALLBACK_FUNCTION_V3,
+        0U,
+        52U,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        function_registration_values.data(),
+        function_registration_values.size(),
+        function_registration_edges.data(),
+        function_registration_edges.size(),
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3};
+    const auto* registered_function =
+        invoke_generated(engine, function_registration);
+    require(
+        registered_function->status
+                == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && registered_function->values[
+                registered_function->root_value_index].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "binary standalone callback function registration failed");
+    const auto registered_function_handle =
+        registered_function->values[
+            registered_function->root_value_index].payload;
+    release_interop_result(registered_function);
+
+    std::array<webscene_interop_value_v3, 2> factory_registration_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_HANDLE_V3, 0U, 0U, 0U, callback_handle}
+    }};
+    const std::array<webscene_interop_edge_v3, 1>
+        factory_registration_edges{{{0U, 0U, 1U, 0U}}};
+    const webscene_interop_invoke_request_v3 factory_registration{
+        static_cast<uint32_t>(
+            sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_CREATE_SYNCHRONOUS_FACTORY_V3,
+        0U,
+        53U,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        factory_registration_values.data(),
+        factory_registration_values.size(),
+        factory_registration_edges.data(),
+        factory_registration_edges.size(),
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3};
+    const auto* registered_factory =
+        invoke_generated(engine, factory_registration);
+    require(
+        registered_factory->status
+                == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && registered_factory->values[
+                registered_factory->root_value_index].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "binary synchronous callback factory registration failed");
+    const auto registered_factory_handle =
+        registered_factory->values[
+            registered_factory->root_value_index].payload;
+    release_interop_result(registered_factory);
+
+    const webscene_interop_invoke_request_v3 invoke_registered_function{
+        static_cast<uint32_t>(
+            sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_INVOKE_FUNCTION_V3,
+        0U,
+        registered_function_handle,
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        release_values.data(),
+        release_values.size(),
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_VOID_V3};
+    const auto* invoked_registered_function =
+        invoke_generated(engine, invoke_registered_function);
+    require(
+        invoked_registered_function->status
+            == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3,
+        "binary standalone callback function invocation failed");
+    release_interop_result(invoked_registered_function);
+
+    auto invoke_registered_factory = invoke_registered_function;
+    invoke_registered_factory.target_handle =
+        registered_factory_handle;
+    invoke_registered_factory.result_mode =
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3;
+    const auto* invoked_registered_factory =
+        invoke_generated(engine, invoke_registered_factory);
+    require(
+        invoked_registered_factory->status
+                == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && invoked_registered_factory->values[
+                invoked_registered_factory->root_value_index].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "binary synchronous callback factory invocation failed");
+    const auto factory_result_handle =
+        invoked_registered_factory->values[
+            invoked_registered_factory->root_value_index].payload;
+    release_interop_result(invoked_registered_factory);
+
+    std::array<const webscene_interop_callback_view_v3*, 2>
+        registered_callbacks{};
+    for (auto& queued : registered_callbacks) {
+        for (auto attempt = 0; attempt < 250 && queued == nullptr; ++attempt) {
+            queued = webscene_engine_take_callback_v3(engine);
+            if (queued == nullptr) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        }
+    }
+    require(
+        registered_callbacks[0] != nullptr
+            && registered_callbacks[0]->target_id == 52U
+            && registered_callbacks[0]->method_id == 0U
+            && registered_callbacks[0]->return_kind
+                == WEBSCENE_INTEROP_CALLBACK_VOID_V3
+            && registered_callbacks[1] != nullptr
+            && registered_callbacks[1]->target_id == 53U
+            && registered_callbacks[1]->method_id == 0U
+            && registered_callbacks[1]->return_kind
+                == WEBSCENE_INTEROP_CALLBACK_SYNCHRONOUS_V3,
+        "binary standalone function or synchronous factory callback metadata "
+        "was invalid");
+    for (const auto* queued : registered_callbacks) {
+        webscene_interop_callback_release_v3(
+            queued,
+            queued->lease_id);
+    }
+
+    release_handle(function_handle);
+    release_handle(registered_function_handle);
+    release_handle(registered_factory_handle);
+    release_handle(factory_result_handle);
+    release_handle(callback_handle);
+
+    webscene_interop_pool_metrics_v3 metrics{};
+    metrics.struct_size = sizeof(metrics);
+    require(
+        webscene_engine_get_interop_pool_metrics_v3(
+            engine,
+            &metrics) != 0U
+            && metrics.queued_callbacks == 0U
+            && metrics.taken_callback_leases == 0U
+            && metrics.pending_callback_promises == 0U
+            && metrics.callback_queue_high_water >= 3U,
+        "binary reverse callback leases or promises leaked");
     webscene_engine_destroy(engine);
 }
 
@@ -10541,7 +10977,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
-    test_interop_callback_notification();
+    test_binary_reverse_callback_is_leased_and_completed();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();

@@ -73,12 +73,22 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
             };
             for (var tick = 0; tick < 64; tick++)
             {
-                await UpdateAllAsync(engines, bar);
+                for (var index = 0; index < engines.Count; index++)
+                {
+                    await engines[index].Host.OnRealtimeUpdateAsync(
+                        "subscriber-0",
+                        bar);
+                }
             }
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
+            var allocationCounterProbe =
+                GC.GetTotalAllocatedBytes(precise: true);
+            var allocationCounterOverhead =
+                GC.GetTotalAllocatedBytes(precise: true)
+                - allocationCounterProbe;
             var process = Process.GetCurrentProcess();
             process.Refresh();
             var startCpu = process.TotalProcessorTime;
@@ -95,7 +105,12 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
             {
                 var target = TimeSpan.FromTicks(
                     tickDuration.Ticks * (tick + 1L));
-                await UpdateAllAsync(engines, bar);
+                for (var index = 0; index < engines.Count; index++)
+                {
+                    await engines[index].Host.OnRealtimeUpdateAsync(
+                        "subscriber-0",
+                        bar);
+                }
                 var remaining = target - elapsed.Elapsed;
                 if (remaining > TimeSpan.Zero)
                 {
@@ -104,10 +119,13 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
             }
 
             elapsed.Stop();
+            var rawAllocated = GC.GetTotalAllocatedBytes(precise: true)
+                - startAllocated;
+            var allocated = Math.Max(
+                0,
+                rawAllocated - allocationCounterOverhead);
             process.Refresh();
             var cpu = process.TotalProcessorTime - startCpu;
-            var allocated = GC.GetTotalAllocatedBytes(precise: true)
-                - startAllocated;
             var heap = GC.GetGCMemoryInfo().HeapSizeBytes;
             var expectedCount = 64d + ticks;
             var observed = new double[engines.Count];
@@ -136,6 +154,9 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
                     cpu.TotalMilliseconds / elapsed.Elapsed.TotalMilliseconds
                     * 100d,
                 managedAllocatedBytes = allocated,
+                rawManagedAllocatedBytes = rawAllocated,
+                allocationCounterOverheadBytes =
+                    allocationCounterOverhead,
                 managedBytesPerCall =
                     (double)allocated / checked(chartCount * ticks),
                 gen0Collections = GC.CollectionCount(0) - startGen0,
@@ -220,18 +241,6 @@ internal static class GeneratedRealtimeChartAcceptanceProbe
                 state.Transport.Dispose();
                 NativeWebSceneApi.EngineDestroy(state.Engine);
             }
-        }
-    }
-
-    private static async ValueTask UpdateAllAsync(
-        IReadOnlyList<EngineState> engines,
-        RealtimeChartBar bar)
-    {
-        for (var index = 0; index < engines.Count; index++)
-        {
-            await engines[index].Host.OnRealtimeUpdateAsync(
-                "subscriber-0",
-                bar);
         }
     }
 

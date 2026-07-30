@@ -199,7 +199,7 @@ Each native V8 isolate owns:
 - deterministic release of object handles.
 
 Generated code does not concatenate user input into executable JavaScript.
-The public view creates the forward-only invoker directly:
+The public view creates the bidirectional invoker directly:
 
 ```csharp
 using var interop = view.CreateJavaScriptInvoker();
@@ -215,6 +215,16 @@ declaration shapes cannot run through `NativeJavaScriptInvoker`; they must gain
 a tagged codec first. Arbitrary evaluation and diagnostics use
 `begin_evaluate_v3`; `EvaluateTextAsync` materializes JSON-compatible text only
 after the tagged lease reaches managed code.
+
+Binary-compatible generated adapters register native proxy objects/functions.
+JavaScript-to-managed arguments arrive in leased tagged arenas, and generated
+dispatch reads them directly. Function-valued arguments are retained handles
+wrapped in generated `JavaScriptAction` codecs; invoking one writes another
+tagged request. Void callbacks release immediately, Promise callbacks complete
+the retained native resolver, and synchronous factories return a pre-encoded
+native value. The engine notifies only on an empty-to-nonempty queue edge, and
+the public views connect that notification to a reusable managed `ValueTask`
+source—there is no callback polling or per-wakeup `TaskCompletionSource`.
 
 ## Prototype status
 
@@ -252,12 +262,17 @@ Implemented:
   readers, and UTF-8 spans;
 - pooled managed request buffers and completion sources plus native request,
   operation, and size-classed result records;
+- allocation-free managed completion-source stacks and pooled operation slots
+  queued directly as ThreadPool work items, with native leases released before
+  caller continuations resume;
 - generated TradingView-shaped widget, chart, watched-value, trading primitive,
   datafeed, broker, broker-host, quote, and trading models;
-- runtime-neutral reverse callback generation for non-native invokers,
-  including lossless optional callback arguments and arbitrary-width
-  signatures; the forward-only native invoker deliberately does not expose
-  this surface;
+- binary-only native reverse callback generation for codec-supported adapters,
+  including lossless optional arguments, function-valued arguments,
+  void/Promise/synchronous return modes, and direct retained-function
+  invocation;
+- runtime-neutral reverse callback generation for non-native invokers when an
+  adapter shape is not yet binary-codec compatible;
 - discovery, code-generation, native-dispatch, datafeed, broker, callback,
   promise-object, property, optional-argument, and generic-proxy tests.
 
@@ -274,8 +289,6 @@ Follow-up work that does not change the ABI 3 merge contract:
 
 - extend tagged codecs to additional dynamic shapes when an application needs
   them;
-- design a separate versioned tagged callback ABI if a native bidirectional
-  application is selected; do not restore JSON polling;
 - broaden randomized malformed-input fuzzing beyond the deterministic
   regression suite;
 - generate optional `JsonSerializerContext` metadata for NativeAOT.

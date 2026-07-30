@@ -49,7 +49,9 @@ C++ object pointer.
 
 Supported direct operations are global lookup, global invocation,
 construction, property get/set, member invocation, retained-handle release,
-and promise awaiting. Member invocation preserves the JavaScript receiver.
+promise awaiting, callback-target/function creation, synchronous callback
+factory creation, and retained function invocation. Member invocation
+preserves the JavaScript receiver.
 
 Pending promises attach V8 fulfillment/rejection handlers once. Settlement
 completes the original native operation directly; there is no JavaScript
@@ -83,19 +85,46 @@ semantics.
 
 The generator remains runtime-neutral and can still describe dynamic shapes
 through `IJavaScriptInvoker` for non-native runtimes. The native
-`NativeJavaScriptInvoker` is forward-only and rejects those methods. A shape
-must gain a tagged codec before it can be selected for native use.
+`NativeJavaScriptInvoker` rejects methods without a tagged codec. A shape must
+gain a tagged codec before it can be selected for native use.
 
 A method policy may specify `borrowedName` for a binary-supported array return.
 The generator then emits an additional disposable lease and stack-only array
 view. Indexed values and UTF-8 spans address the immutable native arena;
 `GetString()` is the explicit allocation point.
 
-Reverse managed callbacks are not part of this forward-only native invoker.
-The former JSON polling callback bootstrap was removed. If a native
-bidirectional API is later required, it must use versioned tagged
-take/complete operations and explicit callback lifetimes; it must not restore
-the JSON compatibility path.
+### Reverse callback ABI
+
+ABI 3 is bidirectional. Generated callback adapters whose complete signatures
+have tagged codecs register native proxy objects or functions through
+`CreateCallbackTarget`, `CreateCallbackFunction`, and
+`CreateSynchronousFactory`. JavaScript-to-managed invocations are queued as
+immutable tagged argument arenas and consumed through:
+
+- `webscene_engine_take_callback_v3`;
+- `webscene_engine_complete_callback_v3`;
+- `webscene_engine_cancel_callback_v3`;
+- `webscene_interop_callback_release_v3`.
+
+Each taken callback has a process-wide generation-checked lease. Releasing the
+lease returns its argument arena and callback record to their pools; completing
+a Promise copies the managed completion into a pooled native completion record
+before returning from the P/Invoke. Completion and release are independent, so
+managed code can release a large argument arena before asynchronous user work
+settles.
+
+Native callback notification retains the empty-to-nonempty edge semantics from
+commit `68ab91b`: the engine callback only wakes the managed pump and never
+runs user code. The managed signal uses one reusable
+`ManualResetValueTaskSourceCore<bool>` instead of allocating a `Task` or
+`TaskCompletionSource` per edge. Promise settlement is delivered directly to
+the retained V8 resolver; there is no JavaScript polling.
+
+Function-valued callback arguments are retained as handles and wrapped by
+generated `JavaScriptAction` codecs. Calling such an action uses
+`InvokeFunction` with a tagged argument arena. Binary-compatible generated
+adapters emit only this binary registration/dispatch surface—there is no JSON
+adapter or runtime fallback in those generated classes.
 
 ### Pooling and ownership
 
@@ -104,9 +133,14 @@ After warm-up, the implementation reuses:
 - managed tagged request arrays and UTF-8 buffers through `ArrayPool<T>`;
 - managed operation slots backed by `ManualResetValueTaskSourceCore<T>`, routed
   by operation ID through one engine-level completion bridge;
-- managed decode completion sources;
+- managed decode completion sources held in allocation-free locked stacks;
+- the operation slot itself as the asynchronous ThreadPool work item, avoiding
+  a completion work-item object while keeping user continuations off the
+  native engine worker;
 - native request records and their capacity-bearing vectors;
 - native operation records;
+- native callback records, tagged argument arenas, and Promise completion
+  records with retained vector/string capacity;
 - native result records grouped into 4, 16, 64, 256 KiB, and 1 MiB retained
   size classes.
 
@@ -131,7 +165,9 @@ The pool ABI reports:
 - total and per-size-class retained result bytes;
 - result hits, misses, and oversize frees;
 - pooled request-record count, hits, misses, and oversize frees;
-- active/available operation slots and slot high-water mark.
+- active/available operation slots and slot high-water mark;
+- queued callbacks, taken callback leases, pending callback Promises, and
+  callback queue high-water mark.
 
 Managed finalizers recover leaked borrowed leases and increment a diagnostic
 counter. Finalization is a leak guard, not normal ownership.
@@ -167,8 +203,19 @@ binary. Full measurements, retained-capacity diagnostics, and reproduction
 commands are in
 [TradingView-shaped four-chart generated binary interop](../tradingview-four-chart-binary-interop-results.md).
 
-The actual StackWich manifest and policy on `feature/native-chart` compile
-against the generator from a read-only path. Its hot
+The bidirectional completion audit subsequently removed the remaining managed
+control objects: `ConcurrentStack` pool nodes and
+`RunContinuationsAsynchronously` ThreadPool wrappers. A fresh four-chart
+60 updates/sec/chart run measured 4.61 B/call, zero collections, and zero
+outstanding leases. At 600 updates/sec/chart, 24,000 calls measured 0.761
+B/call. The remaining sub-byte amortized activity is ThreadPool queue-segment
+and runtime bookkeeping; no request, result, decode source, operation slot, or
+payload object is allocated per call after warm-up.
+
+The actual StackWich manifest and policy compile against this generator in an
+isolated worktree. Both `SW.TradingView.csproj` and the complete
+`Sandwich.Desktop.csproj` graph build with zero errors. Its live datafeed and
+broker bridge generate binary-only callback adapters, while hot
 `GetWindowAsync`/`OnRealtimeUpdateAsync` calls select the direct binary route.
 
 ## Correctness and release gates
@@ -179,6 +226,9 @@ Automated V8 and managed suites cover:
   encoding behavior;
 - receiver preservation and retained/stale handles;
 - immediate/delayed promise fulfillment, delayed rejection, and cancellation;
+- leased reverse callback arguments, void/Promise/synchronous return modes,
+  retained function-valued arguments, direct function invocation, duplicate
+  completion rejection, callback edge coalescing, and callback handle release;
 - malformed/truncated headers, UTF-8 ranges, edge ranges, child indices, and
   property-name ranges;
 - double release, stale release generations after forced address reuse, and
@@ -214,8 +264,8 @@ generated results above satisfy this gate.
   explicitly materializes values.
 - Arbitrary evaluation uses a tagged lease; producing text is an explicit
   managed diagnostic operation.
-- Unsupported native declaration shapes and reverse callbacks fail explicitly
-  instead of silently changing transport.
+- Unsupported native declaration shapes fail explicitly instead of silently
+  changing transport.
 - Pooling shifts risk toward lease correctness, stale generations, and bounds
   validation, so the automated malformed, lifetime, stress, and package checks
   are release requirements.

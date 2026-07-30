@@ -69,6 +69,82 @@ public interface IJavaScriptBidirectionalInvoker : IJavaScriptInvoker
         CancellationToken cancellationToken = default);
 }
 
+public interface IJavaScriptBinaryBidirectionalInvoker
+    : IJavaScriptBidirectionalInvoker, IJavaScriptBinaryInvoker
+{
+    ValueTask<JavaScriptObjectReference> RegisterBinaryCallbackTargetAsync(
+        IJavaScriptBinaryCallbackTarget target,
+        IReadOnlyList<JavaScriptBinaryCallbackMethod> methods,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<JavaScriptFunctionReference> RegisterBinaryFunctionAsync(
+        IJavaScriptBinaryCallbackTarget target,
+        JavaScriptCallbackReturnKind returnKind =
+            JavaScriptCallbackReturnKind.Void,
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromException<JavaScriptFunctionReference>(
+            new NotSupportedException(
+                "This binary invoker cannot register managed functions."));
+
+    ValueTask<JavaScriptFunctionReference>
+        RegisterBinarySynchronousFactoryAsync(
+            JavaScriptObjectReference result,
+            IJavaScriptBinaryCallbackTarget target,
+            CancellationToken cancellationToken = default)
+        => ValueTask.FromException<JavaScriptFunctionReference>(
+            new NotSupportedException(
+                "This binary invoker cannot register synchronous factories."));
+
+    ValueTask InvokeBinaryFunctionVoidAsync<TArguments, TCodec>(
+        JavaScriptObjectReference function,
+        TArguments arguments,
+        CancellationToken cancellationToken = default)
+        where TCodec : struct,
+        IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>;
+}
+
+public delegate ValueTask JavaScriptBinaryActionInvoker(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    CancellationToken cancellationToken);
+
+public delegate ValueTask JavaScriptBinaryActionInvoker<T1>(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    T1 argument1,
+    CancellationToken cancellationToken);
+
+public delegate ValueTask JavaScriptBinaryActionInvoker<T1, T2>(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    T1 argument1,
+    T2 argument2,
+    CancellationToken cancellationToken);
+
+public delegate ValueTask JavaScriptBinaryActionInvoker<T1, T2, T3>(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    T1 argument1,
+    T2 argument2,
+    T3 argument3,
+    CancellationToken cancellationToken);
+
+public delegate ValueTask JavaScriptBinaryActionInvoker<T1, T2, T3, T4>(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    T1 argument1,
+    T2 argument2,
+    T3 argument3,
+    T4 argument4,
+    CancellationToken cancellationToken);
+
+public delegate ValueTask JavaScriptBinaryTupleActionInvoker<TArguments>(
+    IJavaScriptBinaryBidirectionalInvoker invoker,
+    JavaScriptObjectReference function,
+    TArguments arguments,
+    CancellationToken cancellationToken)
+    where TArguments : struct, ITuple;
+
 public sealed class JavaScriptFunctionReference
     : IJavaScriptObjectReferenceProvider, IAsyncDisposable
 {
@@ -218,75 +294,199 @@ public abstract class JavaScriptActionBase : IJavaScriptObjectReferenceProvider,
             cancellationToken);
 }
 
-public sealed class JavaScriptAction(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptAction : JavaScriptActionBase
 {
+    private readonly JavaScriptBinaryActionInvoker? _binaryInvoker;
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryActionInvoker binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(CancellationToken cancellationToken = default)
-        => InvokeCoreAsync(cancellationToken);
+        => _binaryInvoker is not null
+           && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker
+            ? _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                cancellationToken)
+            : InvokeCoreAsync(cancellationToken);
 }
 
-public sealed class JavaScriptAction<T1>(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptAction<T1> : JavaScriptActionBase
 {
+    private readonly JavaScriptBinaryActionInvoker<T1>? _binaryInvoker;
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryActionInvoker<T1> binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(
         T1 argument1,
         CancellationToken cancellationToken = default)
-        => InvokeCoreAsync(cancellationToken, JavaScriptArgument.From(argument1));
+        => _binaryInvoker is not null
+           && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker
+            ? _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                argument1,
+                cancellationToken)
+            : InvokeCoreAsync(
+                cancellationToken,
+                JavaScriptArgument.From(argument1));
 }
 
-public sealed class JavaScriptAction<T1, T2>(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptAction<T1, T2> : JavaScriptActionBase
 {
+    private readonly JavaScriptBinaryActionInvoker<T1, T2>? _binaryInvoker;
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryActionInvoker<T1, T2> binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(
         T1 argument1,
         T2 argument2,
         CancellationToken cancellationToken = default)
-        => InvokeCoreAsync(
-            cancellationToken,
-            JavaScriptArgument.From(argument1),
-            JavaScriptArgument.From(argument2));
+        => _binaryInvoker is not null
+           && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker
+            ? _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                argument1,
+                argument2,
+                cancellationToken)
+            : InvokeCoreAsync(
+                cancellationToken,
+                JavaScriptArgument.From(argument1),
+                JavaScriptArgument.From(argument2));
 }
 
-public sealed class JavaScriptAction<T1, T2, T3>(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptAction<T1, T2, T3> : JavaScriptActionBase
 {
+    private readonly JavaScriptBinaryActionInvoker<T1, T2, T3>? _binaryInvoker;
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryActionInvoker<T1, T2, T3> binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(
         T1 argument1,
         T2 argument2,
         T3 argument3,
         CancellationToken cancellationToken = default)
-        => InvokeCoreAsync(
-            cancellationToken,
-            JavaScriptArgument.From(argument1),
-            JavaScriptArgument.From(argument2),
-            JavaScriptArgument.From(argument3));
+        => _binaryInvoker is not null
+           && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker
+            ? _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                argument1,
+                argument2,
+                argument3,
+                cancellationToken)
+            : InvokeCoreAsync(
+                cancellationToken,
+                JavaScriptArgument.From(argument1),
+                JavaScriptArgument.From(argument2),
+                JavaScriptArgument.From(argument3));
 }
 
-public sealed class JavaScriptAction<T1, T2, T3, T4>(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptAction<T1, T2, T3, T4>
+    : JavaScriptActionBase
 {
+    private readonly JavaScriptBinaryActionInvoker<T1, T2, T3, T4>?
+        _binaryInvoker;
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryActionInvoker<T1, T2, T3, T4> binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(
         T1 argument1,
         T2 argument2,
         T3 argument3,
         T4 argument4,
         CancellationToken cancellationToken = default)
-        => InvokeCoreAsync(
-            cancellationToken,
-            JavaScriptArgument.From(argument1),
-            JavaScriptArgument.From(argument2),
-            JavaScriptArgument.From(argument3),
-            JavaScriptArgument.From(argument4));
+        => _binaryInvoker is not null
+           && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker
+            ? _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                argument1,
+                argument2,
+                argument3,
+                argument4,
+                cancellationToken)
+            : InvokeCoreAsync(
+                cancellationToken,
+                JavaScriptArgument.From(argument1),
+                JavaScriptArgument.From(argument2),
+                JavaScriptArgument.From(argument3),
+                JavaScriptArgument.From(argument4));
 }
 
 /// <summary>
@@ -294,16 +494,43 @@ public sealed class JavaScriptAction<T1, T2, T3, T4>(
 /// four parameters. <typeparamref name="TArguments"/> is the generated C#
 /// value-tuple containing every callback argument type.
 /// </summary>
-public sealed class JavaScriptTupleAction<TArguments>(
-    IJavaScriptBidirectionalInvoker invoker,
-    JavaScriptFunctionReference function)
-    : JavaScriptActionBase(invoker, function)
+public sealed class JavaScriptTupleAction<TArguments>
+    : JavaScriptActionBase
     where TArguments : struct, ITuple
 {
+    private readonly JavaScriptBinaryTupleActionInvoker<TArguments>?
+        _binaryInvoker;
+
+    public JavaScriptTupleAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function)
+        : base(invoker, function)
+    {
+    }
+
+    public JavaScriptTupleAction(
+        IJavaScriptBidirectionalInvoker invoker,
+        JavaScriptFunctionReference function,
+        JavaScriptBinaryTupleActionInvoker<TArguments> binaryInvoker)
+        : base(invoker, function)
+    {
+        _binaryInvoker = binaryInvoker
+            ?? throw new ArgumentNullException(nameof(binaryInvoker));
+    }
+
     public ValueTask InvokeAsync(
         TArguments arguments,
         CancellationToken cancellationToken = default)
     {
+        if (_binaryInvoker is not null
+            && Invoker is IJavaScriptBinaryBidirectionalInvoker binaryInvoker)
+        {
+            return _binaryInvoker(
+                binaryInvoker,
+                Function.Reference,
+                arguments,
+                cancellationToken);
+        }
         var tuple = (ITuple)arguments;
         var values = new JavaScriptArgument[tuple.Length];
         for (var index = 0; index < tuple.Length; index++)

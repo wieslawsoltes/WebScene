@@ -16,7 +16,11 @@ public enum JavaScriptBinaryOperation : uint
     GetProperty = 4,
     SetProperty = 5,
     InvokeMember = 6,
-    ReleaseHandle = 7
+    ReleaseHandle = 7,
+    CreateCallbackTarget = 8,
+    CreateCallbackFunction = 9,
+    CreateSynchronousFactory = 10,
+    InvokeFunction = 11
 }
 
 /// <summary>
@@ -139,6 +143,218 @@ public interface IJavaScriptBinaryTransport : IDisposable
         TArguments arguments,
         CancellationToken cancellationToken = default)
         where TCodec : struct, IJavaScriptBinaryArgumentsCodec<TArguments>;
+}
+
+/// <summary>
+/// Native transport extension that exposes the leased JavaScript-to-managed
+/// callback queue. Queue notifications are edge-triggered by the engine.
+/// </summary>
+public interface IJavaScriptBinaryCallbackTransport
+    : IJavaScriptBinaryTransport
+{
+    JavaScriptBinaryCallbackLease? TryTakeCallback();
+}
+
+public readonly record struct JavaScriptBinaryCallbackMethod(
+    string Name,
+    uint MethodId,
+    JavaScriptCallbackReturnKind ReturnKind,
+    bool HasSynchronousResult = false);
+
+/// <summary>
+/// Reflection-free target emitted by the binding generator for reverse calls.
+/// Implementations must decode every borrowed argument before returning.
+/// </summary>
+public interface IJavaScriptBinaryCallbackTarget
+{
+    ValueTask DispatchBinaryAsync(
+        uint methodId,
+        JavaScriptBinaryValue arguments,
+        JavaScriptBinaryCallbackCompletion completion,
+        CancellationToken cancellationToken = default);
+
+    uint EncodeSynchronousResult(
+        uint methodId,
+        ref JavaScriptBinaryWriter writer,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            $"Callback method {methodId} has no precomputed synchronous result.");
+}
+
+public interface IJavaScriptBinaryCallbackResultCodec<T>
+{
+    static abstract uint EncodeResult(
+        ref JavaScriptBinaryWriter writer,
+        in T result);
+}
+
+/// <summary>
+/// One-shot completion for a reverse callback. The native implementation
+/// copies the tagged arena synchronously, so pooled writer buffers are returned
+/// immediately after SetResult/SetException.
+/// </summary>
+public abstract class JavaScriptBinaryCallbackCompletion : IDisposable
+{
+    private int _completed;
+    private JavaScriptCallbackReturnKind _returnKind;
+
+    protected JavaScriptBinaryCallbackCompletion(
+        JavaScriptCallbackReturnKind returnKind)
+    {
+        _returnKind = returnKind;
+    }
+
+    public JavaScriptCallbackReturnKind ReturnKind => _returnKind;
+
+    public bool IsCompleted => Volatile.Read(ref _completed) != 0;
+
+    public void SetVoid()
+    {
+        BeginCompletion();
+        if (ReturnKind != JavaScriptCallbackReturnKind.Promise)
+        {
+            CompleteWithoutNativeResult();
+            return;
+        }
+        var writer = new JavaScriptBinaryWriter();
+        try
+        {
+            var root = writer.WriteUndefined();
+            CompleteSuccess(writer.Values, writer.Edges, writer.Utf8, root);
+        }
+        finally
+        {
+            writer.Dispose();
+        }
+    }
+
+    public void SetResult<T, TCodec>(in T result)
+        where TCodec : struct, IJavaScriptBinaryCallbackResultCodec<T>
+    {
+        BeginCompletion();
+        if (ReturnKind != JavaScriptCallbackReturnKind.Promise)
+        {
+            CompleteWithoutNativeResult();
+            return;
+        }
+        var writer = new JavaScriptBinaryWriter();
+        try
+        {
+            var root = TCodec.EncodeResult(ref writer, in result);
+            if (root >= writer.Values.Length)
+            {
+                throw new InvalidDataException(
+                    "A generated callback codec returned an invalid result root.");
+            }
+            CompleteSuccess(writer.Values, writer.Edges, writer.Utf8, root);
+        }
+        finally
+        {
+            writer.Dispose();
+        }
+    }
+
+    public void SetException(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        BeginCompletion();
+        if (ReturnKind != JavaScriptCallbackReturnKind.Promise)
+        {
+            CompleteWithoutNativeResult();
+            return;
+        }
+        CompleteFailure(exception.Message);
+    }
+
+    protected abstract void CompleteSuccess(
+        ReadOnlySpan<JavaScriptBinaryValueData> values,
+        ReadOnlySpan<JavaScriptBinaryEdgeData> edges,
+        ReadOnlySpan<byte> utf8,
+        uint rootValueIndex);
+
+    protected abstract void CompleteFailure(string error);
+
+    protected virtual void CompleteWithoutNativeResult()
+    {
+    }
+
+    public virtual void Dispose()
+    {
+    }
+
+    private void BeginCompletion()
+    {
+        if (Interlocked.Exchange(ref _completed, 1) != 0)
+        {
+            throw new InvalidOperationException(
+                "A JavaScript callback can be completed only once.");
+        }
+    }
+}
+
+/// <summary>
+/// Owns one immutable callback-argument arena. A callback completion does not
+/// retain this lease, so generated targets decode all arguments synchronously.
+/// </summary>
+public abstract class JavaScriptBinaryCallbackLease : IDisposable
+{
+    public abstract ulong CallId { get; }
+
+    public abstract ulong TargetId { get; }
+
+    public abstract uint MethodId { get; }
+
+    public abstract JavaScriptCallbackReturnKind ReturnKind { get; }
+
+    public JavaScriptBinaryCallbackBorrowScope Borrow()
+    {
+        var root = AcquireBorrow(out var token);
+        return new JavaScriptBinaryCallbackBorrowScope(this, root, token);
+    }
+
+    public abstract JavaScriptBinaryCallbackCompletion CreateCompletion();
+
+    protected abstract JavaScriptBinaryValue AcquireBorrow(
+        out object? borrowToken);
+
+    protected abstract void ReleaseBorrow(object? borrowToken);
+
+    internal void ReleaseBorrowCore(object? token) => ReleaseBorrow(token);
+
+    public abstract void Dispose();
+}
+
+public ref struct JavaScriptBinaryCallbackBorrowScope
+{
+    private JavaScriptBinaryCallbackLease? _lease;
+    private object? _token;
+    private readonly JavaScriptBinaryValue _arguments;
+
+    internal JavaScriptBinaryCallbackBorrowScope(
+        JavaScriptBinaryCallbackLease lease,
+        JavaScriptBinaryValue arguments,
+        object? token)
+    {
+        _lease = lease;
+        _arguments = arguments;
+        _token = token;
+    }
+
+    public readonly JavaScriptBinaryValue Arguments
+        => _lease is null
+            ? throw new ObjectDisposedException(
+                nameof(JavaScriptBinaryCallbackBorrowScope))
+            : _arguments;
+
+    public void Dispose()
+    {
+        var lease = _lease;
+        if (lease is null) return;
+        _lease = null;
+        var token = _token;
+        _token = null;
+        lease.ReleaseBorrowCore(token);
+    }
 }
 
 /// <summary>

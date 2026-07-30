@@ -4638,6 +4638,47 @@ internal unsafe struct NativeInteropResultView
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeInteropCallbackView
+{
+    public uint StructSize;
+    public uint Version;
+    public ulong CallId;
+    public ulong TargetId;
+    public uint MethodId;
+    public JavaScriptCallbackReturnKind ReturnKind;
+    public JavaScriptBinaryValueData* Values;
+    public JavaScriptBinaryEdgeData* Edges;
+    public byte* Utf8Bytes;
+    public ulong LeaseId;
+    public uint ValueCount;
+    public uint EdgeCount;
+    public uint Utf8ByteCount;
+    public uint ArgumentsRoot;
+    public uint PooledCapacity;
+    public uint Reserved0;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeInteropCallbackCompletion
+{
+    public uint StructSize;
+    public uint Version;
+    public ulong CallId;
+    public uint Succeeded;
+    public uint Reserved;
+    public JavaScriptBinaryValueData* Values;
+    public nuint ValueCount;
+    public JavaScriptBinaryEdgeData* Edges;
+    public nuint EdgeCount;
+    public byte* Utf8Bytes;
+    public nuint Utf8ByteCount;
+    public byte* ErrorBytes;
+    public nuint ErrorByteCount;
+    public uint RootValueIndex;
+    public uint Reserved1;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public struct NativeInteropPoolMetrics
 {
     public uint StructSize;
@@ -4662,6 +4703,10 @@ public struct NativeInteropPoolMetrics
     public ulong PooledResultBytes1M;
     public ulong TakenResultLeases;
     public ulong OperationResultLeases;
+    public ulong QueuedCallbacks;
+    public ulong TakenCallbackLeases;
+    public ulong PendingCallbackPromises;
+    public ulong CallbackQueueHighWater;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -5814,6 +5859,30 @@ public static unsafe class NativeWebSceneApi
     [DllImport(LibraryName, EntryPoint = "webscene_interop_result_release_v3")]
     internal static extern void InteropResultReleaseV3(
         IntPtr result,
+        ulong leaseId);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_take_callback_v3")]
+    internal static extern IntPtr EngineTakeCallbackV3(IntPtr engine);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_complete_callback_v3")]
+    internal static extern byte EngineCompleteCallbackV3(
+        IntPtr engine,
+        in NativeInteropCallbackCompletion completion);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_cancel_callback_v3")]
+    internal static extern byte EngineCancelCallbackV3(
+        IntPtr engine,
+        ulong callId);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_interop_callback_release_v3")]
+    internal static extern void InteropCallbackReleaseV3(
+        IntPtr callback,
         ulong leaseId);
 
     [DllImport(

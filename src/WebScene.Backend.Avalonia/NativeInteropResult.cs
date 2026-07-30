@@ -48,6 +48,306 @@ internal sealed unsafe class NativeInteropResultSafeHandle
     }
 }
 
+internal sealed unsafe class NativeInteropCallbackSafeHandle
+    : SafeHandleZeroOrMinusOneIsInvalid
+{
+    private readonly ulong _leaseId;
+
+    internal NativeInteropCallbackSafeHandle(IntPtr value)
+        : base(ownsHandle: true)
+    {
+        _leaseId = ((NativeInteropCallbackView*)value)->LeaseId;
+        SetHandle(value);
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeWebSceneApi.InteropCallbackReleaseV3(handle, _leaseId);
+        return true;
+    }
+}
+
+internal sealed class NativeCallbackCompletionOwner : IDisposable
+{
+    private readonly object _gate = new();
+    private IntPtr _engine;
+
+    internal NativeCallbackCompletionOwner(IntPtr engine)
+    {
+        if (engine == IntPtr.Zero)
+        {
+            throw new ArgumentException(
+                "A native engine is required.",
+                nameof(engine));
+        }
+        _engine = engine;
+    }
+
+    internal bool TryEnter(out IntPtr engine)
+    {
+        Monitor.Enter(_gate);
+        engine = _engine;
+        if (engine != IntPtr.Zero)
+        {
+            return true;
+        }
+        Monitor.Exit(_gate);
+        return false;
+    }
+
+    internal void Exit() => Monitor.Exit(_gate);
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _engine = IntPtr.Zero;
+        }
+    }
+}
+
+internal sealed unsafe class NativeJavaScriptBinaryCallbackLease
+    : JavaScriptBinaryCallbackLease
+{
+    private NativeInteropCallbackSafeHandle? _handle;
+    private readonly NativeCallbackCompletionOwner _completionOwner;
+    private readonly ulong _callId;
+    private readonly ulong _targetId;
+    private readonly uint _methodId;
+    private readonly JavaScriptCallbackReturnKind _returnKind;
+    private int _disposed;
+
+    internal NativeJavaScriptBinaryCallbackLease(
+        NativeCallbackCompletionOwner completionOwner,
+        IntPtr callback)
+    {
+        ArgumentNullException.ThrowIfNull(completionOwner);
+        if (callback == IntPtr.Zero)
+        {
+            throw new ArgumentException(
+                "A native callback lease is required.",
+                nameof(callback));
+        }
+        var view = (NativeInteropCallbackView*)callback;
+        ValidateHeader(view);
+        _completionOwner = completionOwner;
+        _callId = view->CallId;
+        _targetId = view->TargetId;
+        _methodId = view->MethodId;
+        _returnKind = view->ReturnKind;
+        _handle = new NativeInteropCallbackSafeHandle(callback);
+    }
+
+    ~NativeJavaScriptBinaryCallbackLease()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            Interlocked.Increment(ref s_finalizerRecoveredLeaseCount);
+        }
+        DisposeCore();
+    }
+
+    private static long s_finalizerRecoveredLeaseCount;
+
+    internal static long FinalizerRecoveredLeaseCount
+        => Interlocked.Read(ref s_finalizerRecoveredLeaseCount);
+
+    public override ulong CallId => _callId;
+
+    public override ulong TargetId => _targetId;
+
+    public override uint MethodId => _methodId;
+
+    public override JavaScriptCallbackReturnKind ReturnKind => _returnKind;
+
+    public override JavaScriptBinaryCallbackCompletion CreateCompletion()
+    {
+        ObjectDisposedException.ThrowIf(
+            Volatile.Read(ref _disposed) != 0,
+            this);
+        return new NativeJavaScriptBinaryCallbackCompletion(
+            _completionOwner,
+            _callId,
+            _returnKind);
+    }
+
+    protected override JavaScriptBinaryValue AcquireBorrow(
+        out object? borrowToken)
+    {
+        borrowToken = null;
+        ObjectDisposedException.ThrowIf(
+            Volatile.Read(ref _disposed) != 0,
+            this);
+        var handle = Volatile.Read(ref _handle);
+        ObjectDisposedException.ThrowIf(handle is null, this);
+        var added = false;
+        try
+        {
+            handle.DangerousAddRef(ref added);
+            var view = (NativeInteropCallbackView*)
+                handle.DangerousGetHandle();
+            ValidateHeader(view);
+            borrowToken = handle;
+            return new JavaScriptBinaryValue(
+                view->Values,
+                view->ValueCount,
+                view->Edges,
+                view->EdgeCount,
+                view->Utf8Bytes,
+                view->Utf8ByteCount,
+                view->ArgumentsRoot);
+        }
+        catch
+        {
+            if (added)
+            {
+                handle.DangerousRelease();
+            }
+            throw;
+        }
+    }
+
+    protected override void ReleaseBorrow(object? borrowToken)
+    {
+        if (borrowToken is not NativeInteropCallbackSafeHandle handle)
+        {
+            throw new InvalidOperationException(
+                "The native callback borrow token is invalid.");
+        }
+        handle.DangerousRelease();
+    }
+
+    public override void Dispose()
+    {
+        DisposeCore();
+        GC.SuppressFinalize(this);
+    }
+
+    private void DisposeCore()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        Interlocked.Exchange(ref _handle, null)?.Dispose();
+    }
+
+    private static void ValidateHeader(NativeInteropCallbackView* view)
+    {
+        if (view == null
+            || view->StructSize < (uint)sizeof(NativeInteropCallbackView)
+            || view->Version != 3
+            || view->CallId == 0
+            || view->TargetId == 0
+            || view->ReturnKind
+                > JavaScriptCallbackReturnKind.Synchronous
+            || view->ArgumentsRoot >= view->ValueCount
+            || (view->ValueCount != 0 && view->Values == null)
+            || (view->EdgeCount != 0 && view->Edges == null)
+            || (view->Utf8ByteCount != 0 && view->Utf8Bytes == null))
+        {
+            throw new InvalidDataException(
+                "The native callback lease header is invalid.");
+        }
+    }
+}
+
+internal sealed unsafe class NativeJavaScriptBinaryCallbackCompletion(
+    NativeCallbackCompletionOwner completionOwner,
+    ulong callId,
+    JavaScriptCallbackReturnKind returnKind)
+    : JavaScriptBinaryCallbackCompletion(returnKind)
+{
+    protected override void CompleteSuccess(
+        ReadOnlySpan<JavaScriptBinaryValueData> values,
+        ReadOnlySpan<JavaScriptBinaryEdgeData> edges,
+        ReadOnlySpan<byte> utf8,
+        uint rootValueIndex)
+    {
+        if (!completionOwner.TryEnter(out var engine))
+        {
+            return;
+        }
+        try
+        {
+            fixed (JavaScriptBinaryValueData* valuePointer = values)
+            fixed (JavaScriptBinaryEdgeData* edgePointer = edges)
+            fixed (byte* utf8Pointer = utf8)
+            {
+                var completion = new NativeInteropCallbackCompletion
+                {
+                    StructSize =
+                        (uint)sizeof(NativeInteropCallbackCompletion),
+                    Version = 3,
+                    CallId = callId,
+                    Succeeded = 1,
+                    Values = valuePointer,
+                    ValueCount = (nuint)values.Length,
+                    Edges = edgePointer,
+                    EdgeCount = (nuint)edges.Length,
+                    Utf8Bytes = utf8Pointer,
+                    Utf8ByteCount = (nuint)utf8.Length,
+                    RootValueIndex = rootValueIndex
+                };
+                if (NativeWebSceneApi.EngineCompleteCallbackV3(
+                        engine,
+                        in completion) == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Native callback completion was rejected: "
+                        + NativeWebSceneApi.GetLastError(engine));
+                }
+            }
+        }
+        finally
+        {
+            completionOwner.Exit();
+        }
+    }
+
+    protected override void CompleteFailure(string error)
+    {
+        if (!completionOwner.TryEnter(out var engine))
+        {
+            return;
+        }
+        try
+        {
+            var byteCount = Encoding.UTF8.GetByteCount(error);
+            var bytes = ArrayPool<byte>.Shared.Rent(Math.Max(1, byteCount));
+            try
+            {
+                byteCount = Encoding.UTF8.GetBytes(error, bytes);
+                fixed (byte* errorPointer = bytes)
+                {
+                    var completion = new NativeInteropCallbackCompletion
+                    {
+                        StructSize =
+                            (uint)sizeof(NativeInteropCallbackCompletion),
+                        Version = 3,
+                        CallId = callId,
+                        ErrorBytes = errorPointer,
+                        ErrorByteCount = (nuint)byteCount
+                    };
+                    if (NativeWebSceneApi.EngineCompleteCallbackV3(
+                            engine,
+                            in completion) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Native callback rejection was rejected: "
+                            + NativeWebSceneApi.GetLastError(engine));
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bytes);
+            }
+        }
+        finally
+        {
+            completionOwner.Exit();
+        }
+    }
+}
+
 internal sealed unsafe class NativeJavaScriptBinaryResultLease
     : JavaScriptBinaryResultLease
 {
@@ -613,16 +913,45 @@ internal static class NativeInteropJsonText
 /// Callers must dispose it before destroying the engine.
 /// </summary>
 public sealed class NativeJavaScriptBinaryTransport
-    : IJavaScriptBinaryTransport
+    : IJavaScriptBinaryCallbackTransport
 {
     private readonly NativeInteropInvoker _operations;
+    private readonly NativeCallbackCompletionOwner _callbackCompletions;
 
     public NativeJavaScriptBinaryTransport(IntPtr engine)
     {
+        if (engine == IntPtr.Zero)
+        {
+            throw new ArgumentException(
+                "A native engine is required.",
+                nameof(engine));
+        }
         _operations = new NativeInteropInvoker(engine);
+        _callbackCompletions = new NativeCallbackCompletionOwner(engine);
     }
 
     public NativeInteropPoolMetrics PoolMetrics => _operations.PoolMetrics;
+
+    public JavaScriptBinaryCallbackLease? TryTakeCallback()
+    {
+        if (!_callbackCompletions.TryEnter(out var engine))
+        {
+            return null;
+        }
+        try
+        {
+            var callback = NativeWebSceneApi.EngineTakeCallbackV3(engine);
+            return callback == IntPtr.Zero
+                ? null
+                : new NativeJavaScriptBinaryCallbackLease(
+                    _callbackCompletions,
+                    callback);
+        }
+        finally
+        {
+            _callbackCompletions.Exit();
+        }
+    }
 
     public ValueTask<TResult> InvokeAsync<TArguments, TResult, TCodec>(
         IJavaScriptInvoker invoker,
@@ -742,23 +1071,31 @@ public sealed class NativeJavaScriptBinaryTransport
         }
     }
 
-    public void Dispose() => _operations.Dispose();
+    public void Dispose()
+    {
+        _callbackCompletions.Dispose();
+        _operations.Dispose();
+    }
 
     private sealed class BinaryDecodeSource<TArguments, TResult, TCodec>
         : IValueTaskSource<TResult>
         where TCodec : struct, IJavaScriptBinaryCodec<TArguments, TResult>
     {
-        private static readonly System.Collections.Concurrent.ConcurrentStack<
+        private static readonly object s_poolGate = new();
+        private static readonly Stack<
             BinaryDecodeSource<TArguments, TResult, TCodec>> s_pool = new();
 
         private ManualResetValueTaskSourceCore<TResult> _core;
         private readonly Action _complete;
+        private readonly object _lifetimeGate = new();
         private ValueTask<IntPtr> _pending;
         private IJavaScriptInvoker? _invoker;
+        private bool _publisherCompleted;
+        private bool _consumerCompleted;
 
         private BinaryDecodeSource()
         {
-            _core.RunContinuationsAsynchronously = true;
+            _core.RunContinuationsAsynchronously = false;
             _complete = Complete;
         }
 
@@ -786,14 +1123,21 @@ public sealed class NativeJavaScriptBinaryTransport
                 }
             }
 
-            if (!s_pool.TryPop(out var source))
+            BinaryDecodeSource<TArguments, TResult, TCodec>? source;
+            lock (s_poolGate)
             {
-                source = new BinaryDecodeSource<
-                    TArguments,
-                    TResult,
-                    TCodec>();
+                s_pool.TryPop(out source);
             }
+            source ??= new BinaryDecodeSource<
+                TArguments,
+                TResult,
+                TCodec>();
             source._core.Reset();
+            lock (source._lifetimeGate)
+            {
+                source._publisherCompleted = false;
+                source._consumerCompleted = false;
+            }
             source._pending = pending;
             source._invoker = invoker;
             pending.GetAwaiter().UnsafeOnCompleted(source._complete);
@@ -810,7 +1154,7 @@ public sealed class NativeJavaScriptBinaryTransport
             {
                 _pending = default;
                 _invoker = null;
-                s_pool.Push(this);
+                FinishLifetime(consumer: true);
             }
         }
 
@@ -829,25 +1173,56 @@ public sealed class NativeJavaScriptBinaryTransport
             try
             {
                 var result = _pending.GetAwaiter().GetResult();
+                TResult decoded;
                 try
                 {
                     unsafe
                     {
                         var root = NativeInteropBorrowScope.GetBinaryRoot(
                             (NativeInteropResultView*)result);
-                        _core.SetResult(TCodec.DecodeResult(
+                        decoded = TCodec.DecodeResult(
                             root,
-                            _invoker!));
+                            _invoker!);
                     }
                 }
                 finally
                 {
                     NativeInteropResultSafeHandle.ReleaseRaw(result);
                 }
+                _core.SetResult(decoded);
             }
             catch (Exception error)
             {
                 _core.SetException(error);
+            }
+            finally
+            {
+                FinishLifetime(consumer: false);
+            }
+        }
+
+        private void FinishLifetime(bool consumer)
+        {
+            var returnToPool = false;
+            lock (_lifetimeGate)
+            {
+                if (consumer)
+                {
+                    _consumerCompleted = true;
+                    returnToPool = _publisherCompleted;
+                }
+                else
+                {
+                    _publisherCompleted = true;
+                    returnToPool = _consumerCompleted;
+                }
+            }
+            if (returnToPool)
+            {
+                lock (s_poolGate)
+                {
+                    s_pool.Push(this);
+                }
             }
         }
     }
@@ -857,17 +1232,21 @@ public sealed class NativeJavaScriptBinaryTransport
         where TCodec : struct,
         IJavaScriptBinaryCodec<TArguments, JavaScriptBinaryVoid>
     {
-        private static readonly System.Collections.Concurrent.ConcurrentStack<
+        private static readonly object s_poolGate = new();
+        private static readonly Stack<
             BinaryVoidDecodeSource<TArguments, TCodec>> s_pool = new();
 
         private ManualResetValueTaskSourceCore<bool> _core;
         private readonly Action _complete;
+        private readonly object _lifetimeGate = new();
         private ValueTask<IntPtr> _pending;
         private IJavaScriptInvoker? _invoker;
+        private bool _publisherCompleted;
+        private bool _consumerCompleted;
 
         private BinaryVoidDecodeSource()
         {
-            _core.RunContinuationsAsynchronously = true;
+            _core.RunContinuationsAsynchronously = false;
             _complete = Complete;
         }
 
@@ -895,11 +1274,18 @@ public sealed class NativeJavaScriptBinaryTransport
                 return ValueTask.CompletedTask;
             }
 
-            if (!s_pool.TryPop(out var source))
+            BinaryVoidDecodeSource<TArguments, TCodec>? source;
+            lock (s_poolGate)
             {
-                source = new BinaryVoidDecodeSource<TArguments, TCodec>();
+                s_pool.TryPop(out source);
             }
+            source ??= new BinaryVoidDecodeSource<TArguments, TCodec>();
             source._core.Reset();
+            lock (source._lifetimeGate)
+            {
+                source._publisherCompleted = false;
+                source._consumerCompleted = false;
+            }
             source._pending = pending;
             source._invoker = invoker;
             pending.GetAwaiter().UnsafeOnCompleted(source._complete);
@@ -916,7 +1302,7 @@ public sealed class NativeJavaScriptBinaryTransport
             {
                 _pending = default;
                 _invoker = null;
-                s_pool.Push(this);
+                FinishLifetime(consumer: true);
             }
         }
 
@@ -953,6 +1339,35 @@ public sealed class NativeJavaScriptBinaryTransport
             catch (Exception error)
             {
                 _core.SetException(error);
+            }
+            finally
+            {
+                FinishLifetime(consumer: false);
+            }
+        }
+
+        private void FinishLifetime(bool consumer)
+        {
+            var returnToPool = false;
+            lock (_lifetimeGate)
+            {
+                if (consumer)
+                {
+                    _consumerCompleted = true;
+                    returnToPool = _publisherCompleted;
+                }
+                else
+                {
+                    _publisherCompleted = true;
+                    returnToPool = _consumerCompleted;
+                }
+            }
+            if (returnToPool)
+            {
+                lock (s_poolGate)
+                {
+                    s_pool.Push(this);
+                }
             }
         }
     }
@@ -1307,7 +1722,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
     }
 
     private sealed class OperationSlot
-        : IValueTaskSource<IntPtr>, IDisposable
+        : IValueTaskSource<IntPtr>, IThreadPoolWorkItem, IDisposable
     {
         private readonly object _gate = new();
         private readonly NativeInteropInvoker _owner;
@@ -1318,11 +1733,14 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         private bool _active;
         private bool _cancelRequested;
         private bool _completionSet;
+        private ulong _completedOperationId;
+        private bool _publisherCompleted;
+        private bool _consumerCompleted;
 
         public OperationSlot(NativeInteropInvoker owner)
         {
             _owner = owner;
-            _source.RunContinuationsAsynchronously = true;
+            _source.RunContinuationsAsynchronously = false;
         }
 
         public void Prepare(IntPtr engine, CancellationToken cancellationToken)
@@ -1335,6 +1753,9 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 _active = true;
                 _cancelRequested = false;
                 _completionSet = false;
+                _completedOperationId = 0;
+                _publisherCompleted = false;
+                _consumerCompleted = false;
             }
             if (cancellationToken.CanBeCanceled)
             {
@@ -1365,7 +1786,6 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
 
         public void Complete(ulong operationId)
         {
-            IntPtr engine;
             lock (_gate)
             {
                 if (!_active
@@ -1375,49 +1795,68 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 }
                 _operationId = operationId;
                 _completionSet = true;
-                engine = _engine;
+                _completedOperationId = operationId;
             }
+            ThreadPool.UnsafeQueueUserWorkItem(this, preferLocal: false);
+        }
 
-            var result = NativeWebSceneApi.EngineTakeInvokeResultV3(
-                engine,
-                operationId);
-            if (result == IntPtr.Zero)
+        void IThreadPoolWorkItem.Execute()
+        {
+            IntPtr engine;
+            ulong operationId;
+            lock (_gate)
             {
-                _source.SetException(
-                    new InvalidOperationException(
-                        "The native interop result was not available."));
-                return;
+                if (!_active || _completedOperationId == 0) return;
+                engine = _engine;
+                operationId = _completedOperationId;
+                _completedOperationId = 0;
             }
-
             try
             {
-                var view = (NativeInteropResultView*)result;
-                NativeInteropBorrowScope.ValidateHeader(view);
-                if (view->Status != NativeInteropResultStatus.Succeeded)
+                var result = NativeWebSceneApi.EngineTakeInvokeResultV3(
+                    engine,
+                    operationId);
+                if (result == IntPtr.Zero)
                 {
-                    if (view->ErrorByteCount != 0
-                        && view->ErrorBytes == null)
-                    {
-                        throw new InvalidDataException(
-                            "The native interop result has an invalid error buffer.");
-                    }
-                    var error = view->ErrorByteCount == 0
-                        ? view->Status.ToString()
-                        : System.Text.Encoding.UTF8.GetString(
-                            new ReadOnlySpan<byte>(
-                                view->ErrorBytes,
-                                checked((int)view->ErrorByteCount)));
-                    NativeInteropResultSafeHandle.ReleaseRaw(result);
                     _source.SetException(
-                        new InvalidOperationException(error));
+                        new InvalidOperationException(
+                            "The native interop result was not available."));
                     return;
                 }
-                _source.SetResult(result);
+                var view = (NativeInteropResultView*)result;
+                try
+                {
+                    NativeInteropBorrowScope.ValidateHeader(view);
+                    if (view->Status != NativeInteropResultStatus.Succeeded)
+                    {
+                        if (view->ErrorByteCount != 0
+                            && view->ErrorBytes == null)
+                        {
+                            throw new InvalidDataException(
+                                "The native interop result has an invalid error buffer.");
+                        }
+                        var error = view->ErrorByteCount == 0
+                            ? view->Status.ToString()
+                            : System.Text.Encoding.UTF8.GetString(
+                                new ReadOnlySpan<byte>(
+                                    view->ErrorBytes,
+                                    checked((int)view->ErrorByteCount)));
+                        NativeInteropResultSafeHandle.ReleaseRaw(result);
+                        _source.SetException(
+                            new InvalidOperationException(error));
+                        return;
+                    }
+                    _source.SetResult(result);
+                }
+                catch (Exception error)
+                {
+                    NativeInteropResultSafeHandle.ReleaseRaw(result);
+                    _source.SetException(error);
+                }
             }
-            catch (Exception error)
+            finally
             {
-                NativeInteropResultSafeHandle.ReleaseRaw(result);
-                _source.SetException(error);
+                FinishLifetime(consumer: false);
             }
         }
 
@@ -1428,7 +1867,14 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 if (!_active || _completionSet) return;
                 _completionSet = true;
             }
-            _source.SetException(error);
+            try
+            {
+                _source.SetException(error);
+            }
+            finally
+            {
+                FinishLifetime(consumer: false);
+            }
         }
 
         public void Cancel()
@@ -1445,7 +1891,14 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 _completionSet = true;
             }
             NativeWebSceneApi.EngineCancelInvokeV3(engine, operationId);
-            _source.SetException(new OperationCanceledException());
+            try
+            {
+                _source.SetException(new OperationCanceledException());
+            }
+            finally
+            {
+                FinishLifetime(consumer: false);
+            }
         }
 
         public IntPtr GetResult(short token)
@@ -1457,15 +1910,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             finally
             {
                 _cancellation.Dispose();
-                ulong operationId;
-                lock (_gate)
-                {
-                    _active = false;
-                    _engine = IntPtr.Zero;
-                    operationId = _operationId;
-                    _operationId = 0;
-                }
-                _owner.Return(this, operationId);
+                FinishLifetime(consumer: true);
             }
         }
 
@@ -1481,6 +1926,37 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
 
         public void Dispose()
         {
+        }
+
+        private void FinishLifetime(bool consumer)
+        {
+            var returnToPool = false;
+            ulong operationId = 0;
+            lock (_gate)
+            {
+                if (consumer)
+                {
+                    _consumerCompleted = true;
+                    returnToPool = _publisherCompleted;
+                }
+                else
+                {
+                    _publisherCompleted = true;
+                    returnToPool = _consumerCompleted;
+                }
+                if (returnToPool)
+                {
+                    _active = false;
+                    _engine = IntPtr.Zero;
+                    operationId = _operationId;
+                    _operationId = 0;
+                    _completedOperationId = 0;
+                }
+            }
+            if (returnToPool)
+            {
+                _owner.Return(this, operationId);
+            }
         }
     }
 

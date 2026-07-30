@@ -45,6 +45,23 @@ struct interop_invoke_request_data_v3 final {
     std::vector<char> utf8_bytes;
 };
 
+struct interop_callback_request_data_v3 final {
+    uint64_t target_id{0};
+    uint32_t method_id{0};
+    uint32_t return_kind{WEBSCENE_INTEROP_CALLBACK_VOID_V3};
+    interop_result_data_v3 arguments;
+};
+
+struct interop_callback_completion_data_v3 final {
+    uint64_t call_id{0};
+    bool succeeded{false};
+    uint32_t root_value_index{0};
+    std::vector<webscene_interop_value_v3> values;
+    std::vector<webscene_interop_edge_v3> edges;
+    std::vector<char> utf8_bytes;
+    std::string error;
+};
+
 enum class interop_invoke_state_v3 : uint8_t {
     failed = 0,
     completed = 1,
@@ -154,6 +171,8 @@ public:
         const std::string& entity_tag,
         int64_t last_modified_unix_seconds,
         resource_response& response)>;
+    using interop_callback_sink_v3 =
+        std::function<uint64_t(interop_callback_request_data_v3&&)>;
 
     v8_dom_runtime(
         native_document& document,
@@ -161,7 +180,8 @@ public:
         std::string compilation_cache_directory = {},
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
-        std::function<void()> interop_callback_available = {});
+        std::function<void()> interop_callback_available = {},
+        interop_callback_sink_v3 interop_callback_sink = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
@@ -184,6 +204,10 @@ public:
         uint64_t operation_id,
         interop_completion_v3 completion);
     void cancel_interop_v3(uint64_t operation_id);
+    bool complete_callback_v3(
+        interop_callback_completion_data_v3& completion);
+    void cancel_callback_v3(uint64_t call_id);
+    uint64_t pending_callback_promises() const noexcept;
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();

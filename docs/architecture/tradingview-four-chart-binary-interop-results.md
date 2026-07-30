@@ -111,6 +111,31 @@ The completion-lifetime probe additionally cancels 3,200 delayed promises
 while disposing 100 managed transports. All 3,200 complete as cancellation,
 with no faults, outstanding results, or active native operations.
 
+## Bidirectional completion follow-up
+
+The reverse-callback integration audit also exposed two small forward-call
+control allocations that the earlier numbers included: a linked
+`ConcurrentStack` node whenever a decoder returned to its pool, and a
+ThreadPool continuation wrapper for each native completion. The transport now
+uses capacity-retaining locked stacks and queues the already-pooled operation
+slot itself as the work item. A publisher/consumer handshake prevents a slot
+or decoder source from being reused until both `SetResult` and `GetResult`
+have unwound, and materialized results release their native lease before
+resuming caller code.
+
+Fresh-process validation after that change:
+
+| Four-chart workload | Calls | Managed allocation | Bytes/call | GC | Outstanding leases |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 60 updates/sec/chart | 2,400 | 11,064 B | 4.61 B | 0/0/0 | 0 |
+| 600 updates/sec/chart | 24,000 | 18,264 B | 0.761 B | 0/0/0 | 0 |
+
+The nearly flat total as call count increases shows that the remaining bytes
+are amortized runtime/ThreadPool queue-segment bookkeeping, not a managed
+request, result, DTO, string, operation, or decoder object per call. The
+pre-fix 60 Hz acceptance run measured 236,808 B (98.67 B/call), so this removes
+95.3% at the normal rate and 99.2% on the burst workload.
+
 ## Reproduction
 
 Build the V8 library and run correctness/stress:
@@ -122,7 +147,7 @@ WEBSCENE_INTEROP_STRESS=1 \
   -C Release --output-on-failure
 ```
 
-Run the retained forward-only four-chart binary acceptance process:
+Run the four-chart binary acceptance process:
 
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
@@ -134,7 +159,8 @@ dotnet run \
 ```
 
 The JSON control and its public mode were removed after these measurements
-because the ABI was unreleased and the accepted design is forward-only.
+because the ABI was unreleased and the accepted design is binary-only for
+codec-supported generated calls and callbacks.
 Commit `760d18a` preserves the matched pre-removal benchmark implementation and
 must be paired with its native library to reproduce the historical JSON
 column. The current BenchmarkDotNet command runs the binary regression across

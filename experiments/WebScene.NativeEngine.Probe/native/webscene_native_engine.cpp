@@ -52,7 +52,9 @@ static_assert(sizeof(webscene_interop_edge_v3) == 16);
 static_assert(sizeof(webscene_interop_evaluate_request_v3) == 48);
 static_assert(sizeof(webscene_interop_invoke_request_v3) == 112);
 static_assert(sizeof(webscene_interop_result_view_v3) == 96);
-static_assert(sizeof(webscene_interop_pool_metrics_v3) == 168);
+static_assert(sizeof(webscene_interop_callback_view_v3) == 88);
+static_assert(sizeof(webscene_interop_callback_completion_v3) == 96);
+static_assert(sizeof(webscene_interop_pool_metrics_v3) == 200);
 
 class input_ring final {
 public:
@@ -172,6 +174,8 @@ struct url_request final {
 
 class interop_result_pool_v3;
 struct interop_result_lease_v3;
+class interop_callback_pool_v3;
+struct interop_callback_lease_v3;
 
 std::mutex taken_interop_results_mutex;
 std::unordered_map<
@@ -179,6 +183,12 @@ std::unordered_map<
     std::pair<uint64_t, interop_result_lease_v3*>>
     taken_interop_results;
 std::atomic<uint64_t> next_interop_result_lease_id{1U};
+std::mutex taken_interop_callbacks_mutex;
+std::unordered_map<
+    const webscene_interop_callback_view_v3*,
+    std::pair<uint64_t, interop_callback_lease_v3*>>
+    taken_interop_callbacks;
+std::atomic<uint64_t> next_interop_callback_lease_id{1U};
 
 uint64_t allocate_interop_result_lease_id()
 {
@@ -187,6 +197,19 @@ uint64_t allocate_interop_result_lease_id()
         std::memory_order_relaxed);
     if (lease_id == 0U) {
         lease_id = next_interop_result_lease_id.fetch_add(
+            1U,
+            std::memory_order_relaxed);
+    }
+    return lease_id;
+}
+
+uint64_t allocate_interop_callback_lease_id()
+{
+    auto lease_id = next_interop_callback_lease_id.fetch_add(
+        1U,
+        std::memory_order_relaxed);
+    if (lease_id == 0U) {
+        lease_id = next_interop_callback_lease_id.fetch_add(
             1U,
             std::memory_order_relaxed);
     }
@@ -359,6 +382,91 @@ private:
     std::atomic<uint64_t> high_water_outstanding_results_{0};
 };
 
+struct interop_callback_lease_v3 final {
+    webscene_interop_callback_view_v3 view{};
+    std::unique_ptr<interop_result_lease_v3> arguments;
+    std::shared_ptr<interop_callback_pool_v3> owner;
+
+    ~interop_callback_lease_v3()
+    {
+        if (!arguments) return;
+        auto result_pool = arguments->owner;
+        result_pool->release(std::move(arguments));
+    }
+
+    void publish(
+        uint64_t call_id,
+        uint64_t target_id,
+        uint32_t method_id,
+        uint32_t return_kind)
+    {
+        const auto retained = arguments == nullptr
+            ? sizeof(*this)
+            : sizeof(*this) + arguments->retained_bytes();
+        const auto& data = arguments->data;
+        view = webscene_interop_callback_view_v3{
+            static_cast<uint32_t>(sizeof(webscene_interop_callback_view_v3)),
+            3U,
+            call_id,
+            target_id,
+            method_id,
+            return_kind,
+            data.values.data(),
+            data.edges.data(),
+            data.utf8_bytes.data(),
+            0U,
+            static_cast<uint32_t>(data.values.size()),
+            static_cast<uint32_t>(data.edges.size()),
+            static_cast<uint32_t>(data.utf8_bytes.size()),
+            data.root_value_index,
+            retained > std::numeric_limits<uint32_t>::max()
+                ? std::numeric_limits<uint32_t>::max()
+                : static_cast<uint32_t>(retained),
+            0U};
+    }
+};
+
+class interop_callback_pool_v3 final
+    : public std::enable_shared_from_this<interop_callback_pool_v3> {
+public:
+    std::unique_ptr<interop_callback_lease_v3> acquire()
+    {
+        std::unique_ptr<interop_callback_lease_v3> result;
+        {
+            std::lock_guard lock(mutex_);
+            if (!available_.empty()) {
+                result = std::move(available_.back());
+                available_.pop_back();
+            }
+        }
+        if (!result) {
+            result = std::make_unique<interop_callback_lease_v3>();
+        }
+        result->view = {};
+        result->arguments.reset();
+        result->owner = shared_from_this();
+        return result;
+    }
+
+    void release(std::unique_ptr<interop_callback_lease_v3> callback)
+    {
+        if (callback->arguments) {
+            auto result_pool = callback->arguments->owner;
+            result_pool->release(std::move(callback->arguments));
+        }
+        callback->view = {};
+        callback->owner.reset();
+        std::lock_guard lock(mutex_);
+        if (available_.size() < 256U) {
+            available_.push_back(std::move(callback));
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    std::vector<std::unique_ptr<interop_callback_lease_v3>> available_;
+};
+
 struct interop_operation_v3 final {
     size_t pool_index{0};
     uint64_t id{0};
@@ -395,13 +503,95 @@ struct interop_cancel_work_v3 final {
     std::shared_ptr<interop_operation_v3> operation;
 };
 
+struct interop_callback_completion_work_v3 final {
+    std::unique_ptr<
+        webscene_native::interop_callback_completion_data_v3> completion;
+};
+
+struct interop_callback_cancel_work_v3 final {
+    uint64_t call_id{0};
+};
+
+class interop_callback_completion_pool_v3 final {
+public:
+    std::unique_ptr<
+        webscene_native::interop_callback_completion_data_v3> acquire()
+    {
+        std::unique_ptr<
+            webscene_native::interop_callback_completion_data_v3> result;
+        {
+            std::lock_guard lock(mutex_);
+            if (!available_.empty()) {
+                result = std::move(available_.back());
+                available_.pop_back();
+                pooled_bytes_ -= retained_bytes(*result);
+            }
+        }
+        if (!result) {
+            result = std::make_unique<
+                webscene_native::interop_callback_completion_data_v3>();
+        }
+        reset(*result);
+        return result;
+    }
+
+    void release(
+        std::unique_ptr<
+            webscene_native::interop_callback_completion_data_v3> completion)
+    {
+        if (!completion) return;
+        reset(*completion);
+        const auto bytes = retained_bytes(*completion);
+        constexpr size_t maximum_record_capacity = 1U * 1024U * 1024U;
+        constexpr size_t maximum_pool_capacity = 8U * 1024U * 1024U;
+        if (bytes > maximum_record_capacity) return;
+        std::lock_guard lock(mutex_);
+        if (available_.size() < 256U
+            && bytes <= maximum_pool_capacity - pooled_bytes_) {
+            pooled_bytes_ += bytes;
+            available_.push_back(std::move(completion));
+        }
+    }
+
+private:
+    static void reset(
+        webscene_native::interop_callback_completion_data_v3& completion)
+    {
+        completion.call_id = 0U;
+        completion.succeeded = false;
+        completion.root_value_index = 0U;
+        completion.values.clear();
+        completion.edges.clear();
+        completion.utf8_bytes.clear();
+        completion.error.clear();
+    }
+
+    static size_t retained_bytes(
+        const webscene_native::interop_callback_completion_data_v3& completion)
+    {
+        return completion.values.capacity()
+                * sizeof(webscene_interop_value_v3)
+            + completion.edges.capacity()
+                * sizeof(webscene_interop_edge_v3)
+            + completion.utf8_bytes.capacity()
+            + completion.error.capacity();
+    }
+
+    std::mutex mutex_;
+    std::vector<std::unique_ptr<
+        webscene_native::interop_callback_completion_data_v3>> available_;
+    size_t pooled_bytes_{0};
+};
+
 using script_work_request =
     std::variant<
         script_request,
         url_request,
         interop_evaluate_work_v3,
         interop_invoke_work_v3,
-        interop_cancel_work_v3>;
+        interop_cancel_work_v3,
+        interop_callback_completion_work_v3,
+        interop_callback_cancel_work_v3>;
 
 bool validate_interop_invoke_request_v3(
     const webscene_interop_invoke_request_v3& request,
@@ -414,7 +604,7 @@ bool validate_interop_invoke_request_v3(
     if (request.struct_size < sizeof(webscene_interop_invoke_request_v3)
         || request.version != 3U
         || request.operation < WEBSCENE_INTEROP_GET_GLOBAL_V3
-        || request.operation > WEBSCENE_INTEROP_RELEASE_HANDLE_V3
+        || request.operation > WEBSCENE_INTEROP_INVOKE_FUNCTION_V3
         || request.result_mode > WEBSCENE_INTEROP_RESULT_VOID_V3
         || (request.flags & ~WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V3) != 0U
         || request.value_count == 0U
@@ -444,7 +634,11 @@ bool validate_interop_invoke_request_v3(
         request.operation == WEBSCENE_INTEROP_GET_PROPERTY_V3
         || request.operation == WEBSCENE_INTEROP_SET_PROPERTY_V3
         || request.operation == WEBSCENE_INTEROP_INVOKE_MEMBER_V3
-        || request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V3;
+        || request.operation == WEBSCENE_INTEROP_RELEASE_HANDLE_V3
+        || request.operation == WEBSCENE_INTEROP_CREATE_CALLBACK_TARGET_V3
+        || request.operation == WEBSCENE_INTEROP_CREATE_CALLBACK_FUNCTION_V3
+        || request.operation == WEBSCENE_INTEROP_CREATE_SYNCHRONOUS_FACTORY_V3
+        || request.operation == WEBSCENE_INTEROP_INVOKE_FUNCTION_V3;
     const auto needs_member =
         request.operation == WEBSCENE_INTEROP_GET_PROPERTY_V3
         || request.operation == WEBSCENE_INTEROP_SET_PROPERTY_V3
@@ -1113,6 +1307,230 @@ struct webscene_engine final {
         return true;
     }
 
+    uint64_t enqueue_callback_v3(
+        webscene_native::interop_callback_request_data_v3&& request)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(request);
+        return 0U;
+#else
+        auto arguments = interop_result_pool_->acquire();
+        arguments->data = std::move(request.arguments);
+        const auto call_id = next_interop_callback_id_.fetch_add(
+            1U,
+            std::memory_order_relaxed);
+        auto callback = interop_callback_pool_->acquire();
+        callback->arguments = std::move(arguments);
+        callback->publish(
+            call_id,
+            request.target_id,
+            request.method_id,
+            request.return_kind);
+
+        bool notify = false;
+        {
+            std::lock_guard lock(interop_callback_mutex_);
+            constexpr size_t maximum_queued_callbacks = 4096U;
+            if (queued_interop_callbacks_.size()
+                >= maximum_queued_callbacks) {
+                auto pool = callback->owner;
+                pool->release(std::move(callback));
+                set_last_error("Native reverse interop callback queue is full");
+                return 0U;
+            }
+            notify = queued_interop_callbacks_.empty();
+            if (request.return_kind
+                == WEBSCENE_INTEROP_CALLBACK_PROMISE_V3) {
+                pending_interop_callback_promises_.insert(call_id);
+            }
+            queued_interop_callbacks_.push_back(std::move(callback));
+            interop_callback_queue_high_water_ = std::max(
+                interop_callback_queue_high_water_,
+                queued_interop_callbacks_.size());
+        }
+        if (notify && interop_callback_available_callback_ != nullptr) {
+            interop_callback_available_callback_(
+                interop_callback_available_user_data_);
+        }
+        return call_id;
+#endif
+    }
+
+    const webscene_interop_callback_view_v3* take_callback_v3()
+    {
+        std::unique_ptr<interop_callback_lease_v3> callback;
+        {
+            std::lock_guard lock(interop_callback_mutex_);
+            if (queued_interop_callbacks_.empty()) return nullptr;
+            callback = std::move(queued_interop_callbacks_.front());
+            queued_interop_callbacks_.pop_front();
+        }
+        const auto lease_id = allocate_interop_callback_lease_id();
+        callback->view.lease_id = lease_id;
+        const auto* view = &callback->view;
+        {
+            std::lock_guard lock(taken_interop_callbacks_mutex);
+            const auto [unused, inserted] =
+                taken_interop_callbacks.emplace(
+                    view,
+                    std::pair{lease_id, callback.get()});
+            if (!inserted) {
+                auto pool = callback->owner;
+                pool->release(std::move(callback));
+                set_last_error(
+                    "Native callback lease address is already active");
+                return nullptr;
+            }
+        }
+        static_cast<void>(callback.release());
+        return view;
+    }
+
+    bool complete_callback_v3(
+        const webscene_interop_callback_completion_v3* completion)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(completion);
+        set_last_error("Native engine was built without V8 support");
+        return false;
+#else
+        constexpr size_t maximum_values = 1'000'000U;
+        constexpr size_t maximum_edges = 1'000'000U;
+        constexpr size_t maximum_utf8_bytes = 64U * 1024U * 1024U;
+        if (completion == nullptr
+            || completion->struct_size
+                < sizeof(webscene_interop_callback_completion_v3)
+            || completion->version != 3U
+            || completion->call_id == 0U
+            || completion->succeeded > 1U
+            || completion->value_count > maximum_values
+            || completion->edge_count > maximum_edges
+            || completion->utf8_byte_count > maximum_utf8_bytes
+            || (completion->succeeded != 0U
+                && (completion->value_count == 0U
+                    || completion->values == nullptr
+                    || completion->root_value_index
+                        >= completion->value_count))
+            || (completion->edge_count != 0U
+                && completion->edges == nullptr)
+            || (completion->utf8_byte_count != 0U
+                && completion->utf8_bytes == nullptr)
+            || (completion->succeeded == 0U
+                && (completion->error_bytes == nullptr
+                    || completion->error_byte_count == 0U))) {
+            set_last_error("Native callback completion header is invalid");
+            return false;
+        }
+        for (size_t index = 0; index < completion->value_count; ++index) {
+            const auto& value = completion->values[index];
+            if (value.kind > WEBSCENE_INTEROP_VALUE_HANDLE_V3
+                || (value.kind == WEBSCENE_INTEROP_VALUE_STRING_V3
+                    && (value.offset > completion->utf8_byte_count
+                        || value.length
+                            > completion->utf8_byte_count - value.offset))
+                || ((value.kind == WEBSCENE_INTEROP_VALUE_ARRAY_V3
+                        || value.kind == WEBSCENE_INTEROP_VALUE_OBJECT_V3)
+                    && (value.offset > completion->edge_count
+                        || value.length
+                            > completion->edge_count - value.offset))) {
+                set_last_error("Native callback completion arena is invalid");
+                return false;
+            }
+        }
+        for (size_t index = 0; index < completion->edge_count; ++index) {
+            const auto& edge = completion->edges[index];
+            if (edge.value_index >= completion->value_count
+                || edge.name_offset > completion->utf8_byte_count
+                || edge.name_length
+                    > completion->utf8_byte_count - edge.name_offset) {
+                set_last_error("Native callback completion edge is invalid");
+                return false;
+            }
+        }
+
+        auto copied = interop_callback_completion_pool_.acquire();
+        copied->call_id = completion->call_id;
+        copied->succeeded = completion->succeeded != 0U;
+        copied->root_value_index = completion->root_value_index;
+        if (completion->value_count != 0U) {
+            copied->values.assign(
+                completion->values,
+                completion->values + completion->value_count);
+        }
+        if (completion->edge_count != 0U) {
+            copied->edges.assign(
+                completion->edges,
+                completion->edges + completion->edge_count);
+        }
+        if (completion->utf8_byte_count != 0U) {
+            copied->utf8_bytes.assign(
+                completion->utf8_bytes,
+                completion->utf8_bytes + completion->utf8_byte_count);
+        }
+        if (completion->error_byte_count != 0U) {
+            copied->error.assign(
+                completion->error_bytes,
+                completion->error_byte_count);
+        }
+        {
+            std::scoped_lock lock(
+                script_mutex_,
+                interop_callback_mutex_);
+            if (!pending_interop_callback_promises_.contains(
+                    completion->call_id)) {
+                interop_callback_completion_pool_.release(
+                    std::move(copied));
+                set_last_error(
+                    "Native callback completion references a stale call");
+                return false;
+            }
+            constexpr size_t maximum_pending_completions = 4096U;
+            const auto pending = static_cast<size_t>(std::count_if(
+                script_work_.begin(),
+                script_work_.end(),
+                [](const auto& work) {
+                    return std::holds_alternative<
+                        interop_callback_completion_work_v3>(work);
+                }));
+            if (pending >= maximum_pending_completions) {
+                interop_callback_completion_pool_.release(
+                    std::move(copied));
+                set_last_error("Native callback completion queue is full");
+                return false;
+            }
+            pending_interop_callback_promises_.erase(
+                completion->call_id);
+            script_work_.emplace_back(
+                interop_callback_completion_work_v3{
+                    std::move(copied)});
+        }
+        signal_worker();
+        return true;
+#endif
+    }
+
+    bool cancel_callback_v3(uint64_t call_id)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(call_id);
+        return false;
+#else
+        if (call_id == 0U) return false;
+        {
+            std::scoped_lock lock(
+                script_mutex_,
+                interop_callback_mutex_);
+            if (pending_interop_callback_promises_.erase(call_id) == 0U) {
+                return false;
+            }
+            script_work_.emplace_back(
+                interop_callback_cancel_work_v3{call_id});
+        }
+        signal_worker();
+        return true;
+#endif
+    }
+
     bool get_interop_pool_metrics_v3(
         webscene_interop_pool_metrics_v3& metrics) const
     {
@@ -1152,6 +1570,19 @@ struct webscene_engine final {
             std::lock_guard lock(taken_interop_results_mutex);
             metrics.taken_result_leases =
                 taken_interop_results.size();
+        }
+        {
+            std::lock_guard lock(interop_callback_mutex_);
+            metrics.queued_callbacks = queued_interop_callbacks_.size();
+            metrics.pending_callback_promises =
+                pending_interop_callback_promises_.size();
+            metrics.callback_queue_high_water =
+                interop_callback_queue_high_water_;
+        }
+        {
+            std::lock_guard lock(taken_interop_callbacks_mutex);
+            metrics.taken_callback_leases =
+                taken_interop_callbacks.size();
         }
         return true;
     }
@@ -2048,6 +2479,11 @@ private:
                     interop_callback_available_callback_(
                         interop_callback_available_user_data_);
                 }
+            },
+            [this](
+                    webscene_native::interop_callback_request_data_v3&&
+                        callback) {
+                return enqueue_callback_v3(std::move(callback));
             });
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
@@ -2589,6 +3025,28 @@ private:
                         std::lock_guard lock(interop_mutex_);
                         return_interop_operation_locked(
                             cancellation->operation);
+                    }
+                    continue;
+                }
+                if (auto* completion =
+                        std::get_if<
+                            interop_callback_completion_work_v3>(&request)) {
+                    auto record = std::move(completion->completion);
+                    if (runtime_ != nullptr
+                        && !runtime_->complete_callback_v3(
+                            *record)) {
+                        set_last_error(runtime_->last_error());
+                    }
+                    interop_callback_completion_pool_.release(
+                        std::move(record));
+                    continue;
+                }
+                if (auto* cancellation =
+                        std::get_if<
+                            interop_callback_cancel_work_v3>(&request)) {
+                    if (runtime_ != nullptr) {
+                        runtime_->cancel_callback_v3(
+                            cancellation->call_id);
                     }
                     continue;
                 }
@@ -3674,6 +4132,16 @@ private:
     std::mutex script_mutex_;
     std::shared_ptr<interop_result_pool_v3> interop_result_pool_{
         std::make_shared<interop_result_pool_v3>()};
+    std::shared_ptr<interop_callback_pool_v3> interop_callback_pool_{
+        std::make_shared<interop_callback_pool_v3>()};
+    interop_callback_completion_pool_v3
+        interop_callback_completion_pool_;
+    mutable std::mutex interop_callback_mutex_;
+    std::deque<std::unique_ptr<interop_callback_lease_v3>>
+        queued_interop_callbacks_;
+    std::unordered_set<uint64_t> pending_interop_callback_promises_;
+    size_t interop_callback_queue_high_water_{0};
+    std::atomic<uint64_t> next_interop_callback_id_{1U};
     mutable std::mutex interop_mutex_;
     std::unordered_map<uint64_t, std::shared_ptr<interop_operation_v3>>
         interop_operations_;
@@ -4200,6 +4668,53 @@ void webscene_interop_result_release_v3(
         taken_interop_results.erase(taken);
     }
     auto lease = std::unique_ptr<interop_result_lease_v3>(lease_pointer);
+    auto pool = lease->owner;
+    pool->release(std::move(lease));
+}
+
+const webscene_interop_callback_view_v3*
+webscene_engine_take_callback_v3(webscene_engine* engine)
+{
+    return engine == nullptr ? nullptr : engine->take_callback_v3();
+}
+
+uint8_t webscene_engine_complete_callback_v3(
+    webscene_engine* engine,
+    const webscene_interop_callback_completion_v3* completion)
+{
+    return engine != nullptr
+        && engine->complete_callback_v3(completion)
+        ? 1U
+        : 0U;
+}
+
+uint8_t webscene_engine_cancel_callback_v3(
+    webscene_engine* engine,
+    uint64_t call_id)
+{
+    return engine != nullptr && engine->cancel_callback_v3(call_id)
+        ? 1U
+        : 0U;
+}
+
+void webscene_interop_callback_release_v3(
+    const webscene_interop_callback_view_v3* callback,
+    uint64_t lease_id)
+{
+    if (callback == nullptr || lease_id == 0U) return;
+    interop_callback_lease_v3* lease_pointer = nullptr;
+    {
+        std::lock_guard lock(taken_interop_callbacks_mutex);
+        const auto taken = taken_interop_callbacks.find(callback);
+        if (taken == taken_interop_callbacks.end()
+            || taken->second.first != lease_id) {
+            return;
+        }
+        lease_pointer = taken->second.second;
+        taken_interop_callbacks.erase(taken);
+    }
+    auto lease = std::unique_ptr<interop_callback_lease_v3>(
+        lease_pointer);
     auto pool = lease->owner;
     pool->release(std::move(lease));
 }

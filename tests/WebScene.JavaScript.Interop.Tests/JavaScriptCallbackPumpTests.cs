@@ -57,6 +57,21 @@ public sealed class JavaScriptCallbackPumpTests
         await pending.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
+    [Fact]
+    public async Task SignalCanBeReusedAfterCancellation()
+    {
+        var signal = new JavaScriptCallbackSignal();
+        using var cancellation = new CancellationTokenSource();
+        var pending = signal.WaitAsync(cancellation.Token).AsTask();
+
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pending);
+
+        signal.Notify();
+        await signal.WaitAsync();
+    }
+
     private static async Task WaitUntilAsync(
         Func<bool> condition,
         TimeSpan timeout)
