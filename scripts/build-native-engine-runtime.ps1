@@ -100,6 +100,12 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
     if ($ThinLto) {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ThinLtoPatch.txt")
     }
+    if ($v8Revision -eq "15.3.10") {
+        # V8 15.3 needs two clang-cl/MSVC compatibility fixes: model the
+        # ExtendedMap ABI padding in Torque and use V8's FunctionRef directly
+        # in the backing-store allocation retry path.
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt")
+    }
     if (-not $UpstreamV8) {
         Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
         Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
@@ -198,7 +204,8 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
     "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
     "-p:WebSceneNativeEngineDenseLink=true",
-    "-p:WebSceneNativeEngineThinLto=$thinLtoValue"
+    "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
+    "-p:WebSceneNativeEngineV8Revision=$v8Revision"
 )
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments

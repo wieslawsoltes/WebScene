@@ -52,7 +52,7 @@ static_assert(sizeof(webscene_interop_edge_v3) == 16);
 static_assert(sizeof(webscene_interop_evaluate_request_v3) == 48);
 static_assert(sizeof(webscene_interop_invoke_request_v3) == 112);
 static_assert(sizeof(webscene_interop_result_view_v3) == 96);
-static_assert(sizeof(webscene_interop_pool_metrics_v3) == 152);
+static_assert(sizeof(webscene_interop_pool_metrics_v3) == 168);
 
 class input_ring final {
 public:
@@ -100,6 +100,7 @@ private:
 
 struct canvas_layer_version final {
     uint64_t generation{0};
+    uint64_t content_hash{0};
     uint32_t command_count{0};
     uint32_t string_count{0};
     float x{0};
@@ -107,7 +108,16 @@ struct canvas_layer_version final {
     float width{0};
     float height{0};
 
-    bool operator==(const canvas_layer_version&) const = default;
+    bool visually_equals(const canvas_layer_version& other) const noexcept
+    {
+        return content_hash == other.content_hash
+            && command_count == other.command_count
+            && string_count == other.string_count
+            && x == other.x
+            && y == other.y
+            && width == other.width
+            && height == other.height;
+    }
 };
 
 struct scene final {
@@ -488,6 +498,51 @@ uint64_t mix_hash(uint64_t hash, uint64_t value)
     return hash;
 }
 
+uint64_t canvas_layer_content_hash(
+    const webscene_canvas_layer& layer,
+    const std::vector<webscene_canvas_command>& commands,
+    const std::vector<webscene_scene_string>& strings,
+    const std::vector<char>& string_bytes)
+{
+    auto hash = 1469598103934665603ULL;
+    const auto command_end =
+        static_cast<size_t>(layer.command_offset) + layer.command_count;
+    for (auto index = static_cast<size_t>(layer.command_offset);
+         index < command_end;
+         ++index) {
+        const auto& command = commands[index];
+        hash = mix_hash(
+            hash,
+            static_cast<uint64_t>(command.kind) << 32U | command.flags);
+        hash = mix_hash(
+            hash,
+            static_cast<uint64_t>(command.resource_id) << 32U
+                | command.reserved);
+        for (const auto value : command.data.values) {
+            hash = mix_hash(hash, std::bit_cast<uint64_t>(value));
+        }
+    }
+
+    const auto string_end =
+        static_cast<size_t>(layer.string_offset) + layer.string_count;
+    for (auto index = static_cast<size_t>(layer.string_offset);
+         index < string_end;
+         ++index) {
+        const auto& value = strings[index];
+        hash = mix_hash(hash, value.byte_length);
+        const auto byte_end =
+            static_cast<size_t>(value.byte_offset) + value.byte_length;
+        for (auto byte_index = static_cast<size_t>(value.byte_offset);
+             byte_index < byte_end;
+             ++byte_index) {
+            hash = mix_hash(
+                hash,
+                static_cast<uint8_t>(string_bytes[byte_index]));
+        }
+    }
+    return hash;
+}
+
 void store_maximum(std::atomic<uint64_t>& target, uint64_t value)
 {
     auto current = target.load(std::memory_order_relaxed);
@@ -689,7 +744,10 @@ struct webscene_engine final {
         void* text_measure_user_data = nullptr,
         webscene_host_request_available_callback
             host_request_available_callback = nullptr,
-        void* host_request_available_user_data = nullptr)
+        void* host_request_available_user_data = nullptr,
+        webscene_interop_callback_available_callback
+            interop_callback_available_callback = nullptr,
+        void* interop_callback_available_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -702,6 +760,8 @@ struct webscene_engine final {
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)
         , host_request_available_user_data_(host_request_available_user_data)
+        , interop_callback_available_callback_(interop_callback_available_callback)
+        , interop_callback_available_user_data_(interop_callback_available_user_data)
         , document_(text_measure_callback, text_measure_user_data)
         , worker_([this](std::stop_token token) { run(token); })
     {
@@ -1079,6 +1139,19 @@ struct webscene_engine final {
                 available_interop_operation_slots_.size();
             metrics.operation_slot_high_water =
                 interop_operation_slot_high_water_;
+            metrics.operation_result_leases = static_cast<uint64_t>(
+                std::count_if(
+                    interop_operation_slots_.begin(),
+                    interop_operation_slots_.end(),
+                    [](const auto& operation) {
+                        return operation != nullptr
+                            && operation->result != nullptr;
+                    }));
+        }
+        {
+            std::lock_guard lock(taken_interop_results_mutex);
+            metrics.taken_result_leases =
+                taken_interop_results.size();
         }
         return true;
     }
@@ -1969,6 +2042,12 @@ private:
                     host_request_available_callback_(
                         host_request_available_user_data_);
                 }
+            },
+            [this] {
+                if (interop_callback_available_callback_ != nullptr) {
+                    interop_callback_available_callback_(
+                        interop_callback_available_user_data_);
+                }
             });
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
@@ -1994,6 +2073,10 @@ private:
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            const auto starting_scene_generation =
+                document_.scene_generation();
+            const auto starting_component_ready =
+                component_ready_.load(std::memory_order_relaxed);
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
@@ -2415,7 +2498,6 @@ private:
                 frame_script_errors_.store(runtime_->frame_script_errors(), std::memory_order_relaxed);
                 update_compilation_metrics();
                 update_component_readiness();
-                changed = true;
             }
 
             if (document_.has_active_animations()) {
@@ -2556,7 +2638,6 @@ private:
                         return_interop_request(
                             std::move(interop->request));
                         update_compilation_metrics();
-                        changed = true;
                         continue;
                     }
                     if (state
@@ -2578,7 +2659,6 @@ private:
                     return_interop_request(
                         std::move(interop->request));
                     update_compilation_metrics();
-                    changed = true;
                     continue;
                 }
                 if (auto* interop = std::get_if<interop_evaluate_work_v3>(&request)) {
@@ -2642,7 +2722,6 @@ private:
                             interop->operation->id);
                     }
                     update_compilation_metrics();
-                    changed = true;
                     continue;
                 }
                 continue;
@@ -2650,6 +2729,10 @@ private:
 #endif
 
             update_host_animation_frame_demand();
+            changed = changed
+                || document_.scene_generation() != starting_scene_generation
+                || component_ready_.load(std::memory_order_relaxed)
+                    != starting_component_ready;
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
             // A resize and its host RAF are one browser rendering opportunity.
@@ -3376,8 +3459,14 @@ private:
                 next->damage_rects.push_back(webscene_damage_rect{x, y, damage_width, damage_height});
             };
             for (auto layer : all_layers) {
+                const auto content_hash = canvas_layer_content_hash(
+                    layer,
+                    all_canvas_commands,
+                    all_canvas_strings,
+                    all_canvas_string_bytes);
                 const canvas_layer_version version{
                     layer.generation,
+                    content_hash,
                     layer.command_count,
                     layer.string_count,
                     layer.x,
@@ -3386,7 +3475,9 @@ private:
                     layer.height};
                 next->full_layer_versions[layer.node_id] = version;
                 const auto old = acknowledged_layers.find(layer.node_id);
-                if (base_revision != 0 && old != acknowledged_layers.end() && old->second == version) {
+                if (base_revision != 0
+                    && old != acknowledged_layers.end()
+                    && old->second.visually_equals(version)) {
                     continue;
                 }
 
@@ -3433,7 +3524,13 @@ private:
 
             hash = mix_hash(hash, dom_hash);
             for (const auto& layer : all_layers) {
-                hash = mix_hash(hash, layer.generation);
+                const auto version =
+                    next->full_layer_versions.find(layer.node_id);
+                hash = mix_hash(
+                    hash,
+                    version == next->full_layer_versions.end()
+                        ? layer.generation
+                        : version->second.content_hash);
                 hash = mix_hash(
                     hash,
                     static_cast<uint64_t>(layer.node_id) << 32U | layer.command_count);
@@ -3548,6 +3645,9 @@ private:
     webscene_host_request_available_callback
         host_request_available_callback_{nullptr};
     void* host_request_available_user_data_{nullptr};
+    webscene_interop_callback_available_callback
+        interop_callback_available_callback_{nullptr};
+    void* interop_callback_available_user_data_{nullptr};
     mutable std::mutex configuration_mutex_;
     std::string resource_root_;
     input_ring inputs_;
@@ -3941,7 +4041,11 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
             offsetof(webscene_engine_options, host_request_available_callback);
         const auto has_text_measure_callback =
             options->struct_size >= text_measure_options_size;
+        constexpr auto host_request_available_options_size =
+            offsetof(webscene_engine_options, interop_callback_available_callback);
         const auto has_host_request_available_callback =
+            options->struct_size >= host_request_available_options_size;
+        const auto has_interop_callback_available_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -3957,6 +4061,12 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_host_request_available_callback
                 ? options->host_request_available_user_data
+                : nullptr,
+            has_interop_callback_available_callback
+                ? options->interop_callback_available_callback
+                : nullptr,
+            has_interop_callback_available_callback
+                ? options->interop_callback_available_user_data
                 : nullptr);
     } catch (...) {
         return nullptr;

@@ -346,6 +346,8 @@ typedef struct webscene_interop_pool_metrics_v3 {
     uint64_t pooled_result_bytes_64k;
     uint64_t pooled_result_bytes_256k;
     uint64_t pooled_result_bytes_1m;
+    uint64_t taken_result_leases;
+    uint64_t operation_result_leases;
 } webscene_interop_pool_metrics_v3;
 
 typedef struct webscene_damage_rect {
@@ -451,6 +453,14 @@ typedef uint8_t (*webscene_text_measure_callback)(
  */
 typedef void (*webscene_host_request_available_callback)(void* user_data);
 
+/*
+ * Edge notification emitted when JavaScript queues an interop callback for
+ * its managed host. The callback runs on the engine worker and must only
+ * signal non-blocking host work; managed callbacks are drained after the
+ * current engine call returns.
+ */
+typedef void (*webscene_interop_callback_available_callback)(void* user_data);
+
 typedef struct webscene_engine_options {
     uint32_t struct_size;
     uint32_t simulated_chart_command_count;
@@ -464,6 +474,8 @@ typedef struct webscene_engine_options {
     void* text_measure_user_data;
     webscene_host_request_available_callback host_request_available_callback;
     void* host_request_available_user_data;
+    webscene_interop_callback_available_callback interop_callback_available_callback;
+    void* interop_callback_available_user_data;
 } webscene_engine_options;
 
 typedef struct webscene_engine_metrics {

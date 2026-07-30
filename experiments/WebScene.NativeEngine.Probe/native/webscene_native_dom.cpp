@@ -1052,6 +1052,10 @@ dom_node& native_document::create_element(std::string tag)
     }
     auto* result = node.get();
     nodes_.push_back(std::move(node));
+    if (native_id_index_.size() < result->id) {
+        native_id_index_.resize(result->id, nullptr);
+    }
+    native_id_index_[result->id - 1U] = result;
     mark_dirty();
     return *result;
 }
@@ -1090,17 +1094,22 @@ size_t native_document::erase_detached_subtree(dom_node& root)
     };
     collect(collect, root);
     const auto before = nodes_.size();
+    for (const auto* node : removed) {
+        if (node->id == 0U || node->id > native_id_index_.size()) continue;
+        native_id_index_[node->id - 1U] = nullptr;
+    }
     std::erase_if(nodes_, [&](const auto& node) { return removed.contains(node.get()); });
+    while (!native_id_index_.empty() && native_id_index_.back() == nullptr) {
+        native_id_index_.pop_back();
+    }
     if (nodes_.size() != before) mark_dirty();
     return before - nodes_.size();
 }
 
 dom_node* native_document::find_by_native_id(uint32_t id) noexcept
 {
-    const auto match = std::find_if(nodes_.begin(), nodes_.end(), [id](const auto& node) {
-        return node->id == id;
-    });
-    return match == nodes_.end() ? nullptr : match->get();
+    if (id == 0U || id > native_id_index_.size()) return nullptr;
+    return native_id_index_[id - 1U];
 }
 
 dom_node* native_document::find_by_id(const std::string& id) noexcept
@@ -1286,6 +1295,7 @@ dom_node* native_document::hit_test_node(
 void native_document::clear()
 {
     nodes_.clear();
+    native_id_index_.clear();
     // A complete navigation invalidates every node, so no pooled allocation
     // remains live. Return all node chunks to the upstream allocator instead
     // of retaining the previous document's high-water mark.
@@ -5373,8 +5383,19 @@ bool native_document::dirty() const noexcept
     return dirty_;
 }
 
+uint64_t native_document::scene_generation() const noexcept
+{
+    return scene_generation_;
+}
+
+void native_document::mark_scene_changed() noexcept
+{
+    ++scene_generation_;
+}
+
 void native_document::mark_dirty() noexcept
 {
+    mark_scene_changed();
     dirty_ = true;
     globally_dirty_ = true;
     active_animation_demand_cache_valid_ = false;
@@ -5389,6 +5410,7 @@ void native_document::mark_out_of_flow_geometry_dirty(dom_node& node) noexcept
         mark_dirty();
         return;
     }
+    mark_scene_changed();
     dirty_ = true;
     if (globally_dirty_) return;
 

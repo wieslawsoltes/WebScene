@@ -123,7 +123,8 @@ internal static class NativeInteropRaceProbe
                 }
             }
 
-            var metrics = NativeWebSceneApi.GetInteropPoolMetrics(engine);
+            var metrics = await WaitForPoolDrainAsync(engine)
+                .ConfigureAwait(false);
             var correct =
                 faulted == 0
                 && succeeded + cancelled == checked(batches * width)
@@ -141,6 +142,8 @@ internal static class NativeInteropRaceProbe
                     faultExamples,
                     metrics.OutstandingResults,
                     metrics.ActiveOperationSlots,
+                    metrics.TakenResultLeases,
+                    metrics.OperationResultLeases,
                     correct
                 },
                 new JsonSerializerOptions { WriteIndented = true }));
@@ -169,6 +172,25 @@ internal static class NativeInteropRaceProbe
             }
         }
         return fallback;
+    }
+
+    private static async Task<NativeInteropPoolMetrics> WaitForPoolDrainAsync(
+        IntPtr engine)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        NativeInteropPoolMetrics metrics;
+        do
+        {
+            metrics = NativeWebSceneApi.GetInteropPoolMetrics(engine);
+            if (metrics.ActiveOperationSlots == 0
+                && metrics.OutstandingResults == 0)
+            {
+                return metrics;
+            }
+            await Task.Delay(1).ConfigureAwait(false);
+        }
+        while (DateTime.UtcNow < deadline);
+        return metrics;
     }
 
     private readonly struct DelayedCodec

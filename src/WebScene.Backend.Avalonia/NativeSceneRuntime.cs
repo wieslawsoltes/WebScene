@@ -1672,23 +1672,141 @@ internal static class NativeSceneResizeProjection
 }
 
 #if !WEBSCENE_UNO
-internal sealed unsafe class NativeSceneCompositionHandler(
-    IntPtr engine,
-    NativeSceneRenderObserver renderObserver,
-    NativeScenePublicationMailbox publicationMailbox,
-    NativeSceneUiWakeGate uiWakeGate,
-    Action scheduleUiWake)
-    : CompositionCustomVisualHandler
+internal readonly record struct NativeSceneDamage(
+    bool RequiresRender,
+    bool IsFull,
+    Rect Bounds,
+    int RectangleCount,
+    double SummedArea)
+{
+    public static NativeSceneDamage None => default;
+}
+
+internal static class NativeSceneDamagePolicy
 {
     private const uint SceneCheckpoint = 1;
     private const uint SceneDomReplacement = 2;
-    private readonly IntPtr _engine = engine;
+
+    public static NativeSceneDamage Evaluate(
+        in SceneHeader header,
+        ReadOnlySpan<NativeDamageRect> damageRects,
+        bool damageBufferValid,
+        bool viewportChanged,
+        Size effectiveSize)
+    {
+        var fullWidth = Math.Max(0, effectiveSize.Width);
+        var fullHeight = Math.Max(0, effectiveSize.Height);
+        var fullBounds = new Rect(0, 0, fullWidth, fullHeight);
+        var fullArea = fullWidth * fullHeight;
+        var declaredDamageCount = header.DamageRectCount <= int.MaxValue
+            ? (int)header.DamageRectCount
+            : -1;
+        var hasUnspecifiedVisualChange =
+            header.CanvasLayerCount != 0
+            || (header.Flags & SceneDomReplacement) != 0;
+
+        if ((header.Flags & SceneCheckpoint) != 0
+            || viewportChanged
+            || header.ViewportWidth <= 0
+            || header.ViewportHeight <= 0
+            || !damageBufferValid
+            || declaredDamageCount < 0
+            || damageRects.Length != declaredDamageCount
+            || (declaredDamageCount == 0 && hasUnspecifiedVisualChange))
+        {
+            return new NativeSceneDamage(
+                RequiresRender: fullArea > 0,
+                IsFull: true,
+                fullBounds,
+                RectangleCount: fullArea > 0 ? 1 : 0,
+                SummedArea: fullArea);
+        }
+
+        // An empty incremental diff is a producer/consumer synchronization
+        // point, not visual damage.
+        if (damageRects.IsEmpty)
+        {
+            return NativeSceneDamage.None;
+        }
+
+        var scale = NativeSceneResizeProjection.GetScale(
+            fullWidth,
+            fullHeight,
+            header.ViewportWidth,
+            header.ViewportHeight);
+        var hasDamage = false;
+        var damageLeft = double.PositiveInfinity;
+        var damageTop = double.PositiveInfinity;
+        var damageRight = double.NegativeInfinity;
+        var damageBottom = double.NegativeInfinity;
+        var rectangleCount = 0;
+        double summedArea = 0;
+        foreach (ref readonly var item in damageRects)
+        {
+            if (!float.IsFinite(item.X)
+                || !float.IsFinite(item.Y)
+                || !float.IsFinite(item.Width)
+                || !float.IsFinite(item.Height))
+            {
+                return new NativeSceneDamage(
+                    RequiresRender: fullArea > 0,
+                    IsFull: true,
+                    fullBounds,
+                    RectangleCount: fullArea > 0 ? 1 : 0,
+                    SummedArea: fullArea);
+            }
+
+            var left = Math.Max(0, item.X * scale.X);
+            var top = Math.Max(0, item.Y * scale.Y);
+            var right = Math.Min(fullWidth, (item.X + item.Width) * scale.X);
+            var bottom = Math.Min(fullHeight, (item.Y + item.Height) * scale.Y);
+            if (right <= left || bottom <= top)
+            {
+                continue;
+            }
+
+            rectangleCount++;
+            summedArea += (right - left) * (bottom - top);
+            damageLeft = Math.Min(damageLeft, left);
+            damageTop = Math.Min(damageTop, top);
+            damageRight = Math.Max(damageRight, right);
+            damageBottom = Math.Max(damageBottom, bottom);
+            hasDamage = true;
+        }
+
+        if (!hasDamage)
+        {
+            return new NativeSceneDamage(
+                RequiresRender: fullArea > 0,
+                IsFull: true,
+                fullBounds,
+                RectangleCount: fullArea > 0 ? 1 : 0,
+                SummedArea: fullArea);
+        }
+
+        return new NativeSceneDamage(
+            RequiresRender: true,
+            IsFull: false,
+            new Rect(
+                damageLeft,
+                damageTop,
+                damageRight - damageLeft,
+                damageBottom - damageTop),
+            rectangleCount,
+            summedArea);
+    }
+}
+
+internal sealed unsafe class NativeSceneCompositionHandler
+    : CompositionCustomVisualHandler
+{
+    private readonly IntPtr _engine;
     private readonly NativeCanvasSceneRenderer _renderer = new();
-    private readonly NativeSceneRenderObserver _renderObserver = renderObserver;
-    private readonly NativeScenePublicationMailbox _publicationMailbox =
-        publicationMailbox;
-    private readonly NativeSceneUiWakeGate _uiWakeGate = uiWakeGate;
-    private readonly Action _scheduleUiWake = scheduleUiWake;
+    private readonly NativeSceneRenderObserver _renderObserver;
+    private readonly NativeScenePublicationMailbox _publicationMailbox;
+    private readonly NativeSceneUiWakeGate _uiWakeGate;
+    private readonly Action _scheduleUiWake;
+    private readonly Func<SKRect, bool> _renderClipIntersects;
     private ulong _appliedRevision;
     private float _viewportWidth;
     private float _viewportHeight;
@@ -1697,6 +1815,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
     private int _renderRequested;
     private long _liveResizeFrameDeadlineTimestamp;
     private bool _hasPendingRenderMetrics;
+    private NativeSceneDamage _pendingDamage;
     private SceneHeader _pendingRenderHeader;
     private long _pendingDiffApplyTicks;
     private long _pendingDiffCanvasCommandCount;
@@ -1716,6 +1835,21 @@ internal sealed unsafe class NativeSceneCompositionHandler(
     public static long SkippedEmptyAnimationFrameCount;
     public static int LastAnimationFrameDemand;
 
+    public NativeSceneCompositionHandler(
+        IntPtr engine,
+        NativeSceneRenderObserver renderObserver,
+        NativeScenePublicationMailbox publicationMailbox,
+        NativeSceneUiWakeGate uiWakeGate,
+        Action scheduleUiWake)
+    {
+        _engine = engine;
+        _renderObserver = renderObserver;
+        _publicationMailbox = publicationMailbox;
+        _uiWakeGate = uiWakeGate;
+        _scheduleUiWake = scheduleUiWake;
+        _renderClipIntersects = NativeBoundsIntersectsRenderClip;
+    }
+
     public override void OnMessage(object message)
     {
         if (message is not NativeSceneCompositionMessage command)
@@ -1730,7 +1864,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                 _running = true;
                 RegisterForNextAnimationFrameUpdate();
             }
-            if (!_manualFrames && _publicationMailbox.PendingCount > 0)
+            if (!_manualFrames && HasPendingPresentation)
             {
                 RequestRenderIfNeeded();
             }
@@ -1740,7 +1874,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         if (command == NativeSceneCompositionMessage.SceneWake)
         {
             _uiWakeGate.Complete();
-            if (!_manualFrames && _publicationMailbox.PendingCount > 0)
+            if (!_manualFrames && HasPendingPresentation)
             {
                 RequestRenderIfNeeded();
             }
@@ -1751,9 +1885,9 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         {
             // This message exists specifically for the OS's nested live-resize
             // loop, where ordinary animation callbacks may be paused and
-            // _running is therefore false. Always invalidate so the synchronous
-            // composition render can acquire, acknowledge, and paint the next
-            // cooperatively published scene.
+            // _running is therefore false. Acquire the cooperatively published
+            // scene here and invalidate its damage so the nested composition
+            // render can paint it immediately.
             // SizeChanged has already paired the accepted viewport with a host
             // RAF. Suppress the composition clock's duplicate RAF briefly so
             // the producer does not build two scenes for one display boundary.
@@ -1818,6 +1952,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         Interlocked.Exchange(ref _renderRequested, 0);
         Interlocked.Exchange(ref _liveResizeFrameDeadlineTimestamp, 0);
         _hasPendingRenderMetrics = false;
+        _pendingDamage = NativeSceneDamage.None;
     }
 
     public override void OnAnimationFrameUpdate()
@@ -1851,7 +1986,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
             Interlocked.Increment(
                 ref SuppressedLiveResizeAnimationFrameCount);
         }
-        if (_publicationMailbox.PendingCount > 0)
+        if (HasPendingPresentation)
         {
             RequestRenderIfNeeded();
         }
@@ -1864,12 +1999,29 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         {
             return;
         }
+
+        var damage = _pendingDamage;
+        if (!_hasPendingRenderMetrics
+            && (!TryAcquireNextDiff(out damage) || !damage.RequiresRender))
+        {
+            Interlocked.Exchange(ref _renderRequested, 0);
+            return;
+        }
+
         Interlocked.Increment(ref InvalidationCallCount);
-        Invalidate();
+        if (damage.IsFull)
+        {
+            Invalidate();
+        }
+        else
+        {
+            Invalidate(damage.Bounds);
+        }
     }
 
-    private bool AcquireAndInvalidateNextDiff()
+    private bool TryAcquireNextDiff(out NativeSceneDamage damage)
     {
+        damage = NativeSceneDamage.None;
         var scene = NativeWebSceneApi.EngineAcquireNextScene(_engine);
         if (scene == IntPtr.Zero)
         {
@@ -1886,15 +2038,12 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                 return false;
             }
 
-            // The publication callback already invalidated this visual. Apply
-            // the immutable diff in that render slot and draw it below. Asking
-            // Avalonia to invalidate again from inside OnRender creates an empty
-            // render a few milliseconds later, then defers the next visual frame
-            // to the following compositor turn (a visible 2/30 ms cadence).
-            // The counted publication signal is consumed with this scene. If
-            // Avalonia coalesced two publication invalidations, the remaining
-            // count asks the next host frame to drain exactly one more diff
-            // without scheduling an empty render.
+            // Apply the immutable diff before invalidating so Avalonia receives
+            // the native scene's precise damage bounds. Acquiring from OnRender
+            // would make the current render clip too broad and require a second
+            // empty invalidation to present the retained scene. The counted
+            // publication signal is consumed with this scene; an additional
+            // publication is drained on the next host frame.
             var header = view->Header;
             var applyStarted = Stopwatch.GetTimestamp();
             var applied = _renderer.ApplyDiff(view);
@@ -1906,13 +2055,14 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                     || Math.Abs(_viewportHeight - header.ViewportHeight) > 0.01f;
                 _viewportWidth = header.ViewportWidth;
                 _viewportHeight = header.ViewportHeight;
-                var invalidated = InvalidateDamage(view, viewportChanged);
+                damage = EvaluateDamage(view, viewportChanged);
                 NativeWebSceneApi.SceneAcknowledge(scene);
                 _appliedRevision = header.Revision;
                 _appliedDiffs++;
                 Interlocked.Increment(ref AppliedDiffCount);
-                if (invalidated)
+                if (damage.RequiresRender)
                 {
+                    _pendingDamage = damage;
                     _pendingRenderHeader = header;
                     _pendingDiffApplyTicks += diffApplyTicks;
                     _pendingDiffCanvasCommandCount += view->CanvasCommandCount;
@@ -1928,87 +2078,49 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         return accepted;
     }
 
-    private bool InvalidateDamage(NativeSceneView* view, bool viewportChanged)
+    private NativeSceneDamage EvaluateDamage(
+        NativeSceneView* view,
+        bool viewportChanged)
     {
         var header = view->Header;
         var effective = EffectiveSize;
-        var fullWidth = Math.Max(0, effective.X);
-        var fullHeight = Math.Max(0, effective.Y);
-        var fullArea = (double)fullWidth * fullHeight;
+        var fullArea =
+            (double)Math.Max(0, effective.X) * Math.Max(0, effective.Y);
         _viewportArea += fullArea;
         _changedLayers += header.CanvasLayerCount;
 
-        if ((header.Flags & (SceneCheckpoint | SceneDomReplacement)) != 0
-            || viewportChanged
-            || (header.CanvasLayerCount != 0 && header.DamageRectCount == 0)
-            || (header.DamageRectCount != 0 && view->DamageRects == null)
-            || header.ViewportWidth <= 0
-            || header.ViewportHeight <= 0)
+        var damageBufferValid =
+            header.DamageRectCount <= int.MaxValue
+            && (header.DamageRectCount == 0 || view->DamageRects != null);
+        var damageRects = damageBufferValid
+            ? new ReadOnlySpan<NativeDamageRect>(
+                view->DamageRects,
+                checked((int)header.DamageRectCount))
+            : ReadOnlySpan<NativeDamageRect>.Empty;
+        var damage = NativeSceneDamagePolicy.Evaluate(
+            in header,
+            damageRects,
+            damageBufferValid,
+            viewportChanged,
+            new Size(effective.X, effective.Y));
+
+        _damageRectangles += damage.RectangleCount;
+        _damageArea += damage.SummedArea;
+        if (damage.IsFull && damage.RequiresRender)
         {
-            _damageRectangles++;
-            _damageArea += fullArea;
             Interlocked.Increment(ref FullInvalidationCount);
-            return true;
         }
-
-        // An empty incremental diff is a producer/consumer synchronization
-        // point, not visual damage. Acknowledge it without making Avalonia and
-        // Skia repaint the entire surface. Dynamic documents emit these while their
-        // requestAnimationFrame loop is alive but retained DOM/canvas output is
-        // unchanged.
-        if (header.DamageRectCount == 0)
+        else if (damage.RequiresRender)
         {
-            return false;
+            Interlocked.Add(ref DamageRectangleCount, damage.RectangleCount);
         }
-
-        var scale = NativeSceneResizeProjection.GetScale(
-            fullWidth,
-            fullHeight,
-            header.ViewportWidth,
-            header.ViewportHeight);
-        var hasDamage = false;
-        var damageLeft = double.PositiveInfinity;
-        var damageTop = double.PositiveInfinity;
-        var damageRight = double.NegativeInfinity;
-        var damageBottom = double.NegativeInfinity;
-        var damage = new ReadOnlySpan<NativeDamageRect>(
-            view->DamageRects,
-            checked((int)header.DamageRectCount));
-        foreach (ref readonly var item in damage)
-        {
-            var left = Math.Max(0, item.X * scale.X);
-            var top = Math.Max(0, item.Y * scale.Y);
-            var right = Math.Min(fullWidth, (item.X + item.Width) * scale.X);
-            var bottom = Math.Min(fullHeight, (item.Y + item.Height) * scale.Y);
-            if (right <= left || bottom <= top)
-            {
-                continue;
-            }
-
-            var rect = new Rect(left, top, right - left, bottom - top);
-            _damageRectangles++;
-            _damageArea += rect.Width * rect.Height;
-            Interlocked.Increment(ref DamageRectangleCount);
-            damageLeft = Math.Min(damageLeft, rect.Left);
-            damageTop = Math.Min(damageTop, rect.Top);
-            damageRight = Math.Max(damageRight, rect.Right);
-            damageBottom = Math.Max(damageBottom, rect.Bottom);
-            hasDamage = true;
-        }
-
-        if (!hasDamage)
-        {
-            _damageRectangles++;
-            _damageArea += fullArea;
-            Interlocked.Increment(ref FullInvalidationCount);
-            return true;
-        }
-        return true;
+        return damage;
     }
 
     public override void OnRender(ImmediateDrawingContext drawingContext)
     {
-        Interlocked.Exchange(ref _renderRequested, 0);
+        var requestedByWebScene =
+            Interlocked.Exchange(ref _renderRequested, 0) != 0;
         var renderStarted = Stopwatch.GetTimestamp();
         long retainedDrawTicks = 0;
         long skiaSubmitTicks = 0;
@@ -2016,9 +2128,14 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         if (drawingContext.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature))
                 is not ISkiaSharpApiLeaseFeature feature)
         {
-            // Do not consume and acknowledge an ordered diff when this
-            // compositor callback has no drawable Skia surface. Keep the
-            // publication pending for the next valid render slot.
+            // Scene acquisition now precedes invalidation so Avalonia can use
+            // native damage. Preserve the applied retained scene and retry its
+            // presentation on the next compositor boundary if this callback
+            // has no drawable Skia surface.
+            if (!_running)
+            {
+                _scheduleUiWake();
+            }
             return;
         }
 
@@ -2029,7 +2146,11 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         // keeps the producer's bounded ordered back-pressure moving and
         // makes every presented resize frame use real DOM layout, not a stretched
         // or mouse-up-delayed snapshot.
-        if (AcquireAndInvalidateNextDiff())
+        if (!requestedByWebScene
+            && !_running
+            && !_manualFrames
+            && _publicationMailbox.PendingCount > 0
+            && TryAcquireNextDiff(out _))
         {
             Interlocked.Increment(ref SynchronousRenderAcquisitionCount);
         }
@@ -2064,11 +2185,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                 canvas,
                 _viewportWidth,
                 _viewportHeight,
-                bounds => NativeBoundsIntersectsRenderClip(new Rect(
-                    bounds.Left,
-                    bounds.Top,
-                    bounds.Width,
-                    bounds.Height)));
+                _renderClipIntersects);
             retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
         }
         finally
@@ -2089,6 +2206,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
                 _renderer.TotalCommandCount);
             _renderObserver.RecordRendered(_pendingRenderHeader);
             _hasPendingRenderMetrics = false;
+            _pendingDamage = NativeSceneDamage.None;
             _pendingDiffApplyTicks = 0;
             _pendingDiffCanvasCommandCount = 0;
             if (_appliedDiffs % 300 == 0)
@@ -2126,7 +2244,7 @@ internal sealed unsafe class NativeSceneCompositionHandler(
         }
     }
 
-    private bool NativeBoundsIntersectsRenderClip(Rect nativeBounds)
+    private bool NativeBoundsIntersectsRenderClip(SKRect nativeBounds)
     {
         if (_viewportWidth <= 0 || _viewportHeight <= 0)
         {
@@ -2139,14 +2257,18 @@ internal sealed unsafe class NativeSceneCompositionHandler(
             _viewportWidth,
             _viewportHeight);
         return RenderClipIntersectes(new Rect(
-            nativeBounds.X * scale.X,
-            nativeBounds.Y * scale.Y,
+            nativeBounds.Left * scale.X,
+            nativeBounds.Top * scale.Y,
             nativeBounds.Width * scale.X,
             nativeBounds.Height * scale.Y));
     }
 
     public override Rect GetRenderBounds()
         => new(0, 0, EffectiveSize.X, EffectiveSize.Y);
+
+    private bool HasPendingPresentation
+        => _hasPendingRenderMetrics
+            || _publicationMailbox.PendingCount > 0;
 
     private static bool ValidateView(NativeSceneView* view)
         => view != null
@@ -2532,6 +2654,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private const uint LayerRemove = 2;
 
     private readonly Dictionary<uint, RetainedLayer> s_layers = new();
+    private readonly List<RetainedLayer> s_orderedLayers = [];
     private readonly Dictionary<StringKey, string> s_strings = new();
     private readonly Dictionary<string, SKTypeface> s_typefaces = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
@@ -2629,6 +2752,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 s_domCommandCount = header.CommandCount;
             }
 
+            var layerOrderChanged = false;
             var changes = new ReadOnlySpan<NativeCanvasLayer>(
                 view->CanvasLayers,
                 checked((int)header.CanvasLayerCount));
@@ -2640,6 +2764,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     {
                         s_totalCommandCount -= removed.CommandCount;
                         removed.Dispose();
+                        layerOrderChanged = true;
                     }
                     continue;
                 }
@@ -2648,13 +2773,22 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     return false;
                 }
                 var replacement = CompileLayer(view, change);
+                var orderChanged = true;
                 if (s_layers.Remove(change.NodeId, out var previous))
                 {
+                    orderChanged =
+                        previous.ZOrder != replacement.ZOrder
+                        || !ReplaceOrderedLayer(previous, replacement);
                     s_totalCommandCount -= previous.CommandCount;
                     previous.Dispose();
                 }
                 s_layers[change.NodeId] = replacement;
                 s_totalCommandCount += replacement.CommandCount;
+                layerOrderChanged |= orderChanged;
+            }
+            if (layerOrderChanged)
+            {
+                RebuildLayerOrder();
             }
             s_revision = header.Revision;
         }
@@ -2673,7 +2807,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             canvas.DrawPicture(s_domBackdropPicture);
         }
-        foreach (var layer in s_layers.Values.OrderBy(static value => value.ZOrder))
+        foreach (var layer in s_orderedLayers)
         {
             if (layer.Width <= 0 || layer.Height <= 0
                 || layer.BitmapWidth == 0 || layer.BitmapHeight == 0)
@@ -4007,6 +4141,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         s_domCommandCount = 0;
         foreach (var layer in s_layers.Values) layer.Dispose();
         s_layers.Clear();
+        s_orderedLayers.Clear();
         foreach (var typeface in s_typefaces.Values) typeface.Dispose();
         s_typefaces.Clear();
         foreach (var svg in s_svgPictures.Values) svg.Dispose();
@@ -4014,6 +4149,35 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         s_strings.Clear();
         s_revision = 0;
         s_totalCommandCount = 0;
+    }
+
+    private void RebuildLayerOrder()
+    {
+        s_orderedLayers.Clear();
+        s_orderedLayers.AddRange(s_layers.Values);
+        s_orderedLayers.Sort(static (left, right) =>
+        {
+            var zOrder = left.ZOrder.CompareTo(right.ZOrder);
+            return zOrder != 0
+                ? zOrder
+                : left.NodeId.CompareTo(right.NodeId);
+        });
+    }
+
+    private bool ReplaceOrderedLayer(
+        RetainedLayer previous,
+        RetainedLayer replacement)
+    {
+        for (var index = 0; index < s_orderedLayers.Count; index++)
+        {
+            if (!ReferenceEquals(s_orderedLayers[index], previous))
+            {
+                continue;
+            }
+            s_orderedLayers[index] = replacement;
+            return true;
+        }
+        return false;
     }
 
     private readonly record struct StringKey(uint NodeId, ulong Generation, uint Index);
@@ -4496,6 +4660,8 @@ public struct NativeInteropPoolMetrics
     public ulong PooledResultBytes64K;
     public ulong PooledResultBytes256K;
     public ulong PooledResultBytes1M;
+    public ulong TakenResultLeases;
+    public ulong OperationResultLeases;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -4739,6 +4905,8 @@ internal struct EngineOptions
     public IntPtr TextMeasureUserData;
     public IntPtr HostRequestAvailableCallback;
     public IntPtr HostRequestAvailableUserData;
+    public IntPtr InteropCallbackAvailableCallback;
+    public IntPtr InteropCallbackAvailableUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -5086,6 +5254,10 @@ public static unsafe class NativeWebSceneApi
         NotifyHostRequestAvailable;
     private static readonly IntPtr HostRequestAvailableAddress =
         Marshal.GetFunctionPointerForDelegate(HostRequestAvailable);
+    private static readonly InteropCallbackAvailableCallback InteropCallbackAvailable =
+        NotifyInteropCallbackAvailable;
+    private static readonly IntPtr InteropCallbackAvailableAddress =
+        Marshal.GetFunctionPointerForDelegate(InteropCallbackAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -5136,7 +5308,8 @@ public static unsafe class NativeWebSceneApi
         string? compilationCacheDirectory,
         IWebSceneResourceLoader resourceLoader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable = null)
+        Action? hostRequestAvailable = null,
+        Action? interopCallbackAvailable = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -5144,7 +5317,11 @@ public static unsafe class NativeWebSceneApi
             ? []
             : Encoding.UTF8.GetBytes(compilationCacheDirectory);
         var bridgeHandle = GCHandle.Alloc(
-            new ResourceBridge(resourceLoader, scenePublished, hostRequestAvailable));
+            new ResourceBridge(
+                resourceLoader,
+                scenePublished,
+                hostRequestAvailable,
+                interopCallbackAvailable));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -5165,6 +5342,12 @@ public static unsafe class NativeWebSceneApi
                         ? IntPtr.Zero
                         : HostRequestAvailableAddress,
                     HostRequestAvailableUserData = hostRequestAvailable is null
+                        ? IntPtr.Zero
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    InteropCallbackAvailableCallback = interopCallbackAvailable is null
+                        ? IntPtr.Zero
+                        : InteropCallbackAvailableAddress,
+                    InteropCallbackAvailableUserData = interopCallbackAvailable is null
                         ? IntPtr.Zero
                         : GCHandle.ToIntPtr(bridgeHandle)
                 };
@@ -5250,6 +5433,9 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void HostRequestAvailableCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void InteropCallbackAvailableCallback(IntPtr userData);
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -5261,6 +5447,20 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native host request notification] {error}");
+        }
+    }
+
+    private static void NotifyInteropCallbackAvailable(IntPtr userData)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyInteropCallbackAvailable();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene native interop callback notification] {error}");
         }
     }
 
@@ -5367,7 +5567,8 @@ public static unsafe class NativeWebSceneApi
     private sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
-        Action? hostRequestAvailable)
+        Action? hostRequestAvailable,
+        Action? interopCallbackAvailable)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
@@ -5380,6 +5581,9 @@ public static unsafe class NativeWebSceneApi
 
         public void NotifyHostRequestAvailable()
             => hostRequestAvailable?.Invoke();
+
+        public void NotifyInteropCallbackAvailable()
+            => interopCallbackAvailable?.Invoke();
 
         public nuint Copy(
             uint kind,

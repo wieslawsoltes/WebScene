@@ -257,6 +257,51 @@ void test_document_clear_releases_and_reinitializes_node_pool()
     }
 }
 
+void test_native_id_lookup_tracks_creation_erasure_and_clear()
+{
+    webscene_native::native_document document;
+    auto& retained = document.create_element("div");
+    auto& detached_root = document.create_element("section");
+    auto& detached_child = document.create_element("span");
+    const auto retained_id = retained.id;
+    const auto detached_root_id = detached_root.id;
+    const auto detached_child_id = detached_child.id;
+
+    require(
+        document.append_child(document.body(), retained)
+            && document.append_child(detached_root, detached_child),
+        "native-id fixture could not build its retained and detached trees");
+    require(
+        document.find_by_native_id(retained_id) == &retained
+            && document.find_by_native_id(detached_root_id) == &detached_root
+            && document.find_by_native_id(detached_child_id) == &detached_child,
+        "native-id direct index did not resolve newly-created nodes");
+
+    require(
+        document.erase_detached_subtree(detached_root) == 2,
+        "native-id fixture did not erase its detached subtree");
+    require(
+        document.find_by_native_id(retained_id) == &retained
+            && document.find_by_native_id(detached_root_id) == nullptr
+            && document.find_by_native_id(detached_child_id) == nullptr,
+        "native-id direct index retained erased subtree pointers");
+
+    auto& later = document.create_element("button");
+    const auto later_id = later.id;
+    require(
+        later_id > detached_child_id
+            && document.find_by_native_id(later_id) == &later,
+        "native-id direct index did not preserve monotonic sparse IDs");
+
+    document.clear();
+    require(
+        document.body().id == 1
+            && document.find_by_native_id(1) == &document.body()
+            && document.find_by_native_id(retained_id) == nullptr
+            && document.find_by_native_id(later_id) == nullptr,
+        "native-id direct index was not reset with its document");
+}
+
 void test_compact_attribute_collection_preserves_map_semantics()
 {
     webscene_native::attribute_collection left;
@@ -1529,6 +1574,67 @@ void test_binary_interop_stress_when_requested(webscene_engine* engine)
             && metrics.high_water_outstanding_results
                 >= retained_lease_count,
         "binary interop stress violated pool bounds or leaked a lease");
+}
+
+void notify_interop_callback_test(void* user_data)
+{
+    static_cast<std::atomic<uint32_t>*>(user_data)
+        ->fetch_add(1U, std::memory_order_relaxed);
+}
+
+void test_interop_callback_notification()
+{
+    struct previous_engine_options final {
+        uint32_t struct_size;
+        uint32_t simulated_chart_command_count;
+        const char* compilation_cache_directory;
+        size_t compilation_cache_directory_length;
+        webscene_resource_load_callback resource_load_callback;
+        void* resource_load_user_data;
+        webscene_scene_published_callback scene_published_callback;
+        void* scene_published_user_data;
+        webscene_text_measure_callback text_measure_callback;
+        void* text_measure_user_data;
+        webscene_host_request_available_callback host_request_available_callback;
+        void* host_request_available_user_data;
+    };
+    static_assert(
+        sizeof(previous_engine_options)
+        == offsetof(
+            webscene_engine_options,
+            interop_callback_available_callback));
+    previous_engine_options previous_options{};
+    previous_options.struct_size = sizeof(previous_engine_options);
+    auto* previous_engine = webscene_engine_create_with_options(
+        reinterpret_cast<const webscene_engine_options*>(&previous_options));
+    require(
+        previous_engine != nullptr,
+        "interop callback ABI rejected the previous engine options tail");
+    webscene_engine_destroy(previous_engine);
+
+    std::atomic<uint32_t> notifications{0U};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(webscene_engine_options);
+    options.interop_callback_available_callback =
+        notify_interop_callback_test;
+    options.interop_callback_available_user_data = &notifications;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "interop callback notification engine creation failed");
+
+    require(
+        evaluate(
+            engine,
+            "(() => {"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "__webSceneNotifyInteropCallbackAvailable();"
+            "return true;"
+            "})()",
+            "native-interop-callback-notification.js") == "true",
+        "native interop callback notification script did not complete");
+    require(
+        notifications.load(std::memory_order_relaxed) == 2U,
+        "native interop callback notification did not reach the host");
+    webscene_engine_destroy(engine);
 }
 
 uint64_t consumed_input_count(webscene_engine* engine)
@@ -8855,6 +8961,87 @@ void test_scene_flow_is_attributed()
     webscene_engine_destroy(engine);
 }
 
+void test_read_only_evaluation_does_not_publish_scene()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "read-only evaluation engine creation failed");
+    execute_and_wait(
+        engine,
+        "document.body.textContent = 'ready'",
+        "read-only-evaluation-setup.js");
+
+    const webscene_scene_view* initial = nullptr;
+    for (auto attempt = 0; attempt < 100 && initial == nullptr; ++attempt) {
+        initial = webscene_engine_acquire_latest_scene(engine);
+        if (initial == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(initial != nullptr, "read-only evaluation fixture had no initial scene");
+    require(
+        webscene_scene_acknowledge(initial) != 0,
+        "read-only evaluation fixture could not acknowledge its initial scene");
+    webscene_scene_release(initial);
+
+    webscene_engine_metrics baseline{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* pending = webscene_engine_acquire_latest_scene(engine);
+        if (pending != nullptr) {
+            webscene_scene_acknowledge(pending);
+            webscene_scene_release(pending);
+        }
+        webscene_engine_get_metrics(engine, &baseline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        webscene_engine_metrics settled{};
+        webscene_engine_get_metrics(engine, &settled);
+        if (settled.published_scenes == baseline.published_scenes) {
+            baseline = settled;
+            break;
+        }
+    }
+    require(
+        evaluate(engine, "1 + 1", "read-only-evaluation.js") == "2",
+        "read-only evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    webscene_engine_metrics after_read{};
+    webscene_engine_get_metrics(engine, &after_read);
+    if (after_read.published_scenes != baseline.published_scenes) {
+        fail(
+            "read-only evaluation published an unchanged scene: before="
+            + std::to_string(baseline.published_scenes)
+            + ", after=" + std::to_string(after_read.published_scenes));
+    }
+
+    require(
+        evaluate(
+            engine,
+            "setTimeout(() => {}, 0); true",
+            "non-visual-task-evaluation.js") == "true",
+        "non-visual task evaluation returned the wrong value");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    webscene_engine_get_metrics(engine, &after_read);
+    require(
+        after_read.published_scenes == baseline.published_scenes,
+        "a completed non-visual task published an unchanged scene");
+
+    require(
+        evaluate(
+            engine,
+            "document.body.textContent = 'changed'; true",
+            "mutating-evaluation.js") == "true",
+        "mutating evaluation returned the wrong value");
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        webscene_engine_get_metrics(engine, &after_read);
+        if (after_read.published_scenes > baseline.published_scenes) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after_read.published_scenes == baseline.published_scenes + 1U,
+        "mutating evaluation did not publish its dirty scene");
+    webscene_engine_destroy(engine);
+}
+
 void test_ordered_scene_consumer_preserves_two_diff_chain()
 {
     auto* engine = webscene_engine_create(64);
@@ -10354,6 +10541,7 @@ int main()
         "ordinary build unexpectedly advertised certification telemetry");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    test_interop_callback_notification();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
@@ -10361,6 +10549,7 @@ int main()
     test_textual_style_state_is_cold_and_copy_on_write();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
     test_document_clear_releases_and_reinitializes_node_pool();
+    test_native_id_lookup_tracks_creation_erasure_and_clear();
     test_compact_attribute_collection_preserves_map_semantics();
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
@@ -10477,6 +10666,7 @@ int main()
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
     test_scene_flow_is_attributed();
+    test_read_only_evaluation_does_not_publish_scene();
     test_ordered_scene_consumer_preserves_two_diff_chain();
     test_keyboard_and_pointer_focus_modality();
     test_navigator_platform_and_wheel_modifiers(engine);

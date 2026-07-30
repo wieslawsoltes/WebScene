@@ -18,7 +18,7 @@
     <PackageTags>webscene;web-components;dom;css;canvas;svg;v8;native;runtime;$(WebSceneNativeEngineRid)</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <WebSceneNativeEngineAbiVersion>3</WebSceneNativeEngineAbiVersion>
-    <WebSceneNativeEngineV8Revision>14.7.173.23</WebSceneNativeEngineV8Revision>
+    <WebSceneNativeEngineV8Revision>15.3.10</WebSceneNativeEngineV8Revision>
     <WebSceneNativeEngineV8PointerCompression Condition="'$(WebSceneNativeEngineV8PointerCompression)' == ''">false</WebSceneNativeEngineV8PointerCompression>
     <WebSceneNativeEngineV8SharedCage Condition="'$(WebSceneNativeEngineV8SharedCage)' == ''">false</WebSceneNativeEngineV8SharedCage>
     <WebSceneNativeEngineV8OptimizeForSizeDefault Condition="'$(WebSceneNativeEngineV8OptimizeForSizeDefault)' == ''">false</WebSceneNativeEngineV8OptimizeForSizeDefault>

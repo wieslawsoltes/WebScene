@@ -8,8 +8,11 @@
 #include <v8-profiler.h>
 
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
+#include "partition_alloc/buildflags.h"
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #include "partition_alloc/partition_root.h"
 #include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
+#endif
 #endif
 
 #include <algorithm>
@@ -1029,6 +1032,7 @@ void initialize_v8_process()
 {
     std::call_once(v8_initialize_once, [] {
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
         // Standalone V8's d8 shell performs this initialization before
         // entering V8. Without it, PartitionAlloc's process root has no
         // thread cache and allocation-heavy multi-context resize becomes
@@ -1052,6 +1056,7 @@ void initialize_v8_process()
         partition->AdjustSlotSpanRing(
             foreground_slot_span_ring_size,
             foreground_dirty_bytes_shift);
+#endif
 #endif
         bool optimize_for_size = false;
 #if defined(WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT)
@@ -2297,11 +2302,13 @@ struct v8_dom_runtime::implementation final {
         std::function<v8_dom_runtime::viewport_metrics()> viewport_provider_value,
         std::string compilation_cache_directory_value,
         resource_loader resource_loader_value,
-        std::function<void()> host_request_available_value)
+        std::function<void()> host_request_available_value,
+        std::function<void()> interop_callback_available_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
+        , interop_callback_available(std::move(interop_callback_available_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -2420,6 +2427,15 @@ struct v8_dom_runtime::implementation final {
             }
         }
         return static_cast<implementation*>(isolate->GetData(0));
+    }
+
+    static void notify_interop_callback_available(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr && self->interop_callback_available) {
+            self->interop_callback_available();
+        }
     }
 
     struct feature_observation final {
@@ -4860,6 +4876,12 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "open"),
             v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "requestAnimationFrame"),
@@ -13452,8 +13474,17 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    static void mark_canvas_scene_changed()
+    {
+        auto* self = current(v8::Isolate::GetCurrent());
+        if (self != nullptr) {
+            self->document.mark_scene_changed();
+        }
+    }
+
     static void advance_canvas_generation(dom_node& node)
     {
+        mark_canvas_scene_changed();
         auto& canvas = node.mutable_canvas();
         ++canvas.generation;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -14492,6 +14523,7 @@ struct v8_dom_runtime::implementation final {
         canvas_command_kind kind,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -14509,6 +14541,7 @@ struct v8_dom_runtime::implementation final {
         uint32_t resource_id,
         std::initializer_list<double> arguments = {})
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(kind);
         command.flags = static_cast<uint32_t>(arguments.size());
@@ -14525,6 +14558,7 @@ struct v8_dom_runtime::implementation final {
         dom_node& node,
         const std::vector<double>& segments)
     {
+        mark_canvas_scene_changed();
         webscene_canvas_command command{};
         command.kind = static_cast<uint32_t>(canvas_command_kind::set_line_dash);
         command.flags = static_cast<uint32_t>(segments.size() + 1U);
@@ -23707,6 +23741,12 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "AbortController"), v8::FunctionTemplate::New(isolate, abort_controller_constructor)->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "matchMedia"), v8::Function::New(local_context, match_media).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "open"), v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneNotifyInteropCallbackAvailable"),
+            v8::Function::New(
+                local_context,
+                notify_interop_callback_available).ToLocalChecked()).Check();
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -28178,6 +28218,7 @@ struct v8_dom_runtime::implementation final {
     std::mutex host_request_mutex;
     std::deque<std::string> host_requests;
     std::function<void()> host_request_available;
+    std::function<void()> interop_callback_available;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -28384,13 +28425,15 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<viewport_metrics()> viewport_provider,
     std::string compilation_cache_directory,
     resource_loader load_resource,
-    std::function<void()> host_request_available)
+    std::function<void()> host_request_available,
+    std::function<void()> interop_callback_available)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
         std::move(load_resource),
-        std::move(host_request_available)))
+        std::move(host_request_available),
+        std::move(interop_callback_available)))
 {
 }
 

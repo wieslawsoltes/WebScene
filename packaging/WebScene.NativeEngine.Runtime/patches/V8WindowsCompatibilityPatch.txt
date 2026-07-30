@@ -1,0 +1,75 @@
+diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
+index 1bf77351fa0..831d4f5e2f3 100644
+--- a/src/objects/js-interceptor-map.h
++++ b/src/objects/js-interceptor-map.h
+@@ -41,7 +41,8 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
+ 
+  public:
+   uint8_t flags_;
+-  uint8_t extended_padding_[kTaggedSize - 2];
++  // Include MSVC's alignment byte so tagged fields remain naturally aligned.
++  uint8_t extended_padding_[kTaggedSize - 1];
+   TaggedMember<InterceptorInfo> named_interceptor_;
+   TaggedMember<InterceptorInfo> indexed_interceptor_;
+   TaggedMember<Cell> fast_case_validity_cell_;
+diff --git a/src/objects/js-interceptor-map.tq b/src/objects/js-interceptor-map.tq
+index f351cb0fb0a..7fe0d494b24 100644
+--- a/src/objects/js-interceptor-map.tq
++++ b/src/objects/js-interceptor-map.tq
+@@ -9,8 +9,9 @@
+ @doNotGenerateCast
+ extern class JSInterceptorMap extends ExtendedMap {
+   flags: uint8;
+-  @ifnot(TAGGED_SIZE_8_BYTES) extended_padding[2]: uint8;
+-  @if(TAGGED_SIZE_8_BYTES) extended_padding[6]: uint8;
++  // Keep tagged fields naturally aligned in the Windows C++ layout.
++  @ifnot(TAGGED_SIZE_8_BYTES) extended_padding[3]: uint8;
++  @if(TAGGED_SIZE_8_BYTES) extended_padding[7]: uint8;
+   named_interceptor: InterceptorInfo;
+   indexed_interceptor: InterceptorInfo;
+   // This prototype validity cell guards modifications of the interceptor's
+diff --git a/src/objects/map.h b/src/objects/map.h
+index 594d4c7c79a..9be75a60e53 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -1288,7 +1288,13 @@ V8_ABSTRACT_OBJECT class ExtendedMap : public Map {
+   static const int kStartOfStrongExtendedFieldsOffset;
+ 
+   std::atomic<uint8_t> bit_field_ex_;
++#if V8_CC_MSVC
++  // Model the base-class tail padding materialized by the MSVC ABI so Torque
++  // and C++ agree where ExtendedMap subclasses begin.
++  uint8_t windows_padding_[kTaggedSize - 1];
++#else
+   // Leaves kTaggedSize-1 unused bytes, they will be used by subclasses.
++#endif
+ } V8_OBJECT_END;
+ 
+ constexpr int ExtendedMapSizeForKind(ExtendedMapKind kind);
+diff --git a/src/objects/map.tq b/src/objects/map.tq
+index cb85e7788e6..defb3b29320 100644
+--- a/src/objects/map.tq
++++ b/src/objects/map.tq
+@@ -116,7 +116,8 @@ bitfield struct ExtendedMapBitFields extends uint8 {
+ @doNotGenerateCast
+ extern class ExtendedMap extends Map {
+   bit_field_ex: ExtendedMapBitFields;
+-  // Leaves kTaggedSize-1 unused bytes, they will be used by subclasses.
++  // Match the tail padding materialized in the C++ base class by the MSVC ABI.
++  windows_padding[3]: uint8;
+ }
+ 
+ @export
+diff --git a/src/objects/backing-store.cc b/src/objects/backing-store.cc
+index 839acf15f16..30519dd7c19 100644
+--- a/src/objects/backing-store.cc
++++ b/src/objects/backing-store.cc
+@@ -323,7 +323,7 @@ std::unique_ptr<BackingStore> BackingStore::TryAllocateAndPartiallyCommitMemory(
+   // For accounting purposes, whether a GC was necessary.
+   bool did_retry = false;
+ 
+-  auto gc_retry = [&](const std::function<bool()>& fn) {
++  auto gc_retry = [&](base::FunctionRef<bool()> fn) {
+     if (fn()) return true;
+     // Collect garbage and retry.
+     did_retry = true;

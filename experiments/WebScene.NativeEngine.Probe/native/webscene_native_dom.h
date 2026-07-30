@@ -1171,6 +1171,8 @@ public:
     std::string first_attribute(const std::string& tag, const std::string& attribute) const;
     std::string describe_busiest_canvas() const;
     layout_rect busiest_canvas_layout() const noexcept;
+    uint64_t scene_generation() const noexcept;
+    void mark_scene_changed() noexcept;
     bool dirty() const noexcept;
     void mark_dirty() noexcept;
     void mark_out_of_flow_geometry_dirty(dom_node& node) noexcept;
@@ -1336,6 +1338,12 @@ private:
             .largest_required_pool_block = sizeof(dom_node)},
         &node_pool_upstream_};
     std::vector<node_pointer> nodes_;
+    // Native IDs are monotonically assigned and are used on hot event and
+    // detached-wrapper paths. Keep a sparse direct index rather than scanning
+    // every live allocation for each lookup. Detached tail entries are
+    // trimmed when possible so short-lived text-node churn does not retain an
+    // ever-growing pointer table.
+    std::vector<dom_node*> native_id_index_;
     dom_node* body_{nullptr};
     float viewport_width_{1};
     float viewport_height_{1};
@@ -1355,6 +1363,7 @@ private:
         text_measurement_key_hash> text_measurement_cache_;
     bool dirty_{true};
     bool globally_dirty_{true};
+    uint64_t scene_generation_{1};
     std::vector<dom_node*> out_of_flow_geometry_dirty_roots_;
 };
 

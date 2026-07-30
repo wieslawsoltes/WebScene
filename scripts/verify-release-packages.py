@@ -32,9 +32,9 @@ DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 NATIVE_V8_REVISIONS = {
     "osx-arm64": "15.3.10",
     "linux-x64": "15.3.10",
-    "win-x64": "14.7.173.23",
+    "win-x64": "15.3.10",
 }
-PARTITION_ALLOC_NATIVE_RIDS = {"osx-arm64"}
+PARTITION_ALLOC_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 REPOSITORY_URL = "https://github.com/wieslawsoltes/WebScene"
 REQUIRED_PACKAGE_TAGS = {"webscene", "web-components", "native-ui"}
 
