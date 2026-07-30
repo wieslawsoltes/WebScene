@@ -349,7 +349,7 @@ consumer_smoke_root="$repo_root/artifacts/native-engine-consumer-smoke"
 mkdir -p "$consumer_smoke_root"
 consumer_root="$(mktemp -d "$consumer_smoke_root/consumer.XXXXXX")"
 consumer_dir="$consumer_root/consumer"
-consumer_nuget_config="$consumer_root/NuGet.Config"
+consumer_nuget_config="$consumer_root/nuget.config"
 cmake -E copy_if_different \
   "$repo_root/packaging/WebScene.NativeEngine.Runtime/ConsumerSmoke.Directory.Packages.props" \
   "$consumer_root/Directory.Packages.props"

@@ -227,7 +227,7 @@ $consumerSmokeRoot = Join-Path $repoRoot "artifacts/native-engine-consumer-smoke
 New-Item -ItemType Directory -Force -Path $consumerSmokeRoot | Out-Null
 $consumerRoot = Join-Path $consumerSmokeRoot ("consumer-" + [Guid]::NewGuid().ToString("N"))
 $consumerDir = Join-Path $consumerRoot "consumer"
-$consumerNuGetConfig = Join-Path $consumerRoot "NuGet.Config"
+$consumerNuGetConfig = Join-Path $consumerRoot "nuget.config"
 $previousPackages = $env:NUGET_PACKAGES
 $env:NUGET_PACKAGES = Join-Path $consumerRoot "packages"
 try {
