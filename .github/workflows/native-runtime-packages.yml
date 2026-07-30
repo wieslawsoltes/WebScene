@@ -114,10 +114,10 @@ jobs:
           cpu: x64
           monolith: v8_monolith.lib
           script: windows
-          v8_revision: 14.7.173.23
-          partition_alloc: false
-          v8_configuration: Release
-          v8_cache_generation: v4-v8-14.7-stable
+          v8_revision: 15.3.10
+          partition_alloc: true
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v7-v8-15.3.10-pa-js-interceptor-layout
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -260,6 +260,8 @@ jobs:
           -PackageVersion '${{ needs.metadata.outputs.package-version }}' `
           -V8Root $v8Root `
           -V8Revision '${{ matrix.v8_revision }}' `
+          -UpstreamV8 `
+          -PartitionAlloc `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
@@ -371,7 +373,7 @@ jobs:
           rid: osx-arm64
         - os: ubuntu-latest
           rid: linux-x64
-        - os: windows-latest
+        - os: windows-2022
           rid: win-x64
     runs-on: ${{ matrix.os }}
     steps:

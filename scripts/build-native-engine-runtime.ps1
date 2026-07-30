@@ -100,6 +100,12 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
     if ($ThinLto) {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ThinLtoPatch.txt")
     }
+    if ($v8Revision -eq "15.3.10") {
+        # V8 15.3's generated JSInterceptorMap layout rounds the ExtendedMap
+        # prefix to kTaggedSize. clang-cl with the MSVC ABI reuses those tail
+        # bytes unless the derived C++ layout claims them explicitly.
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsJsInterceptorMapLayoutPatch.txt")
+    }
     if (-not $UpstreamV8) {
         Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
         Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")

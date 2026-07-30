@@ -1,0 +1,20 @@
+diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
+index 1620023..a46c44f 100644
+--- a/src/objects/js-interceptor-map.h
++++ b/src/objects/js-interceptor-map.h
+@@ -42,4 +42,15 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
+  public:
++#if V8_CC_MSVC
++  // Torque lays out ExtendedMap subclasses after
++  // RoundUp(sizeof(ExtendedMap), kTaggedSize). clang-cl's MSVC ABI otherwise
++  // reuses the three tail bytes after ExtendedMap::bit_field_ex_, shifting all
++  // JSInterceptorMap fields away from their generated offsets. Claim those
++  // logical base-class padding bytes explicitly in the derived layout.
++  //
++  // Remove this compatibility field when the pinned V8 revision contains the
++  // equivalent upstream Windows layout fix.
++  uint8_t extended_map_padding_[kTaggedSize - 1];
++#endif
+   uint8_t flags_;
+   uint8_t extended_padding_[kTaggedSize - 2];
+   TaggedMember<InterceptorInfo> named_interceptor_;
