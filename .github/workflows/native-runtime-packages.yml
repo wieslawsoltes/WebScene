@@ -121,9 +121,9 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v7-v8-15.3.10-pa-js-interceptor-layout
+          v8_cache_generation: v8-v8-15.3.10-pa-windows-compat
           v8_cache_script: scripts/build-native-engine-runtime.ps1
-          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsJsInterceptorMapLayoutPatch.txt
+          v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4

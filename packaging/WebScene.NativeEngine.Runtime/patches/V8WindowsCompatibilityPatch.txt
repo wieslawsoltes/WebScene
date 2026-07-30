@@ -60,3 +60,16 @@ index cb85e7788e6..defb3b29320 100644
  }
  
  @export
+diff --git a/src/objects/backing-store.cc b/src/objects/backing-store.cc
+index 839acf15f16..30519dd7c19 100644
+--- a/src/objects/backing-store.cc
++++ b/src/objects/backing-store.cc
+@@ -323,7 +323,7 @@ std::unique_ptr<BackingStore> BackingStore::TryAllocateAndPartiallyCommitMemory(
+   // For accounting purposes, whether a GC was necessary.
+   bool did_retry = false;
+ 
+-  auto gc_retry = [&](const std::function<bool()>& fn) {
++  auto gc_retry = [&](base::FunctionRef<bool()> fn) {
+     if (fn()) return true;
+     // Collect garbage and retry.
+     did_retry = true;
