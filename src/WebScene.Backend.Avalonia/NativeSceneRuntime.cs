@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
@@ -4946,6 +4947,10 @@ public static class NativeTextShaping
 
 public static unsafe class NativeWebSceneApi
 {
+    private const int EvaluationBufferSize = 1024 * 1024;
+    private static readonly ArrayPool<byte> EvaluationBufferPool =
+        ArrayPool<byte>.Create(EvaluationBufferSize, 8);
+
     private const string LibraryName = "webscene_native_engine";
     private static readonly object LibraryPathGate = new();
     private static readonly ConcurrentDictionary<IntPtr, GCHandle> EngineResourceBridges = new();
@@ -5542,23 +5547,30 @@ public static unsafe class NativeWebSceneApi
     {
         var sourceBytes = Encoding.UTF8.GetBytes(source);
         var nameBytes = Encoding.UTF8.GetBytes(documentName);
-        var destination = new byte[1024 * 1024];
-        var required = EngineEvaluateJson(
-            engine,
-            sourceBytes,
-            (nuint)sourceBytes.Length,
-            nameBytes,
-            (nuint)nameBytes.Length,
-            destination,
-            (nuint)destination.Length,
-            timeoutMilliseconds);
-        if (required == 0 || required > (nuint)destination.Length)
+        var destination = EvaluationBufferPool.Rent(EvaluationBufferSize);
+        try
         {
-            json = string.Empty;
-            return false;
+            var required = EngineEvaluateJson(
+                engine,
+                sourceBytes,
+                (nuint)sourceBytes.Length,
+                nameBytes,
+                (nuint)nameBytes.Length,
+                destination,
+                (nuint)destination.Length,
+                timeoutMilliseconds);
+            if (required == 0 || required > (nuint)destination.Length)
+            {
+                json = string.Empty;
+                return false;
+            }
+            json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
+            return true;
         }
-        json = Encoding.UTF8.GetString(destination, 0, checked((int)required - 1));
-        return true;
+        finally
+        {
+            EvaluationBufferPool.Return(destination);
+        }
     }
 
     public static bool TryTakeHostRequest(IntPtr engine, out string request)
