@@ -1541,6 +1541,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
     {
         var type = parameter.GetProperty("type");
         var optional = parameter.GetProperty("optional").GetBoolean();
+        var valueType = OptionalParameterValueType(type, optional);
         var mapping = MapAdapterParameterType(
             generation,
             type,
@@ -1558,7 +1559,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 binaryActionHelpers,
                 ref binaryActionHelperIndex,
                 generation,
-                type,
+                valueType,
                 mapping,
                 value,
                 "invoker",
@@ -1597,7 +1598,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 binaryActionHelpers,
                 ref binaryActionHelperIndex,
                 generation,
-                type,
+                valueType,
                 mapping,
                 valueLocal,
                 "invoker",
@@ -1615,7 +1616,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 binaryActionHelpers,
                 ref binaryActionHelperIndex,
                 generation,
-                type,
+                valueType,
                 mapping,
                 valueLocal,
                 "invoker",
@@ -4767,16 +4768,25 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         JsonElement type,
         bool optional,
         string member)
+        => MapType(
+            generation,
+            OptionalParameterValueType(type, optional),
+            optional: false,
+            member);
+
+    private static JsonElement OptionalParameterValueType(
+        JsonElement type,
+        bool optional)
     {
         if (!optional || Kind(type) != "union")
         {
-            return MapType(generation, type, optional: false, member);
+            return type;
         }
 
         var types = type.GetProperty("types").EnumerateArray().ToArray();
         if (!types.Any(static candidate => Kind(candidate) == "undefined"))
         {
-            return MapType(generation, type, optional: false, member);
+            return type;
         }
 
         var values = types
@@ -4784,11 +4794,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             .ToArray();
         if (values.Length == 1)
         {
-            return MapType(
-                generation,
-                values[0],
-                optional: false,
-                member);
+            return values[0];
         }
         using var normalized = JsonDocument.Parse(
             "{\"kind\":\"union\",\"types\":["
@@ -4796,11 +4802,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 ",",
                 values.Select(static value => value.GetRawText()))
             + "]}");
-        return MapType(
-                generation,
-                normalized.RootElement,
-                optional: false,
-                member);
+        return normalized.RootElement.Clone();
     }
 
     private static TypeMapping MapOptionalModelProperty(TypeMapping value)

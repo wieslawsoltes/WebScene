@@ -164,9 +164,10 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
         restore-keys: |
-          webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+          webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-
+          webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-
     - id: restored-v8-sdk
       name: Validate restored V8 SDK compatibility
       shell: bash
@@ -318,7 +319,7 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
-        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
+        key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ steps.v8-cache-key.outputs.clearscript-revision }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:

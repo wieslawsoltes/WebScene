@@ -175,6 +175,7 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
 & cmake --build $buildDir --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the native WebScene engine." }
+Copy-Item $icuData (Join-Path $buildDir "Release/icudtl.dat") -Force
 & ctest --test-dir $buildDir -C Release --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
