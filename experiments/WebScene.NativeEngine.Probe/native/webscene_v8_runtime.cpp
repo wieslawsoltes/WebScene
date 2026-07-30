@@ -6238,9 +6238,10 @@ struct v8_dom_runtime::implementation final {
         if (result_mode == WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3) {
             if (value->IsNullOrUndefined()) {
                 result.values.push_back({
-                    value->IsUndefined()
-                        ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V3
-                        : WEBSCENE_INTEROP_VALUE_NULL_V3,
+                    static_cast<uint32_t>(
+                        value->IsUndefined()
+                            ? WEBSCENE_INTEROP_VALUE_UNDEFINED_V3
+                            : WEBSCENE_INTEROP_VALUE_NULL_V3),
                     0U,
                     0U,
                     0U,
