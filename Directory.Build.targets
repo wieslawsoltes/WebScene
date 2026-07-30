@@ -4,7 +4,7 @@
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';webscene;'))">$(PackageTags);webscene</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';web-components;'))">$(PackageTags);web-components</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';native-ui;'))">$(PackageTags);native-ui</PackageTags>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Adds native flex-flow shorthand layout and CSSOM support, fixing vertical component tabs and settings-dialog layouts.</PackageReleaseNotes>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Adds event-driven native callback notifications to eliminate managed interop polling.</PackageReleaseNotes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>
