@@ -1,5 +1,5 @@
 diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
-index 1bf77351fa0..da9f2ff178a 100644
+index 1bf77351fa0..4efb1619c6c 100644
 --- a/src/objects/js-interceptor-map.h
 +++ b/src/objects/js-interceptor-map.h
 @@ -17,4 +17,8 @@ class InterceptorInfo;
@@ -11,7 +11,7 @@ index 1bf77351fa0..da9f2ff178a 100644
  V8_OBJECT class JSInterceptorMap : public ExtendedMap {
 +#endif
   public:
-@@ -42,4 +42,15 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
+@@ -42,7 +42,19 @@ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
   public:
 +#if V8_CC_MSVC
 +  // Torque lays out ExtendedMap subclasses after
@@ -27,3 +27,17 @@ index 1bf77351fa0..da9f2ff178a 100644
    uint8_t flags_;
    uint8_t extended_padding_[kTaggedSize - 2];
    TaggedMember<InterceptorInfo> named_interceptor_;
+   TaggedMember<InterceptorInfo> indexed_interceptor_;
+   TaggedMember<Cell> fast_case_validity_cell_;
++  uint8_t windows_tail_padding_;
+ } V8_OBJECT_END;
+diff --git a/src/objects/js-interceptor-map.tq b/src/objects/js-interceptor-map.tq
+index f351cb0fb0a..8b8b088541e 100644
+--- a/src/objects/js-interceptor-map.tq
++++ b/src/objects/js-interceptor-map.tq
+@@ -19,4 +19,5 @@ extern class JSInterceptorMap extends ExtendedMap {
+   // usages of Maps as a fast property transition handlers - it makes sure
+   // that the prototype chain does not have the property added by the map.
+   fast_case_validity_cell: Cell;
++  windows_tail_padding: uint8;
+ }
