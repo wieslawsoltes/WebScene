@@ -421,13 +421,43 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         var objectInvocation = promise
             ? "GetGlobalPromiseObjectAsync"
             : "GetGlobalObjectAsync";
+        var binarySupported = CanEmitBinaryType(generation, effectiveType);
+        var binaryName = "__WebSceneBinary"
+                         + PascalCase(property.Name)
+                         + "Global";
         source.AppendLine()
-            .Append("    public static async global::System.Threading.Tasks.ValueTask<")
+            .Append("    public static ");
+        if (!binarySupported)
+        {
+            source.Append("async ");
+        }
+        source.Append("global::System.Threading.Tasks.ValueTask<")
             .Append(mapping.CSharpType).Append("> ").Append(property.Name).AppendLine("(")
             .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,")
             .AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
             .AppendLine("    {")
             .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(invoker);");
+        if (binarySupported)
+        {
+            source.AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+                .AppendLine("        {")
+                .Append("            return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
+                .Append(mapping.CSharpType).Append(", ").Append(binaryName)
+                .Append("Codec>(").Append(binaryName)
+                .AppendLine("CallSite, default, new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid(), cancellationToken);")
+                .AppendLine("        }")
+                .Append("        return ").Append(binaryName)
+                .AppendLine("JsonAsync(invoker, cancellationToken);")
+                .AppendLine("    }")
+                .AppendLine()
+                .Append("    private static async global::System.Threading.Tasks.ValueTask<")
+                .Append(mapping.CSharpType).Append("> ").Append(binaryName)
+                .AppendLine("JsonAsync(")
+                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,")
+                .AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
+                .AppendLine("    {");
+        }
         if (mapping.IsBinding && mapping.IsNullable)
         {
             source.Append("        var reference = await invoker.")
@@ -489,6 +519,76 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
+        if (binarySupported)
+        {
+            EmitBinaryGlobalPropertyCodec(
+                source,
+                generation,
+                effectiveType,
+                mapping,
+                binaryName,
+                property.GlobalName,
+                promise);
+        }
+    }
+
+    private static void EmitBinaryGlobalPropertyCodec(
+        StringBuilder source,
+        GenerationContext generation,
+        JsonElement effectiveType,
+        TypeMapping mapping,
+        string binaryName,
+        string globalName,
+        bool promise)
+    {
+        var resultMode = mapping.IsBinding
+                         || mapping.IsObjectReference
+                         || mapping.IsFunctionReference
+            ? "RetainedHandle"
+            : "Value";
+        source.AppendLine()
+            .Append("    private static readonly global::WebScene.JavaScript.Interop.JavaScriptBinaryCallSite ")
+            .Append(binaryName).AppendLine("CallSite = new(")
+            .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryOperation.GetGlobal,")
+            .Append("        globalName: ").Append(Literal(globalName))
+            .AppendLine(",")
+            .AppendLine("        memberName: null,")
+            .Append("        global::WebScene.JavaScript.Interop.JavaScriptBinaryResultMode.")
+            .Append(resultMode);
+        if (promise)
+        {
+            source.AppendLine(",")
+                .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryCallFlags.AwaitPromise);");
+        }
+        else
+        {
+            source.AppendLine(");");
+        }
+        source.AppendLine()
+            .Append("    private readonly struct ").Append(binaryName)
+            .Append("Codec : global::WebScene.JavaScript.Interop.IJavaScriptBinaryCodec<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
+            .Append(mapping.CSharpType).AppendLine(">")
+            .AppendLine("    {")
+            .AppendLine("        public static uint EncodeArguments(")
+            .AppendLine("            ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
+            .AppendLine("            in global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid arguments)")
+            .AppendLine("            => writer.BeginArray(0);")
+            .AppendLine()
+            .Append("        public static ").Append(mapping.CSharpType)
+            .AppendLine(" DecodeResult(")
+            .AppendLine("            global::WebScene.JavaScript.Interop.JavaScriptBinaryValue value,")
+            .AppendLine("            global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker)")
+            .AppendLine("        {");
+        var result = EmitBinaryReadValue(
+            source,
+            generation,
+            effectiveType,
+            "value",
+            "invoker",
+            "            ");
+        source.Append("            return ").Append(result).AppendLine(";")
+            .AppendLine("        }")
+            .AppendLine("    }");
     }
 
     private static void EmitGlobalFunction(
@@ -532,7 +632,12 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                             $"global::WebScene.JavaScript.Interop.JavaScriptOptional<{mapping.CSharpType}>"
                     };
                 }
-                return new MappedParameter(name, mapping, optional, rest);
+                return new MappedParameter(
+                    name,
+                    mapping,
+                    optional,
+                    rest,
+                    parameter.GetProperty("type").Clone());
             })
             .ToArray();
         var declaredReturn = method.GetProperty("returns");
@@ -548,9 +653,27 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 effectiveReturn,
                 optional: false,
                 $"{function.Name} return");
+        var binarySupported = typeParameters.Length == 0
+                              && parameters.All(parameter =>
+                                  !parameter.Rest
+                                  && CanEmitBinaryType(
+                                      generation,
+                                      parameter.Type))
+                              && (returnsVoid
+                                  || CanEmitBinaryType(
+                                      generation,
+                                      effectiveReturn));
+        var binaryName = "__WebSceneBinary"
+                         + PascalCase(function.Name)
+                         + "Global";
 
         source.AppendLine()
-            .Append("    public static async global::System.Threading.Tasks.ValueTask");
+            .Append("    public static ");
+        if (!binarySupported)
+        {
+            source.Append("async ");
+        }
+        source.Append("global::System.Threading.Tasks.ValueTask");
         if (!returnsVoid)
         {
             source.Append('<').Append(returnMapping.CSharpType).Append('>');
@@ -570,6 +693,38 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         source.AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
             .AppendLine("    {")
             .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(invoker);");
+        if (binarySupported)
+        {
+            EmitBinaryGlobalFunctionDispatch(
+                source,
+                parameters,
+                returnsVoid,
+                returnMapping,
+                binaryName);
+            source.Append("        return ").Append(binaryName)
+                .Append("JsonAsync(invoker, ");
+            foreach (var parameter in parameters)
+            {
+                source.Append('@').Append(parameter.Name).Append(", ");
+            }
+            source.AppendLine("cancellationToken);")
+                .AppendLine("    }")
+                .AppendLine()
+                .Append("    private static async global::System.Threading.Tasks.ValueTask");
+            if (!returnsVoid)
+            {
+                source.Append('<').Append(returnMapping.CSharpType).Append('>');
+            }
+            source.Append(' ').Append(binaryName).AppendLine("JsonAsync(")
+                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,");
+            foreach (var parameter in parameters)
+            {
+                source.Append("        ").Append(parameter.Mapping.CSharpType)
+                    .Append(" @").Append(parameter.Name).AppendLine(",");
+            }
+            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
+                .AppendLine("    {");
+        }
 
         var arguments = ArgumentArray(parameters.Select(parameter =>
             new Parameter(
@@ -718,6 +873,64 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
+        if (binarySupported)
+        {
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters,
+                returnsVoid,
+                effectiveReturn,
+                returnMapping,
+                binaryName,
+                operation: "InvokeGlobal",
+                globalName: function.GlobalName,
+                memberName: null,
+                promise: promise);
+        }
+    }
+
+    private static void EmitBinaryGlobalFunctionDispatch(
+        StringBuilder source,
+        IReadOnlyList<MappedParameter> parameters,
+        bool returnsVoid,
+        TypeMapping returnMapping,
+        string binaryName)
+    {
+        var argumentsType = parameters.Count == 0
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : binaryName + "Arguments";
+        var arguments = parameters.Count == 0
+            ? "new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid()"
+            : "new " + binaryName + "Arguments("
+              + string.Join(
+                  ", ",
+                  parameters.Select(parameter => "@" + parameter.Name))
+              + ")";
+        source.AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+            .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+            .AppendLine("        {");
+        if (returnsVoid)
+        {
+            source.Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+                .Append(argumentsType).Append(", ").Append(binaryName)
+                .Append("Codec>(").Append(binaryName)
+                .Append("CallSite, default, ")
+                .Append(arguments)
+                .AppendLine(", cancellationToken);");
+        }
+        else
+        {
+            source.Append("            return binaryInvoker.InvokeBinaryAsync<")
+                .Append(argumentsType).Append(", ")
+                .Append(returnMapping.CSharpType).Append(", ")
+                .Append(binaryName).Append("Codec>(")
+                .Append(binaryName)
+                .Append("CallSite, default, ")
+                .Append(arguments)
+                .AppendLine(", cancellationToken);");
+        }
+        source.AppendLine("        }");
     }
 
     private static string GenerateAdapter(
@@ -1411,7 +1624,8 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                     javascriptName,
                     propertyName,
                     optional,
-                    mapping));
+                    mapping,
+                    propertyType.Clone()));
             }
             if (hasIndexSignatures)
             {
@@ -1563,8 +1777,19 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .Append("                    pair => ").Append(convertedValue).AppendLine(")")
                 .AppendLine("                : null,");
         }
-        source.AppendLine("        };")
-            .AppendLine("}")
+        source.AppendLine("        };");
+        if (typeParameters.Count == 0
+            && mappedIndex is null
+            && mappedProperties.All(property =>
+                CanEmitBinaryType(generation, property.Type)))
+        {
+            EmitObjectModelBinaryCodec(
+                source,
+                generation,
+                declarationName,
+                mappedProperties);
+        }
+        source.AppendLine("}")
             .AppendLine()
             .Append("internal sealed record ").Append(wireDeclarationName)
             .AppendLine()
@@ -1610,6 +1835,137 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 mappedProperties,
                 converterIndex);
         }
+    }
+
+    private static void EmitObjectModelBinaryCodec(
+        StringBuilder source,
+        GenerationContext generation,
+        string declarationName,
+        IReadOnlyList<ObjectModelProperty> properties)
+    {
+        var requiredCount = properties.Count(static property => !property.Optional);
+        source.AppendLine()
+            .AppendLine("    internal static uint __WebSceneWriteBinary(")
+            .AppendLine("        ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
+            .Append("        ").Append(declarationName).AppendLine(" value)")
+            .AppendLine("    {")
+            .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);")
+            .Append("        var propertyCount = ").Append(requiredCount)
+            .AppendLine(";");
+        foreach (var property in properties.Where(static property => property.Optional))
+        {
+            source.Append("        if (value.")
+                .Append(EscapeIdentifier(property.CSharpName))
+                .AppendLine(".HasValue) propertyCount++;");
+        }
+        source.AppendLine("        var result = writer.BeginObject(propertyCount);")
+            .AppendLine("        var propertyIndex = 0;");
+        foreach (var property in properties)
+        {
+            var propertyName = EscapeIdentifier(property.CSharpName);
+            var valueType = property.Optional
+                ? OptionalBinaryPayloadType(property.Type)
+                : property.Type;
+            if (property.Optional)
+            {
+                source.Append("        if (value.").Append(propertyName)
+                    .AppendLine(".HasValue)")
+                    .AppendLine("        {");
+            }
+            var indent = property.Optional ? "            " : "        ";
+            var value = EmitBinaryWriteValue(
+                source,
+                generation,
+                valueType,
+                "value." + propertyName + (property.Optional ? ".Value!" : string.Empty),
+                indent);
+            source.Append(indent).Append("writer.SetObjectProperty(result, propertyIndex++, ")
+                .Append(Literal(property.JavaScriptName)).Append("u8, ")
+                .Append(value).AppendLine(");");
+            if (property.Optional)
+            {
+                source.AppendLine("        }");
+            }
+        }
+        source.AppendLine("        return result;")
+            .AppendLine("    }")
+            .AppendLine()
+            .Append("    internal static ").Append(declarationName)
+            .AppendLine(" __WebSceneReadBinary(")
+            .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryValue value,")
+            .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker)")
+            .AppendLine("    {");
+
+        var values = new List<(ObjectModelProperty Property, string Local)>();
+        foreach (var property in properties)
+        {
+            if (!property.Optional)
+            {
+                var local = EmitBinaryReadValue(
+                    source,
+                    generation,
+                    property.Type,
+                    "value.GetRequiredProperty(" + Literal(property.JavaScriptName) + "u8)",
+                    "invoker",
+                    "        ");
+                values.Add((property, local));
+                continue;
+            }
+
+            var optionalType = property.Mapping.CSharpType;
+            var node = generation.NextLocal("binaryProperty");
+            var localOptional = generation.NextLocal("binaryOptional");
+            source.Append("        ").Append(optionalType).Append(' ')
+                .Append(localOptional).AppendLine(";")
+                .Append("        if (value.TryGetProperty(")
+                .Append(Literal(property.JavaScriptName)).Append("u8, out var ")
+                .Append(node).AppendLine(")")
+                .Append("            && ").Append(node)
+                .AppendLine(".Kind != global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Undefined)")
+                .AppendLine("        {");
+            var child = EmitBinaryReadValue(
+                source,
+                generation,
+                OptionalBinaryPayloadType(property.Type),
+                node,
+                "invoker",
+                "            ");
+            source.Append("            ").Append(localOptional).Append(" = ")
+                .Append(child).AppendLine(";")
+                .AppendLine("        }")
+                .AppendLine("        else")
+                .AppendLine("        {")
+                .Append("            ").Append(localOptional)
+                .AppendLine(" = default;")
+                .AppendLine("        }");
+            values.Add((property, localOptional));
+        }
+        source.AppendLine("        return new()")
+            .AppendLine("        {");
+        foreach (var (property, local) in values)
+        {
+            source.Append("            ")
+                .Append(EscapeIdentifier(property.CSharpName))
+                .Append(" = ").Append(local).AppendLine(",");
+        }
+        source.AppendLine("        };")
+            .AppendLine("    }");
+    }
+
+    private static JsonElement OptionalBinaryPayloadType(JsonElement type)
+    {
+        if (Kind(type) != "union")
+        {
+            return type;
+        }
+        var candidates = FlattenUnionTypes(type)
+            .Where(static candidate => Kind(candidate) != "undefined")
+            .ToArray();
+        if (candidates.Length == 1)
+        {
+            return candidates[0];
+        }
+        return type;
     }
 
     private static void EmitIndexedModelJsonConverter(
@@ -1979,11 +2335,40 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         var objectInvocation = promise
             ? "GetPromiseObjectPropertyAsync"
             : "GetObjectPropertyAsync";
+        var binarySupported = CanEmitBinaryType(generation, effectiveType);
+        var binaryName = "__WebSceneBinary"
+                         + PascalCase(getterName)
+                         + "Property";
         source.AppendLine()
-            .Append("    public async global::System.Threading.Tasks.ValueTask<")
+            .Append("    public ");
+        if (!binarySupported)
+        {
+            source.Append("async ");
+        }
+        source.Append("global::System.Threading.Tasks.ValueTask<")
             .Append(mapping.CSharpType).Append("> ").Append(getterName).AppendLine("(")
             .AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
             .AppendLine("    {");
+        if (binarySupported)
+        {
+            source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+                .AppendLine("        {")
+                .Append("            return binaryInvoker.InvokeBinaryAsync<global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid, ")
+                .Append(mapping.CSharpType).Append(", ").Append(binaryName)
+                .Append("Codec>(").Append(binaryName)
+                .AppendLine("CallSite, __webSceneReference, new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid(), cancellationToken);")
+                .AppendLine("        }")
+                .Append("        return ").Append(binaryName)
+                .AppendLine("JsonAsync(cancellationToken);")
+                .AppendLine("    }")
+                .AppendLine()
+                .Append("    private async global::System.Threading.Tasks.ValueTask<")
+                .Append(mapping.CSharpType).Append("> ").Append(binaryName)
+                .AppendLine("JsonAsync(")
+                .AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
+                .AppendLine("    {");
+        }
         if (mapping.IsBinding && mapping.IsNullable)
         {
             source.Append("        var reference = await __webSceneInvoker.")
@@ -2048,6 +2433,21 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
+        if (binarySupported)
+        {
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters: [],
+                returnsVoid: false,
+                effectiveReturn: effectiveType,
+                returnMapping: mapping,
+                binaryName: binaryName,
+                operation: "GetProperty",
+                globalName: null,
+                memberName: memberName,
+                promise: promise);
+        }
 
         var writable = !property.GetProperty("readonly").GetBoolean()
                        && (!propertyPolicy.TryGetProperty("write", out var write)
@@ -2064,12 +2464,34 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 IsBinding: false,
                 IsObjectReference: true)
             : mapping;
+        var binarySetterSupported =
+            !promise
+            && !property.GetProperty("optional").GetBoolean()
+            && CanEmitBinaryType(generation, effectiveType);
+        var binarySetterName = "__WebSceneBinary"
+                               + PascalCase(setterName)
+                               + "Property";
         source.AppendLine()
             .Append("    public global::System.Threading.Tasks.ValueTask ")
             .Append(setterName).AppendLine("(")
             .Append("        ").Append(setterMapping.CSharpType).AppendLine(" value,")
             .AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
-            .AppendLine("        => __webSceneInvoker.SetPropertyAsync(")
+            .AppendLine("    {");
+        if (binarySetterSupported)
+        {
+            source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+                .AppendLine("        {")
+                .Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+                .Append(binarySetterName).Append("Arguments, ")
+                .Append(binarySetterName).Append("Codec>(")
+                .Append(binarySetterName)
+                .Append("CallSite, __webSceneReference, new ")
+                .Append(binarySetterName)
+                .AppendLine("Arguments(value), cancellationToken);")
+                .AppendLine("        }");
+        }
+        source.AppendLine("        return __webSceneInvoker.SetPropertyAsync(")
             .AppendLine("            __webSceneReference,")
             .Append("            ").Append(Literal(memberName)).AppendLine(",")
             .Append("            ");
@@ -2089,6 +2511,30 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         }
         source
             .AppendLine("            cancellationToken);");
+        source.AppendLine("    }");
+        if (binarySetterSupported)
+        {
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters:
+                [
+                    new MappedParameter(
+                        "value",
+                        setterMapping,
+                        Optional: false,
+                        Rest: false,
+                        effectiveType.Clone())
+                ],
+                returnsVoid: true,
+                effectiveReturn: effectiveType,
+                returnMapping: new TypeMapping("void", false),
+                binaryName: binarySetterName,
+                operation: "SetProperty",
+                globalName: null,
+                memberName: memberName,
+                promise: false);
+        }
     }
 
     private static void EmitConstructor(
@@ -2110,7 +2556,9 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                     IsBinding: false,
                     IsNullable: false,
                     Optional: false,
-                    Rest: false))
+                    Rest: false,
+                    BinaryMapping: null,
+                    BinaryType: default))
                 .ToArray();
         }
         else if (binding.Root.TryGetProperty("constructors", out var constructors)
@@ -2145,7 +2593,9 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                         mapping.IsBinding,
                         mapping.IsNullable,
                         optional,
-                        rest);
+                        rest,
+                        mapping,
+                        parameter.GetProperty("type").Clone());
                 })
                 .ToArray();
         }
@@ -2153,8 +2603,20 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         {
             parameters = [];
         }
+        var binarySupported = parameters.All(parameter =>
+            !parameter.Rest
+            && parameter.BinaryMapping is not null
+            && CanEmitBinaryType(generation, parameter.BinaryType));
+        var binaryName = "__WebSceneBinary"
+                         + PascalCase(methodName)
+                         + "Constructor";
         source.AppendLine()
-            .Append("    public static async global::System.Threading.Tasks.ValueTask<")
+            .Append("    public static ");
+        if (!binarySupported)
+        {
+            source.Append("async ");
+        }
+        source.Append("global::System.Threading.Tasks.ValueTask<")
             .Append(BindingTypeName(binding)).Append("> ").Append(methodName).AppendLine("(")
             .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,");
         for (var index = 0; index < parameters.Length; index++)
@@ -2171,8 +2633,52 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             source.AppendLine(",");
         }
         source.AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
-            .AppendLine("    {")
-            .Append("        return new ").Append(BindingTypeName(binding))
+            .AppendLine("    {");
+        if (binarySupported)
+        {
+            var binaryArgumentsType = parameters.Length == 0
+                ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+                : binaryName + "Arguments";
+            var binaryArguments = parameters.Length == 0
+                ? "new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid()"
+                : "new " + binaryName + "Arguments("
+                  + string.Join(
+                      ", ",
+                      parameters.Select(parameter => "@" + parameter.Name))
+                  + ")";
+            source.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(invoker);")
+                .AppendLine("        if (invoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+                .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+                .AppendLine("        {")
+                .Append("            return binaryInvoker.InvokeBinaryAsync<")
+                .Append(binaryArgumentsType).Append(", ")
+                .Append(BindingTypeName(binding)).Append(", ")
+                .Append(binaryName).Append("Codec>(")
+                .Append(binaryName).Append("CallSite, default, ")
+                .Append(binaryArguments).AppendLine(", cancellationToken);")
+                .AppendLine("        }")
+                .Append("        return ").Append(binaryName)
+                .Append("JsonAsync(invoker, ");
+            foreach (var parameter in parameters)
+            {
+                source.Append('@').Append(parameter.Name).Append(", ");
+            }
+            source.AppendLine("cancellationToken);")
+                .AppendLine("    }")
+                .AppendLine()
+                .Append("    private static async global::System.Threading.Tasks.ValueTask<")
+                .Append(BindingTypeName(binding)).Append("> ")
+                .Append(binaryName).AppendLine("JsonAsync(")
+                .AppendLine("        global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker,");
+            foreach (var parameter in parameters)
+            {
+                source.Append("        ").Append(parameter.CSharpType)
+                    .Append(" @").Append(parameter.Name).AppendLine(",");
+            }
+            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
+                .AppendLine("    {");
+        }
+        source.Append("        return new ").Append(BindingTypeName(binding))
             .AppendLine("(invoker, await invoker.ConstructAsync(")
             .Append("            ").Append(Literal(globalName)).AppendLine(",")
             .Append("            ").Append(ArgumentArray(
@@ -2184,6 +2690,16 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                     parameter.Rest)))).AppendLine(",")
             .AppendLine("            cancellationToken).ConfigureAwait(false));")
             .AppendLine("    }");
+        if (binarySupported)
+        {
+            EmitBinaryConstructorCodec(
+                source,
+                generation,
+                binding,
+                parameters,
+                binaryName,
+                globalName);
+        }
     }
 
     private static void EmitMethod(
@@ -2213,6 +2729,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
 
         var methodName = OptionalString(methodPolicy, "name")
                          ?? PascalCase(memberName) + "Async";
+        var borrowedName = OptionalString(methodPolicy, "borrowedName");
         var methodTypeParameters = method.TryGetProperty("typeParameters", out var genericParameters)
             ? genericParameters.EnumerateArray()
                 .Select(static item => EscapeIdentifier(item.GetString()!))
@@ -2248,7 +2765,12 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                             $"global::WebScene.JavaScript.Interop.JavaScriptOptional<{mapping.CSharpType}>"
                     };
                 }
-                return new MappedParameter(name, mapping, optional, rest);
+                return new MappedParameter(
+                    name,
+                    mapping,
+                    optional,
+                    rest,
+                    parameter.GetProperty("type").Clone());
             })
             .ToArray();
 
@@ -2265,9 +2787,33 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 effectiveReturn,
                 optional: false,
                 $"{binding.Name}.{methodName} return");
+        var binarySupported = methodTypeParameters.Length == 0
+                              && parameters.All(parameter =>
+                                  !parameter.Rest
+                                  && CanEmitBinaryType(
+                                      generation,
+                                      parameter.Type))
+                              && (returnsVoid
+                                  || CanEmitBinaryType(
+                                      generation,
+                                      effectiveReturn));
+        var binaryName = "__WebSceneBinary"
+                         + PascalCase(memberName)
+                         + overload;
+        if (borrowedName is not null
+            && (!binarySupported || Kind(effectiveReturn) != "array"))
+        {
+            throw new InvalidDataException(
+                $"Borrowed method '{binding.Name}.{borrowedName}' requires a binary-supported array return type.");
+        }
 
         source.AppendLine()
-            .Append("    public async global::System.Threading.Tasks.ValueTask");
+            .Append("    public ");
+        if (!binarySupported)
+        {
+            source.Append("async ");
+        }
+        source.Append("global::System.Threading.Tasks.ValueTask");
         if (!returnsVoid)
         {
             source.Append('<').Append(returnMapping.CSharpType).Append('>');
@@ -2285,6 +2831,38 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         }
         source.AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
             .AppendLine("    {");
+
+        if (binarySupported)
+        {
+            EmitBinaryMethodDispatch(
+                source,
+                parameters,
+                returnsVoid,
+                returnMapping,
+                binaryName);
+            source.Append("        return ").Append(binaryName)
+                .Append("JsonAsync(");
+            foreach (var parameter in parameters)
+            {
+                source.Append('@').Append(parameter.Name).Append(", ");
+            }
+            source.AppendLine("cancellationToken);")
+                .AppendLine("    }")
+                .AppendLine()
+                .Append("    private async global::System.Threading.Tasks.ValueTask");
+            if (!returnsVoid)
+            {
+                source.Append('<').Append(returnMapping.CSharpType).Append('>');
+            }
+            source.Append(' ').Append(binaryName).AppendLine("JsonAsync(");
+            foreach (var parameter in parameters)
+            {
+                source.Append("        ").Append(parameter.Mapping.CSharpType)
+                    .Append(" @").Append(parameter.Name).AppendLine(",");
+            }
+            source.AppendLine("        global::System.Threading.CancellationToken cancellationToken)")
+                .AppendLine("    {");
+        }
 
         var arguments = ArgumentArray(parameters.Select(parameter =>
             new Parameter(
@@ -2434,6 +3012,418 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                 .AppendLine(", cancellationToken).ConfigureAwait(false))!;");
         }
         source.AppendLine("    }");
+        if (binarySupported)
+        {
+            EmitBinaryInvocationCodec(
+                source,
+                generation,
+                parameters,
+                returnsVoid,
+                effectiveReturn,
+                returnMapping,
+                binaryName,
+                operation: "InvokeMember",
+                globalName: null,
+                memberName: memberName,
+                promise: promise);
+            if (borrowedName is not null)
+            {
+                EmitBorrowedBinaryMethod(
+                    source,
+                    parameters,
+                    borrowedName,
+                    binaryName);
+            }
+        }
+    }
+
+    private static void EmitBorrowedBinaryMethod(
+        StringBuilder source,
+        IReadOnlyList<MappedParameter> parameters,
+        string borrowedName,
+        string binaryName)
+    {
+        var argumentsType = parameters.Count == 0
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : binaryName + "Arguments";
+        var arguments = parameters.Count == 0
+            ? "new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid()"
+            : "new " + binaryName + "Arguments("
+              + string.Join(
+                  ", ",
+                  parameters.Select(parameter => "@" + parameter.Name))
+              + ")";
+        var typeStem = borrowedName.EndsWith(
+                "Async",
+                StringComparison.Ordinal)
+            ? borrowedName.Substring(0, borrowedName.Length - 5)
+            : borrowedName;
+        typeStem = PascalCase(typeStem);
+        var leaseType = typeStem + "Lease";
+        var viewType = typeStem + "View";
+
+        source.AppendLine()
+            .Append("    public async global::System.Threading.Tasks.ValueTask<")
+            .Append(leaseType).Append("> ").Append(borrowedName)
+            .AppendLine("(");
+        foreach (var parameter in parameters)
+        {
+            source.Append("        ").Append(parameter.Mapping.CSharpType)
+                .Append(" @").Append(parameter.Name);
+            if (parameter.Optional)
+            {
+                source.Append(" = default");
+            }
+            source.AppendLine(",");
+        }
+        source.AppendLine("        global::System.Threading.CancellationToken cancellationToken = default)")
+            .AppendLine("    {")
+            .AppendLine("        if (__webSceneInvoker is not global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+            .AppendLine("            || !binaryInvoker.IsBinaryInteropAvailable)")
+            .AppendLine("        {")
+            .AppendLine("            throw new global::System.NotSupportedException(")
+            .AppendLine("                \"Borrowed JavaScript results require the native binary transport.\");")
+            .AppendLine("        }")
+            .Append("        return new ").Append(leaseType).AppendLine("(")
+            .Append("            await binaryInvoker.InvokeBinaryBorrowedAsync<")
+            .Append(argumentsType).Append(", ").Append(binaryName)
+            .Append("Codec>(").Append(binaryName)
+            .Append("CallSite, __webSceneReference, ")
+            .Append(arguments)
+            .AppendLine(", cancellationToken).ConfigureAwait(false));")
+            .AppendLine("    }")
+            .AppendLine()
+            .Append("    public readonly struct ").Append(leaseType)
+            .AppendLine(" : global::System.IDisposable")
+            .AppendLine("    {")
+            .AppendLine("        private readonly global::WebScene.JavaScript.Interop.JavaScriptBinaryResultLease? _lease;")
+            .AppendLine()
+            .Append("        internal ").Append(leaseType).AppendLine("(")
+            .AppendLine("            global::WebScene.JavaScript.Interop.JavaScriptBinaryResultLease lease)")
+            .AppendLine("        {")
+            .AppendLine("            _lease = lease;")
+            .AppendLine("        }")
+            .AppendLine()
+            .Append("        public ").Append(viewType).AppendLine(" Borrow()")
+            .AppendLine("            => new((_lease ?? throw new global::System.InvalidOperationException(")
+            .AppendLine("                \"The borrowed result lease is uninitialized.\")).Borrow());")
+            .AppendLine()
+            .AppendLine("        public void Dispose() => _lease?.Dispose();")
+            .AppendLine("    }")
+            .AppendLine()
+            .Append("    public ref struct ").Append(viewType).AppendLine()
+            .AppendLine("    {")
+            .AppendLine("        private global::WebScene.JavaScript.Interop.JavaScriptBinaryBorrowScope _scope;")
+            .AppendLine()
+            .Append("        internal ").Append(viewType).AppendLine("(")
+            .AppendLine("            global::WebScene.JavaScript.Interop.JavaScriptBinaryBorrowScope scope)")
+            .AppendLine("        {")
+            .AppendLine("            _scope = scope;")
+            .AppendLine("            if (_scope.Root.Kind != global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Array)")
+            .AppendLine("            {")
+            .AppendLine("                _scope.Dispose();")
+            .AppendLine("                throw new global::System.IO.InvalidDataException(")
+            .AppendLine("                    \"The borrowed JavaScript result is not an array.\");")
+            .AppendLine("            }")
+            .AppendLine("        }")
+            .AppendLine()
+            .AppendLine("        public readonly int Count => _scope.Root.Count;")
+            .AppendLine()
+            .AppendLine("        public readonly global::WebScene.JavaScript.Interop.JavaScriptBinaryValue this[int index]")
+            .AppendLine("            => _scope.Root.GetArrayItem(index);")
+            .AppendLine()
+            .AppendLine("        public void Dispose() => _scope.Dispose();")
+            .AppendLine("    }");
+    }
+
+    private static void EmitBinaryMethodDispatch(
+        StringBuilder source,
+        IReadOnlyList<MappedParameter> parameters,
+        bool returnsVoid,
+        TypeMapping returnMapping,
+        string binaryName)
+    {
+        var argumentsType = parameters.Count == 0
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : binaryName + "Arguments";
+        var arguments = parameters.Count == 0
+            ? "new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid()"
+            : "new " + binaryName + "Arguments("
+              + string.Join(
+                  ", ",
+                  parameters.Select(parameter => "@" + parameter.Name))
+              + ")";
+        source.AppendLine("        if (__webSceneInvoker is global::WebScene.JavaScript.Interop.IJavaScriptBinaryInvoker binaryInvoker")
+            .AppendLine("            && binaryInvoker.IsBinaryInteropAvailable)")
+            .AppendLine("        {");
+        if (returnsVoid)
+        {
+            source.Append("            return binaryInvoker.InvokeBinaryVoidAsync<")
+                .Append(argumentsType).Append(", ").Append(binaryName)
+                .Append("Codec>(").Append(binaryName)
+                .Append("CallSite, __webSceneReference, ")
+                .Append(arguments)
+                .AppendLine(", cancellationToken);");
+        }
+        else
+        {
+            source.Append("            return binaryInvoker.InvokeBinaryAsync<")
+                .Append(argumentsType).Append(", ")
+                .Append(returnMapping.CSharpType).Append(", ")
+                .Append(binaryName).Append("Codec>(")
+                .Append(binaryName)
+                .Append("CallSite, __webSceneReference, ")
+                .Append(arguments)
+                .AppendLine(", cancellationToken);");
+        }
+        source.AppendLine("        }");
+    }
+
+    private static void EmitBinaryInvocationCodec(
+        StringBuilder source,
+        GenerationContext generation,
+        IReadOnlyList<MappedParameter> parameters,
+        bool returnsVoid,
+        JsonElement effectiveReturn,
+        TypeMapping returnMapping,
+        string binaryName,
+        string operation,
+        string? globalName,
+        string? memberName,
+        bool promise)
+    {
+        var argumentsType = parameters.Count == 0
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : binaryName + "Arguments";
+        var resultType = returnsVoid
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : returnMapping.CSharpType;
+        var resultMode = returnsVoid
+            ? "Void"
+            : returnMapping.IsBinding
+              || returnMapping.IsObjectReference
+              || returnMapping.IsFunctionReference
+                ? "RetainedHandle"
+                : "Value";
+        source.AppendLine()
+            .Append("    private static readonly global::WebScene.JavaScript.Interop.JavaScriptBinaryCallSite ")
+            .Append(binaryName).AppendLine("CallSite = new(")
+            .Append("        global::WebScene.JavaScript.Interop.JavaScriptBinaryOperation.")
+            .Append(operation).AppendLine(",")
+            .Append("        globalName: ")
+            .Append(globalName is null ? "null" : Literal(globalName))
+            .AppendLine(",")
+            .Append("        memberName: ")
+            .Append(memberName is null ? "null" : Literal(memberName))
+            .AppendLine(",")
+            .Append("        global::WebScene.JavaScript.Interop.JavaScriptBinaryResultMode.")
+            .Append(resultMode);
+        if (promise)
+        {
+            source.AppendLine(",")
+                .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryCallFlags.AwaitPromise);");
+        }
+        else
+        {
+            source.AppendLine(");");
+        }
+
+        if (parameters.Count > 0)
+        {
+            source.AppendLine()
+                .Append("    private readonly record struct ")
+                .Append(binaryName).AppendLine("Arguments(");
+            for (var index = 0; index < parameters.Count; index++)
+            {
+                var parameter = parameters[index];
+                source.Append("        ").Append(parameter.Mapping.CSharpType)
+                    .Append(' ').Append(PascalCase(parameter.Name));
+                source.AppendLine(index + 1 == parameters.Count ? ");" : ",");
+            }
+        }
+
+        source.AppendLine()
+            .Append("    private readonly struct ").Append(binaryName)
+            .Append("Codec : global::WebScene.JavaScript.Interop.IJavaScriptBinaryCodec<")
+            .Append(argumentsType).Append(", ").Append(resultType)
+            .AppendLine(">")
+            .AppendLine("    {")
+            .AppendLine("        public static uint EncodeArguments(")
+            .AppendLine("            ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
+            .Append("            in ").Append(argumentsType)
+            .AppendLine(" arguments)")
+            .AppendLine("        {")
+            .Append("            var root = writer.BeginArray(")
+            .Append(parameters.Count).AppendLine(");");
+        for (var index = 0; index < parameters.Count; index++)
+        {
+            var parameter = parameters[index];
+            var expression =
+                "arguments." + PascalCase(parameter.Name);
+            string value;
+            if (parameter.Optional)
+            {
+                value = generation.NextLocal("binaryArgument");
+                source.Append("            uint ").Append(value)
+                    .AppendLine(";")
+                    .Append("            if (").Append(expression)
+                    .AppendLine(".HasValue)")
+                    .AppendLine("            {");
+                var child = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    OptionalBinaryPayloadType(parameter.Type),
+                    expression + ".Value!",
+                    "                ");
+                source.Append("                ").Append(value).Append(" = ")
+                    .Append(child).AppendLine(";")
+                    .AppendLine("            }")
+                    .AppendLine("            else")
+                    .AppendLine("            {")
+                    .Append("                ").Append(value)
+                    .AppendLine(" = writer.WriteUndefined();")
+                    .AppendLine("            }");
+            }
+            else
+            {
+                value = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    parameter.Type,
+                    expression,
+                    "            ");
+            }
+            source.Append("            writer.SetArrayItem(root, ")
+                .Append(index).Append(", ").Append(value).AppendLine(");");
+        }
+        source.AppendLine("            return root;")
+            .AppendLine("        }")
+            .AppendLine()
+            .Append("        public static ").Append(resultType)
+            .AppendLine(" DecodeResult(")
+            .AppendLine("            global::WebScene.JavaScript.Interop.JavaScriptBinaryValue value,")
+            .AppendLine("            global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker)")
+            .AppendLine("        {");
+        if (returnsVoid)
+        {
+            source.AppendLine("            return new global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid();");
+        }
+        else
+        {
+            var result = EmitBinaryReadValue(
+                source,
+                generation,
+                effectiveReturn,
+                "value",
+                "invoker",
+                "            ");
+            source.Append("            return ").Append(result)
+                .AppendLine(";");
+        }
+        source.AppendLine("        }")
+            .AppendLine("    }");
+    }
+
+    private static void EmitBinaryConstructorCodec(
+        StringBuilder source,
+        GenerationContext generation,
+        Binding binding,
+        IReadOnlyList<ConstructorParameter> parameters,
+        string binaryName,
+        string globalName)
+    {
+        var argumentsType = parameters.Count == 0
+            ? "global::WebScene.JavaScript.Interop.JavaScriptBinaryVoid"
+            : binaryName + "Arguments";
+        var resultType = BindingTypeName(binding);
+        source.AppendLine()
+            .Append("    private static readonly global::WebScene.JavaScript.Interop.JavaScriptBinaryCallSite ")
+            .Append(binaryName).AppendLine("CallSite = new(")
+            .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryOperation.Construct,")
+            .Append("        globalName: ").Append(Literal(globalName))
+            .AppendLine(",")
+            .AppendLine("        memberName: null,")
+            .AppendLine("        global::WebScene.JavaScript.Interop.JavaScriptBinaryResultMode.RetainedHandle);");
+
+        if (parameters.Count > 0)
+        {
+            source.AppendLine()
+                .Append("    private readonly record struct ")
+                .Append(binaryName).AppendLine("Arguments(");
+            for (var index = 0; index < parameters.Count; index++)
+            {
+                var parameter = parameters[index];
+                source.Append("        ").Append(parameter.CSharpType)
+                    .Append(' ').Append(PascalCase(parameter.Name));
+                source.AppendLine(index + 1 == parameters.Count ? ");" : ",");
+            }
+        }
+
+        source.AppendLine()
+            .Append("    private readonly struct ").Append(binaryName)
+            .Append("Codec : global::WebScene.JavaScript.Interop.IJavaScriptBinaryCodec<")
+            .Append(argumentsType).Append(", ").Append(resultType)
+            .AppendLine(">")
+            .AppendLine("    {")
+            .AppendLine("        public static uint EncodeArguments(")
+            .AppendLine("            ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
+            .Append("            in ").Append(argumentsType)
+            .AppendLine(" arguments)")
+            .AppendLine("        {")
+            .Append("            var root = writer.BeginArray(")
+            .Append(parameters.Count).AppendLine(");");
+        for (var index = 0; index < parameters.Count; index++)
+        {
+            var parameter = parameters[index];
+            var expression = "arguments." + PascalCase(parameter.Name);
+            string value;
+            if (parameter.Optional)
+            {
+                value = generation.NextLocal("binaryArgument");
+                source.Append("            uint ").Append(value)
+                    .AppendLine(";")
+                    .Append("            if (").Append(expression)
+                    .AppendLine(".HasValue)")
+                    .AppendLine("            {");
+                var child = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    OptionalBinaryPayloadType(parameter.BinaryType),
+                    expression + ".Value!",
+                    "                ");
+                source.Append("                ").Append(value).Append(" = ")
+                    .Append(child).AppendLine(";")
+                    .AppendLine("            }")
+                    .AppendLine("            else")
+                    .AppendLine("            {")
+                    .Append("                ").Append(value)
+                    .AppendLine(" = writer.WriteUndefined();")
+                    .AppendLine("            }");
+            }
+            else
+            {
+                value = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    parameter.BinaryType,
+                    expression,
+                    "            ");
+            }
+            source.Append("            writer.SetArrayItem(root, ")
+                .Append(index).Append(", ").Append(value).AppendLine(");");
+        }
+        source.AppendLine("            return root;")
+            .AppendLine("        }")
+            .AppendLine()
+            .Append("        public static ").Append(resultType)
+            .AppendLine(" DecodeResult(")
+            .AppendLine("            global::WebScene.JavaScript.Interop.JavaScriptBinaryValue value,")
+            .AppendLine("            global::WebScene.JavaScript.Interop.IJavaScriptInvoker invoker)")
+            .AppendLine("        {")
+            .Append("            return new ").Append(resultType)
+            .AppendLine("(invoker, value.GetHandle());")
+            .AppendLine("        }")
+            .AppendLine("    }");
     }
 
     private static TypeMapping MapType(
@@ -3575,6 +4565,393 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                              : ")")))
            + " }";
 
+    private static bool CanEmitBinaryType(
+        GenerationContext generation,
+        JsonElement type)
+    {
+        var kind = Kind(type);
+        if (kind is "string" or "number" or "boolean" or "null"
+            or "undefined")
+        {
+            return true;
+        }
+        if (kind == "literal")
+        {
+            return type.GetProperty("value").ValueKind is
+                JsonValueKind.String or JsonValueKind.Number
+                or JsonValueKind.True or JsonValueKind.False;
+        }
+        if (kind == "array")
+        {
+            return CanEmitBinaryType(generation, type.GetProperty("element"));
+        }
+        if (kind == "promise")
+        {
+            return CanEmitBinaryType(generation, type.GetProperty("result"));
+        }
+        if (kind == "union")
+        {
+            var concrete = FlattenUnionTypes(type)
+                .Where(static candidate =>
+                    Kind(candidate) is not ("null" or "undefined"))
+                .ToArray();
+            return concrete.Length == 1
+                   && CanEmitBinaryType(generation, concrete[0]);
+        }
+        if (kind != "reference")
+        {
+            return false;
+        }
+
+        var mapping = MapType(generation, type, optional: false, "binary codec");
+        if (mapping.IsBinding
+            || mapping.IsObjectReference
+            || mapping.IsFunctionReference)
+        {
+            return true;
+        }
+        var shortName = type.GetProperty("name").GetString()!;
+        var sourceName = type.TryGetProperty("qualifiedName", out var qualified)
+            ? qualified.GetString()!
+            : shortName;
+        if (!generation.ModelNames.ContainsKey(sourceName)
+            && !generation.ModelNames.ContainsKey(shortName))
+        {
+            return false;
+        }
+        return TryGetType(generation.Types, sourceName, shortName, out var sourceType)
+               && IsObjectModelType(sourceType)
+               && (!sourceType.TryGetProperty("typeParameters", out var parameters)
+                   || parameters.GetArrayLength() == 0)
+               && sourceType.GetProperty("properties").EnumerateArray().All(
+                   property => CanEmitBinaryType(
+                       generation,
+                       property.GetProperty("type")))
+               && (!sourceType.TryGetProperty("indexSignatures", out var indexes)
+                   || indexes.GetArrayLength() == 0);
+    }
+
+    private static string EmitBinaryWriteValue(
+        StringBuilder source,
+        GenerationContext generation,
+        JsonElement type,
+        string valueExpression,
+        string indent)
+    {
+        var kind = Kind(type);
+        var result = generation.NextLocal("binaryValue");
+        switch (kind)
+        {
+            case "string":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.WriteString(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
+            case "number":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.WriteNumber(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
+            case "boolean":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.WriteBoolean(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
+            case "null":
+                source.Append(indent).Append("var ").Append(result)
+                    .AppendLine(" = writer.WriteNull();");
+                return result;
+            case "undefined":
+                source.Append(indent).Append("var ").Append(result)
+                    .AppendLine(" = writer.WriteUndefined();");
+                return result;
+            case "literal":
+                return EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    LiteralPrimitiveType(type),
+                    valueExpression,
+                    indent);
+            case "promise":
+                return EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    type.GetProperty("result"),
+                    valueExpression,
+                    indent);
+            case "array":
+            {
+                var index = generation.NextLocal("binaryIndex");
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.BeginArray(").Append(valueExpression)
+                    .AppendLine(".Count);")
+                    .Append(indent).Append("for (var ").Append(index)
+                    .Append(" = 0; ").Append(index).Append(" < ")
+                    .Append(valueExpression).Append(".Count; ").Append(index)
+                    .AppendLine("++)")
+                    .Append(indent).AppendLine("{");
+                var item = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    type.GetProperty("element"),
+                    valueExpression + "[" + index + "]",
+                    indent + "    ");
+                source.Append(indent).Append("    writer.SetArrayItem(")
+                    .Append(result).Append(", ").Append(index).Append(", ")
+                    .Append(item).AppendLine(");")
+                    .Append(indent).AppendLine("}");
+                return result;
+            }
+            case "union":
+            {
+                var concrete = FlattenUnionTypes(type)
+                    .Where(static candidate =>
+                        Kind(candidate) is not ("null" or "undefined"))
+                    .ToArray();
+                source.Append(indent).Append("uint ").Append(result)
+                    .AppendLine(";")
+                    .Append(indent).Append("if (").Append(valueExpression)
+                    .AppendLine(" is null)")
+                    .Append(indent).AppendLine("{")
+                    .Append(indent).Append("    ").Append(result)
+                    .AppendLine(" = writer.WriteNull();")
+                    .Append(indent).AppendLine("}")
+                    .Append(indent).AppendLine("else")
+                    .Append(indent).AppendLine("{");
+                var mapping = MapType(
+                    generation,
+                    concrete[0],
+                    optional: false,
+                    "binary union");
+                var concreteExpression = IsValueType(mapping.CSharpType)
+                    ? valueExpression + ".Value"
+                    : valueExpression;
+                var child = EmitBinaryWriteValue(
+                    source,
+                    generation,
+                    concrete[0],
+                    concreteExpression,
+                    indent + "    ");
+                source.Append(indent).Append("    ").Append(result)
+                    .Append(" = ").Append(child).AppendLine(";")
+                    .Append(indent).AppendLine("}");
+                return result;
+            }
+            case "reference":
+            {
+                var mapping = MapType(
+                    generation,
+                    type,
+                    optional: false,
+                    "binary reference");
+                if (mapping.IsBinding)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = writer.WriteHandle(")
+                        .Append(valueExpression)
+                        .AppendLine(".__WebSceneReference);");
+                }
+                else if (mapping.IsFunctionReference)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = writer.WriteHandle(")
+                        .Append(valueExpression).AppendLine(".Reference);");
+                }
+                else if (mapping.IsObjectReference)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = writer.WriteHandle(")
+                        .Append(valueExpression).AppendLine(");");
+                }
+                else
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = ").Append(mapping.NonNullableCSharpType)
+                        .Append(".__WebSceneWriteBinary(ref writer, ")
+                        .Append(valueExpression).AppendLine(");");
+                }
+                return result;
+            }
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported generated binary type '{kind}'.");
+        }
+    }
+
+    private static string EmitBinaryReadValue(
+        StringBuilder source,
+        GenerationContext generation,
+        JsonElement type,
+        string valueExpression,
+        string invokerExpression,
+        string indent)
+    {
+        var kind = Kind(type);
+        var result = generation.NextLocal("binaryResult");
+        switch (kind)
+        {
+            case "string":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = ").Append(valueExpression)
+                    .AppendLine(".GetString();");
+                return result;
+            case "number":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = ").Append(valueExpression)
+                    .AppendLine(".GetNumber();");
+                return result;
+            case "boolean":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = ").Append(valueExpression)
+                    .AppendLine(".GetBoolean();");
+                return result;
+            case "null":
+            case "undefined":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = ").Append(valueExpression)
+                    .AppendLine(".Kind == global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Undefined")
+                    .Append(indent)
+                    .AppendLine("    ? global::WebScene.JavaScript.Interop.JavaScriptNullish.Undefined")
+                    .Append(indent)
+                    .AppendLine("    : global::WebScene.JavaScript.Interop.JavaScriptNullish.Null;");
+                return result;
+            case "literal":
+                return EmitBinaryReadValue(
+                    source,
+                    generation,
+                    LiteralPrimitiveType(type),
+                    valueExpression,
+                    invokerExpression,
+                    indent);
+            case "promise":
+                return EmitBinaryReadValue(
+                    source,
+                    generation,
+                    type.GetProperty("result"),
+                    valueExpression,
+                    invokerExpression,
+                    indent);
+            case "array":
+            {
+                var elementType = type.GetProperty("element");
+                var elementMapping = MapType(
+                    generation,
+                    elementType,
+                    optional: false,
+                    "binary array");
+                var index = generation.NextLocal("binaryIndex");
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = new ").Append(elementMapping.CSharpType)
+                    .Append('[').Append(valueExpression).AppendLine(".Count];")
+                    .Append(indent).Append("for (var ").Append(index)
+                    .Append(" = 0; ").Append(index).Append(" < ")
+                    .Append(result).Append(".Length; ").Append(index)
+                    .AppendLine("++)")
+                    .Append(indent).AppendLine("{");
+                var child = EmitBinaryReadValue(
+                    source,
+                    generation,
+                    elementType,
+                    valueExpression + ".GetArrayItem(" + index + ")",
+                    invokerExpression,
+                    indent + "    ");
+                source.Append(indent).Append("    ").Append(result)
+                    .Append('[').Append(index).Append("] = ")
+                    .Append(child).AppendLine(";")
+                    .Append(indent).AppendLine("}");
+                return result;
+            }
+            case "union":
+            {
+                var concrete = FlattenUnionTypes(type)
+                    .Where(static candidate =>
+                        Kind(candidate) is not ("null" or "undefined"))
+                    .ToArray();
+                var mapping = MapType(
+                    generation,
+                    type,
+                    optional: false,
+                    "binary union");
+                source.Append(indent).Append(mapping.CSharpType).Append(' ')
+                    .Append(result).AppendLine(";")
+                    .Append(indent).Append("if (").Append(valueExpression)
+                    .AppendLine(".Kind is global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Null or global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Undefined)")
+                    .Append(indent).AppendLine("{")
+                    .Append(indent).Append("    ").Append(result)
+                    .AppendLine(" = null;")
+                    .Append(indent).AppendLine("}")
+                    .Append(indent).AppendLine("else")
+                    .Append(indent).AppendLine("{");
+                var child = EmitBinaryReadValue(
+                    source,
+                    generation,
+                    concrete[0],
+                    valueExpression,
+                    invokerExpression,
+                    indent + "    ");
+                source.Append(indent).Append("    ").Append(result)
+                    .Append(" = ").Append(child).AppendLine(";")
+                    .Append(indent).AppendLine("}");
+                return result;
+            }
+            case "reference":
+            {
+                var mapping = MapType(
+                    generation,
+                    type,
+                    optional: false,
+                    "binary reference");
+                if (mapping.IsBinding)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = new ").Append(mapping.NonNullableCSharpType)
+                        .Append('(').Append(invokerExpression).Append(", ")
+                        .Append(valueExpression).AppendLine(".GetHandle());");
+                }
+                else if (mapping.IsFunctionReference)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = new global::WebScene.JavaScript.Interop.JavaScriptFunctionReference(")
+                        .Append(invokerExpression).Append(", ")
+                        .Append(valueExpression).AppendLine(".GetHandle());");
+                }
+                else if (mapping.IsObjectReference)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = ").Append(valueExpression)
+                        .AppendLine(".GetHandle();");
+                }
+                else
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = ").Append(mapping.NonNullableCSharpType)
+                        .Append(".__WebSceneReadBinary(")
+                        .Append(valueExpression).Append(", ")
+                        .Append(invokerExpression).AppendLine(");");
+                }
+                return result;
+            }
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported generated binary type '{kind}'.");
+        }
+    }
+
+    private static JsonElement LiteralPrimitiveType(JsonElement literal)
+    {
+        var kind = literal.GetProperty("value").ValueKind switch
+        {
+            JsonValueKind.String => "string",
+            JsonValueKind.Number => "number",
+            JsonValueKind.True or JsonValueKind.False => "boolean",
+            _ => throw new InvalidOperationException(
+                "Unsupported binary literal.")
+        };
+        using var document = JsonDocument.Parse(
+            "{\"kind\":\"" + kind + "\"}");
+        return document.RootElement.Clone();
+    }
+
     private static Dictionary<string, string> ReadStringMap(
         JsonElement value,
         string property)
@@ -3765,7 +5142,8 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         string JavaScriptName,
         string CSharpName,
         bool Optional,
-        TypeMapping Mapping);
+        TypeMapping Mapping,
+        JsonElement Type);
 
     private sealed record ObjectModelIndex(
         string KeyType,
@@ -3935,11 +5313,14 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         bool IsBinding,
         bool IsNullable,
         bool Optional,
-        bool Rest);
+        bool Rest,
+        TypeMapping? BinaryMapping,
+        JsonElement BinaryType);
 
     private readonly record struct MappedParameter(
         string Name,
         TypeMapping Mapping,
         bool Optional,
-        bool Rest);
+        bool Rest,
+        JsonElement Type);
 }
