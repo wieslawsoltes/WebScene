@@ -202,7 +202,8 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
     "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
     "-p:WebSceneNativeEngineDenseLink=true",
-    "-p:WebSceneNativeEngineThinLto=$thinLtoValue"
+    "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
+    "-p:WebSceneNativeEngineV8Revision=$v8Revision"
 )
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments
