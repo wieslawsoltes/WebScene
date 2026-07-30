@@ -4,9 +4,11 @@
 
 WebScene can generate a strongly typed .NET facade for a JavaScript library from
 the library's TypeScript declarations. The native engine should be the primary
-runtime boundary. Generated methods should call
-`webscene_engine_evaluate_json` asynchronously, retain JavaScript objects through
-isolate-local handles, and map JavaScript promises to `ValueTask<T>`.
+runtime boundary. For binary-supported declaration shapes, generated methods
+now use static direct-invocation call sites and tagged codecs, retain JavaScript
+objects through isolate-local handles, and map JavaScript promises to
+`ValueTask<T>` without JSON or polling. `webscene_engine_evaluate_json` remains
+the compatibility boundary for unsupported shapes and arbitrary evaluation.
 
 TradingView is a good candidate because its licensed package contains
 `charting_library/charting_library.d.ts` for the widget API and
@@ -119,25 +121,25 @@ fingerprint mismatches, and policy references to undiscovered declarations.
 
 | TypeScript declaration | Generated .NET shape | Native behavior |
 | --- | --- | --- |
-| `string`, `number`, `boolean` | `string`, `double`, `bool` | JSON value |
-| `void` | `ValueTask` | queued invocation |
-| `Promise<T>` | `ValueTask<T>` | promise handle plus non-blocking result polling |
+| `string`, `number`, `boolean` | `string`, `double`, `bool` | tagged native value |
+| `void` | `ValueTask` | pooled queued direct invocation |
+| `Promise<T>` | `ValueTask<T>` | native settlement completes the original operation |
 | public interface returned by a method | generated proxy class | isolate-local object handle |
-| object/options interface | record or class with JSON names | JSON argument |
-| optional parameter | `JavaScriptOptional<T>` | preserves `undefined` separately from JSON `null` in both directions |
-| optional property | `JavaScriptOptional<T>` | preserves an absent property separately from explicit JSON `null` |
-| string-literal union | generated string-backed value type | JSON string |
-| structural union of arbitrary width | `JavaScriptUnion<...>` | branch-aware JSON conversion |
-| array/readonly array | array/read-only list | JSON array |
+| object/options interface | record or class with JavaScript names | generated tagged object codec where supported |
+| optional parameter | `JavaScriptOptional<T>` | preserves `undefined` separately from `null` |
+| optional property | `JavaScriptOptional<T>` | preserves an absent property separately from explicit `null` |
+| string-literal union | generated string-backed value type | tagged UTF-8 string where supported |
+| structural union of arbitrary width | `JavaScriptUnion<...>` | compatibility conversion until every branch has a tagged codec |
+| array/readonly array | array/read-only list | tagged array, or policy-selected borrowed view |
 | tuple, including more than seven elements | C# value tuple | JavaScript array with positional conversion |
 | string/number index signature | typed `AdditionalProperties` dictionary | flattened JavaScript object properties |
 | `Map`, `Set`, DOM objects, typed arrays | `JavaScriptObjectReference` | retained isolate-local object handle |
 | overloads | C# overloads where unambiguous | same JavaScript member |
-| generic interface | generic proxy/model | retained object handle or JSON |
+| generic interface | generic proxy/model | retained object handle or compatibility path |
 | callback parameter | function reference/typed `JavaScriptAction<T...>` or tuple action | retained function handle with arbitrary argument count |
 | ambient/exported function | generated static facade method | dotted global lookup and invocation |
 | exported/static value | generated static facade getter | dotted global value or promise lookup |
-| anonymous object in a member signature | generated structural record | JSON object |
+| anonymous object in a member signature | generated structural record | compatibility path unless it has a generated tagged codec |
 | `T \| Promise<T>` | `ValueTask<T>` | `Promise.resolve` handles either result |
 | model containing live objects | public model plus internal wire model | nested handles become proxies using the active invoker |
 
@@ -199,19 +201,23 @@ owns:
 - synchronous factory functions for Trading Platform broker construction;
 - deterministic release of object handles.
 
-All user values and member names are JSON encoded. Generated code does not
-concatenate user input into executable JavaScript. `NativeJavaScriptInvoker`
-accepts the existing `NativeWebSceneView.EvaluateJsonAsync` method directly:
+The compatibility path JSON-encodes user values and member names. Generated
+code does not concatenate user input into executable JavaScript.
+`NativeJavaScriptInvoker` can still accept the existing
+`NativeWebSceneView.EvaluateJsonAsync` method directly:
 
 ```csharp
 var interop = new NativeJavaScriptInvoker(view.EvaluateJsonAsync);
 var widget = await TradingViewWidget.CreateAsync(interop, options, cancellationToken);
 ```
 
-The current native ABI is sufficient for a correctness prototype. A production
-version should eventually add dedicated native exports for handle invocation
-and promise completion. That removes repeated script parsing and result polling
-while retaining the same generated .NET API.
+When a native binary transport is supplied, supported generated methods emit
+static call-site metadata, direct tagged request writers, and typed tagged
+result codecs. Native handle/global/member invocation and direct promise
+completion remove JSON, repeated script construction, parsing, polling, and
+intermediate managed values while retaining the same public generated .NET
+API. Unsupported declaration shapes use the compatibility implementation.
+Arbitrary evaluation and diagnostics remain on the JSON path.
 
 ## Prototype status
 
@@ -237,6 +243,18 @@ Implemented:
 - native value/object/void/promise invocation for dotted global functions;
 - branch-aware runtime result encoding: arrays and plain objects remain JSON,
   while live JavaScript objects are retained as handles;
+- direct generated global lookup and receiver-preserving member invocation
+  over pooled tagged request/result arenas;
+- direct generated invocation for binary-supported dotted global functions,
+  discovered constructors, and instance property getters/setters;
+- direct fulfillment, rejection, and cancellation of pending promise
+  operations without JavaScript status polling;
+- generated reflection-free codecs for primitive values, arrays, retained
+  handles, and generated object models;
+- policy-selected borrowed array results using disposable leases, stack-only
+  readers, and UTF-8 spans;
+- pooled managed request buffers and completion sources plus native request,
+  operation, and size-classed result records;
 - generated TradingView-shaped widget, chart, watched-value, trading primitive,
   datafeed, broker, broker-host, quote, and trading models;
 - reverse callback registration, typed callback invocation, a callback pump,
@@ -257,11 +275,14 @@ declarations.
 
 Remaining production work:
 
-- run the coverage report and compile against a licensed current TradingView
-  package; those private declarations are not present in this repository;
-- add a dedicated native handle/callback ABI to replace script polling;
+- extend the binary generator to all selected global functions, constructors,
+  properties, generic shapes, and discriminated unions;
+- add direct native callback take/complete operations to replace compatibility
+  JSON polling (callback handles already flow through direct generated calls);
 - provide a direct native synchronous callback for adapter methods that take
   arguments and return synchronously. No-argument synchronous methods and
   broker factories are already supported through cached values and native
   JavaScript closures;
+- complete the weighted binary-versus-leased-UTF-8 end-to-end gate and broader
+  malformed-input fuzzing before promoting ABI 3;
 - generate optional `JsonSerializerContext` metadata for NativeAOT.

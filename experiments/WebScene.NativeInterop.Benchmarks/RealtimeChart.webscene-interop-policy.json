@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0",
+  "api": "RealtimeChart.webscene-interop-api.json",
+  "apiFingerprint": "2416d25dbdf74763fb33b3ef49b659756965e4669bda5813841b75b57e7675e3",
+  "namespace": "WebScene.NativeInterop.Benchmarks.Generated",
+  "typeMappings": {},
+  "functionsClassName": "JavaScriptGlobals",
+  "functions": [],
+  "globalProperties": [
+    {
+      "source": "realtimeChartHost",
+      "globalName": "realtimeChartHost",
+      "getterName": "GetRealtimeChartHostAsync",
+      "include": true
+    }
+  ],
+  "models": [
+    {
+      "source": "RealtimeChartBar",
+      "name": "RealtimeChartBar",
+      "include": true
+    }
+  ],
+  "adapters": [
+    {
+      "source": "RealtimeChartHost",
+      "name": "RealtimeChartHostAdapter",
+      "include": false,
+      "methods": [
+        {
+          "source": "getHistory",
+          "overload": 0,
+          "name": "GetHistoryAsync",
+          "include": false
+        },
+        {
+          "source": "lastClose",
+          "overload": 0,
+          "name": "LastClose",
+          "include": false
+        },
+        {
+          "source": "onHistoryResponse",
+          "overload": 0,
+          "name": "OnHistoryResponseAsync",
+          "include": false
+        },
+        {
+          "source": "onRealtimeUpdate",
+          "overload": 0,
+          "name": "OnRealtimeUpdateAsync",
+          "include": false
+        },
+        {
+          "source": "updateCount",
+          "overload": 0,
+          "name": "UpdateCount",
+          "include": false
+        }
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "source": "RealtimeChartHost",
+      "name": "RealtimeChartHost",
+      "include": true,
+      "constructor": null,
+      "constructors": [],
+      "properties": [
+        {
+          "source": "status",
+          "include": true,
+          "getterName": "GetStatusAsync",
+          "setterName": "SetStatusAsync"
+        }
+      ],
+      "methods": [
+        {
+          "source": "getHistory",
+          "overload": 0,
+          "name": "GetHistoryAsync",
+          "borrowedName": "BorrowHistoryAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "lastClose",
+          "overload": 0,
+          "name": "LastCloseAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "onHistoryResponse",
+          "overload": 0,
+          "name": "OnHistoryResponseAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "onRealtimeUpdate",
+          "overload": 0,
+          "name": "OnRealtimeUpdateAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        },
+        {
+          "source": "updateCount",
+          "overload": 0,
+          "name": "UpdateCountAsync",
+          "include": true,
+          "omitOptionalParameters": false
+        }
+      ]
+    }
+  ]
+}

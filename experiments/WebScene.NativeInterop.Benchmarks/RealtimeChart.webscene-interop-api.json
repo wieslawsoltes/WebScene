@@ -1,0 +1,417 @@
+{
+  "schemaVersion": "1.0",
+  "generator": "webscene-interop-discover",
+  "typescriptVersion": "5.9.3",
+  "apiFingerprint": "2416d25dbdf74763fb33b3ef49b659756965e4669bda5813841b75b57e7675e3",
+  "declarations": [
+    {
+      "fileName": "RealtimeChart.fixture.d.ts",
+      "sha256": "3852ad52a815eb4afc5d9997ac629c592068ac6180e669180812243b598c0da0"
+    }
+  ],
+  "types": [
+    {
+      "name": "RealtimeChartBar",
+      "qualifiedName": "RealtimeChartBar",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "close",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "high",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "low",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "open",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "time",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "volume",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "RealtimeChartHost",
+      "qualifiedName": "RealtimeChartHost",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "getHistory",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": false,
+              "element": {
+                "kind": "reference",
+                "name": "RealtimeChartBar",
+                "qualifiedName": "RealtimeChartBar",
+                "display": "RealtimeChartBar",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "lastClose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "onHistoryResponse",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "requestId",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "bars",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "reference",
+                  "name": "RealtimeChartBar",
+                  "qualifiedName": "RealtimeChartBar",
+                  "display": "RealtimeChartBar",
+                  "typeArguments": []
+                }
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "onRealtimeUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "subscriberUid",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "bar",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "RealtimeChartBar",
+                "qualifiedName": "RealtimeChartBar",
+                "display": "RealtimeChartBar",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "updateCount",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "number"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "status",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    }
+  ],
+  "roots": [
+    {
+      "name": "RealtimeChartBar",
+      "qualifiedName": "RealtimeChartBar",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "close",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "high",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "low",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "open",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "time",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "volume",
+          "optional": true,
+          "readonly": false,
+          "type": {
+            "kind": "union",
+            "types": [
+              {
+                "kind": "undefined"
+              },
+              {
+                "kind": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    },
+    {
+      "name": "RealtimeChartHost",
+      "qualifiedName": "RealtimeChartHost",
+      "kind": "interface",
+      "typeParameters": [],
+      "constructors": [],
+      "callSignatures": [],
+      "methods": [
+        {
+          "name": "getHistory",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "promise",
+            "result": {
+              "kind": "array",
+              "readonly": false,
+              "element": {
+                "kind": "reference",
+                "name": "RealtimeChartBar",
+                "qualifiedName": "RealtimeChartBar",
+                "display": "RealtimeChartBar",
+                "typeArguments": []
+              }
+            }
+          }
+        },
+        {
+          "name": "lastClose",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "number"
+          }
+        },
+        {
+          "name": "onHistoryResponse",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "requestId",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "bars",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "array",
+                "readonly": false,
+                "element": {
+                  "kind": "reference",
+                  "name": "RealtimeChartBar",
+                  "qualifiedName": "RealtimeChartBar",
+                  "display": "RealtimeChartBar",
+                  "typeArguments": []
+                }
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "onRealtimeUpdate",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "subscriberUid",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "bar",
+              "optional": false,
+              "rest": false,
+              "type": {
+                "kind": "reference",
+                "name": "RealtimeChartBar",
+                "qualifiedName": "RealtimeChartBar",
+                "display": "RealtimeChartBar",
+                "typeArguments": []
+              }
+            }
+          ],
+          "returns": {
+            "kind": "void"
+          }
+        },
+        {
+          "name": "updateCount",
+          "overload": 0,
+          "typeParameters": [],
+          "parameters": [],
+          "returns": {
+            "kind": "number"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "status",
+          "optional": false,
+          "readonly": false,
+          "type": {
+            "kind": "number"
+          }
+        }
+      ],
+      "indexSignatures": [],
+      "baseTypes": []
+    }
+  ],
+  "functions": [],
+  "globals": [
+    {
+      "name": "realtimeChartHost",
+      "qualifiedName": "realtimeChartHost",
+      "readonly": true,
+      "type": {
+        "kind": "reference",
+        "name": "RealtimeChartHost",
+        "qualifiedName": "RealtimeChartHost",
+        "display": "RealtimeChartHost",
+        "typeArguments": []
+      }
+    }
+  ]
+}

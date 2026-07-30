@@ -71,7 +71,12 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
     {
         return V8NativePackageProbe.Run(args.Skip(2).ToArray());
     }
-    Console.Error.WriteLine("Unknown probe. Use one of: css-custom-properties, css-style-storage, v8dom, v8canvasboundary, v8dataset, v8tokens, v8observer, v8textnode, v8attributes, v8react, v8reactfocus, v8iframepointer, v8domidentity, v8interactioncontracts, v8lifecycle, v8sharedcache, v8nativepackage.");
+    if (args.Length > 1 && string.Equals(args[1], "generated-realtime-chart", StringComparison.OrdinalIgnoreCase))
+    {
+        return await GeneratedRealtimeChartAcceptanceProbe.RunAsync(
+            args.Skip(2).ToArray());
+    }
+    Console.Error.WriteLine("Unknown probe. Use one of: css-custom-properties, css-style-storage, v8dom, v8canvasboundary, v8dataset, v8tokens, v8observer, v8textnode, v8attributes, v8react, v8reactfocus, v8iframepointer, v8domidentity, v8interactioncontracts, v8lifecycle, v8sharedcache, v8nativepackage, generated-realtime-chart.");
     return 2;
 }
 

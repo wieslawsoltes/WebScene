@@ -5,10 +5,19 @@
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop.Generator\WebScene.JavaScript.Interop.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="..\..\experiments\WebScene.NativeInterop.Benchmarks\RealtimeChart.webscene-interop-api.json" />
+    <AdditionalFiles Include="..\..\experiments\WebScene.NativeInterop.Benchmarks\RealtimeChart.webscene-interop-policy.json" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless" />

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "declarations": 1,
+  "namedTypes": 2,
+  "methods": 5,
+  "properties": 7,
+  "constructors": 0,
+  "callbacks": 0,
+  "promises": 1,
+  "functions": 0,
+  "globals": 1,
+  "typeKinds": {
+    "array": 2,
+    "interface": 2,
+    "number": 9,
+    "promise": 1,
+    "reference": 4,
+    "string": 2,
+    "undefined": 1,
+    "union": 1,
+    "void": 2
+  },
+  "fallbacks": []
+}
