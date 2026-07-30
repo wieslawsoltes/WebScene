@@ -349,6 +349,7 @@ consumer_smoke_root="$repo_root/artifacts/native-engine-consumer-smoke"
 mkdir -p "$consumer_smoke_root"
 consumer_root="$(mktemp -d "$consumer_smoke_root/consumer.XXXXXX")"
 consumer_dir="$consumer_root/consumer"
+consumer_nuget_config="$consumer_root/NuGet.Config"
 cmake -E copy_if_different \
   "$repo_root/packaging/WebScene.NativeEngine.Runtime/ConsumerSmoke.Directory.Packages.props" \
   "$consumer_root/Directory.Packages.props"
@@ -357,6 +358,10 @@ if [[ "$expected_kernel" == Linux ]]; then
   # The compatibility image intentionally carries the pinned .NET 10 SDK.
   consumer_framework=net10.0
 fi
+dotnet new nugetconfig --force --output "$consumer_root"
+dotnet nuget add source "$output_dir" \
+  --name local-release \
+  --configfile "$consumer_nuget_config"
 dotnet new console --framework "$consumer_framework" --no-restore --output "$consumer_dir"
 NUGET_PACKAGES="$consumer_root/packages" dotnet add "$consumer_dir/consumer.csproj" package \
   "WebScene.NativeEngine.Runtime.$rid" \
@@ -364,8 +369,7 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet add "$consumer_dir/consumer.cspr
   --no-restore
 NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
   "$consumer_dir/consumer.csproj" -r "$rid" \
-  --source "$output_dir" \
-  --source https://api.nuget.org/v3/index.json
+  --configfile "$consumer_nuget_config"
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
 for copied_asset in "$native_name" icudtl.dat webscene-native-runtime.json; do

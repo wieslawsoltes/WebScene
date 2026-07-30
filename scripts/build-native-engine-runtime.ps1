@@ -223,11 +223,20 @@ $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_n
     --output (Join-Path $buildDir "wpt-results")
 if ($LASTEXITCODE -ne 0) { throw "Native package relocation smoke failed." }
 
-$consumerRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("webscene-native-consumer-" + [Guid]::NewGuid().ToString("N"))
+$consumerSmokeRoot = Join-Path $repoRoot "artifacts/native-engine-consumer-smoke"
+New-Item -ItemType Directory -Force -Path $consumerSmokeRoot | Out-Null
+$consumerRoot = Join-Path $consumerSmokeRoot ("consumer-" + [Guid]::NewGuid().ToString("N"))
 $consumerDir = Join-Path $consumerRoot "consumer"
+$consumerNuGetConfig = Join-Path $consumerRoot "NuGet.Config"
 $previousPackages = $env:NUGET_PACKAGES
 $env:NUGET_PACKAGES = Join-Path $consumerRoot "packages"
 try {
+    & dotnet new nugetconfig --force --output $consumerRoot
+    if ($LASTEXITCODE -ne 0) { throw "Failed to create the native package consumer NuGet configuration." }
+    & dotnet nuget add source $Output `
+        --name local-release `
+        --configfile $consumerNuGetConfig
+    if ($LASTEXITCODE -ne 0) { throw "Failed to add the local native package source." }
     & dotnet new console --framework net8.0 --no-restore --output $consumerDir
     if ($LASTEXITCODE -ne 0) { throw "Failed to create the native package consumer smoke project." }
     $consumerProject = Join-Path $consumerDir "consumer.csproj"
@@ -235,8 +244,7 @@ try {
         --version $PackageVersion --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to add the native runtime package to a consumer." }
     & dotnet restore $consumerProject -r $Rid `
-        --source "https://api.nuget.org/v3/index.json" `
-        --source $Output
+        --configfile $consumerNuGetConfig
     if ($LASTEXITCODE -ne 0) { throw "Failed to restore the native runtime package into a consumer." }
     & dotnet build $consumerProject -c Release -r $Rid --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }
