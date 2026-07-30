@@ -4,7 +4,7 @@
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';webscene;'))">$(PackageTags);webscene</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';web-components;'))">$(PackageTags);web-components</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';native-ui;'))">$(PackageTags);native-ui</PackageTags>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Improves multi-chart native runtime scheduling, demand-driven rendering, shared-isolate lifecycle management, and ships V8 15.3.10 on macOS and Linux with PartitionAlloc on macOS.</PackageReleaseNotes>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Improves multi-chart native runtime scheduling, demand-driven rendering, shared-isolate lifecycle management, and ships V8 15.3.10 with PartitionAlloc across macOS, Linux, and Windows.</PackageReleaseNotes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>
