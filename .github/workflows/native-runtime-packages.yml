@@ -108,7 +108,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v8-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel-complete
+          v8_cache_generation: v9-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel-shared
         - os: windows-latest
           rid: win-x64
           cpu: x64
@@ -179,7 +179,8 @@ jobs:
             && grep -Eq '^v8_enable_partition_alloc *= *${{ matrix.partition_alloc }}$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
-                && grep -Eq '^use_sysroot *= *false$' "$args"; }; }
+                && grep -Eq '^use_sysroot *= *false$' "$args" \
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
@@ -277,7 +278,8 @@ jobs:
             && grep -Eq '^v8_enable_partition_alloc *= *${{ matrix.partition_alloc }}$' "$args" \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
-                && grep -Eq '^use_sysroot *= *false$' "$args"; }; }
+                && grep -Eq '^use_sysroot *= *false$' "$args" \
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \

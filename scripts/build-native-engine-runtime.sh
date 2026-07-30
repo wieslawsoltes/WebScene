@@ -152,7 +152,7 @@ if [[ -z "$v8_root" ]]; then
     # against that image's libstdc++ and glibc 2.35 instead.
     # Keep V8's bundled LLD for its host tools; the reviewed build patch above
     # disables only CREL emission so Jammy can consume the archive.
-    gn_args+=" use_lld=true use_sysroot=false"
+    gn_args+=" use_lld=true use_sysroot=false v8_monolithic_for_shared_library=true"
   fi
   (
     cd "$v8_root"
@@ -206,6 +206,11 @@ fi
 if [[ "$expected_kernel" == Linux ]] \
     && ! grep -Eq '^use_lld *= *true$' "$v8_args"; then
   echo "The V8 SDK at '$v8_root' was not built with the required patched LLD configuration." >&2
+  exit 1
+fi
+if [[ "$expected_kernel" == Linux ]] \
+    && ! grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$v8_args"; then
+  echo "The V8 SDK at '$v8_root' is not safe to link into a shared library." >&2
   exit 1
 fi
 
