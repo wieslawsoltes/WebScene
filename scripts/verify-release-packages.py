@@ -29,6 +29,12 @@ MANAGED_PACKAGE_IDS = {
     "JavaScript.Avalonia.ClearScript",
 }
 DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
+NATIVE_V8_REVISIONS = {
+    "osx-arm64": "15.3.10",
+    "linux-x64": "15.3.10",
+    "win-x64": "14.7.173.23",
+}
+PARTITION_ALLOC_NATIVE_RIDS = {"osx-arm64"}
 REPOSITORY_URL = "https://github.com/wieslawsoltes/WebScene"
 REQUIRED_PACKAGE_TAGS = {"webscene", "web-components", "native-ui"}
 
@@ -192,11 +198,13 @@ def validate_native_runtime(
         "packageVersion": version,
         "runtimeIdentifier": runtime_identifier,
         "configuration": "Release",
+        "v8Revision": NATIVE_V8_REVISIONS[runtime_identifier],
         "v8PointerCompression": True,
         "v8SharedCage": True,
         "v8OptimizeForSizeDefault": True,
-        "v8PartitionAlloc": False,
+        "v8PartitionAlloc": runtime_identifier in PARTITION_ALLOC_NATIVE_RIDS,
         "denseLink": True,
+        "thinLto": False,
         "certificationTelemetry": False,
     }
     for name, value in expected.items():
