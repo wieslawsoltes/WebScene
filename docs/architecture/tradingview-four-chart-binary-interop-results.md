@@ -106,6 +106,10 @@ leased evaluation and generated direct tagged invocation, including promises,
 while retaining 32 result arenas concurrently. The run ends with no live
 result or operation and no breach of the 8 MiB retained-capacity limit.
 
+The completion-lifetime probe additionally cancels 3,200 delayed promises
+while disposing 100 managed transports. All 3,200 complete as cancellation,
+with no faults, outstanding results, or active native operations.
+
 ## Reproduction
 
 Build the V8 library and run correctness/stress:
@@ -137,6 +141,16 @@ dotnet run \
   --project benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj \
   -c Release --no-build -- \
   --filter '*GeneratedRealtimeChartInteropBenchmarks*' --job short
+```
+
+Exercise cancellation and transport-disposal races with:
+
+```bash
+WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
+dotnet run \
+  --project benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj \
+  -c Release --no-build -- \
+  probe native-interop-race --batches 100 --width 32
 ```
 
 The actual StackWich policy/manifests can be compiled read-only by overriding

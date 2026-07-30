@@ -46,6 +46,8 @@ and promise awaiting. Member invocation preserves the JavaScript receiver.
 Pending promises attach V8 fulfillment/rejection handlers once. Settlement
 completes the original native operation directly; there is no JavaScript
 polling loop. Cancellation removes pending promise state on the engine worker.
+Promise-handler metadata is V8-managed, so a timer settling after cancellation
+cannot dereference freed native callback state.
 Compatibility callback handles can be resolved by direct generated calls, so
 callback parameters do not force the hot invocation back through JSON.
 
@@ -78,8 +80,8 @@ view. Indexed values and UTF-8 spans address the immutable native arena;
 After warm-up, the implementation reuses:
 
 - managed tagged request arrays and UTF-8 buffers through `ArrayPool<T>`;
-- managed generation-checked operation slots backed by
-  `ManualResetValueTaskSourceCore<T>`;
+- managed operation slots backed by `ManualResetValueTaskSourceCore<T>`, routed
+  by operation ID through one engine-level completion bridge;
 - managed decode completion sources;
 - native request records and their capacity-bearing vectors;
 - native operation records;
@@ -159,6 +161,12 @@ leased evaluation and generated tagged calls while retaining 32 leases. The
 run must end with zero live result/operation state and no retained-capacity
 breach.
 
+An additional managed/native race probe starts and immediately disposes 3,200
+delayed-promise operations across 100 fresh transports. Every operation is
+cancelled without a fault or crash, and the run ends with zero outstanding
+results and zero active native operation slots. This specifically guards
+completion-bridge lifetime and promise settlement after cancellation.
+
 ## Consequences
 
 - Schema-known realtime calls avoid all JSON and intermediate strings.
@@ -183,9 +191,9 @@ Do not declare the custom format the sole production ABI yet. Before ABI 3:
   so those declarations no longer require compatibility fallback;
 - replace callback take/complete JSON compatibility polling with equivalent
   direct native operations;
-- add broader differential/fuzz coverage for property order, deep/cyclic
-  graphs, disposal races, double release, timeout, and malformed native
-  requests;
+- add broader differential/fuzz coverage for deep/cyclic graphs, timeout, and
+  randomized malformed native requests beyond the current bounds, truncated
+  header, cancellation/disposal, and double-release cases;
 - run the weighted end-to-end comparator against a dedicated leased UTF-8 JSON
   invocation, not only the isolated decoder comparator;
 - verify no scalar, handle, or void workload regresses by more than 10%.

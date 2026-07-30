@@ -400,7 +400,9 @@ bool validate_interop_request_v2(
     constexpr size_t maximum_values = 1'000'000U;
     constexpr size_t maximum_edges = 1'000'000U;
     constexpr size_t maximum_utf8_bytes = 64U * 1024U * 1024U;
-    if (request.version != 2U
+    constexpr size_t maximum_name_bytes = 1024U * 1024U;
+    if (request.struct_size < sizeof(webscene_interop_request_v2)
+        || request.version != 2U
         || request.operation < WEBSCENE_INTEROP_GET_GLOBAL_V2
         || request.operation > WEBSCENE_INTEROP_RELEASE_HANDLE_V2
         || request.result_mode > WEBSCENE_INTEROP_RESULT_VOID_V2
@@ -409,9 +411,15 @@ bool validate_interop_request_v2(
         || request.value_count > maximum_values
         || request.edge_count > maximum_edges
         || request.utf8_byte_count > maximum_utf8_bytes
+        || request.global_name_length > maximum_name_bytes
+        || request.member_name_length > maximum_name_bytes
         || request.values == nullptr
         || (request.edge_count != 0U && request.edges == nullptr)
         || (request.utf8_byte_count != 0U && request.utf8_bytes == nullptr)
+        || (request.global_name_length != 0U
+            && request.global_name == nullptr)
+        || (request.member_name_length != 0U
+            && request.member_name == nullptr)
         || request.arguments_root >= request.value_count
         || request.values[request.arguments_root].kind
             != WEBSCENE_INTEROP_VALUE_ARRAY_V1) {

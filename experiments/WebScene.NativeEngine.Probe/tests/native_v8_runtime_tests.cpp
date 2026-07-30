@@ -729,6 +729,21 @@ const webscene_interop_result_view_v1* invoke_generated(
     return result;
 }
 
+void require_generated_rejected(
+    webscene_engine* engine,
+    const webscene_interop_request_v2& request,
+    std::string_view message)
+{
+    interop_completion_probe probe;
+    require(
+        webscene_engine_begin_generated_invoke_v2(
+            engine,
+            &request,
+            interop_completed,
+            &probe) == 0U,
+        message);
+}
+
 void test_generated_binary_invocation_uses_tagged_arguments(
     webscene_engine* engine)
 {
@@ -791,6 +806,33 @@ void test_generated_binary_invocation_uses_tagged_arguments(
         0U,
         0U,
         WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V2};
+
+    auto malformed = get_global;
+    malformed.struct_size =
+        static_cast<uint32_t>(sizeof(webscene_interop_request_v2) - 1U);
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted a truncated request header");
+    malformed = get_global;
+    malformed.global_name_length = 1024U * 1024U + 1U;
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted an oversized global name");
+    malformed = get_global;
+    malformed.global_name = nullptr;
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted a missing global-name buffer");
+    malformed = get_global;
+    malformed.values = nullptr;
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted a missing value table");
+
     const auto* global_result = invoke_generated(engine, get_global);
     require(
         global_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1
@@ -851,6 +893,44 @@ void test_generated_binary_invocation_uses_tagged_arguments(
         utf8.size(),
         0U,
         WEBSCENE_INTEROP_RESULT_VALUE_V2};
+
+    malformed = update;
+    auto malformed_values = values;
+    malformed_values[1].offset =
+        static_cast<uint32_t>(utf8.size() + 1U);
+    malformed.values = malformed_values.data();
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted an invalid string range");
+    malformed = update;
+    malformed_values = values;
+    malformed_values[2].length =
+        static_cast<uint32_t>(edges.size() + 1U);
+    malformed.values = malformed_values.data();
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted an invalid object edge range");
+    malformed = update;
+    auto malformed_edges = edges;
+    malformed_edges[0].value_index =
+        static_cast<uint32_t>(values.size());
+    malformed.edges = malformed_edges.data();
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted an invalid child index");
+    malformed = update;
+    malformed_edges = edges;
+    malformed_edges[2].name_length =
+        static_cast<uint32_t>(utf8.size() + 1U);
+    malformed.edges = malformed_edges.data();
+    require_generated_rejected(
+        engine,
+        malformed,
+        "generated invocation accepted an invalid property-name range");
+
     const auto* update_result = invoke_generated(engine, update);
     require(
         update_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V1

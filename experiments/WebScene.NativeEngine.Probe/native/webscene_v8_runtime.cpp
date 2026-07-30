@@ -1630,18 +1630,10 @@ struct v8_dom_runtime::implementation final {
         std::string error;
     };
 
-    struct interop_promise_callback_data final {
-        implementation* owner{nullptr};
-        uint64_t operation_id{0};
-        bool rejected{false};
-    };
-
     struct pending_interop_promise final {
         uint32_t result_mode{WEBSCENE_INTEROP_RESULT_VALUE_V2};
         v8_dom_runtime::interop_completion_v2 completion;
         v8::Global<v8::Promise> promise;
-        std::unique_ptr<interop_promise_callback_data> fulfilled;
-        std::unique_ptr<interop_promise_callback_data> rejected;
     };
 
     struct frame_script final {
@@ -6335,17 +6327,26 @@ struct v8_dom_runtime::implementation final {
     static void interop_promise_settled(
         const v8::FunctionCallbackInfo<v8::Value>& info)
     {
-        if (!info.Data()->IsExternal()) return;
-        auto* data = static_cast<interop_promise_callback_data*>(
-            info.Data().As<v8::External>()->Value(
-                v8::kExternalPointerTypeTagDefault));
-        if (data == nullptr || data->owner == nullptr) return;
-        auto* owner = data->owner;
-        const auto operation_id = data->operation_id;
-        const auto rejected = data->rejected;
+        if (!info.Data()->IsArray()) return;
+        auto* owner = current(info.GetIsolate());
+        if (owner == nullptr) return;
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto data = info.Data().As<v8::Array>();
+        v8::Local<v8::Value> operation;
+        v8::Local<v8::Value> rejected_value;
+        if (!data->Get(local_context, 0U).ToLocal(&operation)
+            || !operation->IsBigInt()
+            || !data->Get(local_context, 1U).ToLocal(&rejected_value)
+            || !rejected_value->IsBoolean()) {
+            return;
+        }
+        bool lossless = false;
+        const auto operation_id =
+            operation.As<v8::BigInt>()->Uint64Value(&lossless);
+        if (!lossless) return;
         owner->settle_interop_promise(
             operation_id,
-            rejected,
+            rejected_value->BooleanValue(info.GetIsolate()),
             info.Length() == 0
                 ? v8::Undefined(info.GetIsolate())
                 : info[0]);
@@ -6373,33 +6374,46 @@ struct v8_dom_runtime::implementation final {
         pending->result_mode = result_mode;
         pending->completion = std::move(completion);
         pending->promise.Reset(isolate, promise);
-        pending->fulfilled =
-            std::make_unique<interop_promise_callback_data>(
-                this,
-                operation_id,
-                false);
-        pending->rejected =
-            std::make_unique<interop_promise_callback_data>(
-                this,
-                operation_id,
-                true);
+
+        auto fulfilled_data = v8::Array::New(isolate, 2);
+        auto rejected_data = v8::Array::New(isolate, 2);
+        if (!fulfilled_data->Set(
+                local_context,
+                0U,
+                v8::BigInt::NewFromUnsigned(
+                    isolate,
+                    operation_id)).FromMaybe(false)
+            || !fulfilled_data->Set(
+                local_context,
+                1U,
+                v8::False(isolate)).FromMaybe(false)
+            || !rejected_data->Set(
+                local_context,
+                0U,
+                v8::BigInt::NewFromUnsigned(
+                    isolate,
+                    operation_id)).FromMaybe(false)
+            || !rejected_data->Set(
+                local_context,
+                1U,
+                v8::True(isolate)).FromMaybe(false)) {
+            last_error =
+                "Generated native interop promise metadata could not be created";
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V1;
+            result.error = last_error;
+            return false;
+        }
 
         v8::Local<v8::Function> fulfilled;
         v8::Local<v8::Function> rejected;
         if (!v8::Function::New(
                 local_context,
                 interop_promise_settled,
-                v8::External::New(
-                    isolate,
-                    pending->fulfilled.get(),
-                    v8::kExternalPointerTypeTagDefault)).ToLocal(&fulfilled)
+                fulfilled_data).ToLocal(&fulfilled)
             || !v8::Function::New(
                 local_context,
                 interop_promise_settled,
-                v8::External::New(
-                    isolate,
-                    pending->rejected.get(),
-                    v8::kExternalPointerTypeTagDefault)).ToLocal(&rejected)
+                rejected_data).ToLocal(&rejected)
             || promise->Then(
                 local_context,
                 fulfilled,

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
 using Microsoft.Win32.SafeHandles;
@@ -901,12 +902,18 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
     private static readonly CompletedCallback s_completed = Complete;
     private static readonly IntPtr s_completedAddress =
         Marshal.GetFunctionPointerForDelegate(s_completed);
+    private static readonly ConcurrentDictionary<IntPtr, NativeInteropInvoker>
+        s_completionBridges = new();
+    private static long s_nextCompletionBridge;
 
     private readonly object _gate = new();
     private readonly Stack<OperationSlot> _available = [];
     private readonly HashSet<OperationSlot> _active = [];
     private readonly List<OperationSlot> _all = [];
+    private readonly Dictionary<ulong, OperationSlot> _operations = [];
+    private readonly HashSet<ulong> _earlyCompletions = [];
     private readonly IntPtr _engine;
+    private readonly IntPtr _callbackData;
     private bool _disposed;
 
     public NativeInteropInvoker(IntPtr engine)
@@ -916,6 +923,17 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             throw new ArgumentException("A native engine is required.", nameof(engine));
         }
         _engine = engine;
+        var bridge = Interlocked.Increment(ref s_nextCompletionBridge);
+        if (bridge == 0)
+        {
+            bridge = Interlocked.Increment(ref s_nextCompletionBridge);
+        }
+        _callbackData = new IntPtr(bridge);
+        if (!s_completionBridges.TryAdd(_callbackData, this))
+        {
+            throw new InvalidOperationException(
+                "The native interop completion bridge could not be registered.");
+        }
     }
 
     public NativeInteropPoolMetrics PoolMetrics
@@ -967,7 +985,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                     _engine,
                     in request,
                     s_completedAddress,
-                    slot.CallbackData);
+                    _callbackData);
                 if (operationId == 0)
                 {
                     slot.FailToBegin(
@@ -1004,7 +1022,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 _engine,
                 in request,
                 s_completedAddress,
-                slot.CallbackData);
+                _callbackData);
             if (operationId == 0)
             {
                 slot.FailToBegin(
@@ -1045,28 +1063,82 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             _disposed = true;
         }
         CancelAll();
+        s_completionBridges.TryRemove(_callbackData, out _);
         lock (_gate)
         {
-            foreach (var slot in _all)
+            foreach (var slot in _available)
             {
                 slot.Dispose();
+                _all.Remove(slot);
             }
             _available.Clear();
-            _active.Clear();
-            _all.Clear();
+            _operations.Clear();
+            _earlyCompletions.Clear();
         }
     }
 
-    private void Return(OperationSlot slot)
+    private void Return(OperationSlot slot, ulong operationId)
     {
         lock (_gate)
         {
             _active.Remove(slot);
+            if (operationId != 0
+                && _operations.TryGetValue(operationId, out var registered)
+                && ReferenceEquals(registered, slot))
+            {
+                _operations.Remove(operationId);
+            }
             if (!_disposed)
             {
                 _available.Push(slot);
             }
+            else
+            {
+                slot.Dispose();
+                _all.Remove(slot);
+            }
         }
+    }
+
+    private void Bind(OperationSlot slot, ulong operationId)
+    {
+        var complete = false;
+        var cancel = false;
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                cancel = true;
+            }
+            else
+            {
+                _operations.Add(operationId, slot);
+                complete = _earlyCompletions.Remove(operationId);
+            }
+        }
+        if (cancel)
+        {
+            slot.Cancel();
+        }
+        else if (complete)
+        {
+            slot.Complete(operationId);
+        }
+    }
+
+    private void CompleteOperation(ulong operationId)
+    {
+        OperationSlot? slot;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            if (!_operations.TryGetValue(operationId, out slot))
+            {
+                _earlyCompletions.Add(operationId);
+                return;
+            }
+        }
+        slot.Complete(operationId);
     }
 
     private OperationSlot RentSlot(CancellationToken cancellationToken)
@@ -1091,8 +1163,10 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         try
         {
             if (userData == IntPtr.Zero) return;
-            var slot = (OperationSlot?)GCHandle.FromIntPtr(userData).Target;
-            slot?.Complete(operationId);
+            if (s_completionBridges.TryGetValue(userData, out var owner))
+            {
+                owner.CompleteOperation(operationId);
+            }
         }
         catch (Exception error)
         {
@@ -1106,7 +1180,6 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
     {
         private readonly object _gate = new();
         private readonly NativeInteropInvoker _owner;
-        private GCHandle _callbackHandle;
         private ManualResetValueTaskSourceCore<IntPtr> _source;
         private CancellationTokenRegistration _cancellation;
         private IntPtr _engine;
@@ -1118,12 +1191,8 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
         public OperationSlot(NativeInteropInvoker owner)
         {
             _owner = owner;
-            _callbackHandle = GCHandle.Alloc(this);
-            CallbackData = GCHandle.ToIntPtr(_callbackHandle);
             _source.RunContinuationsAsynchronously = true;
         }
-
-        public IntPtr CallbackData { get; }
 
         public void Prepare(IntPtr engine, CancellationToken cancellationToken)
         {
@@ -1156,6 +1225,7 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
                 _operationId = operationId;
                 cancel = _cancelRequested;
             }
+            _owner.Bind(this, operationId);
             if (cancel)
             {
                 Cancel();
@@ -1256,13 +1326,15 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
             finally
             {
                 _cancellation.Dispose();
+                ulong operationId;
                 lock (_gate)
                 {
                     _active = false;
                     _engine = IntPtr.Zero;
+                    operationId = _operationId;
                     _operationId = 0;
                 }
-                _owner.Return(this);
+                _owner.Return(this, operationId);
             }
         }
 
@@ -1278,11 +1350,6 @@ public sealed unsafe class NativeInteropInvoker : IDisposable
 
         public void Dispose()
         {
-            if (_callbackHandle.IsAllocated)
-            {
-                _callbackHandle.Free();
-                _callbackHandle = default;
-            }
         }
     }
 }
