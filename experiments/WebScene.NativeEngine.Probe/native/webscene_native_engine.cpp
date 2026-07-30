@@ -2289,9 +2289,17 @@ private:
         operation->user_data = user_data;
         operation->cancelled.store(false, std::memory_order_relaxed);
         operation->ready.store(false, std::memory_order_relaxed);
-        operation->result.reset();
+        release_interop_operation_result(*operation);
         operation->in_use = true;
         return operation;
+    }
+
+    static void release_interop_operation_result(
+        interop_operation_v3& operation)
+    {
+        if (!operation.result) return;
+        auto pool = operation.result->owner;
+        pool->release(std::move(operation.result));
     }
 
     void return_interop_operation_locked(
@@ -2303,7 +2311,7 @@ private:
         operation->user_data = nullptr;
         operation->cancelled.store(false, std::memory_order_relaxed);
         operation->ready.store(false, std::memory_order_relaxed);
-        operation->result.reset();
+        release_interop_operation_result(*operation);
         operation->in_use = false;
         available_interop_operation_slots_.push_back(
             operation->pool_index);

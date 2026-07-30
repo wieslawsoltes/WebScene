@@ -1215,6 +1215,65 @@ void test_generated_binary_invocation_uses_tagged_arguments(
         "generated rejected promise did not fail its native operation");
     release_interop_result(rejected_promise_result);
 
+    webscene_interop_pool_metrics_v3 before_ready_cancel{};
+    before_ready_cancel.struct_size =
+        static_cast<uint32_t>(sizeof(before_ready_cancel));
+    require(
+        webscene_engine_get_interop_pool_metrics_v3(
+            engine,
+            &before_ready_cancel) != 0,
+        "generated ready-result cancellation metrics were unavailable");
+    interop_completion_probe ready_cancel_probe;
+    const auto ready_cancel_operation =
+        webscene_engine_begin_invoke_v3(
+            engine,
+            &count,
+            interop_completed,
+            &ready_cancel_probe);
+    require(
+        ready_cancel_operation != 0U,
+        "generated ready-result cancellation invocation was rejected");
+    {
+        std::unique_lock lock(ready_cancel_probe.mutex);
+        require(
+            ready_cancel_probe.ready.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&ready_cancel_probe] {
+                    return ready_cancel_probe.operation_id != 0U;
+                }),
+            "generated ready-result cancellation invocation did not complete");
+    }
+    require(
+        webscene_engine_cancel_invoke_v3(
+            engine,
+            ready_cancel_operation) != 0U,
+        "generated ready result could not be cancelled");
+    webscene_interop_pool_metrics_v3 after_ready_cancel{};
+    after_ready_cancel.struct_size =
+        static_cast<uint32_t>(sizeof(after_ready_cancel));
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        require(
+            webscene_engine_get_interop_pool_metrics_v3(
+                engine,
+                &after_ready_cancel) != 0,
+            "generated ready-result cancellation metrics became unavailable");
+        if (after_ready_cancel.active_operation_slots == 0U
+            && after_ready_cancel.outstanding_results
+                == before_ready_cancel.outstanding_results) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after_ready_cancel.active_operation_slots == 0U
+            && after_ready_cancel.outstanding_results
+                == before_ready_cancel.outstanding_results
+            && webscene_engine_take_invoke_result_v3(
+                engine,
+                ready_cancel_operation) == nullptr,
+        "cancelling a ready generated result bypassed its result pool");
+
     constexpr std::string_view cancellable_promise_member{
         "cancellablePromise"};
     promise.member_name = cancellable_promise_member.data();
