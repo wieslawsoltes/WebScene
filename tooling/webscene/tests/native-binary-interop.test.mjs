@@ -2,13 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('native invoker is a forward-only ABI 3 binary adapter', async () => {
+test('native invoker is a bidirectional ABI 3 binary adapter', async () => {
   const source = await readFile(new URL(
     '../../../src/WebScene.JavaScript.Interop/NativeJavaScriptInvoker.cs',
     import.meta.url), 'utf8');
 
-  assert.match(source, /IJavaScriptBinaryInvoker/);
-  assert.match(source, /NativeJavaScriptInvoker\(IJavaScriptBinaryTransport transport\)/);
+  assert.match(source, /IJavaScriptBinaryBidirectionalInvoker/);
+  assert.match(
+    source,
+    /NativeJavaScriptInvoker\(\s*IJavaScriptBinaryTransport transport,\s*Func<CancellationToken, ValueTask>\? waitForCallbackAsync = null\)/);
+  assert.match(source, /PumpCallbackAsync/);
   assert.match(source, /generated ABI 3 binary codec/);
   assert.doesNotMatch(source, /private const string Bootstrap/);
   assert.doesNotMatch(source, /System\.Text\.Json/);
