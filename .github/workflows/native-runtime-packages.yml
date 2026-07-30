@@ -106,9 +106,9 @@ jobs:
           monolith: libv8_monolith.a
           script: unix
           v8_revision: 15.3.10
-          partition_alloc: true
-          v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v9-v8-15.3.10-partitionalloc-ubuntu22-gcc12-lld-no-crel-shared
+          partition_alloc: false
+          v8_configuration: Release
+          v8_cache_generation: v10-v8-15.3.10-ubuntu22-gcc12-lld-no-crel-shared
         - os: windows-latest
           rid: win-x64
           cpu: x64
@@ -241,7 +241,6 @@ jobs:
               --v8-root '$v8_root' \
               --v8-revision '${{ matrix.v8_revision }}' \
               --upstream-v8 \
-              --partition-alloc \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
