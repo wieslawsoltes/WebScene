@@ -106,10 +106,10 @@ jobs:
           monolith: libv8_monolith.a
           script: unix
           v8_revision: 15.3.10
-          partition_alloc: false
-          v8_configuration: Release
-          v8_cache_generation: v10-v8-15.3.10-ubuntu22-gcc12-lld-no-crel-shared
-        - os: windows-latest
+          partition_alloc: true
+          v8_configuration: ReleasePartitionAlloc
+          v8_cache_generation: v11-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared
+        - os: windows-2022
           rid: win-x64
           cpu: x64
           monolith: v8_monolith.lib
@@ -180,7 +180,9 @@ jobs:
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
                 && grep -Eq '^use_sysroot *= *false$' "$args" \
-                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args" \
+                && grep -Eq '^use_allocator_shim *= *false$' "$args" \
+                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
@@ -241,6 +243,7 @@ jobs:
               --v8-root '$v8_root' \
               --v8-revision '${{ matrix.v8_revision }}' \
               --upstream-v8 \
+              --partition-alloc \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
@@ -278,7 +281,9 @@ jobs:
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
                 && grep -Eq '^use_sysroot *= *false$' "$args" \
-                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args" \
+                && grep -Eq '^use_allocator_shim *= *false$' "$args" \
+                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \

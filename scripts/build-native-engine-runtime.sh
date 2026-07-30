@@ -153,6 +153,13 @@ if [[ -z "$v8_root" ]]; then
     # Keep V8's bundled LLD for its host tools; the reviewed build patch above
     # disables only CREL emission so Jammy can consume the archive.
     gn_args+=" use_lld=true use_sysroot=false v8_monolithic_for_shared_library=true"
+    if [[ "$partition_alloc" == true ]]; then
+      # A dlopen-loaded runtime cannot safely replace glibc's process allocator:
+      # objects allocated before the DSO is loaded can later be routed to the
+      # replacement free(). Keep PartitionAlloc available to V8 while disabling
+      # its ELF process-wide malloc symbol interposition.
+      gn_args+=" use_allocator_shim=false use_partition_alloc_as_malloc=false"
+    fi
   fi
   (
     cd "$v8_root"
@@ -211,6 +218,12 @@ fi
 if [[ "$expected_kernel" == Linux ]] \
     && ! grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$v8_args"; then
   echo "The V8 SDK at '$v8_root' is not safe to link into a shared library." >&2
+  exit 1
+fi
+if [[ "$expected_kernel" == Linux && "$partition_alloc" == true ]] \
+    && { ! grep -Eq '^use_allocator_shim *= *false$' "$v8_args" \
+      || ! grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$v8_args"; }; then
+  echo "The V8 SDK at '$v8_root' enables unsafe process-wide allocator interposition." >&2
   exit 1
 fi
 
