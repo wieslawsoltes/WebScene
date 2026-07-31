@@ -9607,10 +9607,6 @@ void test_read_only_evaluation_does_not_publish_scene()
 {
     auto* engine = webscene_engine_create(0);
     require(engine != nullptr, "read-only evaluation engine creation failed");
-    execute_and_wait(
-        engine,
-        "document.body.textContent = 'ready'",
-        "read-only-evaluation-setup.js");
 
     const webscene_scene_view* initial = nullptr;
     for (auto attempt = 0; attempt < 100 && initial == nullptr; ++attempt) {
@@ -9625,22 +9621,32 @@ void test_read_only_evaluation_does_not_publish_scene()
         "read-only evaluation fixture could not acknowledge its initial scene");
     webscene_scene_release(initial);
 
-    webscene_engine_metrics baseline{};
-    for (auto attempt = 0; attempt < 100; ++attempt) {
-        const auto* pending = webscene_engine_acquire_latest_scene(engine);
-        if (pending != nullptr) {
-            webscene_scene_acknowledge(pending);
-            webscene_scene_release(pending);
+    webscene_engine_metrics before_setup{};
+    webscene_engine_get_metrics(engine, &before_setup);
+    execute_and_wait(
+        engine,
+        "document.body.textContent = 'ready'",
+        "read-only-evaluation-setup.js");
+
+    const webscene_scene_view* setup_scene = nullptr;
+    for (auto attempt = 0; attempt < 100 && setup_scene == nullptr; ++attempt) {
+        webscene_engine_metrics current{};
+        webscene_engine_get_metrics(engine, &current);
+        if (current.published_scenes > before_setup.published_scenes) {
+            setup_scene = webscene_engine_acquire_latest_scene(engine);
         }
-        webscene_engine_get_metrics(engine, &baseline);
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
-        webscene_engine_metrics settled{};
-        webscene_engine_get_metrics(engine, &settled);
-        if (settled.published_scenes == baseline.published_scenes) {
-            baseline = settled;
-            break;
+        if (setup_scene == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
     }
+    require(setup_scene != nullptr, "read-only evaluation setup scene was not published");
+    require(
+        webscene_scene_acknowledge(setup_scene) != 0,
+        "read-only evaluation setup scene could not be acknowledged");
+    webscene_scene_release(setup_scene);
+
+    webscene_engine_metrics baseline{};
+    webscene_engine_get_metrics(engine, &baseline);
     require(
         evaluate(engine, "1 + 1", "read-only-evaluation.js") == "2",
         "read-only evaluation returned the wrong value");
