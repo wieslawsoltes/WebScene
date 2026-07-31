@@ -99,7 +99,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v7-v8-15.3.10-partitionalloc-complete
+          v8_cache_generation: v8-v8-15.3.10-pa-no-process-shim-macos
           v8_cache_script: scripts/build-native-engine-runtime.sh
           v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt
         - os: ubuntu-latest
@@ -184,12 +184,14 @@ jobs:
           grep -Eq '^v8_enable_pointer_compression *= *true$' "$args" \
             && grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$args" \
             && grep -Eq '^v8_enable_partition_alloc *= *${{ matrix.partition_alloc }}$' "$args" \
+            && { [[ '${{ matrix.partition_alloc }}' != 'true' ]] \
+              || [[ '${{ matrix.rid }}' == 'win-x64' ]] \
+              || { grep -Eq '^use_allocator_shim *= *false$' "$args" \
+                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; } \
             && { [[ '${{ matrix.rid }}' != 'linux-x64' ]] \
               || { grep -Eq '^use_lld *= *true$' "$args" \
                 && grep -Eq '^use_sysroot *= *false$' "$args" \
-                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args" \
-                && grep -Eq '^use_allocator_shim *= *false$' "$args" \
-                && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
+                && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
           && -f "$args" \
