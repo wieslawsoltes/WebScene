@@ -1859,7 +1859,12 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private long _appliedDiffs;
     private long _changedLayers;
     private long _damageRectangles;
+    private long _damageEvaluations;
+    private long _emptyDamageDiffs;
+    private long _partialDamageDiffs;
+    private long _fullDamageDiffs;
     private double _damageArea;
+    private double _damageUnionArea;
     private double _viewportArea;
     public static long AnimationFrameCount;
     public static long SynchronousRenderAcquisitionCount;
@@ -2064,12 +2069,17 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
 
         Interlocked.Increment(ref InvalidationCallCount);
-        // CompositionCustomVisualHandler invalidation bounds are useful for
-        // scheduling, but the macOS compositor does not guarantee that the
-        // backing surface outside a partial invalidation remains available to
-        // a custom Skia draw. Repaint the complete retained scene for each
-        // changed WebScene frame.
-        Invalidate();
+        // This only bounds Avalonia's root dirty region. OnRender still replays
+        // the retained scene whenever Avalonia visits the custom visual, which
+        // is required when the window target loses or exposes prior contents.
+        if (damage.IsFull)
+        {
+            Invalidate();
+        }
+        else
+        {
+            Invalidate(damage.Bounds);
+        }
     }
 
     private bool TryAcquireNextDiff(out NativeSceneDamage damage)
@@ -2158,14 +2168,24 @@ internal sealed unsafe class NativeSceneCompositionHandler
             new Size(effective.X, effective.Y));
 
         _damageRectangles += damage.RectangleCount;
+        _damageEvaluations++;
         _damageArea += damage.SummedArea;
+        _damageUnionArea += damage.RequiresRender
+            ? damage.Bounds.Width * damage.Bounds.Height
+            : 0;
         if (damage.IsFull && damage.RequiresRender)
         {
+            _fullDamageDiffs++;
             Interlocked.Increment(ref FullInvalidationCount);
         }
         else if (damage.RequiresRender)
         {
+            _partialDamageDiffs++;
             Interlocked.Add(ref DamageRectangleCount, damage.RectangleCount);
+        }
+        else
+        {
+            _emptyDamageDiffs++;
         }
         return damage;
     }
@@ -2274,18 +2294,30 @@ internal sealed unsafe class NativeSceneCompositionHandler
             _pendingDamage = NativeSceneDamage.None;
             _pendingDiffApplyTicks = 0;
             _pendingDiffCanvasCommandCount = 0;
-            if (_appliedDiffs % 300 == 0)
+            if (_damageEvaluations >= 300)
             {
-                var damagePercent = _viewportArea > 0
+                var summedDamagePercent = _viewportArea > 0
                     ? _damageArea * 100 / _viewportArea
+                    : 0;
+                var unionDamagePercent = _viewportArea > 0
+                    ? _damageUnionArea * 100 / _viewportArea
                     : 0;
                 Console.WriteLine(
                     $"Composition scene diffs: {_appliedDiffs:N0}, " +
-                    $"changed layers={_changedLayers:N0}, damage rects={_damageRectangles:N0}, " +
-                    $"summed damage={damagePercent:F1}% of frame area");
+                    $"sample={_damageEvaluations:N0}, changed layers={_changedLayers:N0}, " +
+                    $"damage rects={_damageRectangles:N0}, " +
+                    $"empty={_emptyDamageDiffs:N0}, partial={_partialDamageDiffs:N0}, " +
+                    $"full={_fullDamageDiffs:N0}, " +
+                    $"summed damage={summedDamagePercent:F1}%, " +
+                    $"union damage={unionDamagePercent:F1}% of frame area");
                 _changedLayers = 0;
                 _damageRectangles = 0;
+                _damageEvaluations = 0;
+                _emptyDamageDiffs = 0;
+                _partialDamageDiffs = 0;
+                _fullDamageDiffs = 0;
                 _damageArea = 0;
+                _damageUnionArea = 0;
                 _viewportArea = 0;
             }
         }
