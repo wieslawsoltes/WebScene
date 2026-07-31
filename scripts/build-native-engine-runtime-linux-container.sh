@@ -6,11 +6,19 @@ v8_root="$repo_root/artifacts/native-engine-v8/linux-x64/v8"
 thin_lto=false
 disable_wasm=false
 partition_alloc=false
+html_parser=legacy
+expect_html_parser_value=false
 for argument in "$@"; do
+  if [[ "$expect_html_parser_value" == true ]]; then
+    html_parser="$argument"
+    expect_html_parser_value=false
+    continue
+  fi
   case "$argument" in
     --thin-lto) thin_lto=true ;;
     --disable-wasm) disable_wasm=true ;;
     --partition-alloc) partition_alloc=true ;;
+    --html-parser) expect_html_parser_value=true ;;
   esac
 done
 build_variant=
@@ -28,6 +36,9 @@ if [[ "$partition_alloc" == true ]]; then
   v8_configuration+=PartitionAlloc
 fi
 build_dir="$repo_root/artifacts/native-engine-runtime-build/linux-x64$build_variant"
+if [[ "$html_parser" == html5ever ]]; then
+  build_dir="$repo_root/artifacts/native-engine-runtime-build/linux-x64-html5ever$build_variant"
+fi
 
 set +e
 "$repo_root/scripts/build-native-engine-runtime.sh" "$@"

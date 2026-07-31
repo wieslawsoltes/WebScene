@@ -51,6 +51,84 @@ option(WEBSCENE_NATIVE_ENGINE_THIN_LTO
     "Enable ThinLTO for the WebScene native engine and its V8 monolith link" OFF)
 option(WEBSCENE_NATIVE_ENGINE_CERTIFICATION
     "Include certification telemetry, diagnostic snapshots, and native profiling hooks" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK
+    "Build the V8-free html5ever parser microbenchmark" OFF)
+set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "legacy" CACHE STRING
+    "Native HTML parser implementation: legacy or html5ever")
+set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
+
+if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
+    find_program(WEBSCENE_CARGO_EXECUTABLE cargo REQUIRED)
+    set(WEBSCENE_HTML_PARSER_MANIFEST
+        "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/Cargo.toml")
+    set(WEBSCENE_HTML_PARSER_TARGET_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/html-parser-target")
+    if(MSVC)
+        set(WEBSCENE_HTML_PARSER_LIBRARY
+            "${WEBSCENE_HTML_PARSER_TARGET_DIR}/release/webscene_html_parser.lib")
+    else()
+        set(WEBSCENE_HTML_PARSER_LIBRARY
+            "${WEBSCENE_HTML_PARSER_TARGET_DIR}/release/libwebscene_html_parser.a")
+    endif()
+    add_custom_command(
+        OUTPUT "${WEBSCENE_HTML_PARSER_LIBRARY}"
+        COMMAND ${CMAKE_COMMAND} -E env
+            "CARGO_TARGET_DIR=${WEBSCENE_HTML_PARSER_TARGET_DIR}"
+            "${WEBSCENE_CARGO_EXECUTABLE}" build
+            --manifest-path "${WEBSCENE_HTML_PARSER_MANIFEST}"
+            --release --locked
+        DEPENDS
+            "${WEBSCENE_HTML_PARSER_MANIFEST}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/Cargo.lock"
+            "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/src/lib.rs"
+        COMMENT "Building the pinned html5ever WebScene parser"
+        VERBATIM)
+    add_custom_target(webscene_html_parser_build
+        DEPENDS "${WEBSCENE_HTML_PARSER_LIBRARY}")
+    add_library(webscene_html_parser STATIC IMPORTED GLOBAL)
+    set_target_properties(webscene_html_parser PROPERTIES
+        IMPORTED_LOCATION "${WEBSCENE_HTML_PARSER_LIBRARY}")
+    add_dependencies(webscene_html_parser webscene_html_parser_build)
+    if(WIN32)
+        target_link_libraries(webscene_html_parser INTERFACE
+            advapi32 bcrypt ntdll userenv ws2_32)
+    elseif(APPLE)
+        target_link_libraries(webscene_html_parser INTERFACE iconv)
+    elseif(UNIX)
+        target_link_libraries(webscene_html_parser INTERFACE
+            dl m pthread rt util)
+    endif()
+    target_sources(webscene_native_engine PRIVATE
+        native/webscene_html_parser.cpp)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_html_parser)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_HTML5EVER=1)
+    if(BUILD_TESTING)
+        add_executable(webscene_html_parser_tests
+            tests/html_parser_tests.cpp
+            native/webscene_html_parser.cpp
+            native/webscene_native_dom.cpp)
+        target_compile_features(webscene_html_parser_tests PRIVATE cxx_std_20)
+        target_include_directories(webscene_html_parser_tests PRIVATE native)
+        target_link_libraries(webscene_html_parser_tests PRIVATE webscene_html_parser)
+        add_test(NAME webscene_html_parser_tests COMMAND webscene_html_parser_tests)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK)
+        add_executable(webscene_html_parser_benchmark
+            benchmarks/html_parser_benchmark.cpp
+            native/webscene_html_parser.cpp
+            native/webscene_native_dom.cpp)
+        target_compile_features(webscene_html_parser_benchmark PRIVATE cxx_std_20)
+        target_include_directories(webscene_html_parser_benchmark PRIVATE native)
+        target_link_libraries(webscene_html_parser_benchmark PRIVATE webscene_html_parser)
+    endif()
+    message(STATUS "WebScene native engine: html5ever parser selected")
+elseif(NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "legacy")
+    message(FATAL_ERROR
+        "WEBSCENE_NATIVE_ENGINE_HTML_PARSER must be legacy or html5ever")
+else()
+    message(STATUS "WebScene native engine: legacy HTML parser selected")
+endif()
 
 if(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     target_compile_definitions(webscene_native_engine PUBLIC
@@ -231,9 +309,31 @@ if(MSVC)
             /std:c++20 /Zc:__cplusplus)
         target_compile_definitions(webscene_native_engine_tests PRIVATE NOMINMAX)
     endif()
+    if(TARGET webscene_html_parser_tests)
+        set_property(TARGET webscene_html_parser_tests PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        target_compile_options(webscene_html_parser_tests PRIVATE
+            /std:c++20 /Zc:__cplusplus)
+        target_compile_definitions(webscene_html_parser_tests PRIVATE NOMINMAX)
+    endif()
+    if(TARGET webscene_html_parser_benchmark)
+        set_property(TARGET webscene_html_parser_benchmark PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        target_compile_options(webscene_html_parser_benchmark PRIVATE
+            /std:c++20 /Zc:__cplusplus)
+        target_compile_definitions(webscene_html_parser_benchmark PRIVATE NOMINMAX)
+    endif()
 else()
     target_compile_options(webscene_native_engine PRIVATE
         -Wall -Wextra -Wpedantic -fno-rtti -Wno-deprecated-declarations)
+    if(TARGET webscene_html_parser_tests)
+        target_compile_options(webscene_html_parser_tests PRIVATE
+            -Wall -Wextra -Wpedantic -fno-rtti)
+    endif()
+    if(TARGET webscene_html_parser_benchmark)
+        target_compile_options(webscene_html_parser_benchmark PRIVATE
+            -Wall -Wextra -Wpedantic -fno-rtti)
+    endif()
 endif()
 
 if(WEBSCENE_NATIVE_ENGINE_THIN_LTO)

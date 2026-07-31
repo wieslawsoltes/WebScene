@@ -1,0 +1,20 @@
+[package]
+name = "webscene-html-parser"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "webscene_html_parser"
+crate-type = ["staticlib"]
+
+[dependencies]
+html5ever = "=0.39.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "unwind"
+strip = "debuginfo"

@@ -39,6 +39,18 @@ RUN apt-get update \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# html5ever is compiled into the existing WebScene DSO. Keep the Rust compiler
+# pinned independently from Ubuntu's older distro package so native release
+# builds resolve the same Cargo.lock on every host. Install it in /opt because
+# CI deliberately runs this image as the host's non-root UID.
+ENV RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo \
+    PATH=/opt/cargo/bin:${PATH}
+RUN mkdir -p "$RUSTUP_HOME" "$CARGO_HOME" \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain 1.90.0 \
+    && chmod -R a+rX "$RUSTUP_HOME" "$CARGO_HOME"
+
 COPY --from=dotnet-sdk /usr/share/dotnet /usr/share/dotnet
 COPY --from=dotnet8-runtime /usr/share/dotnet/shared/Microsoft.NETCore.App /usr/share/dotnet/shared/Microsoft.NETCore.App
 

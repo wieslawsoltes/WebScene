@@ -107,6 +107,7 @@ internal static class HeadlessProof
             }
             var layout = root.GetProperty("layoutProbe");
             var pointerInput = root.GetProperty("pointerInput");
+            var loadingIndicator = layout.GetProperty("loadingIndicator");
             var pointerTarget =
                 layout.GetProperty("pointerTarget")[0];
             var rightRect = layout.GetProperty("right").GetProperty("rect");
@@ -145,6 +146,8 @@ internal static class HeadlessProof
                 rect.GetProperty("x").GetDouble()
                 + rect.GetProperty("width").GetDouble();
             if (!layout.GetProperty("ready").GetBoolean()
+                || loadingIndicator.GetProperty("count").GetInt32() != 1
+                || loadingIndicator.GetProperty("display").GetString() != "none"
                 || layout.GetProperty("widgetbarWrap").GetProperty("position").GetString()
                     != "absolute"
                 || layout.GetProperty("widgetbarTabs").GetProperty("position").GetString()
@@ -363,6 +366,8 @@ internal static class HeadlessProof
                       '[class^="toolbar-"]');
                     const volume = watchlistRow?.querySelector(
                       '[class*="volume-"]');
+                    const loadingIndicator = chartDocument.querySelector(
+                      '.loading-indicator');
                     const pointerTarget = chartDocument.elementFromPoint(
                       700, 350);
                     const describeVisual = node => {
@@ -533,6 +538,23 @@ internal static class HeadlessProof
                             getComputedStyle(chartValuesCoach).transform
                         } : null
                       },
+                      loadingIndicator: loadingIndicator ? {
+                        count: chartDocument.querySelectorAll(
+                          '.loading-indicator').length,
+                        html: loadingIndicator.outerHTML,
+                        parentClass:
+                          loadingIndicator.parentElement?.className ?? null,
+                        styleAttribute:
+                          loadingIndicator.getAttribute('style'),
+                        display:
+                          getComputedStyle(loadingIndicator).display,
+                        position:
+                          getComputedStyle(loadingIndicator).position,
+                        zIndex:
+                          getComputedStyle(loadingIndicator).zIndex,
+                        background:
+                          getComputedStyle(loadingIndicator).backgroundColor
+                      } : null,
                       pointerTarget: (() => {
                         const result = [];
                         for (let node = pointerTarget;
@@ -543,6 +565,10 @@ internal static class HeadlessProof
                             tag: node.tagName,
                             className: node.className,
                             cursor: getComputedStyle(node).cursor,
+                            display: getComputedStyle(node).display,
+                            background:
+                              getComputedStyle(node).backgroundColor,
+                            styleAttribute: node.getAttribute('style'),
                             pointerEvents:
                               getComputedStyle(node).pointerEvents,
                             rect: {

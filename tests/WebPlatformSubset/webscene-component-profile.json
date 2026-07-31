@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/html5-tree-construction-primitives.html",
+      "type": "contract",
+      "capabilities": ["html5-tree-construction", "adoption-agency", "table-foster-parenting", "named-character-references", "comments", "whitespace-text", "foreign-content-namespaces", "template-contents"],
+      "evidence": ["html5ever-parser-spike"],
+      "reason": "Candidate denominator for the compile-time html5ever investigation. It deliberately remains non-gating until separate legacy and html5ever native artifacts have been compared against the adoption gates."
+    },
+    {
       "path": "contracts/monaco-editor-runtime-primitives.html",
       "type": "contract",
       "capabilities": ["queue-microtask", "text-encoding", "custom-elements-registry", "multi-root-innerhtml", "insert-adjacent-html", "replace-with", "sibling-navigation", "node-interface-instance-constants", "window-scroll-offsets", "caret-range-from-point", "monospace-text-metrics", "token-color-cascade", "downloadable-font-face", "generated-icon-glyph-paint"],

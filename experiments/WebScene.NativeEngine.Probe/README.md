@@ -34,6 +34,28 @@ cmake -S experiments/WebScene.NativeEngine.Probe \
 cmake --build artifacts/native-engine-probe-v8 --config Release
 ```
 
+## Optional html5ever parser spike
+
+The native runtime normally builds its legacy parser. Build the pinned `html5ever`
+comparison artifact as a separate binary:
+
+```sh
+cmake -S experiments/WebScene.NativeEngine.Probe \
+  -B artifacts/native-engine-probe-html5ever \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DWEBSCENE_NATIVE_ENGINE_HTML_PARSER=html5ever \
+  -DWEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK=ON
+cmake --build artifacts/native-engine-probe-html5ever --config Release
+ctest --test-dir artifacts/native-engine-probe-html5ever --output-on-failure
+artifacts/native-engine-probe-html5ever/webscene_html_parser_benchmark
+```
+
+The Rust library is linked statically into the existing WebScene native library; it does
+not add a deployed dynamic library. `scripts/build-native-engine-runtime.sh` accepts
+`--html-parser html5ever`, and the Windows PowerShell equivalent accepts
+`-HtmlParser html5ever`, for equivalent packaged V8 comparisons. Comment preservation
+is the production policy; the discard mode exists only in the parser benchmark.
+
 Certification telemetry and profiling hooks are excluded by default from both
 Release and Debug builds. Enable them only for compatibility evidence or native
 profiling:

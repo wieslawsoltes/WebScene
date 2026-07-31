@@ -745,7 +745,25 @@ enum class text_selection_direction : uint8_t {
     backward
 };
 
+enum class dom_node_kind : uint8_t {
+    element,
+    text,
+    comment,
+    document_fragment,
+    document_type,
+    processing_instruction,
+    internal
+};
+
 struct dom_node final {
+    static constexpr std::string_view html_namespace_uri =
+        "http://www.w3.org/1999/xhtml";
+
+    struct namespace_data final {
+        std::string uri;
+        std::string prefix;
+    };
+
     struct authored_style_data final {
         std::unordered_map<std::string, std::string> declarations;
         std::unordered_set<std::string> important_declarations;
@@ -849,6 +867,7 @@ struct dom_node final {
     };
 
     uint32_t id{0};
+    dom_node_kind kind{dom_node_kind::element};
     std::string tag;
     std::string id_attribute;
     std::string class_name;
@@ -857,6 +876,38 @@ struct dom_node final {
     // continue to apply the ASCII case-insensitive name rules at the binding.
     bool xml_mode{false};
     attribute_collection attributes;
+    std::string_view namespace_uri() const noexcept
+    {
+        if (namespace_state != nullptr) return namespace_state->uri;
+        return kind == dom_node_kind::element ? html_namespace_uri : std::string_view{};
+    }
+
+    std::string_view namespace_prefix() const noexcept
+    {
+        return namespace_state == nullptr
+            ? std::string_view{}
+            : std::string_view(namespace_state->prefix);
+    }
+
+    void set_namespace(std::string_view uri, std::string_view prefix = {})
+    {
+        if (kind == dom_node_kind::element
+            && uri == html_namespace_uri
+            && prefix.empty()) {
+            namespace_state.reset();
+            return;
+        }
+        if (namespace_state == nullptr) {
+            namespace_state = std::make_unique<namespace_data>();
+        }
+        namespace_state->uri.assign(uri);
+        namespace_state->prefix.assign(prefix);
+    }
+
+    // HTML is represented by the null state, so ordinary elements pay one
+    // pointer rather than two inline std::string objects. Foreign/XML
+    // namespaces remain lossless and allocate only on the uncommon path.
+    std::unique_ptr<namespace_data> namespace_state;
     const authored_style_data& authored_style() const noexcept
     {
         static const authored_style_data empty;
@@ -885,6 +936,10 @@ struct dom_node final {
 
     std::unique_ptr<authored_style_data> authored_style_state;
     dom_node* parent{nullptr};
+    // HTMLTemplateElement content is a separate document fragment. It is
+    // allocated by native_document and therefore has the same stable address
+    // and lifetime as ordinary nodes.
+    dom_node* template_contents{nullptr};
     std::vector<dom_node*> children;
     node_style style{};
     layout_rect layout{};
@@ -1098,6 +1153,11 @@ public:
         uint64_t node_object_bytes{0};
         uint64_t node_pool_reserved_bytes{0};
         uint64_t node_pool_peak_bytes{0};
+        uint64_t element_node_count{0};
+        uint64_t text_node_count{0};
+        uint64_t comment_node_count{0};
+        uint64_t document_type_node_count{0};
+        uint64_t other_node_count{0};
         uint64_t table_layout_node_count{0};
         uint64_t table_layout_storage_bytes{0};
         uint64_t form_control_node_count{0};
@@ -1143,7 +1203,13 @@ public:
     dom_node& body() noexcept;
     const dom_node& body() const noexcept;
     dom_node& create_element(std::string tag);
+    dom_node& create_node(dom_node_kind kind, std::string name = {});
     bool append_child(dom_node& parent, dom_node& child);
+    bool parser_append_child(dom_node& parent, dom_node& child) noexcept;
+    bool parser_insert_before(dom_node& sibling, dom_node& child) noexcept;
+    bool parser_remove_from_parent(dom_node& child) noexcept;
+    bool parser_reparent_children(dom_node& source, dom_node& destination) noexcept;
+    dom_node& parser_template_contents(dom_node& element);
     void remove_all_children(dom_node& parent);
     size_t erase_detached_subtree(dom_node& root);
     dom_node* find_by_native_id(uint32_t id) noexcept;

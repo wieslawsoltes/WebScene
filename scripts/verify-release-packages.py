@@ -199,6 +199,7 @@ def validate_native_runtime(
         "runtimeIdentifier": runtime_identifier,
         "configuration": "Release",
         "v8Revision": NATIVE_V8_REVISIONS[runtime_identifier],
+        "htmlParser": "legacy",
         "v8PointerCompression": True,
         "v8SharedCage": True,
         "v8OptimizeForSizeDefault": True,

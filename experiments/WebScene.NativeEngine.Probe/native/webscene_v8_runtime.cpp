@@ -2,6 +2,9 @@
 
 #include "webscene_native_dom.h"
 #include "webscene_native_websocket.h"
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+#include "webscene_html_parser.h"
+#endif
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
@@ -3183,6 +3186,7 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "namespaceURI"), get_namespace_uri);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "children"), get_children);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "childNodes"), get_children);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "content"), get_template_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "parentNode"), get_parent_node);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "parentElement"), get_parent_node);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "firstChild"), get_first_child);
@@ -3570,6 +3574,7 @@ struct v8_dom_runtime::implementation final {
         document_template->SetNativeDataProperty(js_string(isolate, "body"), get_body);
         document_template->SetNativeDataProperty(js_string(isolate, "documentElement"), get_body);
         document_template->SetNativeDataProperty(js_string(isolate, "head"), get_body);
+        document_template->SetNativeDataProperty(js_string(isolate, "doctype"), get_document_doctype);
         document_template->SetNativeDataProperty(
             js_string(isolate, "scrollingElement"),
             get_scrolling_element);
@@ -5736,6 +5741,52 @@ struct v8_dom_runtime::implementation final {
             "html-element");
         detach_all_children(viewport_root);
 
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        const auto parsed_document = parse_html_document(document, viewport_root, html);
+        html_parse_duration_ns += parsed_document.duration_ns;
+        html_parse_error_count += parsed_document.parse_error_count;
+        html_parse_callback_count += parsed_document.callback_count;
+        html_parse_element_count += parsed_document.element_count;
+        html_parse_text_append_count += parsed_document.text_append_count;
+        html_parse_comment_count += parsed_document.comment_count;
+        html_parse_doctype_count += parsed_document.doctype_count;
+        html_parse_rust_allocation_count += parsed_document.rust_allocation_count;
+        html_parse_rust_peak_bytes = std::max(
+            html_parse_rust_peak_bytes, parsed_document.rust_peak_bytes);
+        html_parse_rust_retained_bytes += parsed_document.rust_retained_bytes;
+        if (!parsed_document) {
+            last_error = parsed_document.error.empty()
+                ? "html5ever document parsing failed with status "
+                    + std::to_string(parsed_document.status)
+                : parsed_document.error;
+            return false;
+        }
+        auto* html_element_pointer = static_cast<dom_node*>(nullptr);
+        for (auto* child : viewport_root.children) {
+            if (child != nullptr && child->tag == "html") {
+                html_element_pointer = child;
+                break;
+            }
+        }
+        auto* head_element_pointer = static_cast<dom_node*>(nullptr);
+        auto* body_pointer = static_cast<dom_node*>(nullptr);
+        if (html_element_pointer != nullptr) {
+            for (auto* child : html_element_pointer->children) {
+                if (child == nullptr) continue;
+                if (child->tag == "head") head_element_pointer = child;
+                else if (child->tag == "body") body_pointer = child;
+            }
+        }
+        if (html_element_pointer == nullptr
+            || head_element_pointer == nullptr
+            || body_pointer == nullptr) {
+            last_error = "html5ever did not construct the required HTML/HEAD/BODY tree";
+            return false;
+        }
+        auto& html_element = *html_element_pointer;
+        auto& head_element = *head_element_pointer;
+        auto& body = *body_pointer;
+#else
         // Keep the native viewport root stable for scene/layout ownership, but
         // expose the browser-shaped HTML/HEAD/BODY tree to CSS and script. This
         // prevents BODY declarations from contaminating documentElement while
@@ -5800,6 +5851,38 @@ struct v8_dom_runtime::implementation final {
             html_element.attributes["class"] = html_element.class_name;
         }
         if (!body.class_name.empty()) body.attributes["class"] = body.class_name;
+#endif
+        html_element.style.width = {100, length_unit::percent};
+        body.style.width = {100, length_unit::percent};
+        record_feature(
+            "html",
+            "element:html",
+            "supported",
+            {},
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+            "html5ever");
+#else
+            "html-element");
+#endif
+        record_feature(
+            "html",
+            "element:body",
+            "supported",
+            {},
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+            "html5ever");
+#else
+            "html-element");
+#endif
+
+        document_object.Get(isolate)->SetAlignedPointerInInternalField(
+            0,
+            &html_element,
+            v8::kEmbedderDataTypeTagDefault);
+        local_context->SetAlignedPointerInEmbedderData(
+            1,
+            &html_element,
+            v8::kEmbedderDataTypeTagDefault);
         css_rules.clear();
         opacity_keyframes.clear();
         css_rules_by_class.clear();
@@ -5850,12 +5933,17 @@ struct v8_dom_runtime::implementation final {
         apply_inline_style_attribute(html_element);
         apply_inline_style_attribute(body);
 
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        activate_html5ever_subtree(html_element, false);
+        recascade_connected_subtree(html_element);
+#else
         auto body_html = extract_element_contents(html, "body");
         if (body_html.empty()) body_html = html;
         body_html = strip_html_elements(std::move(body_html), "script");
         body_html = strip_html_elements(std::move(body_html), "style");
         parse_inner_html(body, body_html);
         append_script_elements(body, scripts);
+#endif
 
         const auto report_document_script_error = [&](const std::string& error) {
             std::lock_guard lock(console_message_mutex);
@@ -11130,6 +11218,27 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(self->dom_implementation_object.Get(info.GetIsolate()));
     }
 
+    static void get_document_doctype(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        auto* container = root->tag == "html" ? root->parent : root;
+        if (container != nullptr) {
+            for (auto* child : container->children) {
+                if (child != nullptr && child->kind == dom_node_kind::document_type) {
+                    info.GetReturnValue().Set(self->wrap_node(*child));
+                    return;
+                }
+            }
+        }
+        info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    }
+
     static void get_scrolling_element(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -11348,7 +11457,7 @@ struct v8_dom_runtime::implementation final {
                 element.xml_mode = true;
                 if (info.Length() > 0) {
                     const auto namespace_uri = to_utf8(info.GetIsolate(), info[0]);
-                    if (!namespace_uri.empty()) element.attributes["namespace"] = namespace_uri;
+                    if (!namespace_uri.empty()) element.set_namespace(namespace_uri);
                 }
                 self->document.append_child(root, element);
             }
@@ -11394,9 +11503,9 @@ struct v8_dom_runtime::implementation final {
             {},
             "html-element");
         auto& node = self->document.create_element(std::move(tag));
-        node.attributes["namespace"] = info.Length() > 0
+        node.set_namespace(info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
-            : "http://www.w3.org/2000/svg";
+            : "http://www.w3.org/2000/svg");
         self->apply_css_rules(node);
         info.GetReturnValue().Set(self->wrap_node(node));
     }
@@ -11478,7 +11587,10 @@ struct v8_dom_runtime::implementation final {
         }
         const auto deep = info.Length() > 0 && info[0]->BooleanValue(info.GetIsolate());
         const auto clone_subtree = [&](const auto& recurse, const dom_node& original) -> dom_node& {
-            auto& clone = self->document.create_element(original.tag);
+            auto& clone = self->document.create_node(original.kind, original.tag);
+            clone.set_namespace(
+                original.namespace_uri(),
+                original.namespace_prefix());
             clone.id_attribute = original.id_attribute;
             clone.class_name = original.class_name;
             clone.text_content = original.text_content;
@@ -11494,6 +11606,14 @@ struct v8_dom_runtime::implementation final {
                     if (child == nullptr) continue;
                     auto& child_clone = recurse(recurse, *child);
                     self->document.append_child(clone, child_clone);
+                }
+                if (original.template_contents != nullptr) {
+                    auto& clone_contents = self->document.parser_template_contents(clone);
+                    for (const auto* child : original.template_contents->children) {
+                        if (child == nullptr) continue;
+                        auto& child_clone = recurse(recurse, *child);
+                        self->document.append_child(clone_contents, child_clone);
+                    }
                 }
             }
             return clone;
@@ -12517,7 +12637,7 @@ struct v8_dom_runtime::implementation final {
         auto& fragment = self->document.create_element("#document-fragment");
         fragment.visible = false;
         const auto html = to_utf8(info.GetIsolate(), info[1]);
-        if (!html.empty()) self->parse_inner_html(fragment, html);
+        if (!html.empty()) self->parse_inner_html(fragment, html, parent);
         auto children = std::move(fragment.children);
         fragment.children.clear();
         for (auto* child : children) {
@@ -12827,10 +12947,9 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         auto tag = node->tag;
-        auto* ancestor = node;
-        while (ancestor != nullptr && ancestor->tag != "svg") ancestor = ancestor->parent;
-        const auto svg = node->attributes.contains("namespace") || ancestor != nullptr;
-        if (!node->xml_mode && !svg) {
+        const auto html = node->namespace_uri().empty()
+            || node->namespace_uri() == dom_node::html_namespace_uri;
+        if (!node->xml_mode && html && node->kind == dom_node_kind::element) {
             std::transform(tag.begin(), tag.end(), tag.begin(), [](unsigned char value) {
                 return static_cast<char>(std::toupper(value));
             });
@@ -12849,12 +12968,14 @@ struct v8_dom_runtime::implementation final {
     static void get_element_node_type(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* node = unwrap_node(info.Holder());
-        const auto type = node != nullptr && node->tag == "#text"
+        const auto type = node != nullptr && node->kind == dom_node_kind::text
             ? 3
-            : node != nullptr && node->tag == "#comment"
+            : node != nullptr && node->kind == dom_node_kind::comment
                 ? 8
-            : node != nullptr && (node->tag == "#document-fragment" || node->tag == "#fragment")
+            : node != nullptr && node->kind == dom_node_kind::document_fragment
                 ? 11
+            : node != nullptr && node->kind == dom_node_kind::document_type
+                ? 10
                 : 1;
         info.GetReturnValue().Set(v8::Integer::New(
             info.GetIsolate(),
@@ -12873,6 +12994,9 @@ struct v8_dom_runtime::implementation final {
 
     static void append_node_text(const dom_node& node, std::string& value)
     {
+        if (node.kind == dom_node_kind::comment
+            || node.kind == dom_node_kind::processing_instruction
+            || node.kind == dom_node_kind::document_type) return;
         value += node.text_content;
         for (const auto* child : node.children) append_node_text(*child, value);
     }
@@ -12883,6 +13007,11 @@ struct v8_dom_runtime::implementation final {
     {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
+        if (node->kind == dom_node_kind::comment
+            || node->kind == dom_node_kind::processing_instruction) {
+            info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), node->text_content));
+            return;
+        }
         std::string value;
         append_node_text(*node, value);
         info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), value));
@@ -12982,13 +13111,11 @@ struct v8_dom_runtime::implementation final {
     static void get_namespace_uri(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* node = unwrap_node(info.Holder());
-        auto* current_node = node;
-        while (current_node != nullptr && current_node->tag != "svg") current_node = current_node->parent;
-        const auto svg = node != nullptr
-            && (node->attributes.contains("namespace") || current_node != nullptr);
-        info.GetReturnValue().Set(js_string(
-            info.GetIsolate(),
-            svg ? "http://www.w3.org/2000/svg" : "http://www.w3.org/1999/xhtml"));
+        if (node == nullptr || node->kind != dom_node_kind::element) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), node->namespace_uri()));
     }
 
     static void get_attributes(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -13035,18 +13162,42 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(result);
     }
 
-    static void get_children(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    static void get_children(
+        v8::Local<v8::Name> property,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(node->children.size()));
+        const auto property_name = to_utf8(info.GetIsolate(), property);
+        std::vector<dom_node*> children;
+        children.reserve(node->children.size());
+        for (auto* child : node->children) {
+            if (child == nullptr) continue;
+            if (property_name == "children" && child->kind != dom_node_kind::element) continue;
+            children.push_back(child);
+        }
+        auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(children.size()));
         auto local_context = info.GetIsolate()->GetCurrentContext();
-        for (uint32_t index = 0; index < node->children.size(); ++index) {
-            result->Set(local_context, index, self->wrap_node(*node->children[index])).Check();
+        for (uint32_t index = 0; index < children.size(); ++index) {
+            result->Set(local_context, index, self->wrap_node(*children[index])).Check();
         }
         info.GetReturnValue().Set(result);
+    }
+
+    static void get_template_content(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || node->tag != "template") {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        auto& contents = self->document.parser_template_contents(*node);
+        info.GetReturnValue().Set(self->wrap_node(contents));
     }
 
     static void get_parent_node(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -13642,7 +13793,7 @@ struct v8_dom_runtime::implementation final {
         }
         const auto width =
             node->style.display == display_mode::inline_flow
-                && !node->attributes.contains("namespace")
+                && node->namespace_uri() != "http://www.w3.org/2000/svg"
                 && node->style.width.unit == length_unit::automatic
             ? self->document.measure_inline_content_width(*node)
             : node->layout.width;
@@ -17081,6 +17232,41 @@ struct v8_dom_runtime::implementation final {
         const auto xml = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         const auto mime_type = info.Length() > 1 ? to_utf8(info.GetIsolate(), info[1]) : std::string{};
         if (mime_type == "text/html") {
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+            auto& document_root = self->document.create_node(
+                dom_node_kind::internal, "#document-root");
+            document_root.visible = false;
+            const auto parsed = parse_html_document(
+                self->document, document_root, xml);
+            self->html_parse_duration_ns += parsed.duration_ns;
+            self->html_parse_error_count += parsed.parse_error_count;
+            self->html_parse_callback_count += parsed.callback_count;
+            self->html_parse_element_count += parsed.element_count;
+            self->html_parse_text_append_count += parsed.text_append_count;
+            self->html_parse_comment_count += parsed.comment_count;
+            self->html_parse_doctype_count += parsed.doctype_count;
+            self->html_parse_rust_allocation_count += parsed.rust_allocation_count;
+            self->html_parse_rust_peak_bytes = std::max(
+                self->html_parse_rust_peak_bytes, parsed.rust_peak_bytes);
+            self->html_parse_rust_retained_bytes += parsed.rust_retained_bytes;
+            auto* html = static_cast<dom_node*>(nullptr);
+            for (auto* child : document_root.children) {
+                if (child != nullptr && child->tag == "html") {
+                    html = child;
+                    break;
+                }
+            }
+            if (!parsed || html == nullptr) {
+                info.GetIsolate()->ThrowException(v8::Exception::Error(
+                    js_string(info.GetIsolate(), "DOMParser HTML tree construction failed")));
+                return;
+            }
+            self->activate_html5ever_subtree(*html, false);
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            self->detached_document_roots.insert(html->id);
+            info.GetReturnValue().Set(wrap_detached_document(
+                *self, *html, local_context, "about:blank"));
+#else
             auto& html = self->document.create_element("html");
             auto& head = self->document.create_element("head");
             auto& body = self->document.create_element("body");
@@ -17091,6 +17277,7 @@ struct v8_dom_runtime::implementation final {
             self->detached_document_roots.insert(html.id);
             info.GetReturnValue().Set(wrap_detached_document(
                 *self, html, local_context, "about:blank"));
+#endif
             return;
         }
         auto& root = self->document.create_element("#document-root");
@@ -24743,6 +24930,11 @@ struct v8_dom_runtime::implementation final {
         css_attribute_dependencies.clear();
         css_variables.clear();
         important_css_variables.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        for (auto stylesheet : parse_inline_stylesheets(html)) {
+            add_stylesheet(std::move(stylesheet), frame_base_address);
+        }
+#endif
         for (const auto& href : stylesheets) {
             std::string stylesheet;
             std::string stylesheet_name;
@@ -24797,11 +24989,83 @@ struct v8_dom_runtime::implementation final {
         frame_body.style.background_rgba = 0x131722FFU;
         apply_css_rules(frame_body);
         document.append_child(frame, frame_body);
-        auto& loading = document.create_element("div");
-        loading.id_attribute = "loading-indicator";
-        loading.class_name = "loading-indicator";
-        apply_css_rules(loading);
-        document.append_child(frame_body, loading);
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        auto& parsed_root = document.create_node(
+            dom_node_kind::internal, "#iframe-parser-document");
+        parsed_root.visible = false;
+        const auto parsed_frame = parse_html_document(document, parsed_root, html);
+        html_parse_duration_ns += parsed_frame.duration_ns;
+        html_parse_error_count += parsed_frame.parse_error_count;
+        html_parse_callback_count += parsed_frame.callback_count;
+        html_parse_element_count += parsed_frame.element_count;
+        html_parse_text_append_count += parsed_frame.text_append_count;
+        html_parse_comment_count += parsed_frame.comment_count;
+        html_parse_doctype_count += parsed_frame.doctype_count;
+        html_parse_rust_allocation_count += parsed_frame.rust_allocation_count;
+        html_parse_rust_peak_bytes = std::max(
+            html_parse_rust_peak_bytes, parsed_frame.rust_peak_bytes);
+        html_parse_rust_retained_bytes += parsed_frame.rust_retained_bytes;
+        if (!parsed_frame) {
+            frame_last_error_value = parsed_frame.error.empty()
+                ? "html5ever iframe parsing failed"
+                : parsed_frame.error;
+            ++frame_script_error_count;
+            return false;
+        }
+        dom_node* parsed_html = nullptr;
+        dom_node* parsed_body = nullptr;
+        for (auto* child : parsed_root.children) {
+            if (child != nullptr && child->tag == "html") parsed_html = child;
+        }
+        if (parsed_html != nullptr) {
+            for (auto* child : parsed_html->children) {
+                if (child != nullptr && child->tag == "body") parsed_body = child;
+            }
+        }
+        if (parsed_body == nullptr) {
+            frame_last_error_value = "html5ever iframe parse produced no body";
+            ++frame_script_error_count;
+            return false;
+        }
+        auto parsed_children = parsed_body->children;
+        for (auto* child : parsed_children) {
+            if (child == nullptr || child->tag == "script" || child->tag == "style") continue;
+            document.parser_append_child(frame_body, *child);
+        }
+        activate_html5ever_subtree(frame_body, false);
+        document.erase_detached_subtree(parsed_root);
+#endif
+        auto has_authored_loading_indicator = false;
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        const auto find_loading_indicator = [&](const auto& self, const dom_node& node) -> bool {
+            if (node.kind == dom_node_kind::element
+                && (node.id_attribute == "loading-indicator"
+                    || has_class(node, "loading-indicator"))) {
+                return true;
+            }
+            return std::any_of(
+                node.children.begin(),
+                node.children.end(),
+                [&](const auto* child) {
+                    return child != nullptr && self(self, *child);
+                });
+        };
+        has_authored_loading_indicator = find_loading_indicator(
+            find_loading_indicator, frame_body);
+#endif
+        // The legacy loader did not retain authored frame markup, so it needed
+        // a synthetic loading box for frame startup. html5ever retains that
+        // markup; appending another box duplicates real pages that already
+        // provide `.loading-indicator` and can leave an unstyled viewport cover.
+        if (!has_authored_loading_indicator) {
+            auto& loading = document.create_element("div");
+            loading.id_attribute = "loading-indicator";
+            loading.class_name = "loading-indicator";
+            loading.attributes["id"] = loading.id_attribute;
+            loading.attributes["class"] = loading.class_name;
+            apply_css_rules(loading);
+            document.append_child(frame_body, loading);
+        }
         append_script_elements(frame_body, scripts);
 
         auto frame_global_template = v8::ObjectTemplate::New(isolate);
@@ -24964,7 +25228,10 @@ struct v8_dom_runtime::implementation final {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
         std::string html;
-        for (const auto* child : node->children) {
+        const auto& children = node->tag == "template" && node->template_contents != nullptr
+            ? node->template_contents->children
+            : node->children;
+        for (const auto* child : children) {
             if (child != nullptr) append_serialized_html(*child, html);
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), html.c_str()));
@@ -24985,8 +25252,14 @@ struct v8_dom_runtime::implementation final {
 
     static void append_serialized_html(const dom_node& node, std::string& result)
     {
-        if (node.tag == "#text") {
+        if (node.kind == dom_node_kind::text) {
             append_escaped_html(node.text_content, result, false);
+            return;
+        }
+        if (node.kind == dom_node_kind::comment) {
+            result += "<!--";
+            result += node.text_content;
+            result += "-->";
             return;
         }
         if (node.tag.empty() || node.tag.front() == '#') return;
@@ -25315,8 +25588,129 @@ struct v8_dom_runtime::implementation final {
         return result;
     }
 
-    void parse_inner_html(dom_node& parent, const std::string& html)
+    void activate_html5ever_subtree(dom_node& root, bool activate_style_elements = true)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        std::vector<dom_node*> stylesheets;
+        const auto visit = [&](const auto& self, dom_node& node) -> void {
+            if (node.kind == dom_node_kind::element) {
+                record_feature(
+                    "html", "element:" + node.tag, "supported", {}, "html5ever");
+                for (const auto& [name, value] : node.attributes) {
+                    static_cast<void>(value);
+                    record_html_attribute_feature(name, "html5ever");
+                }
+                apply_css_rules(node);
+                if (const auto style = node.attributes.find("style");
+                    style != node.attributes.end()) {
+                    uint64_t inline_property_mask = 0U;
+                    for (const auto& declaration : parse_css_declarations(style->second, true)) {
+                        inventory_css_value_functions(
+                            declaration.value, "inline-style-parser");
+                        if (!store_inline_declaration(node, declaration)) continue;
+                        apply_css_declaration(node, declaration);
+                        inline_property_mask |= inline_style_mask(declaration.name);
+                    }
+                    node.style.inline_property_mask |= inline_property_mask;
+                    detect_css_compositions(node);
+                }
+                if (node.tag == "input" || node.tag == "textarea") {
+                    const auto value = node.attributes.find("value");
+                    if (value != node.attributes.end()) {
+                        auto& form = node.mutable_form_control();
+                        form.value = value->second;
+                        form.value_initialized = true;
+                        form.selection_start = form.value.size();
+                        form.selection_end = form.value.size();
+                        form.selection_direction = text_selection_direction::none;
+                    }
+                }
+                if (node.tag == "iframe") {
+                    const auto source = node.attributes.find("src");
+                    if (source != node.attributes.end()) {
+                        const auto object_url = object_urls.find(source->second);
+                        if (object_url != object_urls.end()) {
+                            node.attributes["object-html"] = object_url->second;
+                        }
+                    }
+                    node.style.width = {100, length_unit::percent};
+                    node.style.height = {100, length_unit::percent};
+                    node.style.background_rgba = 0x131722FFU;
+                    node.style.inline_property_mask |=
+                        inline_width | inline_height | inline_background;
+                    if (node.attributes.contains("object-html")) {
+                        pending_frame_hydrations.push_back(&node);
+                    }
+                }
+                if (activate_style_elements && node.tag == "style") {
+                    node.text_content.clear();
+                    for (const auto* child : node.children) {
+                        if (child != nullptr && child->kind == dom_node_kind::text) {
+                            node.text_content += child->text_content;
+                        }
+                    }
+                    stylesheets.push_back(&node);
+                }
+            }
+            for (auto* child : node.children) {
+                if (child != nullptr) self(self, *child);
+            }
+            if (node.template_contents != nullptr) self(self, *node.template_contents);
+        };
+        visit(visit, root);
+        for (auto* stylesheet : stylesheets) {
+            if (stylesheet != nullptr && !stylesheet->text_content.empty()) {
+                activate_connected_stylesheet(*stylesheet);
+            }
+        }
+#else
+        static_cast<void>(root);
+        static_cast<void>(activate_style_elements);
+#endif
+    }
+
+    void parse_inner_html(
+        dom_node& parent,
+        const std::string& html,
+        const dom_node* context_element = nullptr)
+    {
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        const auto& context = context_element == nullptr ? parent : *context_element;
+        const auto context_name = context.kind == dom_node_kind::element
+            ? std::string_view(context.tag)
+            : std::string_view("body");
+        const auto context_namespace = context.namespace_uri().empty()
+            ? std::string_view("http://www.w3.org/1999/xhtml")
+            : context.namespace_uri();
+        const auto result = parse_html_fragment(
+            document,
+            parent,
+            html,
+            context_name,
+            context_namespace);
+        html_parse_duration_ns += result.duration_ns;
+        html_parse_error_count += result.parse_error_count;
+        html_parse_callback_count += result.callback_count;
+        html_parse_element_count += result.element_count;
+        html_parse_text_append_count += result.text_append_count;
+        html_parse_comment_count += result.comment_count;
+        html_parse_doctype_count += result.doctype_count;
+        html_parse_rust_allocation_count += result.rust_allocation_count;
+        html_parse_rust_peak_bytes = std::max(
+            html_parse_rust_peak_bytes, result.rust_peak_bytes);
+        html_parse_rust_retained_bytes += result.rust_retained_bytes;
+        if (!result) {
+            last_error = result.error.empty()
+                ? "html5ever tree construction failed with status "
+                    + std::to_string(result.status)
+                : result.error;
+            return;
+        }
+        activate_html5ever_subtree(parent);
+        recascade_connected_subtree(parent);
+        document.mark_dirty();
+        return;
+#else
         std::vector<dom_node*> stack{&parent};
         size_t cursor = 0;
         while (cursor < html.size()) {
@@ -25504,6 +25898,7 @@ struct v8_dom_runtime::implementation final {
         // observes the finished tree.
         recascade_connected_subtree(parent);
         document.mark_dirty();
+#endif
     }
 
     static void set_inner_html(
@@ -25516,9 +25911,15 @@ struct v8_dom_runtime::implementation final {
         auto* parent = unwrap_node(info.Holder());
         if (parent == nullptr) return;
         const auto html = to_utf8(info.GetIsolate(), raw_value);
-        if (!self->blur_active_descendant_before_replacing_children(*parent)) return;
-        self->detach_all_children(*parent);
-        if (!html.empty()) self->parse_inner_html(*parent, html);
+        auto* output = parent;
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        if (parent->tag == "template") {
+            output = &self->document.parser_template_contents(*parent);
+        }
+#endif
+        if (!self->blur_active_descendant_before_replacing_children(*output)) return;
+        self->detach_all_children(*output);
+        if (!html.empty()) self->parse_inner_html(*output, html, parent);
     }
 
     static void get_content_window(
@@ -28857,6 +29258,16 @@ struct v8_dom_runtime::implementation final {
     uint64_t compilation_cache_bytes_read_count{0};
     uint64_t compilation_cache_bytes_written_count{0};
     uint64_t compilation_time_nanosecond_count{0};
+    uint64_t html_parse_duration_ns{0};
+    uint64_t html_parse_error_count{0};
+    uint64_t html_parse_callback_count{0};
+    uint64_t html_parse_element_count{0};
+    uint64_t html_parse_text_append_count{0};
+    uint64_t html_parse_comment_count{0};
+    uint64_t html_parse_doctype_count{0};
+    uint64_t html_parse_rust_allocation_count{0};
+    uint64_t html_parse_rust_peak_bytes{0};
+    uint64_t html_parse_rust_retained_bytes{0};
     uint64_t process_compilation_memory_hit_count{0};
     uint64_t process_compilation_leader_count{0};
     uint64_t process_compilation_waiter_count{0};
@@ -29341,6 +29752,31 @@ std::string v8_dom_runtime::diagnostics()
             description << ']';
         }
     }
+    description << " | html-parser={implementation="
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        << "html5ever"
+#else
+        << "legacy"
+#endif
+        << ",ms=" << std::fixed << std::setprecision(3)
+        << static_cast<double>(impl_->html_parse_duration_ns) / 1'000'000.0
+        << ",callbacks=" << impl_->html_parse_callback_count
+        << ",errors=" << impl_->html_parse_error_count
+        << ",elements=" << impl_->html_parse_element_count
+        << ",text-appends=" << impl_->html_parse_text_append_count
+        << ",comments=" << impl_->html_parse_comment_count
+        << ",doctypes=" << impl_->html_parse_doctype_count
+        << ",rust-allocations=" << impl_->html_parse_rust_allocation_count
+        << ",rust-peak-bytes=" << impl_->html_parse_rust_peak_bytes
+        << ",rust-retained-bytes=" << impl_->html_parse_rust_retained_bytes
+        << '}';
+    const auto node_metrics = impl_->document.read_allocation_metrics();
+    description << " | dom-node-kinds={element=" << node_metrics.element_node_count
+        << ",text=" << node_metrics.text_node_count
+        << ",comment=" << node_metrics.comment_node_count
+        << ",doctype=" << node_metrics.document_type_node_count
+        << ",other=" << node_metrics.other_node_count
+        << ",bytes-per-node=" << node_metrics.node_object_size_bytes << '}';
     return description.str();
 #endif
 }

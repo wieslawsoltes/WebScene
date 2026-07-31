@@ -21,6 +21,7 @@ architecture changes.
 Active investigations:
 
 - [Native V8 + immutable scene engine](native-v8-scene-engine.md)
+- [Runtime architectural upgrade shortlist](runtime-architectural-upgrade-shortlist.md)
 - [ADR 0012 — Pooled binary native JavaScript interop](adr/0012-pooled-binary-native-javascript-interop.md)
 - [TradingView four-chart binary interop results](tradingview-four-chart-binary-interop-results.md)
 

@@ -8,7 +8,10 @@ param(
     [string] $PackageVersion,
     [string] $V8Root,
     [string] $V8Workspace,
-    [string] $V8Revision = "14.7.173.23",
+    [string] $V8Revision = "15.3.10",
+
+    [ValidateSet("legacy", "html5ever")]
+    [string] $HtmlParser = "legacy",
     [switch] $UpstreamV8,
     [switch] $ThinLto,
     [switch] $PartitionAlloc
@@ -29,6 +32,7 @@ $partitionAllocValue = if ($PartitionAlloc) { "true" } else { "false" }
 $partitionAllocCMake = if ($PartitionAlloc) { "ON" } else { "OFF" }
 $buildVariant = if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
+$buildVariant += if ($HtmlParser -eq "html5ever") { "-html5ever" } else { "" }
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $versionOutput = & dotnet msbuild `
         (Join-Path $repoRoot "src/WebScene.Core/WebScene.Core.csproj") `
@@ -93,7 +97,7 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
             throw "Cannot apply or recognize V8 patch '$PatchPath' in '$Checkout'."
         }
     }
-    if (-not $UpstreamV8) {
+    if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/clearscript/V8/V8Patch.txt")
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
     }
@@ -106,7 +110,7 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
         # in the backing-store allocation retry path.
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt")
     }
-    if (-not $UpstreamV8) {
+    if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
         Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
         Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
     }
@@ -170,6 +174,7 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
     -DWEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON `
     "-DWEBSCENE_NATIVE_ENGINE_THIN_LTO=$thinLtoCMake" `
     -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF `
+    "-DWEBSCENE_NATIVE_ENGINE_HTML_PARSER=$HtmlParser" `
     "-DWEBSCENE_V8_ROOT=$V8Root" `
     "-DWEBSCENE_V8_OUTPUT_ROOT=$v8OutputRoot"
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
@@ -206,8 +211,12 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
     "-p:WebSceneNativeEngineDenseLink=true",
     "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
-    "-p:WebSceneNativeEngineV8Revision=$v8Revision"
+    "-p:WebSceneNativeEngineV8Revision=$v8Revision",
+    "-p:WebSceneNativeEngineHtmlParser=$HtmlParser"
 )
+if ($HtmlParser -eq "html5ever") {
+    $packArguments += "-p:WebSceneNativeEngineHtmlParserNoticesPath=$(Join-Path $repoRoot 'experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md')"
+}
 $packArguments += "-p:PackageVersion=$PackageVersion"
 & dotnet @packArguments
 if ($LASTEXITCODE -ne 0) { throw "Failed to pack the native WebScene engine." }

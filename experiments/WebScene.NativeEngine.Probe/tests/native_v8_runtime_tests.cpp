@@ -8323,6 +8323,39 @@ void test_frame_script_dom_presence(webscene_engine* engine)
         "contentDocument queries escaped the frame document boundary: " + boundary);
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+void test_html5ever_frame_does_not_duplicate_authored_loading_indicator(
+    webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(
+            '<html><body>'
+            + '<div class="loading-indicator" style="display:none"></div>'
+            + '<script>globalThis.__loadingIndicators = ['
+            + 'document.querySelectorAll(".loading-indicator").length,'
+            + 'getComputedStyle(document.querySelector(".loading-indicator")).display,'
+            + 'document.elementFromPoint(5, 5)?.className || ""'
+            + '];<\/script></body></html>');
+          frameDocument.close();
+          globalThis.__loadingIndicatorFrame = frame;
+        })()
+    )JS", "native-html5ever-frame-loading-indicator-setup.js");
+    const auto result = evaluate(
+        engine,
+        "globalThis.__loadingIndicatorFrame.contentWindow.__loadingIndicators",
+        "native-html5ever-frame-loading-indicator-result.js");
+    require(
+        result == R"([1,"none",""])",
+        "html5ever duplicated or hit-tested an authored hidden loading indicator: "
+            + result);
+}
+#endif
+
 void test_dom_element_constructor_identity(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -11337,6 +11370,9 @@ int main()
     test_native_text_input_focus_events_and_caret(engine);
     test_svg_dom_parser_preserves_fill_rule(engine);
     test_frame_script_dom_presence(engine);
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+    test_html5ever_frame_does_not_duplicate_authored_loading_indicator(engine);
+#endif
     test_dom_element_constructor_identity(engine);
     test_provisional_frame_focus_and_document_event_identity(engine);
     test_initial_frame_document_write_and_hidden_style(engine);

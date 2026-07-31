@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HTML5 tree-construction primitives</title>
+<body>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function equal(actual, expected, message) {
+    if (!Object.is(actual, expected)) throw new Error(`${message}: expected ${expected}, got ${actual}`);
+  }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({ name, status: "FAIL", message: String(error.message || error), stack: error.stack || null });
+    }
+  }
+
+  test("DOMParser performs adoption-agency and table tree construction", () => {
+    const parsed = new DOMParser().parseFromString(
+      `<p id="format"><b>one<i>two</b>three</i></p>` +
+      `<table id="table">outside<tr><td>A<td>B</table>`, "text/html");
+    const format = parsed.body.querySelector("#format");
+    equal(format.querySelectorAll("b").length, 1, "formatting element count");
+    equal(format.querySelectorAll("i").length, 2, "reconstructed formatting element count");
+    equal(parsed.body.querySelectorAll("tbody").length, 1, "inferred tbody count");
+    equal(parsed.body.querySelectorAll("td").length, 2, "inferred table cell count");
+    assert(parsed.body.textContent.startsWith("outside"), "foster-parented table text is not before the table");
+  });
+
+  test("comments, whitespace, and the complete named-entity table remain observable", () => {
+    const parsed = new DOMParser().parseFromString(
+      `<main>  <!--hydration--><span>&copy;&NotEqualTilde;</span>\n </main>`, "text/html");
+    const main = parsed.body.querySelector("main");
+    equal(main.childNodes[0].nodeType, 3, "leading whitespace node type");
+    equal(main.childNodes[1].nodeType, 8, "comment node type");
+    equal(main.childNodes[1].textContent, "hydration", "comment data");
+    assert(main.querySelector("span").textContent.startsWith("©"), "named entity was not decoded");
+    equal(main.children.length, 1, "Element.children must exclude text and comments");
+  });
+
+  test("foreign content and template contents preserve their DOM identity", () => {
+    const parsed = new DOMParser().parseFromString(
+      `<svg viewBox="0 0 1 1"><foreignObject><div id="html-child"></div></foreignObject></svg>` +
+      `<template><table><tr><td>cell</table></template>`, "text/html");
+    equal(parsed.body.querySelector("svg").namespaceURI, "http://www.w3.org/2000/svg", "SVG namespace");
+    equal(parsed.body.querySelector("#html-child").namespaceURI, "http://www.w3.org/1999/xhtml", "HTML integration-point namespace");
+    const template = parsed.body.querySelector("template");
+    assert(template.content, "template content fragment is missing");
+    equal(template.children.length, 0, "template element must not directly own content children");
+    equal(template.content.querySelectorAll("tbody").length, 1, "template table insertion mode");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

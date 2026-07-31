@@ -239,6 +239,14 @@ void update_retained_canvas_paint_phase(dom_node& node, bool& retained_canvas_se
     }
 }
 
+bool display_tree_allows_render(const dom_node& node) noexcept
+{
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (current->style.display == display_mode::none) return false;
+    }
+    return true;
+}
+
 bool stacking_ancestors_allow_hit(
     const dom_node& node,
     const dom_node& root,
@@ -255,6 +263,7 @@ bool stacking_ancestors_allow_hit(
     if (ancestors.empty() || ancestors.back() != &root) return false;
     for (auto iterator = ancestors.rbegin(); iterator != ancestors.rend(); ++iterator) {
         const auto& ancestor = **iterator;
+        if (ancestor.style.display == display_mode::none) return false;
         visibility_hidden = ancestor.style.visibility_specified
             ? ancestor.style.visibility_hidden
             : visibility_hidden;
@@ -1029,6 +1038,20 @@ const dom_node& native_document::body() const noexcept
 
 dom_node& native_document::create_element(std::string tag)
 {
+    auto kind = dom_node_kind::element;
+    if (tag == "#text") kind = dom_node_kind::text;
+    else if (tag == "#comment") kind = dom_node_kind::comment;
+    else if (tag == "#document-fragment" || tag == "#fragment") {
+        kind = dom_node_kind::document_fragment;
+    } else if (tag == "#doctype") kind = dom_node_kind::document_type;
+    else if (tag == "#processing-instruction") {
+        kind = dom_node_kind::processing_instruction;
+    } else if (!tag.empty() && tag.front() == '#') kind = dom_node_kind::internal;
+    return create_node(kind, std::move(tag));
+}
+
+dom_node& native_document::create_node(dom_node_kind kind, std::string name)
+{
     auto* storage = static_cast<dom_node*>(
         node_pool_.allocate(sizeof(dom_node), alignof(dom_node)));
     try {
@@ -1039,9 +1062,13 @@ dom_node& native_document::create_element(std::string tag)
     }
     node_pointer node(storage, node_deleter{&node_pool_});
     node->id = next_node_id_++;
-    node->tag = std::move(tag);
-    if (node->tag == "#text") {
+    node->kind = kind;
+    node->tag = std::move(name);
+    if (kind == dom_node_kind::text) {
         node->style.display = display_mode::inline_flow;
+    } else if (kind != dom_node_kind::element) {
+        node->style.display = display_mode::none;
+        node->visible = false;
     } else if (node->tag == "style" || node->tag == "script" || node->tag == "head"
         || node->tag == "meta" || node->tag == "link" || node->tag == "title"
         || node->tag == "base" || node->tag == "template") {
@@ -1072,6 +1099,63 @@ bool native_document::append_child(dom_node& parent, dom_node& child)
     return true;
 }
 
+bool native_document::parser_remove_from_parent(dom_node& child) noexcept
+{
+    if (child.parent == nullptr) return true;
+    auto& siblings = child.parent->children;
+    const auto known = std::find(siblings.begin(), siblings.end(), &child);
+    if (known == siblings.end()) return false;
+    siblings.erase(known);
+    child.parent = nullptr;
+    return true;
+}
+
+bool native_document::parser_append_child(dom_node& parent, dom_node& child) noexcept
+{
+    if (&parent == &child || !parser_remove_from_parent(child)) return false;
+    child.parent = &parent;
+    child.visible = child.kind == dom_node_kind::element
+        || child.kind == dom_node_kind::text;
+    parent.children.push_back(&child);
+    return true;
+}
+
+bool native_document::parser_insert_before(dom_node& sibling, dom_node& child) noexcept
+{
+    auto* parent = sibling.parent;
+    if (parent == nullptr || &sibling == &child) return false;
+    if (!parser_remove_from_parent(child)) return false;
+    const auto position = std::find(parent->children.begin(), parent->children.end(), &sibling);
+    if (position == parent->children.end()) return false;
+    child.parent = parent;
+    child.visible = child.kind == dom_node_kind::element
+        || child.kind == dom_node_kind::text;
+    parent->children.insert(position, &child);
+    return true;
+}
+
+bool native_document::parser_reparent_children(
+    dom_node& source,
+    dom_node& destination) noexcept
+{
+    if (&source == &destination) return false;
+    for (auto* child : source.children) {
+        if (child == nullptr) continue;
+        child->parent = &destination;
+        destination.children.push_back(child);
+    }
+    source.children.clear();
+    return true;
+}
+
+dom_node& native_document::parser_template_contents(dom_node& element)
+{
+    if (element.template_contents != nullptr) return *element.template_contents;
+    auto& fragment = create_node(dom_node_kind::document_fragment, "#document-fragment");
+    element.template_contents = &fragment;
+    return fragment;
+}
+
 void native_document::remove_all_children(dom_node& parent)
 {
     for (auto* child : parent.children) {
@@ -1088,6 +1172,7 @@ size_t native_document::erase_detached_subtree(dom_node& root)
     std::unordered_set<dom_node*> removed;
     const auto collect = [&](const auto& self, dom_node& node) -> void {
         if (!removed.insert(&node).second) return;
+        if (node.template_contents != nullptr) self(self, *node.template_contents);
         for (auto* child : node.children) {
             if (child != nullptr) self(self, *child);
         }
@@ -1210,7 +1295,7 @@ dom_node* native_document::hit_test_node(
     bool inherited_pointer_events_none,
     bool ignore_own_clip) noexcept
 {
-    if (!node.visible) return nullptr;
+    if (!node.visible || node.style.display == display_mode::none) return nullptr;
     const auto visibility_hidden = node.style.visibility_specified
         ? node.style.visibility_hidden
         : inherited_visibility_hidden;
@@ -3700,6 +3785,7 @@ void native_document::build_scene(
         collect_fixed_positioned_nodes(*child, fixed);
     }
     for (const auto* fixed_node : fixed) {
+        if (!display_tree_allows_render(*fixed_node)) continue;
         auto inherited_visibility_hidden = false;
         std::vector<const dom_node*> ancestors;
         for (auto* ancestor = fixed_node->parent;
@@ -3727,7 +3813,12 @@ void native_document::build_canvas_layouts(
 {
     layouts.clear();
     for (const auto& node : nodes_) {
-        if (node->tag != "canvas" || !is_connected(*node) || !node->visible) continue;
+        if (node->tag != "canvas"
+            || !is_connected(*node)
+            || !node->visible
+            || !display_tree_allows_render(*node)) {
+            continue;
+        }
         const auto width = node->attributes.find("width");
         const auto height = node->attributes.find("height");
         layouts.push_back(webscene_canvas_layout{
@@ -3763,6 +3854,7 @@ void native_document::build_canvas_display_lists(
         if (node->tag != "canvas"
             || !is_connected(*node)
             || !node->visible
+            || !display_tree_allows_render(*node)
             || canvas.commands.empty()) {
             continue;
         }
@@ -3820,7 +3912,9 @@ void native_document::append_scene(
             : node.style.opacity,
         0.0F,
         1.0F);
-    if (!node.visible || opacity <= 0.001F) {
+    if (!node.visible
+        || node.style.display == display_mode::none
+        || opacity <= 0.001F) {
         return;
     }
     const auto has_opacity_group = opacity < 0.999F;
@@ -4862,6 +4956,15 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
     std::unordered_set<const node_style::grid_data*> grid_allocations;
     std::unordered_set<const node_style::textual_style_data*> textual_allocations;
     for (const auto& node : nodes_) {
+        if (node != nullptr) {
+            switch (node->kind) {
+            case dom_node_kind::element: ++result.element_node_count; break;
+            case dom_node_kind::text: ++result.text_node_count; break;
+            case dom_node_kind::comment: ++result.comment_node_count; break;
+            case dom_node_kind::document_type: ++result.document_type_node_count; break;
+            default: ++result.other_node_count; break;
+            }
+        }
         if (node != nullptr && node->has_table_layout()) {
             ++result.table_layout_node_count;
             result.table_layout_storage_bytes +=

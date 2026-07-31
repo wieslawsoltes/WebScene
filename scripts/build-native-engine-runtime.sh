@@ -8,14 +8,15 @@ package_version=
 v8_root=
 v8_output_root=
 v8_workspace=
-v8_revision=14.7.173.23
+v8_revision=15.3.10
+html_parser=legacy
 thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
 }
 
 while (($# > 0)); do
@@ -27,6 +28,7 @@ while (($# > 0)); do
     --v8-output-root) v8_output_root="${2:-}"; shift 2 ;;
     --v8-workspace) v8_workspace="${2:-}"; shift 2 ;;
     --v8-revision) v8_revision="${2:-}"; shift 2 ;;
+    --html-parser) html_parser="${2:-}"; shift 2 ;;
     --upstream-v8) upstream_v8=true; shift ;;
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
@@ -44,14 +46,22 @@ case "$rid" in
   *) usage; exit 1 ;;
 esac
 
+if [[ "$html_parser" != legacy && "$html_parser" != html5ever ]]; then
+  echo "Unsupported HTML parser '$html_parser'; expected legacy or html5ever." >&2
+  exit 1
+fi
+
 v8_configuration=Release
 build_variant=
 thin_lto_cmake=OFF
 partition_alloc_cmake=OFF
+if [[ "$html_parser" == html5ever ]]; then
+  build_variant+=-html5ever
+fi
 v8_webassembly=true
 if [[ "$thin_lto" == true ]]; then
   v8_configuration=ReleaseThinLto
-  build_variant=-thinlto-llvm
+  build_variant+=-thinlto-llvm
   thin_lto_cmake=ON
 fi
 if [[ "$disable_wasm" == true ]]; then
@@ -127,7 +137,7 @@ if [[ -z "$v8_root" ]]; then
       exit 1
     fi
   }
-  if [[ "$upstream_v8" == false ]]; then
+  if [[ "$upstream_v8" == false && "$v8_revision" != 15.3.10 ]]; then
     apply_patch_once "$v8_root" "$repo_root/third-party/clearscript/V8/V8Patch.txt"
     apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
     apply_patch_once "$v8_root/build" "$repo_root/third-party/clearscript/V8/BuildPatch.txt"
@@ -242,6 +252,7 @@ cmake_args=(
   -DWEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON
   -DWEBSCENE_NATIVE_ENGINE_THIN_LTO="$thin_lto_cmake"
   -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
+  -DWEBSCENE_NATIVE_ENGINE_HTML_PARSER="$html_parser"
   -DWEBSCENE_V8_ROOT="$v8_root"
   -DWEBSCENE_V8_OUTPUT_ROOT="$v8_output_root"
 )
@@ -335,7 +346,12 @@ pack_args=(
   "-p:WebSceneNativeEngineDenseLink=true"
   "-p:WebSceneNativeEngineThinLto=$thin_lto"
   "-p:WebSceneNativeEngineV8Revision=$v8_revision"
+  "-p:WebSceneNativeEngineHtmlParser=$html_parser"
 )
+if [[ "$html_parser" == html5ever ]]; then
+  pack_args+=(
+    "-p:WebSceneNativeEngineHtmlParserNoticesPath=$repo_root/experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md")
+fi
 pack_args+=("-p:PackageVersion=$package_version")
 dotnet pack "${pack_args[@]}"
 
