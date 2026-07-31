@@ -1663,6 +1663,10 @@ struct v8_dom_runtime::implementation final {
         std::vector<char> combinators;
     };
 
+    struct compiled_css_selector_list final {
+        std::vector<compiled_css_selector> selectors;
+    };
+
     struct css_rule_payload final {
         std::string selector;
         compiled_css_selector compiled_selector;
@@ -6330,37 +6334,39 @@ struct v8_dom_runtime::implementation final {
     }
 
     static void interop_promise_settled(
-        const v8::FunctionCallbackInfo<v8::Value>& info)
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool rejected)
     {
-        if (!info.Data()->IsArray()) return;
+        if (!info.Data()->IsBigInt()) return;
         auto* owner = current(info.GetIsolate());
         if (owner == nullptr) return;
-        auto local_context = info.GetIsolate()->GetCurrentContext();
-        auto data = info.Data().As<v8::Array>();
-        v8::Local<v8::Value> operation;
-        v8::Local<v8::Value> rejected_value;
-        if (!data->Get(local_context, 0U).ToLocal(&operation)
-            || !operation->IsBigInt()
-            || !data->Get(local_context, 1U).ToLocal(&rejected_value)
-            || !rejected_value->IsBoolean()) {
-            return;
-        }
         bool lossless = false;
         const auto operation_id =
-            operation.As<v8::BigInt>()->Uint64Value(&lossless);
+            info.Data().As<v8::BigInt>()->Uint64Value(&lossless);
         if (!lossless) return;
         owner->settle_interop_promise(
             operation_id,
-            rejected_value->BooleanValue(info.GetIsolate()),
+            rejected,
             info.Length() == 0
                 ? v8::Undefined(info.GetIsolate())
                 : info[0]);
     }
 
+    static void interop_promise_fulfilled(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        interop_promise_settled(info, false);
+    }
+
+    static void interop_promise_rejected(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        interop_promise_settled(info, true);
+    }
+
     bool await_interop_promise(
         uint64_t operation_id,
         uint32_t result_mode,
-        v8::Local<v8::Context> local_context,
         v8::Local<v8::Promise> promise,
         v8_dom_runtime::interop_completion_v3 completion,
         interop_result_data_v3& result)
@@ -6375,54 +6381,34 @@ struct v8_dom_runtime::implementation final {
             return false;
         }
 
+        v8::Local<v8::Context> promise_context;
+        if (!promise->GetCreationContext().ToLocal(&promise_context)) {
+            last_error =
+                "Generated native interop promise context is unavailable";
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
+            result.error = last_error;
+            return false;
+        }
+        v8::Context::Scope promise_context_scope(promise_context);
+
         auto pending = std::make_unique<pending_interop_promise>();
         pending->result_mode = result_mode;
         pending->completion = std::move(completion);
         pending->promise.Reset(isolate, promise);
 
-        auto fulfilled_data = v8::Array::New(isolate, 2);
-        auto rejected_data = v8::Array::New(isolate, 2);
-        if (!fulfilled_data->Set(
-                local_context,
-                0U,
-                v8::BigInt::NewFromUnsigned(
-                    isolate,
-                    operation_id)).FromMaybe(false)
-            || !fulfilled_data->Set(
-                local_context,
-                1U,
-                v8::False(isolate)).FromMaybe(false)
-            || !rejected_data->Set(
-                local_context,
-                0U,
-                v8::BigInt::NewFromUnsigned(
-                    isolate,
-                    operation_id)).FromMaybe(false)
-            || !rejected_data->Set(
-                local_context,
-                1U,
-                v8::True(isolate)).FromMaybe(false)) {
-            last_error =
-                "Generated native interop promise metadata could not be created";
-            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
-            result.error = last_error;
-            return false;
-        }
+        auto operation_data =
+            v8::BigInt::NewFromUnsigned(isolate, operation_id);
 
         v8::Local<v8::Function> fulfilled;
         v8::Local<v8::Function> rejected;
         if (!v8::Function::New(
-                local_context,
-                interop_promise_settled,
-                fulfilled_data).ToLocal(&fulfilled)
+                promise_context,
+                interop_promise_fulfilled,
+                operation_data).ToLocal(&fulfilled)
             || !v8::Function::New(
-                local_context,
-                interop_promise_settled,
-                rejected_data).ToLocal(&rejected)
-            || promise->Then(
-                local_context,
-                fulfilled,
-                rejected).IsEmpty()) {
+                promise_context,
+                interop_promise_rejected,
+                operation_data).ToLocal(&rejected)) {
             last_error =
                 "Generated native interop promise handlers could not be registered";
             result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
@@ -6430,6 +6416,17 @@ struct v8_dom_runtime::implementation final {
             return false;
         }
         pending_interop_promises.emplace(operation_id, std::move(pending));
+        if (promise->Then(
+                promise_context,
+                fulfilled,
+                rejected).IsEmpty()) {
+            pending_interop_promises.erase(operation_id);
+            last_error =
+                "Generated native interop promise handlers could not be registered";
+            result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
+            result.error = last_error;
+            return false;
+        }
         return true;
     }
 
@@ -7179,7 +7176,6 @@ struct v8_dom_runtime::implementation final {
                 return await_interop_promise(
                         operation_id,
                         request.result_mode,
-                        local_context,
                         promise,
                         std::move(completion),
                         result)
@@ -10754,9 +10750,27 @@ struct v8_dom_runtime::implementation final {
         return object;
     }
 
+    bool compiled_css_selector_list_matches(
+        const dom_node& node,
+        const compiled_css_selector_list& selectors,
+        const dom_node* scope_root = nullptr) const
+    {
+        return std::any_of(
+            selectors.selectors.begin(),
+            selectors.selectors.end(),
+            [&](const auto& selector) {
+                return !selector.compounds.empty()
+                    && compiled_css_selector_matches(
+                        node,
+                        selector,
+                        selector.compounds.size() - 1U,
+                        scope_root);
+            });
+    }
+
     void collect_selector_matches(
         dom_node& node,
-        std::string_view selector,
+        const compiled_css_selector_list& selector,
         bool include_node,
         std::vector<dom_node*>& result,
         const dom_node* scope_root) const
@@ -10764,7 +10778,10 @@ struct v8_dom_runtime::implementation final {
         if (include_node
             && !node.tag.empty()
             && node.tag.front() != '#'
-            && css_selector_list_matches(node, selector, scope_root)) result.push_back(&node);
+            && compiled_css_selector_list_matches(
+                node,
+                selector,
+                scope_root)) result.push_back(&node);
         for (auto* child : node.children) {
             if (child != nullptr) collect_selector_matches(
                 *child,
@@ -10773,6 +10790,50 @@ struct v8_dom_runtime::implementation final {
                 result,
                 scope_root);
         }
+    }
+
+    dom_node* find_selector_match(
+        dom_node& node,
+        const compiled_css_selector_list& selector,
+        bool include_node,
+        const dom_node* scope_root) const
+    {
+        if (include_node
+            && !node.tag.empty()
+            && node.tag.front() != '#'
+            && compiled_css_selector_list_matches(
+                node,
+                selector,
+                scope_root)) {
+            return &node;
+        }
+        for (auto* child : node.children) {
+            if (child == nullptr) continue;
+            if (auto* match = find_selector_match(
+                    *child,
+                    selector,
+                    true,
+                    scope_root);
+                match != nullptr) {
+                return match;
+            }
+        }
+        return nullptr;
+    }
+
+    static dom_node* find_element_by_id(
+        dom_node& node,
+        std::string_view id,
+        bool include_node = true)
+    {
+        if (include_node && node.id_attribute == id) return &node;
+        for (auto* child : node.children) {
+            if (child == nullptr) continue;
+            if (auto* match = find_element_by_id(*child, id); match != nullptr) {
+                return match;
+            }
+        }
+        return nullptr;
     }
 
     static bool is_valid_dom_selector_list(std::string_view selector)
@@ -10937,8 +10998,18 @@ struct v8_dom_runtime::implementation final {
         bool include_root) const
     {
         std::vector<dom_node*> result;
-        collect_selector_matches(root, selector, include_root, result, &root);
+        const auto& compiled = cached_css_selector_list(selector);
+        collect_selector_matches(root, compiled, include_root, result, &root);
         return result;
+    }
+
+    dom_node* query_selector_node(
+        dom_node& root,
+        std::string_view selector,
+        bool include_root) const
+    {
+        const auto& compiled = cached_css_selector_list(selector);
+        return find_selector_match(root, compiled, include_root, &root);
     }
 
     v8::Local<v8::Array> selector_results(
@@ -11437,11 +11508,9 @@ struct v8_dom_runtime::implementation final {
         auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
             0,
             v8::kEmbedderDataTypeTagDefault));
-        auto matches = self->query_selector_nodes(
+        auto* node = find_element_by_id(
             root == nullptr ? self->active_root() : *root,
-            "#" + id,
-            true);
-        auto* node = matches.empty() ? nullptr : matches.front();
+            id);
         if (node == nullptr) {
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
         } else {
@@ -11491,10 +11560,10 @@ struct v8_dom_runtime::implementation final {
                 query_root.children.begin(),
                 query_root.children.end(),
                 [](const auto* child) { return child != nullptr && child->tag == "html"; });
-        auto matches = self->query_selector_nodes(query_root, selector, include_root);
-        info.GetReturnValue().Set(matches.empty()
+        auto* match = self->query_selector_node(query_root, selector, include_root);
+        info.GetReturnValue().Set(match == nullptr
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
-            : v8::Local<v8::Value>(self->wrap_node(*matches.front())));
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
     }
 
     static void document_element_from_point(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -11644,10 +11713,10 @@ struct v8_dom_runtime::implementation final {
             throw_selector_syntax_error(info, selector);
             return;
         }
-        auto matches = self->query_selector_nodes(*root, selector, false);
-        info.GetReturnValue().Set(matches.empty()
+        auto* match = self->query_selector_node(*root, selector, false);
+        info.GetReturnValue().Set(match == nullptr
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
-            : v8::Local<v8::Value>(self->wrap_node(*matches.front())));
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
     }
 
     static void element_get_elements_by_tag_name(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -11760,7 +11829,10 @@ struct v8_dom_runtime::implementation final {
         }
         info.GetReturnValue().Set(v8::Boolean::New(
             info.GetIsolate(),
-            self->css_selector_list_matches(*node, selector, node)));
+            self->compiled_css_selector_list_matches(
+                *node,
+                self->cached_css_selector_list(selector),
+                node)));
     }
 
     static bool nodes_are_equal(const dom_node& left, const dom_node& right)
@@ -11816,7 +11888,9 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         for (auto* candidate = node; candidate != nullptr; candidate = candidate->parent) {
-            if (self->css_selector_list_matches(*candidate, selector)) {
+            if (self->compiled_css_selector_list_matches(
+                    *candidate,
+                    self->cached_css_selector_list(selector))) {
                 info.GetReturnValue().Set(self->wrap_node(*candidate));
                 return;
             }
@@ -17147,10 +17221,10 @@ struct v8_dom_runtime::implementation final {
             : nullptr;
         if (root == nullptr) return;
         const auto selector = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
-        auto matches = self->query_selector_nodes(*root, selector, true);
-        info.GetReturnValue().Set(matches.empty()
+        auto* match = self->query_selector_node(*root, selector, true);
+        info.GetReturnValue().Set(match == nullptr
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
-            : v8::Local<v8::Value>(self->wrap_node(*matches.front())));
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
     }
 
     static void return_this(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -19844,6 +19918,62 @@ struct v8_dom_runtime::implementation final {
         return result;
     }
 
+    static compiled_css_selector_list compile_css_selector_list(
+        std::string_view selector)
+    {
+        compiled_css_selector_list result;
+        size_t start = 0;
+        int bracket_depth = 0;
+        int parenthesis_depth = 0;
+        char quote = 0;
+        for (size_t index = 0; index <= selector.size(); ++index) {
+            const auto at_end = index == selector.size();
+            const auto character = at_end ? ',' : selector[index];
+            if (!at_end && quote != 0) {
+                if (character == quote
+                    && (index == 0U || selector[index - 1U] != '\\')) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (!at_end && character == '\\') {
+                index = skip_css_escape_sequence(selector, index) - 1U;
+                continue;
+            }
+            if (!at_end && (character == '\'' || character == '"')) {
+                quote = character;
+                continue;
+            }
+            if (!at_end && character == '[') ++bracket_depth;
+            else if (!at_end && character == ']') --bracket_depth;
+            else if (!at_end && character == '(') ++parenthesis_depth;
+            else if (!at_end && character == ')') --parenthesis_depth;
+            else if (character == ',' && bracket_depth == 0 && parenthesis_depth == 0) {
+                result.selectors.push_back(compile_css_selector(
+                    selector.substr(start, index - start)));
+                start = index + 1U;
+            }
+        }
+        return result;
+    }
+
+    const compiled_css_selector_list& cached_css_selector_list(
+        std::string_view selector) const
+    {
+        const auto key = std::string(selector);
+        if (const auto known = compiled_css_selector_lists.find(key);
+            known != compiled_css_selector_lists.end()) {
+            return known->second;
+        }
+        if (compiled_css_selector_lists.size()
+            >= maximum_compiled_css_selector_lists) {
+            compiled_css_selector_lists.clear();
+        }
+        return compiled_css_selector_lists.emplace(
+            key,
+            compile_css_selector_list(key)).first->second;
+    }
+
     static const dom_node* previous_sibling(const dom_node& node)
     {
         if (node.parent == nullptr) return nullptr;
@@ -19966,38 +20096,10 @@ struct v8_dom_runtime::implementation final {
         std::string_view selector,
         const dom_node* scope_root = nullptr) const
     {
-        size_t start = 0;
-        int bracket_depth = 0;
-        int parenthesis_depth = 0;
-        char quote = 0;
-        for (size_t index = 0; index <= selector.size(); ++index) {
-            const auto at_end = index == selector.size();
-            const auto character = at_end ? ',' : selector[index];
-            if (!at_end && quote != 0) {
-                if (character == quote && (index == 0 || selector[index - 1U] != '\\')) quote = 0;
-                continue;
-            }
-            if (!at_end && character == '\\') {
-                index = skip_css_escape_sequence(selector, index) - 1U;
-                continue;
-            }
-            if (!at_end && (character == '\'' || character == '"')) {
-                quote = character;
-                continue;
-            }
-            if (!at_end && character == '[') ++bracket_depth;
-            else if (!at_end && character == ']') --bracket_depth;
-            else if (!at_end && character == '(') ++parenthesis_depth;
-            else if (!at_end && character == ')') --parenthesis_depth;
-            else if (character == ',' && bracket_depth == 0 && parenthesis_depth == 0) {
-                if (css_selector_matches(
-                        node,
-                        selector.substr(start, index - start),
-                        scope_root)) return true;
-                start = index + 1U;
-            }
-        }
-        return false;
+        return compiled_css_selector_list_matches(
+            node,
+            cached_css_selector_list(selector),
+            scope_root);
     }
 
     static int split_pseudo_element_selector(const std::string& selector, std::string& origin)
@@ -28670,6 +28772,9 @@ struct v8_dom_runtime::implementation final {
     std::string document_base_address;
     std::string frame_base_address;
     std::vector<css_rule> css_rules;
+    static constexpr size_t maximum_compiled_css_selector_lists = 512U;
+    mutable std::unordered_map<std::string, compiled_css_selector_list>
+        compiled_css_selector_lists;
     uint32_t active_stylesheet_owner_id{0};
     std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_class;

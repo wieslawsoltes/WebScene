@@ -147,6 +147,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private readonly bool _useCompositionVisual;
     private readonly bool _submitAnimationFrames;
     private readonly NativeCanvasSceneRenderer _renderer = new();
+    private readonly object _rendererGate = new();
     private readonly NativeSceneRenderObserver _renderObserver = new();
     private long _sequence = DateTime.UtcNow.Ticks;
     private long _lastResizeSequence;
@@ -166,6 +167,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private double _lastPointerX;
     private double _lastPointerY;
     private bool _frameLoopActive;
+    private int _frameCallbackScheduled;
     private bool _presentationActive = true;
     private bool _pointerDown;
     private int _lastCursorKind = -1;
@@ -179,7 +181,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         bool submitAnimationFrames = true)
     {
         _engine = engine;
-        _useCompositionVisual = useCompositionVisual;
+        _useCompositionVisual = useCompositionVisual
+            && !string.Equals(
+                Environment.GetEnvironmentVariable(
+                    "WEBSCENE_AVALONIA_DIRECT_DRAW"),
+                "1",
+                StringComparison.Ordinal);
         _submitAnimationFrames = submitAnimationFrames;
         Focusable = true;
         ClipToBounds = true;
@@ -248,7 +255,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             _customVisual = null;
             _compositionUiWakeGate.Reset();
         }
-        _renderer.Reset();
+        lock (_rendererGate)
+        {
+            _renderer.Reset();
+        }
         _compositionMailbox.Reset();
         _compositionUiWakeGate.Reset();
         _engine = engine;
@@ -321,7 +331,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             // Reattachment requests a full checkpoint. Release old retained
             // pictures immediately while this surface is absent rather than
             // waiting for the control and native handles to be collected.
-            _renderer.Reset();
+            lock (_rendererGate)
+            {
+                _renderer.Reset();
+            }
         }
         if (_engine != IntPtr.Zero)
         {
@@ -462,7 +475,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         => _renderObserver.RenderedSceneCount;
 
     public NativeRendererMemoryMetrics GetRendererMemoryMetrics()
-        => _renderer.ReadMemoryMetrics();
+    {
+        lock (_rendererGate)
+        {
+            return _renderer.ReadMemoryMetrics();
+        }
+    }
 
     public long FirstRenderedSceneTimestamp
         => _renderObserver.FirstRenderedSceneTimestamp;
@@ -600,20 +618,13 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 DispatcherPriority.Input);
         }
 
-        var matchingResizePublication = NotifyResizePublicationIfReady(scene);
+        NotifyResizePublicationIfReady(scene);
         if (Volatile.Read(ref _compositionProjectionActive) != 0)
         {
-            // The compositor clock is the ordinary wake mechanism. Avalonia can
-            // suspend that clock inside macOS's nested live-resize loop, however,
-            // and a first frame has no prior presentation proving that the clock
-            // is advancing. Preserve those two correctness edges with one
-            // coalesced UI-to-compositor wake, never one post per scene.
-            if (NativeScenePublicationWakePolicy.RequiresUiWake(
-                    matchingResizePublication,
-                    _renderObserver.RenderedSceneCount))
-            {
-                ScheduleCompositionUiWake();
-            }
+            // Projection is demand-driven. A publication must wake an idle
+            // compositor, but the gate still coalesces any producer burst into
+            // one UI-to-compositor message.
+            ScheduleCompositionUiWake();
             return;
         }
 
@@ -622,6 +633,20 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         Dispatcher.UIThread.Post(
             RequestPublishedScenePaint,
             DispatcherPriority.Render);
+    }
+
+    public void OnNativeAnimationFrameRequested()
+    {
+        if (Volatile.Read(ref _compositionProjectionActive) != 0)
+        {
+            ScheduleCompositionUiWake();
+            return;
+        }
+
+        // The fallback has no composition handler to receive SceneWake.
+        // Marshal the native worker's idle-to-active edge to Avalonia's UI
+        // frame scheduler.
+        Dispatcher.UIThread.Post(RequestNextFrame, DispatcherPriority.Render);
     }
 
     private bool NotifyResizePublicationIfReady(NativeScenePublished scene)
@@ -728,22 +753,31 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void RequestNextFrame()
     {
-        if (!_frameLoopActive) return;
+        if (!_frameLoopActive
+            || _engine == IntPtr.Zero
+            || NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) == 0)
+        {
+            return;
+        }
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel is null)
         {
             Dispatcher.UIThread.Post(RequestNextFrame, DispatcherPriority.Render);
             return;
         }
+        if (Interlocked.CompareExchange(ref _frameCallbackScheduled, 1, 0) != 0)
+        {
+            return;
+        }
         topLevel.RequestAnimationFrame(timestamp =>
         {
+            Interlocked.Exchange(ref _frameCallbackScheduled, 0);
             if (!_frameLoopActive) return;
             if (_submitAnimationFrames
                 && NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) != 0)
             {
                 NativeFrameInput.Submit(_engine, timestamp.TotalMilliseconds);
             }
-            InvalidateVisual();
             RequestNextFrame();
         });
     }
@@ -1244,11 +1278,14 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(new SKColor(19, 23, 34, 255));
-        _renderer.RenderRetained(
-            canvas,
-            (float)Math.Max(1, Bounds.Width),
-            (float)Math.Max(1, Bounds.Height),
-            null);
+        lock (_rendererGate)
+        {
+            _renderer.RenderRetained(
+                canvas,
+                (float)Math.Max(1, Bounds.Width),
+                (float)Math.Max(1, Bounds.Height),
+                null);
+        }
         canvas.Flush();
         using var image = SKImage.FromBitmap(bitmap);
         using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
@@ -1280,7 +1317,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                         && view->StructSize == sizeof(NativeSceneView)
                         && view->AbiVersion == 2)
                     {
-                        _renderer.ApplyDiff(view);
+                        lock (_rendererGate)
+                        {
+                            _renderer.ApplyDiff(view);
+                        }
                         applied = true;
                     }
                     NativeWebSceneApi.SceneAcknowledge(scene);
@@ -1355,6 +1395,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 ref NativeSceneCompositionHandler.SubmittedAnimationFrameCount),
             SkippedEmptyAnimationFrames: Volatile.Read(
                 ref NativeSceneCompositionHandler.SkippedEmptyAnimationFrameCount),
+            RenderCallbacks: Volatile.Read(
+                ref NativeSceneCompositionHandler.RenderCallbackCount),
+            UnchangedRenderCallbacks: Volatile.Read(
+                ref NativeSceneCompositionHandler.UnchangedRenderCallbackCount),
             LastAnimationFrameDemand: Volatile.Read(
                 ref NativeSceneCompositionHandler.LastAnimationFrameDemand));
 
@@ -1399,21 +1443,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             // must not inherit stale publication counts from already acquired
             // scenes.
             _compositionMailbox.TryConsume();
-            var view = (NativeSceneView*)scene;
-            var applied = view != null
-                && view->StructSize == sizeof(NativeSceneView)
-                && view->AbiVersion == 2
-                && _renderer.ApplyDiff(view);
-            if (applied)
-            {
-                NativeWebSceneApi.SceneAcknowledge(scene);
-            }
             context.Custom(new NativeSceneDrawOperation(
                 scene,
                 new Rect(Bounds.Size),
                 _renderer,
-                _renderObserver,
-                applied));
+                _rendererGate,
+                _renderObserver));
         }
     }
 }
@@ -1428,6 +1463,8 @@ public readonly record struct NativeCompositionFlowMetrics(
     long SuppressedLiveResizeAnimationFrames,
     long SubmittedAnimationFrames,
     long SkippedEmptyAnimationFrames,
+    long RenderCallbacks,
+    long UnchangedRenderCallbacks,
     int LastAnimationFrameDemand);
 
 internal sealed class LivePerformanceHud : Border
@@ -1812,6 +1849,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private float _viewportHeight;
     private bool _running;
     private bool _manualFrames;
+    private bool _animationFrameScheduled;
     private int _renderRequested;
     private long _liveResizeFrameDeadlineTimestamp;
     private bool _hasPendingRenderMetrics;
@@ -1833,6 +1871,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
     public static long SuppressedLiveResizeAnimationFrameCount;
     public static long SubmittedAnimationFrameCount;
     public static long SkippedEmptyAnimationFrameCount;
+    public static long RenderCallbackCount;
+    public static long UnchangedRenderCallbackCount;
     public static int LastAnimationFrameDemand;
 
     public NativeSceneCompositionHandler(
@@ -1862,12 +1902,12 @@ internal sealed unsafe class NativeSceneCompositionHandler
             if (!_running)
             {
                 _running = true;
-                RegisterForNextAnimationFrameUpdate();
             }
             if (!_manualFrames && HasPendingPresentation)
             {
                 RequestRenderIfNeeded();
             }
+            RequestAnimationFrameIfNeeded();
             return;
         }
 
@@ -1878,6 +1918,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             {
                 RequestRenderIfNeeded();
             }
+            RequestAnimationFrameIfNeeded();
             return;
         }
 
@@ -1913,8 +1954,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
             if (!_running)
             {
                 _running = true;
-                RegisterForNextAnimationFrameUpdate();
             }
+            RequestAnimationFrameIfNeeded();
             return;
         }
 
@@ -1931,8 +1972,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
             if (!_running)
             {
                 _running = true;
-                RegisterForNextAnimationFrameUpdate();
             }
+            RequestAnimationFrameIfNeeded();
             return;
         }
 
@@ -1944,6 +1985,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
         _running = false;
         _manualFrames = false;
+        _animationFrameScheduled = false;
         _uiWakeGate.Complete();
         _renderer.Reset();
         _appliedRevision = 0;
@@ -1957,6 +1999,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     public override void OnAnimationFrameUpdate()
     {
+        _animationFrameScheduled = false;
         if (!_running)
         {
             return;
@@ -1990,6 +2033,20 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             RequestRenderIfNeeded();
         }
+        RequestAnimationFrameIfNeeded();
+    }
+
+    private void RequestAnimationFrameIfNeeded()
+    {
+        if (!_running
+            || _manualFrames
+            || _animationFrameScheduled
+            || NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) == 0)
+        {
+            return;
+        }
+
+        _animationFrameScheduled = true;
         RegisterForNextAnimationFrameUpdate();
     }
 
@@ -2121,6 +2178,27 @@ internal sealed unsafe class NativeSceneCompositionHandler
     {
         var requestedByWebScene =
             Interlocked.Exchange(ref _renderRequested, 0) != 0;
+        Interlocked.Increment(ref RenderCallbackCount);
+        if (!requestedByWebScene)
+        {
+            Interlocked.Increment(ref UnchangedRenderCallbackCount);
+        }
+        var mayAcquireDuringSynchronousRender =
+            !requestedByWebScene
+            && !_running
+            && !_manualFrames
+            && _publicationMailbox.PendingCount > 0;
+
+        // A custom visual can be visited whenever another part of the window
+        // causes a composition pass. Most of those visits have neither a
+        // WebScene invalidation nor a live-resize publication to consume.
+        // Return before querying the drawing-context feature so the unchanged
+        // retained visual is effectively free at the handler boundary.
+        if (!requestedByWebScene && !mayAcquireDuringSynchronousRender)
+        {
+            return;
+        }
+
         var renderStarted = Stopwatch.GetTimestamp();
         long retainedDrawTicks = 0;
         long skiaSubmitTicks = 0;
@@ -2146,13 +2224,24 @@ internal sealed unsafe class NativeSceneCompositionHandler
         // keeps the producer's bounded ordered back-pressure moving and
         // makes every presented resize frame use real DOM layout, not a stretched
         // or mouse-up-delayed snapshot.
-        if (!requestedByWebScene
-            && !_running
-            && !_manualFrames
-            && _publicationMailbox.PendingCount > 0
+        var acquiredDuringSynchronousRender = false;
+        if (mayAcquireDuringSynchronousRender
             && TryAcquireNextDiff(out _))
         {
             Interlocked.Increment(ref SynchronousRenderAcquisitionCount);
+            acquiredDuringSynchronousRender = true;
+        }
+
+        // RegisterForNextAnimationFrameUpdate can make Avalonia invoke
+        // OnRender at the compositor cadence even when WebScene did not
+        // invalidate this visual. The compositor retains the last drawing, so
+        // replaying the complete retained scene here only burns CPU/GPU time
+        // and defeats native damage tracking. A live-resize acquisition is the
+        // one exception because it intentionally paints a scene obtained from
+        // inside the nested synchronous render loop.
+        if (!requestedByWebScene && !acquiredDuringSynchronousRender)
+        {
+            return;
         }
 
         if (_viewportWidth <= 0 || _viewportHeight <= 0)
@@ -2489,14 +2578,27 @@ internal sealed class NativeFrozenSceneDrawOperation :
     }
 }
 
-internal sealed class NativeSceneDrawOperation(
-    IntPtr scene,
-    Rect bounds,
-    NativeCanvasSceneRenderer renderer,
-    NativeSceneRenderObserver renderObserver,
-    bool sceneAlreadyApplied = false) : ICustomDrawOperation
+internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
 {
-    private IntPtr _scene = scene;
+    private readonly NativeCanvasSceneRenderer _renderer;
+    private readonly object _rendererGate;
+    private readonly NativeSceneRenderObserver _renderObserver;
+    private IntPtr _scene;
+    private bool _sceneApplied;
+
+    internal NativeSceneDrawOperation(
+        IntPtr scene,
+        Rect bounds,
+        NativeCanvasSceneRenderer renderer,
+        object rendererGate,
+        NativeSceneRenderObserver renderObserver)
+    {
+        _scene = scene;
+        Bounds = bounds;
+        _renderer = renderer;
+        _rendererGate = rendererGate;
+        _renderObserver = renderObserver;
+    }
 
     public static int RenderCount;
     public static int RectCommandCount;
@@ -2517,7 +2619,7 @@ internal sealed class NativeSceneDrawOperation(
     private static long s_latestResizeSequence;
     private static long s_latestResizeTimestamp;
 
-    public Rect Bounds { get; } = bounds;
+    public Rect Bounds { get; }
 
     public bool HitTest(Point point) => Bounds.Contains(point);
 
@@ -2525,79 +2627,91 @@ internal sealed class NativeSceneDrawOperation(
 
     public unsafe void Render(ImmediateDrawingContext context)
     {
-        var scene = Volatile.Read(ref _scene);
-        var view = (NativeSceneView*)scene;
-        if (view == null
-            || view->StructSize != sizeof(NativeSceneView)
-            || view->AbiVersion != 2)
+        lock (_rendererGate)
         {
-            return;
-        }
-
-        var header = view->Header;
-        if ((header.CommandCount != 0 && view->Commands == null)
-            || (header.CanvasLayerCount != 0 && (view->CanvasLayers == null || view->CanvasCommands == null))
-            || (view->StringCount != 0 && (view->Strings == null || view->StringBytes == null)))
-        {
-            return;
-        }
-
-        if (context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature))
-                is not ISkiaSharpApiLeaseFeature feature)
-        {
-            // Headless render targets may execute custom draw operations
-            // without exposing a drawable Skia lease. Still compile and
-            // acknowledge the immutable scene so diagnostic captures use the
-            // same retained DOM/canvas state and the producer is not blocked
-            // behind an unacknowledged publication.
-            if (!sceneAlreadyApplied && renderer.ApplyDiff(view))
-            {
-                NativeWebSceneApi.SceneAcknowledge(scene);
-            }
-            return;
-        }
-
-        using var lease = feature.Lease();
-        var canvas = lease.SkCanvas;
-        canvas.Save();
-        try
-        {
-            canvas.ClipRect(new SKRect(0, 0, (float)Bounds.Width, (float)Bounds.Height));
-            canvas.Clear(new SKColor(19, 23, 34, 255));
-            var scale = NativeSceneResizeProjection.GetScale(
-                (float)Bounds.Width,
-                (float)Bounds.Height,
-                header.ViewportWidth,
-                header.ViewportHeight);
-            canvas.Scale(scale.X, scale.Y);
-            if (!sceneAlreadyApplied && !renderer.ApplyDiff(view))
+            var scene = _scene;
+            var view = (NativeSceneView*)scene;
+            if (view == null
+                || view->StructSize != sizeof(NativeSceneView)
+                || view->AbiVersion != 2)
             {
                 return;
             }
-            renderer.RenderRetained(
-                canvas,
-                header.ViewportWidth,
-                header.ViewportHeight,
-                null);
-            if (!sceneAlreadyApplied)
+
+            var header = view->Header;
+            if ((header.CommandCount != 0 && view->Commands == null)
+                || (header.CanvasLayerCount != 0
+                    && (view->CanvasLayers == null
+                        || view->CanvasCommands == null))
+                || (view->StringCount != 0
+                    && (view->Strings == null
+                        || view->StringBytes == null)))
             {
+                return;
+            }
+
+            if (!_sceneApplied)
+            {
+                if (!_renderer.ApplyDiff(view))
+                {
+                    return;
+                }
+                _sceneApplied = true;
                 NativeWebSceneApi.SceneAcknowledge(scene);
             }
-            RecordRendered(header);
-            renderObserver.RecordRendered(header);
-        }
-        finally
-        {
-            canvas.Restore();
+
+            if (context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature))
+                    is not ISkiaSharpApiLeaseFeature feature)
+            {
+                // Headless render targets may execute custom draw operations
+                // without exposing a drawable Skia lease. Diff application and
+                // acknowledgement above still keep diagnostic captures and the
+                // producer's publication lifetime correct.
+                return;
+            }
+
+            using var lease = feature.Lease();
+            var canvas = lease.SkCanvas;
+            canvas.Save();
+            try
+            {
+                canvas.ClipRect(new SKRect(
+                    0,
+                    0,
+                    (float)Bounds.Width,
+                    (float)Bounds.Height));
+                canvas.Clear(new SKColor(19, 23, 34, 255));
+                var scale = NativeSceneResizeProjection.GetScale(
+                    (float)Bounds.Width,
+                    (float)Bounds.Height,
+                    header.ViewportWidth,
+                    header.ViewportHeight);
+                canvas.Scale(scale.X, scale.Y);
+                _renderer.RenderRetained(
+                    canvas,
+                    header.ViewportWidth,
+                    header.ViewportHeight,
+                    null);
+                RecordRendered(header);
+                _renderObserver.RecordRendered(header);
+            }
+            finally
+            {
+                canvas.Restore();
+            }
         }
     }
 
     public void Dispose()
     {
-        var scene = Interlocked.Exchange(ref _scene, IntPtr.Zero);
-        if (scene != IntPtr.Zero)
+        lock (_rendererGate)
         {
-            NativeWebSceneApi.SceneRelease(scene);
+            var scene = _scene;
+            _scene = IntPtr.Zero;
+            if (scene != IntPtr.Zero)
+            {
+                NativeWebSceneApi.SceneRelease(scene);
+            }
         }
     }
 
@@ -4952,6 +5066,8 @@ internal struct EngineOptions
     public IntPtr HostRequestAvailableUserData;
     public IntPtr InteropCallbackAvailableCallback;
     public IntPtr InteropCallbackAvailableUserData;
+    public IntPtr AnimationFrameRequestedCallback;
+    public IntPtr AnimationFrameRequestedUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -5303,6 +5419,10 @@ public static unsafe class NativeWebSceneApi
         NotifyInteropCallbackAvailable;
     private static readonly IntPtr InteropCallbackAvailableAddress =
         Marshal.GetFunctionPointerForDelegate(InteropCallbackAvailable);
+    private static readonly AnimationFrameRequestedCallback AnimationFrameRequested =
+        NotifyAnimationFrameRequested;
+    private static readonly IntPtr AnimationFrameRequestedAddress =
+        Marshal.GetFunctionPointerForDelegate(AnimationFrameRequested);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -5354,7 +5474,8 @@ public static unsafe class NativeWebSceneApi
         IWebSceneResourceLoader resourceLoader,
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable = null,
-        Action? interopCallbackAvailable = null)
+        Action? interopCallbackAvailable = null,
+        Action? animationFrameRequested = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -5366,7 +5487,8 @@ public static unsafe class NativeWebSceneApi
                 resourceLoader,
                 scenePublished,
                 hostRequestAvailable,
-                interopCallbackAvailable));
+                interopCallbackAvailable,
+                animationFrameRequested));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -5393,6 +5515,12 @@ public static unsafe class NativeWebSceneApi
                         ? IntPtr.Zero
                         : InteropCallbackAvailableAddress,
                     InteropCallbackAvailableUserData = interopCallbackAvailable is null
+                        ? IntPtr.Zero
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    AnimationFrameRequestedCallback = animationFrameRequested is null
+                        ? IntPtr.Zero
+                        : AnimationFrameRequestedAddress,
+                    AnimationFrameRequestedUserData = animationFrameRequested is null
                         ? IntPtr.Zero
                         : GCHandle.ToIntPtr(bridgeHandle)
                 };
@@ -5481,6 +5609,9 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void InteropCallbackAvailableCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void AnimationFrameRequestedCallback(IntPtr userData);
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -5506,6 +5637,20 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native interop callback notification] {error}");
+        }
+    }
+
+    private static void NotifyAnimationFrameRequested(IntPtr userData)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyAnimationFrameRequested();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene native animation-frame notification] {error}");
         }
     }
 
@@ -5613,7 +5758,8 @@ public static unsafe class NativeWebSceneApi
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable,
-        Action? interopCallbackAvailable)
+        Action? interopCallbackAvailable,
+        Action? animationFrameRequested)
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
@@ -5629,6 +5775,9 @@ public static unsafe class NativeWebSceneApi
 
         public void NotifyInteropCallbackAvailable()
             => interopCallbackAvailable?.Invoke();
+
+        public void NotifyAnimationFrameRequested()
+            => animationFrameRequested?.Invoke();
 
         public nuint Copy(
             uint kind,

@@ -222,7 +222,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 compilationCacheDirectory,
                 resourceLoader,
                 _surface.OnNativeScenePublished,
-                interopCallbackAvailable: callbackSignal.Notify);
+                interopCallbackAvailable: callbackSignal.Notify,
+                animationFrameRequested: _surface.OnNativeAnimationFrameRequested);
             if (engine == IntPtr.Zero)
             {
                 throw new InvalidOperationException(

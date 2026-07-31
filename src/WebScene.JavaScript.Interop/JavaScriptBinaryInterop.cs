@@ -2,6 +2,7 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 
 namespace WebScene.JavaScript.Interop;
 
@@ -587,6 +588,62 @@ public ref struct JavaScriptBinaryWriter
         });
     }
 
+    /// <summary>
+    /// Writes an arbitrary JSON value directly into the tagged ABI arena.
+    /// This avoids serializing dynamic generated-API arguments to an
+    /// intermediate JSON string.
+    /// </summary>
+    public uint WriteJsonElement(JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Undefined:
+                return WriteUndefined();
+            case JsonValueKind.Null:
+                return WriteNull();
+            case JsonValueKind.True:
+                return WriteBoolean(true);
+            case JsonValueKind.False:
+                return WriteBoolean(false);
+            case JsonValueKind.Number:
+                return WriteNumber(value.GetDouble());
+            case JsonValueKind.String:
+                return WriteString(value.GetString()!);
+            case JsonValueKind.Array:
+            {
+                var result = BeginArray(value.GetArrayLength());
+                var index = 0;
+                foreach (var item in value.EnumerateArray())
+                {
+                    SetArrayItem(result, index++, WriteJsonElement(item));
+                }
+                return result;
+            }
+            case JsonValueKind.Object:
+            {
+                var propertyCount = 0;
+                foreach (var unused in value.EnumerateObject())
+                {
+                    propertyCount++;
+                }
+                var result = BeginObject(propertyCount);
+                var index = 0;
+                foreach (var property in value.EnumerateObject())
+                {
+                    SetObjectProperty(
+                        result,
+                        index++,
+                        property.Name,
+                        WriteJsonElement(property.Value));
+                }
+                return result;
+            }
+            default:
+                throw new InvalidDataException(
+                    $"Unsupported JSON value kind {value.ValueKind}.");
+        }
+    }
+
     public uint BeginArray(int itemCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(itemCount);
@@ -628,12 +685,6 @@ public ref struct JavaScriptBinaryWriter
         ReadOnlySpan<byte> utf8Name,
         uint valueIndex)
     {
-        if (utf8Name.IsEmpty)
-        {
-            throw new ArgumentException(
-                "A property name is required.",
-                nameof(utf8Name));
-        }
         ref var value = ref GetContainer(
             objectIndex,
             JavaScriptBinaryValueKind.Object,
@@ -646,6 +697,32 @@ public ref struct JavaScriptBinaryWriter
             {
                 NameOffset = checked((uint)nameOffset),
                 NameLength = checked((uint)utf8Name.Length),
+                ValueIndex = valueIndex
+            };
+    }
+
+    public void SetObjectProperty(
+        uint objectIndex,
+        int propertyIndex,
+        string name,
+        uint valueIndex)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ref var value = ref GetContainer(
+            objectIndex,
+            JavaScriptBinaryValueKind.Object,
+            propertyIndex);
+        ValidateValueIndex(valueIndex);
+        var byteCount = Encoding.UTF8.GetByteCount(name);
+        var nameOffset = ReserveUtf8(byteCount);
+        var written = Encoding.UTF8.GetBytes(
+            name.AsSpan(),
+            RequireUtf8().AsSpan(nameOffset, byteCount));
+        RequireEdges()[checked((int)value.Offset + propertyIndex)] =
+            new JavaScriptBinaryEdgeData
+            {
+                NameOffset = checked((uint)nameOffset),
+                NameLength = checked((uint)written),
                 ValueIndex = valueIndex
             };
     }
@@ -856,6 +933,43 @@ public readonly unsafe ref struct JavaScriptBinaryValue
         return Child(edge.ValueIndex);
     }
 
+    public ReadOnlySpan<byte> GetObjectPropertyNameUtf8(int index)
+    {
+        ref readonly var data = ref Require(JavaScriptBinaryValueKind.Object);
+        var edge = GetEdge(data, index);
+        ValidateUtf8(edge.NameOffset, edge.NameLength);
+        return new ReadOnlySpan<byte>(
+            _utf8 + edge.NameOffset,
+            checked((int)edge.NameLength));
+    }
+
+    public JavaScriptBinaryValue GetObjectPropertyValue(int index)
+    {
+        ref readonly var data = ref Require(JavaScriptBinaryValueKind.Object);
+        var edge = GetEdge(data, index);
+        return Child(edge.ValueIndex);
+    }
+
+    /// <summary>
+    /// Materializes a dynamic tagged ABI value as a detached JSON element.
+    /// Undefined values map to an undefined <see cref="JsonElement"/> at the
+    /// root and to JSON null when nested.
+    /// </summary>
+    public JsonElement GetJsonElement()
+    {
+        if (Kind == JavaScriptBinaryValueKind.Undefined)
+        {
+            return default;
+        }
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            WriteJsonValue(writer, nested: false);
+        }
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
+
     public bool TryGetProperty(
         ReadOnlySpan<byte> utf8Name,
         out JavaScriptBinaryValue value)
@@ -955,6 +1069,58 @@ public readonly unsafe ref struct JavaScriptBinaryValue
         {
             throw new InvalidDataException(
                 "A binary value has an invalid UTF-8 range.");
+        }
+    }
+
+    private void WriteJsonValue(Utf8JsonWriter writer, bool nested)
+    {
+        switch (Kind)
+        {
+            case JavaScriptBinaryValueKind.Undefined:
+                if (nested)
+                {
+                    writer.WriteNullValue();
+                    return;
+                }
+                throw new InvalidOperationException(
+                    "A root undefined value cannot be written as JSON.");
+            case JavaScriptBinaryValueKind.Null:
+                writer.WriteNullValue();
+                return;
+            case JavaScriptBinaryValueKind.Boolean:
+                writer.WriteBooleanValue(GetBoolean());
+                return;
+            case JavaScriptBinaryValueKind.Number:
+                writer.WriteNumberValue(GetNumber());
+                return;
+            case JavaScriptBinaryValueKind.String:
+                writer.WriteStringValue(Utf8);
+                return;
+            case JavaScriptBinaryValueKind.Array:
+                writer.WriteStartArray();
+                for (var index = 0; index < Count; index++)
+                {
+                    GetArrayItem(index).WriteJsonValue(writer, nested: true);
+                }
+                writer.WriteEndArray();
+                return;
+            case JavaScriptBinaryValueKind.Object:
+                writer.WriteStartObject();
+                for (var index = 0; index < Count; index++)
+                {
+                    writer.WritePropertyName(GetObjectPropertyNameUtf8(index));
+                    GetObjectPropertyValue(index).WriteJsonValue(
+                        writer,
+                        nested: true);
+                }
+                writer.WriteEndObject();
+                return;
+            case JavaScriptBinaryValueKind.Handle:
+                throw new InvalidOperationException(
+                    "A retained JavaScript handle cannot be represented as JSON.");
+            default:
+                throw new InvalidDataException(
+                    $"Unsupported binary value kind {Kind}.");
         }
     }
 }

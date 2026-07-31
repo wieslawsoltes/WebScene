@@ -193,6 +193,91 @@ public sealed class JavaScriptFunctionReference
                "This JavaScript invoker cannot invoke function references.");
 }
 
+/// <summary>
+/// A managed, parameterless action exposed to JavaScript as an ABI 3 function
+/// handle. This is the forward-call counterpart to generated callback adapters:
+/// generated APIs can pass the retained function without source strings or JSON.
+/// </summary>
+public sealed class JavaScriptManagedAction
+    : IJavaScriptBinaryCallbackTarget,
+      IJavaScriptObjectReferenceProvider,
+      IAsyncDisposable
+{
+    private readonly Func<CancellationToken, ValueTask> _callback;
+    private JavaScriptFunctionReference? _function;
+
+    private JavaScriptManagedAction(
+        Func<CancellationToken, ValueTask> callback)
+    {
+        _callback = callback ?? throw new ArgumentNullException(nameof(callback));
+    }
+
+    public JavaScriptObjectReference JavaScriptReference
+        => Volatile.Read(ref _function)?.Reference
+           ?? throw new InvalidOperationException(
+               "The managed JavaScript action is not registered.");
+
+    /// <summary>
+    /// Gets the registered function reference for passing to generated APIs.
+    /// The action retains ownership of the reference; callers must not dispose it.
+    /// </summary>
+    public JavaScriptFunctionReference FunctionReference
+        => Volatile.Read(ref _function)
+           ?? throw new InvalidOperationException(
+               "The managed JavaScript action is not registered.");
+
+    public static async ValueTask<JavaScriptManagedAction> CreateAsync(
+        IJavaScriptBinaryBidirectionalInvoker invoker,
+        Func<CancellationToken, ValueTask> callback,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(invoker);
+        var action = new JavaScriptManagedAction(callback);
+        try
+        {
+            action._function = await invoker.RegisterBinaryFunctionAsync(
+                action,
+                JavaScriptCallbackReturnKind.Void,
+                cancellationToken).ConfigureAwait(false);
+            return action;
+        }
+        catch
+        {
+            await action.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public ValueTask DispatchBinaryAsync(
+        uint methodId,
+        JavaScriptBinaryValue arguments,
+        JavaScriptBinaryCallbackCompletion completion,
+        CancellationToken cancellationToken = default)
+    {
+        if (methodId != 0)
+        {
+            throw new InvalidDataException(
+                $"Managed JavaScript action received unknown method {methodId}.");
+        }
+        if (arguments.Kind != JavaScriptBinaryValueKind.Array
+            || arguments.Count != 0)
+        {
+            throw new InvalidDataException(
+                "Managed JavaScript action requires an empty argument array.");
+        }
+        return _callback(cancellationToken);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var function = Interlocked.Exchange(ref _function, null);
+        if (function is not null)
+        {
+            await function.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+}
+
 public static class JavaScriptCallbackArguments
 {
     public static bool HasValue(JsonElement arguments, int index)

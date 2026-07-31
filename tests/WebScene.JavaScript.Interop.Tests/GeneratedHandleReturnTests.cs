@@ -341,8 +341,8 @@ public sealed class GeneratedHandleReturnTests
             [
                 "object:createDisposer",
                 "promise-object:createDisposerAsync",
-                "value:maybeDisposer",
-                "promise-value:maybeDisposerAsync",
+                "object:maybeDisposer",
+                "promise-object:maybeDisposerAsync",
                 "property:disposer",
                 "promise-property-object:ready",
                 "promise-property-object:readyDisposer",
@@ -350,7 +350,7 @@ public sealed class GeneratedHandleReturnTests
                 "object:maybeAliasedWidget",
                 "global-object:GeneratorCapabilities.createDisposer",
                 "global-promise-object:GeneratorCapabilities.loadDisposer",
-                "global-value:GeneratorCapabilities.maybeDisposer"
+                "global-object:GeneratorCapabilities.maybeDisposer"
             ],
             invoker.Calls);
     }

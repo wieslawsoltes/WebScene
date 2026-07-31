@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using WebScene.JavaScript.Interop;
 using Xunit;
 
@@ -75,6 +76,49 @@ public sealed class JavaScriptBinaryInteropTests
         Assert.True(
             allocated <= 1_024,
             $"Expected pooled binary writes to allocate at most 1 KiB, allocated {allocated} bytes.");
+    }
+
+    [Fact]
+    public unsafe void DynamicJsonRoundTripsThroughTaggedBinaryArena()
+    {
+        using var source = JsonDocument.Parse(
+            """
+            {
+              "settings": {
+                "theme": "dark",
+                "empty": ""
+              },
+              "layoutCount": 4,
+              "enabled": true,
+              "items": [1, null, "three"]
+            }
+            """);
+        var writer = new JavaScriptBinaryWriter();
+        try
+        {
+            var root = writer.WriteJsonElement(source.RootElement);
+            fixed (JavaScriptBinaryValueData* values = writer.Values)
+            fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+            fixed (byte* utf8 = writer.Utf8)
+            {
+                var encoded = new JavaScriptBinaryValue(
+                    values,
+                    checked((uint)writer.Values.Length),
+                    edges,
+                    checked((uint)writer.Edges.Length),
+                    utf8,
+                    checked((uint)writer.Utf8.Length),
+                    root);
+                var decoded = encoded.GetJsonElement();
+
+                Assert.True(
+                    JsonElement.DeepEquals(source.RootElement, decoded));
+            }
+        }
+        finally
+        {
+            writer.Dispose();
+        }
     }
 
     [Fact]

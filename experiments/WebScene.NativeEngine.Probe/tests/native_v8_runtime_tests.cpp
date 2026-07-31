@@ -1320,6 +1320,93 @@ void test_generated_binary_invocation_uses_tagged_arguments(
     release_interop_result(stale_result);
 }
 
+void test_generated_binary_cross_context_promise()
+{
+    auto* engine = webscene_engine_create(0);
+    require(
+        engine != nullptr,
+        "cross-context promise engine creation failed");
+    execute_and_wait(
+        engine,
+        R"JS(
+          const frame = document.createElement("iframe");
+          frame.style.display = "none";
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(
+            "<script>parent.__crossContextPromise = "
+            + "new Promise(resolve => setTimeout(() => resolve(84.75), 100))"
+            + "<\/script>");
+          frameDocument.close();
+          globalThis.__crossContextHost = {
+            ready() { return globalThis.__crossContextPromise; }
+          };
+        )JS",
+        "generated-binary-cross-context-host.js");
+
+    const std::array<webscene_interop_value_v3, 1> empty_arguments{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 0U, 0U}}};
+    constexpr std::string_view global_name{"__crossContextHost"};
+    const webscene_interop_invoke_request_v3 get_global{
+        static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_GET_GLOBAL_V3,
+        0U,
+        0U,
+        global_name.data(),
+        global_name.size(),
+        nullptr,
+        0U,
+        empty_arguments.data(),
+        empty_arguments.size(),
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3};
+    const auto* global_result = invoke_generated(engine, get_global);
+    require(
+        global_result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && global_result->value_count == 1U
+            && global_result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+        "cross-context promise host lookup failed");
+    const auto handle = global_result->values[0].payload;
+    release_interop_result(global_result);
+
+    constexpr std::string_view member_name{"ready"};
+    const webscene_interop_invoke_request_v3 invoke{
+        static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+        3U,
+        WEBSCENE_INTEROP_INVOKE_MEMBER_V3,
+        WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V3,
+        handle,
+        nullptr,
+        0U,
+        member_name.data(),
+        member_name.size(),
+        empty_arguments.data(),
+        empty_arguments.size(),
+        nullptr,
+        0U,
+        nullptr,
+        0U,
+        0U,
+        WEBSCENE_INTEROP_RESULT_VALUE_V3};
+    const auto* result = invoke_generated(engine, invoke);
+    require(
+        result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+            && result->value_count == 1U
+            && result->values[0].kind
+                == WEBSCENE_INTEROP_VALUE_NUMBER_V3
+            && std::bit_cast<double>(result->values[0].payload) == 84.75,
+        "generated cross-context promise did not settle into its operation");
+    release_interop_result(result);
+    webscene_engine_destroy(engine);
+}
+
 void test_binary_interop_result_is_leased_and_pooled(webscene_engine* engine)
 {
     webscene_interop_pool_metrics_v3 before{};
@@ -2249,6 +2336,66 @@ void animation_frame_and_wait(
         engine,
         consumed_before + 1U,
         "animation frame was not consumed");
+}
+
+void notify_animation_frame_requested_test(void* user_data)
+{
+    static_cast<std::atomic<uint32_t>*>(user_data)
+        ->fetch_add(1U, std::memory_order_relaxed);
+}
+
+void test_animation_frame_demand_emits_idle_to_active_edges()
+{
+    std::atomic<uint32_t> notifications{0U};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.animation_frame_requested_callback =
+        notify_animation_frame_requested_test;
+    options.animation_frame_requested_user_data = &notifications;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "animation-frame notification engine creation failed");
+
+    execute(
+        engine,
+        "requestAnimationFrame(() => {}); requestAnimationFrame(() => {});",
+        "native-animation-frame-notification-first.js");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "initial requestAnimationFrame did not request a host frame");
+    for (auto attempt = 0;
+         attempt < 250 && notifications.load(std::memory_order_relaxed) < 1U;
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        notifications.load(std::memory_order_relaxed) == 1U,
+        "one idle-to-active RAF transition emitted more than one notification");
+
+    animation_frame_and_wait(engine, 100.0, 1U);
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "released RAF callbacks retained host-frame demand");
+
+    execute(
+        engine,
+        "requestAnimationFrame(() => {});",
+        "native-animation-frame-notification-second.js");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "second requestAnimationFrame did not request a host frame");
+    for (auto attempt = 0;
+         attempt < 250 && notifications.load(std::memory_order_relaxed) < 2U;
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        notifications.load(std::memory_order_relaxed) == 2U,
+        "a second idle-to-active RAF transition did not emit one notification");
+
+    webscene_engine_destroy(engine);
 }
 
 void test_zero_command_engine_starts_with_clean_scene()
@@ -11037,6 +11184,7 @@ int main()
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
     test_binary_reverse_callback_is_leased_and_completed();
+    test_generated_binary_cross_context_promise();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
@@ -11063,6 +11211,7 @@ int main()
     test_process_wide_resource_load_single_flight();
     test_resource_cache_policy_matrix();
     test_due_timer_precedes_dynamic_resource_wave();
+    test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
     test_executed_compilation_units_enrich_persistent_cache();

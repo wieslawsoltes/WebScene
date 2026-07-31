@@ -123,6 +123,27 @@ public sealed class NativeJavaScriptInvokerTests
         Assert.Equal(42, factory.Reference.Id);
     }
 
+    [Fact]
+    public async Task ManagedActionRegistersAsRetainedAbi3Function()
+    {
+        var transport = new RecordingTransport();
+        using var invoker = new NativeJavaScriptInvoker(transport);
+
+        await using var action = await JavaScriptManagedAction.CreateAsync(
+            invoker,
+            static _ => ValueTask.CompletedTask);
+
+        Assert.Equal(
+            JavaScriptBinaryOperation.CreateCallbackFunction,
+            transport.LastCallSite?.Operation);
+        Assert.Equal(42, action.JavaScriptReference.Id);
+
+        await action.DisposeAsync();
+        Assert.Equal(
+            JavaScriptBinaryOperation.ReleaseHandle,
+            transport.LastCallSite?.Operation);
+    }
+
     private readonly struct NumberCodec :
         IJavaScriptBinaryCodec<JavaScriptBinaryVoid, double>
     {

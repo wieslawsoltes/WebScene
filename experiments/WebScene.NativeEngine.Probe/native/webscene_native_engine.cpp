@@ -941,7 +941,10 @@ struct webscene_engine final {
         void* host_request_available_user_data = nullptr,
         webscene_interop_callback_available_callback
             interop_callback_available_callback = nullptr,
-        void* interop_callback_available_user_data = nullptr)
+        void* interop_callback_available_user_data = nullptr,
+        webscene_animation_frame_requested_callback
+            animation_frame_requested_callback = nullptr,
+        void* animation_frame_requested_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -956,6 +959,8 @@ struct webscene_engine final {
         , host_request_available_user_data_(host_request_available_user_data)
         , interop_callback_available_callback_(interop_callback_available_callback)
         , interop_callback_available_user_data_(interop_callback_available_user_data)
+        , animation_frame_requested_callback_(animation_frame_requested_callback)
+        , animation_frame_requested_user_data_(animation_frame_requested_user_data)
         , document_(text_measure_callback, text_measure_user_data)
         , worker_([this](std::stop_token token) { run(token); })
     {
@@ -2358,9 +2363,15 @@ private:
             demand |= runtime_->host_animation_frame_demand();
         }
 #endif
-        host_animation_frame_requested_.store(
+        const auto previous = host_animation_frame_requested_.exchange(
             demand,
             std::memory_order_release);
+        if (previous == 0U
+            && demand != 0U
+            && animation_frame_requested_callback_ != nullptr) {
+            animation_frame_requested_callback_(
+                animation_frame_requested_user_data_);
+        }
     }
 
     void signal_worker() noexcept
@@ -4114,6 +4125,9 @@ private:
     webscene_interop_callback_available_callback
         interop_callback_available_callback_{nullptr};
     void* interop_callback_available_user_data_{nullptr};
+    webscene_animation_frame_requested_callback
+        animation_frame_requested_callback_{nullptr};
+    void* animation_frame_requested_user_data_{nullptr};
     mutable std::mutex configuration_mutex_;
     std::string resource_root_;
     input_ring inputs_;
@@ -4521,7 +4535,13 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
             offsetof(webscene_engine_options, interop_callback_available_callback);
         const auto has_host_request_available_callback =
             options->struct_size >= host_request_available_options_size;
+        constexpr auto interop_callback_available_options_size =
+            offsetof(
+                webscene_engine_options,
+                animation_frame_requested_callback);
         const auto has_interop_callback_available_callback =
+            options->struct_size >= interop_callback_available_options_size;
+        const auto has_animation_frame_requested_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -4543,6 +4563,12 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_interop_callback_available_callback
                 ? options->interop_callback_available_user_data
+                : nullptr,
+            has_animation_frame_requested_callback
+                ? options->animation_frame_requested_callback
+                : nullptr,
+            has_animation_frame_requested_callback
+                ? options->animation_frame_requested_user_data
                 : nullptr);
     } catch (...) {
         return nullptr;

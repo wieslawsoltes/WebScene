@@ -3131,7 +3131,8 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         var binarySetterSupported =
             !promise
             && !property.GetProperty("optional").GetBoolean()
-            && CanEmitBinaryType(generation, effectiveType);
+            && (CanEmitBinaryType(generation, effectiveType)
+                || setterMapping.IsObjectReferenceProvider);
         var binarySetterName = "__WebSceneBinary"
                                + PascalCase(setterName)
                                + "Property";
@@ -4345,10 +4346,24 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                             == "global::WebScene.JavaScript.Interop.JavaScriptObjectReference";
         var isFunctionReference = csharpType.TrimEnd('?')
                                   == "global::WebScene.JavaScript.Interop.JavaScriptFunctionReference";
+        var isObjectReferenceProvider = generation.AdapterNames.Values.Any(
+            adapterName =>
+                string.Equals(
+                    csharpType.TrimEnd('?'),
+                    adapterName,
+                    StringComparison.Ordinal)
+                || csharpType.TrimEnd('?').StartsWith(
+                    adapterName + "<",
+                    StringComparison.Ordinal));
         if (referenceAliasMapping is { } resolvedAlias)
         {
-            isObjectReference = resolvedAlias.IsObjectReference;
-            isFunctionReference = resolvedAlias.IsFunctionReference;
+            isObjectReference =
+                isObjectReference || resolvedAlias.IsObjectReference;
+            isFunctionReference =
+                isFunctionReference || resolvedAlias.IsFunctionReference;
+            isObjectReferenceProvider =
+                isObjectReferenceProvider
+                || resolvedAlias.IsObjectReferenceProvider;
         }
         isBinding = isBinding
                     || generation.BindingNames.Values.Any(bindingName =>
@@ -4518,6 +4533,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             isBinding,
             IsObjectReference: isObjectReference || isFunctionReference,
             IsFunctionReference: isFunctionReference,
+            IsObjectReferenceProvider: isObjectReferenceProvider,
             WireCSharpType: wireCSharpType,
             FromWireTemplate: fromWireTemplate);
     }
@@ -5203,7 +5219,8 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
     {
         var kind = Kind(type);
         if (kind is "string" or "number" or "boolean" or "null"
-            or "undefined")
+            or "undefined" or "object" or "any" or "unknown"
+            or "callback")
         {
             return true;
         }
@@ -5307,6 +5324,18 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
             case "undefined":
                 source.Append(indent).Append("var ").Append(result)
                     .AppendLine(" = writer.WriteUndefined();");
+                return result;
+            case "object":
+            case "any":
+            case "unknown":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.WriteJsonElement(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
+            case "callback":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = writer.WriteHandle(")
+                    .Append(valueExpression).AppendLine(".Reference);");
                 return result;
             case "literal":
                 return EmitBinaryWriteValue(
@@ -5436,6 +5465,13 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                         .Append(" = writer.WriteHandle(")
                         .Append(valueExpression).AppendLine(");");
                 }
+                else if (mapping.IsObjectReferenceProvider)
+                {
+                    source.Append(indent).Append("var ").Append(result)
+                        .Append(" = writer.WriteHandle(")
+                        .Append(valueExpression)
+                        .AppendLine(".JavaScriptReference);");
+                }
                 else
                 {
                     source.Append(indent).Append("var ").Append(result)
@@ -5490,6 +5526,19 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
                     .AppendLine("    ? global::WebScene.JavaScript.Interop.JavaScriptNullish.Undefined")
                     .Append(indent)
                     .AppendLine("    : global::WebScene.JavaScript.Interop.JavaScriptNullish.Null;");
+                return result;
+            case "object":
+            case "any":
+            case "unknown":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = ").Append(valueExpression)
+                    .AppendLine(".GetJsonElement();");
+                return result;
+            case "callback":
+                source.Append(indent).Append("var ").Append(result)
+                    .Append(" = new global::WebScene.JavaScript.Interop.JavaScriptFunctionReference(")
+                    .Append(invokerExpression).Append(", ")
+                    .Append(valueExpression).AppendLine(".GetHandle());");
                 return result;
             case "literal":
                 return EmitBinaryReadValue(
@@ -6054,6 +6103,7 @@ public sealed class ManifestJavaScriptBindingGenerator : IIncrementalGenerator
         bool IsCallbackWrapper = false,
         bool IsObjectReference = false,
         bool IsFunctionReference = false,
+        bool IsObjectReferenceProvider = false,
         string? WireCSharpType = null,
         string? FromWireTemplate = null,
         string? WirePatternCSharpType = null)

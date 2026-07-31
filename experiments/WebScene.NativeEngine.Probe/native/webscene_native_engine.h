@@ -522,6 +522,14 @@ typedef void (*webscene_host_request_available_callback)(void* user_data);
  */
 typedef void (*webscene_interop_callback_available_callback)(void* user_data);
 
+/*
+ * Edge notification emitted when the engine's host animation-frame demand
+ * transitions from idle to active. The callback runs on the engine worker and
+ * must only wake a compositor; demand is still queried through
+ * webscene_engine_requires_animation_frame and released by a frame input.
+ */
+typedef void (*webscene_animation_frame_requested_callback)(void* user_data);
+
 typedef struct webscene_engine_options {
     uint32_t struct_size;
     uint32_t simulated_chart_command_count;
@@ -537,6 +545,8 @@ typedef struct webscene_engine_options {
     void* host_request_available_user_data;
     webscene_interop_callback_available_callback interop_callback_available_callback;
     void* interop_callback_available_user_data;
+    webscene_animation_frame_requested_callback animation_frame_requested_callback;
+    void* animation_frame_requested_user_data;
 } webscene_engine_options;
 
 typedef struct webscene_engine_metrics {
