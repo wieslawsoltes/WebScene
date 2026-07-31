@@ -1843,7 +1843,6 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private readonly NativeScenePublicationMailbox _publicationMailbox;
     private readonly NativeSceneUiWakeGate _uiWakeGate;
     private readonly Action _scheduleUiWake;
-    private readonly Func<SKRect, bool> _renderClipIntersects;
     private ulong _appliedRevision;
     private float _viewportWidth;
     private float _viewportHeight;
@@ -1887,7 +1886,6 @@ internal sealed unsafe class NativeSceneCompositionHandler
         _publicationMailbox = publicationMailbox;
         _uiWakeGate = uiWakeGate;
         _scheduleUiWake = scheduleUiWake;
-        _renderClipIntersects = NativeBoundsIntersectsRenderClip;
     }
 
     public override void OnMessage(object message)
@@ -2066,14 +2064,12 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
 
         Interlocked.Increment(ref InvalidationCallCount);
-        if (damage.IsFull)
-        {
-            Invalidate();
-        }
-        else
-        {
-            Invalidate(damage.Bounds);
-        }
+        // CompositionCustomVisualHandler invalidation bounds are useful for
+        // scheduling, but the macOS compositor does not guarantee that the
+        // backing surface outside a partial invalidation remains available to
+        // a custom Skia draw. Repaint the complete retained scene for each
+        // changed WebScene frame.
+        Invalidate();
     }
 
     private bool TryAcquireNextDiff(out NativeSceneDamage damage)
@@ -2189,16 +2185,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
             && !_manualFrames
             && _publicationMailbox.PendingCount > 0;
 
-        // A custom visual can be visited whenever another part of the window
-        // causes a composition pass. Most of those visits have neither a
-        // WebScene invalidation nor a live-resize publication to consume.
-        // Return before querying the drawing-context feature so the unchanged
-        // retained visual is effectively free at the handler boundary.
-        if (!requestedByWebScene && !mayAcquireDuringSynchronousRender)
-        {
-            return;
-        }
-
+        // Avalonia can also invoke this callback to repopulate a custom visual
+        // whose composition backing was discarded. Returning without drawing
+        // in that case exposes a cleared region, so every callback must replay
+        // the retained scene even when WebScene did not publish a new diff.
         var renderStarted = Stopwatch.GetTimestamp();
         long retainedDrawTicks = 0;
         long skiaSubmitTicks = 0;
@@ -2224,24 +2214,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
         // keeps the producer's bounded ordered back-pressure moving and
         // makes every presented resize frame use real DOM layout, not a stretched
         // or mouse-up-delayed snapshot.
-        var acquiredDuringSynchronousRender = false;
         if (mayAcquireDuringSynchronousRender
             && TryAcquireNextDiff(out _))
         {
             Interlocked.Increment(ref SynchronousRenderAcquisitionCount);
-            acquiredDuringSynchronousRender = true;
-        }
-
-        // RegisterForNextAnimationFrameUpdate can make Avalonia invoke
-        // OnRender at the compositor cadence even when WebScene did not
-        // invalidate this visual. The compositor retains the last drawing, so
-        // replaying the complete retained scene here only burns CPU/GPU time
-        // and defeats native damage tracking. A live-resize acquisition is the
-        // one exception because it intentionally paints a scene obtained from
-        // inside the nested synchronous render loop.
-        if (!requestedByWebScene && !acquiredDuringSynchronousRender)
-        {
-            return;
         }
 
         if (_viewportWidth <= 0 || _viewportHeight <= 0)
@@ -2274,7 +2250,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 canvas,
                 _viewportWidth,
                 _viewportHeight,
-                _renderClipIntersects);
+                null);
             retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
         }
         finally
