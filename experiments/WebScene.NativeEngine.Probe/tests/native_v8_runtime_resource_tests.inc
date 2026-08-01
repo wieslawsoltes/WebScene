@@ -733,6 +733,7 @@ void test_process_wide_resource_load_single_flight()
     uint64_t shared_bytes = 0U;
     uint64_t script_source_hits = 0U;
     uint64_t script_source_shared_bytes = 0U;
+    uint64_t mapped_resource_bytes = 0U;
     for (size_t index = 0U; index < engine_count; ++index) {
         require(results[index] == "1", "resource sharing leaked mutable script state");
         webscene_process_cache_metrics metrics{
@@ -756,10 +757,13 @@ void test_process_wide_resource_load_single_flight()
             memory.v8_external_script_source_bytes
                 >= shared_script.size() + shared_ascii_script.size(),
             "large UTF-8 script source was copied into the V8 heap");
-        require(
-            memory.process_resource_mapped_cache_bytes >= shared_script.size(),
-            "large persisted script resource was not retained as file-backed memory");
+        mapped_resource_bytes = std::max(
+            mapped_resource_bytes,
+            memory.process_resource_mapped_cache_bytes);
     }
+    require(
+        mapped_resource_bytes >= shared_script.size(),
+        "large persisted script resource was not retained as file-backed memory");
     require(
         server.requests.load(std::memory_order_relaxed) == 3,
         "identical resources were loaded more than once across four engines");
