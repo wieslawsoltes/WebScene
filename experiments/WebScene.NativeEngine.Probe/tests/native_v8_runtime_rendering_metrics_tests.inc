@@ -159,7 +159,7 @@ void test_svg_current_color_is_resolved_before_scene_serialization(webscene_engi
     for (auto attempt = 0; attempt < 250; ++attempt) {
         svg_width = evaluate(
             engine,
-            "document.querySelector('svg')?.offsetWidth || 0",
+            "document.querySelector('.currentcolor-row')?.offsetWidth || 0",
             "native-svg-currentcolor-ready.js");
         if (svg_width == "24") break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
