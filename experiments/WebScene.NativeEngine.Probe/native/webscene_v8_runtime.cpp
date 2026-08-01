@@ -447,6 +447,62 @@ std::filesystem::path native_module_directory()
 #endif
 }
 
+#if defined(WEBSCENE_V8_BOOTSTRAP_SNAPSHOT)
+std::once_flag startup_snapshot_once;
+std::vector<char> startup_snapshot_bytes;
+v8::StartupData startup_snapshot_data{};
+
+void configure_startup_snapshot(v8::Isolate::CreateParams& params)
+{
+    std::call_once(startup_snapshot_once, [] {
+        const auto directory = native_module_directory();
+        const auto metadata_path =
+            directory / WEBSCENE_V8_SNAPSHOT_METADATA_FILENAME;
+        const auto blob_path = directory / WEBSCENE_V8_SNAPSHOT_FILENAME;
+
+        std::ifstream metadata_stream(metadata_path, std::ios::binary);
+        std::string metadata(
+            std::istreambuf_iterator<char>{metadata_stream},
+            std::istreambuf_iterator<char>{});
+        if (!metadata_stream || metadata != WEBSCENE_V8_SNAPSHOT_FINGERPRINT) {
+            throw std::runtime_error(
+                "WebScene V8 snapshot metadata is missing or incompatible: "
+                + metadata_path.string());
+        }
+
+        std::ifstream blob_stream(blob_path, std::ios::binary | std::ios::ate);
+        if (!blob_stream) {
+            throw std::runtime_error(
+                "WebScene V8 snapshot is missing: " + blob_path.string());
+        }
+        const auto size = blob_stream.tellg();
+        if (size <= 0 || size > std::numeric_limits<int>::max()) {
+            throw std::runtime_error(
+                "WebScene V8 snapshot has an invalid size: " + blob_path.string());
+        }
+        startup_snapshot_bytes.resize(static_cast<size_t>(size));
+        blob_stream.seekg(0);
+        blob_stream.read(startup_snapshot_bytes.data(), size);
+        if (!blob_stream) {
+            throw std::runtime_error(
+                "Unable to read WebScene V8 snapshot: " + blob_path.string());
+        }
+        startup_snapshot_data.data = startup_snapshot_bytes.data();
+        startup_snapshot_data.raw_size = static_cast<int>(size);
+        if (!startup_snapshot_data.IsValid()) {
+            throw std::runtime_error(
+                "V8 rejected the WebScene startup snapshot: " + blob_path.string());
+        }
+    });
+    params.snapshot_blob = &startup_snapshot_data;
+}
+
+constexpr bool bootstrap_snapshot_enabled = true;
+#else
+void configure_startup_snapshot(v8::Isolate::CreateParams&) {}
+constexpr bool bootstrap_snapshot_enabled = false;
+#endif
+
 display_mode default_display_for_tag(std::string_view tag)
 {
     constexpr std::array<std::string_view, 8> non_rendered_tags{
@@ -2243,6 +2299,7 @@ struct v8_dom_runtime::implementation final {
                 initial_heap_mib * 1024U * 1024U,
                 *maximum_heap_mib * 1024U * 1024U);
         }
+        configure_startup_snapshot(params);
         state->isolate = v8::Isolate::New(params);
         if (state->isolate == nullptr) return {};
         state->active_contexts.store(1U, std::memory_order_relaxed);
@@ -3103,7 +3160,12 @@ struct v8_dom_runtime::implementation final {
         prune_persistent_compilation_cache();
         initialize_v8_process();
         if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
-            shared_isolate = acquire_shared_isolate();
+            try {
+                shared_isolate = acquire_shared_isolate();
+            } catch (const std::exception& exception) {
+                last_error = exception.what();
+                return false;
+            }
             isolate = shared_isolate == nullptr ? nullptr : shared_isolate->isolate;
         } else {
             allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
@@ -3117,6 +3179,14 @@ struct v8_dom_runtime::implementation final {
                 params.constraints.ConfigureDefaultsFromHeapSize(
                     initial_heap_mib * 1024U * 1024U,
                     *maximum_heap_mib * 1024U * 1024U);
+            }
+            try {
+                configure_startup_snapshot(params);
+            } catch (const std::exception& exception) {
+                last_error = exception.what();
+                delete allocator;
+                allocator = nullptr;
+                return false;
             }
             isolate = v8::Isolate::New(params);
         }
@@ -4068,6 +4138,7 @@ struct v8_dom_runtime::implementation final {
 
     void install_intersection_observer_polyfill(v8::Local<v8::Context> local_context)
     {
+        if constexpr (bootstrap_snapshot_enabled) return;
         const auto source = intersection_observer_bootstrap_source();
         auto script = v8::Script::Compile(
             local_context,
@@ -4323,6 +4394,8 @@ struct v8_dom_runtime::implementation final {
             v8::Function::New(
                 local_context,
                 websocket_buffered_amount).ToLocalChecked()).Check();
+
+        if constexpr (bootstrap_snapshot_enabled) return;
 
         constexpr std::string_view source = R"JS(
           (() => {
@@ -4636,6 +4709,7 @@ struct v8_dom_runtime::implementation final {
 
     void install_editor_web_platform_globals(v8::Local<v8::Context> local_context)
     {
+        if constexpr (bootstrap_snapshot_enabled) return;
         // These are general browser primitives used by Monaco and other
         // component runtimes. Keep them inside WebScene's native realm so
         // applications do not have to patch third-party bundles.
@@ -5329,6 +5403,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneFetchText"),
             v8::Function::New(local_context, fetch_text).ToLocalChecked()).Check();
+        if constexpr (bootstrap_snapshot_enabled) return;
         constexpr std::string_view source = R"JS(
           (() => {
             class WebSceneHeaders {

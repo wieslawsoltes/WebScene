@@ -66,6 +66,9 @@ set_property(CACHE WEBSCENE_NATIVE_ENGINE_CSS_PARSER PROPERTY STRINGS legacy css
 set(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS "legacy" CACHE STRING
     "Native DOM binding catalog: legacy or generated")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS PROPERTY STRINGS legacy generated)
+set(WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT "none" CACHE STRING
+    "V8 embedder startup snapshot: none or bootstrap")
+set_property(CACHE WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT PROPERTY STRINGS none bootstrap)
 
 if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
     target_compile_definitions(webscene_native_engine PRIVATE
@@ -323,6 +326,102 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         target_include_directories(webscene_native_engine SYSTEM PRIVATE
             "${WEBSCENE_V8_ROOT}/third_party/partition_alloc/src"
             "${WEBSCENE_V8_OUTPUT_ROOT}/gen/third_party/partition_alloc/src")
+    endif()
+
+    if(WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT STREQUAL "bootstrap")
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        set(WEBSCENE_V8_BOOTSTRAP_SOURCE
+            "${CMAKE_CURRENT_BINARY_DIR}/webscene_v8_bootstrap.js")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_v8_runtime.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/v8-snapshot/extract_bootstraps.py")
+        execute_process(
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/v8-snapshot/extract_bootstraps.py"
+                --input "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_v8_runtime.cpp"
+                --output "${WEBSCENE_V8_BOOTSTRAP_SOURCE}"
+            RESULT_VARIABLE WEBSCENE_V8_BOOTSTRAP_EXTRACT_RESULT)
+        if(NOT WEBSCENE_V8_BOOTSTRAP_EXTRACT_RESULT EQUAL 0)
+            message(FATAL_ERROR "Unable to extract WebScene V8 bootstrap sources")
+        endif()
+        file(SHA256 "${WEBSCENE_V8_BOOTSTRAP_SOURCE}"
+            WEBSCENE_V8_BOOTSTRAP_SOURCE_SHA256)
+        file(SHA256
+            "${CMAKE_CURRENT_SOURCE_DIR}/native/generated/webscene_dom_bindings.inc"
+            WEBSCENE_V8_BINDING_CATALOG_SHA256)
+        file(SHA256 "${WEBSCENE_V8_ROOT}/include/v8-version.h"
+            WEBSCENE_V8_VERSION_HEADER_SHA256)
+        string(JOIN "," WEBSCENE_V8_SNAPSHOT_FINGERPRINT
+            "v8_version_header=${WEBSCENE_V8_VERSION_HEADER_SHA256}"
+            "cpu=${WEBSCENE_V8_CPU}"
+            "pointer_compression=${WEBSCENE_V8_POINTER_COMPRESSION}"
+            "shared_cage=${WEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE}"
+            "direct_handle=${WEBSCENE_V8_DIRECT_HANDLE}"
+            "optimize_for_size=${WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT}"
+            "bootstrap=${WEBSCENE_V8_BOOTSTRAP_SOURCE_SHA256}"
+            "bindings=${WEBSCENE_V8_BINDING_CATALOG_SHA256}")
+        string(REPLACE ";" "," WEBSCENE_V8_SNAPSHOT_FINGERPRINT
+            "${WEBSCENE_V8_SNAPSHOT_FINGERPRINT}")
+
+        add_executable(webscene_v8_snapshot_builder
+            tools/v8_snapshot_builder.cpp)
+        target_compile_features(webscene_v8_snapshot_builder PRIVATE cxx_std_20)
+        target_include_directories(webscene_v8_snapshot_builder SYSTEM PRIVATE
+            "${WEBSCENE_V8_ROOT}/include")
+        target_compile_definitions(webscene_v8_snapshot_builder PRIVATE
+            WEBSCENE_V8_SNAPSHOT_FINGERPRINT="${WEBSCENE_V8_SNAPSHOT_FINGERPRINT}")
+        if(WEBSCENE_V8_POINTER_COMPRESSION)
+            target_compile_definitions(webscene_v8_snapshot_builder PRIVATE
+                V8_COMPRESS_POINTERS V8_31BIT_SMIS_ON_64BIT_ARCH)
+        endif()
+        if(WEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE)
+            target_compile_definitions(webscene_v8_snapshot_builder PRIVATE
+                V8_COMPRESS_POINTERS_IN_SHARED_CAGE)
+        endif()
+        if(WEBSCENE_V8_DIRECT_HANDLE)
+            target_compile_definitions(webscene_v8_snapshot_builder PRIVATE
+                V8_ENABLE_DIRECT_HANDLE)
+        endif()
+        target_link_libraries(webscene_v8_snapshot_builder PRIVATE
+            "${WEBSCENE_V8_MONOLITH}")
+        if(APPLE)
+            target_link_libraries(webscene_v8_snapshot_builder PRIVATE
+                "-framework CoreFoundation")
+        elseif(WIN32)
+            target_link_libraries(webscene_v8_snapshot_builder PRIVATE
+                dbghelp winmm advapi32)
+        elseif(UNIX)
+            target_link_libraries(webscene_v8_snapshot_builder PRIVATE dl rt)
+        endif()
+
+        set(WEBSCENE_V8_SNAPSHOT_BLOB
+            "${CMAKE_CURRENT_BINARY_DIR}/webscene_bootstrap_snapshot.bin")
+        set(WEBSCENE_V8_SNAPSHOT_METADATA
+            "${CMAKE_CURRENT_BINARY_DIR}/webscene_bootstrap_snapshot.meta")
+        add_custom_command(
+            OUTPUT "${WEBSCENE_V8_SNAPSHOT_BLOB}" "${WEBSCENE_V8_SNAPSHOT_METADATA}"
+            COMMAND "$<TARGET_FILE:webscene_v8_snapshot_builder>"
+                "${WEBSCENE_V8_ICU_DATA}"
+                "${WEBSCENE_V8_BOOTSTRAP_SOURCE}"
+                "${WEBSCENE_V8_SNAPSHOT_BLOB}"
+                "${WEBSCENE_V8_SNAPSHOT_METADATA}"
+            DEPENDS webscene_v8_snapshot_builder "${WEBSCENE_V8_BOOTSTRAP_SOURCE}"
+            COMMENT "Creating the WebScene V8 bootstrap snapshot"
+            VERBATIM)
+        add_custom_target(webscene_v8_bootstrap_snapshot ALL
+            DEPENDS "${WEBSCENE_V8_SNAPSHOT_BLOB}" "${WEBSCENE_V8_SNAPSHOT_METADATA}")
+        add_dependencies(webscene_native_engine webscene_v8_bootstrap_snapshot)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_V8_BOOTSTRAP_SNAPSHOT=1
+            WEBSCENE_V8_SNAPSHOT_FILENAME="webscene_bootstrap_snapshot.bin"
+            WEBSCENE_V8_SNAPSHOT_METADATA_FILENAME="webscene_bootstrap_snapshot.meta"
+            WEBSCENE_V8_SNAPSHOT_FINGERPRINT="${WEBSCENE_V8_SNAPSHOT_FINGERPRINT}")
+        message(STATUS "WebScene native engine: bootstrap snapshot selected")
+    elseif(NOT WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT STREQUAL "none")
+        message(FATAL_ERROR
+            "WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT must be none or bootstrap")
+    else()
+        message(STATUS "WebScene native engine: startup snapshot disabled")
     endif()
     target_link_libraries(webscene_native_engine PRIVATE
         "${WEBSCENE_V8_MONOLITH}"

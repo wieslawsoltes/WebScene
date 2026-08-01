@@ -283,6 +283,8 @@ tools/**
 !tools/webidl-v8-bindings/generate.mjs
 !tools/webidl-v8-bindings/package.json
 !tools/webidl-v8-bindings/package-lock.json
+!tools/v8-snapshot/
+!tools/v8-snapshot/extract_bootstraps.py
 !tools/webidl-v8-bindings/README.md
 tools/webidl-v8-bindings/node_modules/
 

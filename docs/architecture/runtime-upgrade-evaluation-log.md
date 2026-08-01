@@ -39,7 +39,10 @@ fixture, warm/cold cache state, sample count, and raw artifact location.
 ## Baseline
 
 - Commit baseline: `38d72dc` (`Integrate html5ever native HTML parser`).
-- Native JavaScript engine: V8 15.3.10 with pointer compression and shared cage.
+- Release configuration: V8 15.3.10 with pointer compression and shared cage. The local
+  artifact inherited by the experiments was subsequently verified at runtime as
+  `14.7.173.23-HtmlML`; results below now distinguish that stale artifact from the release
+  target instead of inferring the engine version from build configuration.
 - Target used for the initial measurements: macOS arm64, Release, certification enabled.
 - HTML parsing: `html5ever` 0.39.0 through a coarse Rust static-library C ABI.
 - Parser correctness suite passes.
@@ -186,10 +189,12 @@ semantic getter/setter functions callable from V8 `FunctionCallback` accessors; 
 
 ### 3. V8 embedder startup snapshot
 
-**State:** Conditional on generated-binding behavioral parity
+**State:** Provisionally ruled in for independent-isolate churn; release-V8 validation pending
 
-**Prototype boundary:** Snapshot only immutable bootstrap code and the generated
-prototype/template graph. Attach document/context-specific native state after restore.
+**Prototype boundary:** Snapshot immutable bootstrap code first. Keep the generated
+prototype/template graph out of the initial snapshot because its native callbacks would
+require a stable external-reference table; attach all document/context-specific native
+state after restore.
 
 **Required evidence:**
 
@@ -198,7 +203,41 @@ prototype/template graph. Attach document/context-specific native state after re
 - Strict mismatch rejection keyed by V8 revision, ABI, architecture, configuration, and
   binding-catalog hash.
 
-**Decision:** Pending prerequisite.
+**Decision:** **Provisionally rule in for deployments that repeatedly create independent
+isolates, where the prototype clears the 20% context-lifecycle performance gate. Do not
+enable it by default for the shared-isolate deployment:** its 7.3% lifecycle improvement,
+neutral cold-process time, and sub-3% RSS improvement do not meet a material-benefit gate.
+The final adoption decision remains gated on reproducing compatibility and timing against
+the configured V8 15.3.10 release build; the locally available artifact is 14.7.173.23.
+
+**Current findings:**
+
+- The opt-in `WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT=bootstrap` build extracts and snapshots
+  36,064 bytes of immutable WebSocket, editor-platform, fetch, and IntersectionObserver
+  JavaScript. DOM wrappers, native callbacks, context embedder slots, and the differing
+  top-level/frame Blob and MessageChannel programs remain context-specific.
+- The build-time snapshot is 398,176 bytes. The snapshot engine library is 32,864 bytes
+  smaller because the four raw programs are dead-stripped, making the complete shipped
+  delta +365,631 bytes (+0.697%). The builder is not shipped.
+- The metadata fingerprint covers the complete V8 version header, target CPU, pointer
+  compression/shared cage/direct-handle/size flags, bootstrap SHA-256, and generated
+  binding-catalog SHA-256. Missing or unequal metadata is rejected before isolate creation;
+  the missing-sidecar probe exits cleanly with an engine evaluation failure.
+- On macOS arm64, AppleClang 21, Release/certification, generated bindings, html5ever and
+  cssparser, five processes with five warmups and 30 samples measured independent-isolate
+  lifecycle p50 at 0.942 ms control versus 0.658 ms snapshot (-30.2%). Shared-isolate p50
+  was 0.368 versus 0.341 ms (-7.3%).
+- Twenty cold processes measured 23.110 versus 22.653 ms median wall time (-2.0%) and
+  2.071 versus 1.913 ms first measured context (-7.6%). Snapshot generation took 25.5 ms
+  median after its first process run.
+- Median RSS changed by -1.7% for repeated isolated lifecycles, -2.7% for shared-isolate
+  lifecycles, and -0.8% for a cold process. These are safe non-regressions, not a memory
+  benefit.
+- The complete required profile is exactly neutral at 104/110 documents and 431/433
+  subtests with the same five failures and hover timeout. Both parser suites pass; the
+  native suite reaches the known SVG `currentColor` fixture failure.
+- Raw evidence is in `artifacts/snapshot-evaluation/benchmark-results-final.json` and
+  `artifacts/snapshot-evaluation/required-snapshot/results.json`.
 
 ### 4. Servo selector parsing
 
@@ -228,7 +267,8 @@ layout engine.
 
 ### 2026-08-01 — cssparser isolated IR prototype
 
-- Working tree based on decision-log commit `0b18a34`; V8 remains pinned at 15.3.10,
+- Working tree based on decision-log commit `0b18a34`; the release configuration targets
+  V8 15.3.10, while the local artifact used here was later identified as 14.7.173.23,
   although the isolated parser test and benchmark deliberately do not link V8.
 - Build: macOS arm64, AppleClang 21 C++20 Release and Rust 1.90.0 release with LTO.
 - Fixtures: generated component stylesheet at 1 KiB, 50 KiB, and 1 MiB plus focused
@@ -243,7 +283,8 @@ layout engine.
 
 ### 2026-08-01 — cssparser live A/B decision
 
-- Built matched macOS arm64 Release/certification variants against V8 15.3.10, pointer
+- Built matched macOS arm64 Release/certification variants against the locally cached V8
+  14.7.173.23 artifact, pointer
   compression, and the shared cage. The only intended variant was
   `WEBSCENE_NATIVE_ENGINE_CSS_PARSER=legacy|cssparser`; the Cargo feature gate prevents
   the control from linking `cssparser`.
@@ -267,7 +308,8 @@ layout engine.
 
 ### 2026-08-01 — generated WebIDL-to-V8 binding slice
 
-- Prototype base: `0fa1d52`; V8 15.3.10, macOS arm64, AppleClang 21, Release with
+- Prototype base: `0fa1d52`; locally cached V8 14.7.173.23, macOS arm64, AppleClang 21,
+  Release with
   certification, html5ever, and cssparser. Build switch:
   `WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=legacy|generated`.
 - Inputs and generator: `tools/webidl-v8-bindings`; generated output:
@@ -282,10 +324,32 @@ layout engine.
   wait for a successful V8 evaluation, release the result, and destroy the engine; five
   process samples per variant/mode, five warmups and 30 recorded lifecycles per process.
 - The V8 accessor-receiver constraint was found by compiling the prototype, not inferred:
-  `PropertyCallbackInfo` in V8 15.3 exposes `Holder()` but not the original receiver.
+  `PropertyCallbackInfo` in the evaluated V8 14.7 exposes `Holder()` but not the original
+  receiver. This constraint must be rechecked against the 15.3 release headers.
   Instance accessors therefore retain current semantics and brand guards, while generated
   method templates can use `Signature` for correct receiver enforcement.
 - Decision: rule in the generated operation/prototype catalog for compatibility, retain the
   A/B switch during ecosystem validation, and treat prototype attribute descriptors as a
   separately gated semantic-callback refactor rather than hiding duplicate behavior in the
   generator.
+
+### 2026-08-01 — V8 bootstrap snapshot prototype
+
+- Prototype base: `324e38d`; matched macOS arm64 Release/certification builds with
+  generated bindings, html5ever, cssparser, pointer compression, and shared cage.
+- Runtime version inspection corrected the evaluation artifact from the assumed 15.3.10
+  to `14.7.173.23-HtmlML`. Repository release scripts and package verification target
+  15.3.10, so this checkpoint is provisional rather than silently relabeling the data.
+- The default-context snapshot contains four immutable bootstrap programs and accepts the
+  existing named-window global template when each context is restored. Native callback
+  functions and document/frame state are attached afterward; no external-reference table
+  is required for this boundary.
+- Raw A/B results: `artifacts/snapshot-evaluation/benchmark-results-final.json`. Five warm
+  processes per mode used five warmups and 30 samples; cold results used 20 fresh
+  processes. Independent-isolate lifecycle improves 30.2%, but shared-isolate lifecycle,
+  first context, process cold start, and RSS do not meet material-benefit gates.
+- Required-profile result: `artifacts/snapshot-evaluation/required-snapshot/results.json`,
+  exactly matching the generated-binding control at 104/110 documents and 431/433
+  subtests.
+- Decision: provisional rule-in only for independent-isolate churn. Keep the option off by
+  default and reproduce on the V8 15.3.10 release artifact before adoption.
