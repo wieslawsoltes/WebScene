@@ -22,6 +22,14 @@
         }
     }
 
+    void perform_microtask_checkpoint()
+    {
+        isolate->PerformMicrotaskCheckpoint();
+        if (work_metrics_enabled.load(std::memory_order_relaxed)) {
+            ++work.microtask_checkpoints;
+        }
+    }
+
     bool execute_timer_task(
         timer_task task,
         std::chrono::steady_clock::time_point now_time)
@@ -37,6 +45,21 @@
         v8::Context::Scope task_context_scope(task_context);
         auto callback = task.callback.Get(isolate);
         if (callback.IsEmpty()) return true;
+        const auto collect_work_metrics =
+            work_metrics_enabled.load(std::memory_order_relaxed);
+        if (collect_work_metrics && task.animation_frame) {
+            ++work.animation_frames_invoked;
+        } else if (collect_work_metrics) {
+            ++work.timers_fired;
+            constexpr auto late_threshold = std::chrono::milliseconds(1);
+            if (now_time > task.deadline + late_threshold) {
+                ++work.late_timers;
+                work.total_timer_lateness_nanoseconds +=
+                    static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            now_time - task.deadline).count());
+            }
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         auto task_profile_name = std::string{};
         auto task_profile_started = std::chrono::steady_clock::time_point{};
@@ -98,7 +121,7 @@
                 + describe_exception(try_catch, task_context);
             return false;
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             auto& stats = startup_task_profiles[task_profile_name];
@@ -215,7 +238,7 @@
                 << " name=" << resource_name << '\n';
 #endif
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         return true;
     }
 
@@ -305,7 +328,7 @@
             ++frame_script_error_count;
             return false;
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         return true;
     }
 
@@ -550,7 +573,7 @@
                     return false;
                 }
             }
-            isolate->PerformMicrotaskCheckpoint();
+            perform_microtask_checkpoint();
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto outer_listeners_finished = std::chrono::steady_clock::now();
@@ -637,7 +660,7 @@
                     ++input_callback_invocation_count;
                 }
             }
-            isolate->PerformMicrotaskCheckpoint();
+            perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             stop_cpu_profile();
             for (size_t index = 0; index < binding_category_count; ++index) {
@@ -769,7 +792,7 @@
                 return false;
             }
             ++input_callback_invocation_count;
-            isolate->PerformMicrotaskCheckpoint();
+            perform_microtask_checkpoint();
         }
         return true;
     }
@@ -1242,7 +1265,7 @@
         }
         set_number("eventPhase", 0);
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;

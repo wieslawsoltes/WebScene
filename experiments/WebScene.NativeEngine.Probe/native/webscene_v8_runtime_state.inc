@@ -41,6 +41,17 @@
     std::unordered_map<uint64_t, v8::Global<v8::Object>> style_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> computed_style_wrappers;
     std::unordered_set<uint64_t> detached_document_roots;
+    // Document.getElementById overwhelmingly targets unique IDs. Cache the
+    // first tree-order match per document root, and rebuild lazily after any
+    // DOM generation change so duplicate IDs, reparents, detached nodes, and
+    // frame/document boundaries retain browser ordering semantics.
+    using element_id_index = std::unordered_map<std::string, dom_node*>;
+    std::unordered_map<const dom_node*, element_id_index> element_id_indexes;
+    std::unordered_map<const dom_node*, element_id_index> element_named_indexes;
+    std::unordered_map<const dom_node*, element_id_index>
+        document_named_form_indexes;
+    uint64_t element_id_index_generation{
+        std::numeric_limits<uint64_t>::max()};
     std::vector<std::pair<std::string, std::string>> document_cookies;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> canvas_contexts;
     std::unordered_map<uint64_t, std::unique_ptr<canvas_state>> canvas_states;
@@ -88,6 +99,8 @@
     uint32_t active_timer_id{0};
     bool active_timer_cancelled{false};
     bool prefer_timer_task{true};
+    std::atomic<bool> work_metrics_enabled{false};
+    v8_dom_runtime::work_metrics work{};
     uint32_t next_object_url_id{1};
     std::unordered_map<std::string, std::string> object_urls;
     std::vector<dom_node*> pending_frame_hydrations;

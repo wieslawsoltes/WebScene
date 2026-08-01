@@ -276,7 +276,11 @@ public static unsafe class NativeWebSceneApi
         }
         finally
         {
-            if (bridgeHandle.IsAllocated) bridgeHandle.Free();
+            if (bridgeHandle.IsAllocated)
+            {
+                (bridgeHandle.Target as ResourceBridge)?.Dispose();
+                bridgeHandle.Free();
+            }
         }
     }
 
@@ -288,9 +292,17 @@ public static unsafe class NativeWebSceneApi
         EngineDestroyNative(engine);
         if (EngineResourceBridges.TryRemove(engine, out var bridge) && bridge.IsAllocated)
         {
+            (bridge.Target as ResourceBridge)?.Dispose();
             bridge.Free();
         }
     }
+
+    internal static NativeTextShaping.WebTypefaceRegistry? GetWebTypefaceRegistry(
+        IntPtr engine)
+        => EngineResourceBridges.TryGetValue(engine, out var bridge)
+            && bridge.IsAllocated
+            ? (bridge.Target as ResourceBridge)?.WebTypefaces
+            : null;
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_load_url")]
     private static extern byte EngineLoadUrl(IntPtr engine, byte[] url, nuint urlLength);
@@ -418,13 +430,17 @@ public static unsafe class NativeWebSceneApi
             var value = Marshal.PtrToStringUTF8(text, checked((int)textLength)) ?? string.Empty;
             var family = Marshal.PtrToStringUTF8(fontFamily, checked((int)fontFamilyLength))
                 ?? "sans-serif";
+            var registry = (GCHandle.FromIntPtr(userData).Target as ResourceBridge)
+                ?.WebTypefaces;
             var measured = NativeTextShaping.Measure(
                 value,
                 family,
                 fontSize,
                 fontWeight,
                 letterSpacing,
-                wordSpacing);
+                wordSpacing,
+                featureFlags: 0,
+                registry: registry);
             metrics.AdvanceWidth = measured.AdvanceWidth;
             metrics.Ascent = measured.Ascent;
             metrics.Descent = measured.Descent;
@@ -502,13 +518,17 @@ public static unsafe class NativeWebSceneApi
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable,
         Action? interopCallbackAvailable,
-        Action? animationFrameRequested)
+        Action? animationFrameRequested) : IDisposable
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
 #if !WEBSCENE_UNO
         private readonly ConcurrentDictionary<string, byte> _registeredFontSources =
             new(StringComparer.Ordinal);
 #endif
+        internal NativeTextShaping.WebTypefaceRegistry WebTypefaces { get; } =
+            NativeTextShaping.CreateWebTypefaceRegistry();
+
+        public void Dispose() => WebTypefaces.Dispose();
 
         public void NotifyScenePublished(NativeScenePublished scene)
             => scenePublished(scene);
@@ -610,7 +630,7 @@ public static unsafe class NativeWebSceneApi
                         .LoadBytesAsync(source, stylesheetAddress, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
-                    if (!NativeTextShaping.RegisterWebTypeface(family, resource.Content))
+                    if (!WebTypefaces.Register(family, resource.Content))
                     {
                         Console.Error.WriteLine(
                             $"[WebScene native web font] '{resource.DisplayName}' is not a supported font.");
@@ -1154,6 +1174,48 @@ public static unsafe class NativeWebSceneApi
             throw new InvalidOperationException("The native resource-cache metrics ABI is unavailable.");
         }
         return metrics;
+    }
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_get_runtime_work_metrics")]
+    private static extern byte EngineGetRuntimeWorkMetrics(
+        IntPtr engine,
+        ref RuntimeWorkMetrics metrics);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_set_runtime_work_metrics_enabled")]
+    private static extern byte EngineSetRuntimeWorkMetricsEnabled(
+        IntPtr engine,
+        byte enabled);
+
+    public static bool TryEnableRuntimeWorkMetrics(IntPtr engine)
+    {
+        try
+        {
+            return EngineSetRuntimeWorkMetricsEnabled(engine, 1) != 0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static RuntimeWorkMetrics? TryGetRuntimeWorkMetrics(IntPtr engine)
+    {
+        var metrics = new RuntimeWorkMetrics
+        {
+            StructSize = (uint)Marshal.SizeOf<RuntimeWorkMetrics>()
+        };
+        try
+        {
+            return EngineGetRuntimeWorkMetrics(engine, ref metrics) == 0
+                ? null
+                : metrics;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return null;
+        }
     }
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_get_process_cache_metrics")]

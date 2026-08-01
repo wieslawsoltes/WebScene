@@ -663,17 +663,10 @@
         // Before that assignment it cannot name a DOM element, so avoid an
         // otherwise full-tree named-property search on every readiness poll.
         if (name == "__webSceneComponentReady") return v8::Intercepted::kNo;
-        const auto find_named = [&](const auto& recurse, dom_node& root) -> dom_node* {
-            if (root.id_attribute == name) return &root;
-            const auto named = root.attributes.find("name");
-            if (named != root.attributes.end() && named->second == name) return &root;
-            for (auto* child : root.children) {
-                if (child == nullptr) continue;
-                if (auto* match = recurse(recurse, *child); match != nullptr) return match;
-            }
-            return nullptr;
-        };
-        auto* match = find_named(find_named, self->active_root());
+        auto* match = self->find_named_element(
+            self->active_root(),
+            name,
+            false);
         if (match == nullptr) {
             static const std::unordered_set<std::string> known_web_api_globals{
                 "localStorage", "indexedDB", "fetch", "XMLHttpRequest",
@@ -706,19 +699,7 @@
         if (root == nullptr) root = &self->active_root();
         const auto name = to_utf8(info.GetIsolate(), property.As<v8::Value>());
         if (name.empty()) return v8::Intercepted::kNo;
-        const auto find_named_form = [&](const auto& recurse, dom_node& candidate) -> dom_node* {
-            if (candidate.tag == "form") {
-                const auto authored_name = candidate.attributes.find("name");
-                if ((authored_name != candidate.attributes.end() && authored_name->second == name)
-                    || candidate.id_attribute == name) return &candidate;
-            }
-            for (auto* child : candidate.children) {
-                if (child == nullptr) continue;
-                if (auto* match = recurse(recurse, *child); match != nullptr) return match;
-            }
-            return nullptr;
-        };
-        auto* match = find_named_form(find_named_form, *root);
+        auto* match = self->find_named_element(*root, name, true);
         if (match == nullptr) return v8::Intercepted::kNo;
         info.GetReturnValue().Set(self->wrap_node(*match));
         return v8::Intercepted::kYes;

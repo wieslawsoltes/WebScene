@@ -76,6 +76,18 @@ void prewarm_v8_process();
 
 class v8_dom_runtime final {
 public:
+    struct work_metrics final {
+        uint64_t timers_scheduled{0};
+        uint64_t timers_fired{0};
+        uint64_t timers_cancelled{0};
+        uint64_t late_timers{0};
+        uint64_t total_timer_lateness_nanoseconds{0};
+        uint64_t animation_frames_requested{0};
+        uint64_t animation_frames_invoked{0};
+        uint64_t animation_frames_cancelled{0};
+        uint64_t microtask_checkpoints{0};
+    };
+
     struct memory_metrics final {
         uint64_t total_heap_bytes{0};
         uint64_t used_heap_bytes{0};
@@ -212,7 +224,7 @@ public:
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();
     bool refresh_media_environment();
-    void set_visible(bool visible) noexcept;
+    bool set_visible(bool visible);
     bool dispatch_input(const webscene_input_event& event);
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;
@@ -248,6 +260,8 @@ public:
     uint64_t process_resource_memory_hits() const noexcept;
     uint64_t process_resource_load_leaders() const noexcept;
     uint64_t process_resource_load_waiters() const noexcept;
+    void set_work_metrics_enabled(bool enabled) noexcept;
+    work_metrics read_work_metrics() const noexcept;
     uint64_t process_resource_shared_bytes() const noexcept;
     uint64_t process_script_source_memory_hits() const noexcept;
     uint64_t process_script_source_shared_bytes() const noexcept;

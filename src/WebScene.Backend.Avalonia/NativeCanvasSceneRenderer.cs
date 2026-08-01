@@ -48,6 +48,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private readonly Dictionary<string, SKTypeface> s_typefaces = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
         new(StringComparer.Ordinal);
+    private NativeTextShaping.WebTypefaceRegistry? _webTypefaces;
     private SKPicture? s_domBackdropPicture;
     private SKPicture? s_domOverlayPicture;
     private uint s_domCommandCount;
@@ -56,6 +57,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     public static long RejectedDiffCount;
 
     public long TotalCommandCount => s_totalCommandCount;
+
+    internal void SetWebTypefaceRegistry(
+        NativeTextShaping.WebTypefaceRegistry? registry)
+        => _webTypefaces = registry;
 
     internal NativeRendererMemoryMetrics ReadMemoryMetrics()
     {
@@ -631,7 +636,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             out var parsedWeight)
             ? Math.Clamp(parsedWeight, 1, 1000)
             : 400;
-        var typeface = NativeTextShaping.ResolveTypeface(parts[4], fontWeight);
+        var typeface = NativeTextShaping.ResolveTypeface(
+            parts[4],
+            fontWeight,
+            _webTypefaces);
         paint.Color = Rgba(command.Rgba);
         paint.TextSize = fontSize;
         paint.Typeface = typeface;
@@ -644,8 +652,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var featureFlags = NativeTextShaping.ResolveFeatureFlags(
             parts[5],
             parts[4],
-            0);
-        var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(parts[4]);
+            0,
+            _webTypefaces);
+        var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
+            parts[4],
+            _webTypefaces);
         var shapedWidth = NativeTextShaping.MeasureShapedWidth(
             shaper,
             parts[5],
@@ -653,7 +664,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             featureFlags,
             tabularDigitScale);
         var widthScale = (featureFlags & NativeTextShaping.TabularNumerals) != 0
-            ? NativeTextShaping.ResolveWidthScale(parts[4], fontSize, fontWeight)
+            ? NativeTextShaping.ResolveWidthScale(
+                parts[4],
+                fontSize,
+                fontWeight,
+                _webTypefaces)
             : 1f;
         var renderedWidth = shapedWidth * widthScale;
         var x = parts[3] switch
@@ -1388,12 +1403,20 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 family = families[0].Trim('"', '\'');
             }
         }
-        if (!s_typefaces.TryGetValue(family, out var typeface))
+        if (_webTypefaces?.TryResolve(family, out var webTypeface) == true)
         {
-            typeface = SKTypeface.FromFamilyName(family) ?? SKTypeface.Default;
-            s_typefaces[family] = typeface;
+            paint.Typeface = webTypeface;
         }
-        paint.Typeface = typeface;
+        else
+        {
+            if (!s_typefaces.TryGetValue(family, out var typeface))
+            {
+                typeface = SKTypeface.FromFamilyName(family)
+                    ?? SKTypeface.Default;
+                s_typefaces[family] = typeface;
+            }
+            paint.Typeface = typeface;
+        }
         paint.TextSize = size;
     }
 

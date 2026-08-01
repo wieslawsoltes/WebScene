@@ -152,6 +152,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         lock (_rendererGate)
         {
             _renderer.Reset();
+            _renderer.SetWebTypefaceRegistry(
+                engine == IntPtr.Zero
+                    ? null
+                    : NativeWebSceneApi.GetWebTypefaceRegistry(engine));
         }
         _compositionMailbox.Reset();
         _compositionUiWakeGate.Reset();
@@ -367,6 +371,15 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     public long RenderedSceneCount
         => _renderObserver.RenderedSceneCount;
+
+    public NativeSurfacePerformanceMetrics CapturePerformanceMetrics()
+        => new(
+            RenderedScenes: RenderedSceneCount,
+            RoutedInputEvents: RoutedInputEvents,
+            AcceptedInputEvents: AcceptedInputEvents,
+            CompositionUiWakes: CompositionSceneUiWakeCount,
+            PendingCompositionPublications: PendingCompositionScenePublications,
+            ResizePublicationNotifications: ResizePublicationNotificationCount);
 
     public NativeRendererMemoryMetrics GetRendererMemoryMetrics()
     {

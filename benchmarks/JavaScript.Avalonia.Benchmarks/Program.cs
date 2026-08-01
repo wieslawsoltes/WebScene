@@ -81,7 +81,23 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
         return await NativeInteropRaceProbe.RunAsync(
             args.Skip(2).ToArray());
     }
-    Console.Error.WriteLine("Unknown probe. Use one of: css-custom-properties, css-style-storage, v8dom, v8canvasboundary, v8dataset, v8tokens, v8observer, v8textnode, v8attributes, v8react, v8reactfocus, v8iframepointer, v8domidentity, v8interactioncontracts, v8lifecycle, v8sharedcache, v8nativepackage, generated-realtime-chart, native-interop-race.");
+    if (args.Length > 1 && string.Equals(args[1], "native-runtime-work", StringComparison.OrdinalIgnoreCase))
+    {
+        return NativeRuntimeWorkProbe.Run(args.Skip(2).ToArray());
+    }
+    if (args.Length > 1 && string.Equals(args[1], "native-dom-lookup", StringComparison.OrdinalIgnoreCase))
+    {
+        return await NativeDomLookupProbe.RunAsync(args.Skip(2).ToArray());
+    }
+    if (args.Length > 1 && string.Equals(args[1], "native-context-memory", StringComparison.OrdinalIgnoreCase))
+    {
+        return NativeContextMemoryProbe.Run(args.Skip(2).ToArray());
+    }
+    if (args.Length > 1 && string.Equals(args[1], "native-lifecycle", StringComparison.OrdinalIgnoreCase))
+    {
+        return NativeViewLifecycleProbe.Run(args.Skip(2).ToArray());
+    }
+    Console.Error.WriteLine("Unknown probe. Use one of: css-custom-properties, css-style-storage, v8dom, v8canvasboundary, v8dataset, v8tokens, v8observer, v8textnode, v8attributes, v8react, v8reactfocus, v8iframepointer, v8domidentity, v8interactioncontracts, v8lifecycle, v8sharedcache, v8nativepackage, generated-realtime-chart, native-interop-race, native-runtime-work, native-dom-lookup, native-context-memory, native-lifecycle.");
     return 2;
 }
 

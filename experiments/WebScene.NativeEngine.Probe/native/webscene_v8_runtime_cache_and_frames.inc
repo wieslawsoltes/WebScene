@@ -1026,7 +1026,7 @@
             error = describe_exception(try_catch, local_context);
             return false;
         }
-        if (checkpoint_microtasks) isolate->PerformMicrotaskCheckpoint();
+        if (checkpoint_microtasks) perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             auto& stats = startup_script_profiles[resource_leaf_name(document_name)];
@@ -1924,7 +1924,7 @@
                     }
                 }
             }
-            isolate->PerformMicrotaskCheckpoint();
+            perform_microtask_checkpoint();
             return true;
         };
         auto frame_global = local_frame_context->Global();
@@ -1937,7 +1937,7 @@
             js_string(isolate, "readyState"),
             js_string(isolate, "complete")).Check();
         if (!dispatch_lifecycle_event(frame_global, "load")) return false;
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         frame_last_error_value.clear();
         return true;
     }

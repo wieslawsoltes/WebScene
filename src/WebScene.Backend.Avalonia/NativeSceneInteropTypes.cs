@@ -477,6 +477,33 @@ public struct ResourceCacheMetrics
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct RuntimeWorkMetrics
+{
+    public uint StructSize;
+    public uint Reserved;
+    public ulong TimersScheduled;
+    public ulong TimersFired;
+    public ulong TimersCancelled;
+    public ulong LateTimers;
+    public ulong TotalTimerLatenessNanoseconds;
+    public ulong AnimationFramesRequested;
+    public ulong AnimationFramesInvoked;
+    public ulong AnimationFramesCancelled;
+    public ulong MicrotaskCheckpoints;
+    public ulong WorkerWaits;
+    public ulong WorkerSignalledWakes;
+    public ulong WorkerTimeoutWakes;
+    public ulong SceneBuilds;
+    public ulong NoDamageSceneBuilds;
+    public ulong FullCheckpointSceneBuilds;
+    public ulong ArbitraryEvaluationCalls;
+    public ulong GeneratedInvokeCalls;
+    public ulong GeneratedCallbackCalls;
+    public ulong ArbitraryEvaluationSourceBytes;
+    public ulong GeneratedRequestBytes;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public struct ProcessCacheMetrics
 {
     public uint StructSize;

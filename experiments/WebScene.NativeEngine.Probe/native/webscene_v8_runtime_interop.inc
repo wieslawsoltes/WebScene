@@ -248,7 +248,7 @@
             result.error = last_error;
             return false;
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         if (!promote_pending_promise_error()) {
             result.status = WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3;
             result.error = last_error;
@@ -1185,7 +1185,7 @@
             return interop_invoke_state_v3::failed;
         }
 
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         if ((request.flags & WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V3) != 0U
             && value->IsPromise()) {
             auto promise = value.As<v8::Promise>();

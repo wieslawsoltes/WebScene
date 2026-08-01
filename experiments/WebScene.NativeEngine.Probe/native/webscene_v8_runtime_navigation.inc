@@ -380,7 +380,7 @@
                 report_document_script_error(frame_last_error_value);
                 return false;
             }
-            isolate->PerformMicrotaskCheckpoint();
+            perform_microtask_checkpoint();
             return true;
         };
 

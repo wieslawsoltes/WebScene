@@ -215,6 +215,85 @@ void test_component_library_dom_discovery_primitives(webscene_engine* engine)
     }
 }
 
+void test_document_id_index_preserves_tree_and_root_semantics(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(
+        engine,
+        R"JS((() => {
+          const host = document.createElement('div');
+          const first = document.createElement('span');
+          const second = document.createElement('span');
+          first.id = 'duplicate-id';
+          second.id = 'duplicate-id';
+          host.appendChild(first);
+          host.appendChild(second);
+          document.body.appendChild(host);
+
+          const initialWinner = document.getElementById('duplicate-id') === first;
+          host.insertBefore(second, first);
+          const reorderedWinner = document.getElementById('duplicate-id') === second;
+          second.id = 'renamed-id';
+          const mutationUpdated = document.getElementById('duplicate-id') === first
+            && document.getElementById('renamed-id') === second;
+          host.removeChild(first);
+          const detachedExcluded = document.getElementById('duplicate-id') === null;
+          first.id = 'detached-id';
+          const detachedMutationExcluded = document.getElementById('detached-id') === null;
+
+          const parsed = new DOMParser().parseFromString(
+            '<main id="renamed-id"></main>',
+            'text/html');
+          const parsedScoped = parsed.getElementById('renamed-id') !== second
+            && parsed.getElementById('renamed-id').tagName.toLowerCase() === 'main';
+          const outerScoped = document.getElementById('renamed-id') === second;
+
+          const namedFirst = document.createElement('span');
+          const namedSecond = document.createElement('span');
+          namedFirst.setAttribute('name', 'duplicate-name');
+          namedSecond.setAttribute('name', 'duplicate-name');
+          host.appendChild(namedFirst);
+          host.appendChild(namedSecond);
+          const namedInitial = globalThis['duplicate-name'] === namedFirst;
+          host.insertBefore(namedSecond, namedFirst);
+          const namedReordered = globalThis['duplicate-name'] === namedSecond;
+          namedSecond.setAttribute('name', 'renamed-name');
+          const namedMutation = globalThis['duplicate-name'] === namedFirst
+            && globalThis['renamed-name'] === namedSecond;
+          namedFirst.remove();
+          const namedDetached = globalThis['duplicate-name'] === undefined;
+
+          const nonForm = document.createElement('input');
+          nonForm.setAttribute('name', 'document-named');
+          const namedForm = document.createElement('form');
+          namedForm.setAttribute('name', 'document-named');
+          host.appendChild(nonForm);
+          host.appendChild(namedForm);
+          const documentFormsOnly = document['document-named'] === namedForm;
+          host.remove();
+          return {
+            initialWinner,
+            reorderedWinner,
+            mutationUpdated,
+            detachedExcluded,
+            detachedMutationExcluded,
+            parsedScoped,
+            outerScoped,
+            namedInitial,
+            namedReordered,
+            namedMutation,
+            namedDetached,
+            documentFormsOnly
+          };
+        })())JS",
+        "document-id-index-semantics.js");
+    require(
+        result
+            == R"({"initialWinner":true,"reorderedWinner":true,"mutationUpdated":true,"detachedExcluded":true,"detachedMutationExcluded":true,"parsedScoped":true,"outerScoped":true,"namedInitial":true,"namedReordered":true,"namedMutation":true,"namedDetached":true,"documentFormsOnly":true})",
+        "document ID index lost mutation, tree-order, or root scoping semantics: "
+            + result);
+}
+
 void test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -423,6 +502,92 @@ void test_animation_frame_dispatch_is_attributed()
                 >= after.last_dispatch_nanoseconds
             && after.last_timestamp_microseconds == 12'345'500U,
         "animation-frame timing or timestamp attribution was inconsistent");
+    webscene_engine_destroy(engine);
+}
+
+void test_runtime_work_is_attributed()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "runtime-work metrics engine creation failed");
+    webscene_runtime_work_metrics undersized{};
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &undersized) == 0,
+        "runtime-work metrics accepted an undersized ABI structure");
+    webscene_runtime_work_metrics before{
+        sizeof(webscene_runtime_work_metrics)};
+    require(
+        webscene_engine_set_runtime_work_metrics_enabled(engine, 1U) != 0
+            && webscene_engine_get_runtime_work_metrics(engine, &before) != 0,
+        "runtime-work metrics ABI was rejected");
+
+    execute_and_wait(
+        engine,
+        R"JS(
+          globalThis.__runtimeWorkTimer = 0;
+          globalThis.__runtimeWorkFrame = 0;
+          const cancelledTimer = setTimeout(() => {}, 1000);
+          clearTimeout(cancelledTimer);
+          setTimeout(() => { __runtimeWorkTimer++; }, 0);
+          const cancelledFrame = requestAnimationFrame(() => {});
+          cancelAnimationFrame(cancelledFrame);
+          requestAnimationFrame(() => { __runtimeWorkFrame++; });
+        )JS",
+        "runtime-work-metrics.js");
+    animation_frame(engine, 1'234.5, 104U);
+
+    webscene_runtime_work_metrics after{
+        sizeof(webscene_runtime_work_metrics)};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        require(
+            webscene_engine_get_runtime_work_metrics(engine, &after) != 0,
+            "runtime-work metrics became unavailable");
+        if (after.timers_fired >= before.timers_fired + 1U
+            && after.animation_frames_invoked
+                >= before.animation_frames_invoked + 1U) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    const auto work_is_consistent =
+        after.timers_scheduled >= before.timers_scheduled + 2U
+            && after.timers_fired >= before.timers_fired + 1U
+            && after.timers_cancelled >= before.timers_cancelled + 1U
+            && after.animation_frames_requested
+                >= before.animation_frames_requested + 2U
+            && after.animation_frames_invoked
+                >= before.animation_frames_invoked + 1U
+            && after.animation_frames_cancelled
+                >= before.animation_frames_cancelled + 1U
+            && after.microtask_checkpoints > before.microtask_checkpoints
+            && after.worker_waits >= before.worker_waits
+            && after.worker_signalled_wakes + after.worker_timeout_wakes
+                <= after.worker_waits;
+    if (!work_is_consistent) {
+        fail(
+            "timer, RAF, microtask, or worker-wake attribution was inconsistent: "
+            "timers=" + std::to_string(after.timers_scheduled) + "/"
+                + std::to_string(after.timers_fired) + "/"
+                + std::to_string(after.timers_cancelled)
+            + " raf=" + std::to_string(after.animation_frames_requested) + "/"
+                + std::to_string(after.animation_frames_invoked) + "/"
+                + std::to_string(after.animation_frames_cancelled)
+            + " microtasks=" + std::to_string(after.microtask_checkpoints)
+            + " waits=" + std::to_string(after.worker_waits) + "/"
+                + std::to_string(after.worker_signalled_wakes) + "/"
+                + std::to_string(after.worker_timeout_wakes));
+    }
+
+    const auto evaluation_before = after.arbitrary_evaluation_calls;
+    require(
+        evaluate(engine, "true", "runtime-work-evaluation.js") == "true",
+        "runtime-work evaluation fixture failed");
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &after) != 0
+            && after.arbitrary_evaluation_calls
+                == evaluation_before + 1U
+            && after.arbitrary_evaluation_source_bytes
+                >= before.arbitrary_evaluation_source_bytes + 4U,
+        "arbitrary evaluation was not attributed separately");
     webscene_engine_destroy(engine);
 }
 
@@ -934,24 +1099,126 @@ void test_document_direction_and_visibility_are_native_properties()
         reflected == R"({"dir":"rtl","attribute":"rtl"})",
         "Document.dir did not reflect the document-element attribute: " + reflected);
 
+    execute_and_wait(
+        engine,
+        R"JS(
+          globalThis.__visibilityEvents = [];
+          document.addEventListener('visibilitychange', () => {
+            __visibilityEvents.push(document.visibilityState);
+            Promise.resolve().then(() =>
+              __visibilityEvents.push(`microtask:${document.visibilityState}`));
+          });
+        )JS",
+        "native-document-visibility-events.js");
+
     require(
         webscene_engine_set_visible(engine, 0U) != 0,
         "document state engine rejected hidden visibility");
     const auto hidden = evaluate(engine, R"JS(
-        ({ hidden: document.hidden, visibilityState: document.visibilityState })
+        ({
+          hidden: document.hidden,
+          visibilityState: document.visibilityState,
+          events: __visibilityEvents
+        })
     )JS", "native-document-state-hidden.js");
     require(
-        hidden == R"({"hidden":true,"visibilityState":"hidden"})",
+        hidden == R"({"hidden":true,"visibilityState":"hidden","events":["hidden","microtask:hidden"]})",
         "Document visibility did not follow the hidden host state: " + hidden);
+
+    require(
+        webscene_engine_set_visible(engine, 0U) != 0,
+        "document state engine rejected duplicate hidden visibility");
 
     require(
         webscene_engine_set_visible(engine, 1U) != 0,
         "document state engine rejected visible visibility");
     const auto visible = evaluate(engine, R"JS(
-        ({ hidden: document.hidden, visibilityState: document.visibilityState })
+        ({
+          hidden: document.hidden,
+          visibilityState: document.visibilityState,
+          events: __visibilityEvents
+        })
     )JS", "native-document-state-visible.js");
     require(
-        visible == R"({"hidden":false,"visibilityState":"visible"})",
+        visible == R"({"hidden":false,"visibilityState":"visible","events":["hidden","microtask:hidden","visible","microtask:visible"]})",
         "Document visibility did not follow the restored host state: " + visible);
+    webscene_engine_destroy(engine);
+}
+
+void test_hidden_document_defers_presentation_work()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "hidden-presentation engine creation failed");
+    const webscene_scene_view* initial = nullptr;
+    for (auto attempt = 0; attempt < 100 && initial == nullptr; ++attempt) {
+        initial = webscene_engine_acquire_latest_scene(engine);
+        if (initial == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(initial != nullptr, "hidden-presentation fixture had no initial scene");
+    require(
+        webscene_scene_acknowledge(initial) != 0,
+        "hidden-presentation fixture could not acknowledge its initial scene");
+    webscene_scene_release(initial);
+    require(
+        webscene_engine_set_runtime_work_metrics_enabled(engine, 1U) != 0,
+        "hidden-presentation fixture could not enable work metrics");
+    require(
+        webscene_engine_set_visible(engine, 0U) != 0,
+        "hidden-presentation fixture rejected hidden state");
+    require(
+        evaluate(engine, "document.hidden", "hidden-presentation-ready.js")
+            == "true",
+        "hidden-presentation state did not reach the document");
+
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    webscene_runtime_work_metrics work_before{
+        sizeof(webscene_runtime_work_metrics)};
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &work_before) != 0,
+        "hidden-presentation work metrics were unavailable");
+    execute_and_wait(
+        engine,
+        "setTimeout(() => { document.body.textContent = 'mutated while hidden'; }, 0)",
+        "hidden-presentation-mutation.js");
+    webscene_runtime_work_metrics work_hidden{
+        sizeof(webscene_runtime_work_metrics)};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        require(
+            webscene_engine_get_runtime_work_metrics(engine, &work_hidden) != 0,
+            "hidden-presentation work metrics became unavailable");
+        if (work_hidden.timers_fired > work_before.timers_fired) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(75));
+
+    webscene_engine_metrics hidden{};
+    webscene_engine_get_metrics(engine, &hidden);
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &work_hidden) != 0
+            && work_hidden.timers_fired == work_before.timers_fired + 1U
+            && hidden.published_scenes == before.published_scenes
+            && work_hidden.scene_builds == work_before.scene_builds,
+        "hidden DOM work produced presentation scenes");
+
+    require(
+        webscene_engine_set_visible(engine, 1U) != 0,
+        "hidden-presentation fixture rejected restored visibility");
+    webscene_engine_metrics visible{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_get_metrics(engine, &visible);
+        if (visible.published_scenes > hidden.published_scenes) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        visible.published_scenes == hidden.published_scenes + 1U
+            && evaluate(
+                engine,
+                "document.body.textContent",
+                "hidden-presentation-restored.js")
+                == "\"mutated while hidden\"",
+        "restored visibility did not publish the deferred document state");
     webscene_engine_destroy(engine);
 }

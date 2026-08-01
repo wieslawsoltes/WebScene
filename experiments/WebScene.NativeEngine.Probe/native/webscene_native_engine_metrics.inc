@@ -173,6 +173,52 @@
         result.bytes_written = resource_cache_bytes_written_.load(std::memory_order_relaxed);
     }
 
+    void read_runtime_work_metrics(webscene_runtime_work_metrics& result) const
+    {
+        result.timers_scheduled = timers_scheduled_.load(std::memory_order_relaxed);
+        result.timers_fired = timers_fired_.load(std::memory_order_relaxed);
+        result.timers_cancelled = timers_cancelled_.load(std::memory_order_relaxed);
+        result.late_timers = late_timers_.load(std::memory_order_relaxed);
+        result.total_timer_lateness_nanoseconds =
+            total_timer_lateness_nanoseconds_.load(std::memory_order_relaxed);
+        result.animation_frames_requested =
+            animation_frames_requested_.load(std::memory_order_relaxed);
+        result.animation_frames_invoked =
+            animation_frames_invoked_.load(std::memory_order_relaxed);
+        result.animation_frames_cancelled =
+            animation_frames_cancelled_.load(std::memory_order_relaxed);
+        result.microtask_checkpoints =
+            microtask_checkpoints_.load(std::memory_order_relaxed);
+        result.worker_waits = worker_waits_.load(std::memory_order_relaxed);
+        result.worker_signalled_wakes =
+            worker_signalled_wakes_.load(std::memory_order_relaxed);
+        result.worker_timeout_wakes =
+            worker_timeout_wakes_.load(std::memory_order_relaxed);
+        result.scene_builds = scene_builds_.load(std::memory_order_relaxed);
+        result.no_damage_scene_builds =
+            no_damage_scene_builds_.load(std::memory_order_relaxed);
+        result.full_checkpoint_scene_builds =
+            full_checkpoint_scene_builds_.load(std::memory_order_relaxed);
+        result.arbitrary_evaluation_calls =
+            arbitrary_evaluation_calls_.load(std::memory_order_relaxed);
+        result.generated_invoke_calls =
+            generated_invoke_calls_.load(std::memory_order_relaxed);
+        result.generated_callback_calls =
+            generated_callback_calls_.load(std::memory_order_relaxed);
+        result.arbitrary_evaluation_source_bytes =
+            arbitrary_evaluation_source_bytes_.load(std::memory_order_relaxed);
+        result.generated_request_bytes =
+            generated_request_bytes_.load(std::memory_order_relaxed);
+    }
+
+    void set_runtime_work_metrics_enabled(bool enabled) noexcept
+    {
+        runtime_work_metrics_enabled_.store(enabled, std::memory_order_release);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        if (runtime_ != nullptr) runtime_->set_work_metrics_enabled(enabled);
+#endif
+    }
+
     void read_process_cache_metrics(webscene_process_cache_metrics& result) const
     {
         result.compilation_memory_hits =

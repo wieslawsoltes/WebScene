@@ -103,6 +103,7 @@ int main()
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
     test_document_direction_and_visibility_are_native_properties();
+    test_hidden_document_defers_presentation_work();
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
@@ -221,10 +222,12 @@ int main()
     test_primary_click_mouse_event_detail(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
     test_component_library_dom_discovery_primitives(engine);
+    test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
     test_dropdown_runtime_primitives(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
+    test_runtime_work_is_attributed();
     test_scene_flow_is_attributed();
     test_read_only_evaluation_does_not_publish_scene();
     test_ordered_scene_consumer_preserves_two_diff_chain();

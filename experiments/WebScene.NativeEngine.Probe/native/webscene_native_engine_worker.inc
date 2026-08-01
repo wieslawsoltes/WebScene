@@ -89,6 +89,8 @@
                         callback) {
                 return enqueue_callback_v3(std::move(callback));
             });
+        runtime_->set_work_metrics_enabled(
+            runtime_work_metrics_enabled_.load(std::memory_order_acquire));
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
             runtime_.reset();
@@ -122,7 +124,11 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
             if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
                 const auto host_visible = host_visible_.load(std::memory_order_acquire);
-                if (runtime_ != nullptr) runtime_->set_visible(host_visible);
+                if (runtime_ != nullptr
+                    && !runtime_->set_visible(host_visible)) {
+                    script_errors_.fetch_add(1, std::memory_order_relaxed);
+                    set_last_error(runtime_->last_error());
+                }
                 if (host_visible) {
                     hidden_low_memory_deadline.reset();
                 } else {
@@ -806,6 +812,7 @@
             const auto resize_frame_boundary =
                 resize_applied && host_frame_applied;
             if (scene_pending
+                && host_visible_.load(std::memory_order_acquire)
                 && (resize_frame_boundary || now >= next_scene_publication)) {
                 if (publish_scene()) {
                     scene_pending = false;
@@ -871,7 +878,15 @@
             }
 #endif
             std::unique_lock lock(wake_mutex_);
-            wake_.wait_for(lock, idle_wait, [this, &token, &deferred_input] {
+            const auto collect_runtime_work_metrics =
+                runtime_work_metrics_enabled_.load(std::memory_order_relaxed);
+            if (collect_runtime_work_metrics) {
+                worker_waits_.fetch_add(1, std::memory_order_relaxed);
+            }
+            const auto signalled = wake_.wait_for(
+                lock,
+                idle_wait,
+                [this, &token, &deferred_input] {
                 // Every script-queue producer latches wake_pending_ after it
                 // enqueues work. Do not inspect script_work_ while holding the
                 // wake mutex: producers can signal while holding script_mutex_,
@@ -886,7 +901,12 @@
                     || visibility_changed_.load(std::memory_order_acquire)
                     || preferred_color_scheme_changed_.load(
                         std::memory_order_acquire);
-            });
+                });
+            if (collect_runtime_work_metrics && signalled) {
+                worker_signalled_wakes_.fetch_add(1, std::memory_order_relaxed);
+            } else if (collect_runtime_work_metrics) {
+                worker_timeout_wakes_.fetch_add(1, std::memory_order_relaxed);
+            }
             wake_pending_ = false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)

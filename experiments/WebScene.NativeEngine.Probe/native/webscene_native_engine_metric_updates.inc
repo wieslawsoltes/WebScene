@@ -57,6 +57,58 @@
         resource_cache_bytes_written_.store(runtime_->resource_cache_bytes_written(), std::memory_order_relaxed);
         input_events_dispatched_.store(runtime_->input_events_dispatched(), std::memory_order_relaxed);
         input_callbacks_invoked_.store(runtime_->input_callbacks_invoked(), std::memory_order_relaxed);
+        if (runtime_work_metrics_enabled_.load(std::memory_order_relaxed)) {
+            const auto work = runtime_->read_work_metrics();
+            if (work.timers_scheduled
+                != last_runtime_work_metrics_.timers_scheduled) {
+                timers_scheduled_.store(
+                    work.timers_scheduled,
+                    std::memory_order_relaxed);
+            }
+            if (work.timers_fired != last_runtime_work_metrics_.timers_fired) {
+                timers_fired_.store(work.timers_fired, std::memory_order_relaxed);
+            }
+            if (work.timers_cancelled
+                != last_runtime_work_metrics_.timers_cancelled) {
+                timers_cancelled_.store(
+                    work.timers_cancelled,
+                    std::memory_order_relaxed);
+            }
+            if (work.late_timers != last_runtime_work_metrics_.late_timers) {
+                late_timers_.store(work.late_timers, std::memory_order_relaxed);
+            }
+            if (work.total_timer_lateness_nanoseconds
+                != last_runtime_work_metrics_.total_timer_lateness_nanoseconds) {
+                total_timer_lateness_nanoseconds_.store(
+                    work.total_timer_lateness_nanoseconds,
+                    std::memory_order_relaxed);
+            }
+            if (work.animation_frames_requested
+                != last_runtime_work_metrics_.animation_frames_requested) {
+                animation_frames_requested_.store(
+                    work.animation_frames_requested,
+                    std::memory_order_relaxed);
+            }
+            if (work.animation_frames_invoked
+                != last_runtime_work_metrics_.animation_frames_invoked) {
+                animation_frames_invoked_.store(
+                    work.animation_frames_invoked,
+                    std::memory_order_relaxed);
+            }
+            if (work.animation_frames_cancelled
+                != last_runtime_work_metrics_.animation_frames_cancelled) {
+                animation_frames_cancelled_.store(
+                    work.animation_frames_cancelled,
+                    std::memory_order_relaxed);
+            }
+            if (work.microtask_checkpoints
+                != last_runtime_work_metrics_.microtask_checkpoints) {
+                microtask_checkpoints_.store(
+                    work.microtask_checkpoints,
+                    std::memory_order_relaxed);
+            }
+            last_runtime_work_metrics_ = work;
+        }
 
         // Heap code/metadata statistics walk V8's code spaces and are orders of
         // magnitude more expensive than the atomic compilation/resource counters

@@ -661,6 +661,37 @@ typedef struct webscene_resource_cache_metrics {
     uint64_t bytes_written;
 } webscene_resource_cache_metrics;
 
+/*
+ * Monotonic work counters used to compare equivalent benchmark intervals.
+ * JavaScript task counters are copied from the worker-owned runtime state at
+ * existing metric update boundaries; gauges and retained sizes live in the
+ * separate memory and interop-pool structures.
+ */
+typedef struct webscene_runtime_work_metrics {
+    uint32_t struct_size;
+    uint32_t reserved;
+    uint64_t timers_scheduled;
+    uint64_t timers_fired;
+    uint64_t timers_cancelled;
+    uint64_t late_timers;
+    uint64_t total_timer_lateness_nanoseconds;
+    uint64_t animation_frames_requested;
+    uint64_t animation_frames_invoked;
+    uint64_t animation_frames_cancelled;
+    uint64_t microtask_checkpoints;
+    uint64_t worker_waits;
+    uint64_t worker_signalled_wakes;
+    uint64_t worker_timeout_wakes;
+    uint64_t scene_builds;
+    uint64_t no_damage_scene_builds;
+    uint64_t full_checkpoint_scene_builds;
+    uint64_t arbitrary_evaluation_calls;
+    uint64_t generated_invoke_calls;
+    uint64_t generated_callback_calls;
+    uint64_t arbitrary_evaluation_source_bytes;
+    uint64_t generated_request_bytes;
+} webscene_runtime_work_metrics;
+
 typedef struct webscene_process_cache_metrics {
     uint32_t struct_size;
     uint32_t reserved;
@@ -971,6 +1002,12 @@ WEBSCENE_API uint8_t webscene_engine_get_resize_frame_metrics(
 WEBSCENE_API uint8_t webscene_engine_get_resource_cache_metrics(
     const webscene_engine* engine,
     webscene_resource_cache_metrics* metrics);
+WEBSCENE_API uint8_t webscene_engine_get_runtime_work_metrics(
+    const webscene_engine* engine,
+    webscene_runtime_work_metrics* metrics);
+WEBSCENE_API uint8_t webscene_engine_set_runtime_work_metrics_enabled(
+    webscene_engine* engine,
+    uint8_t enabled);
 WEBSCENE_API uint8_t webscene_engine_get_process_cache_metrics(
     const webscene_engine* engine,
     webscene_process_cache_metrics* metrics);

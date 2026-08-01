@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 #if !WEBSCENE_UNO
@@ -49,8 +50,87 @@ public static class NativeTextShaping
     internal const uint TabularNumerals = 1u << 0;
     private static readonly ConcurrentDictionary<string, SKTypeface> Typefaces =
         new(StringComparer.Ordinal);
+    private static readonly object WebTypefaceCacheGate = new();
+    private static readonly Dictionary<string, SharedWebTypeface> WebTypefaceCache =
+        new(StringComparer.Ordinal);
+    private static long _webTypefaceCacheHits;
+    private static long _webTypefaceCacheMisses;
     private static readonly ConcurrentDictionary<string, SKTypeface> WebTypefaces =
         new(StringComparer.OrdinalIgnoreCase);
+
+    internal sealed class WebTypefaceRegistry : IDisposable
+    {
+        private readonly object _gate = new();
+        private readonly ConcurrentDictionary<string, WebTypefaceLease> _typefaces =
+            new(StringComparer.OrdinalIgnoreCase);
+        private volatile bool _disposed;
+
+        internal bool Register(string family, ReadOnlySpan<byte> data)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(family);
+            if (data.IsEmpty) return false;
+
+            var normalizedFamily = family.Trim().Trim('"', '\'');
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_typefaces.ContainsKey(normalizedFamily)) return true;
+                var lease = AcquireWebTypeface(data);
+                if (lease is null) return false;
+                if (_typefaces.TryAdd(normalizedFamily, lease)) return true;
+                lease.Dispose();
+                return true;
+            }
+        }
+
+        internal bool TryResolve(string family, out SKTypeface typeface)
+        {
+            if (!_disposed && _typefaces.TryGetValue(family, out var lease))
+            {
+                typeface = lease.Typeface;
+                return true;
+            }
+            typeface = null!;
+            return false;
+        }
+
+        internal bool Contains(string family)
+            => !_disposed && _typefaces.ContainsKey(family);
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                foreach (var lease in _typefaces.Values)
+                {
+                    lease.Dispose();
+                }
+                _typefaces.Clear();
+            }
+        }
+    }
+
+    public readonly record struct WebTypefaceCacheMetrics(
+        int Entries,
+        int References,
+        long Hits,
+        long Misses);
+
+    internal static WebTypefaceRegistry CreateWebTypefaceRegistry() => new();
+
+    public static WebTypefaceCacheMetrics GetWebTypefaceCacheMetrics()
+    {
+        lock (WebTypefaceCacheGate)
+        {
+            return new WebTypefaceCacheMetrics(
+                WebTypefaceCache.Count,
+                WebTypefaceCache.Values.Sum(static entry => entry.ReferenceCount),
+                Volatile.Read(ref _webTypefaceCacheHits),
+                Volatile.Read(ref _webTypefaceCacheMisses));
+        }
+    }
 
     public static bool RegisterWebTypeface(string family, ReadOnlySpan<byte> data)
     {
@@ -69,11 +149,21 @@ public static class NativeTextShaping
     }
 
     public static SKTypeface ResolveTypeface(string familyList, int fontWeight)
+        => ResolveTypeface(familyList, fontWeight, null);
+
+    internal static SKTypeface ResolveTypeface(
+        string familyList,
+        int fontWeight,
+        WebTypefaceRegistry? registry)
     {
         foreach (var rawFamily in familyList.Split(
                      ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var family = rawFamily.Trim('"', '\'');
+            if (registry?.TryResolve(family, out var scopedTypeface) == true)
+            {
+                return scopedTypeface;
+            }
             if (WebTypefaces.TryGetValue(family, out var webTypeface))
             {
                 return webTypeface;
@@ -114,9 +204,14 @@ public static class NativeTextShaping
         });
     }
 
-    internal static float ResolveWidthScale(string familyList, float fontSize, int fontWeight)
+    internal static float ResolveWidthScale(
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        WebTypefaceRegistry? registry = null)
     {
-        if (!OperatingSystem.IsMacOS() || !UsesMacSystemUiMetrics(familyList))
+        if (!OperatingSystem.IsMacOS()
+            || !UsesMacSystemUiMetrics(familyList, registry))
         {
             return 1f;
         }
@@ -249,13 +344,15 @@ public static class NativeTextShaping
     internal static uint ResolveFeatureFlags(
         string text,
         string familyList,
-        uint authoredFeatureFlags)
+        uint authoredFeatureFlags,
+        WebTypefaceRegistry? registry = null)
     {
         if ((authoredFeatureFlags & TabularNumerals) != 0)
         {
             return authoredFeatureFlags;
         }
-        if (!OperatingSystem.IsMacOS() || !UsesMacSystemUiMetrics(familyList))
+        if (!OperatingSystem.IsMacOS()
+            || !UsesMacSystemUiMetrics(familyList, registry))
         {
             return authoredFeatureFlags;
         }
@@ -278,18 +375,24 @@ public static class NativeTextShaping
         return sawDigit ? authoredFeatureFlags | TabularNumerals : authoredFeatureFlags;
     }
 
-    internal static float ResolveTabularDigitScale(string familyList)
-        => OperatingSystem.IsMacOS() && UsesMacSystemUiMetrics(familyList)
+    internal static float ResolveTabularDigitScale(
+        string familyList,
+        WebTypefaceRegistry? registry = null)
+        => OperatingSystem.IsMacOS()
+            && UsesMacSystemUiMetrics(familyList, registry)
             ? 1.014f
             : 1f;
 
-    private static bool UsesMacSystemUiMetrics(string familyList)
+    private static bool UsesMacSystemUiMetrics(
+        string familyList,
+        WebTypefaceRegistry? registry)
     {
         foreach (var rawFamily in familyList.Split(
                      ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var family = rawFamily.Trim('"', '\'');
-            if (WebTypefaces.ContainsKey(family))
+            if (registry?.Contains(family) == true
+                || WebTypefaces.ContainsKey(family))
             {
                 return false;
             }
@@ -324,8 +427,27 @@ public static class NativeTextShaping
         float letterSpacing,
         float wordSpacing,
         uint featureFlags = 0)
+        => Measure(
+            text,
+            familyList,
+            fontSize,
+            fontWeight,
+            letterSpacing,
+            wordSpacing,
+            featureFlags,
+            null);
+
+    internal static NativeTextMetrics Measure(
+        string text,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        float letterSpacing,
+        float wordSpacing,
+        uint featureFlags,
+        WebTypefaceRegistry? registry)
     {
-        var typeface = ResolveTypeface(familyList, fontWeight);
+        var typeface = ResolveTypeface(familyList, fontWeight, registry);
         using var paint = new SKPaint
         {
             IsAntialias = true,
@@ -333,13 +455,17 @@ public static class NativeTextShaping
             Typeface = typeface
         };
         using var shaper = new SKShaper(typeface);
-        featureFlags = ResolveFeatureFlags(text, familyList, featureFlags);
+        featureFlags = ResolveFeatureFlags(
+            text,
+            familyList,
+            featureFlags,
+            registry);
         var shapedWidth = MeasureShapedWidth(
             shaper,
             text,
             paint,
             featureFlags,
-            ResolveTabularDigitScale(familyList));
+            ResolveTabularDigitScale(familyList, registry));
         paint.GetFontMetrics(out var fontMetrics);
         var graphemes = string.IsNullOrEmpty(text)
             ? 0
@@ -350,7 +476,11 @@ public static class NativeTextShaping
             StructSize = (uint)Marshal.SizeOf<NativeTextMetrics>(),
             AdvanceWidth = shapedWidth
                 * ((featureFlags & TabularNumerals) != 0
-                    ? ResolveWidthScale(familyList, fontSize, fontWeight)
+                    ? ResolveWidthScale(
+                        familyList,
+                        fontSize,
+                        fontWeight,
+                        registry)
                     : 1f)
                 + Math.Max(0, graphemes - 1) * letterSpacing
                 + spaces * wordSpacing,
@@ -358,5 +488,60 @@ public static class NativeTextShaping
             Descent = fontMetrics.Descent,
             Leading = fontMetrics.Leading
         };
+    }
+
+    private static WebTypefaceLease? AcquireWebTypeface(ReadOnlySpan<byte> data)
+    {
+        var contentHash = Convert.ToHexString(SHA256.HashData(data));
+        lock (WebTypefaceCacheGate)
+        {
+            if (WebTypefaceCache.TryGetValue(contentHash, out var cached))
+            {
+                cached.ReferenceCount++;
+                Interlocked.Increment(ref _webTypefaceCacheHits);
+                return new WebTypefaceLease(contentHash, cached.Typeface);
+            }
+
+            using var fontData = SKData.CreateCopy(data);
+            var typeface = SKTypeface.FromData(fontData);
+            if (typeface is null) return null;
+            WebTypefaceCache.Add(
+                contentHash,
+                new SharedWebTypeface(typeface));
+            Interlocked.Increment(ref _webTypefaceCacheMisses);
+            return new WebTypefaceLease(contentHash, typeface);
+        }
+    }
+
+    private static void ReleaseWebTypeface(string contentHash)
+    {
+        lock (WebTypefaceCacheGate)
+        {
+            if (!WebTypefaceCache.TryGetValue(contentHash, out var cached)) return;
+            cached.ReferenceCount--;
+            if (cached.ReferenceCount > 0) return;
+            WebTypefaceCache.Remove(contentHash);
+            cached.Typeface.Dispose();
+        }
+    }
+
+    private sealed class SharedWebTypeface(SKTypeface typeface)
+    {
+        internal SKTypeface Typeface { get; } = typeface;
+        internal int ReferenceCount { get; set; } = 1;
+    }
+
+    private sealed class WebTypefaceLease(
+        string contentHash,
+        SKTypeface typeface) : IDisposable
+    {
+        private string? _contentHash = contentHash;
+        internal SKTypeface Typeface { get; } = typeface;
+
+        public void Dispose()
+        {
+            var hash = Interlocked.Exchange(ref _contentHash, null);
+            if (hash is not null) ReleaseWebTypeface(hash);
+        }
     }
 }

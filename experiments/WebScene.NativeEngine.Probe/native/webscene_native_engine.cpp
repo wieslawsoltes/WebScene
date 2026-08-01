@@ -55,6 +55,7 @@ static_assert(sizeof(webscene_interop_result_view_v3) == 96);
 static_assert(sizeof(webscene_interop_callback_view_v3) == 88);
 static_assert(sizeof(webscene_interop_callback_completion_v3) == 96);
 static_assert(sizeof(webscene_interop_pool_metrics_v3) == 200);
+static_assert(sizeof(webscene_runtime_work_metrics) == 168);
 
 class input_ring final {
 public:
@@ -436,6 +437,31 @@ private:
     std::atomic<uint64_t> last_animation_frame_dispatch_nanoseconds_{0};
     std::atomic<uint64_t> maximum_animation_frame_dispatch_nanoseconds_{0};
     std::atomic<uint64_t> last_animation_frame_timestamp_microseconds_{0};
+    std::atomic<uint64_t> timers_scheduled_{0};
+    std::atomic<uint64_t> timers_fired_{0};
+    std::atomic<uint64_t> timers_cancelled_{0};
+    std::atomic<uint64_t> late_timers_{0};
+    std::atomic<uint64_t> total_timer_lateness_nanoseconds_{0};
+    std::atomic<uint64_t> animation_frames_requested_{0};
+    std::atomic<uint64_t> animation_frames_invoked_{0};
+    std::atomic<uint64_t> animation_frames_cancelled_{0};
+    std::atomic<uint64_t> microtask_checkpoints_{0};
+    std::atomic<uint64_t> worker_waits_{0};
+    std::atomic<uint64_t> worker_signalled_wakes_{0};
+    std::atomic<uint64_t> worker_timeout_wakes_{0};
+    std::atomic<uint64_t> scene_builds_{0};
+    std::atomic<uint64_t> no_damage_scene_builds_{0};
+    std::atomic<uint64_t> full_checkpoint_scene_builds_{0};
+    std::atomic<uint64_t> arbitrary_evaluation_calls_{0};
+    std::atomic<uint64_t> generated_invoke_calls_{0};
+    std::atomic<uint64_t> generated_callback_calls_{0};
+    std::atomic<uint64_t> arbitrary_evaluation_source_bytes_{0};
+    std::atomic<uint64_t> generated_request_bytes_{0};
+    std::atomic<bool> runtime_work_metrics_enabled_{false};
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+    webscene_native::v8_dom_runtime::work_metrics
+        last_runtime_work_metrics_{};
+#endif
     std::atomic<uint32_t> current_cursor_{WEBSCENE_CURSOR_DEFAULT};
     std::atomic<bool> checkpoint_requested_{false};
     mutable std::mutex iframe_html_mutex_;
@@ -1098,6 +1124,27 @@ uint8_t webscene_engine_get_resource_cache_metrics(
         return 0U;
     }
     engine->read_resource_cache_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t webscene_engine_get_runtime_work_metrics(
+    const webscene_engine* engine,
+    webscene_runtime_work_metrics* metrics)
+{
+    if (engine == nullptr || metrics == nullptr
+        || metrics->struct_size < sizeof(webscene_runtime_work_metrics)) {
+        return 0U;
+    }
+    engine->read_runtime_work_metrics(*metrics);
+    return 1U;
+}
+
+uint8_t webscene_engine_set_runtime_work_metrics_enabled(
+    webscene_engine* engine,
+    uint8_t enabled)
+{
+    if (engine == nullptr) return 0U;
+    engine->set_runtime_work_metrics_enabled(enabled != 0U);
     return 1U;
 }
 

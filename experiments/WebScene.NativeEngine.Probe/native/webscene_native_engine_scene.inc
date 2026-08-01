@@ -64,6 +64,11 @@
             }
         }
         uint32_t scene_flags = base_revision == 0 ? scene_flag_checkpoint : 0U;
+        const auto collect_runtime_work_metrics =
+            runtime_work_metrics_enabled_.load(std::memory_order_relaxed);
+        if (collect_runtime_work_metrics) {
+            scene_builds_.fetch_add(1, std::memory_order_relaxed);
+        }
         if (native_scene_active_) {
             if (document_.dirty()) {
                 const auto layout_started = std::chrono::steady_clock::now();
@@ -324,6 +329,15 @@
             next->dom_hash = hash;
         }
 
+        if (collect_runtime_work_metrics && next->damage_rects.empty()) {
+            no_damage_scene_builds_.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (collect_runtime_work_metrics
+            && (scene_flags & scene_flag_checkpoint) != 0U) {
+            full_checkpoint_scene_builds_.fetch_add(
+                1,
+                std::memory_order_relaxed);
+        }
         const auto revision = next_revision_++;
         next->header = webscene_scene_header{
             revision,

@@ -789,19 +789,71 @@
         return nullptr;
     }
 
-    static dom_node* find_element_by_id(
-        dom_node& node,
-        std::string_view id,
-        bool include_node = true)
+    dom_node* find_element_by_id(dom_node& root, const std::string& id)
     {
-        if (include_node && node.id_attribute == id) return &node;
-        for (auto* child : node.children) {
-            if (child == nullptr) continue;
-            if (auto* match = find_element_by_id(*child, id); match != nullptr) {
-                return match;
-            }
+        const auto generation = document.scene_generation();
+        if (element_id_index_generation != generation) {
+            element_id_indexes.clear();
+            element_named_indexes.clear();
+            document_named_form_indexes.clear();
+            element_id_index_generation = generation;
         }
-        return nullptr;
+        auto [root_index, inserted] = element_id_indexes.try_emplace(&root);
+        if (inserted) {
+            const auto collect = [&](const auto& recurse, dom_node& node) -> void {
+                if (!node.id_attribute.empty()) {
+                    root_index->second.try_emplace(node.id_attribute, &node);
+                }
+                for (auto* child : node.children) {
+                    if (child != nullptr) recurse(recurse, *child);
+                }
+            };
+            collect(collect, root);
+        }
+        const auto match = root_index->second.find(id);
+        return match == root_index->second.end()
+            ? nullptr
+            : match->second;
+    }
+
+    dom_node* find_named_element(
+        dom_node& root,
+        const std::string& name,
+        bool forms_only)
+    {
+        const auto generation = document.scene_generation();
+        if (element_id_index_generation != generation) {
+            element_id_indexes.clear();
+            element_named_indexes.clear();
+            document_named_form_indexes.clear();
+            element_id_index_generation = generation;
+        }
+        auto& indexes = forms_only
+            ? document_named_form_indexes
+            : element_named_indexes;
+        auto [root_index, inserted] = indexes.try_emplace(&root);
+        if (inserted) {
+            const auto collect = [&](const auto& recurse, dom_node& node) -> void {
+                if (!forms_only || node.tag == "form") {
+                    if (!node.id_attribute.empty()) {
+                        root_index->second.try_emplace(node.id_attribute, &node);
+                    }
+                    const auto authored_name = node.attributes.find("name");
+                    if (authored_name != node.attributes.end()
+                        && !authored_name->second.empty()) {
+                        root_index->second.try_emplace(authored_name->second, &node);
+                    }
+                }
+                for (auto* child : node.children) {
+                    if (child != nullptr) recurse(recurse, *child);
+                }
+            };
+            collect(collect, root);
+        }
+        const auto match = root_index->second.find(name);
+        return match == root_index->second.end()
+            ? nullptr
+            : match->second;
     }
 
     bool is_valid_dom_selector_list(std::string_view selector) const
@@ -1593,7 +1645,7 @@
         auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
             0,
             v8::kEmbedderDataTypeTagDefault));
-        auto* node = find_element_by_id(
+        auto* node = self->find_element_by_id(
             root == nullptr ? self->active_root() : *root,
             id);
         if (node == nullptr) {

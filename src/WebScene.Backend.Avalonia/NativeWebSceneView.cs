@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -13,9 +14,11 @@ namespace WebScene.Backends.Avalonia.Native;
 /// </summary>
 public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 {
+    private static long s_nextContextId;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly NativeSceneSurface _surface;
     private IntPtr _engine;
+    private long _contextId;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
     private CancellationTokenSource? _navigationCancellation;
@@ -184,6 +187,46 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Captures native, interop, renderer, and compositor counters in one
+    /// read-on-demand object. The first call opts this context into detailed
+    /// runtime-work counters; contexts that are never sampled retain the default
+    /// disabled path. Use <see cref="NativeWebScenePerformanceSnapshot.Since"/>
+    /// with an earlier snapshot from this loaded context to establish a baseline
+    /// without resetting counters.
+    /// </summary>
+    public NativeWebScenePerformanceSnapshot CapturePerformanceSnapshot()
+    {
+        var engine = Volatile.Read(ref _engine);
+        var contextId = Volatile.Read(ref _contextId);
+        if (engine == IntPtr.Zero || contextId == 0)
+        {
+            throw new InvalidOperationException(
+                "The WebScene native document is not loaded.");
+        }
+
+        NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine);
+        NativeWebSceneApi.EngineGetMetrics(engine, out var engineMetrics);
+        return new NativeWebScenePerformanceSnapshot(
+            ContextId: contextId,
+            Timestamp: Stopwatch.GetTimestamp(),
+            Engine: engineMetrics,
+            InputDispatch: NativeWebSceneApi.GetInputDispatchMetrics(engine),
+            AnimationFrames: NativeWebSceneApi.GetAnimationFrameMetrics(engine),
+            SceneFlow: NativeWebSceneApi.GetSceneFlowMetrics(engine),
+            ResizeFrames: NativeWebSceneApi.GetResizeFrameMetrics(engine),
+            ResourceCache: NativeWebSceneApi.GetResourceCacheMetrics(engine),
+            RuntimeWork: NativeWebSceneApi.TryGetRuntimeWorkMetrics(engine),
+            ProcessCache: NativeWebSceneApi.TryGetProcessCacheMetrics(engine),
+            Memory: NativeWebSceneApi.TryGetMemoryMetrics(engine),
+            InteropPool: NativeWebSceneApi.GetInteropPoolMetrics(engine),
+            RendererMemory: _surface.GetRendererMemoryMetrics(),
+            Surface: _surface.CapturePerformanceMetrics(),
+            ProcessWebTypefaces:
+                NativeTextShaping.GetWebTypefaceCacheMetrics(),
+            ProcessComposition: NativeSceneSurface.CompositionFlowMetrics);
+    }
+
     public async Task LoadAsync(
         string source,
         string nativeLibraryPath,
@@ -231,6 +274,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            Volatile.Write(
+                ref _contextId,
+                Interlocked.Increment(ref s_nextContextId));
             _interopCallbackSignal = callbackSignal;
             _interop = new NativeInteropInvoker(engine);
             await Dispatcher.UIThread.InvokeAsync(
@@ -324,6 +370,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         var interop = Interlocked.Exchange(ref _interop, null);
         Interlocked.Exchange(ref _interopCallbackSignal, null);
         _engine = IntPtr.Zero;
+        Volatile.Write(ref _contextId, 0);
         if (engine == IntPtr.Zero)
         {
             interop?.Dispose();

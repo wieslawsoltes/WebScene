@@ -47,6 +47,12 @@
                 operation,
                 enqueued_inputs_.load(std::memory_order_acquire)});
         }
+        if (runtime_work_metrics_enabled_.load(std::memory_order_relaxed)) {
+            arbitrary_evaluation_calls_.fetch_add(1, std::memory_order_relaxed);
+            arbitrary_evaluation_source_bytes_.fetch_add(
+                request->source_length,
+                std::memory_order_relaxed);
+        }
         signal_worker();
         return operation->id;
 #endif
@@ -98,6 +104,16 @@
                 std::move(copied),
                 operation,
                 enqueued_inputs_.load(std::memory_order_acquire)});
+        }
+        if (runtime_work_metrics_enabled_.load(std::memory_order_relaxed)) {
+            generated_invoke_calls_.fetch_add(1, std::memory_order_relaxed);
+            generated_request_bytes_.fetch_add(
+                request->global_name_length
+                    + request->member_name_length
+                    + request->value_count * sizeof(webscene_interop_value_v3)
+                    + request->edge_count * sizeof(webscene_interop_edge_v3)
+                    + request->utf8_byte_count,
+                std::memory_order_relaxed);
         }
         signal_worker();
         return operation->id;
@@ -197,6 +213,9 @@
             interop_callback_queue_high_water_ = std::max(
                 interop_callback_queue_high_water_,
                 queued_interop_callbacks_.size());
+        }
+        if (runtime_work_metrics_enabled_.load(std::memory_order_relaxed)) {
+            generated_callback_calls_.fetch_add(1, std::memory_order_relaxed);
         }
         if (notify && interop_callback_available_callback_ != nullptr) {
             interop_callback_available_callback_(

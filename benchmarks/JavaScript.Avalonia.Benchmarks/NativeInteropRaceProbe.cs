@@ -18,11 +18,12 @@ internal static class NativeInteropRaceProbe
     {
         var batches = ReadIntOption(args, "--batches", 100);
         var width = ReadIntOption(args, "--width", 32);
-        if (batches <= 0 || width <= 0)
+        var contextCount = ReadIntOption(args, "--contexts", 4);
+        if (batches <= 0 || width <= 0 || contextCount <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(args),
-                "Batches and width must be positive.");
+                "Batches, width, and contexts must be positive.");
         }
 
         var library = Environment.GetEnvironmentVariable(
@@ -34,54 +35,69 @@ internal static class NativeInteropRaceProbe
         }
         NativeWebSceneApi.ConfigureLibraryPath(library);
 
-        var engine = NativeWebSceneApi.EngineCreate(
-            simulatedChartCommandCount: 0,
-            compilationCacheDirectory: null,
-            EmptyResourceLoader.Instance,
-            static _ => { });
-        if (engine == IntPtr.Zero)
-        {
-            throw new InvalidOperationException(
-                "The native interop race engine could not be created.");
-        }
-
+        var engines = new List<IntPtr>(contextCount);
         var succeeded = 0;
         var cancelled = 0;
         var faulted = 0;
         var faultExamples = new List<string>();
         try
         {
-            if (!NativeWebSceneApi.TryExecuteScript(
-                    engine,
-                    """
-                    globalThis.__webSceneInteropDelayed = () =>
-                      new Promise(resolve =>
-                        setTimeout(() => resolve(42), 10));
-                    """,
-                    "native-interop-race.js"))
+            for (var context = 0; context < contextCount; context++)
             {
-                throw new InvalidOperationException(
-                    "The native interop race fixture could not be installed.");
+                var engine = NativeWebSceneApi.EngineCreate(
+                    simulatedChartCommandCount: 0,
+                    compilationCacheDirectory: null,
+                    EmptyResourceLoader.Instance,
+                    static _ => { });
+                if (engine == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException(
+                        "The native interop race engine could not be created.");
+                }
+                engines.Add(engine);
+                if (!NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine))
+                {
+                    throw new InvalidOperationException(
+                        "The native interop work metrics ABI is unavailable.");
+                }
+                if (!NativeWebSceneApi.TryExecuteScript(
+                        engine,
+                        """
+                        globalThis.__webSceneInteropDelayed = () =>
+                          new Promise(resolve =>
+                            setTimeout(() => resolve(42), 10));
+                        """,
+                        "native-interop-race.js"))
+                {
+                    throw new InvalidOperationException(
+                        "The native interop race fixture could not be installed.");
+                }
             }
 
             for (var batch = 0; batch < batches; batch++)
             {
-                var transport = new NativeJavaScriptBinaryTransport(engine);
-                var invoker = new NativeJavaScriptInvoker(transport);
-                var pending = new Task<double>[width];
-                for (var index = 0; index < pending.Length; index++)
+                var invokers = engines.Select(engine =>
+                    new NativeJavaScriptInvoker(
+                        new NativeJavaScriptBinaryTransport(engine)))
+                    .ToArray();
+                var pending = new List<Task<double>>(
+                    checked(width * contextCount));
+                foreach (var invoker in invokers)
                 {
-                    pending[index] = invoker.InvokeBinaryAsync<
+                    for (var index = 0; index < width; index++)
+                    {
+                        pending.Add(invoker.InvokeBinaryAsync<
                             JavaScriptBinaryVoid,
                             double,
                             DelayedCodec>(
                             s_delayedCallSite,
                             default,
                             new JavaScriptBinaryVoid())
-                        .AsTask();
+                        .AsTask());
+                    }
                 }
 
-                invoker.Dispose();
+                foreach (var invoker in invokers) invoker.Dispose();
                 foreach (var task in pending)
                 {
                     try
@@ -103,47 +119,83 @@ internal static class NativeInteropRaceProbe
                     }
                 }
 
-                var cleanupDeadline =
-                    DateTime.UtcNow + TimeSpan.FromSeconds(5);
-                while (NativeWebSceneApi.GetInteropPoolMetrics(engine)
-                           .ActiveOperationSlots != 0
-                       && DateTime.UtcNow < cleanupDeadline)
-                {
-                    await Task.Delay(1).ConfigureAwait(false);
-                }
+                // Disposal cancels managed waiters, but JavaScript promises
+                // and their timers still settle inside each realm. Allow that
+                // standards-required work to drain before the next batch.
                 await Task.Delay(20).ConfigureAwait(false);
-                if (!NativeWebSceneApi.TryExecuteScript(
-                        engine,
-                        "true",
-                        "native-interop-race-barrier.js"))
+                foreach (var engine in engines)
                 {
-                    throw new InvalidOperationException(
-                        "The native interop race barrier failed: "
-                        + NativeWebSceneApi.GetLastError(engine));
+                    var cleanupDeadline =
+                        DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                    while (NativeWebSceneApi.GetInteropPoolMetrics(engine)
+                               .ActiveOperationSlots != 0
+                           && DateTime.UtcNow < cleanupDeadline)
+                    {
+                        await Task.Delay(1).ConfigureAwait(false);
+                    }
+                    if (!NativeWebSceneApi.TryExecuteScript(
+                            engine,
+                            "true",
+                            "native-interop-race-barrier.js"))
+                    {
+                        throw new InvalidOperationException(
+                            "The native interop race barrier failed: "
+                            + NativeWebSceneApi.GetLastError(engine));
+                    }
                 }
             }
 
-            var metrics = await WaitForPoolDrainAsync(engine)
-                .ConfigureAwait(false);
+            var metrics = new NativeInteropPoolMetrics[engines.Count];
+            for (var index = 0; index < engines.Count; index++)
+            {
+                metrics[index] = await WaitForPoolDrainAsync(engines[index])
+                    .ConfigureAwait(false);
+            }
+            var work = engines.Select(engine =>
+                    NativeWebSceneApi.TryGetRuntimeWorkMetrics(engine)
+                    ?? throw new InvalidOperationException(
+                        "The native interop work metrics ABI became unavailable."))
+                .ToArray();
+            var operations = checked(batches * width * contextCount);
+            var generatedCalls = work.Aggregate(
+                0UL,
+                static (sum, value) => sum + value.GeneratedInvokeCalls);
+            var generatedRequestBytes = work.Aggregate(
+                0UL,
+                static (sum, value) => sum + value.GeneratedRequestBytes);
+            var evaluationCalls = work.Aggregate(
+                0UL,
+                static (sum, value) => sum + value.ArbitraryEvaluationCalls);
             var correct =
                 faulted == 0
-                && succeeded + cancelled == checked(batches * width)
-                && metrics.OutstandingResults == 0
-                && metrics.ActiveOperationSlots == 0;
+                && succeeded + cancelled == operations
+                && generatedCalls == (ulong)operations
+                && generatedRequestBytes > 0
+                && metrics.All(static value =>
+                    value.OutstandingResults == 0
+                    && value.ActiveOperationSlots == 0);
             Console.WriteLine(JsonSerializer.Serialize(
                 new
                 {
                     batches,
                     width,
-                    operations = checked(batches * width),
+                    contextCount,
+                    operations,
                     succeeded,
                     cancelled,
                     faulted,
                     faultExamples,
-                    metrics.OutstandingResults,
-                    metrics.ActiveOperationSlots,
-                    metrics.TakenResultLeases,
-                    metrics.OperationResultLeases,
+                    generatedCalls,
+                    generatedRequestBytes,
+                    arbitraryEvaluationCalls = evaluationCalls,
+                    contexts = metrics.Select((value, index) => new
+                    {
+                        index,
+                        value.OutstandingResults,
+                        value.ActiveOperationSlots,
+                        value.TakenResultLeases,
+                        value.OperationResultLeases
+                    }),
                     correct
                 },
                 new JsonSerializerOptions { WriteIndented = true }));
@@ -151,7 +203,10 @@ internal static class NativeInteropRaceProbe
         }
         finally
         {
-            NativeWebSceneApi.EngineDestroy(engine);
+            foreach (var engine in engines)
+            {
+                NativeWebSceneApi.EngineDestroy(engine);
+            }
         }
     }
 

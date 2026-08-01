@@ -1,6 +1,13 @@
 void test_generated_binary_invocation_uses_tagged_arguments(
     webscene_engine* engine)
 {
+    webscene_runtime_work_metrics work_before{
+        sizeof(webscene_runtime_work_metrics)};
+    require(
+        webscene_engine_set_runtime_work_metrics_enabled(engine, 1U) != 0
+            && webscene_engine_get_runtime_work_metrics(engine, &work_before)
+                != 0,
+        "runtime work metrics were unavailable before generated interop");
     execute_and_wait(
         engine,
         R"JS(
@@ -381,6 +388,15 @@ void test_generated_binary_invocation_uses_tagged_arguments(
         stale_result->status == WEBSCENE_INTEROP_RESULT_JAVASCRIPT_ERROR_V3,
         "generated invocation accepted a stale handle");
     release_interop_result(stale_result);
+    webscene_runtime_work_metrics work_after{
+        sizeof(webscene_runtime_work_metrics)};
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &work_after) != 0
+            && work_after.generated_invoke_calls
+                > work_before.generated_invoke_calls
+            && work_after.generated_request_bytes
+                > work_before.generated_request_bytes,
+        "accepted generated operations were not attributed to the binary path");
 }
 
 void test_generated_binary_cross_context_promise()

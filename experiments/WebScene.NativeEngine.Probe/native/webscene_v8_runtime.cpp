@@ -1302,7 +1302,7 @@ struct v8_dom_runtime::implementation final {
             }
             return false;
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         if (value.type == native_websocket_transport::event_type::closed) {
             websocket_bindings.erase(value.socket_id);
             websocket_transport.release(value.socket_id);
@@ -2786,9 +2786,10 @@ bool v8_dom_runtime::load_url(const std::string& url)
     return impl_->load_url(url);
 }
 
-void v8_dom_runtime::set_visible(bool visible) noexcept
+bool v8_dom_runtime::set_visible(bool visible)
 {
-    impl_->document_visible = visible;
+    return impl_->set_visible(visible)
+        && impl_->promote_pending_promise_error();
 }
 
 void v8_dom_runtime::set_resource_root(std::string resource_root)
@@ -3408,6 +3409,16 @@ uint64_t v8_dom_runtime::process_resource_load_leaders() const noexcept
 uint64_t v8_dom_runtime::process_resource_load_waiters() const noexcept
 {
     return impl_->process_resource_load_waiter_count.load(std::memory_order_relaxed);
+}
+
+v8_dom_runtime::work_metrics v8_dom_runtime::read_work_metrics() const noexcept
+{
+    return impl_->work;
+}
+
+void v8_dom_runtime::set_work_metrics_enabled(bool enabled) noexcept
+{
+    impl_->work_metrics_enabled.store(enabled, std::memory_order_release);
 }
 
 uint64_t v8_dom_runtime::process_resource_shared_bytes() const noexcept

@@ -9,6 +9,9 @@
             "web-api-binding");
         if (info.Length() < 1 || !info[0]->IsFunction()) return;
         auto* self = current(info.GetIsolate());
+        if (self->work_metrics_enabled.load(std::memory_order_relaxed)) {
+            ++self->work.animation_frames_requested;
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->profile_startup) ++self->startup_raf_scheduled;
 #endif
@@ -55,6 +58,9 @@
         }
 #endif
         if (repeating) delay = std::max(1.0, delay);
+        if (self->work_metrics_enabled.load(std::memory_order_relaxed)) {
+            ++self->work.timers_scheduled;
+        }
         const auto interval = std::chrono::duration<double, std::milli>(delay);
         std::vector<v8::Global<v8::Value>> arguments;
         arguments.reserve(info.Length() > 2 ? static_cast<size_t>(info.Length() - 2) : 0U);
@@ -92,7 +98,18 @@
         if (info.Length() < 1) return;
         auto* self = current(info.GetIsolate());
         const auto id = info[0]->Uint32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0);
-        std::erase_if(self->timers, [id](const auto& timer) { return timer.id == id; });
+        uint64_t cancelled_animation_frames = 0;
+        const auto removed = std::erase_if(
+            self->timers,
+            [id, &cancelled_animation_frames](const auto& timer) {
+                if (timer.id != id) return false;
+                if (timer.animation_frame) ++cancelled_animation_frames;
+                return true;
+            });
+        if (self->work_metrics_enabled.load(std::memory_order_relaxed)) {
+            self->work.animation_frames_cancelled += cancelled_animation_frames;
+            self->work.timers_cancelled += removed - cancelled_animation_frames;
+        }
         if (self->active_timer_id == id) self->active_timer_cancelled = true;
     }
 
@@ -789,6 +806,55 @@
         info.GetReturnValue().Set(result);
     }
 
+    bool set_visible(bool visible)
+    {
+        if (document_visible == visible) return true;
+        document_visible = visible;
+        auto isolate_locker = lock_shared_isolate();
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        auto local_context = context.Get(isolate);
+        if (local_context.IsEmpty()) return true;
+        v8::Context::Scope context_scope(local_context);
+        auto target = document_object.Get(isolate);
+        if (target.IsEmpty()) return true;
+        auto event = create_event_instance(local_context);
+        event->Set(
+            local_context,
+            js_string(isolate, "type"),
+            js_string(isolate, "visibilitychange")).Check();
+        event->Set(
+            local_context,
+            js_string(isolate, "bubbles"),
+            v8::False(isolate)).Check();
+        event->Set(
+            local_context,
+            js_string(isolate, "cancelable"),
+            v8::False(isolate)).Check();
+        v8::Local<v8::Value> dispatcher;
+        if (!target->Get(
+                local_context,
+                js_string(isolate, "dispatchEvent")).ToLocal(&dispatcher)
+            || !dispatcher->IsFunction()) {
+            last_error = "Document visibilitychange dispatcher is unavailable";
+            return false;
+        }
+        v8::TryCatch try_catch(isolate);
+        v8::Local<v8::Value> arguments[] = {event};
+        if (dispatcher.As<v8::Function>()->Call(
+                local_context,
+                target,
+                1,
+                arguments).IsEmpty()) {
+            last_error = "Document visibilitychange dispatch failed: "
+                + describe_exception(try_catch, local_context);
+            ++frame_script_error_count;
+            return false;
+        }
+        perform_microtask_checkpoint();
+        return true;
+    }
+
     bool dispatch_transition_events()
     {
         auto events = document.take_transition_events();
@@ -829,7 +895,7 @@
                 return false;
             }
         }
-        isolate->PerformMicrotaskCheckpoint();
+        perform_microtask_checkpoint();
         return true;
     }
 
