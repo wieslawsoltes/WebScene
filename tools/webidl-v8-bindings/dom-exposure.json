@@ -70,6 +70,22 @@
       ]
     },
     {
+      "name": "DocumentFragment",
+      "template": "document_fragment_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "Node",
+      "attributes": [
+        { "name": "children", "getter": "get_children" },
+        { "name": "firstElementChild", "getter": "get_first_element_child" },
+        { "name": "lastElementChild", "getter": "get_last_element_child" }
+      ],
+      "methods": [
+        { "name": "querySelector", "callback": "element_query_selector", "length": 1 },
+        { "name": "querySelectorAll", "callback": "element_query_selector_all", "length": 1 }
+      ],
+      "constants": []
+    },
+    {
       "name": "Element",
       "template": "element_template",
       "constructor": "illegal_dom_constructor",
@@ -186,7 +202,6 @@
     "HTMLImageElement": "HTMLElement",
     "HTMLInputElement": "HTMLElement",
     "SVGElement": "Element",
-    "DocumentFragment": "Node",
     "Window": "EventTarget"
   }
 }

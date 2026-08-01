@@ -4601,6 +4601,41 @@ void test_related_tree_mutations_preserve_identity_and_atomicity(webscene_engine
         "related DOM tree-mutation identity or atomicity regressed: " + result);
 }
 
+void test_contextual_fragment_exposes_parent_node_members(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const range = document.createRange();
+          range.selectNodeContents(document.documentElement);
+          const fragment = range.createContextualFragment(
+            '<div id="first"></div><span id="last"></span>');
+          const first = fragment.firstElementChild;
+          const last = fragment.lastElementChild;
+          const selected = fragment.querySelector('#last');
+          const before = {
+            isFragment: fragment instanceof DocumentFragment,
+            nodeType: fragment.nodeType,
+            childCount: fragment.children.length,
+            firstId: first?.id,
+            lastId: last?.id,
+            selectedIsLast: selected === last,
+            directParent: first?.parentNode === fragment
+          };
+          const removed = fragment.removeChild(first);
+          return {
+            ...before,
+            returnedChild: removed === first,
+            removedParent: removed.parentNode === null,
+            remainingCount: fragment.children.length,
+            remainingFirstId: fragment.firstElementChild?.id
+          };
+        })()
+    )JS", "native-contextual-fragment-parent-node.js");
+    require(
+        result == R"({"isFragment":true,"nodeType":11,"childCount":2,"firstId":"first","lastId":"last","selectedIsLast":true,"directParent":true,"returnedChild":true,"removedParent":true,"remainingCount":1,"remainingFirstId":"last"})",
+        "DocumentFragment ParentNode members or child identity regressed: " + result);
+}
+
 void test_monaco_browser_primitives(webscene_engine* engine)
 {
     execute(
@@ -11285,6 +11320,7 @@ int main()
     test_replace_child_advances_attribute_selector_iteration(engine);
     test_insert_before_preserves_tree_identity_and_atomicity(engine);
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
+    test_contextual_fragment_exposes_parent_node_members(engine);
     test_monaco_browser_primitives(engine);
     test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);

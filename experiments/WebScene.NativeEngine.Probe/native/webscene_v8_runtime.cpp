@@ -2474,6 +2474,7 @@ struct v8_dom_runtime::implementation final {
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        document_fragment_template.Reset();
         node_template.Reset();
         event_target_template.Reset();
 #endif
@@ -10656,7 +10657,9 @@ struct v8_dom_runtime::implementation final {
             ? (node.namespace_uri() == dom_node::html_namespace_uri
                 ? html_element_template.Get(isolate)
                 : element_template.Get(isolate))
-            : node_template.Get(isolate);
+            : node.kind == dom_node_kind::document_fragment
+                ? document_fragment_template.Get(isolate)
+                : node_template.Get(isolate);
         auto object = selected_template->InstanceTemplate()
 #else
         auto object = element_template.Get(isolate)->InstanceTemplate()
@@ -11036,10 +11039,14 @@ struct v8_dom_runtime::implementation final {
         return nullptr;
     }
 
-    static bool is_valid_dom_selector_list(std::string_view selector)
+    bool is_valid_dom_selector_list(std::string_view selector) const
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        return static_cast<bool>(parse_selector_syntax(selector));
+        // DOM selector APIs validate and then immediately match the same selector.
+        // Reuse the compiled-selector cache so frequently repeated querySelector,
+        // matches, and closest calls do not cross the Rust FFI and allocate a full
+        // Servo parse result on every invocation.
+        return !cached_css_selector_list(selector).selectors.empty();
 #else
         selector = trim_css_view(selector);
         if (selector.empty()) return false;
@@ -11759,7 +11766,7 @@ struct v8_dom_runtime::implementation final {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
         const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -11783,7 +11790,7 @@ struct v8_dom_runtime::implementation final {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
         const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -11931,7 +11938,7 @@ struct v8_dom_runtime::implementation final {
         auto* root = unwrap_node(info.This());
         if (root == nullptr) return;
         const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -11945,7 +11952,7 @@ struct v8_dom_runtime::implementation final {
         auto* root = unwrap_node(info.This());
         if (root == nullptr) return;
         const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -12059,7 +12066,7 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         const auto selector = to_wtf8(info.GetIsolate(), info[0]);
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -12119,7 +12126,7 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         const auto selector = to_wtf8(info.GetIsolate(), info[0]);
-        if (!is_valid_dom_selector_list(selector)) {
+        if (!self->is_valid_dom_selector_list(selector)) {
             throw_selector_syntax_error(info, selector);
             return;
         }
@@ -29700,6 +29707,7 @@ struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;
+    v8::Global<v8::FunctionTemplate> document_fragment_template;
 #endif
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
