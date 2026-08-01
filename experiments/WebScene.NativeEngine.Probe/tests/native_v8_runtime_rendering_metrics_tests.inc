@@ -142,11 +142,16 @@ void test_svg_current_color_is_resolved_before_scene_serialization(webscene_engi
           document.body.appendChild(row);
         })()
     )JS", "native-svg-currentcolor-setup.js");
-    require(
-        evaluate(engine,
-            "document.querySelector('svg').offsetWidth",
-            "native-svg-currentcolor-ready.js") == "24",
-        "SVG currentColor fixture did not lay out");
+    auto svg_width = std::string{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        svg_width = evaluate(
+            engine,
+            "document.querySelector('svg')?.offsetWidth || 0",
+            "native-svg-currentcolor-ready.js");
+        if (svg_width == "24") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(svg_width == "24", "SVG currentColor fixture did not lay out");
 
     webscene_engine_request_scene_checkpoint(engine);
     auto found_resolved_svg = false;

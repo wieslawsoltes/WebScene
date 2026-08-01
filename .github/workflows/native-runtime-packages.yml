@@ -240,12 +240,14 @@ jobs:
           --user "$(id -u):$(id -g)" \
           --env HOME=/tmp/webscene-home \
           --env DOTNET_CLI_HOME=/tmp/webscene-home \
+          --env CARGO_HOME=/tmp/webscene-home/.cargo \
           --env NUGET_PACKAGES=/tmp/webscene-home/.nuget/packages \
           --volume "$GITHUB_WORKSPACE:/workspace" \
           --workdir /workspace \
           webscene-native-linux-builder:ubuntu-22.04 \
           bash -lc "
             mkdir -p \"\$HOME\"
+            mkdir -p \"\$CARGO_HOME\"
             scripts/build-native-engine-runtime-linux-container.sh \
               --rid '${{ matrix.rid }}' \
               --package-version '${{ needs.metadata.outputs.package-version }}' \

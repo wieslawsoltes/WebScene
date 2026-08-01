@@ -518,6 +518,10 @@ if(MSVC)
             /std:c++20 /Zc:__cplusplus)
         target_compile_definitions(webscene_native_engine_tests PRIVATE NOMINMAX)
     endif()
+    if(TARGET webscene_v8_snapshot_builder)
+        target_compile_options(webscene_v8_snapshot_builder PRIVATE
+            /std:c++20 /Zc:__cplusplus)
+    endif()
     if(TARGET webscene_html_parser_tests)
         set_property(TARGET webscene_html_parser_tests PROPERTY
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
