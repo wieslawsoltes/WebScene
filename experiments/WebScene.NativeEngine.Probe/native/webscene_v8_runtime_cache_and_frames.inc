@@ -28,9 +28,18 @@
 
     static void remember_process_resource_cache(
         const std::filesystem::path& path,
-        cached_text_resource resource)
+        cached_text_resource resource,
+        bool preserve_existing_content = false)
     {
         const auto memory_key = path.generic_string();
+        if (memory_key.empty()) return;
+        std::lock_guard lock(process_resource_cache_mutex);
+        const auto known = process_resource_cache.find(memory_key);
+        if (known != process_resource_cache.end()) {
+            if (preserve_existing_content && known->second.resource.content != nullptr) {
+                resource.content = known->second.resource.content;
+            }
+        }
         const auto bytes =
             (resource.content == nullptr ? 0U : resource.content->size())
             + resource.entity_tag.size();
@@ -38,10 +47,8 @@
                 && resource.content->mapped()
             ? resource.content->size()
             : 0U;
-        if (memory_key.empty() || bytes > maximum_process_resource_cache_bytes) return;
-        std::lock_guard lock(process_resource_cache_mutex);
-        if (const auto known = process_resource_cache.find(memory_key);
-            known != process_resource_cache.end()) {
+        if (bytes > maximum_process_resource_cache_bytes) return;
+        if (known != process_resource_cache.end()) {
             process_resource_cache_bytes -= known->second.bytes;
             process_resource_mapped_cache_bytes -= known->second.mapped_bytes;
             process_resource_cache.erase(known);
@@ -224,7 +231,8 @@
                     content,
                     entity_tag.substr(0U, entity_tag_length),
                     last_modified_unix_seconds,
-                    fresh_until_unix_seconds});
+                    fresh_until_unix_seconds},
+                true);
         };
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
