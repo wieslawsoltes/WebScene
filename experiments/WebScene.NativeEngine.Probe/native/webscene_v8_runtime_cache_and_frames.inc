@@ -81,6 +81,22 @@
         process_resource_cache.erase(known);
     }
 
+    static bool replace_cache_file(
+        const std::filesystem::path& temporary,
+        const std::filesystem::path& destination)
+    {
+#if defined(_WIN32)
+        return MoveFileExW(
+            temporary.c_str(),
+            destination.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+        std::error_code error;
+        std::filesystem::rename(temporary, destination, error);
+        return !error;
+#endif
+    }
+
     bool read_resource_cache(
         const std::array<uint8_t, 32>& key,
         uint32_t kind,
@@ -243,8 +259,7 @@
             std::filesystem::remove(temporary, error);
             return;
         }
-        std::filesystem::rename(temporary, path, error);
-        if (error) {
+        if (!replace_cache_file(temporary, path)) {
             std::filesystem::remove(temporary, error);
             return;
         }
@@ -489,8 +504,7 @@
             std::filesystem::remove(temporary, error);
             return;
         }
-        std::filesystem::rename(temporary, path, error);
-        if (error) {
+        if (!replace_cache_file(temporary, path)) {
             std::filesystem::remove(temporary, error);
             return;
         }

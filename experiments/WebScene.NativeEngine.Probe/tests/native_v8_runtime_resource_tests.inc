@@ -894,9 +894,11 @@ void test_resource_cache_policy_matrix()
         cache_policy_mode::stale_validator};
     require(load_policy_value(revalidated) == 1, "stale resource initial load failed");
     require(load_policy_value(revalidated) == 1, "304 did not reuse the cached body");
-    require(
-        revalidated.requests == 2 && revalidated.conditional_requests == 1,
-        "stale resource did not revalidate with its validator");
+    if (revalidated.requests != 2 || revalidated.conditional_requests != 1) {
+        fail("stale resource did not revalidate with its validator: requests="
+            + std::to_string(revalidated.requests)
+            + " conditional=" + std::to_string(revalidated.conditional_requests));
+    }
 
     cache_policy_server changed{
         "https://cache-policy.test/changed.html",
