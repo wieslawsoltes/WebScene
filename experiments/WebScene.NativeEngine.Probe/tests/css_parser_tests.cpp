@@ -22,11 +22,22 @@ void declaration_syntax()
         "--Case: calc(1px + var(--x, 2px)); width: 10px ! IMPORTANT; "
         "--vertical-tab:\vpreserved\v; broken");
     require(static_cast<bool>(parsed), parsed.error);
+    if (parsed.declarations.size() != 6U) {
+        std::cerr << "Recovered declarations: " << parsed.declarations.size() << '\n';
+        for (const auto& declaration : parsed.declarations) {
+            std::cerr << "  " << declaration.name << ": " << declaration.value
+                << (declaration.important ? " !important" : "") << '\n';
+        }
+    }
     require(parsed.declarations.size() == 6U, "expected six recovered declarations");
     require(parsed.declarations[0].name == "color", "ordinary property names are ASCII-lowercase");
     require(parsed.declarations[1].value == "\"a;b:c\"", "semicolon and colon inside strings survive");
     require(parsed.declarations[2].value == "url(data:x;y)", "semicolon inside url() survives");
     require(parsed.declarations[3].name == "--Case", "custom property names remain case-sensitive");
+    if (!parsed.declarations[4].important) {
+        std::cerr << "Important declaration value: " << parsed.declarations[4].name
+            << ": " << parsed.declarations[4].value << '\n';
+    }
     require(parsed.declarations[4].important, "case-insensitive !important is recognized");
     require(parsed.declarations[4].value == "10px", "!important is removed from the value");
     require(
@@ -48,7 +59,21 @@ void stylesheet_structure()
         @keyframes fade { from { opacity: 0 } 50%, to { opacity: 1 } }
     )CSS");
     require(static_cast<bool>(parsed), parsed.error);
+    if (parsed.metrics.parse_error_count != 0U) {
+        std::cerr << "Valid stylesheet parse errors: "
+            << parsed.metrics.parse_error_count << '\n';
+    }
     require(parsed.metrics.parse_error_count == 0U, "valid stylesheet has no syntax errors");
+    if (parsed.rules.size() != 9U) {
+        std::cerr << "Stylesheet rules: " << parsed.rules.size() << '\n';
+        for (size_t index = 0; index < parsed.rules.size(); ++index) {
+            const auto& rule = parsed.rules[index];
+            std::cerr << "  [" << index << "] kind=" << rule.kind
+                << " name=" << rule.name << " prelude=" << rule.prelude
+                << " parent=" << rule.parent_index
+                << " declarations=" << rule.declaration_count << '\n';
+        }
+    }
     require(parsed.rules.size() == 9U, "flat rule tree contains nested at-rules and keyframes");
     require(parsed.rules[0].kind == css_syntax_style_rule, "first rule is a style rule");
     require(parsed.rules[1].name == "media", "media at-rule is normalized");

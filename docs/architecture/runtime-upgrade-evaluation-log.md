@@ -18,6 +18,7 @@ Candidates:
 3. A V8 embedder startup snapshot after binding parity.
 4. Servo selector parsing, only if it can emit WebScene's existing selector IR without
    importing another cascade or layout engine.
+5. Lexbor CSS as a C alternative to Servo `cssparser`, using the same WebScene IR boundary.
 
 ## Decision gates
 
@@ -300,6 +301,56 @@ not visible in the matched required profile or Monaco proof.
   the new Rust adapter and C++ ABI/wrapper are larger. Adopt it only for compatibility,
   then reduce copying and delete the fallback after packaged rollout evidence is complete.
 
+### 5. Lexbor CSS
+
+**State:** Ruled out in favor of Servo `cssparser`
+
+**Prototype boundary:** Parse the same stylesheet/declaration inputs and project into the
+same flat WebScene rule/declaration IR. Keep WebScene's selector compiler, cascade,
+invalidation, layout, and renderer unchanged.
+
+**Decision:** **Rule out Lexbor's high-level CSS stylesheet API for this boundary.** It
+does not clear a code, compatibility, memory, or performance gate against the already
+selected Servo parser. Do not retain its runtime switch or its 443-line adapter. The
+useful lesson is its callback/direct-consumer ownership model: apply that shape to the
+Servo wrapper instead of changing standards parsers.
+
+**Current findings:**
+
+- The isolated prototype used upstream Lexbor v3.0.0 at commit
+  `2ae88a1c6b5261830eff73ee12bb3cdf805f3cfe` (Apache-2.0), macOS arm64,
+  AppleClang 21, Release. Only the separately built `core` and `css` static modules were
+  linked. The evaluated Lexbor CSS/core source surface is about 42,461 C lines.
+- Lexbor does not natively understand all rule-container at-rules at its typed stylesheet
+  layer. In particular, generic `@supports` block parsing misclassified
+  `button:focus-visible { ... }` as a declaration. Recovering parity required adapter code
+  to locate raw blocks and invoke Lexbor's rule-list parser again for `supports`, `layer`,
+  `container`, and keyframes. Lexbor also did not accept whitespace between `!` and
+  case-insensitive `important` without adapter normalization.
+- Even with that glue, the focused CSS Syntax contract is 10/11 versus Servo's 11/11.
+  Lexbor consumes the valid `height: 19px` following a malformed declaration instead of
+  recovering at the next semicolon. The broader required profile is neutral at 104/110
+  documents and 431/433 subtests, so the focused denominator exposes a real regression
+  hidden by the broad suite.
+- The matched end-to-end microbenchmark includes parser work and projection into C++ IR,
+  with five processes, five warmups, and 30 samples. Median p50 is 0.0107 versus 0.00538 ms
+  at 1 KiB (+99%), 0.408 versus 0.238 ms at 50 KiB (+71%), and 8.495 versus 4.742 ms at
+  1 MiB (+79%) for Lexbor versus Servo. The malformed fixture is 0.00263 versus
+  0.000875 ms (+200%).
+- Lexbor's measured stylesheet pools reserve 192,528 bytes for the 1 KiB fixture and
+  8,262,264 bytes for 1 MiB, versus Servo's owned IR retaining 2,452 and 2,423,899 bytes.
+  This is about 79x and 3.4x respectively. The pool figure is reserved parser capacity,
+  while the Servo figure is allocator-observed live ownership, so process RSS is the
+  decisive cross-allocator check.
+- Five focused runtime processes measured median peak RSS of 188,366,848 bytes for Lexbor
+  versus 186,515,456 bytes for Servo (+0.99%). Warm wall time was 0.27 versus 0.25 seconds
+  and user CPU 0.22 versus 0.20 seconds. The linked runtime grew from 58,610,832 to
+  58,842,608 bytes (+231,776 bytes, +0.395%). These are bounded, but none is a benefit.
+- The prototype adapter reached 443 lines versus 108 for the current Servo C++ wrapper and
+  still needed WebScene-specific error recovery and at-rule grammar policy. Retaining it
+  would increase maintained code and introduce a second dependency without broadening
+  compatibility.
+
 ## Final recommendation order
 
 1. Ship the V8 bootstrap snapshot first after per-RID sidecar packaging is complete. It is
@@ -307,7 +358,9 @@ not visible in the matched required profile or Monaco proof.
 2. Continue the adopted `html5ever` path. It is the broadest parser-compatibility and
    implementation-ownership improvement, but not a memory or performance win.
 3. Promote Servo `cssparser` and selector parsing together as the standards parsing
-   module after their owned-result ABI is tightened. Both are compatibility investments;
+   module after replacing their owned-result ABI with a callback/streaming adapter. Try an
+   in-repository wrapper first; `cssparser` itself need not be forked unless its public
+   parser traits prove insufficient. Both are compatibility investments;
    neither reduces memory, runtime, or current maintained source by itself.
 4. Expand generated WebIDL bindings incrementally for operations, prototype inheritance,
    brands, constructors, and wrapper selection. Refactor semantic attribute callbacks
@@ -315,6 +368,8 @@ not visible in the matched required profile or Monaco proof.
 5. Treat significant memory reduction as unsolved. None of these candidates reaches the
    15% peak-RSS or 25% retained-plateau gate, so memory work needs a separate ownership,
    compact-node, interning, or V8 external-memory investigation.
+6. Do not adopt Lexbor CSS as a parallel or replacement parser. Its only attractive idea
+   here is direct result consumption, which should be applied to the selected Servo path.
 
 ## Evidence journal
 
@@ -463,3 +518,19 @@ not visible in the matched required profile or Monaco proof.
 - Decision: rule in for broad selector-syntax and specificity compatibility, accepting the
   bounded parser-heavy regression. Do not claim code, memory, or performance benefits and
   do not expand the boundary into Servo matching, cascade, invalidation, or layout.
+
+### 2026-08-01 — Lexbor CSS comparison
+
+- Cloned Lexbor v3.0.0 as an uncommitted neighboring source checkout and built only its
+  `core` and `css` static targets. The rejected adapter and runtime switch were removed
+  after measurement so they do not become a second maintained implementation.
+- Raw ignored evidence is under `artifacts/lexbor-css-evaluation`: five-process parser
+  microbenchmarks, five focused process RSS samples, the 10/11 CSS Syntax result, the
+  104/110 required-profile result, and the full Lexbor runtime build.
+- The benchmark boundary was corrected for both variants to include C++ IR materialization;
+  previous Servo microbenchmarks stopped after the Rust FFI call. Allocation metric names
+  are now backend-neutral in preparation for the streaming ABI experiment.
+- Decision: rule out Lexbor. It is slower and more memory-hungry on the matched parser
+  fixtures, regresses malformed-declaration recovery, increases binary and adapter size,
+  and offers no compatibility improvement over Servo. Next evaluate a streaming Servo
+  adapter that emits directly into WebScene-owned vectors.

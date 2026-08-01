@@ -38,9 +38,9 @@ css_syntax_output parse(std::string_view input, Parse&& parse_native)
     output.metrics.duration_ns = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(finished - started).count());
     output.metrics.parse_error_count = parsed.parse_error_count;
-    output.metrics.rust_allocation_count = parsed.rust_allocation_count;
-    output.metrics.rust_peak_bytes = parsed.rust_peak_bytes;
-    output.metrics.rust_retained_bytes = parsed.rust_retained_bytes;
+    output.metrics.parser_allocation_count = parsed.rust_allocation_count;
+    output.metrics.parser_peak_bytes = parsed.rust_peak_bytes;
+    output.metrics.parser_retained_bytes = parsed.rust_retained_bytes;
 
     struct handle_guard final {
         void* handle;

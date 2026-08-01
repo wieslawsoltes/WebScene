@@ -1,6 +1,7 @@
 #include "webscene_css_parser.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -41,17 +42,20 @@ std::string repeated_fixture(size_t target_bytes)
 
 sample run_once(std::string_view input)
 {
+    const auto started = std::chrono::steady_clock::now();
     const auto parsed = parse_css_syntax_stylesheet(input);
+    const auto finished = std::chrono::steady_clock::now();
     if (!parsed) {
         std::cerr << "CSS parser benchmark failed: " << parsed.error << '\n';
         std::exit(1);
     }
     return {
-        parsed.metrics.duration_ns,
+        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            finished - started).count()),
         parsed.metrics.parse_error_count,
-        parsed.metrics.rust_allocation_count,
-        parsed.metrics.rust_peak_bytes,
-        parsed.metrics.rust_retained_bytes,
+        parsed.metrics.parser_allocation_count,
+        parsed.metrics.parser_peak_bytes,
+        parsed.metrics.parser_retained_bytes,
         parsed.rules.size(),
         parsed.declarations.size()};
 }
@@ -93,9 +97,9 @@ void benchmark(std::string_view name, std::string_view input)
         << ",\"rules\":" << representative.rule_count
         << ",\"declarations\":" << representative.declaration_count
         << ",\"parseErrors\":" << representative.error_count
-        << ",\"rustAllocationCount\":" << representative.allocation_count
-        << ",\"rustPeakBytes\":" << representative.peak_bytes
-        << ",\"rustRetainedBytes\":" << representative.retained_bytes
+        << ",\"parserAllocationCount\":" << representative.allocation_count
+        << ",\"parserPeakBytes\":" << representative.peak_bytes
+        << ",\"parserRetainedBytes\":" << representative.retained_bytes
         << "}\n";
 }
 

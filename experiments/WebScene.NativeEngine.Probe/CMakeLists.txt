@@ -54,7 +54,7 @@ option(WEBSCENE_NATIVE_ENGINE_CERTIFICATION
 option(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK
     "Build the V8-free html5ever parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
-    "Build the V8-free cssparser syntax microbenchmark" OFF)
+    "Build the V8-free selected CSS syntax parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
     "Build the native V8 DOM binding lifecycle benchmark" OFF)
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "legacy" CACHE STRING
@@ -108,8 +108,7 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     find_program(WEBSCENE_CARGO_EXECUTABLE cargo REQUIRED)
     set(WEBSCENE_ENABLE_CSSPARSER_RUST OFF)
     set(WEBSCENE_HTML_PARSER_CARGO_FEATURES)
-    if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser"
-        OR WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK)
+    if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser")
         set(WEBSCENE_ENABLE_CSSPARSER_RUST ON)
         list(APPEND WEBSCENE_HTML_PARSER_CARGO_FEATURES
             --features cssparser)
@@ -218,6 +217,10 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
         target_link_libraries(webscene_html_parser_benchmark PRIVATE webscene_html_parser)
     endif()
     if(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK)
+        if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "legacy")
+            message(FATAL_ERROR
+                "The CSS parser benchmark requires cssparser")
+        endif()
         add_executable(webscene_css_parser_benchmark
             benchmarks/css_parser_benchmark.cpp
             native/webscene_css_parser.cpp)

@@ -72,6 +72,7 @@ artifact paths, and decision rationale are in
 | Generated WebIDL catalog | Rule in incrementally | Binding compatibility, 2/10 to 9/10 focused assertions | No material code/memory/performance win; prototype attributes need semantic callback refactoring |
 | V8 bootstrap snapshot | Rule in first | -27.1% independent context lifecycle, -11.6% shared lifecycle | +0.660% shipped size; per-RID sidecar packaging required |
 | Servo `selectors` 0.39.0 syntax | Rule in after ABI cleanup | Selector syntax/specificity, 1/10 to 10/10 focused and 1/9 to 8/9 pinned WPT | +24.7% selector stress; memory neutral; no maintained-code reduction |
+| Lexbor CSS 1.4.0 (Lexbor v3.0.0) | Rule out | Required profile neutral, but no improvement over Servo | Focused CSS Syntax 10/11 vs Servo 11/11; +71% to +99% on valid parser fixtures; 3.4x 1 MiB parser-pool memory |
 
 None of these candidates reaches the memory-benefit gate. Memory reduction remains a
 separate architectural investigation rather than a claimed side effect of standards
@@ -365,8 +366,9 @@ The following are not justified by the four outcome filters:
 1. Package the measured V8 bootstrap snapshot with strict fingerprints for each supported
    RID, then enable it by default.
 2. Complete packaged-platform rollout of `html5ever`, then remove the legacy HTML parser.
-3. Tighten the owned Rust-result ABI shared by `cssparser` and selector parsing, expand
-   ecosystem coverage, promote the standards module, and remove the syntax fallbacks.
+3. Replace the owned Rust-result ABI with a callback/streaming adapter, beginning in the
+   repository wrapper rather than forking `cssparser`; expand ecosystem coverage, promote
+   the standards module, and remove the syntax fallbacks.
 4. Continue migrating operations and interface structure to generated WebIDL bindings;
    refactor semantic getter/setter callbacks before moving attributes to prototypes.
 5. Introduce external-memory accounting and lifetime regions category by category, using
