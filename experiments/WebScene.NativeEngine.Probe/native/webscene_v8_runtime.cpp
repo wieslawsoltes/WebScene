@@ -8,6 +8,9 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
 #include "webscene_css_parser.h"
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+#include "webscene_selector_parser.h"
+#endif
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
@@ -1723,6 +1726,7 @@ struct v8_dom_runtime::implementation final {
     struct compiled_css_selector final {
         std::vector<std::string> compounds;
         std::vector<char> combinators;
+        uint32_t specificity{0};
     };
 
     struct compiled_css_selector_list final {
@@ -11034,6 +11038,9 @@ struct v8_dom_runtime::implementation final {
 
     static bool is_valid_dom_selector_list(std::string_view selector)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        return static_cast<bool>(parse_selector_syntax(selector));
+#else
         selector = trim_css_view(selector);
         if (selector.empty()) return false;
 
@@ -11163,6 +11170,7 @@ struct v8_dom_runtime::implementation final {
             item_has_token = true;
         }
         return quote == 0 && bracket_depth == 0 && parenthesis_depth == 0 && item_has_token;
+#endif
     }
 
     static void throw_selector_syntax_error(
@@ -18711,7 +18719,11 @@ struct v8_dom_runtime::implementation final {
     static std::shared_ptr<const css_rule_payload> intern_css_rule_payload(
         std::string selector,
         const std::vector<css_declaration>& declarations,
-        const std::vector<std::string>& media_queries)
+        const std::vector<std::string>& media_queries
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        , const selector_syntax_selector* parsed_selector = nullptr
+#endif
+        )
     {
         const auto hash = css_rule_payload_hash(
             selector,
@@ -18735,9 +18747,18 @@ struct v8_dom_runtime::implementation final {
             ++iterator;
         }
         auto payload = std::make_shared<css_rule_payload>();
-        payload->specificity = css_selector_specificity(selector);
         payload->selector = std::move(selector);
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        payload->compiled_selector = parsed_selector == nullptr
+            ? compile_css_selector(payload->selector)
+            : compiled_css_selector{
+                parsed_selector->compounds,
+                parsed_selector->combinators,
+                parsed_selector->specificity};
+#else
         payload->compiled_selector = compile_css_selector(payload->selector);
+#endif
+        payload->specificity = payload->compiled_selector.specificity;
         payload->declarations = declarations;
         payload->media_queries = media_queries;
         candidates.emplace_back(payload);
@@ -18747,7 +18768,11 @@ struct v8_dom_runtime::implementation final {
     void append_css_rule(
         std::string selector,
         const std::vector<css_declaration>& declarations,
-        const std::vector<std::string>& media_queries)
+        const std::vector<std::string>& media_queries
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        , const selector_syntax_selector* parsed_selector = nullptr
+#endif
+        )
     {
         const auto index = css_rules.size();
         css_rule rule;
@@ -18755,7 +18780,11 @@ struct v8_dom_runtime::implementation final {
         rule.payload = intern_css_rule_payload(
             std::move(selector),
             declarations,
-            media_queries);
+            media_queries
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+            , parsed_selector
+#endif
+            );
         rule.media_matches = css_rule_media_matches(rule);
         css_rules.push_back(std::move(rule));
         index_css_rule(index);
@@ -19440,6 +19469,18 @@ struct v8_dom_runtime::implementation final {
                 }
             }
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        const auto parsed_selectors = parse_selector_syntax(prelude);
+        if (!parsed_selectors) return;
+        for (const auto& parsed_selector : parsed_selectors.selectors) {
+            inventory_css_selector(parsed_selector.serialized);
+            append_css_rule(
+                parsed_selector.serialized,
+                declarations,
+                inherited_media,
+                &parsed_selector);
+        }
+#else
         size_t selector_cursor = 0U;
         int bracket_depth = 0;
         int parenthesis_depth = 0;
@@ -19470,6 +19511,7 @@ struct v8_dom_runtime::implementation final {
                 selector_cursor = index + 1U;
             }
         }
+#endif
     }
 
     void parse_css_rules(
@@ -20442,6 +20484,15 @@ struct v8_dom_runtime::implementation final {
 
     static compiled_css_selector compile_css_selector(std::string_view selector)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        const auto parsed = parse_selector_syntax(selector);
+        if (!parsed || parsed.selectors.size() != 1U) return {};
+        const auto& source = parsed.selectors.front();
+        return {
+            source.compounds,
+            source.combinators,
+            source.specificity};
+#else
         std::vector<std::string> reversed_compounds;
         std::vector<char> reversed_combinators;
         auto remaining = trim_css_view(selector);
@@ -20460,13 +20511,26 @@ struct v8_dom_runtime::implementation final {
         result.combinators.assign(
             reversed_combinators.rbegin(),
             reversed_combinators.rend());
+        result.specificity = css_selector_specificity(selector);
         return result;
+#endif
     }
 
     static compiled_css_selector_list compile_css_selector_list(
         std::string_view selector)
     {
         compiled_css_selector_list result;
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        const auto parsed = parse_selector_syntax(selector);
+        if (!parsed) return result;
+        result.selectors.reserve(parsed.selectors.size());
+        for (const auto& source : parsed.selectors) {
+            result.selectors.push_back({
+                source.compounds,
+                source.combinators,
+                source.specificity});
+        }
+#else
         size_t start = 0;
         int bracket_depth = 0;
         int parenthesis_depth = 0;
@@ -20499,6 +20563,7 @@ struct v8_dom_runtime::implementation final {
                 start = index + 1U;
             }
         }
+#endif
         return result;
     }
 

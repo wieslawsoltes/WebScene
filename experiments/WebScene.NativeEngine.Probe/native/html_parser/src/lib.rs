@@ -1245,3 +1245,503 @@ mod css_syntax {
         }
     }
 }
+
+#[cfg(feature = "selectors")]
+mod selector_syntax {
+    use super::*;
+    use cssparser::{
+        serialize_identifier, CowRcStr, CssStringWriter, Parser as CssParser, ParserInput,
+        SourceLocation, ToCss,
+    };
+    use precomputed_hash::PrecomputedHash;
+    use selectors::parser::{
+        Combinator, NonTSPseudoClass, ParseRelative, PseudoElement, SelectorParseError,
+        SelectorParseErrorKind,
+    };
+    use selectors::{Parser as SelectorParser, SelectorImpl, SelectorList};
+    use std::borrow::Borrow;
+    use std::fmt::{self, Write};
+
+    #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+    struct Atom(String);
+
+    impl Borrow<str> for Atom {
+        fn borrow(&self) -> &str {
+            &self.0
+        }
+    }
+
+    impl From<String> for Atom {
+        fn from(value: String) -> Self {
+            Self(value)
+        }
+    }
+
+    impl From<&str> for Atom {
+        fn from(value: &str) -> Self {
+            Self(value.to_owned())
+        }
+    }
+
+    impl PrecomputedHash for Atom {
+        fn precomputed_hash(&self) -> u32 {
+            self.0.bytes().fold(2_166_136_261_u32, |hash, byte| {
+                (hash ^ u32::from(byte)).wrapping_mul(16_777_619)
+            })
+        }
+    }
+
+    impl ToCss for Atom {
+        fn to_css<W>(&self, destination: &mut W) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_identifier(&self.0, destination)
+        }
+    }
+
+    #[derive(Clone, Debug, Default, Eq, PartialEq)]
+    struct AttributeValue(String);
+
+    impl From<&str> for AttributeValue {
+        fn from(value: &str) -> Self {
+            Self(value.to_owned())
+        }
+    }
+
+    impl ToCss for AttributeValue {
+        fn to_css<W>(&self, destination: &mut W) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            destination.write_char('"')?;
+            write!(CssStringWriter::new(destination), "{}", self.0)?;
+            destination.write_char('"')
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum WebScenePseudoClass {
+        Named(String),
+        Functional(String, String),
+    }
+
+    impl ToCss for WebScenePseudoClass {
+        fn to_css<W>(&self, destination: &mut W) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match self {
+                Self::Named(name) => write!(destination, ":{name}"),
+                Self::Functional(name, argument) => {
+                    write!(destination, ":{name}({argument})")
+                }
+            }
+        }
+    }
+
+    impl NonTSPseudoClass for WebScenePseudoClass {
+        type Impl = WebSceneSelectorImpl;
+
+        fn is_active_or_hover(&self) -> bool {
+            matches!(self, Self::Named(name) if name == "active" || name == "hover")
+        }
+
+        fn is_user_action_state(&self) -> bool {
+            matches!(
+                self,
+                Self::Named(name)
+                    if name == "active" || name == "hover" || name == "focus"
+                        || name == "focus-visible" || name == "focus-within"
+            )
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct WebScenePseudoElement(String);
+
+    impl ToCss for WebScenePseudoElement {
+        fn to_css<W>(&self, destination: &mut W) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            write!(destination, "::{}", self.0)
+        }
+    }
+
+    impl PseudoElement for WebScenePseudoElement {
+        type Impl = WebSceneSelectorImpl;
+
+        fn is_before_or_after(&self) -> bool {
+            self.0 == "before" || self.0 == "after"
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct WebSceneSelectorImpl;
+
+    impl SelectorImpl for WebSceneSelectorImpl {
+        type ExtraMatchingData<'a> = std::marker::PhantomData<&'a ()>;
+        type AttrValue = AttributeValue;
+        type Identifier = Atom;
+        type LocalName = Atom;
+        type NamespaceUrl = Atom;
+        type NamespacePrefix = Atom;
+        type BorrowedLocalName = str;
+        type BorrowedNamespaceUrl = str;
+        type NonTSPseudoClass = WebScenePseudoClass;
+        type PseudoElement = WebScenePseudoElement;
+    }
+
+    #[derive(Default)]
+    struct WebSceneSelectorParser;
+
+    fn is_supported_pseudo_class(name: &str) -> bool {
+        matches!(
+            name,
+            "hover"
+                | "active"
+                | "focus"
+                | "focus-visible"
+                | "focus-within"
+                | "disabled"
+                | "enabled"
+                | "checked"
+                | "indeterminate"
+                | "default"
+                | "required"
+                | "optional"
+                | "valid"
+                | "invalid"
+                | "in-range"
+                | "out-of-range"
+                | "read-only"
+                | "read-write"
+                | "placeholder-shown"
+                | "autofill"
+                | "link"
+                | "visited"
+                | "any-link"
+                | "local-link"
+                | "target"
+                | "target-within"
+                | "defined"
+                | "fullscreen"
+                | "modal"
+                | "open"
+                | "picture-in-picture"
+                | "user-valid"
+                | "user-invalid"
+                | "blank"
+        )
+    }
+
+    fn is_supported_pseudo_element(name: &str) -> bool {
+        matches!(
+            name,
+            "before"
+                | "after"
+                | "first-letter"
+                | "first-line"
+                | "selection"
+                | "marker"
+                | "placeholder"
+                | "backdrop"
+                | "file-selector-button"
+                | "cue"
+                | "cue-region"
+                | "grammar-error"
+                | "spelling-error"
+                | "target-text"
+                | "-webkit-scrollbar"
+                | "-webkit-scrollbar-thumb"
+                | "-webkit-scrollbar-track"
+        )
+    }
+
+    impl<'i> SelectorParser<'i> for WebSceneSelectorParser {
+        type Impl = WebSceneSelectorImpl;
+        type Error = SelectorParseErrorKind<'i>;
+
+        fn parse_nth_child_of(&self) -> bool {
+            true
+        }
+
+        fn parse_is_and_where(&self) -> bool {
+            true
+        }
+
+        fn parse_has(&self) -> bool {
+            true
+        }
+
+        fn parse_non_ts_pseudo_class(
+            &self,
+            location: SourceLocation,
+            name: CowRcStr<'i>,
+        ) -> Result<WebScenePseudoClass, SelectorParseError<'i>> {
+            let name = name.to_ascii_lowercase();
+            if is_supported_pseudo_class(&name) {
+                return Ok(WebScenePseudoClass::Named(name));
+            }
+            Err(
+                location.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(
+                    name.into(),
+                )),
+            )
+        }
+
+        fn parse_non_ts_functional_pseudo_class<'t>(
+            &self,
+            name: CowRcStr<'i>,
+            parser: &mut CssParser<'i, 't>,
+            _after_part: bool,
+        ) -> Result<WebScenePseudoClass, SelectorParseError<'i>> {
+            let name = name.to_ascii_lowercase();
+            if name != "lang" && name != "dir" {
+                return Err(parser.new_custom_error(
+                    SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.into()),
+                ));
+            }
+            let start = parser.position();
+            while parser.next_including_whitespace_and_comments().is_ok() {}
+            let argument = parser.slice_from(start).trim().to_owned();
+            if argument.is_empty() {
+                return Err(parser.new_custom_error(
+                    SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.into()),
+                ));
+            }
+            Ok(WebScenePseudoClass::Functional(name, argument))
+        }
+
+        fn parse_pseudo_element(
+            &self,
+            location: SourceLocation,
+            name: CowRcStr<'i>,
+        ) -> Result<WebScenePseudoElement, SelectorParseError<'i>> {
+            let name = name.to_ascii_lowercase();
+            if is_supported_pseudo_element(&name) {
+                return Ok(WebScenePseudoElement(name));
+            }
+            Err(
+                location.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(
+                    name.into(),
+                )),
+            )
+        }
+    }
+
+    #[derive(Default)]
+    struct FlatSelector {
+        serialized: String,
+        specificity: u32,
+        compounds: Vec<String>,
+        combinators: Vec<u8>,
+    }
+
+    #[derive(Default)]
+    struct SelectorOutput {
+        selectors: Vec<FlatSelector>,
+    }
+
+    fn native_specificity(servo_specificity: u32) -> u32 {
+        let ids = (servo_specificity >> 20).min(0xff);
+        let classes = ((servo_specificity >> 10) & 0x3ff).min(0xff);
+        let elements = (servo_specificity & 0x3ff).min(0xff);
+        ids << 16 | classes << 8 | elements
+    }
+
+    fn flatten_selector(
+        selector: &selectors::parser::Selector<WebSceneSelectorImpl>,
+    ) -> FlatSelector {
+        let components = selector.iter_raw_match_order().as_slice();
+        let mut combinators = components
+            .iter()
+            .rev()
+            .filter_map(|component| component.as_combinator());
+        let compound_groups = components
+            .split(|component| component.is_combinator())
+            .rev();
+        let mut compounds = Vec::new();
+        let mut native_combinators = Vec::new();
+        let mut current = String::new();
+        for compound in compound_groups {
+            for component in compound {
+                let _ = component.to_css(&mut current);
+            }
+            match combinators.next() {
+                Some(Combinator::Child) => {
+                    compounds.push(std::mem::take(&mut current));
+                    native_combinators.push(b'>');
+                }
+                Some(Combinator::Descendant) => {
+                    compounds.push(std::mem::take(&mut current));
+                    native_combinators.push(b' ');
+                }
+                Some(Combinator::NextSibling) => {
+                    compounds.push(std::mem::take(&mut current));
+                    native_combinators.push(b'+');
+                }
+                Some(Combinator::LaterSibling) => {
+                    compounds.push(std::mem::take(&mut current));
+                    native_combinators.push(b'~');
+                }
+                Some(Combinator::PseudoElement | Combinator::SlotAssignment | Combinator::Part) => {
+                    // These are internal Servo edges and serialize without a CSS combinator.
+                }
+                None => compounds.push(std::mem::take(&mut current)),
+            }
+        }
+        FlatSelector {
+            serialized: selector.to_css_string(),
+            specificity: native_specificity(selector.specificity()),
+            compounds,
+            combinators: native_combinators,
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    pub struct SelectorParseResult {
+        pub status: u32,
+        pub selector_count: u64,
+        pub rust_allocation_count: u64,
+        pub rust_peak_bytes: u64,
+        pub rust_retained_bytes: u64,
+        pub handle: *mut c_void,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    pub struct SelectorView {
+        pub serialized: ByteSlice,
+        pub specificity: u32,
+        pub compound_count: usize,
+        pub combinator_count: usize,
+    }
+
+    fn selector_error(status: u32) -> SelectorParseResult {
+        SelectorParseResult {
+            status,
+            ..Default::default()
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn webscene_selector_parser_abi_version() -> u32 {
+        ABI_VERSION
+    }
+
+    #[no_mangle]
+    pub extern "C" fn webscene_selector_parse(input: ByteSlice) -> SelectorParseResult {
+        let Some(input) = read_slice(input).and_then(|bytes| std::str::from_utf8(bytes).ok())
+        else {
+            return selector_error(STATUS_INVALID_ARGUMENT);
+        };
+        reset_allocation_metrics();
+        let parsed = catch_unwind(AssertUnwindSafe(|| {
+            let mut parser_input = ParserInput::new(input);
+            let mut parser = CssParser::new(&mut parser_input);
+            let list = SelectorList::parse(&WebSceneSelectorParser, &mut parser, ParseRelative::No)
+                .map_err(|_| ())?;
+            parser.expect_exhausted().map_err(|_| ())?;
+            Ok::<_, ()>(SelectorOutput {
+                selectors: list.slice().iter().map(flatten_selector).collect(),
+            })
+        }));
+        let output = match parsed {
+            Ok(Ok(output)) if !output.selectors.is_empty() => output,
+            Ok(Ok(_)) | Ok(Err(_)) => return selector_error(STATUS_INVALID_ARGUMENT),
+            Err(_) => return selector_error(STATUS_PANIC),
+        };
+        let selector_count = output.selectors.len() as u64;
+        let handle = Box::into_raw(Box::new(output)).cast::<c_void>();
+        SelectorParseResult {
+            status: STATUS_OK,
+            selector_count,
+            rust_allocation_count: ALLOCATION_COUNT.with(Cell::get),
+            rust_peak_bytes: ALLOCATION_PEAK.with(Cell::get),
+            rust_retained_bytes: ALLOCATION_CURRENT.with(Cell::get),
+            handle,
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn webscene_selector_at(
+        handle: *const c_void,
+        index: usize,
+        view: *mut SelectorView,
+    ) -> u8 {
+        let Some(output) = (unsafe { handle.cast::<SelectorOutput>().as_ref() }) else {
+            return 0;
+        };
+        let Some(selector) = output.selectors.get(index) else {
+            return 0;
+        };
+        let Some(view) = (unsafe { view.as_mut() }) else {
+            return 0;
+        };
+        *view = SelectorView {
+            serialized: ByteSlice::from_bytes(selector.serialized.as_bytes()),
+            specificity: selector.specificity,
+            compound_count: selector.compounds.len(),
+            combinator_count: selector.combinators.len(),
+        };
+        1
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn webscene_selector_compound_at(
+        handle: *const c_void,
+        selector_index: usize,
+        compound_index: usize,
+        value: *mut ByteSlice,
+    ) -> u8 {
+        let Some(output) = (unsafe { handle.cast::<SelectorOutput>().as_ref() }) else {
+            return 0;
+        };
+        let Some(compound) = output
+            .selectors
+            .get(selector_index)
+            .and_then(|selector| selector.compounds.get(compound_index))
+        else {
+            return 0;
+        };
+        let Some(value) = (unsafe { value.as_mut() }) else {
+            return 0;
+        };
+        *value = ByteSlice::from_bytes(compound.as_bytes());
+        1
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn webscene_selector_combinator_at(
+        handle: *const c_void,
+        selector_index: usize,
+        combinator_index: usize,
+        value: *mut u8,
+    ) -> u8 {
+        let Some(output) = (unsafe { handle.cast::<SelectorOutput>().as_ref() }) else {
+            return 0;
+        };
+        let Some(combinator) = output
+            .selectors
+            .get(selector_index)
+            .and_then(|selector| selector.combinators.get(combinator_index))
+        else {
+            return 0;
+        };
+        let Some(value) = (unsafe { value.as_mut() }) else {
+            return 0;
+        };
+        *value = *combinator;
+        1
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn webscene_selector_free(handle: *mut c_void) {
+        if !handle.is_null() {
+            drop(unsafe { Box::from_raw(handle.cast::<SelectorOutput>()) });
+        }
+    }
+}

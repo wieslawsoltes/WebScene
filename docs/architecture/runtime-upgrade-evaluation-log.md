@@ -1,6 +1,6 @@
 # Runtime upgrade evaluation log
 
-**Status:** Active
+**Status:** Evaluation complete; staged rollout work remains
 
 **Started:** 2026-08-01
 
@@ -243,7 +243,7 @@ snapshot sidecar. This is not a memory or code-reduction win.
 
 ### 4. Servo selector parsing
 
-**State:** Conditional on the CSS IR experiment
+**State:** Ruled in for selector-syntax compatibility; rollout remains conditional
 
 **Prototype boundary:** Accept only if the external parser can emit WebScene's existing
 compiled selector IR. Do not import a second cascade, invalidation system, style tree, or
@@ -255,7 +255,66 @@ layout engine.
 - Net deletion of selector parsing/compilation code.
 - Selector compilation, matching, invalidation, memory, and package-size measurements.
 
-**Decision:** Pending prerequisite.
+**Decision:** **Rule in the syntax parser and its specificity calculation for
+compatibility.** The prototype clears the compatibility gate, preserves exact required-
+profile behavior, and emits WebScene's existing flat compiled-selector IR without adding
+another matcher, cascade, invalidation system, style tree, layout engine, or renderer. It
+does not clear the maintained-code, memory, or performance gates. Keep the A/B switch
+until packaged ecosystem coverage is broader and optimize the owned Rust-to-C++ result
+before making it the sole path. The 24.7% parser-heavy stress regression is an explicitly
+accepted compatibility tradeoff; it is 7.129 ms across 8,000 selector compilations and is
+not visible in the matched required profile or Monaco proof.
+
+**Current findings:**
+
+- The prototype pins Servo `selectors` 0.39.0 (MPL-2.0) beside the existing `cssparser`
+  0.37.0 dependency. It parses a complete selector list in one Rust call and returns
+  serialized selectors, compounds, combinators, and packed specificity through a flat
+  versioned C ABI. Stylesheet parsing reuses that result instead of parsing twice.
+- The focused standards contract improves from 1/10 assertions under the legacy parser to
+  10/10; unchanged Chrome 151 also passes 10/10. It covers complete-list invalidation,
+  CSS comments, `:is()`, `:not()`, and
+  `:where()` specificity, malformed combinators and attribute operators, and selector
+  tokenization used by `querySelector`.
+- Two pinned upstream specificity tests improve from 1/9 to 8/9 subtests. In particular,
+  `not-specificity.html` improves from 1/8 to 8/8. Both variants still fail the complex
+  sibling-sensitive `:is()` fixture because the existing matcher/DOM sibling semantics do
+  not yet implement it; replacing syntax parsing cannot repair that separate layer.
+- The broader existing selector profile is exactly neutral at 13/14 documents and 126/126
+  subtests, with the same hover timeout. The required profile is also exactly neutral at
+  104/110 documents and 431/433 subtests, with the same five failures and one timeout.
+- On macOS arm64, AppleClang 21, V8 15.3.10-WebScene, Release/certification, html5ever,
+  cssparser, generated bindings, and no snapshot, five processes with five warmups and 20
+  samples measured 28.886 ms legacy versus 36.015 ms Servo median p50 for four STYLE
+  reparses containing 2,000 selectors each: +24.7%, or +7.129 ms for 8,000 selectors.
+- Median peak RSS in that stress is 52,854,784 versus 52,871,168 bytes (+0.031%), so the
+  result is memory-neutral. Linked libraries are 58,610,832 versus 58,710,176 bytes:
+  +99,344 bytes, or +0.1695%.
+- Matched Monaco headless proofs produced all four expected captures. Control versus Servo
+  measured 16.32 versus 16.19 seconds wall, 5.46 versus 5.50 user CPU seconds, and 255.8
+  versus 256.2 MB peak RSS in one run. This is a non-regression observation, not a benefit;
+  initial and folded captures are byte-identical and visual inspection of the remaining
+  captures shows the same editor state.
+- The candidate cannot delete 500 maintained lines. The replaceable legacy validation,
+  list splitting, specificity, and compilation surface is roughly 500 lines at most, while
+  the new Rust adapter and C++ ABI/wrapper are larger. Adopt it only for compatibility,
+  then reduce copying and delete the fallback after packaged rollout evidence is complete.
+
+## Final recommendation order
+
+1. Ship the V8 bootstrap snapshot first after per-RID sidecar packaging is complete. It is
+   the only candidate that clears a material performance gate.
+2. Continue the adopted `html5ever` path. It is the broadest parser-compatibility and
+   implementation-ownership improvement, but not a memory or performance win.
+3. Promote Servo `cssparser` and selector parsing together as the standards parsing
+   module after their owned-result ABI is tightened. Both are compatibility investments;
+   neither reduces memory, runtime, or current maintained source by itself.
+4. Expand generated WebIDL bindings incrementally for operations, prototype inheritance,
+   brands, constructors, and wrapper selection. Refactor semantic attribute callbacks
+   before moving accessors to prototypes; do not generate duplicate method bodies.
+5. Treat significant memory reduction as unsolved. None of these candidates reaches the
+   15% peak-RSS or 25% retained-plateau gate, so memory work needs a separate ownership,
+   compact-node, interning, or V8 external-memory investigation.
 
 ## Evidence journal
 
@@ -376,3 +435,31 @@ layout engine.
   WebIDL attribute-accessor constraint therefore remains unchanged.
 - Decision: rule in for startup/context-creation performance. Retain the build switch until
   snapshot sidecar packaging and fingerprint validation cover all supported RIDs.
+
+### 2026-08-01 — Servo selector parser decision
+
+- Prototype base: `1564d75`; matched macOS arm64 Release/certification builds against V8
+  15.3.10-WebScene with html5ever, cssparser, generated bindings, pointer compression and
+  shared cage, and no startup snapshot. The only intended variant is
+  `WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER=legacy|servo`.
+- The adapter consumes Servo's syntax tree once per complete selector list and projects it
+  into the existing compound/combinator/specificity representation. A first adapter parsed
+  each stylesheet selector twice; reusing the parsed IR reduced its one-shot stress result
+  from about 52 ms to the final 36 ms before comparative measurements were recorded.
+- Focused contract: 1/10 legacy versus 10/10 Servo. Pinned upstream specificity WPT: 1/9
+  versus 8/9. Chrome 151 independently passes the unchanged focused contract at 10/10.
+  Existing selector profile and the complete required profile remain exactly neutral.
+  The final rebuilt-binary parity runs are in `final-required-control` and
+  `final-required-servo`; focused and discovery results are under
+  `artifacts/selector-evaluation/contract-*`, `wpt-specificity-*`, and `selectors-*`.
+- The matched benchmark used five processes per variant, five in-process warmups and 20
+  samples, with four reparses of a 2,000-selector STYLE element, 128 DOM subjects, and a
+  comment-tokenized `querySelector`. Servo is 24.7% slower, process RSS is +0.031%, and the
+  library is +0.1695%. Raw data and build metadata are in
+  `artifacts/selector-evaluation/benchmark-results.json`.
+- Matched Monaco runs complete with the same visible editor state. Raw timing and captures
+  are in `artifacts/selector-evaluation/monaco-control.time`, `monaco-servo.time`,
+  `monaco-control-matched`, and `monaco-servo`.
+- Decision: rule in for broad selector-syntax and specificity compatibility, accepting the
+  bounded parser-heavy regression. Do not claim code, memory, or performance benefits and
+  do not expand the boundary into Servo matching, cascade, invalidation, or layout.

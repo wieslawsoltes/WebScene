@@ -1,4 +1,4 @@
-# WebScene html5ever parser third-party notices
+# WebScene standards parser third-party notices
 
 The optional WebScene standards parser statically links the Rust crates pinned in
 `Cargo.lock`. The dependency set and declared SPDX expressions are:
@@ -18,12 +18,27 @@ The optional WebScene standards parser statically links the Rust crates pinned i
 - `unicode-ident`: (MIT OR Apache-2.0) AND Unicode-3.0.
 - `redox_syscall`: MIT. This target-specific dependency is not linked into the
   supported WebScene macOS, Linux, or Windows artifacts.
+- `selectors`: MPL-2.0.
+- `servo_arc`: MIT OR Apache-2.0.
+- `derive_more` and `derive_more-impl`: MIT.
+- `rustc-hash`: MIT OR Apache-2.0.
+- `stable_deref_trait`: MIT OR Apache-2.0.
+- `rustc_version` and `semver`: MIT OR Apache-2.0. These are build-time-only
+  dependencies and are not linked into WebScene artifacts.
 
 `cssparser` 0.37.0 implements CSS Syntax Level 3 tokenization and recovery. It
 is feature-gated and linked only when the WebScene cssparser prototype or its
 benchmark is selected. Its upstream project is
 https://github.com/servo/rust-cssparser and its MPL-2.0 license text is included
 in the crate source distribution.
+
+`selectors` 0.39.0 implements Selectors parsing and specificity. It is
+feature-gated and linked only when the Servo selector-parser variant is
+selected. WebScene consumes its parsed syntax and specificity through a coarse
+ABI; the existing WebScene matcher, cascade, invalidation, layout, and renderer
+remain authoritative. Its upstream project is
+https://github.com/servo/servo/tree/main/components/selectors and its MPL-2.0
+license text is included in the crate source distribution.
 
 The complete dependency graph, versions, sources, and checksums are recorded
 in the adjacent `Cargo.lock`. MIT and Apache-2.0 license texts are included in

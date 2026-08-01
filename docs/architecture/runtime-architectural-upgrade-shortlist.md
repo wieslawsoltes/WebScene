@@ -1,6 +1,6 @@
 # Runtime architectural upgrade shortlist
 
-**Status:** HTML parser spike implemented; architectural adoption pending evidence gates
+**Status:** Candidates evaluated; measured rollout order recorded below
 
 **Date:** 2026-07-31
 
@@ -59,6 +59,24 @@ These are adoption gates, not predicted results.
 | 3 | V8-aware native memory ownership and accounting | Moderate | Neutral | **High potential** | Moderate potential |
 | 4 | Broad upstream WPT discovery lane | Reuses test infrastructure | **High over time** | None | None |
 
+## Measured outcome (2026-08-01)
+
+The isolated evaluations are complete. The detailed samples, known baseline failures, raw
+artifact paths, and decision rationale are in
+[`runtime-upgrade-evaluation-log.md`](runtime-upgrade-evaluation-log.md).
+
+| Candidate | Decision | Gate cleared | Important cost or limit |
+| --- | --- | --- | --- |
+| `html5ever` 0.39.0 | Adopted behind a rollout switch | Broad HTML compatibility and upstream parser reuse | Performance neutral; approximately +0.7% peak RSS |
+| Servo `cssparser` 0.37.0 | Rule in | CSS Syntax compatibility, 3/11 to 11/11 focused assertions | +124% on a parser-only stress, but +2.32 ms absolute per 108 KiB; +0.85% RSS |
+| Generated WebIDL catalog | Rule in incrementally | Binding compatibility, 2/10 to 9/10 focused assertions | No material code/memory/performance win; prototype attributes need semantic callback refactoring |
+| V8 bootstrap snapshot | Rule in first | -27.1% independent context lifecycle, -11.6% shared lifecycle | +0.660% shipped size; per-RID sidecar packaging required |
+| Servo `selectors` 0.39.0 syntax | Rule in after ABI cleanup | Selector syntax/specificity, 1/10 to 10/10 focused and 1/9 to 8/9 pinned WPT | +24.7% selector stress; memory neutral; no maintained-code reduction |
+
+None of these candidates reaches the memory-benefit gate. Memory reduction remains a
+separate architectural investigation rather than a claimed side effect of standards
+component adoption.
+
 ## 1. Upstream standards parsing module
 
 ### Implementation status (2026-07-31)
@@ -100,10 +118,10 @@ by less than 1%. This confirms that the dominant cost is WebScene's approximatel
 compact non-element node representation is the required mitigation if equivalent
 legacy/html5ever runtime measurements breach the 10% retained-memory gate.
 
-The spike is **not an adoption decision**. Required-profile, targeted tree-construction,
-ecosystem, peak RSS, post-GC plateau, package-size, and end-to-end load comparisons still
-must be collected from separate optimized V8 artifacts. The legacy parser must remain
-only until that comparison is complete and must be deleted if `html5ever` is adopted.
+The subsequent matched evaluation adopted `html5ever` for compatibility and parser
+ownership. Required-profile and ecosystem proofs pass, performance is neutral, and peak
+RSS is approximately 0.7% higher. The legacy parser remains only as a rollout comparison
+path and should be deleted after packaged-platform coverage is complete.
 
 ### Decision
 
@@ -337,24 +355,22 @@ The following are not justified by the four outcome filters:
   an isolate across contexts and has active/peak context metrics and lifecycle tests.
 - **Do not add CDP only for WPT.** It expands the product surface without improving the
   component runtime; use the existing test adapter.
-- **Do not adopt a full external CSS cascade/layout stack yet.** A syntax-parser or
-  selector-parser island is worthwhile only if a spike proves that it deletes native
-  parser code while preserving WebScene's compiled rule and invalidation model.
+- **Do not adopt a full external CSS cascade/layout stack.** The evaluated syntax and
+  selector parser islands improve compatibility while preserving WebScene's compiled rule,
+  cascade, matching, invalidation, layout, and rendering model. They do not reduce current
+  maintained source and must not be described as code-reduction wins.
 
 ## Recommended sequence
 
-1. Add the broad WPT discovery denominator and the memory/startup measurements needed by
-   the adoption gates.
-2. Implement and evaluate the `html5ever` tree-sink prototype. Delete the native parser
-   after parity.
-3. Build the WebIDL-derived binding generator around one interface family, then migrate
-   the remaining supported surface.
-4. Add and benchmark the custom V8 embedder snapshot after the generated binding surface
-   is stable.
+1. Package the measured V8 bootstrap snapshot with strict fingerprints for each supported
+   RID, then enable it by default.
+2. Complete packaged-platform rollout of `html5ever`, then remove the legacy HTML parser.
+3. Tighten the owned Rust-result ABI shared by `cssparser` and selector parsing, expand
+   ecosystem coverage, promote the standards module, and remove the syntax fallbacks.
+4. Continue migrating operations and interface structure to generated WebIDL bindings;
+   refactor semantic getter/setter callbacks before moving attributes to prototypes.
 5. Introduce external-memory accounting and lifetime regions category by category, using
-   the lifecycle soak to prevent double counting and pool retention.
-6. Evaluate `cssparser` and selector parsing as a second standards-module phase only after
-   the HTML integration proves the Rust/C ABI, packaging, and diagnostics model.
+   the lifecycle soak to target the still-unmet memory gate.
 
 Each stage must remove its superseded path. Keeping both implementations indefinitely
 would increase the codebase and invalidate the primary reason for adopting maintained

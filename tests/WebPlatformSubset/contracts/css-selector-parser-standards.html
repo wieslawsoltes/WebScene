@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Selector parsing, list invalidation, and specificity</title>
+<style>
+  .invalid-pseudo-target, :webscene-unknown-pseudo {
+    --invalid-pseudo-list: incorrectly-applied;
+  }
+  .invalid-combinator-target, div > > span {
+    --invalid-combinator-list: incorrectly-applied;
+  }
+  .comment/**/.compound { --comment-compound: pass; }
+  .comment-parent/**/>/**/.comment-child { --comment-combinator: pass; }
+
+  .specificity-target:is(.control, #missing-is-id) { --is-specificity: pass; }
+  div.specificity-target.control { --is-specificity: low-specificity-won; }
+
+  .specificity-target:not(#missing-not-id) { --not-specificity: pass; }
+  div.specificity-target.control { --not-specificity: low-specificity-won; }
+
+  .specificity-target:where(#specificity-target) { --where-specificity: early; }
+  .specificity-target { --where-specificity: pass; }
+</style>
+<body>
+<div id="invalid-pseudo-target" class="invalid-pseudo-target"></div>
+<div id="invalid-combinator-target" class="invalid-combinator-target"></div>
+<div id="comment-compound" class="comment compound query target"></div>
+<div class="comment-parent"><span id="comment-child" class="comment-child"></span></div>
+<div id="specificity-target" class="specificity-target control"></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name,
+        status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+  }
+
+  function customProperty(id, name) {
+    return getComputedStyle(document.getElementById(id)).getPropertyValue(name).trim();
+  }
+
+  function assertSyntaxError(selector) {
+    let error = null;
+    try {
+      document.querySelector(selector);
+    } catch (caught) {
+      error = caught;
+    }
+    assert(error instanceof DOMException,
+      `${selector} did not throw a DOMException`);
+    assert(error.name === "SyntaxError",
+      `${selector} threw ${error.name} instead of SyntaxError`);
+  }
+
+  test("an unsupported selector invalidates its complete style-rule selector list", () => {
+    assert(customProperty("invalid-pseudo-target", "--invalid-pseudo-list") === "",
+      "the valid selector from an invalid list still applied");
+  });
+
+  test("a malformed combinator invalidates its complete style-rule selector list", () => {
+    assert(customProperty("invalid-combinator-target", "--invalid-combinator-list") === "",
+      "the valid selector from a malformed list still applied");
+  });
+
+  test("comments between simple selectors are tokenized rather than matched literally", () => {
+    assert(customProperty("comment-compound", "--comment-compound") === "pass",
+      "comment-separated compound selector did not match");
+  });
+
+  test("comments around a combinator preserve the child combinator", () => {
+    assert(customProperty("comment-child", "--comment-combinator") === "pass",
+      "comment-separated child selector did not match");
+  });
+
+  test(":is() uses the maximum argument specificity", () => {
+    assert(customProperty("specificity-target", "--is-specificity") === "pass",
+      ":is() argument specificity was not used");
+  });
+
+  test(":not() uses the maximum argument specificity", () => {
+    assert(customProperty("specificity-target", "--not-specificity") === "pass",
+      ":not() argument specificity was not used");
+  });
+
+  test(":where() contributes zero argument specificity", () => {
+    assert(customProperty("specificity-target", "--where-specificity") === "pass",
+      ":where() contributed argument specificity");
+  });
+
+  test("DOM selector APIs reject doubled combinators", () => {
+    assertSyntaxError("div > > span");
+  });
+
+  test("DOM selector APIs reject unknown attribute operators", () => {
+    assertSyntaxError("[data-kind!=target]");
+  });
+
+  test("DOM selector APIs tokenize comments inside compounds", () => {
+    assert(document.querySelector(".query/**/.target") ===
+      document.getElementById("comment-compound"),
+      "comment-tokenized query selector did not return its target");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

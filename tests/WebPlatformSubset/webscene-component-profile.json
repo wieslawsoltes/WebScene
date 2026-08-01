@@ -1025,6 +1025,25 @@
       "reason": "Product-neutral assertions for selector families observed in the hosted-component corpus."
     },
     {
+      "path": "contracts/css-selector-parser-standards.html",
+      "type": "contract",
+      "capabilities": ["selector-list-invalidation", "selector-comment-tokenization", "functional-pseudo-specificity", "selector-syntax-errors"],
+      "evidence": ["servo-selector-parser-evaluation"],
+      "reason": "Candidate contract for standards-owned selector parsing. It distinguishes parsing and specificity from WebScene's existing matching, cascade, and invalidation implementation."
+    },
+    {
+      "path": "css/selectors/is-specificity.html",
+      "type": "testharness",
+      "capabilities": ["is-selector-specificity", "complex-functional-selector-list"],
+      "evidence": ["wpt-selectors-4-is-specificity"]
+    },
+    {
+      "path": "css/selectors/not-specificity.html",
+      "type": "testharness",
+      "capabilities": ["not-selector-specificity", "complex-functional-selector-list"],
+      "evidence": ["wpt-selectors-4-not-specificity"]
+    },
+    {
       "path": "contracts/css-background-image-primitives.html",
       "type": "contract",
       "capabilities": ["url-backed-svg-background-image", "background-repeat-no-repeat", "two-axis-background-position", "background-size-length-auto", "background-content-layout-independence"],

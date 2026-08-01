@@ -63,6 +63,9 @@ set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy ht
 set(WEBSCENE_NATIVE_ENGINE_CSS_PARSER "legacy" CACHE STRING
     "Native CSS syntax parser implementation: legacy or cssparser")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_CSS_PARSER PROPERTY STRINGS legacy cssparser)
+set(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER "legacy" CACHE STRING
+    "Native CSS selector parser implementation: legacy or servo")
+set_property(CACHE WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER PROPERTY STRINGS legacy servo)
 set(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS "legacy" CACHE STRING
     "Native DOM binding catalog: legacy or generated")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS PROPERTY STRINGS legacy generated)
@@ -91,6 +94,16 @@ elseif(NOT WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "legacy"
         "WEBSCENE_NATIVE_ENGINE_CSS_PARSER must be legacy or cssparser")
 endif()
 
+if(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo"
+    AND NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
+    message(FATAL_ERROR
+        "The Servo selector prototype currently requires the shared html5ever Rust library")
+elseif(NOT WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "legacy"
+    AND NOT WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo")
+    message(FATAL_ERROR
+        "WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER must be legacy or servo")
+endif()
+
 if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     find_program(WEBSCENE_CARGO_EXECUTABLE cargo REQUIRED)
     set(WEBSCENE_ENABLE_CSSPARSER_RUST OFF)
@@ -100,6 +113,10 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
         set(WEBSCENE_ENABLE_CSSPARSER_RUST ON)
         list(APPEND WEBSCENE_HTML_PARSER_CARGO_FEATURES
             --features cssparser)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo")
+        list(APPEND WEBSCENE_HTML_PARSER_CARGO_FEATURES
+            --features selectors)
     endif()
     set(WEBSCENE_HTML_PARSER_MANIFEST
         "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/Cargo.toml")
@@ -154,6 +171,15 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     else()
         message(STATUS "WebScene native engine: legacy CSS syntax parser selected")
     endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo")
+        target_sources(webscene_native_engine PRIVATE
+            native/webscene_selector_parser.cpp)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS=1)
+        message(STATUS "WebScene native engine: Servo selector parser prototype selected")
+    else()
+        message(STATUS "WebScene native engine: legacy selector parser selected")
+    endif()
     if(BUILD_TESTING)
         add_executable(webscene_html_parser_tests
             tests/html_parser_tests.cpp
@@ -171,6 +197,15 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
             target_include_directories(webscene_css_parser_tests PRIVATE native)
             target_link_libraries(webscene_css_parser_tests PRIVATE webscene_html_parser)
             add_test(NAME webscene_css_parser_tests COMMAND webscene_css_parser_tests)
+        endif()
+        if(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo")
+            add_executable(webscene_selector_parser_tests
+                tests/selector_parser_tests.cpp
+                native/webscene_selector_parser.cpp)
+            target_compile_features(webscene_selector_parser_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_selector_parser_tests PRIVATE native)
+            target_link_libraries(webscene_selector_parser_tests PRIVATE webscene_html_parser)
+            add_test(NAME webscene_selector_parser_tests COMMAND webscene_selector_parser_tests)
         endif()
     endif()
     if(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK)
