@@ -212,9 +212,24 @@
             || content->size() > maximum_resource_cache_entry_bytes) {
             return;
         }
+        const auto entity_tag_length = static_cast<uint32_t>(std::min(
+            entity_tag.size(),
+            static_cast<size_t>(maximum_resource_entity_tag_bytes)));
+        const auto remember_unpersisted_content = [&] {
+            remember_process_resource_cache(
+                path,
+                cached_text_resource{
+                    content,
+                    entity_tag.substr(0U, entity_tag_length),
+                    last_modified_unix_seconds,
+                    fresh_until_unix_seconds});
+        };
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
-        if (error) return;
+        if (error) {
+            remember_unpersisted_content();
+            return;
+        }
 
         static std::atomic<uint64_t> temporary_sequence{0};
         const auto temporary = path.string()
@@ -222,16 +237,16 @@
             + "." + std::to_string(temporary_sequence.fetch_add(1, std::memory_order_relaxed))
             + ".tmp";
         std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
-        if (!stream) return;
+        if (!stream) {
+            remember_unpersisted_content();
+            return;
+        }
         constexpr std::array<char, 8> magic{'H', 'M', 'L', 'R', 'E', 'S', '0', '1'};
         constexpr uint32_t schema = 3U;
         const auto content_hash = sha256(
             reinterpret_cast<const uint8_t*>(content->data()),
             content->size());
         const auto content_length = static_cast<uint64_t>(content->size());
-        const auto entity_tag_length = static_cast<uint32_t>(std::min(
-            entity_tag.size(),
-            static_cast<size_t>(maximum_resource_entity_tag_bytes)));
         stream.write(magic.data(), static_cast<std::streamsize>(magic.size()));
         stream.write(reinterpret_cast<const char*>(&schema), sizeof(schema));
         stream.write(reinterpret_cast<const char*>(&kind), sizeof(kind));
@@ -257,10 +272,12 @@
         stream.close();
         if (!stream) {
             std::filesystem::remove(temporary, error);
+            remember_unpersisted_content();
             return;
         }
         if (!replace_cache_file(temporary, path)) {
             std::filesystem::remove(temporary, error);
+            remember_unpersisted_content();
             return;
         }
         auto retained_content = content;
