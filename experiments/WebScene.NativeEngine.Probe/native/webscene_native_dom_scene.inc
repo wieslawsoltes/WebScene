@@ -1,0 +1,1152 @@
+void native_document::build_scene(
+    std::vector<webscene_scene_command>& commands,
+    std::vector<webscene_scene_string>& strings,
+    std::vector<char>& string_bytes) const
+{
+    commands.clear();
+    commands.reserve(nodes_.size());
+    strings.clear();
+    string_bytes.clear();
+    append_scene(*body_, commands, strings, string_bytes, false, true);
+    std::vector<dom_node*> fixed;
+    for (auto* child : body_->children) {
+        collect_fixed_positioned_nodes(*child, fixed);
+    }
+    for (const auto* fixed_node : fixed) {
+        if (!display_tree_allows_render(*fixed_node)) continue;
+        auto inherited_visibility_hidden = false;
+        std::vector<const dom_node*> ancestors;
+        for (auto* ancestor = fixed_node->parent;
+             ancestor != nullptr;
+             ancestor = ancestor->parent) {
+            ancestors.push_back(ancestor);
+        }
+        for (auto iterator = ancestors.rbegin(); iterator != ancestors.rend(); ++iterator) {
+            if ((*iterator)->style.visibility_specified) {
+                inherited_visibility_hidden = (*iterator)->style.visibility_hidden;
+            }
+        }
+        append_scene(
+            *fixed_node,
+            commands,
+            strings,
+            string_bytes,
+            inherited_visibility_hidden,
+            true);
+    }
+}
+
+void native_document::build_canvas_layouts(
+    std::vector<webscene_canvas_layout>& layouts) const
+{
+    layouts.clear();
+    for (const auto& node : nodes_) {
+        if (node->tag != "canvas"
+            || !is_connected(*node)
+            || !node->visible
+            || !display_tree_allows_render(*node)) {
+            continue;
+        }
+        const auto width = node->attributes.find("width");
+        const auto height = node->attributes.find("height");
+        layouts.push_back(webscene_canvas_layout{
+            node->id,
+            0U,
+            node->layout.x,
+            node->layout.y,
+            node->layout.width,
+            node->layout.height,
+            static_cast<uint32_t>(std::max(
+                0.0F,
+                width == node->attributes.end() ? 0.0F : parse_number(width->second))),
+            static_cast<uint32_t>(std::max(
+                0.0F,
+                height == node->attributes.end() ? 0.0F : parse_number(height->second)))});
+    }
+}
+
+void native_document::build_canvas_display_lists(
+    std::vector<webscene_canvas_layer>& layers,
+    std::vector<webscene_canvas_command>& canvas_commands,
+    std::vector<webscene_scene_string>& strings,
+    std::vector<char>& string_bytes) const
+{
+    layers.clear();
+    canvas_commands.clear();
+    strings.clear();
+    string_bytes.clear();
+
+    uint32_t z_order = 0;
+    for (const auto& node : nodes_) {
+        const auto& canvas = node->canvas();
+        if (node->tag != "canvas"
+            || !is_connected(*node)
+            || !node->visible
+            || !display_tree_allows_render(*node)
+            || canvas.commands.empty()) {
+            continue;
+        }
+
+        const auto width = node->attributes.find("width");
+        const auto height = node->attributes.find("height");
+        const auto command_offset = static_cast<uint32_t>(canvas_commands.size());
+        const auto string_offset = static_cast<uint32_t>(strings.size());
+        canvas_commands.insert(
+            canvas_commands.end(),
+            canvas.commands.begin(),
+            canvas.commands.end());
+        for (const auto& value : canvas.strings) {
+            const auto byte_offset = static_cast<uint32_t>(string_bytes.size());
+            string_bytes.insert(string_bytes.end(), value.begin(), value.end());
+            strings.push_back(webscene_scene_string{
+                byte_offset,
+                static_cast<uint32_t>(value.size())});
+        }
+
+        layers.push_back(webscene_canvas_layer{
+            node->id,
+            z_order++,
+            command_offset,
+            static_cast<uint32_t>(canvas.commands.size()),
+            string_offset,
+            static_cast<uint32_t>(canvas.strings.size()),
+            0U,
+            node->layout.x,
+            node->layout.y,
+            node->layout.width,
+            node->layout.height,
+            static_cast<uint32_t>(std::max(
+                0.0F,
+                width == node->attributes.end() ? 300.0F : parse_number(width->second, 300.0F))),
+            static_cast<uint32_t>(std::max(
+                0.0F,
+                height == node->attributes.end() ? 150.0F : parse_number(height->second, 150.0F))),
+            canvas.generation});
+    }
+}
+
+void native_document::append_scene(
+    const dom_node& node,
+    std::vector<webscene_scene_command>& commands,
+    std::vector<webscene_scene_string>& strings,
+    std::vector<char>& string_bytes,
+    bool inherited_visibility_hidden,
+    bool defer_fixed_descendants) const
+{
+    const auto* animation = node.animation_runtime();
+    const auto opacity = std::clamp(
+        animation != nullptr && animation->opacity_animation_initialized
+            ? animation->painted_opacity
+            : node.style.opacity,
+        0.0F,
+        1.0F);
+    if (!node.visible
+        || node.style.display == display_mode::none
+        || opacity <= 0.001F) {
+        return;
+    }
+    const auto has_opacity_group = opacity < 0.999F;
+    if (has_opacity_group) {
+        commands.push_back(webscene_scene_command{
+            30U,
+            0U,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            static_cast<uint32_t>(std::clamp(
+                std::lround(opacity * 255.0F),
+                0L,
+                255L)),
+            node.id});
+    }
+    const auto resolve_transform_origin = [](css_length value, float available, float fallback) {
+        if (value.unit == length_unit::pixels) return value.value;
+        if (value.unit == length_unit::percent) {
+            return available * value.value / 100.0F + value.pixel_offset;
+        }
+        return fallback;
+    };
+    const auto transform_origin_x = node.layout.x + resolve_transform_origin(
+        node.style.transform_origin_x,
+        node.layout.width,
+        node.layout.width * 0.5F);
+    const auto transform_origin_y = node.layout.y + resolve_transform_origin(
+        node.style.transform_origin_y,
+        node.layout.height,
+        node.layout.height * 0.5F);
+    const auto painted_scale_x =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_x
+        : node.style.transform_scale_x;
+    const auto painted_scale_y =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_y
+        : node.style.transform_scale_y;
+    const auto painted_rotation =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_rotate_degrees
+        : node.style.transform_rotate_degrees;
+    const auto has_scale_transform =
+        std::abs(painted_scale_x - 1.0F) > 0.0001F
+        || std::abs(painted_scale_y - 1.0F) > 0.0001F;
+    if (has_scale_transform) {
+        commands.push_back(webscene_scene_command{
+            15U,
+            0U,
+            transform_origin_x,
+            transform_origin_y,
+            painted_scale_x,
+            painted_scale_y,
+            0U,
+            node.id});
+    }
+    const auto has_rotate_transform = std::abs(painted_rotation) > 0.0001F;
+    if (has_rotate_transform) {
+        commands.push_back(webscene_scene_command{
+            19U,
+            0U,
+            transform_origin_x,
+            transform_origin_y,
+            0,
+            0,
+            0U,
+            node.id,
+            0,
+            0,
+            0,
+            0,
+            painted_rotation});
+    }
+    const auto with_opacity = [](uint32_t rgba) { return rgba; };
+    // Unlike display:none, visibility:hidden does not prune descendants. A child
+    // may explicitly restore visibility:visible; component libraries use that contract
+    // to switch between its collapsed and expanded responsive toolbar wrappers.
+    const auto visibility_hidden = node.style.visibility_specified
+        ? node.style.visibility_hidden
+        : inherited_visibility_hidden;
+    const auto paint_self = !visibility_hidden;
+    const auto paint_box_in_foreground = [&] {
+        auto fixed_layer = false;
+        auto outermost_z_index = 0;
+        for (auto* current = &node; current != nullptr; current = current->parent) {
+            // A fixed popup participates in the elevated overlay layer even
+            // when a backdrop child uses z-index:-1 relative to that popup.
+            if (current->style.position == position_mode::fixed) fixed_layer = true;
+            // A negative descendant stays inside its ancestor's stacking context.
+            // Its own level orders it behind siblings in that context; it must not
+            // demote an otherwise elevated legend or dialog behind retained canvases.
+            if (current->style.z_index != 0) {
+                outermost_z_index = current->style.z_index;
+            }
+            // Fixed-position dialogs and menus form an elevated paint layer in
+            // component UI even when its authored z-index is auto. Its DOM
+            // backgrounds must be emitted after retained chart canvases, just
+            // like their text and SVG foreground commands.
+        }
+        return node.paints_after_retained_canvas || fixed_layer || outermost_z_index > 0;
+    }();
+    struct resolved_radii final {
+        float top_left;
+        float top_right;
+        float bottom_right;
+        float bottom_left;
+
+        bool any() const noexcept
+        {
+            return top_left > 0 || top_right > 0 || bottom_right > 0 || bottom_left > 0;
+        }
+    };
+    const auto resolve_radii = [&](css_length top_left, css_length top_right,
+                                   css_length bottom_right, css_length bottom_left,
+                                   float width, float height) {
+        const auto limit = std::max(0.0F, std::min(width, height) * 0.5F);
+        const auto reference = std::min(width, height);
+        return resolved_radii{
+            std::clamp(resolve_length(node, top_left, reference, 0), 0.0F, limit),
+            std::clamp(resolve_length(node, top_right, reference, 0), 0.0F, limit),
+            std::clamp(resolve_length(node, bottom_right, reference, 0), 0.0F, limit),
+            std::clamp(resolve_length(node, bottom_left, reference, 0), 0.0F, limit)};
+    };
+    const auto append_pseudo = [&](const node_style::pseudo_element& pseudo) {
+        if (!paint_self || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
+        const auto pseudo_paints_in_foreground = paint_box_in_foreground
+            || (pseudo.z_index > 0 && pseudo.position != position_mode::normal);
+        const auto pseudo_opacity = std::clamp(pseudo.opacity, 0.0F, 1.0F);
+        if (pseudo_opacity <= 0.001F) return;
+        const auto with_pseudo_opacity = [&](uint32_t rgba) {
+            const auto alpha = static_cast<uint32_t>(std::clamp(
+                std::lround(static_cast<float>(rgba & 0xFFU) * pseudo_opacity),
+                0L,
+                255L));
+            return with_opacity((rgba & 0xFFFFFF00U) | alpha);
+        };
+        const auto inherited_font_size = resolved_font_size(node);
+        const auto font_size = pseudo.font_size >= 0 ? pseudo.font_size : inherited_font_size;
+        auto line_height = pseudo.line_height >= 0
+            ? pseudo.line_height
+            : resolved_line_height(node, font_size);
+        if (line_height > 0 && line_height <= 4) line_height *= font_size;
+        const auto x = pseudo.layout.x;
+        const auto y = pseudo.layout.y;
+        const auto width = pseudo.layout.width;
+        const auto height = pseudo.layout.height;
+        const auto pseudo_background = pseudo.background_current_color
+            ? (pseudo.foreground_rgba & 0xFFU) != 0U
+                ? pseudo.foreground_rgba
+                : resolved_foreground(node)
+            : pseudo.background_rgba;
+        if ((pseudo_background & 0xFFU) != 0U && width > 0 && height > 0) {
+            const auto radii = resolve_radii(
+                pseudo.border_top_left_radius,
+                pseudo.border_top_right_radius,
+                pseudo.border_bottom_right_radius,
+                pseudo.border_bottom_left_radius,
+                width,
+                height);
+            commands.push_back(webscene_scene_command{
+                radii.any()
+                    ? pseudo_paints_in_foreground ? 10U : 7U
+                    : pseudo_paints_in_foreground ? 9U : 1U,
+                0U,
+                x,
+                y,
+                width,
+                height,
+                with_pseudo_opacity(pseudo_background),
+                node.id,
+                radii.top_left,
+                radii.top_right,
+                radii.bottom_right,
+                radii.bottom_left,
+                0});
+        }
+        if (has_visible_text(pseudo.content)) {
+            std::ostringstream resource;
+            resource << font_size << '\t' << line_height << '\t'
+                << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
+                << resolved_font_family(node) << '\t' << pseudo.content;
+            commands.push_back(webscene_scene_command{
+                3U,
+                append_scene_string(resource.str(), strings, string_bytes),
+                x,
+                y,
+                width,
+                height,
+                (pseudo.foreground_rgba & 0xFFU) != 0U
+                    ? with_pseudo_opacity(pseudo.foreground_rgba)
+                    : with_pseudo_opacity(resolved_foreground(node)),
+                node.id});
+        }
+    };
+    const auto radii = resolve_radii(
+        node.style.border_top_left_radius,
+        node.style.border_top_right_radius,
+        node.style.border_bottom_right_radius,
+        node.style.border_bottom_left_radius,
+        node.layout.width,
+        node.layout.height);
+    const auto pack_round_rect = [](float packed_radius, float stroke_width) {
+        const auto radius_bits = static_cast<uint32_t>(std::clamp(
+            std::lround(packed_radius * 100.0F), 0L, 65535L));
+        const auto width_bits = static_cast<uint32_t>(std::clamp(
+            std::lround(stroke_width * 100.0F), 0L, 65535L));
+        return (radius_bits << 16U) | width_bits;
+    };
+    if (paint_self
+        && node.style.box_shadow_present
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        const auto spread = node.style.box_shadow_spread_radius;
+        const auto shadow_width = node.layout.width + spread * 2.0F;
+        const auto shadow_height = node.layout.height + spread * 2.0F;
+        if (shadow_width > 0 && shadow_height > 0) {
+            commands.push_back(webscene_scene_command{
+                paint_box_in_foreground ? 18U : 17U,
+                0U,
+                node.layout.x + node.style.box_shadow_offset_x - spread,
+                node.layout.y + node.style.box_shadow_offset_y - spread,
+                shadow_width,
+                shadow_height,
+                with_opacity(node.style.box_shadow_rgba),
+                node.id,
+                std::max(0.0F, radii.top_left + spread),
+                std::max(0.0F, radii.top_right + spread),
+                std::max(0.0F, radii.bottom_right + spread),
+                std::max(0.0F, radii.bottom_left + spread),
+                node.style.box_shadow_blur_radius});
+        }
+    }
+    if (paint_self
+        && (node.style.background_rgba & 0xFFU) != 0U
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        commands.push_back(webscene_scene_command{
+            radii.any()
+                ? paint_box_in_foreground ? 10U : 7U
+                : paint_box_in_foreground ? 9U : 1U,
+            node.style.clip ? 1U : 0U,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            with_opacity(node.style.background_rgba),
+            node.id,
+            radii.top_left,
+            radii.top_right,
+            radii.bottom_right,
+            radii.bottom_left,
+            0});
+    }
+    const auto& background_image = node.style.background_image();
+    if (paint_self
+        && !background_image.image_markup.empty()
+        && !background_image.image_view_box.empty()
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        std::istringstream view_box_stream(background_image.image_view_box);
+        float view_x = 0;
+        float view_y = 0;
+        float view_width = 0;
+        float view_height = 0;
+        if (view_box_stream >> view_x >> view_y >> view_width >> view_height
+            && view_width > 0 && view_height > 0) {
+            const auto resolve_size = [](const std::string& token, float available) {
+                if (token.empty() || token == "auto" || token == "cover" || token == "contain") {
+                    return -1.0F;
+                }
+                if (token.ends_with('%')) {
+                    return available * std::strtof(token.c_str(), nullptr) / 100.0F;
+                }
+                return std::max(0.0F, native_document::parse_length(token).value);
+            };
+            auto image_width = view_width;
+            auto image_height = view_height;
+            if (background_image.size_x == "cover"
+                || background_image.size_x == "contain") {
+                const auto scale_x = node.layout.width / view_width;
+                const auto scale_y = node.layout.height / view_height;
+                const auto scale = background_image.size_x == "cover"
+                    ? std::max(scale_x, scale_y)
+                    : std::min(scale_x, scale_y);
+                image_width = view_width * scale;
+                image_height = view_height * scale;
+            } else {
+                const auto declared_width = resolve_size(
+                    background_image.size_x, node.layout.width);
+                const auto declared_height = resolve_size(
+                    background_image.size_y, node.layout.height);
+                if (declared_width >= 0 && declared_height >= 0) {
+                    image_width = declared_width;
+                    image_height = declared_height;
+                } else if (declared_width >= 0) {
+                    image_width = declared_width;
+                    image_height = view_height * declared_width / view_width;
+                } else if (declared_height >= 0) {
+                    image_height = declared_height;
+                    image_width = view_width * declared_height / view_height;
+                }
+            }
+            const auto resolve_position = [](const std::string& token,
+                                             float available,
+                                             float image_size,
+                                             bool horizontal) {
+                if (token == "center") return (available - image_size) * 0.5F;
+                if (token == (horizontal ? "right" : "bottom")) return available - image_size;
+                if (token == (horizontal ? "left" : "top")) return 0.0F;
+                if (token.ends_with('%')) {
+                    return (available - image_size)
+                        * std::strtof(token.c_str(), nullptr) / 100.0F;
+                }
+                return native_document::parse_length(token).value;
+            };
+            const auto image_x = node.layout.x + resolve_position(
+                background_image.position_x,
+                node.layout.width,
+                image_width,
+                true);
+            const auto image_y = node.layout.y + resolve_position(
+                background_image.position_y,
+                node.layout.height,
+                image_height,
+                false);
+            const auto resource_index = append_scene_string(
+                background_image.image_view_box + '\t'
+                    + background_image.image_markup,
+                strings,
+                string_bytes);
+            commands.push_back(webscene_scene_command{
+                6U,
+                resource_index,
+                image_x,
+                image_y,
+                image_width,
+                image_height,
+                0U,
+                node.id});
+        }
+    }
+    const auto& replaced_image = node.replaced_image();
+    if (paint_self
+        && node.tag == "img"
+        && !replaced_image.markup.empty()
+        && !replaced_image.view_box.empty()
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        const auto resource_index = append_scene_string(
+            replaced_image.view_box + '\t' + replaced_image.markup,
+            strings,
+            string_bytes);
+        commands.push_back(webscene_scene_command{
+            6U,
+            resource_index,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            0U,
+            node.id});
+    }
+    const auto append_border_rect = [&](float x, float y, float width, float height, uint32_t rgba) {
+        if ((rgba & 0xFFU) == 0U || width <= 0 || height <= 0) return;
+        commands.push_back(webscene_scene_command{
+            paint_box_in_foreground ? 9U : 1U,
+            0U,
+            x,
+            y,
+            width,
+            height,
+            with_opacity(rgba),
+            node.id});
+    };
+    if (paint_self && node.layout.width > 0 && node.layout.height > 0) {
+        const auto top = std::clamp(
+            resolve_length(node, node.style.border_top_width, node.layout.height, 0),
+            0.0F,
+            node.layout.height);
+        const auto right = std::clamp(
+            resolve_length(node, node.style.border_right_width, node.layout.width, 0),
+            0.0F,
+            node.layout.width);
+        const auto bottom = std::clamp(
+            resolve_length(node, node.style.border_bottom_width, node.layout.height, 0),
+            0.0F,
+            node.layout.height);
+        const auto left = std::clamp(
+            resolve_length(node, node.style.border_left_width, node.layout.width, 0),
+            0.0F,
+            node.layout.width);
+        const auto uniform_width = std::abs(top - right) < 0.01F
+            && std::abs(top - bottom) < 0.01F
+            && std::abs(top - left) < 0.01F;
+        const auto uniform_color = node.style.border_top_rgba == node.style.border_right_rgba
+            && node.style.border_top_rgba == node.style.border_bottom_rgba
+            && node.style.border_top_rgba == node.style.border_left_rgba;
+        const auto rounded_stroke_width = std::max({top, right, bottom, left});
+        const auto compatible_rounded_widths = rounded_stroke_width > 0
+            && (top <= 0 || std::abs(top - rounded_stroke_width) < 0.01F)
+            && (right <= 0 || std::abs(right - rounded_stroke_width) < 0.01F)
+            && (bottom <= 0 || std::abs(bottom - rounded_stroke_width) < 0.01F)
+            && (left <= 0 || std::abs(left - rounded_stroke_width) < 0.01F);
+        if (radii.any() && compatible_rounded_widths) {
+            constexpr uint32_t border_top_flag = 1U << 28U;
+            constexpr uint32_t border_right_flag = 1U << 29U;
+            constexpr uint32_t border_bottom_flag = 1U << 30U;
+            constexpr uint32_t border_left_flag = 1U << 31U;
+            constexpr uint32_t border_color_partition_flag = 1U << 27U;
+            const auto inset = rounded_stroke_width * 0.5F;
+            const auto left_inset = left > 0 ? inset : 0.0F;
+            const auto right_inset = right > 0 ? inset : 0.0F;
+            const auto top_inset = top > 0 ? inset : 0.0F;
+            const auto bottom_inset = bottom > 0 ? inset : 0.0F;
+            const auto all_sides = top > 0 && right > 0 && bottom > 0 && left > 0;
+            const auto partition_colors = all_sides && !uniform_color;
+            const auto append_rounded_border = [&](uint32_t color, uint32_t side_flags) {
+                if ((color & 0xFFU) == 0U || side_flags == 0U) return;
+                commands.push_back(webscene_scene_command{
+                    paint_box_in_foreground ? 11U : 8U,
+                    pack_round_rect(0, rounded_stroke_width)
+                        | (partition_colors ? border_color_partition_flag : 0U)
+                        | (all_sides && uniform_width && uniform_color ? 0U : side_flags),
+                    node.layout.x + left_inset,
+                    node.layout.y + top_inset,
+                    std::max(0.0F, node.layout.width - left_inset - right_inset),
+                    std::max(0.0F, node.layout.height - top_inset - bottom_inset),
+                    with_opacity(color),
+                    node.id,
+                    std::max(0.0F, radii.top_left - std::max(top_inset, left_inset)),
+                    std::max(0.0F, radii.top_right - std::max(top_inset, right_inset)),
+                    std::max(0.0F, radii.bottom_right - std::max(bottom_inset, right_inset)),
+                    std::max(0.0F, radii.bottom_left - std::max(bottom_inset, left_inset)),
+                    rounded_stroke_width});
+            };
+            const std::array<uint32_t, 4> colors{
+                node.style.border_top_rgba,
+                node.style.border_right_rgba,
+                node.style.border_bottom_rgba,
+                node.style.border_left_rgba};
+            for (size_t color_index = 0; color_index < colors.size(); ++color_index) {
+                const auto color = colors[color_index];
+                auto already_emitted = false;
+                for (size_t previous = 0; previous < color_index; ++previous) {
+                    already_emitted = already_emitted || colors[previous] == color;
+                }
+                if (already_emitted) continue;
+                const auto side_flags =
+                    (top > 0 && node.style.border_top_rgba == color ? border_top_flag : 0U)
+                    | (right > 0 && node.style.border_right_rgba == color ? border_right_flag : 0U)
+                    | (bottom > 0 && node.style.border_bottom_rgba == color ? border_bottom_flag : 0U)
+                    | (left > 0 && node.style.border_left_rgba == color ? border_left_flag : 0U);
+                append_rounded_border(color, side_flags);
+            }
+        } else {
+            append_border_rect(
+                node.layout.x,
+                node.layout.y,
+                node.layout.width,
+                top,
+                node.style.border_top_rgba);
+            append_border_rect(
+                node.layout.x + node.layout.width - right,
+                node.layout.y,
+                right,
+                node.layout.height,
+                node.style.border_right_rgba);
+            append_border_rect(
+                node.layout.x,
+                node.layout.y + node.layout.height - bottom,
+                node.layout.width,
+                bottom,
+                node.style.border_bottom_rgba);
+            append_border_rect(
+                node.layout.x,
+                node.layout.y,
+                left,
+                node.layout.height,
+                node.style.border_left_rgba);
+        }
+    }
+    if (paint_self && node.layout.width > 0 && node.layout.height > 0
+        && (node.style.outline_rgba & 0xFFU) != 0U) {
+        const auto outline = std::max(
+            0.0F,
+            resolve_length(node, node.style.outline_width, node.layout.width, 0));
+        append_border_rect(
+            node.layout.x - outline,
+            node.layout.y - outline,
+            node.layout.width + outline * 2.0F,
+            outline,
+            node.style.outline_rgba);
+        append_border_rect(
+            node.layout.x + node.layout.width,
+            node.layout.y,
+            outline,
+            node.layout.height,
+            node.style.outline_rgba);
+        append_border_rect(
+            node.layout.x - outline,
+            node.layout.y + node.layout.height,
+            node.layout.width + outline * 2.0F,
+            outline,
+            node.style.outline_rgba);
+        append_border_rect(
+            node.layout.x - outline,
+            node.layout.y,
+            outline,
+            node.layout.height,
+            node.style.outline_rgba);
+    }
+    const auto clip_contents = node.style.clip
+        && node.layout.width > 0
+        && node.layout.height > 0;
+    if (clip_contents) {
+        // Kinds 12/13 bracket the element's pseudo/content/descendant paint.
+        // The box background and border intentionally remain outside its own
+        // overflow clip, matching CSS background/border painting semantics.
+        commands.push_back(webscene_scene_command{
+            12U,
+            0U,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            0U,
+            node.id,
+            radii.top_left,
+            radii.top_right,
+            radii.bottom_right,
+            radii.bottom_left,
+            0});
+    }
+    if (node.list_marker_layout.width > 0 || node.list_marker_layout.height > 0) {
+        node_style::pseudo_element marker{};
+        marker.generated = true;
+        marker.content = list_marker_text(node);
+        marker.layout = node.list_marker_layout;
+        append_pseudo(marker);
+    }
+    const auto before_paints_after_content = node.style.before_pseudo().z_index > 0
+        && node.style.before_pseudo().position != position_mode::normal;
+    if (!before_paints_after_content) {
+        append_pseudo(node.style.before_pseudo());
+    }
+    // Positioned negative-z pseudo-elements participate behind the element's
+    // content. Hosted controls use this for hover/active button surfaces; painting
+    // ::after in its ordinary DOM position would cover the button SVG instead.
+    const auto after_paints_behind_content = node.style.after_pseudo().z_index < 0
+        && node.style.after_pseudo().position != position_mode::normal;
+    if (after_paints_behind_content) {
+        append_pseudo(node.style.after_pseudo());
+    }
+    const auto& canvas = node.canvas();
+    if (paint_self
+        && node.tag == "canvas"
+        && canvas.commands.empty()
+        && (!canvas.rects.empty() || !canvas.lines.empty())) {
+        const auto width_iterator = node.attributes.find("width");
+        const auto height_iterator = node.attributes.find("height");
+        const auto bitmap_width = width_iterator == node.attributes.end()
+            ? 300.0F
+            : std::max(1.0F, parse_number(width_iterator->second, 300.0F));
+        const auto bitmap_height = height_iterator == node.attributes.end()
+            ? 150.0F
+            : std::max(1.0F, parse_number(height_iterator->second, 150.0F));
+        const auto display_width = node.layout.width > 0 ? node.layout.width : bitmap_width;
+        const auto display_height = node.layout.height > 0 ? node.layout.height : bitmap_height;
+        const auto scale_x = display_width / bitmap_width;
+        const auto scale_y = display_height / bitmap_height;
+        for (const auto& rect : canvas.rects) {
+            if ((rect.rgba & 0xFFU) == 0U || rect.width <= 0 || rect.height <= 0) continue;
+            commands.push_back(webscene_scene_command{
+                1U,
+                0U,
+                node.layout.x + rect.x * scale_x,
+                node.layout.y + rect.y * scale_y,
+                rect.width * scale_x,
+                rect.height * scale_y,
+                with_opacity(rect.rgba),
+                node.id});
+        }
+        for (const auto& line : canvas.lines) {
+            if ((line.rgba & 0xFFU) == 0U) continue;
+            commands.push_back(webscene_scene_command{
+                2U,
+                static_cast<uint32_t>(std::max(1.0F, line.line_width * 100.0F)),
+                node.layout.x + line.x1 * scale_x,
+                node.layout.y + line.y1 * scale_y,
+                node.layout.x + line.x2 * scale_x,
+                node.layout.y + line.y2 * scale_y,
+                with_opacity(line.rgba),
+                node.id});
+        }
+    }
+
+    if (paint_self && (node.tag == "input" || node.tag == "textarea")) {
+        const auto font_size = resolved_font_size(node);
+        const auto line_height = resolved_line_height(node, font_size);
+        const auto padding_left = resolve_length(
+            node, node.style.padding_left, node.layout.width, 0);
+        const auto padding_right = resolve_length(
+            node, node.style.padding_right, node.layout.width, 0);
+        const auto text_x = node.layout.x + padding_left;
+        const auto text_y = node.layout.y + std::max(0.0F, (node.layout.height - line_height) * 0.5F);
+        const auto text_width = std::max(
+            0.0F, node.layout.width - padding_left - padding_right);
+        if (!node.form_control().value.empty()) {
+            std::ostringstream resource;
+            resource << font_size << '\t' << line_height << '\t'
+                << resolved_font_weight(node) << '\t' << "start" << '\t'
+                << resolved_font_family(node) << '\t' << node.form_control().value;
+            commands.push_back(webscene_scene_command{
+                3U,
+                append_scene_string(resource.str(), strings, string_bytes),
+                text_x,
+                text_y,
+                text_width,
+                line_height,
+                with_opacity(resolved_foreground(node)),
+                node.id});
+        }
+        if (node.form_control().input_focused && node.form_control().caret_visible) {
+            const auto caret_index = std::min(
+                node.form_control().selection_end,
+                node.form_control().value.size());
+            const auto caret_x = std::min(
+                text_x + measure_text_width(
+                    std::string_view(node.form_control().value).substr(0, caret_index),
+                    node),
+                node.layout.x + node.layout.width - padding_right);
+            commands.push_back(webscene_scene_command{
+                14U,
+                100U,
+                caret_x,
+                text_y + 1.0F,
+                caret_x,
+                text_y + std::max(1.0F, line_height - 1.0F),
+                with_opacity(resolved_foreground(node)),
+                node.id});
+        }
+    }
+
+    if (paint_self && has_visible_text(node.text_content)) {
+        const auto font_size = resolved_font_size(node);
+        const auto line_height = resolved_line_height(node, font_size);
+        if (!node.text_layout_fragments.empty()) {
+            for (const auto& fragment : node.text_layout_fragments) {
+                std::ostringstream resource;
+                resource << font_size << '\t' << fragment.height << '\t'
+                    << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
+                    << resolved_font_family(node) << '\t'
+                    << resolved_text_transform(node, fragment.text);
+                commands.push_back(webscene_scene_command{
+                    3U,
+                    append_scene_string(resource.str(), strings, string_bytes),
+                    fragment.x,
+                    fragment.y,
+                    fragment.width,
+                    fragment.height,
+                    with_opacity(resolved_foreground(node)),
+                    node.id});
+            }
+        } else {
+        const auto padding_left = resolve_length(
+            node, node.style.padding_left, node.layout.width, 0);
+        const auto padding_right = resolve_length(
+            node, node.style.padding_right, node.layout.width, 0);
+        const auto padding_top = resolve_length(
+            node, node.style.padding_top, node.layout.height, 0);
+        const auto padding_bottom = resolve_length(
+            node, node.style.padding_bottom, node.layout.height, 0);
+        auto x = node.layout.x + padding_left;
+        auto y = node.layout.y + padding_top;
+        auto width = std::max(0.0F, node.layout.width - padding_left - padding_right);
+        auto height = std::max(0.0F, node.layout.height - padding_top - padding_bottom);
+        if (width <= 0) {
+            width = measure_text_width(
+                resolved_text_transform(node, node.text_content),
+                node);
+        }
+        if (height <= 0 && node.tag == "#text" && node.parent != nullptr) {
+            y = node.parent->layout.y;
+            height = node.parent->layout.height;
+        }
+        if (height <= 0) height = line_height;
+        const auto wraps = resolved_white_space_wraps(node);
+        const auto transformed_text = resolved_text_transform(node, node.text_content);
+        const auto lines = wrap_text_lines(
+            transformed_text,
+            width,
+            node,
+            wraps);
+        const auto command_width = wraps
+            ? width
+            : std::max(width, measure_text_width(transformed_text, node));
+        for (size_t line_index = 0; line_index < lines.size(); ++line_index) {
+            std::ostringstream resource;
+            resource << font_size << '\t' << line_height << '\t'
+                << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
+                << resolved_font_family(node) << '\t'
+                << lines[line_index];
+            commands.push_back(webscene_scene_command{
+                3U,
+                append_scene_string(resource.str(), strings, string_bytes),
+                x,
+                y + static_cast<float>(line_index) * line_height,
+                command_width,
+                line_height,
+                with_opacity(resolved_foreground(node)),
+                node.id});
+        }
+        }
+    }
+
+    if (node.tag == "svg" && paint_self) {
+        auto box = node.layout;
+        if ((box.width <= 0 || box.height <= 0) && node.parent != nullptr) {
+            box = node.parent->layout;
+        }
+        if (box.width > 0 && box.height > 0) {
+            const auto view_box = node.attributes.contains("viewBox")
+                ? node.attributes.at("viewBox")
+                : std::string("0 0 ") + std::to_string(std::max(1.0F, box.width))
+                    + " " + std::to_string(std::max(1.0F, box.height));
+            std::string markup;
+            markup.reserve(256U);
+            serialize_svg_subtree(node, markup, true);
+            const auto resource_index = append_scene_string(
+                view_box + '\t' + markup,
+                strings,
+                string_bytes);
+            commands.push_back(webscene_scene_command{
+                6U,
+                resource_index,
+                box.x,
+                box.y,
+                box.width,
+                box.height,
+                with_opacity(resolved_foreground(node)),
+                node.id,
+                0,
+                0,
+                0,
+                0,
+                0});
+        }
+        if (clip_contents) {
+            commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+        }
+        if (has_rotate_transform) {
+            commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+        }
+        if (has_scale_transform) {
+            commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+        }
+        if (has_opacity_group) {
+            commands.push_back(webscene_scene_command{
+                31U, 0U, node.layout.x, node.layout.y,
+                node.layout.width, node.layout.height, 0U, node.id});
+        }
+        return;
+    }
+
+    if (paint_self && node.tag == "path" && node.attributes.contains("d")) {
+        const dom_node* svg = node.parent;
+        while (svg != nullptr && svg->tag != "svg") svg = svg->parent;
+        if (svg != nullptr) {
+            auto box = svg->layout;
+            if ((box.width <= 0 || box.height <= 0) && svg->parent != nullptr) {
+                box = svg->parent->layout;
+            }
+            const auto view_box = svg->attributes.contains("viewBox")
+                ? svg->attributes.at("viewBox")
+                : std::string("0 0 ") + std::to_string(std::max(1.0F, box.width))
+                    + " " + std::to_string(std::max(1.0F, box.height));
+            const auto transform = node.attributes.contains("transform")
+                ? node.attributes.at("transform") : std::string{};
+            const auto stroke_width = node.attributes.contains("stroke-width")
+                ? node.attributes.at("stroke-width") : std::string("1");
+            std::string resource = view_box + '\t' + stroke_width + '\t'
+                + transform + '\t' + node.attributes.at("d");
+            const auto resource_index = append_scene_string(resource, strings, string_bytes);
+            const auto fill = node.attributes.contains("fill")
+                ? node.attributes.at("fill")
+                : svg->attributes.contains("fill") ? svg->attributes.at("fill") : "currentColor";
+            if (fill != "none") {
+                const auto color = fill == "currentColor"
+                    ? resolved_foreground(node)
+                    : parse_color(fill);
+                commands.push_back(webscene_scene_command{
+                    4U,
+                    resource_index,
+                    box.x,
+                    box.y,
+                    box.width,
+                    box.height,
+                    with_opacity(color == 0 ? resolved_foreground(node) : color),
+                    node.id,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0});
+            }
+            const auto stroke = node.attributes.contains("stroke")
+                ? node.attributes.at("stroke")
+                : svg->attributes.contains("stroke") ? svg->attributes.at("stroke") : std::string{};
+            if (!stroke.empty() && stroke != "none") {
+                const auto color = stroke == "currentColor"
+                    ? resolved_foreground(node)
+                    : parse_color(stroke);
+                commands.push_back(webscene_scene_command{
+                    5U,
+                    resource_index,
+                    box.x,
+                    box.y,
+                    box.width,
+                    box.height,
+                    with_opacity(color == 0 ? resolved_foreground(node) : color),
+                    node.id,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0});
+            }
+        }
+    }
+    struct local_paint_entry final {
+        const dom_node* child{};
+        const node_style::pseudo_element* pseudo{};
+        int z_index{};
+        size_t source_order{};
+    };
+    std::vector<local_paint_entry> paint_order;
+    paint_order.reserve(
+        node.children.size()
+        + (before_paints_after_content ? 1U : 0U)
+        + (!after_paints_behind_content ? 1U : 0U));
+    if (before_paints_after_content) {
+        paint_order.push_back(local_paint_entry{
+            nullptr,
+            &node.style.before_pseudo(),
+            node.style.before_pseudo().z_index,
+            0U});
+    }
+    for (size_t index = 0; index < node.children.size(); ++index) {
+        const auto* child = node.children[index];
+        paint_order.push_back(local_paint_entry{
+            child,
+            nullptr,
+            child->paint_z_index,
+            index + 1U});
+    }
+    if (!after_paints_behind_content) {
+        paint_order.push_back(local_paint_entry{
+            nullptr,
+            &node.style.after_pseudo(),
+            node.style.after_pseudo().z_index,
+            node.children.size() + 1U});
+    }
+    std::stable_sort(
+        paint_order.begin(),
+        paint_order.end(),
+        [](const auto& left, const auto& right) {
+            return left.z_index < right.z_index
+                || (left.z_index == right.z_index
+                    && left.source_order < right.source_order);
+        });
+    for (const auto& entry : paint_order) {
+        if (entry.child != nullptr) {
+            if (defer_fixed_descendants
+                && entry.child->style.position == position_mode::fixed) {
+                continue;
+            }
+            append_scene(
+                *entry.child,
+                commands,
+                strings,
+                string_bytes,
+                visibility_hidden,
+                defer_fixed_descendants);
+        } else if (entry.pseudo != nullptr) {
+            append_pseudo(*entry.pseudo);
+        }
+    }
+    if (clip_contents) {
+        commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+    }
+    // Scroll geometry is a DOM/CSS contract, while the presence of an actual
+    // scrollbar is a host-renderer contract. Emit lightweight overlay rails
+    // after the overflow clip so they remain visible above the clipped content.
+    // They do not consume clientWidth/clientHeight, matching overlay scrollbars
+    // on the certified macOS host.
+    if (paint_self && !node.style.scrollbar_hidden
+        && node.layout.width > 0 && node.layout.height > 0) {
+        const auto border_left = resolve_length(
+            node, node.style.border_left_width, node.layout.width, 0);
+        const auto border_right = resolve_length(
+            node, node.style.border_right_width, node.layout.width, 0);
+        const auto border_top = resolve_length(
+            node, node.style.border_top_width, node.layout.height, 0);
+        const auto border_bottom = resolve_length(
+            node, node.style.border_bottom_width, node.layout.height, 0);
+        const auto padding_left = resolve_length(
+            node, node.style.padding_left, node.layout.width, 0);
+        const auto padding_right = resolve_length(
+            node, node.style.padding_right, node.layout.width, 0);
+        const auto padding_top = resolve_length(
+            node, node.style.padding_top, node.layout.height, 0);
+        const auto padding_bottom = resolve_length(
+            node, node.style.padding_bottom, node.layout.height, 0);
+        const auto viewport_x = node.layout.x + border_left + padding_left;
+        const auto viewport_y = node.layout.y + border_top + padding_top;
+        const auto viewport_width = std::max(
+            0.0F,
+            node.layout.width - border_left - border_right - padding_left - padding_right);
+        const auto viewport_height = std::max(
+            0.0F,
+            node.layout.height - border_top - border_bottom - padding_top - padding_bottom);
+        const auto maximum_x = std::max(
+            0.0F, node.scroll_content_width - node.scroll_viewport_width);
+        const auto maximum_y = std::max(
+            0.0F, node.scroll_content_height - node.scroll_viewport_height);
+        constexpr auto rail_rgba = 0x7F7F7F40U;
+        constexpr auto thumb_rgba = 0xA0A0A0D0U;
+        constexpr auto thickness = 6.0F;
+        constexpr auto inset = 2.0F;
+        constexpr auto minimum_thumb = 18.0F;
+        const auto append_overlay_rect = [&](float x, float y, float width, float height,
+                                             uint32_t rgba, float radius) {
+            if (width <= 0 || height <= 0) return;
+            commands.push_back(webscene_scene_command{
+                radius > 0 ? 10U : 9U,
+                0U,
+                x,
+                y,
+                width,
+                height,
+                rgba,
+                node.id,
+                radius,
+                radius,
+                radius,
+                radius,
+                0});
+        };
+        const auto root_viewport_scroll_x = node.parent == nullptr
+            && node.style.overflow_x == overflow_mode::visible;
+        const auto root_viewport_scroll_y = node.parent == nullptr
+            && node.style.overflow_y == overflow_mode::visible;
+        if ((node.style.scroll_y_enabled || root_viewport_scroll_y) && maximum_y > 0.01F
+            && viewport_width >= thickness + inset * 2
+            && viewport_height > 0) {
+            const auto rail_x = viewport_x + viewport_width - thickness - inset;
+            const auto rail_y = viewport_y + inset;
+            const auto rail_height = std::max(0.0F, viewport_height - inset * 2);
+            const auto thumb_height = std::min(
+                rail_height,
+                std::max(
+                    minimum_thumb,
+                    rail_height * viewport_height
+                        / std::max(viewport_height, node.scroll_content_height)));
+            const auto thumb_travel = std::max(0.0F, rail_height - thumb_height);
+            const auto thumb_y = rail_y + thumb_travel
+                * std::clamp(node.scroll_top / maximum_y, 0.0F, 1.0F);
+            append_overlay_rect(
+                rail_x, rail_y, thickness, rail_height, rail_rgba, thickness * 0.5F);
+            append_overlay_rect(
+                rail_x, thumb_y, thickness, thumb_height, thumb_rgba, thickness * 0.5F);
+        }
+        if ((node.style.scroll_x_enabled || root_viewport_scroll_x) && maximum_x > 0.01F
+            && viewport_height >= thickness + inset * 2
+            && viewport_width > 0) {
+            const auto rail_x = viewport_x + inset;
+            const auto rail_y = viewport_y + viewport_height - thickness - inset;
+            const auto rail_width = std::max(0.0F, viewport_width - inset * 2);
+            const auto thumb_width = std::min(
+                rail_width,
+                std::max(
+                    minimum_thumb,
+                    rail_width * viewport_width
+                        / std::max(viewport_width, node.scroll_content_width)));
+            const auto thumb_travel = std::max(0.0F, rail_width - thumb_width);
+            const auto thumb_x = rail_x + thumb_travel
+                * std::clamp(node.scroll_left / maximum_x, 0.0F, 1.0F);
+            append_overlay_rect(
+                rail_x, rail_y, rail_width, thickness, rail_rgba, thickness * 0.5F);
+            append_overlay_rect(
+                thumb_x, rail_y, thumb_width, thickness, thumb_rgba, thickness * 0.5F);
+        }
+    }
+    if (has_rotate_transform) {
+        commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+    }
+    if (has_scale_transform) {
+        commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+    }
+    if (has_opacity_group) {
+        commands.push_back(webscene_scene_command{
+            31U, 0U, node.layout.x, node.layout.y,
+            node.layout.width, node.layout.height, 0U, node.id});
+    }
+}

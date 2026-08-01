@@ -32,8 +32,16 @@
   <ItemGroup>
     <!-- The native scene reader and retained Skia renderer are shared with the
          reference backend; WEBSCENE_UNO removes only Avalonia's surface adapter. -->
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeCanvasSceneRenderer.cs" Link="NativeCanvasSceneRenderer.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneComposition.cs" Link="NativeSceneComposition.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneInteropTypes.cs" Link="NativeSceneInteropTypes.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRenderingTypes.cs" Link="NativeSceneRenderingTypes.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeTextShaping.cs" Link="NativeTextShaping.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropCallbacks.cs" Link="NativeInteropCallbacks.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropResult.cs" Link="NativeInteropResult.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropTransport.cs" Link="NativeInteropTransport.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropValues.cs" Link="NativeInteropValues.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneRuntime.cs" Link="NativeWebSceneRuntime.cs" />
   </ItemGroup>
 </Project>

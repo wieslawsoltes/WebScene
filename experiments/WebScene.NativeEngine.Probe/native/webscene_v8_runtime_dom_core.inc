@@ -1,0 +1,2766 @@
+    std::string describe_exception(
+        v8::TryCatch& try_catch,
+        v8::Local<v8::Context> exception_context = {})
+    {
+        std::ostringstream result;
+        result << to_utf8(isolate, try_catch.Exception());
+        auto message = try_catch.Message();
+        if (!message.IsEmpty()) {
+            result << " at " << to_utf8(isolate, message->GetScriptOrigin().ResourceName());
+            auto local_context = exception_context.IsEmpty()
+                ? isolate->GetCurrentContext()
+                : exception_context;
+            const auto line = message->GetLineNumber(local_context).FromMaybe(0);
+            if (line > 0) result << ':' << line;
+        }
+        auto stack = try_catch.StackTrace(exception_context.IsEmpty()
+            ? isolate->GetCurrentContext()
+            : exception_context);
+        v8::Local<v8::Value> stack_value;
+        if (stack.ToLocal(&stack_value) && stack_value->IsString()) {
+            const auto stack_text = to_utf8(isolate, stack_value);
+            if (!stack_text.empty()) result << "\n" << stack_text;
+        }
+        return result.str();
+    }
+
+    void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
+    {
+        if (!document.dirty()) return;
+        if (reusable_client_geometry_subject != nullptr
+            && document.can_reuse_client_geometry(
+                *reusable_client_geometry_subject)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            ++client_geometry_layout_reuse_count;
+#endif
+            return;
+        }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        binding_callback_timer timer(profile_startup ? &startup_layout : nullptr);
+#endif
+        const auto [width, height, device_scale_factor, preferred_color_scheme] =
+            viewport_provider();
+        static_cast<void>(device_scale_factor);
+        static_cast<void>(preferred_color_scheme);
+        document.layout(width, height);
+    }
+
+    void mark_cssom_layout_dirty(
+        dom_node& node,
+        std::string_view canonical_property_name)
+    {
+        const auto isolated_out_of_flow_geometry =
+            node.style.position == position_mode::absolute
+            || node.style.position == position_mode::fixed;
+        const auto changes_only_positioned_subtree =
+            canonical_property_name == "width"
+            || canonical_property_name == "height"
+            || canonical_property_name == "min-width"
+            || canonical_property_name == "min-height"
+            || canonical_property_name == "max-width"
+            || canonical_property_name == "max-height"
+            || canonical_property_name == "left"
+            || canonical_property_name == "top"
+            || canonical_property_name == "right"
+            || canonical_property_name == "bottom";
+        if (isolated_out_of_flow_geometry && changes_only_positioned_subtree) {
+            document.mark_out_of_flow_geometry_dirty(node);
+        } else {
+            document.mark_dirty();
+        }
+    }
+
+    dom_node& active_root()
+    {
+        auto local_context = isolate->GetCurrentContext();
+        auto* root = static_cast<dom_node*>(local_context->GetAlignedPointerFromEmbedderData(
+            1,
+            v8::kEmbedderDataTypeTagDefault));
+        return root == nullptr ? document.body() : *root;
+    }
+
+    static dom_node& exposed_body_for_root(dom_node& root)
+    {
+        auto* html = root.tag == "html" ? &root : nullptr;
+        if (html == nullptr) {
+            const auto found = std::find_if(
+                root.children.begin(),
+                root.children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "html"; });
+            if (found != root.children.end()) html = *found;
+        }
+        if (html != nullptr) {
+            const auto found = std::find_if(
+                html->children.begin(),
+                html->children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "body"; });
+            if (found != html->children.end()) return **found;
+        }
+        return root;
+    }
+
+    bool in_frame_context() const
+    {
+        if (frame_context.IsEmpty()) return false;
+        return isolate->GetCurrentContext() == frame_context.Get(isolate);
+    }
+
+    bool is_document_object(v8::Local<v8::Object> candidate) const
+    {
+        if (!document_object.IsEmpty()
+            && candidate->StrictEquals(document_object.Get(isolate))) return true;
+        for (const auto& [_, document_value] : frame_documents) {
+            if (!document_value.IsEmpty()
+                && candidate->StrictEquals(document_value.Get(isolate))) return true;
+        }
+        for (const auto& [_, document_value] : actual_frame_documents) {
+            if (!document_value.IsEmpty()
+                && candidate->StrictEquals(document_value.Get(isolate))) return true;
+        }
+        return false;
+    }
+
+    uint64_t wrapper_key(const dom_node& node) const
+    {
+        return static_cast<uint64_t>(node.id) | (in_frame_context() ? (1ULL << 63U) : 0ULL);
+    }
+
+    template <typename Callback>
+    static void visit_subtree(dom_node& root, Callback&& callback)
+    {
+        callback(root);
+        for (auto* child : root.children) {
+            if (child != nullptr) visit_subtree(*child, callback);
+        }
+    }
+
+    void weaken_detached_subtree_wrappers(dom_node& root)
+    {
+        // A persistent V8 handle is a GC root. Keeping every historical DOM
+        // wrapper strong therefore retains React's expando graph forever after
+        // the corresponding native node is removed. Model a detached DOM tree
+        // as one weakly rooted object graph: any JavaScript reference to any
+        // wrapper keeps the complete tree alive, while an unreachable tree can
+        // be reclaimed by V8 as a cycle.
+        for (const auto frame_realm : {false, true}) {
+            if (frame_realm && frame_context.IsEmpty()) continue;
+            auto local_context = frame_realm ? frame_context.Get(isolate) : context.Get(isolate);
+            if (local_context.IsEmpty()) continue;
+            v8::Context::Scope context_scope(local_context);
+            std::vector<v8::Local<v8::Object>> wrappers;
+            const auto collect = [&](auto& cache, uint64_t key) {
+                const auto known = cache.find(key);
+                if (known == cache.end() || known->second.IsEmpty()) return;
+                wrappers.push_back(known->second.Get(isolate));
+            };
+            visit_subtree(root, [&](dom_node& node) {
+                const auto key = static_cast<uint64_t>(node.id)
+                    | (frame_realm ? (1ULL << 63U) : 0ULL);
+                collect(node_wrappers, key);
+                collect(class_list_wrappers, key);
+                collect(style_wrappers, key);
+                collect(computed_style_wrappers, key);
+                collect(canvas_contexts, key);
+            });
+            if (wrappers.empty()) continue;
+
+            auto anchor = v8::Object::New(isolate);
+            auto members = v8::Array::New(isolate, static_cast<int>(wrappers.size()));
+            for (size_t index = 0; index < wrappers.size(); ++index) {
+                members->Set(
+                    local_context,
+                    static_cast<uint32_t>(index),
+                    wrappers[index]).Check();
+            }
+            anchor->Set(
+                local_context,
+                js_string(isolate, "members"),
+                members).Check();
+            const auto anchor_key = v8::Private::ForApi(
+                isolate,
+                js_string(isolate, "webscene.detached-dom-anchor"));
+            for (auto wrapper : wrappers) {
+                wrapper->SetPrivate(local_context, anchor_key, anchor).Check();
+            }
+
+            const auto weaken = [](auto& cache, uint64_t key) {
+                const auto known = cache.find(key);
+                if (known != cache.end() && !known->second.IsEmpty()
+                    && !known->second.IsWeak()) {
+                    known->second.SetWeak();
+                }
+            };
+            visit_subtree(root, [&](dom_node& node) {
+                const auto key = static_cast<uint64_t>(node.id)
+                    | (frame_realm ? (1ULL << 63U) : 0ULL);
+                weaken(node_wrappers, key);
+                weaken(class_list_wrappers, key);
+                weaken(style_wrappers, key);
+                weaken(computed_style_wrappers, key);
+                weaken(canvas_contexts, key);
+            });
+        }
+        register_detached_subtree(root);
+    }
+
+    void retain_connected_subtree_wrappers(dom_node& root)
+    {
+        for (const auto frame_realm : {false, true}) {
+            if (frame_realm && frame_context.IsEmpty()) continue;
+            auto local_context = frame_realm ? frame_context.Get(isolate) : context.Get(isolate);
+            if (local_context.IsEmpty()) continue;
+            v8::Context::Scope context_scope(local_context);
+            const auto anchor_key = v8::Private::ForApi(
+                isolate,
+                js_string(isolate, "webscene.detached-dom-anchor"));
+            const auto retain = [&](auto& cache, uint64_t key) {
+                const auto known = cache.find(key);
+                if (known == cache.end() || known->second.IsEmpty()) return;
+                if (known->second.IsWeak()) known->second.ClearWeak();
+                known->second.Get(isolate)->DeletePrivate(local_context, anchor_key).Check();
+            };
+            visit_subtree(root, [&](dom_node& node) {
+                const auto key = static_cast<uint64_t>(node.id)
+                    | (frame_realm ? (1ULL << 63U) : 0ULL);
+                retain(node_wrappers, key);
+                retain(class_list_wrappers, key);
+                retain(style_wrappers, key);
+                retain(computed_style_wrappers, key);
+                retain(canvas_contexts, key);
+            });
+        }
+    }
+
+    void detach_all_children(dom_node& parent)
+    {
+        auto children = parent.children;
+        auto stylesheets_changed = false;
+        for (auto* child : children) {
+            if (child != nullptr) {
+                stylesheets_changed |= deactivate_connected_stylesheets(*child, false);
+            }
+        }
+        document.remove_all_children(parent);
+        for (auto* child : children) {
+            if (child != nullptr) weaken_detached_subtree_wrappers(*child);
+        }
+        if (stylesheets_changed) recascade_after_stylesheet_change();
+    }
+
+    void register_detached_subtree(dom_node& root)
+    {
+        if (&root == &document.body() || root.parent != nullptr) return;
+        for (const auto known_id : detached_dom_roots) {
+            const auto* known = document.find_by_native_id(known_id);
+            if (known != nullptr && subtree_contains(*known, &root)) return;
+        }
+        std::vector<uint32_t> retained_roots;
+        retained_roots.reserve(detached_dom_roots.size() + 1U);
+        for (const auto known_id : detached_dom_roots) {
+            const auto* known = document.find_by_native_id(known_id);
+            if (known != nullptr && !subtree_contains(root, known)) {
+                retained_roots.push_back(known_id);
+            }
+        }
+        size_t count = 0U;
+        visit_subtree(root, [&](const dom_node&) { ++count; });
+        retained_roots.push_back(root.id);
+        detached_dom_roots = std::move(retained_roots);
+        detached_nodes_since_gc += count;
+        if (detached_nodes_since_gc >= detached_dom_gc_threshold) {
+            detached_dom_gc_requested = true;
+        }
+    }
+
+    bool subtree_has_live_wrappers(dom_node& root) const
+    {
+        auto live = false;
+        const auto inspect = [&](const auto& cache, uint64_t key) {
+            const auto known = cache.find(key);
+            return known != cache.end() && !known->second.IsEmpty();
+        };
+        visit_subtree(root, [&](dom_node& node) {
+            for (const auto frame_realm : {false, true}) {
+                const auto key = static_cast<uint64_t>(node.id)
+                    | (frame_realm ? (1ULL << 63U) : 0ULL);
+                live = live
+                    || inspect(node_wrappers, key)
+                    || inspect(class_list_wrappers, key)
+                    || inspect(style_wrappers, key)
+                    || inspect(computed_style_wrappers, key)
+                    || inspect(canvas_contexts, key);
+            }
+        });
+        return live;
+    }
+
+    void release_detached_subtree(dom_node& root)
+    {
+        std::unordered_set<dom_node*> nodes;
+        std::unordered_set<uint32_t> node_ids;
+        visit_subtree(root, [&](dom_node& node) {
+            nodes.insert(&node);
+            node_ids.insert(node.id);
+        });
+        const auto erase_wrappers = [&](auto& cache) {
+            std::erase_if(cache, [&](const auto& entry) {
+                return node_ids.contains(static_cast<uint32_t>(entry.first));
+            });
+        };
+        erase_wrappers(node_wrappers);
+        erase_wrappers(class_list_wrappers);
+        erase_wrappers(style_wrappers);
+        erase_wrappers(computed_style_wrappers);
+        erase_wrappers(canvas_contexts);
+        std::erase_if(canvas_states, [&](const auto& entry) {
+            return node_ids.contains(static_cast<uint32_t>(entry.first));
+        });
+        std::erase_if(pending_frame_hydrations, [&](const auto* node) {
+            return nodes.contains(const_cast<dom_node*>(node));
+        });
+        std::erase_if(connected_resources, [&](const auto& resource) {
+            return nodes.contains(resource.node);
+        });
+        for (auto& observer : resize_observers) {
+            std::erase_if(observer->nodes, [&](const auto* node) {
+                return nodes.contains(const_cast<dom_node*>(node));
+            });
+            for (const auto id : node_ids) observer->delivered_sizes.erase(id);
+        }
+        std::erase_if(provisional_frame_bodies, [&](const auto& entry) {
+            return node_ids.contains(entry.first) || nodes.contains(entry.second);
+        });
+        for (const auto id : node_ids) {
+            frame_documents.erase(id);
+            frame_windows.erase(id);
+            actual_frame_windows.erase(id);
+            actual_frame_contexts.erase(id);
+            actual_frame_documents.erase(id);
+            frame_session_storage.erase(id);
+            frame_load_listeners.erase(id);
+        }
+        if (!frame_context.IsEmpty()) {
+            auto local_frame_context = frame_context.Get(isolate);
+            auto* frame_root = static_cast<dom_node*>(
+                local_frame_context->GetAlignedPointerFromEmbedderData(
+                    1,
+                    v8::kEmbedderDataTypeTagDefault));
+            if (nodes.contains(frame_root)) {
+                frame_context.Reset();
+                frame_base_address.clear();
+            }
+        }
+        for (auto& [type, listeners] : frame_event_listeners) {
+            static_cast<void>(type);
+            std::erase_if(listeners, [&](const auto& listener) {
+                return node_ids.contains(listener.target);
+            });
+        }
+        if (nodes.contains(active_element)) active_element = nullptr;
+        if (nodes.contains(pointer_capture_target)) pointer_capture_target = nullptr;
+        if (nodes.contains(pointer_down_target)) pointer_down_target = nullptr;
+        if (nodes.contains(hover_target)) hover_target = nullptr;
+        if (nodes.contains(current_related_target)) current_related_target = nullptr;
+        released_detached_dom_nodes += document.erase_detached_subtree(root);
+    }
+
+    void collect_detached_dom_if_requested()
+    {
+        if (!detached_dom_gc_requested) return;
+        detached_dom_gc_requested = false;
+        detached_nodes_since_gc = 0U;
+        std::vector<uint32_t> disconnected_roots;
+        std::vector<uint32_t> reconnected_roots;
+        disconnected_roots.reserve(detached_dom_roots.size());
+        reconnected_roots.reserve(detached_dom_roots.size());
+        for (const auto root_id : detached_dom_roots) {
+            auto* root = document.find_by_native_id(root_id);
+            if (root == nullptr) continue;
+            if (is_connected(*root)) reconnected_roots.push_back(root_id);
+            else disconnected_roots.push_back(root_id);
+        }
+        detached_dom_roots = std::move(disconnected_roots);
+        for (const auto root_id : reconnected_roots) {
+            if (auto* root = document.find_by_native_id(root_id); root != nullptr) {
+                retain_connected_subtree_wrappers(*root);
+            }
+        }
+        isolate->LowMemoryNotification();
+        size_t index = 0U;
+        while (index < detached_dom_roots.size()) {
+            auto* root = document.find_by_native_id(detached_dom_roots[index]);
+            if (root == nullptr || is_connected(*root)) {
+                detached_dom_roots.erase(
+                    detached_dom_roots.begin() + static_cast<std::ptrdiff_t>(index));
+                continue;
+            }
+            if (subtree_has_live_wrappers(*root)) {
+                ++index;
+                continue;
+            }
+            std::unordered_set<dom_node*> released;
+            visit_subtree(*root, [&](dom_node& node) { released.insert(&node); });
+            std::erase_if(detached_dom_roots, [&](const auto candidate_id) {
+                return released.contains(document.find_by_native_id(candidate_id));
+            });
+            release_detached_subtree(*root);
+        }
+    }
+
+    v8::Local<v8::Object> wrap_node(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        auto known = node_wrappers.find(key);
+        if (known != node_wrappers.end() && !known->second.IsEmpty()) {
+            if (is_connected(node) && known->second.IsWeak()) known->second.ClearWeak();
+            return known->second.Get(isolate);
+        }
+        if (known != node_wrappers.end()) node_wrappers.erase(known);
+        auto local_context = isolate->GetCurrentContext();
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        auto selected_template = node.kind == dom_node_kind::element
+            ? (node.namespace_uri() == dom_node::html_namespace_uri
+                ? html_element_template.Get(isolate)
+                : element_template.Get(isolate))
+            : node.kind == dom_node_kind::document_fragment
+                ? document_fragment_template.Get(isolate)
+                : node_template.Get(isolate);
+        auto object = selected_template->InstanceTemplate()
+#else
+        auto object = element_template.Get(isolate)->InstanceTemplate()
+#endif
+            ->NewInstance(local_context)
+            .ToLocalChecked();
+#if !defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        v8::Local<v8::Value> element_constructor;
+        const auto has_element_constructor = local_context->Global()
+            ->Get(local_context, js_string(isolate, "Element"))
+            .ToLocal(&element_constructor)
+            && element_constructor->IsFunction();
+        if (has_element_constructor) {
+            v8::Local<v8::Value> element_prototype;
+            if (element_constructor.As<v8::Function>()
+                    ->Get(
+                        local_context,
+                        js_string(isolate, "prototype"))
+                    .ToLocal(&element_prototype)
+                && element_prototype->IsObject()) {
+                object->SetPrototype(local_context, element_prototype).Check();
+            }
+        }
+#endif
+        object->SetAlignedPointerInInternalField(
+            0,
+            &node,
+            v8::kEmbedderDataTypeTagDefault);
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        object->SetInternalField(1, v8::Undefined(isolate));
+#endif
+        if (node.tag == "button" || node.tag == "fieldset" || node.tag == "input"
+            || node.tag == "object" || node.tag == "output" || node.tag == "select"
+            || node.tag == "textarea") {
+            object->SetNativeDataProperty(
+                local_context,
+                js_string(isolate, "form"),
+                get_form_owner).Check();
+        }
+        auto& wrapper = node_wrappers[key];
+        wrapper.Reset(isolate, object);
+        if (!is_connected(node)) wrapper.SetWeak();
+        return object;
+    }
+
+    v8::Local<v8::Object> wrap_style(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        auto known = style_wrappers.find(key);
+        if (known != style_wrappers.end() && !known->second.IsEmpty()) {
+            if (is_connected(node) && known->second.IsWeak()) known->second.ClearWeak();
+            return known->second.Get(isolate);
+        }
+        if (known != style_wrappers.end()) style_wrappers.erase(known);
+        auto object = style_template.Get(isolate)
+            ->NewInstance(isolate->GetCurrentContext())
+            .ToLocalChecked();
+        object->SetAlignedPointerInInternalField(
+            0,
+            &node,
+            v8::kEmbedderDataTypeTagDefault);
+        object->SetInternalField(1, v8::False(isolate));
+        auto& wrapper = style_wrappers[key];
+        wrapper.Reset(isolate, object);
+        if (!is_connected(node)) wrapper.SetWeak();
+        return object;
+    }
+
+    v8::Local<v8::Object> wrap_class_list(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        auto known = class_list_wrappers.find(key);
+        if (known != class_list_wrappers.end() && !known->second.IsEmpty()) {
+            if (is_connected(node) && known->second.IsWeak()) known->second.ClearWeak();
+            return known->second.Get(isolate);
+        }
+        if (known != class_list_wrappers.end()) class_list_wrappers.erase(known);
+        auto local_context = isolate->GetCurrentContext();
+        auto data = v8::External::New(
+            isolate,
+            &node,
+            v8::kExternalPointerTypeTagDefault);
+        auto object = v8::Object::New(isolate);
+        object->Set(
+            local_context,
+            js_string(isolate, "add"),
+            v8::Function::New(local_context, class_list_add, data).ToLocalChecked()).Check();
+        object->Set(
+            local_context,
+            js_string(isolate, "remove"),
+            v8::Function::New(local_context, class_list_remove, data).ToLocalChecked()).Check();
+        object->Set(
+            local_context,
+            js_string(isolate, "contains"),
+            v8::Function::New(local_context, class_list_contains, data).ToLocalChecked()).Check();
+        object->Set(
+            local_context,
+            js_string(isolate, "toggle"),
+            v8::Function::New(local_context, class_list_toggle, data).ToLocalChecked()).Check();
+        auto value_getter = v8::Function::New(
+            local_context,
+            class_list_value_getter_bridge,
+            data).ToLocalChecked();
+        auto value_setter = v8::Function::New(
+            local_context,
+            class_list_value_setter_bridge,
+            data).ToLocalChecked();
+        v8::PropertyDescriptor value_descriptor(value_getter, value_setter);
+        value_descriptor.set_enumerable(true);
+        value_descriptor.set_configurable(true);
+        object->DefineProperty(
+            local_context,
+            js_string(isolate, "value"),
+            value_descriptor).Check();
+        auto& wrapper = class_list_wrappers[key];
+        wrapper.Reset(isolate, object);
+        if (!is_connected(node)) wrapper.SetWeak();
+        return object;
+    }
+
+    v8::Local<v8::Object> wrap_computed_style(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        auto known = computed_style_wrappers.find(key);
+        if (known != computed_style_wrappers.end() && !known->second.IsEmpty()) {
+            if (is_connected(node) && known->second.IsWeak()) known->second.ClearWeak();
+            return known->second.Get(isolate);
+        }
+        if (known != computed_style_wrappers.end()) computed_style_wrappers.erase(known);
+        auto object = style_template.Get(isolate)
+            ->NewInstance(isolate->GetCurrentContext())
+            .ToLocalChecked();
+        object->SetAlignedPointerInInternalField(
+            0,
+            &node,
+            v8::kEmbedderDataTypeTagDefault);
+        object->SetInternalField(1, v8::True(isolate));
+        auto& wrapper = computed_style_wrappers[key];
+        wrapper.Reset(isolate, object);
+        if (!is_connected(node)) wrapper.SetWeak();
+        return object;
+    }
+
+    void enqueue_connected_resource_if_needed(
+        dom_node& node,
+        v8::Local<v8::Object> wrapper,
+        v8::Local<v8::Context> resource_context)
+    {
+        if (node.tag == "script") {
+            const auto authored_type = node.attributes.find("type");
+            if (authored_type != node.attributes.end()) {
+                auto type = lower_html_name(authored_type->second);
+                const auto first = type.find_first_not_of(" \t\r\n\f");
+                const auto last = type.find_last_not_of(" \t\r\n\f");
+                type = first == std::string::npos
+                    ? std::string{}
+                    : type.substr(first, last - first + 1U);
+                const auto executable = type.empty() || type == "module"
+                    || type == "text/javascript"
+                    || type == "application/javascript"
+                    || type == "application/ecmascript"
+                    || type == "text/ecmascript";
+                if (!executable) return;
+            }
+        }
+        if (node.tag == "img") {
+            const auto source = node.attributes.find("src");
+            if (source != node.attributes.end()) {
+                const auto& image = node.replaced_image();
+                if (image.complete && image.source == source->second) return;
+            }
+            // Assigning src schedules an image load even while the element is
+            // detached. Appending that same element must not enqueue a second
+            // load or dispatch a duplicate load event. A pending task reads the
+            // node's latest src, so coalescing also handles src replacement.
+            if (std::any_of(
+                    connected_resources.begin(),
+                    connected_resources.end(),
+                    [&node](const auto& task) {
+                        return task.node == &node;
+                    })) {
+                return;
+            }
+        }
+        auto resource_element =
+            node.tag == "link" || node.tag == "script" || node.tag == "img";
+        v8::Local<v8::Value> onload;
+        const auto has_onload = wrapper->Get(
+                resource_context,
+                js_string(isolate, "onload")).ToLocal(&onload)
+            && onload->IsFunction();
+        if (!resource_element && !has_onload) return;
+        connected_resources.push_back(connected_resource_task{
+            &node,
+            v8::Global<v8::Context>(isolate, resource_context),
+            v8::Global<v8::Object>(isolate, wrapper)});
+    }
+
+    void enqueue_iframe_hydration_if_needed(dom_node& node)
+    {
+        if (!is_connected(node)) return;
+        if (node.tag != "iframe") {
+            for (auto* child : node.children) {
+                if (child != nullptr) {
+                    enqueue_iframe_hydration_if_needed(*child);
+                }
+            }
+            return;
+        }
+        const auto source = node.attributes.find("src");
+        if (source != node.attributes.end()) {
+            const auto object = object_urls.find(source->second);
+            if (object != object_urls.end()) {
+                node.attributes["object-html"] = object->second;
+            } else {
+                const auto& base =
+                    in_frame_context() ? frame_base_address : document_base_address;
+                const auto resolved = resolve_resource_url(source->second, base);
+                if (resolved.starts_with("http://")
+                    || resolved.starts_with("https://")) {
+                    node.attributes["data-webscene-remote-attempt"] = resolved;
+                    std::string html;
+                    std::string resolved_name;
+                    if (load_text_resource(
+                            resolved,
+                            {},
+                            WEBSCENE_RESOURCE_DOCUMENT,
+                            html,
+                            resolved_name)) {
+                        node.attributes["src"] = resolved;
+                        node.attributes["object-html"] = std::move(html);
+                        node.attributes["data-webscene-remote-result"] = "loaded";
+                    } else {
+                        node.attributes["data-webscene-remote-result"] = "failed";
+                    }
+                }
+            }
+        }
+        if (!node.attributes.contains("object-html")
+            && !node.attributes.contains("frame-html")) return;
+        if (std::find(pending_frame_hydrations.begin(), pending_frame_hydrations.end(), &node)
+            == pending_frame_hydrations.end()) {
+            pending_frame_hydrations.push_back(&node);
+        }
+    }
+
+    v8::Local<v8::Object> frame_document(dom_node& node)
+    {
+        auto known = frame_documents.find(node.id);
+        if (known != frame_documents.end()) return known->second.Get(isolate);
+        auto local_context = isolate->GetCurrentContext();
+        auto object = frame_document_template.Get(isolate)->NewInstance(local_context).ToLocalChecked();
+        object->Set(local_context, js_string(isolate, "readyState"), js_string(isolate, "complete")).Check();
+        object->Set(local_context, js_string(isolate, "oninput"), v8::Null(isolate)).Check();
+        const auto source = node.attributes.contains("src")
+            ? resolve_resource_url(node.attributes["src"], document_base_address)
+            : std::string("about:blank");
+        set_document_address(local_context, object, source);
+        auto& body = document.create_element("body");
+        document.append_child(node, body);
+        object->SetAlignedPointerInInternalField(
+            0,
+            &body,
+            v8::kEmbedderDataTypeTagDefault);
+        provisional_frame_bodies[node.id] = &body;
+        object->Set(local_context, js_string(isolate, "body"), wrap_node(body)).Check();
+        frame_documents[node.id].Reset(isolate, object);
+        return object;
+    }
+
+    v8::Local<v8::Object> frame_window(dom_node& node)
+    {
+        auto known = frame_windows.find(node.id);
+        if (known != frame_windows.end()) return known->second.Get(isolate);
+        auto local_context = context.Get(isolate);
+        auto object = frame_window_template.Get(isolate)->NewInstance(local_context).ToLocalChecked();
+        object->SetAlignedPointerInInternalField(
+            0,
+            &node,
+            v8::kEmbedderDataTypeTagDefault);
+        auto location = v8::Object::New(isolate);
+        const auto source = node.attributes.contains("src") ? node.attributes["src"] : "about:blank";
+        location->Set(local_context, js_string(isolate, "href"), js_string(isolate, source.c_str())).Check();
+        object->Set(local_context, js_string(isolate, "location"), location).Check();
+        object->Set(local_context, js_string(isolate, "document"), frame_document(node)).Check();
+        object->Set(local_context, js_string(isolate, "window"), object).Check();
+        object->Set(local_context, js_string(isolate, "self"), object).Check();
+        object->Set(local_context, js_string(isolate, "parent"), local_context->Global()).Check();
+        install_screen(local_context, object);
+        frame_windows[node.id].Reset(isolate, object);
+        return object;
+    }
+
+    bool compiled_css_selector_list_matches(
+        const dom_node& node,
+        const compiled_css_selector_list& selectors,
+        const dom_node* scope_root = nullptr) const
+    {
+        return std::any_of(
+            selectors.selectors.begin(),
+            selectors.selectors.end(),
+            [&](const auto& selector) {
+                return !selector.compounds.empty()
+                    && compiled_css_selector_matches(
+                        node,
+                        selector,
+                        selector.compounds.size() - 1U,
+                        scope_root);
+            });
+    }
+
+    void collect_selector_matches(
+        dom_node& node,
+        const compiled_css_selector_list& selector,
+        bool include_node,
+        std::vector<dom_node*>& result,
+        const dom_node* scope_root) const
+    {
+        if (include_node
+            && !node.tag.empty()
+            && node.tag.front() != '#'
+            && compiled_css_selector_list_matches(
+                node,
+                selector,
+                scope_root)) result.push_back(&node);
+        for (auto* child : node.children) {
+            if (child != nullptr) collect_selector_matches(
+                *child,
+                selector,
+                true,
+                result,
+                scope_root);
+        }
+    }
+
+    dom_node* find_selector_match(
+        dom_node& node,
+        const compiled_css_selector_list& selector,
+        bool include_node,
+        const dom_node* scope_root) const
+    {
+        if (include_node
+            && !node.tag.empty()
+            && node.tag.front() != '#'
+            && compiled_css_selector_list_matches(
+                node,
+                selector,
+                scope_root)) {
+            return &node;
+        }
+        for (auto* child : node.children) {
+            if (child == nullptr) continue;
+            if (auto* match = find_selector_match(
+                    *child,
+                    selector,
+                    true,
+                    scope_root);
+                match != nullptr) {
+                return match;
+            }
+        }
+        return nullptr;
+    }
+
+    static dom_node* find_element_by_id(
+        dom_node& node,
+        std::string_view id,
+        bool include_node = true)
+    {
+        if (include_node && node.id_attribute == id) return &node;
+        for (auto* child : node.children) {
+            if (child == nullptr) continue;
+            if (auto* match = find_element_by_id(*child, id); match != nullptr) {
+                return match;
+            }
+        }
+        return nullptr;
+    }
+
+    bool is_valid_dom_selector_list(std::string_view selector) const
+    {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        // DOM selector APIs validate and then immediately match the same selector.
+        // Reuse the compiled-selector cache so frequently repeated querySelector,
+        // matches, and closest calls do not cross the Rust FFI and allocate a full
+        // Servo parse result on every invocation.
+        return !cached_css_selector_list(selector).selectors.empty();
+#else
+        selector = trim_css_view(selector);
+        if (selector.empty()) return false;
+
+        static const std::unordered_set<std::string> recognized_pseudo_classes{
+            "root", "scope", "empty",
+            "first-child", "last-child", "only-child",
+            "first-of-type", "last-of-type", "only-of-type",
+            "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type",
+            "not", "is", "where", "has",
+            "hover", "active", "focus", "focus-visible", "focus-within",
+            "disabled", "enabled", "checked", "indeterminate", "default",
+            "required", "optional", "valid", "invalid", "in-range", "out-of-range",
+            "read-only", "read-write", "placeholder-shown", "autofill",
+            "link", "visited", "any-link", "local-link", "target", "target-within",
+            "lang", "dir", "defined", "fullscreen", "modal", "open",
+            "picture-in-picture", "user-valid", "user-invalid", "blank"};
+        static const std::unordered_set<std::string> recognized_pseudo_elements{
+            "before", "after", "first-letter", "first-line", "selection", "marker",
+            "placeholder", "backdrop", "file-selector-button", "cue", "cue-region",
+            "grammar-error", "spelling-error", "target-text"};
+        static const std::unordered_set<std::string> selector_argument_pseudos{
+            "not", "is", "where", "has"};
+        static const std::unordered_set<std::string> value_argument_pseudos{
+            "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type", "lang", "dir"};
+
+        auto bracket_depth = 0;
+        auto parenthesis_depth = 0;
+        char quote = 0;
+        auto item_has_token = false;
+        for (size_t index = 0; index < selector.size(); ++index) {
+            const auto character = selector[index];
+            if (quote != 0) {
+                if (character == quote && (index == 0U || selector[index - 1U] != '\\')) quote = 0;
+                continue;
+            }
+            if (character == '\\') {
+                index = skip_css_escape_sequence(selector, index) - 1U;
+                item_has_token = true;
+                continue;
+            }
+            if (character == '\'' || character == '"') {
+                quote = character;
+                item_has_token = true;
+                continue;
+            }
+            if (character == '[') {
+                ++bracket_depth;
+                item_has_token = true;
+                continue;
+            }
+            if (character == ']') {
+                if (--bracket_depth < 0) return false;
+                continue;
+            }
+            if (bracket_depth != 0) continue;
+            if (character == '(') {
+                ++parenthesis_depth;
+                continue;
+            }
+            if (character == ')') {
+                if (--parenthesis_depth < 0) return false;
+                continue;
+            }
+            if (character == ',' && parenthesis_depth == 0) {
+                if (!item_has_token) return false;
+                item_has_token = false;
+                continue;
+            }
+            if (std::isspace(static_cast<unsigned char>(character))) continue;
+            if (character == '{' || character == '}' || character == '<' || character == '%') {
+                return false;
+            }
+            if (character == '.' || character == '#') {
+                auto cursor = index + 1U;
+                if (cursor >= selector.size()) return false;
+                const auto identifier = read_css_identifier(selector, cursor);
+                if (identifier.empty()) return false;
+                index = cursor - 1U;
+                item_has_token = true;
+                continue;
+            }
+            if (character != ':') {
+                item_has_token = true;
+                continue;
+            }
+
+            auto cursor = index + 1U;
+            auto is_pseudo_element = cursor < selector.size() && selector[cursor] == ':';
+            if (is_pseudo_element) ++cursor;
+            auto name = lower_html_name(read_css_identifier(selector, cursor));
+            if (name.empty()) return false;
+            is_pseudo_element = is_pseudo_element || name == "before" || name == "after";
+            if (is_pseudo_element
+                ? !recognized_pseudo_elements.contains(name)
+                : !recognized_pseudo_classes.contains(name)) return false;
+
+            const auto has_argument = cursor < selector.size() && selector[cursor] == '(';
+            const auto requires_argument = selector_argument_pseudos.contains(name)
+                || value_argument_pseudos.contains(name);
+            if (requires_argument != has_argument || (is_pseudo_element && has_argument)) return false;
+            if (has_argument) {
+                const auto argument_start = cursor + 1U;
+                auto nested_depth = 1;
+                char argument_quote = 0;
+                auto close = argument_start;
+                for (; close < selector.size() && nested_depth > 0; ++close) {
+                    const auto nested = selector[close];
+                    if (argument_quote != 0) {
+                        if (nested == argument_quote
+                            && (close == 0U || selector[close - 1U] != '\\')) argument_quote = 0;
+                    } else if (nested == '\\') {
+                        close = skip_css_escape_sequence(selector, close) - 1U;
+                    } else if (nested == '\'' || nested == '"') {
+                        argument_quote = nested;
+                    } else if (nested == '(') {
+                        ++nested_depth;
+                    } else if (nested == ')') {
+                        --nested_depth;
+                    }
+                }
+                if (nested_depth != 0 || close <= argument_start + 1U
+                    || trim_css_view(selector.substr(argument_start, close - argument_start - 1U)).empty()) {
+                    return false;
+                }
+            }
+            index = cursor - 1U;
+            item_has_token = true;
+        }
+        return quote == 0 && bracket_depth == 0 && parenthesis_depth == 0 && item_has_token;
+#endif
+    }
+
+    static void throw_selector_syntax_error(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        std::string_view selector)
+    {
+        auto* isolate = info.GetIsolate();
+        const auto context = isolate->GetCurrentContext();
+        v8::Local<v8::Value> constructor_value;
+        if (context->Global()->Get(context, js_string(isolate, "DOMException")).ToLocal(&constructor_value)
+            && constructor_value->IsFunction()) {
+            const auto message = "'" + std::string(selector) + "' is not a valid selector.";
+            v8::Local<v8::Value> arguments[]{
+                js_string(isolate, message.c_str()),
+                js_string(isolate, "SyntaxError")};
+            v8::Local<v8::Object> exception;
+            if (constructor_value.As<v8::Function>()->NewInstance(context, 2, arguments).ToLocal(&exception)) {
+                isolate->ThrowException(exception);
+                return;
+            }
+        }
+        isolate->ThrowException(v8::Exception::SyntaxError(
+            js_string(isolate, "The selector is not valid.")));
+    }
+
+    std::vector<dom_node*> query_selector_nodes(
+        dom_node& root,
+        std::string_view selector,
+        bool include_root) const
+    {
+        std::vector<dom_node*> result;
+        const auto& compiled = cached_css_selector_list(selector);
+        collect_selector_matches(root, compiled, include_root, result, &root);
+        return result;
+    }
+
+    dom_node* query_selector_node(
+        dom_node& root,
+        std::string_view selector,
+        bool include_root) const
+    {
+        const auto& compiled = cached_css_selector_list(selector);
+        return find_selector_match(root, compiled, include_root, &root);
+    }
+
+    v8::Local<v8::Array> selector_results(
+        dom_node& root,
+        const std::string& selector,
+        bool include_root = true)
+    {
+        auto matches = query_selector_nodes(root, selector, include_root);
+        auto result = v8::Array::New(isolate, static_cast<int>(matches.size()));
+        auto local_context = isolate->GetCurrentContext();
+        for (uint32_t index = 0; index < matches.size(); ++index) {
+            result->Set(local_context, index, wrap_node(*matches[index])).Check();
+        }
+        return result;
+    }
+
+    v8::Local<v8::Array> class_results(dom_node& root, const std::string& names)
+    {
+        std::vector<std::string> required;
+        std::istringstream stream(names);
+        for (std::string name; stream >> name;) required.push_back(std::move(name));
+        auto matches = document.query_selector_all(root, "*");
+        std::erase_if(matches, [&required](const auto* node) {
+            return node == nullptr || required.empty()
+                || !std::all_of(required.begin(), required.end(), [node](const auto& name) {
+                    return has_class(*node, name);
+                });
+        });
+        auto result = v8::Array::New(isolate, static_cast<int>(matches.size()));
+        auto local_context = isolate->GetCurrentContext();
+        for (uint32_t index = 0; index < matches.size(); ++index) {
+            result->Set(local_context, index, wrap_node(*matches[index])).Check();
+        }
+        result->Set(
+            local_context,
+            js_string(isolate, "item"),
+            v8::Function::New(local_context, collection_item).ToLocalChecked()).Check();
+        return result;
+    }
+
+    static void collection_item(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        const auto index = info.Length() > 0
+            ? info[0]->Uint32Value(local_context).FromMaybe(0)
+            : 0U;
+        v8::Local<v8::Value> value;
+        info.GetReturnValue().Set(
+            info.This()->Get(local_context, index).ToLocal(&value)
+                && !value->IsUndefined()
+                ? value
+                : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
+    }
+
+    static void get_body(
+        v8::Local<v8::Name> property,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->record_feature(
+            "dom", "Document.location", "supported", {}, "dom-binding");
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        const auto property_name = to_utf8(info.GetIsolate(), property);
+        if (root->xml_mode && root->tag == "#document-root") {
+            if (property_name == "documentElement") {
+                const auto found = std::find_if(
+                    root->children.begin(),
+                    root->children.end(),
+                    [](const auto* child) {
+                        return child != nullptr && !child->tag.starts_with('#');
+                    });
+                info.GetReturnValue().Set(found == root->children.end()
+                    ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+                    : v8::Local<v8::Value>(self->wrap_node(**found)));
+            } else {
+                info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            }
+            return;
+        }
+        auto* html = root->tag == "html" ? root : nullptr;
+        if (html == nullptr && root->tag == "body") {
+            if (root->parent != nullptr && root->parent->tag == "html") {
+                html = root->parent;
+            } else {
+                const auto found = std::find_if(
+                    root->children.begin(),
+                    root->children.end(),
+                    [](const auto* child) { return child != nullptr && child->tag == "html"; });
+                if (found != root->children.end()) html = *found;
+            }
+        }
+        if (html != nullptr && property_name == "documentElement") {
+            info.GetReturnValue().Set(self->wrap_node(*html));
+            return;
+        }
+        if (html != nullptr) {
+            const auto tag = property_name == "head" ? "head" : "body";
+            const auto found = std::find_if(
+                html->children.begin(),
+                html->children.end(),
+                [tag](const auto* child) { return child != nullptr && child->tag == tag; });
+            if (found != html->children.end()) {
+                info.GetReturnValue().Set(self->wrap_node(**found));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(self->wrap_node(*root));
+    }
+
+    static void get_document_implementation(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        info.GetReturnValue().Set(self->dom_implementation_object.Get(info.GetIsolate()));
+    }
+
+    static void get_document_doctype(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        auto* container = root->tag == "html" ? root->parent : root;
+        if (container != nullptr) {
+            for (auto* child : container->children) {
+                if (child != nullptr && child->kind == dom_node_kind::document_type) {
+                    info.GetReturnValue().Set(self->wrap_node(*child));
+                    return;
+                }
+            }
+        }
+        info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    }
+
+    static void get_scrolling_element(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->record_feature(
+            "dom",
+            "Document.scrollingElement",
+            "partially-supported",
+            "standards-mode documentElement projection onto the native viewport scroll owner",
+            "dom-binding");
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        auto* html = root->tag == "html" ? root : nullptr;
+        if (html == nullptr) {
+            const auto found = std::find_if(
+                root->children.begin(),
+                root->children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "html"; });
+            if (found != root->children.end()) html = *found;
+        }
+        info.GetReturnValue().Set(self->wrap_node(html == nullptr ? *root : *html));
+    }
+
+    static void get_document_location(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->record_feature(
+            "dom", "Document.links", "supported", {}, "dom-binding");
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root != nullptr && self->detached_document_roots.contains(root->id)) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> location;
+        if (local_context->Global()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "location")).ToLocal(&location)) {
+            info.GetReturnValue().Set(location);
+        }
+    }
+
+    static void get_document_links(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        std::vector<dom_node*> links;
+        for (auto* node : self->document.query_selector_all(*root, "a")) {
+            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
+        }
+        for (auto* node : self->document.query_selector_all(*root, "area")) {
+            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
+        }
+        auto collection = v8::Array::New(
+            info.GetIsolate(),
+            static_cast<int>(links.size()));
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        for (uint32_t index = 0; index < links.size(); ++index) {
+            collection->Set(local_context, index, self->wrap_node(*links[index])).Check();
+        }
+        collection->Set(
+            local_context,
+            js_string(info.GetIsolate(), "item"),
+            v8::Function::New(local_context, collection_item).ToLocalChecked()).Check();
+        info.GetReturnValue().Set(collection);
+    }
+
+    static void get_document_cookie(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->record_feature(
+            "dom",
+            "Document.cookie",
+            "partially-supported",
+            "same-engine script-readable name/value jar; no HTTP cookie ingress, domain/path scoping, expiry, SameSite, Secure, or HttpOnly enforcement",
+            "dom-binding");
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root != nullptr && self->detached_document_roots.contains(root->id)) {
+            info.GetReturnValue().Set(js_string(info.GetIsolate(), ""));
+            return;
+        }
+        std::string value;
+        for (const auto& [name, cookie_value] : self->document_cookies) {
+            if (!value.empty()) value += "; ";
+            value += name + "=" + cookie_value;
+        }
+        info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
+    }
+
+    static void set_document_cookie(
+        v8::Local<v8::Name>,
+        v8::Local<v8::Value> raw_value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root != nullptr && self->detached_document_roots.contains(root->id)) return;
+        auto assignment = to_utf8(info.GetIsolate(), raw_value);
+        const auto attributes = assignment.find(';');
+        if (attributes != std::string::npos) assignment.resize(attributes);
+        const auto equals = assignment.find('=');
+        if (equals == std::string::npos) return;
+        const auto trim = [](std::string value) {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) return std::string{};
+            const auto last = value.find_last_not_of(" \t\r\n");
+            return value.substr(first, last - first + 1U);
+        };
+        auto name = trim(assignment.substr(0U, equals));
+        auto value = trim(assignment.substr(equals + 1U));
+        if (name.empty()) return;
+        const auto known = std::find_if(
+            self->document_cookies.begin(),
+            self->document_cookies.end(),
+            [&name](const auto& entry) { return entry.first == name; });
+        if (known == self->document_cookies.end()) {
+            self->document_cookies.emplace_back(std::move(name), std::move(value));
+        } else {
+            known->second = std::move(value);
+        }
+    }
+
+    static void create_html_document(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        self->record_feature(
+            "dom",
+            "DOMImplementation.createHTMLDocument",
+            "supported",
+            {},
+            "dom-api");
+
+        auto& html = self->document.create_element("html");
+        auto& head = self->document.create_element("head");
+        auto& body = self->document.create_element("body");
+        self->document.append_child(html, head);
+        self->document.append_child(html, body);
+        self->detached_document_roots.insert(html.id);
+
+        if (info.Length() > 0) {
+            const auto title_text = to_utf8(info.GetIsolate(), info[0]);
+            if (!title_text.empty()) {
+                auto& title = self->document.create_element("title");
+                auto& text = self->document.create_element("#text");
+                text.text_content = title_text;
+                self->document.append_child(title, text);
+                self->document.append_child(head, title);
+            }
+        }
+
+        auto detached = self->document_template.Get(info.GetIsolate())
+            ->NewInstance(local_context).ToLocalChecked();
+        detached->SetAlignedPointerInInternalField(
+            0,
+            &html,
+            v8::kEmbedderDataTypeTagDefault);
+        detached->Set(
+            local_context,
+            js_string(info.GetIsolate(), "oninput"),
+            v8::Null(info.GetIsolate())).Check();
+        self->set_document_address(local_context, detached, "about:blank");
+        info.GetReturnValue().Set(detached);
+    }
+
+    static v8::Local<v8::Object> wrap_detached_document(
+        implementation& self,
+        dom_node& root,
+        v8::Local<v8::Context> local_context,
+        const char* address)
+    {
+        auto detached = self.document_template.Get(self.isolate)
+            ->NewInstance(local_context).ToLocalChecked();
+        detached->SetAlignedPointerInInternalField(
+            0,
+            &root,
+            v8::kEmbedderDataTypeTagDefault);
+        detached->Set(
+            local_context,
+            js_string(self.isolate, "oninput"),
+            v8::Null(self.isolate)).Check();
+        self.set_document_address(local_context, detached, address);
+        return detached;
+    }
+
+    static void create_xml_document(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto& root = self->document.create_element("#document-root");
+        root.visible = false;
+        root.xml_mode = true;
+        self->detached_document_roots.insert(root.id);
+        if (info.Length() > 1) {
+            const auto qualified_name = to_utf8(info.GetIsolate(), info[1]);
+            if (!qualified_name.empty()) {
+                auto& element = self->document.create_element(qualified_name);
+                element.xml_mode = true;
+                if (info.Length() > 0) {
+                    const auto namespace_uri = to_utf8(info.GetIsolate(), info[0]);
+                    if (!namespace_uri.empty()) element.set_namespace(namespace_uri);
+                }
+                self->document.append_child(root, element);
+            }
+        }
+        info.GetReturnValue().Set(wrap_detached_document(
+            *self,
+            root,
+            local_context,
+            "about:blank"));
+    }
+
+    static void create_element(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto tag = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string("div");
+        auto* document_root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        const auto xml_mode = document_root != nullptr && document_root->xml_mode;
+        if (!xml_mode) tag = lower_html_name(tag);
+        self->record_feature(
+            "html",
+            "element:" + tag,
+            "supported",
+            {},
+            "html-element");
+        auto& node = self->document.create_element(std::move(tag));
+        node.xml_mode = xml_mode;
+        self->apply_css_rules(node);
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_element_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto tag = info.Length() > 1 ? to_utf8(info.GetIsolate(), info[1]) : std::string("svg");
+        self->record_feature(
+            "html",
+            "element:" + lower_html_name(tag),
+            "supported",
+            {},
+            "html-element");
+        auto& node = self->document.create_element(std::move(tag));
+        node.set_namespace(info.Length() > 0
+            ? to_utf8(info.GetIsolate(), info[0])
+            : "http://www.w3.org/2000/svg");
+        self->apply_css_rules(node);
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_text_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto& node = self->document.create_element("#text");
+        auto* document_root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        node.xml_mode = document_root != nullptr && document_root->xml_mode;
+        node.text_content = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_comment(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto& node = self->document.create_element("#comment");
+        auto* document_root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        node.xml_mode = document_root != nullptr && document_root->xml_mode;
+        node.visible = false;
+        node.text_content = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto name = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        auto* document_root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        if (document_root == nullptr || !document_root->xml_mode) name = lower_html_name(name);
+        auto attribute = v8::Object::New(info.GetIsolate());
+        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeType"), v8::Integer::New(info.GetIsolate(), 2)).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "name"), js_dom_string(info.GetIsolate(), name)).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "localName"), js_dom_string(info.GetIsolate(), name)).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeName"), js_dom_string(info.GetIsolate(), name)).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "value"), js_string(info.GetIsolate(), "")).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeValue"), js_string(info.GetIsolate(), "")).Check();
+        attribute->Set(local_context, js_string(info.GetIsolate(), "ownerDocument"), info.This()).Check();
+        self->record_feature("dom", "Document.createAttribute", "supported", {}, "dom-api");
+        info.GetReturnValue().Set(attribute);
+    }
+
+    static void create_document_fragment(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto& node = self->document.create_element("#document-fragment");
+        auto* document_root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        node.xml_mode = document_root != nullptr && document_root->xml_mode;
+        node.visible = false;
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void clone_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* source = unwrap_node(info.This());
+        if (source == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "cloneNode requires a native DOM node")));
+            return;
+        }
+        const auto deep = info.Length() > 0 && info[0]->BooleanValue(info.GetIsolate());
+        const auto clone_subtree = [&](const auto& recurse, const dom_node& original) -> dom_node& {
+            auto& clone = self->document.create_node(original.kind, original.tag);
+            clone.set_namespace(
+                original.namespace_uri(),
+                original.namespace_prefix());
+            clone.id_attribute = original.id_attribute;
+            clone.class_name = original.class_name;
+            clone.text_content = original.text_content;
+            clone.xml_mode = original.xml_mode;
+            if (original.has_form_control()) {
+                clone.mutable_form_control() = original.form_control();
+            }
+            clone.attributes = original.attributes;
+            clone.style = original.style;
+            clone.visible = true;
+            if (deep) {
+                for (const auto* child : original.children) {
+                    if (child == nullptr) continue;
+                    auto& child_clone = recurse(recurse, *child);
+                    self->document.append_child(clone, child_clone);
+                }
+                if (original.template_contents != nullptr) {
+                    auto& clone_contents = self->document.parser_template_contents(clone);
+                    for (const auto* child : original.template_contents->children) {
+                        if (child == nullptr) continue;
+                        auto& child_clone = recurse(recurse, *child);
+                        self->document.append_child(clone_contents, child_clone);
+                    }
+                }
+            }
+            return clone;
+        };
+        info.GetReturnValue().Set(self->wrap_node(clone_subtree(clone_subtree, *source)));
+    }
+
+    static void get_element_by_id(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto id = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        auto* node = find_element_by_id(
+            root == nullptr ? self->active_root() : *root,
+            id);
+        if (node == nullptr) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+        } else {
+            info.GetReturnValue().Set(self->wrap_node(*node));
+        }
+    }
+
+    static void document_query_selector_all(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        auto& query_root = root == nullptr ? self->active_root() : *root;
+        const auto include_root = &query_root != &self->document.body()
+            || std::none_of(
+                query_root.children.begin(),
+                query_root.children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "html"; });
+        info.GetReturnValue().Set(self->selector_results(
+            query_root,
+            selector,
+            include_root));
+    }
+
+    static void document_query_selector(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        auto& query_root = root == nullptr ? self->active_root() : *root;
+        const auto include_root = &query_root != &self->document.body()
+            || std::none_of(
+                query_root.children.begin(),
+                query_root.children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "html"; });
+        auto* match = self->query_selector_node(query_root, selector, include_root);
+        info.GetReturnValue().Set(match == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
+    }
+
+    static void document_element_from_point(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->ensure_layout();
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        const auto x = info.Length() > 0
+            ? static_cast<float>(info[0]->NumberValue(local_context).FromMaybe(0)) : 0;
+        const auto y = info.Length() > 1
+            ? static_cast<float>(info[1]->NumberValue(local_context).FromMaybe(0)) : 0;
+        auto* node = self->document.hit_test(
+            root == nullptr ? self->active_root() : *root,
+            x,
+            y);
+        info.GetReturnValue().Set(node == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*node)));
+    }
+
+    static void document_caret_range_from_point(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->ensure_layout();
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        const auto x = info.Length() > 0
+            ? static_cast<float>(info[0]->NumberValue(local_context).FromMaybe(0)) : 0;
+        const auto y = info.Length() > 1
+            ? static_cast<float>(info[1]->NumberValue(local_context).FromMaybe(0)) : 0;
+        auto* hit = self->document.hit_test(
+            root == nullptr ? self->active_root() : *root,
+            x,
+            y);
+        if (hit == nullptr) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+
+        const auto find_text_node = [&](const auto& recurse, dom_node& node) -> dom_node* {
+            if (node.tag == "#text" && !node.text_content.empty()) return &node;
+            dom_node* fallback = nullptr;
+            for (auto* child : node.children) {
+                if (child == nullptr) continue;
+                auto* candidate = recurse(recurse, *child);
+                if (candidate == nullptr) continue;
+                if (fallback == nullptr) fallback = candidate;
+                const auto& box = candidate->layout;
+                if (x >= box.x && x <= box.x + box.width
+                    && y >= box.y && y <= box.y + box.height) {
+                    return candidate;
+                }
+            }
+            return fallback;
+        };
+        auto* text = find_text_node(find_text_node, *hit);
+        auto* container = text == nullptr ? hit : text;
+        const auto offset = text == nullptr
+            ? 0U
+            : self->document.text_caret_offset_at_x(*text, x);
+
+        auto range = v8::Object::New(info.GetIsolate());
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "startContainer"),
+            self->wrap_node(*container)).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "startOffset"),
+            v8::Integer::NewFromUnsigned(
+                info.GetIsolate(),
+                static_cast<uint32_t>(offset))).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "endContainer"),
+            self->wrap_node(*container)).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "endOffset"),
+            v8::Integer::NewFromUnsigned(
+                info.GetIsolate(),
+                static_cast<uint32_t>(offset))).Check();
+        range->Set(
+            local_context,
+            js_string(info.GetIsolate(), "collapsed"),
+            v8::True(info.GetIsolate())).Check();
+        info.GetReturnValue().Set(range);
+    }
+
+    static void document_get_elements_by_tag_name(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto tag = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        auto& query_root = root == nullptr ? self->active_root() : *root;
+        const auto include_root = &query_root != &self->document.body()
+            || std::none_of(
+                query_root.children.begin(),
+                query_root.children.end(),
+                [](const auto* child) { return child != nullptr && child->tag == "html"; });
+        info.GetReturnValue().Set(self->selector_results(query_root, tag, include_root));
+    }
+
+    static void document_get_elements_by_class_name(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        const auto names = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        info.GetReturnValue().Set(self->class_results(
+            root == nullptr ? self->active_root() : *root,
+            names));
+    }
+
+    static void element_query_selector_all(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        auto* root = unwrap_node(info.This());
+        if (root == nullptr) return;
+        const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        info.GetReturnValue().Set(self->selector_results(*root, selector, false));
+    }
+
+    static void element_query_selector(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        auto* root = unwrap_node(info.This());
+        if (root == nullptr) return;
+        const auto selector = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        auto* match = self->query_selector_node(*root, selector, false);
+        info.GetReturnValue().Set(match == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
+    }
+
+    static void element_get_elements_by_tag_name(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.This());
+        if (root == nullptr) return;
+        const auto tag = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        info.GetReturnValue().Set(self->selector_results(*root, tag, false));
+    }
+
+    static void element_get_elements_by_class_name(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        auto* root = unwrap_node(info.This());
+        if (root == nullptr) return;
+        const auto names = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        info.GetReturnValue().Set(self->class_results(*root, names));
+    }
+
+    static void element_contains(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* root = unwrap_node(info.This());
+        auto* candidate = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        for (auto* node = candidate; root != nullptr && node != nullptr; node = node->parent) {
+            if (node == root) {
+                info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+    }
+
+    static void element_compare_document_position(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* reference = unwrap_node(info.This());
+        auto* other = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        if (reference == other && reference != nullptr) {
+            info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 0));
+            return;
+        }
+        if (reference == nullptr || other == nullptr) {
+            info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 1 | 32));
+            return;
+        }
+
+        const auto build_path = [](dom_node* node) {
+            std::vector<dom_node*> path;
+            for (; node != nullptr; node = node->parent) path.push_back(node);
+            std::reverse(path.begin(), path.end());
+            return path;
+        };
+        const auto reference_path = build_path(reference);
+        const auto other_path = build_path(other);
+        if (reference_path.empty() || other_path.empty()
+            || reference_path.front() != other_path.front()) {
+            const auto order = other->id < reference->id ? 2 : 4;
+            info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 1 | 32 | order));
+            return;
+        }
+
+        size_t shared = 0U;
+        const auto maximum_shared = std::min(reference_path.size(), other_path.size());
+        while (shared < maximum_shared && reference_path[shared] == other_path[shared]) {
+            ++shared;
+        }
+        if (shared == other_path.size()) {
+            info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 2 | 8));
+            return;
+        }
+        if (shared == reference_path.size()) {
+            info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 4 | 16));
+            return;
+        }
+
+        auto* parent = reference_path[shared - 1U];
+        auto* reference_child = reference_path[shared];
+        auto* other_child = other_path[shared];
+        for (auto* child : parent->children) {
+            if (child == other_child) {
+                info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 2));
+                return;
+            }
+            if (child == reference_child) {
+                info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 4));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 1 | 32));
+    }
+
+    static void element_matches(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || info.Length() < 1) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        const auto selector = to_wtf8(info.GetIsolate(), info[0]);
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(),
+            self->compiled_css_selector_list_matches(
+                *node,
+                self->cached_css_selector_list(selector),
+                node)));
+    }
+
+    static bool nodes_are_equal(const dom_node& left, const dom_node& right)
+    {
+        if (left.tag != right.tag
+            || left.text_content != right.text_content
+            || left.attributes != right.attributes
+            || left.children.size() != right.children.size()) return false;
+        for (size_t index = 0; index < left.children.size(); ++index) {
+            const auto* left_child = left.children[index];
+            const auto* right_child = right.children[index];
+            if (left_child == nullptr || right_child == nullptr) {
+                if (left_child != right_child) return false;
+                continue;
+            }
+            if (!nodes_are_equal(*left_child, *right_child)) return false;
+        }
+        return true;
+    }
+
+    static void element_is_same_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* other = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(),
+            unwrap_node(info.This()) == other && other != nullptr));
+    }
+
+    static void element_is_equal_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.This());
+        auto* other = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(),
+            node != nullptr && other != nullptr && nodes_are_equal(*node, *other)));
+    }
+
+    static void element_closest(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || info.Length() < 1) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        const auto selector = to_wtf8(info.GetIsolate(), info[0]);
+        if (!self->is_valid_dom_selector_list(selector)) {
+            throw_selector_syntax_error(info, selector);
+            return;
+        }
+        for (auto* candidate = node; candidate != nullptr; candidate = candidate->parent) {
+            if (self->compiled_css_selector_list_matches(
+                    *candidate,
+                    self->cached_css_selector_list(selector))) {
+                info.GetReturnValue().Set(self->wrap_node(*candidate));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    }
+
+    static void element_focus(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (is_programmatically_focusable(node)) {
+            webscene_input_event synthetic{};
+            self->set_active_element(node, synthetic);
+        }
+    }
+
+    static void element_blur(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (self->active_element == node) {
+            webscene_input_event synthetic{};
+            self->set_active_element(nullptr, synthetic);
+        }
+    }
+
+    static void element_click(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || node->attributes.contains("disabled")) return;
+        if (node->tag == "input") {
+            self->apply_form_control_click_default(*node);
+        } else if (node->tag == "option") {
+            if (node->parent != nullptr) {
+                for (auto* sibling : node->parent->children) {
+                    if (sibling != nullptr && sibling->tag == "option") {
+                        sibling->attributes.erase("selected");
+                    }
+                }
+            }
+            node->attributes["selected"] = std::string{};
+            self->recascade_connected_subtree(*node, "id-property");
+        }
+        webscene_input_event synthetic{};
+        synthetic.kind = WEBSCENE_INPUT_POINTER_UP;
+        synthetic.x = node->layout.x + node->layout.width / 2.0;
+        synthetic.y = node->layout.y + node->layout.height / 2.0;
+        bool default_prevented = false;
+        if (self->dispatch_input_event_type(
+                synthetic,
+                "click",
+                *node,
+                &default_prevented)
+            && !default_prevented) {
+            self->queue_external_navigation(*node);
+        }
+    }
+
+    static void element_set_selection_range(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        const auto start = info.Length() > 0 && info[0]->IsNumber()
+            ? info[0]->Int32Value(local_context).FromMaybe(0)
+            : 0;
+        const auto end = info.Length() > 1 && info[1]->IsNumber()
+            ? info[1]->Int32Value(local_context).FromMaybe(start)
+            : start;
+        info.This()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "selectionStart"),
+            v8::Integer::New(info.GetIsolate(), std::max(0, start))).Check();
+        info.This()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "selectionEnd"),
+            v8::Integer::New(info.GetIsolate(), std::max(start, end))).Check();
+        if (info.Length() > 2) {
+            info.This()->Set(
+                local_context,
+                js_string(info.GetIsolate(), "selectionDirection"),
+                info[2]).Check();
+        }
+    }
+
+    static void element_select(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node != nullptr) {
+            webscene_input_event synthetic{};
+            self->set_active_element(node, synthetic);
+        }
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> value;
+        auto length = 0;
+        if (info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "value")).ToLocal(&value)
+            && !value->IsNullOrUndefined()) {
+            length = static_cast<int>(to_utf8(info.GetIsolate(), value).size());
+        }
+        v8::Local<v8::Value> arguments[] = {
+            v8::Integer::New(info.GetIsolate(), 0),
+            v8::Integer::New(info.GetIsolate(), length)};
+        info.This()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "selectionStart"),
+            arguments[0]).Check();
+        info.This()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "selectionEnd"),
+            arguments[1]).Check();
+        info.This()->Set(
+            local_context,
+            js_string(info.GetIsolate(), "selectionDirection"),
+            js_string(info.GetIsolate(), "none")).Check();
+    }
+
+    static void get_active_element(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        auto* node = &exposed_body_for_root(*root);
+        if (self->active_element != nullptr) {
+            const auto root_owner = self->focus_document_owner(root);
+            const auto active_owner = self->focus_document_owner(self->active_element);
+            if (root_owner == active_owner && subtree_contains(*root, self->active_element)) {
+                node = self->active_element;
+            } else if (root_owner == 0U && active_owner != 0U) {
+                if (auto* owner = find_node_by_native_id(*root, active_owner); owner != nullptr) {
+                    node = owner;
+                }
+            }
+        }
+        info.GetReturnValue().Set(self->wrap_node(*node));
+    }
+
+    static void get_provisional_frame_active_element(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* frame = provisional_frame_owner(info.Holder());
+        if (frame == nullptr) return;
+        const auto known = self->provisional_frame_bodies.find(frame->id);
+        if (known == self->provisional_frame_bodies.end() || known->second == nullptr) return;
+        auto* root = known->second;
+        auto* node = self->active_element != nullptr
+                && subtree_contains(*root, self->active_element)
+            ? self->active_element
+            : root;
+        info.GetReturnValue().Set(self->wrap_node(*node));
+    }
+
+    static void get_provisional_frame_default_view(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* frame = provisional_frame_owner(info.Holder());
+        if (frame != nullptr) info.GetReturnValue().Set(self->frame_window(*frame));
+    }
+
+    static dom_node* provisional_frame_owner(v8::Local<v8::Object> document)
+    {
+        auto* node = unwrap_node(document);
+        if (node != nullptr && node->tag == "body"
+            && node->parent != nullptr && node->parent->tag == "iframe") {
+            return node->parent;
+        }
+        return node != nullptr && node->tag == "iframe" ? node : nullptr;
+    }
+
+    static void get_provisional_frame_element(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* frame = unwrap_node(info.Holder());
+        if (frame != nullptr) info.GetReturnValue().Set(self->wrap_node(*frame));
+    }
+
+    static void document_has_focus(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+    }
+
+    static void return_empty_string(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(js_string(info.GetIsolate(), ""));
+    }
+
+    static void location_to_string(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> href;
+        if (info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "href")).ToLocal(&href)) {
+            info.GetReturnValue().Set(href);
+        }
+    }
+
+    static void return_null(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    }
+
+    static void get_selection(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto context = info.GetIsolate()->GetCurrentContext();
+        auto selection = v8::Object::New(info.GetIsolate());
+        auto no_op = v8::Function::New(context, console_log).ToLocalChecked();
+        selection->Set(context, js_string(info.GetIsolate(), "removeAllRanges"), no_op).Check();
+        selection->Set(context, js_string(info.GetIsolate(), "empty"), no_op).Check();
+        selection->Set(context, js_string(info.GetIsolate(), "collapse"), no_op).Check();
+        selection->Set(
+            context,
+            js_string(info.GetIsolate(), "toString"),
+            v8::Function::New(context, return_empty_string).ToLocalChecked()).Check();
+        selection->Set(context, js_string(info.GetIsolate(), "rangeCount"), v8::Integer::New(info.GetIsolate(), 0)).Check();
+        info.GetReturnValue().Set(selection);
+    }
+
+    static bool insertion_would_create_cycle(
+        const dom_node* parent,
+        const dom_node* child) noexcept
+    {
+        if (parent == nullptr || child == nullptr) return false;
+        for (auto* ancestor = parent; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor == child) return true;
+        }
+        return false;
+    }
+
+    static void throw_hierarchy_request(v8::Isolate* isolate, std::string_view operation)
+    {
+        const auto message = std::string(operation)
+            + " cannot insert an ancestor into its descendant";
+        isolate->ThrowException(v8::Exception::TypeError(js_string(
+            isolate,
+            message.c_str())));
+    }
+
+    static void append_child(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* parent = unwrap_node(info.This());
+        auto* child = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        if (parent == nullptr || child == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "appendChild requires a native node")));
+            return;
+        }
+        if (parent != nullptr && child != nullptr && child->tag == "#document-fragment") {
+            if (std::any_of(
+                    child->children.begin(),
+                    child->children.end(),
+                    [parent](const auto* fragment_child) {
+                        return insertion_would_create_cycle(parent, fragment_child);
+                    })) {
+                throw_hierarchy_request(info.GetIsolate(), "appendChild");
+                return;
+            }
+            auto children = std::move(child->children);
+            child->children.clear();
+            for (auto* fragment_child : children) {
+                if (fragment_child == nullptr) continue;
+                fragment_child->parent = nullptr;
+                fragment_child->visible = true;
+                if (!self->document.append_child(*parent, *fragment_child)) continue;
+                self->recascade_connected_subtree(*fragment_child);
+                self->recascade_connected_node(*parent);
+                self->activate_connected_stylesheet(*fragment_child);
+                self->enqueue_connected_resource_if_needed(
+                    *fragment_child,
+                    self->wrap_node(*fragment_child),
+                    info.GetIsolate()->GetCurrentContext());
+                self->enqueue_iframe_hydration_if_needed(*fragment_child);
+            }
+            self->document.mark_dirty();
+            info.GetReturnValue().Set(info[0]);
+            return;
+        }
+        if (insertion_would_create_cycle(parent, child)) {
+            throw_hierarchy_request(info.GetIsolate(), "appendChild");
+            return;
+        }
+        if (child != nullptr && child->parent != nullptr) {
+            std::erase(child->parent->children, child);
+            child->parent = nullptr;
+        }
+        if (!self->document.append_child(*parent, *child)) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "appendChild requires a detached native node")));
+            return;
+        }
+        self->recascade_connected_subtree(*child);
+        // Appending a child changes structural selectors on the container
+        // itself. In particular, a dynamically populated `:empty` button must
+        // stop matching before layout (TradingView's market-status pill uses
+        // exactly this pattern).
+        self->recascade_connected_node(*parent);
+        self->activate_connected_stylesheet(*child);
+        self->enqueue_connected_resource_if_needed(
+            *child,
+            info[0].As<v8::Object>(),
+            info.GetIsolate()->GetCurrentContext());
+        self->enqueue_iframe_hydration_if_needed(*child);
+        info.GetReturnValue().Set(info[0]);
+    }
+
+    static void append_nodes(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* parent = unwrap_node(info.This());
+        if (parent == nullptr) return;
+
+        std::vector<dom_node*> candidates;
+        candidates.reserve(static_cast<size_t>(info.Length()));
+        for (int index = 0; index < info.Length(); ++index) {
+            dom_node* candidate = nullptr;
+            if (info[index]->IsObject()) {
+                candidate = unwrap_node(info[index].As<v8::Object>());
+            }
+            if (candidate == nullptr) {
+                auto& text = self->document.create_element("#text");
+                text.text_content = to_wtf8(info.GetIsolate(), info[index]);
+                candidate = &text;
+            }
+            if (candidate->tag == "#document-fragment") {
+                for (auto* child : candidate->children) {
+                    if (insertion_would_create_cycle(parent, child)) {
+                        throw_hierarchy_request(info.GetIsolate(), "append");
+                        return;
+                    }
+                }
+            } else if (insertion_would_create_cycle(parent, candidate)) {
+                throw_hierarchy_request(info.GetIsolate(), "append");
+                return;
+            }
+            candidates.push_back(candidate);
+        }
+
+        std::vector<dom_node*> inserted;
+        for (auto* candidate : candidates) {
+            if (candidate == nullptr) continue;
+            if (candidate->tag == "#document-fragment") {
+                auto children = std::move(candidate->children);
+                candidate->children.clear();
+                for (auto* child : children) {
+                    if (child == nullptr) continue;
+                    child->parent = nullptr;
+                    child->visible = true;
+                    if (self->document.append_child(*parent, *child)) inserted.push_back(child);
+                }
+                continue;
+            }
+            if (candidate->parent != nullptr) {
+                std::erase(candidate->parent->children, candidate);
+                candidate->parent = nullptr;
+            }
+            candidate->visible = true;
+            if (self->document.append_child(*parent, *candidate)) inserted.push_back(candidate);
+        }
+
+        for (auto* child : inserted) {
+            if (child == nullptr) continue;
+            self->recascade_connected_subtree(*child);
+            self->enqueue_connected_resource_if_needed(
+                *child,
+                self->wrap_node(*child),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*child);
+        }
+        self->recascade_connected_node(*parent);
+        self->activate_connected_stylesheet(*parent);
+        self->document.mark_dirty();
+    }
+
+    static void remove_child(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* parent = unwrap_node(info.This());
+        auto* child = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        if (parent == nullptr || child == nullptr || child->parent != parent) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "removeChild requires a child of this native node")));
+            return;
+        }
+        if (!self->blur_active_element_before_detach(*child)) return;
+        self->deactivate_connected_stylesheets(*child);
+        std::erase(parent->children, child);
+        child->parent = nullptr;
+        self->weaken_detached_subtree_wrappers(*child);
+        self->document.mark_dirty();
+        info.GetReturnValue().Set(info[0]);
+    }
+
+    static void replace_child(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* parent = unwrap_node(info.This());
+        auto* replacement = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        auto* previous = info.Length() > 1 && info[1]->IsObject()
+            ? unwrap_node(info[1].As<v8::Object>())
+            : nullptr;
+        if (parent == nullptr || replacement == nullptr || previous == nullptr
+            || previous->parent != parent) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "replaceChild requires a child of this native node")));
+            return;
+        }
+        if (replacement == previous) {
+            info.GetReturnValue().Set(info[1]);
+            return;
+        }
+        if (insertion_would_create_cycle(parent, replacement)) {
+            throw_hierarchy_request(info.GetIsolate(), "replaceChild");
+            return;
+        }
+        if (replacement->parent != nullptr) {
+            std::erase(replacement->parent->children, replacement);
+            replacement->parent = nullptr;
+        }
+        const auto iterator = std::find(parent->children.begin(), parent->children.end(), previous);
+        if (iterator == parent->children.end()) return;
+        if (!self->blur_active_element_before_detach(*previous)) return;
+        self->deactivate_connected_stylesheets(*previous, false);
+        *iterator = replacement;
+        replacement->parent = parent;
+        replacement->visible = true;
+        previous->parent = nullptr;
+        self->weaken_detached_subtree_wrappers(*previous);
+        self->recascade_connected_subtree(*replacement);
+        self->activate_connected_stylesheet(*replacement);
+        self->enqueue_connected_resource_if_needed(
+            *replacement,
+            info[0].As<v8::Object>(),
+            info.GetIsolate()->GetCurrentContext());
+        self->enqueue_iframe_hydration_if_needed(*replacement);
+        self->document.mark_dirty();
+        info.GetReturnValue().Set(info[1]);
+    }
+
+    static void replace_children(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* parent = unwrap_node(info.This());
+        if (parent == nullptr) return;
+        for (int index = 0; index < info.Length(); ++index) {
+            if (!info[index]->IsObject()) continue;
+            auto* child = unwrap_node(info[index].As<v8::Object>());
+            if (insertion_would_create_cycle(parent, child)) {
+                throw_hierarchy_request(info.GetIsolate(), "replaceChildren");
+                return;
+            }
+        }
+        if (!self->blur_active_descendant_before_replacing_children(*parent)) return;
+        self->detach_all_children(*parent);
+        for (int index = 0; index < info.Length(); ++index) {
+            if (!info[index]->IsObject()) continue;
+            auto* child = unwrap_node(info[index].As<v8::Object>());
+            if (child == nullptr) continue;
+            if (child->parent != nullptr) {
+                std::erase(child->parent->children, child);
+                child->parent = nullptr;
+            }
+            self->document.append_child(*parent, *child);
+        }
+        self->recascade_connected_subtree(*parent);
+        self->activate_connected_stylesheet(*parent);
+    }
+
+    static void remove_element(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || node->parent == nullptr) return;
+        if (!self->blur_active_element_before_detach(*node)) return;
+        self->deactivate_connected_stylesheets(*node);
+        std::erase(node->parent->children, node);
+        node->parent = nullptr;
+        node->visible = false;
+        self->weaken_detached_subtree_wrappers(*node);
+        self->document.mark_dirty();
+    }
+
+    static void replace_with(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* replaced = unwrap_node(info.This());
+        if (replaced == nullptr || replaced->parent == nullptr) return;
+        auto* parent = replaced->parent;
+
+        std::vector<dom_node*> replacements;
+        for (int argument = 0; argument < info.Length(); ++argument) {
+            dom_node* replacement = nullptr;
+            if (info[argument]->IsObject()) {
+                replacement = unwrap_node(info[argument].As<v8::Object>());
+            } else {
+                auto& text = self->document.create_element("#text");
+                text.text_content = to_wtf8(info.GetIsolate(), info[argument]);
+                replacement = &text;
+            }
+            if (replacement == nullptr) continue;
+            if (replacement != replaced
+                && insertion_would_create_cycle(parent, replacement)) {
+                throw_hierarchy_request(info.GetIsolate(), "replaceWith");
+                return;
+            }
+            if (replacement->tag == "#document-fragment") {
+                for (auto* child : replacement->children) {
+                    if (insertion_would_create_cycle(parent, child)) {
+                        throw_hierarchy_request(info.GetIsolate(), "replaceWith");
+                        return;
+                    }
+                }
+            }
+            replacements.push_back(replacement);
+        }
+
+        if (replacements.size() == 1U && replacements.front() == replaced) return;
+        if (!self->blur_active_element_before_detach(*replaced)) return;
+
+        // Detach every incoming node before locating the final replacement
+        // point. This preserves identity when the source comes from Monaco's
+        // temporary parsing container and avoids stale sibling indices when a
+        // node is moved within the same parent.
+        std::vector<dom_node*> flattened;
+        for (auto* replacement : replacements) {
+            if (replacement == nullptr || replacement == replaced) continue;
+            if (replacement->tag == "#document-fragment") {
+                auto children = std::move(replacement->children);
+                replacement->children.clear();
+                for (auto* child : children) {
+                    if (child == nullptr) continue;
+                    child->parent = nullptr;
+                    flattened.push_back(child);
+                }
+                continue;
+            }
+            if (replacement->parent != nullptr) {
+                std::erase(replacement->parent->children, replacement);
+                replacement->parent = nullptr;
+            }
+            flattened.push_back(replacement);
+        }
+
+        const auto position = std::find(
+            parent->children.begin(), parent->children.end(), replaced);
+        if (position == parent->children.end()) return;
+        auto insertion_index =
+            static_cast<size_t>(position - parent->children.begin());
+        self->deactivate_connected_stylesheets(*replaced);
+        parent->children.erase(position);
+        replaced->parent = nullptr;
+        replaced->visible = false;
+        self->weaken_detached_subtree_wrappers(*replaced);
+
+        for (auto* replacement : flattened) {
+            replacement->parent = parent;
+            replacement->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(insertion_index++),
+                replacement);
+            self->recascade_connected_subtree(*replacement);
+            self->activate_connected_stylesheet(*replacement);
+            self->enqueue_connected_resource_if_needed(
+                *replacement,
+                self->wrap_node(*replacement),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*replacement);
+        }
+        self->document.mark_dirty();
+    }
+
+    static void insert_adjacent_html(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* reference = unwrap_node(info.This());
+        if (reference == nullptr || info.Length() < 2) return;
+        const auto position = lower_html_name(to_utf8(info.GetIsolate(), info[0]));
+
+        dom_node* parent = nullptr;
+        size_t insertion_index = 0U;
+        if (position == "afterbegin" || position == "beforeend") {
+            parent = reference;
+            insertion_index =
+                position == "afterbegin" ? 0U : parent->children.size();
+        } else if ((position == "beforebegin" || position == "afterend")
+            && reference->parent != nullptr) {
+            parent = reference->parent;
+            const auto found = std::find(
+                parent->children.begin(), parent->children.end(), reference);
+            if (found == parent->children.end()) return;
+            insertion_index =
+                static_cast<size_t>(found - parent->children.begin())
+                + (position == "afterend" ? 1U : 0U);
+        } else {
+            info.GetIsolate()->ThrowException(v8::Exception::SyntaxError(
+                js_string(info.GetIsolate(), "Invalid insertAdjacentHTML position")));
+            return;
+        }
+
+        auto& fragment = self->document.create_element("#document-fragment");
+        fragment.visible = false;
+        const auto html = to_utf8(info.GetIsolate(), info[1]);
+        if (!html.empty()) self->parse_inner_html(fragment, html, parent);
+        auto children = std::move(fragment.children);
+        fragment.children.clear();
+        for (auto* child : children) {
+            if (child == nullptr) continue;
+            child->parent = parent;
+            child->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(insertion_index++),
+                child);
+            self->recascade_connected_subtree(*child);
+            self->activate_connected_stylesheet(*child);
+            self->enqueue_connected_resource_if_needed(
+                *child,
+                self->wrap_node(*child),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*child);
+        }
+        self->document.mark_dirty();
+    }
+
+    static void insert_adjacent_element(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        auto* reference = unwrap_node(info.This());
+        auto* child = info.Length() > 1 && info[1]->IsObject()
+            ? unwrap_node(info[1].As<v8::Object>())
+            : nullptr;
+        if (reference == nullptr || child == nullptr || reference == child || info.Length() < 1) return;
+        const auto position = to_utf8(info.GetIsolate(), info[0]);
+        dom_node* parent = nullptr;
+        size_t index = 0;
+        if (position == "afterbegin" || position == "beforeend") {
+            parent = reference;
+            index = position == "afterbegin" ? 0U : parent->children.size();
+        } else if ((position == "beforebegin" || position == "afterend")
+            && reference->parent != nullptr) {
+            parent = reference->parent;
+            const auto iterator = std::find(parent->children.begin(), parent->children.end(), reference);
+            if (iterator == parent->children.end()) return;
+            index = static_cast<size_t>(iterator - parent->children.begin())
+                + (position == "afterend" ? 1U : 0U);
+        } else {
+            return;
+        }
+        if (insertion_would_create_cycle(parent, child)) {
+            throw_hierarchy_request(info.GetIsolate(), "insertAdjacentElement");
+            return;
+        }
+        if (child->parent != nullptr) {
+            auto* old_parent = child->parent;
+            const auto old = std::find(old_parent->children.begin(), old_parent->children.end(), child);
+            if (old != old_parent->children.end()) {
+                const auto old_index = static_cast<size_t>(old - old_parent->children.begin());
+                old_parent->children.erase(old);
+                if (old_parent == parent && old_index < index) --index;
+            }
+            child->parent = nullptr;
+        }
+        index = std::min(index, parent->children.size());
+        child->parent = parent;
+        parent->children.insert(parent->children.begin() + static_cast<std::ptrdiff_t>(index), child);
+        self->document.mark_dirty();
+        self->recascade_connected_subtree(*child);
+        self->activate_connected_stylesheet(*child);
+        info.GetReturnValue().Set(info[1]);
+    }
+
+    static void prepend_child(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* parent = unwrap_node(info.This());
+        auto* child = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>()) : nullptr;
+        if (parent == nullptr || child == nullptr || parent == child) return;
+        if (insertion_would_create_cycle(parent, child)) {
+            throw_hierarchy_request(info.GetIsolate(), "prepend");
+            return;
+        }
+        if (child->parent != nullptr) {
+            std::erase(child->parent->children, child);
+            child->parent = nullptr;
+        }
+        child->parent = parent;
+        parent->children.insert(parent->children.begin(), child);
+        self->document.mark_dirty();
+        self->recascade_connected_subtree(*child);
+        self->activate_connected_stylesheet(*child);
+        info.GetReturnValue().Set(info[0]);
+    }
+
+    static void insert_sibling(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool after)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* reference = unwrap_node(info.This());
+        auto* child = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>()) : nullptr;
+        if (reference == nullptr || reference->parent == nullptr || child == nullptr
+            || reference == child) return;
+        auto* parent = reference->parent;
+        if (insertion_would_create_cycle(parent, child)) {
+            throw_hierarchy_request(info.GetIsolate(), after ? "after" : "before");
+            return;
+        }
+        if (child->parent != nullptr) {
+            std::erase(child->parent->children, child);
+            child->parent = nullptr;
+        }
+        const auto position = std::find(parent->children.begin(), parent->children.end(), reference);
+        if (position == parent->children.end()) return;
+        child->parent = parent;
+        parent->children.insert(position + (after ? 1 : 0), child);
+        self->document.mark_dirty();
+        self->recascade_connected_subtree(*child);
+        self->activate_connected_stylesheet(*child);
+    }
+
+    static void insert_before_self(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        insert_sibling(info, false);
+    }
+
+    static void insert_after_self(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        insert_sibling(info, true);
+    }
+
+    static void insert_before(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        self->record_feature(
+            "dom",
+            "method:Node.insertBefore",
+            "supported",
+            {},
+            "dom-binding");
+        auto* parent = unwrap_node(info.This());
+        auto* child = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        auto* before = info.Length() > 1 && info[1]->IsObject()
+            ? unwrap_node(info[1].As<v8::Object>())
+            : nullptr;
+        if (parent == nullptr || child == nullptr) return;
+        if (child->tag == "#document-fragment") {
+            if (std::any_of(
+                    child->children.begin(),
+                    child->children.end(),
+                    [parent](const auto* fragment_child) {
+                        return insertion_would_create_cycle(parent, fragment_child);
+                    })) {
+                throw_hierarchy_request(info.GetIsolate(), "insertBefore");
+                return;
+            }
+            auto position = before == nullptr
+                ? parent->children.end()
+                : std::find(parent->children.begin(), parent->children.end(), before);
+            if (before != nullptr && position == parent->children.end()) {
+                info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                    js_string(info.GetIsolate(), "insertBefore reference is not a child")));
+                return;
+            }
+            auto insertion_index = static_cast<size_t>(position - parent->children.begin());
+            auto children = std::move(child->children);
+            child->children.clear();
+            for (auto* fragment_child : children) {
+                if (fragment_child == nullptr) continue;
+                fragment_child->parent = parent;
+                fragment_child->visible = true;
+                parent->children.insert(
+                    parent->children.begin() + static_cast<std::ptrdiff_t>(insertion_index++),
+                    fragment_child);
+                self->recascade_connected_subtree(*fragment_child);
+                self->activate_connected_stylesheet(*fragment_child);
+            }
+            self->document.mark_dirty();
+            info.GetReturnValue().Set(info[0]);
+            return;
+        }
+        if (insertion_would_create_cycle(parent, child)) {
+            throw_hierarchy_request(info.GetIsolate(), "insertBefore");
+            return;
+        }
+        // The DOM pre-insertion algorithm validates the reference before it
+        // mutates either tree. In particular, insertBefore(node, node) on the
+        // node's current parent is a no-op. Detaching first made that valid
+        // self-reference disappear from parent->children, then incorrectly
+        // threw and left the node detached. It also made every rejected
+        // foreign reference partially mutate the source tree.
+        if (before != nullptr) {
+            const auto reference = std::find(
+                parent->children.begin(), parent->children.end(), before);
+            if (reference == parent->children.end()) {
+                info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                    js_string(info.GetIsolate(), "insertBefore reference is not a child")));
+                return;
+            }
+            if (before == child) {
+                self->record_feature(
+                    "dom",
+                    "insertBefore:self-reference",
+                    "supported",
+                    {},
+                    "dom-pre-insertion");
+                self->record_composition(
+                    "dom-insertbefore-self-reference",
+                    child->id);
+                info.GetReturnValue().Set(info[0]);
+                return;
+            }
+        }
+        if (child->parent != nullptr) {
+            std::erase(child->parent->children, child);
+            child->parent = nullptr;
+        }
+        if (before == nullptr) {
+            if (self->document.append_child(*parent, *child)) {
+                self->recascade_connected_subtree(*child);
+                self->activate_connected_stylesheet(*child);
+                info.GetReturnValue().Set(info[0]);
+            }
+            return;
+        }
+        const auto position = std::find(parent->children.begin(), parent->children.end(), before);
+        // `before` was validated before detaching `child`; because the
+        // self-reference case returned above, it must still be present.
+        if (position == parent->children.end()) return;
+        child->parent = parent;
+        parent->children.insert(position, child);
+        self->document.mark_dirty();
+        self->recascade_connected_subtree(*child);
+        self->activate_connected_stylesheet(*child);
+        info.GetReturnValue().Set(info[0]);
+    }

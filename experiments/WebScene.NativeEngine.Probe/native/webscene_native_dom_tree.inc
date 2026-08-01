@@ -1,0 +1,550 @@
+native_document::native_document(
+    webscene_text_measure_callback text_measure_callback,
+    void* text_measure_user_data)
+    : text_measure_callback_(text_measure_callback)
+    , text_measure_user_data_(text_measure_user_data)
+{
+    clear();
+}
+
+webscene_text_metrics native_document::measure_text(
+    std::string_view value,
+    const dom_node& node) const
+{
+    const auto transformed = resolved_text_transform(node, std::string(value));
+    const auto font_size = resolved_font_size(node);
+    const auto family = resolved_font_family(node);
+    const auto weight = resolved_font_weight(node);
+    const auto letter_spacing = resolved_letter_spacing(node);
+    const auto word_spacing = resolved_word_spacing(node);
+    text_measurement_key key{
+        transformed,
+        family,
+        font_size,
+        weight,
+        letter_spacing,
+        word_spacing};
+    if (const auto cached = text_measurement_cache_.find(key);
+        cached != text_measurement_cache_.end()) {
+        return cached->second;
+    }
+    if (text_measurement_cache_.size() >= 16'384U) {
+        text_measurement_cache_.clear();
+    }
+    webscene_text_metrics measured{
+        sizeof(webscene_text_metrics),
+        fallback_text_width(transformed, font_size),
+        font_size * 0.9F,
+        font_size * 0.1F,
+        0.0F};
+    if (text_measure_callback_ != nullptr) {
+        webscene_text_metrics metrics{};
+        metrics.struct_size = sizeof(metrics);
+        if (text_measure_callback_(
+                text_measure_user_data_,
+                transformed.data(),
+                transformed.size(),
+                family.data(),
+                family.size(),
+                font_size,
+                weight,
+                letter_spacing,
+                word_spacing,
+                &metrics) != 0U
+            && std::isfinite(metrics.advance_width)
+            && metrics.advance_width >= 0
+            && std::isfinite(metrics.ascent)
+            && metrics.ascent >= 0
+            && std::isfinite(metrics.descent)
+            && metrics.descent >= 0
+            && std::isfinite(metrics.leading)) {
+            measured = metrics;
+        }
+    }
+    text_measurement_cache_.emplace(std::move(key), measured);
+    return measured;
+}
+
+float native_document::measure_inline_content_width(const dom_node& node) const
+{
+    auto width = node.text_content.empty()
+        ? 0.0F
+        : measure_text_width(node.text_content, node);
+    for (const auto* child : node.children) {
+        if (child == nullptr || !child->visible
+            || child->style.display == display_mode::none) {
+            continue;
+        }
+        if (child->tag == "#text"
+            || child->style.display == display_mode::inline_flow) {
+            width += measure_inline_content_width(*child);
+        } else {
+            width += child->layout.width;
+        }
+    }
+    return width;
+}
+
+size_t native_document::text_caret_offset_at_x(
+    const dom_node& node,
+    float x) const
+{
+    const auto& text = node.text_content;
+    if (text.empty()) return 0;
+
+    auto text_x = node.layout.x;
+    if (!node.text_layout_fragments.empty()) {
+        text_x = node.text_layout_fragments.front().x;
+    }
+    const auto relative_x = std::max(0.0F, x - text_x);
+
+    size_t byte_offset = 0;
+    size_t utf16_offset = 0;
+    auto previous_width = 0.0F;
+    while (byte_offset < text.size()) {
+        const auto first = static_cast<uint8_t>(text[byte_offset]);
+        size_t byte_length = 1U;
+        size_t utf16_length = 1U;
+        if ((first & 0xe0U) == 0xc0U) {
+            byte_length = 2U;
+        } else if ((first & 0xf0U) == 0xe0U) {
+            byte_length = 3U;
+        } else if ((first & 0xf8U) == 0xf0U) {
+            byte_length = 4U;
+            utf16_length = 2U;
+        }
+        byte_length = std::min(byte_length, text.size() - byte_offset);
+        const auto next_byte_offset = byte_offset + byte_length;
+        const auto next_width = measure_text_width(
+            std::string_view(text).substr(0, next_byte_offset),
+            node);
+        if (relative_x < (previous_width + next_width) * 0.5F) {
+            return utf16_offset;
+        }
+        byte_offset = next_byte_offset;
+        utf16_offset += utf16_length;
+        previous_width = next_width;
+    }
+    return utf16_offset;
+}
+
+std::vector<std::string> native_document::wrap_text_lines(
+    const std::string& value,
+    float available_width,
+    const dom_node& node,
+    bool allow_wrap) const
+{
+    if (!has_visible_text(value)) return {};
+    if (!allow_wrap) {
+        std::istringstream source(value);
+        std::string collapsed;
+        for (std::string word; source >> word;) {
+            if (!collapsed.empty()) collapsed.push_back(' ');
+            collapsed += word;
+        }
+        return collapsed.empty() ? std::vector<std::string>{} : std::vector<std::string>{collapsed};
+    }
+    std::istringstream source(value);
+    std::vector<std::string> lines;
+    std::string current;
+    std::string word;
+    while (source >> word) {
+        while (measure_text_width(word, node) > available_width && word.size() > 1U) {
+            if (!current.empty()) {
+                lines.push_back(std::move(current));
+                current.clear();
+            }
+            size_t split = 1U;
+            while (split < word.size()
+                && measure_text_width(
+                    std::string_view(word).substr(0, split + 1U), node) <= available_width) {
+                ++split;
+            }
+            lines.push_back(word.substr(0, split));
+            word.erase(0, split);
+        }
+        if (word.empty()) continue;
+        if (current.empty()) {
+            current = std::move(word);
+        } else if (measure_text_width(current + " " + word, node) <= available_width) {
+            current.push_back(' ');
+            current += word;
+        } else {
+            lines.push_back(std::move(current));
+            current = std::move(word);
+        }
+    }
+    if (!current.empty()) lines.push_back(std::move(current));
+    if (lines.empty()) lines.emplace_back();
+    return lines;
+}
+
+dom_node& native_document::body() noexcept
+{
+    return *body_;
+}
+
+const dom_node& native_document::body() const noexcept
+{
+    return *body_;
+}
+
+dom_node& native_document::create_element(std::string tag)
+{
+    auto kind = dom_node_kind::element;
+    if (tag == "#text") kind = dom_node_kind::text;
+    else if (tag == "#comment") kind = dom_node_kind::comment;
+    else if (tag == "#document-fragment" || tag == "#fragment") {
+        kind = dom_node_kind::document_fragment;
+    } else if (tag == "#doctype") kind = dom_node_kind::document_type;
+    else if (tag == "#processing-instruction") {
+        kind = dom_node_kind::processing_instruction;
+    } else if (!tag.empty() && tag.front() == '#') kind = dom_node_kind::internal;
+    return create_node(kind, std::move(tag));
+}
+
+dom_node& native_document::create_node(dom_node_kind kind, std::string name)
+{
+    auto* storage = static_cast<dom_node*>(
+        node_pool_.allocate(sizeof(dom_node), alignof(dom_node)));
+    try {
+        std::construct_at(storage);
+    } catch (...) {
+        node_pool_.deallocate(storage, sizeof(dom_node), alignof(dom_node));
+        throw;
+    }
+    node_pointer node(storage, node_deleter{&node_pool_});
+    node->id = next_node_id_++;
+    node->kind = kind;
+    node->tag = std::move(name);
+    if (kind == dom_node_kind::text) {
+        node->style.display = display_mode::inline_flow;
+    } else if (kind != dom_node_kind::element) {
+        node->style.display = display_mode::none;
+        node->visible = false;
+    } else if (node->tag == "style" || node->tag == "script" || node->tag == "head"
+        || node->tag == "meta" || node->tag == "link" || node->tag == "title"
+        || node->tag == "base" || node->tag == "template") {
+        // HTML metadata and scripting nodes do not generate boxes. Keep this
+        // in the DOM layer as well as the V8 UA defaults so native callers and
+        // reparents cannot accidentally turn their text into scene commands.
+        node->style.display = display_mode::none;
+    }
+    auto* result = node.get();
+    nodes_.push_back(std::move(node));
+    if (native_id_index_.size() < result->id) {
+        native_id_index_.resize(result->id, nullptr);
+    }
+    native_id_index_[result->id - 1U] = result;
+    mark_dirty();
+    return *result;
+}
+
+bool native_document::append_child(dom_node& parent, dom_node& child)
+{
+    if (&parent == &child || child.parent != nullptr) {
+        return false;
+    }
+    child.parent = &parent;
+    child.visible = true;
+    parent.children.push_back(&child);
+    mark_dirty();
+    return true;
+}
+
+bool native_document::parser_remove_from_parent(dom_node& child) noexcept
+{
+    if (child.parent == nullptr) return true;
+    auto& siblings = child.parent->children;
+    const auto known = std::find(siblings.begin(), siblings.end(), &child);
+    if (known == siblings.end()) return false;
+    siblings.erase(known);
+    child.parent = nullptr;
+    return true;
+}
+
+bool native_document::parser_append_child(dom_node& parent, dom_node& child) noexcept
+{
+    if (&parent == &child || !parser_remove_from_parent(child)) return false;
+    child.parent = &parent;
+    child.visible = child.kind == dom_node_kind::element
+        || child.kind == dom_node_kind::text;
+    parent.children.push_back(&child);
+    return true;
+}
+
+bool native_document::parser_insert_before(dom_node& sibling, dom_node& child) noexcept
+{
+    auto* parent = sibling.parent;
+    if (parent == nullptr || &sibling == &child) return false;
+    if (!parser_remove_from_parent(child)) return false;
+    const auto position = std::find(parent->children.begin(), parent->children.end(), &sibling);
+    if (position == parent->children.end()) return false;
+    child.parent = parent;
+    child.visible = child.kind == dom_node_kind::element
+        || child.kind == dom_node_kind::text;
+    parent->children.insert(position, &child);
+    return true;
+}
+
+bool native_document::parser_reparent_children(
+    dom_node& source,
+    dom_node& destination) noexcept
+{
+    if (&source == &destination) return false;
+    for (auto* child : source.children) {
+        if (child == nullptr) continue;
+        child->parent = &destination;
+        destination.children.push_back(child);
+    }
+    source.children.clear();
+    return true;
+}
+
+dom_node& native_document::parser_template_contents(dom_node& element)
+{
+    if (element.template_contents != nullptr) return *element.template_contents;
+    auto& fragment = create_node(dom_node_kind::document_fragment, "#document-fragment");
+    element.template_contents = &fragment;
+    return fragment;
+}
+
+void native_document::remove_all_children(dom_node& parent)
+{
+    for (auto* child : parent.children) {
+        child->parent = nullptr;
+        child->visible = false;
+    }
+    parent.children.clear();
+    mark_dirty();
+}
+
+size_t native_document::erase_detached_subtree(dom_node& root)
+{
+    if (&root == body_ || root.parent != nullptr) return 0U;
+    std::unordered_set<dom_node*> removed;
+    const auto collect = [&](const auto& self, dom_node& node) -> void {
+        if (!removed.insert(&node).second) return;
+        if (node.template_contents != nullptr) self(self, *node.template_contents);
+        for (auto* child : node.children) {
+            if (child != nullptr) self(self, *child);
+        }
+    };
+    collect(collect, root);
+    const auto before = nodes_.size();
+    for (const auto* node : removed) {
+        if (node->id == 0U || node->id > native_id_index_.size()) continue;
+        native_id_index_[node->id - 1U] = nullptr;
+    }
+    std::erase_if(nodes_, [&](const auto& node) { return removed.contains(node.get()); });
+    while (!native_id_index_.empty() && native_id_index_.back() == nullptr) {
+        native_id_index_.pop_back();
+    }
+    if (nodes_.size() != before) mark_dirty();
+    return before - nodes_.size();
+}
+
+dom_node* native_document::find_by_native_id(uint32_t id) noexcept
+{
+    if (id == 0U || id > native_id_index_.size()) return nullptr;
+    return native_id_index_[id - 1U];
+}
+
+dom_node* native_document::find_by_id(const std::string& id) noexcept
+{
+    const auto match = std::find_if(nodes_.begin(), nodes_.end(), [&id](const auto& node) {
+        return node->id_attribute == id;
+    });
+    return match == nodes_.end() ? nullptr : match->get();
+}
+
+std::vector<dom_node*> native_document::query_selector_all(
+    dom_node& root,
+    const std::string& selector)
+{
+    std::vector<dom_node*> result;
+    collect_matches(root, selector, result);
+    return result;
+}
+
+dom_node* native_document::hit_test(dom_node& root, float x, float y)
+{
+    const auto nearest_element = [](dom_node* hit) {
+        while (hit != nullptr && hit->tag == "#text") hit = hit->parent;
+        return hit;
+    };
+    std::vector<dom_node*> fixed;
+    for (auto* child : root.children) {
+        collect_fixed_positioned_nodes(*child, fixed);
+    }
+    std::stable_sort(
+        fixed.begin(),
+        fixed.end(),
+        [](const auto* left, const auto* right) {
+            return left->style.z_index < right->style.z_index;
+        });
+    for (auto iterator = fixed.rbegin(); iterator != fixed.rend(); ++iterator) {
+        auto visibility_hidden = false;
+        auto pointer_events_none = false;
+        if (!stacking_ancestors_allow_hit(
+                **iterator,
+                root,
+                x,
+                y,
+                visibility_hidden,
+                pointer_events_none)) {
+            continue;
+        }
+        if (auto* hit = hit_test_node(
+                **iterator,
+                x,
+                y,
+                visibility_hidden,
+                pointer_events_none);
+            hit != nullptr) {
+            return nearest_element(hit);
+        }
+    }
+    std::vector<dom_node*> elevated;
+    for (auto* child : root.children) {
+        collect_positive_stacking_nodes(*child, elevated);
+    }
+    std::stable_sort(
+        elevated.begin(),
+        elevated.end(),
+        [](const auto* left, const auto* right) {
+            return left->style.z_index < right->style.z_index;
+        });
+    for (auto iterator = elevated.rbegin(); iterator != elevated.rend(); ++iterator) {
+        auto visibility_hidden = false;
+        auto pointer_events_none = false;
+        if (!stacking_ancestors_allow_hit(
+                **iterator,
+                root,
+                x,
+                y,
+                visibility_hidden,
+                pointer_events_none)) {
+            continue;
+        }
+        if (auto* hit = hit_test_node(
+                **iterator,
+                x,
+                y,
+                visibility_hidden,
+                pointer_events_none);
+            hit != nullptr) {
+            return nearest_element(hit);
+        }
+    }
+    return nearest_element(hit_test_node(root, x, y, false, false, true));
+}
+
+dom_node* native_document::hit_test_node(
+    dom_node& node,
+    float x,
+    float y,
+    bool inherited_visibility_hidden,
+    bool inherited_pointer_events_none,
+    bool ignore_own_clip) noexcept
+{
+    if (!node.visible || node.style.display == display_mode::none) return nullptr;
+    const auto visibility_hidden = node.style.visibility_specified
+        ? node.style.visibility_hidden
+        : inherited_visibility_hidden;
+    const auto pointer_events_none = node.style.pointer_events_specified
+        ? node.style.pointer_events_none
+        : inherited_pointer_events_none;
+    const auto resolve_origin = [](css_length value, float available, float fallback) {
+        if (value.unit == length_unit::pixels) return value.value;
+        if (value.unit == length_unit::percent) {
+            return available * value.value / 100.0F + value.pixel_offset;
+        }
+        return fallback;
+    };
+    const auto origin_x = node.layout.x + resolve_origin(
+        node.style.transform_origin_x,
+        node.layout.width,
+        node.layout.width / 2.0F);
+    const auto origin_y = node.layout.y + resolve_origin(
+        node.style.transform_origin_y,
+        node.layout.height,
+        node.layout.height / 2.0F);
+    const auto* animation = node.animation_runtime();
+    const auto painted_scale_x =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_x
+        : node.style.transform_scale_x;
+    const auto painted_scale_y =
+        animation != nullptr && animation->transform_animation_initialized
+        ? animation->painted_transform_scale_y
+        : node.style.transform_scale_y;
+    const auto transformed_left = origin_x
+        + (node.layout.x - origin_x) * painted_scale_x;
+    const auto transformed_right = origin_x
+        + (node.layout.x + node.layout.width - origin_x) * painted_scale_x;
+    const auto transformed_top = origin_y
+        + (node.layout.y - origin_y) * painted_scale_y;
+    const auto transformed_bottom = origin_y
+        + (node.layout.y + node.layout.height - origin_y) * painted_scale_y;
+    const auto left = std::min(transformed_left, transformed_right);
+    const auto right = std::max(transformed_left, transformed_right);
+    const auto top = std::min(transformed_top, transformed_bottom);
+    const auto bottom = std::max(transformed_top, transformed_bottom);
+    const auto inside = x >= left && y >= top && x <= right && y <= bottom;
+    if (inside || !node.style.clip || ignore_own_clip) {
+        // Within a stacking context, larger z-index descendants are painted
+        // and hit-tested above later zero-z DOM siblings. Component libraries place
+        // its pane legend (including the Volume expander) at z-index:6 while
+        // the chart canvas is a later sibling at z-index:0.
+        auto upper_bound = std::numeric_limits<int32_t>::max();
+        while (true) {
+            auto next_z = std::numeric_limits<int32_t>::min();
+            for (const auto* child : node.children) {
+                const auto z_index = node.style.z_index != 0
+                    ? child->paint_z_index
+                    : child->style.z_index;
+                if (z_index < upper_bound) {
+                    next_z = std::max(next_z, z_index);
+                }
+            }
+            if (next_z == std::numeric_limits<int32_t>::min()) break;
+            for (auto iterator = node.children.rbegin(); iterator != node.children.rend(); ++iterator) {
+                const auto z_index = node.style.z_index != 0
+                    ? (*iterator)->paint_z_index
+                    : (*iterator)->style.z_index;
+                if (z_index != next_z) continue;
+                if (auto* hit = hit_test_node(
+                        **iterator,
+                        x,
+                        y,
+                        visibility_hidden,
+                        pointer_events_none);
+                    hit != nullptr) {
+                    return hit;
+                }
+            }
+            upper_bound = next_z;
+        }
+    }
+    return inside && !visibility_hidden && !pointer_events_none ? &node : nullptr;
+}
+
+void native_document::clear()
+{
+    nodes_.clear();
+    native_id_index_.clear();
+    // A complete navigation invalidates every node, so no pooled allocation
+    // remains live. Return all node chunks to the upstream allocator instead
+    // of retaining the previous document's high-water mark.
+    node_pool_.release();
+    transition_events_.clear();
+    last_animation_advance_timestamp_ms_ =
+        std::numeric_limits<double>::quiet_NaN();
+    next_node_id_ = 1;
+    body_ = &create_element("body");
+    body_->style.width = {100, length_unit::percent};
+    body_->style.height = {100, length_unit::percent};
+    body_->style.background_rgba = 0x131722FFU;
+    mark_dirty();
+}
