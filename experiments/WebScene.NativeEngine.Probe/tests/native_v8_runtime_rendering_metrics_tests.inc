@@ -133,12 +133,24 @@ void test_svg_current_color_is_resolved_before_scene_serialization(webscene_engi
         (() => {
           document.body.innerHTML = '';
           document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            .currentcolor-row {
+              display: flex;
+              color: rgb(157, 171, 174);
+              width: 24px;
+              height: 24px;
+            }
+            .currentcolor-row svg {
+              display: block;
+              width: 24px;
+              height: 24px;
+            }
+          `;
+          document.body.appendChild(style);
           const row = document.createElement('div');
-          row.style.display = 'flex';
-          row.style.color = 'rgb(157, 171, 174)';
-          row.style.width = '24px';
-          row.style.height = '24px';
-          row.innerHTML = '<svg style="display:block" viewBox="0 0 24 24" width="24" height="24">'
+          row.className = 'currentcolor-row';
+          row.innerHTML = '<svg viewBox="0 0 24 24">'
             + '<path fill="currentColor" d="M7 4l9 8-9 8z"/></svg>';
           document.body.appendChild(row);
         })()
