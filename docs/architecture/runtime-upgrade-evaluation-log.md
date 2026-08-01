@@ -189,7 +189,7 @@ semantic getter/setter functions callable from V8 `FunctionCallback` accessors; 
 
 ### 3. V8 embedder startup snapshot
 
-**State:** Provisionally ruled in for independent-isolate churn; release-V8 validation pending
+**State:** Ruled in for startup/context-creation performance; packaged rollout remains
 
 **Prototype boundary:** Snapshot immutable bootstrap code first. Keep the generated
 prototype/template graph out of the initial snapshot because its native callbacks would
@@ -203,12 +203,11 @@ state after restore.
 - Strict mismatch rejection keyed by V8 revision, ABI, architecture, configuration, and
   binding-catalog hash.
 
-**Decision:** **Provisionally rule in for deployments that repeatedly create independent
-isolates, where the prototype clears the 20% context-lifecycle performance gate. Do not
-enable it by default for the shared-isolate deployment:** its 7.3% lifecycle improvement,
-neutral cold-process time, and sub-3% RSS improvement do not meet a material-benefit gate.
-The final adoption decision remains gated on reproducing compatibility and timing against
-the configured V8 15.3.10 release build; the locally available artifact is 14.7.173.23.
+**Decision:** **Rule in for performance.** Against the configured V8 15.3.10 release build,
+the prototype clears the 20% context-creation gate for independent isolates and the 10%
+steady-lifecycle gate for a shared isolate, while preserving exact required-profile parity.
+Keep the option off by default until every packaged RID includes and verifies its matching
+snapshot sidecar. This is not a memory or code-reduction win.
 
 **Current findings:**
 
@@ -216,28 +215,31 @@ the configured V8 15.3.10 release build; the locally available artifact is 14.7.
   36,064 bytes of immutable WebSocket, editor-platform, fetch, and IntersectionObserver
   JavaScript. DOM wrappers, native callbacks, context embedder slots, and the differing
   top-level/frame Blob and MessageChannel programs remain context-specific.
-- The build-time snapshot is 398,176 bytes. The snapshot engine library is 32,864 bytes
-  smaller because the four raw programs are dead-stripped, making the complete shipped
-  delta +365,631 bytes (+0.697%). The builder is not shipped.
+- With V8 15.3.10-WebScene, the build-time snapshot is 403,016 bytes. The snapshot engine
+  library is 16,368 bytes smaller because the four raw programs are dead-stripped, making
+  the complete shipped delta +386,967 bytes (+0.660%). The builder is not shipped.
 - The metadata fingerprint covers the complete V8 version header, target CPU, pointer
   compression/shared cage/direct-handle/size flags, bootstrap SHA-256, and generated
   binding-catalog SHA-256. Missing or unequal metadata is rejected before isolate creation;
   the missing-sidecar probe exits cleanly with an engine evaluation failure.
-- On macOS arm64, AppleClang 21, Release/certification, generated bindings, html5ever and
-  cssparser, five processes with five warmups and 30 samples measured independent-isolate
-  lifecycle p50 at 0.942 ms control versus 0.658 ms snapshot (-30.2%). Shared-isolate p50
-  was 0.368 versus 0.341 ms (-7.3%).
-- Twenty cold processes measured 23.110 versus 22.653 ms median wall time (-2.0%) and
-  2.071 versus 1.913 ms first measured context (-7.6%). Snapshot generation took 25.5 ms
-  median after its first process run.
-- Median RSS changed by -1.7% for repeated isolated lifecycles, -2.7% for shared-isolate
-  lifecycles, and -0.8% for a cold process. These are safe non-regressions, not a memory
+- On macOS arm64, AppleClang 21, V8 15.3.10-WebScene, Release/certification, generated
+  bindings, html5ever and cssparser, five processes with five warmups and 30 samples
+  measured independent-isolate lifecycle p50 at 1.036 ms control versus 0.755 ms snapshot
+  (-27.1%). Shared-isolate p50 was 0.397 versus 0.351 ms (-11.6%).
+- Twenty cold processes measured 26.702 versus 25.671 ms median wall time (-3.9%) and
+  3.080 versus 2.214 ms first measured context (-28.1%). Snapshot generation took 31.5 ms
+  median, excluding its one-time first-process outlier.
+- Median RSS changed by -1.1% for repeated isolated lifecycles, -2.8% for shared-isolate
+  lifecycles, and -1.4% for a cold process. These are safe non-regressions, not a memory
   benefit.
 - The complete required profile is exactly neutral at 104/110 documents and 431/433
   subtests with the same five failures and hover timeout. Both parser suites pass; the
   native suite reaches the known SVG `currentColor` fixture failure.
-- Raw evidence is in `artifacts/snapshot-evaluation/benchmark-results-final.json` and
-  `artifacts/snapshot-evaluation/required-snapshot/results.json`.
+- Raw release evidence is in
+  `artifacts/snapshot-evaluation/benchmark-results-v8-15.3.10.json`,
+  `artifacts/snapshot-evaluation/required-15.3-control/results.json`, and
+  `artifacts/snapshot-evaluation/required-15.3-snapshot-awake/results.json`. The earlier
+  14.7 cross-check remains in `benchmark-results-final.json`.
 
 ### 4. Servo selector parsing
 
@@ -353,3 +355,24 @@ layout engine.
   subtests.
 - Decision: provisional rule-in only for independent-isolate churn. Keep the option off by
   default and reproduce on the V8 15.3.10 release artifact before adoption.
+
+### 2026-08-01 — V8 15.3 release snapshot validation
+
+- Built a clean macOS arm64 V8 15.3.10-WebScene monolith with the release configuration
+  (pointer compression, shared cage, static monolith, no external startup data) and made
+  matched control/snapshot runtime builds from commit `03460aa`.
+- Raw A/B results: `artifacts/snapshot-evaluation/benchmark-results-v8-15.3.10.json`.
+  Five processes per mode used five warmups and 30 samples; cold results used 20 fresh
+  processes. Independent-isolate lifecycle improves 27.1%, shared-isolate lifecycle 11.6%,
+  and first measured context 28.1%. Cold process wall time improves 3.9%.
+- RSS improves only 1.1% to 2.8%, below the memory-benefit gate. The complete shipped
+  snapshot sidecar and metadata add 0.660% after dead-stripping the raw bootstrap programs.
+- Matched required-profile runs are exactly neutral at 104/110 documents and 431/433
+  subtests, with the same five failures and hover timeout. A first snapshot run crossed a
+  macOS host-sleep interval; the clean awake rerun completed in 47.45 seconds versus
+  52.35 seconds for control and is used only as a compatibility check, not a speed claim.
+- Rechecking V8 15.3 headers confirms that `PropertyCallbackInfo` still exposes only
+  `Holder()` to embedders despite documentation mentioning `info.This()`. The generated
+  WebIDL attribute-accessor constraint therefore remains unchanged.
+- Decision: rule in for startup/context-creation performance. Retain the build switch until
+  snapshot sidecar packaging and fingerprint validation cover all supported RIDs.
