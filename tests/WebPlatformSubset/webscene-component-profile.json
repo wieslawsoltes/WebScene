@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-syntax-parser-recovery.html",
+      "type": "contract",
+      "capabilities": ["css-syntax-component-values", "declaration-recovery", "ascii-case-insensitive-property-names", "important-token-parsing", "dynamic-style-reparse"],
+      "evidence": ["css-syntax-level-3-consume-declaration", "wpt-css-syntax-declarations-and-recovery"],
+      "reason": "Product-neutral projection of the pinned upstream CSS Syntax declaration and recovery cases onto WebScene's supported CSSOM/computed-style surface. It isolates syntax tokenization from property grammar, selectors, cascade, and layout so the legacy splitter and cssparser variants can be compared directly."
+    },
+    {
       "path": "contracts/html5-tree-construction-primitives.html",
       "type": "contract",
       "capabilities": ["html5-tree-construction", "adoption-agency", "table-foster-parenting", "named-character-references", "comments", "whitespace-text", "foreign-content-namespaces", "template-contents"],

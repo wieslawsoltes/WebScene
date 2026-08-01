@@ -5,6 +5,9 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
+#include "webscene_css_parser.h"
+#endif
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
@@ -18063,6 +18066,26 @@ struct v8_dom_runtime::implementation final {
         bool preserve_empty_custom_properties = false)
     {
         std::vector<css_declaration> result;
+#if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
+        const auto parsed = parse_css_syntax_declarations(body);
+        if (!parsed) return result;
+        result.reserve(parsed.declarations.size());
+        for (const auto& parsed_declaration : parsed.declarations) {
+            auto name = parsed_declaration.name;
+            auto value = parsed_declaration.value;
+            const auto custom = name.starts_with("--");
+            if (custom && !valid_custom_property_name(name)) continue;
+            if (!custom && name.starts_with("-")
+                && name != "-moz-transform" && name != "-webkit-transform") continue;
+            if (custom && value.empty() && preserve_empty_custom_properties) value = " ";
+            if (!name.empty() && !value.empty()) {
+                result.push_back({
+                    std::move(name),
+                    std::move(value),
+                    parsed_declaration.important});
+            }
+        }
+#else
         size_t cursor = 0;
         while (cursor < body.size()) {
             const auto separator = body.find(':', cursor);
@@ -18097,6 +18120,7 @@ struct v8_dom_runtime::implementation final {
             }
             cursor = end + 1U;
         }
+#endif
         return result;
     }
 
@@ -19294,6 +19318,55 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+    void append_parsed_css_style_rule(
+        std::string prelude,
+        std::vector<css_declaration> declarations,
+        const std::vector<std::string>& inherited_media,
+        const std::string& stylesheet_address)
+    {
+        for (auto& declaration : declarations) {
+            declaration.value = resolve_css_resource_urls(
+                std::move(declaration.value),
+                stylesheet_address);
+            inventory_css_value_functions(declaration.value);
+            if (declaration.name == "background-image") {
+                if (const auto url = first_css_url(declaration.value); url.has_value()) {
+                    start_resource_prefetch(*url, {}, WEBSCENE_RESOURCE_IMAGE);
+                }
+            }
+        }
+        size_t selector_cursor = 0U;
+        int bracket_depth = 0;
+        int parenthesis_depth = 0;
+        char quote = 0;
+        for (size_t index = 0U; index <= prelude.size(); ++index) {
+            const auto at_end = index == prelude.size();
+            const auto character = at_end ? ',' : prelude[index];
+            if (!at_end && quote != 0) {
+                if (character == quote
+                    && (index == 0U || prelude[index - 1U] != '\\')) quote = 0;
+                continue;
+            }
+            if (!at_end && (character == '\'' || character == '"')) {
+                quote = character;
+                continue;
+            }
+            if (!at_end && character == '[') ++bracket_depth;
+            else if (!at_end && character == ']') --bracket_depth;
+            else if (!at_end && character == '(') ++parenthesis_depth;
+            else if (!at_end && character == ')') --parenthesis_depth;
+            else if (character == ',' && bracket_depth == 0 && parenthesis_depth == 0) {
+                auto selector = trim_css(std::string_view(prelude).substr(
+                    selector_cursor, index - selector_cursor));
+                if (!selector.empty()) {
+                    inventory_css_selector(selector);
+                    append_css_rule(std::move(selector), declarations, inherited_media);
+                }
+                selector_cursor = index + 1U;
+            }
+        }
+    }
+
     void parse_css_rules(
         const std::string& css,
         size_t begin,
@@ -19380,57 +19453,11 @@ struct v8_dom_runtime::implementation final {
             } else if (!prelude.empty() && prelude.front() != '@') {
                 auto declarations = parse_css_declarations(
                     std::string_view(css).substr(open + 1U, close - open - 1U));
-                for (auto& declaration : declarations) {
-                    declaration.value = resolve_css_resource_urls(
-                        std::move(declaration.value),
-                        stylesheet_address);
-                    inventory_css_value_functions(declaration.value);
-                    if (declaration.name == "background-image") {
-                        if (const auto url = first_css_url(declaration.value);
-                            url.has_value()) {
-                            // CSS image fetches are independent of style
-                            // calculation in browsers. Start them while parsing
-                            // the stylesheet so inserting a dialog subtree does
-                            // not serialize network/cache reads inside every
-                            // background-image declaration.
-                            start_resource_prefetch(
-                                *url,
-                                {},
-                                WEBSCENE_RESOURCE_IMAGE);
-                        }
-                    }
-                }
-                size_t selector_cursor = 0U;
-                int bracket_depth = 0;
-                int parenthesis_depth = 0;
-                char quote = 0;
-                for (size_t index = 0U; index <= prelude.size(); ++index) {
-                    const auto at_end = index == prelude.size();
-                    const auto character = at_end ? ',' : prelude[index];
-                    if (!at_end && quote != 0) {
-                        if (character == quote
-                            && (index == 0U || prelude[index - 1U] != '\\')) quote = 0;
-                        continue;
-                    }
-                    if (!at_end && (character == '\'' || character == '"')) {
-                        quote = character;
-                        continue;
-                    }
-                    if (!at_end && character == '[') ++bracket_depth;
-                    else if (!at_end && character == ']') --bracket_depth;
-                    else if (!at_end && character == '(') ++parenthesis_depth;
-                    else if (!at_end && character == ')') --parenthesis_depth;
-                    else if (character == ',' && bracket_depth == 0
-                        && parenthesis_depth == 0) {
-                        auto selector = trim_css(std::string_view(prelude).substr(
-                            selector_cursor, index - selector_cursor));
-                        if (!selector.empty()) {
-                            inventory_css_selector(selector);
-                            append_css_rule(std::move(selector), declarations, inherited_media);
-                        }
-                        selector_cursor = index + 1U;
-                    }
-                }
+                append_parsed_css_style_rule(
+                    prelude,
+                    std::move(declarations),
+                    inherited_media,
+                    stylesheet_address);
             } else if (!prelude.empty() && prelude.front() == '@') {
                 auto name_end = prelude.find_first_of(" (\t\r\n");
                 if (name_end == std::string::npos) name_end = prelude.size();
@@ -19445,6 +19472,225 @@ struct v8_dom_runtime::implementation final {
         }
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
+    std::vector<css_declaration> materialize_css_syntax_declarations(
+        const css_syntax_output& parsed,
+        const css_syntax_rule& rule) const
+    {
+        std::vector<css_declaration> result;
+        result.reserve(rule.declaration_count);
+        const auto end = std::min(
+            rule.first_declaration + rule.declaration_count,
+            parsed.declarations.size());
+        for (auto index = rule.first_declaration; index < end; ++index) {
+            const auto& source = parsed.declarations[index];
+            const auto custom = source.name.starts_with("--");
+            if (custom && !valid_custom_property_name(source.name)) continue;
+            if (!custom && source.name.starts_with("-")
+                && source.name != "-moz-transform"
+                && source.name != "-webkit-transform") continue;
+            if (source.name.empty() || source.value.empty()) continue;
+            result.push_back({source.name, source.value, source.important});
+        }
+        return result;
+    }
+
+    void append_css_syntax_keyframe(
+        css_opacity_keyframes& definition,
+        std::string selector,
+        const std::vector<css_declaration>& declarations)
+    {
+        const auto opacity = std::find_if(
+            declarations.begin(), declarations.end(), [](const auto& declaration) {
+                return declaration.name == "opacity";
+            });
+        const auto transform = std::find_if(
+            declarations.begin(), declarations.end(), [](const auto& declaration) {
+                return declaration.name == "transform";
+            });
+        const auto rotation_degrees = [&]() -> std::optional<float> {
+            if (transform == declarations.end()) return std::nullopt;
+            auto value = lower_html_name(trim_css(transform->value));
+            const auto rotate = value.find("rotate(");
+            if (rotate == std::string::npos) return std::nullopt;
+            const auto close = value.find(')', rotate + 7U);
+            if (close == std::string::npos) return std::nullopt;
+            auto angle = trim_css(value.substr(rotate + 7U, close - rotate - 7U));
+            auto multiplier = 1.0F;
+            if (angle.ends_with("turn")) {
+                angle.resize(angle.size() - 4U);
+                multiplier = 360.0F;
+            } else if (angle.ends_with("deg")) {
+                angle.resize(angle.size() - 3U);
+            } else if (angle.ends_with("rad")) {
+                angle.resize(angle.size() - 3U);
+                multiplier = 57.29577951308232F;
+            } else return std::nullopt;
+            return std::strtof(angle.c_str(), nullptr) * multiplier;
+        }();
+        for (auto component : split_css_component_list(selector, ',')) {
+            component = lower_html_name(trim_css(std::move(component)));
+            float offset = -1;
+            if (component == "from") offset = 0;
+            else if (component == "to") offset = 1;
+            else if (component.ends_with('%')) {
+                component.pop_back();
+                offset = std::strtof(component.c_str(), nullptr) / 100.0F;
+            }
+            if (offset < 0 || offset > 1) continue;
+            if (opacity != declarations.end()) {
+                definition.opacity_stops.push_back({
+                    offset,
+                    std::clamp(std::strtof(opacity->value.c_str(), nullptr), 0.0F, 1.0F)});
+            }
+            if (rotation_degrees.has_value()) {
+                definition.rotation_stops.push_back({offset, *rotation_degrees});
+            }
+        }
+    }
+
+    void finish_css_syntax_keyframes(
+        std::string name,
+        css_opacity_keyframes definition)
+    {
+        const auto normalize = [](auto& stops) {
+            std::stable_sort(
+                stops.begin(), stops.end(),
+                [](const auto& left, const auto& right) { return left.offset < right.offset; });
+            using stop_type = typename std::decay_t<decltype(stops)>::value_type;
+            std::vector<stop_type> unique;
+            for (const auto& stop : stops) {
+                if (!unique.empty()
+                    && std::abs(unique.back().offset - stop.offset) < 0.0001F) {
+                    unique.back() = stop;
+                } else {
+                    unique.push_back(stop);
+                }
+            }
+            stops = std::move(unique);
+        };
+        normalize(definition.opacity_stops);
+        normalize(definition.rotation_stops);
+        if (definition.rotation_stops.size() == 1U
+            && definition.rotation_stops.front().offset > 0) {
+            definition.rotation_stops.insert(definition.rotation_stops.begin(), {0, 0});
+        }
+        if (definition.opacity_stops.size() >= 2U
+            || definition.rotation_stops.size() >= 2U) {
+            opacity_keyframes[lower_html_name(trim_css(std::move(name)))] =
+                std::move(definition);
+        }
+    }
+
+    void process_css_syntax_rule(
+        const css_syntax_output& parsed,
+        const std::vector<std::vector<size_t>>& children,
+        size_t index,
+        const std::vector<std::string>& inherited_media,
+        const std::string& stylesheet_address)
+    {
+        if (index >= parsed.rules.size()) return;
+        const auto& rule = parsed.rules[index];
+        if (rule.kind == css_syntax_style_rule) {
+            append_parsed_css_style_rule(
+                rule.prelude,
+                materialize_css_syntax_declarations(parsed, rule),
+                inherited_media,
+                stylesheet_address);
+            return;
+        }
+
+        const auto& name = rule.name;
+        if (name == "keyframes" || name == "-webkit-keyframes") {
+            css_opacity_keyframes definition;
+            for (const auto child : children[index]) {
+                if (parsed.rules[child].kind != css_syntax_style_rule) continue;
+                append_css_syntax_keyframe(
+                    definition,
+                    parsed.rules[child].prelude,
+                    materialize_css_syntax_declarations(parsed, parsed.rules[child]));
+            }
+            finish_css_syntax_keyframes(rule.prelude, std::move(definition));
+            record_feature(
+                "css", "at-rule:@keyframes", "partially-supported",
+                "opacity and rotate() keyframes with host-clock timing",
+                "stylesheet-parser");
+            return;
+        }
+        if (name == "font-face") {
+            record_feature(
+                "css", "at-rule:@font-face", "supported",
+                "font-family and first src url are registered by the native host",
+                "stylesheet-parser");
+            return;
+        }
+
+        auto recurse = true;
+        auto nested_media = inherited_media;
+        if (name == "media") {
+            auto query = trim_css(rule.prelude);
+            const auto supported = inventory_media_query(query);
+            record_feature(
+                "css", "at-rule:@media",
+                supported ? "supported" : "unsupported",
+                supported ? std::string{} : "unsupported media type or condition",
+                "stylesheet-parser");
+            nested_media.push_back(std::move(query));
+        } else if (name == "supports") {
+            auto condition = lower_html_name(trim_css(rule.prelude));
+            auto negated = false;
+            if (condition.starts_with("not ")) {
+                negated = true;
+                condition = trim_css(std::string_view(condition).substr(4U));
+            }
+            const auto supported = condition == "selector(:focus-visible)";
+            record_feature(
+                "css", "at-rule:@supports",
+                supported ? "supported" : "unsupported",
+                supported ? "selector(:focus-visible)" : "condition is not evaluated",
+                "stylesheet-parser");
+            recurse = supported != negated;
+        } else if (name == "layer") {
+            record_feature(
+                "css", "at-rule:@layer", "partially-supported",
+                "nested rules are parsed without cascade-layer ordering",
+                "stylesheet-parser");
+        } else if (name == "container") {
+            record_feature(
+                "css", "at-rule:@container", "unsupported",
+                "container conditions are not evaluated",
+                "stylesheet-parser");
+        } else {
+            record_feature(
+                "css", "at-rule:@" + lower_html_name(name), "unsupported", {},
+                "stylesheet-parser");
+            recurse = false;
+        }
+        if (!recurse) return;
+        for (const auto child : children[index]) {
+            process_css_syntax_rule(
+                parsed, children, child, nested_media, stylesheet_address);
+        }
+    }
+
+    void parse_css_rules_with_cssparser(
+        std::string_view css,
+        const std::string& stylesheet_address)
+    {
+        const auto parsed = parse_css_syntax_stylesheet(css);
+        if (!parsed) return;
+        std::vector<std::vector<size_t>> children(parsed.rules.size());
+        for (size_t index = 0; index < parsed.rules.size(); ++index) {
+            const auto parent = parsed.rules[index].parent_index;
+            if (parent < children.size()) children[parent].push_back(index);
+        }
+        for (size_t index = 0; index < parsed.rules.size(); ++index) {
+            if (parsed.rules[index].parent_index != css_syntax_no_parent) continue;
+            process_css_syntax_rule(parsed, children, index, {}, stylesheet_address);
+        }
+    }
+#endif
+
     size_t add_stylesheet(
         std::string css,
         const std::string& stylesheet_address = {},
@@ -19454,6 +19700,12 @@ struct v8_dom_runtime::implementation final {
         binding_callback_timer timer(profile_startup ? &startup_css_parse : nullptr);
 #endif
         const auto first_new_rule = css_rules.size();
+#if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
+        const auto previous_owner_id = active_stylesheet_owner_id;
+        active_stylesheet_owner_id = stylesheet_owner_id;
+        parse_css_rules_with_cssparser(css, stylesheet_address);
+        active_stylesheet_owner_id = previous_owner_id;
+#else
         size_t comment = 0;
         while ((comment = css.find("/*", comment)) != std::string::npos) {
             const auto end = css.find("*/", comment + 2U);
@@ -19467,6 +19719,7 @@ struct v8_dom_runtime::implementation final {
         active_stylesheet_owner_id = stylesheet_owner_id;
         parse_css_rules(css, 0, css.size(), {}, stylesheet_address);
         active_stylesheet_owner_id = previous_owner_id;
+#endif
         for (auto index = first_new_rule; index < css_rules.size(); ++index) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;

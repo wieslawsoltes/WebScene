@@ -9,7 +9,11 @@ publish = false
 name = "webscene_html_parser"
 crate-type = ["staticlib"]
 
+[features]
+cssparser = ["dep:cssparser"]
+
 [dependencies]
+cssparser = { version = "=0.37.0", optional = true }
 html5ever = "=0.39.0"
 
 [profile.release]

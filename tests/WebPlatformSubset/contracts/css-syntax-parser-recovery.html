@@ -1,0 +1,132 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSS syntax parser delimiter and recovery contracts</title>
+<link rel="help" href="https://drafts.csswg.org/css-syntax/#consume-declaration">
+<link rel="help" href="https://drafts.csswg.org/css-syntax/#consume-qualified-rule">
+
+<div id="probe" class="probe">probe</div>
+<style id="syntax-style">
+  .probe {
+    --quoted: "a;b:c";
+    --function: token(a;b:c);
+    --data-url: url("data:text/plain;a:b");
+    --commented: before/* ; } : */after;
+    --nested: calc(1px + var(--fallback, token(a;b:c)));
+    COLOR: rgb(1, 2, 3);
+    width: 17px ! IMPORTANT;
+    malformed-tail;
+    height: 19px;
+  }
+</style>
+
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function test(body, name) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+  }
+  function assert_equals(actual, expected) {
+    if (actual !== expected) {
+      throw new Error("expected " + JSON.stringify(expected) +
+        " but got " + JSON.stringify(actual));
+    }
+  }
+
+  const probe = document.querySelector("#probe");
+  const computed = getComputedStyle(probe);
+  const cssTrim = value => value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "");
+
+  test(() => {
+    assert_equals(cssTrim(computed.getPropertyValue("--quoted")), '"a;b:c"');
+  }, "semicolon and colon tokens inside strings do not terminate a declaration");
+
+  test(() => {
+    assert_equals(cssTrim(computed.getPropertyValue("--function")), "token(a;b:c)");
+  }, "semicolon and colon tokens inside functions do not terminate a declaration");
+
+  test(() => {
+    assert_equals(
+      cssTrim(computed.getPropertyValue("--data-url")),
+      'url("data:text/plain;a:b")');
+  }, "semicolon and colon tokens inside quoted url() data do not terminate a declaration");
+
+  test(() => {
+    assert_equals(
+      cssTrim(computed.getPropertyValue("--nested")),
+      "calc(1px + var(--fallback, token(a;b:c)))");
+  }, "nested function blocks preserve their complete component-value sequence");
+
+  test(() => {
+    assert_equals(
+      cssTrim(computed.getPropertyValue("--commented")),
+      "before/* ; } : */after");
+  }, "comments containing delimiters remain inside a custom-property token sequence");
+
+  test(() => {
+    assert_equals(computed.color, "rgb(1, 2, 3)");
+  }, "ordinary property names are ASCII case-insensitive");
+
+  test(() => {
+    assert_equals(computed.width, "17px");
+  }, "whitespace between ! and important is accepted case-insensitively");
+
+  test(() => {
+    assert_equals(computed.height, "19px");
+  }, "a malformed declaration does not prevent recovery at the next semicolon");
+
+  test(() => {
+    document.getElementById("syntax-style").textContent =
+      ".probe { --quoted: changed(a;b:c); height: 23px; }";
+    const updated = getComputedStyle(probe);
+    assert_equals(cssTrim(updated.getPropertyValue("--quoted")), "changed(a;b:c)");
+    assert_equals(updated.height, "23px");
+  }, "dynamic STYLE reparsing uses the same delimiter-aware syntax path");
+
+  const bulkRuleCount = 2000;
+  let bulkCss = "";
+  for (let index = 0; index < bulkRuleCount; index++) {
+    bulkCss += ".bulk-" + index +
+      " { --bulk-" + index + ": token(a;b:c); width: " +
+      ((index % 100) + 1) + "px; }\n";
+  }
+  bulkCss += ".probe { height: 29px; }";
+  const bulkSamples = [];
+  let finalBulkHeight = "";
+  for (let sample = 0; sample < 6; sample++) {
+    const started = performance.now();
+    document.getElementById("syntax-style").textContent = bulkCss;
+    finalBulkHeight = getComputedStyle(probe).height;
+    bulkSamples.push(performance.now() - started);
+  }
+  test(() => {
+    assert_equals(finalBulkHeight, "29px");
+  }, "large dynamic stylesheet recovers through the final rule");
+  const bulkMetrics = JSON.stringify({
+    bulkRuleCount,
+    bulkBytes: bulkCss.length,
+    bulkParseAndRecascadeMilliseconds: bulkSamples
+  });
+  state.diagnostics.push(bulkMetrics);
+  state.results.push({
+    name: "large stylesheet parse and recascade metrics",
+    status: "PASS",
+    message: bulkMetrics,
+    stack: null
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

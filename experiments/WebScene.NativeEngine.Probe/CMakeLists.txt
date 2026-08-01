@@ -53,12 +53,35 @@ option(WEBSCENE_NATIVE_ENGINE_CERTIFICATION
     "Include certification telemetry, diagnostic snapshots, and native profiling hooks" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK
     "Build the V8-free html5ever parser microbenchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
+    "Build the V8-free cssparser syntax microbenchmark" OFF)
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "legacy" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
+set(WEBSCENE_NATIVE_ENGINE_CSS_PARSER "legacy" CACHE STRING
+    "Native CSS syntax parser implementation: legacy or cssparser")
+set_property(CACHE WEBSCENE_NATIVE_ENGINE_CSS_PARSER PROPERTY STRINGS legacy cssparser)
+
+if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser"
+    AND NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
+    message(FATAL_ERROR
+        "The cssparser prototype currently requires the shared html5ever Rust library")
+elseif(NOT WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "legacy"
+    AND NOT WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser")
+    message(FATAL_ERROR
+        "WEBSCENE_NATIVE_ENGINE_CSS_PARSER must be legacy or cssparser")
+endif()
 
 if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     find_program(WEBSCENE_CARGO_EXECUTABLE cargo REQUIRED)
+    set(WEBSCENE_ENABLE_CSSPARSER_RUST OFF)
+    set(WEBSCENE_HTML_PARSER_CARGO_FEATURES)
+    if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser"
+        OR WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK)
+        set(WEBSCENE_ENABLE_CSSPARSER_RUST ON)
+        list(APPEND WEBSCENE_HTML_PARSER_CARGO_FEATURES
+            --features cssparser)
+    endif()
     set(WEBSCENE_HTML_PARSER_MANIFEST
         "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/Cargo.toml")
     set(WEBSCENE_HTML_PARSER_TARGET_DIR
@@ -76,7 +99,7 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
             "CARGO_TARGET_DIR=${WEBSCENE_HTML_PARSER_TARGET_DIR}"
             "${WEBSCENE_CARGO_EXECUTABLE}" build
             --manifest-path "${WEBSCENE_HTML_PARSER_MANIFEST}"
-            --release --locked
+            --release --locked ${WEBSCENE_HTML_PARSER_CARGO_FEATURES}
         DEPENDS
             "${WEBSCENE_HTML_PARSER_MANIFEST}"
             "${CMAKE_CURRENT_SOURCE_DIR}/native/html_parser/Cargo.lock"
@@ -103,6 +126,15 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     target_link_libraries(webscene_native_engine PRIVATE webscene_html_parser)
     target_compile_definitions(webscene_native_engine PRIVATE
         WEBSCENE_NATIVE_ENGINE_HTML5EVER=1)
+    if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser")
+        target_sources(webscene_native_engine PRIVATE
+            native/webscene_css_parser.cpp)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_CSSPARSER=1)
+        message(STATUS "WebScene native engine: cssparser syntax prototype selected")
+    else()
+        message(STATUS "WebScene native engine: legacy CSS syntax parser selected")
+    endif()
     if(BUILD_TESTING)
         add_executable(webscene_html_parser_tests
             tests/html_parser_tests.cpp
@@ -112,6 +144,15 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
         target_include_directories(webscene_html_parser_tests PRIVATE native)
         target_link_libraries(webscene_html_parser_tests PRIVATE webscene_html_parser)
         add_test(NAME webscene_html_parser_tests COMMAND webscene_html_parser_tests)
+        if(WEBSCENE_ENABLE_CSSPARSER_RUST)
+            add_executable(webscene_css_parser_tests
+                tests/css_parser_tests.cpp
+                native/webscene_css_parser.cpp)
+            target_compile_features(webscene_css_parser_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_css_parser_tests PRIVATE native)
+            target_link_libraries(webscene_css_parser_tests PRIVATE webscene_html_parser)
+            add_test(NAME webscene_css_parser_tests COMMAND webscene_css_parser_tests)
+        endif()
     endif()
     if(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK)
         add_executable(webscene_html_parser_benchmark
@@ -121,6 +162,14 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
         target_compile_features(webscene_html_parser_benchmark PRIVATE cxx_std_20)
         target_include_directories(webscene_html_parser_benchmark PRIVATE native)
         target_link_libraries(webscene_html_parser_benchmark PRIVATE webscene_html_parser)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK)
+        add_executable(webscene_css_parser_benchmark
+            benchmarks/css_parser_benchmark.cpp
+            native/webscene_css_parser.cpp)
+        target_compile_features(webscene_css_parser_benchmark PRIVATE cxx_std_20)
+        target_include_directories(webscene_css_parser_benchmark PRIVATE native)
+        target_link_libraries(webscene_css_parser_benchmark PRIVATE webscene_html_parser)
     endif()
     message(STATUS "WebScene native engine: html5ever parser selected")
 elseif(NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "legacy")
