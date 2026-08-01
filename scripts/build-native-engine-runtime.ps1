@@ -11,7 +11,15 @@ param(
     [string] $V8Revision = "15.3.10",
 
     [ValidateSet("legacy", "html5ever")]
-    [string] $HtmlParser = "legacy",
+    [string] $HtmlParser = "html5ever",
+    [ValidateSet("legacy", "cssparser")]
+    [string] $CssParser = "cssparser",
+    [ValidateSet("legacy", "servo")]
+    [string] $SelectorParser = "servo",
+    [ValidateSet("legacy", "generated")]
+    [string] $DomBindings = "generated",
+    [ValidateSet("none", "bootstrap")]
+    [string] $V8Snapshot = "bootstrap",
     [switch] $UpstreamV8,
     [switch] $ThinLto,
     [switch] $PartitionAlloc
@@ -30,9 +38,12 @@ $thinLtoValue = if ($ThinLto) { "true" } else { "false" }
 $thinLtoCMake = if ($ThinLto) { "ON" } else { "OFF" }
 $partitionAllocValue = if ($PartitionAlloc) { "true" } else { "false" }
 $partitionAllocCMake = if ($PartitionAlloc) { "ON" } else { "OFF" }
-$buildVariant = if ($ThinLto) { "-thinlto" } else { "" }
+$buildVariant = "-$HtmlParser-$CssParser-$SelectorParser-$DomBindings-$V8Snapshot"
+$buildVariant += if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
-$buildVariant += if ($HtmlParser -eq "html5ever") { "-html5ever" } else { "" }
+if (($CssParser -eq "cssparser" -or $SelectorParser -eq "servo") -and $HtmlParser -ne "html5ever") {
+    throw "Servo CSS components require -HtmlParser html5ever."
+}
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $versionOutput = & dotnet msbuild `
         (Join-Path $repoRoot "src/WebScene.Core/WebScene.Core.csproj") `
@@ -134,8 +145,16 @@ $icuData = Join-Path $v8OutputRoot "icudtl.dat"
 $v8Args = Join-Path $v8OutputRoot "args.gn"
 $v8License = Join-Path $V8Root "LICENSE"
 $icuLicense = Join-Path $V8Root "third_party/icu/LICENSE"
-@((Join-Path $V8Root "include/v8.h"), $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
+$v8VersionHeader = Join-Path $V8Root "include/v8-version.h"
+@((Join-Path $V8Root "include/v8.h"), $v8VersionHeader, $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Required native runtime input is missing: $_" }
+}
+$requestedV8Parts = $v8Revision.Split('.')
+if ($requestedV8Parts.Length -lt 3 `
+    -or -not (Select-String -Path $v8VersionHeader -Pattern "^#define V8_MAJOR_VERSION\s+$($requestedV8Parts[0])$" -Quiet) `
+    -or -not (Select-String -Path $v8VersionHeader -Pattern "^#define V8_MINOR_VERSION\s+$($requestedV8Parts[1])$" -Quiet) `
+    -or -not (Select-String -Path $v8VersionHeader -Pattern "^#define V8_BUILD_NUMBER\s+$($requestedV8Parts[2])$" -Quiet)) {
+    throw "The V8 headers at '$V8Root' do not match requested revision $v8Revision."
 }
 $hasPointerCompression = Select-String `
     -Path $v8Args `
@@ -175,12 +194,25 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
     "-DWEBSCENE_NATIVE_ENGINE_THIN_LTO=$thinLtoCMake" `
     -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF `
     "-DWEBSCENE_NATIVE_ENGINE_HTML_PARSER=$HtmlParser" `
+    "-DWEBSCENE_NATIVE_ENGINE_CSS_PARSER=$CssParser" `
+    "-DWEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER=$SelectorParser" `
+    "-DWEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=$DomBindings" `
+    "-DWEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT=$V8Snapshot" `
     "-DWEBSCENE_V8_ROOT=$V8Root" `
     "-DWEBSCENE_V8_OUTPUT_ROOT=$v8OutputRoot"
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the native WebScene engine." }
 & cmake --build $buildDir --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the native WebScene engine." }
 Copy-Item $icuData (Join-Path $buildDir "Release/icudtl.dat") -Force
+$snapshotPath = Join-Path $buildDir "webscene_bootstrap_snapshot.bin"
+$snapshotMetadataPath = Join-Path $buildDir "webscene_bootstrap_snapshot.meta"
+if ($V8Snapshot -eq "bootstrap") {
+    if (-not (Test-Path $snapshotPath) -or -not (Test-Path $snapshotMetadataPath)) {
+        throw "Native engine build did not produce its bootstrap snapshot sidecars."
+    }
+    Copy-Item $snapshotPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.bin") -Force
+    Copy-Item $snapshotMetadataPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.meta") -Force
+}
 & ctest --test-dir $buildDir -C Release --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
@@ -212,8 +244,16 @@ $packArguments = @(
     "-p:WebSceneNativeEngineDenseLink=true",
     "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
     "-p:WebSceneNativeEngineV8Revision=$v8Revision",
-    "-p:WebSceneNativeEngineHtmlParser=$HtmlParser"
+    "-p:WebSceneNativeEngineHtmlParser=$HtmlParser",
+    "-p:WebSceneNativeEngineCssParser=$CssParser",
+    "-p:WebSceneNativeEngineSelectorParser=$SelectorParser",
+    "-p:WebSceneNativeEngineDomBindings=$DomBindings",
+    "-p:WebSceneNativeEngineV8Snapshot=$V8Snapshot"
 )
+if ($V8Snapshot -eq "bootstrap") {
+    $packArguments += "-p:WebSceneNativeEngineSnapshotPath=$snapshotPath"
+    $packArguments += "-p:WebSceneNativeEngineSnapshotMetadataPath=$snapshotMetadataPath"
+}
 if ($HtmlParser -eq "html5ever") {
     $packArguments += "-p:WebSceneNativeEngineHtmlParserNoticesPath=$(Join-Path $repoRoot 'experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md')"
 }
@@ -281,7 +321,11 @@ try {
     & dotnet build $consumerProject -c Release -r $Rid --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }
     $consumerOutput = Join-Path $consumerDir "bin/Release/net8.0/$Rid"
-    @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json") | ForEach-Object {
+    $copiedAssets = @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json")
+    if ($V8Snapshot -eq "bootstrap") {
+        $copiedAssets += @("webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta")
+    }
+    $copiedAssets | ForEach-Object {
         if (-not (Test-Path (Join-Path $consumerOutput $_))) {
             throw "The runtime package did not copy '$_' to consumer output."
         }

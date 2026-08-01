@@ -566,3 +566,57 @@ Servo wrapper instead of changing standards parsers.
 - Decision: adopt the streaming ABI. It improves matched parser throughput by 23.8% to
   34.9% with exact compatibility parity and no size/RSS regression. Further optimization
   should target the remaining C++ syntax-IR-to-runtime materialization, not a parser fork.
+
+### 2026-08-01 — Direct CSS runtime sink
+
+- Replaced production `css_syntax_output` materialization with a C++ sink that consumes
+  borrowed callback slices and writes final `css_declaration` storage directly. Stylesheet
+  nesting retains only lightweight frames; completed style, font-face, and keyframe rules
+  commit at rule boundaries. The owned syntax collector remains solely for parser tests
+  and benchmarks.
+- The implementation keeps the upstream crate unmodified. It also avoids locale-dependent
+  lowercasing, does not copy discarded at-rule preludes, and reserves for the common small
+  declaration list instead of reserving eight entries for every generated rule.
+- Focused CSS Syntax remains 11/11. The accepted combined stack remains 104/110 documents
+  and 431/433 assertions, matching its control; the same five pixel/layout failures and
+  hover timeout remain. Parser, CSS parser, and selector parser native suites pass before
+  the broader native suite reaches its existing SVG `currentColor` layout failure.
+- The selector boundary now round-trips DOMString lone-surrogate WTF-8 through a reversible
+  private-use encoding before invoking the UTF-8 Rust parser. This fixes the native
+  selector regression while preserving actual private-use characters and rejecting other
+  invalid byte sequences.
+- Matched five-process CSS stress data under
+  `artifacts/servo-direct-runtime-evidence` contains 25 warm recascade samples per side.
+  The final direct sink records 1.839 ms p50 versus 1.798 ms for the intermediate C++ IR
+  (+2.3%). Median peak memory footprint is effectively unchanged at about 108.3 MB. The
+  process maximum-RSS counter varied with mapped pages and is not used as a benefit claim.
+- Decision: accept the direct sink for single ownership and removal of the production copy,
+  but do not claim a material speed or process-memory improvement. Further optimization
+  requires profiling final rule storage or reducing callback frequency, not reintroducing
+  a duplicate tree.
+
+### 2026-08-01 — Accepted defaults and release-package proof
+
+- Promoted `html5ever`, `cssparser`, Servo selectors, generated bindings, and the bootstrap
+  snapshot to CMake, shell release-script, PowerShell release-script, and runtime-package
+  defaults. Every component retains an explicit legacy/comparison selection until all
+  supported package lanes reproduce the result.
+- Release scripts now validate the exact V8 header major, minor, and build number. This
+  correctly rejected a stale local 14.7 checkout that had previously been described by
+  15.3 package metadata. The accepted build uses V8 15.3.10-WebScene and produced a
+  403,016-byte bootstrap snapshot.
+- Native manifest schema 2 records component selections and hashes the library, ICU data,
+  snapshot, and snapshot metadata. Transitive targets copy both snapshot sidecars beside
+  the runtime for build and publish output, and the package smoke rejects missing assets
+  or non-accepted selections.
+- Local Release acceptance output is
+  `artifacts/acceptance-packages/WebScene.NativeEngine.Runtime.osx-arm64.1.0.14.nupkg`.
+  It uses PartitionAlloc and passed the complete managed/native package verifier. After
+  extraction to a new directory, the responsive release smoke passed 1/1 and the focused
+  CSS Syntax contract passed 11/11, proving relative snapshot/ICU discovery. The complete
+  required profile against that relocated package records 104/110 documents and 431/433
+  assertions with the same known baseline failures.
+- The build script remains strict: it stops before packing because the broad native suite
+  still reports the known SVG `currentColor` failure. The acceptance package was created
+  from the successfully compiled binary with the same pack properties so that acceptance
+  testing can proceed without weakening the release gate.

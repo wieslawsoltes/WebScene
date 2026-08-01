@@ -32,6 +32,32 @@ var library = NativeLibrary.Load(nativePath);
 try
 {
     using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+    foreach (var (name, expected) in new[]
+             {
+                 ("htmlParser", "html5ever"),
+                 ("cssParser", "cssparser"),
+                 ("selectorParser", "servo"),
+                 ("domBindings", "generated"),
+                 ("v8Snapshot", "bootstrap")
+             })
+    {
+        if (!manifest.RootElement.TryGetProperty(name, out var value)
+            || value.GetString() != expected)
+        {
+            return Fail($"The native runtime manifest must declare {name}={expected}.");
+        }
+    }
+    foreach (var snapshotFile in new[]
+             {
+                 "webscene_bootstrap_snapshot.bin",
+                 "webscene_bootstrap_snapshot.meta"
+             })
+    {
+        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, snapshotFile)))
+        {
+            return Fail($"The runtime package did not copy '{snapshotFile}'.");
+        }
+    }
     if (!manifest.RootElement.TryGetProperty("abiVersion", out var manifestAbiProperty)
         || !manifestAbiProperty.TryGetUInt32(out var manifestAbiVersion))
     {

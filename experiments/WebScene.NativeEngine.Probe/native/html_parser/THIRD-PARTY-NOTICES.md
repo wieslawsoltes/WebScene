@@ -27,7 +27,7 @@ The optional WebScene standards parser statically links the Rust crates pinned i
   dependencies and are not linked into WebScene artifacts.
 
 `cssparser` 0.37.0 implements CSS Syntax Level 3 tokenization and recovery. It
-is feature-gated and linked only when the WebScene cssparser prototype or its
+is feature-gated and linked only when the WebScene cssparser implementation or its
 benchmark is selected. WebScene drives its public parser traits through an
 in-repository adapter and streams borrowed input slices into a versioned,
 exception-safe C callback sink; the upstream crate is unmodified. Its upstream project is

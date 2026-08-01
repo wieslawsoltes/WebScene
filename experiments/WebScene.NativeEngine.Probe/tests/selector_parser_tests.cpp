@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -72,6 +73,26 @@ void require_validation()
         "forgiving :is list retains valid selector");
 }
 
+void require_wtf8_domstring_round_trip()
+{
+    auto selector = std::string("#");
+    selector.append("\xF3\xB0\x80\x80", 4U);
+    selector.append("\xED\xA0\xBD", 3U);
+    selector += "surrogateFirst";
+    const auto parsed = parse_selector_syntax(selector);
+    require(static_cast<bool>(parsed), parsed.error);
+    require(parsed.selectors.size() == 1U, "WTF-8 selector count");
+    require(parsed.selectors[0].serialized == selector,
+        "lone surrogate and private-use sentinel round-trip through Servo");
+    require(parsed.selectors[0].compounds.size() == 1U
+            && parsed.selectors[0].compounds[0] == selector,
+        "compiled compound restores the original WTF-8 bytes");
+
+    constexpr char invalid[]{static_cast<char>(0xFF)};
+    require(!parse_selector_syntax(std::string_view(invalid, 1U)),
+        "non-WTF-8 invalid input remains rejected");
+}
+
 } // namespace
 
 int main()
@@ -79,6 +100,7 @@ int main()
     require_selector_shape();
     require_specificity();
     require_validation();
+    require_wtf8_domstring_round_trip();
     std::cout << "selector parser tests passed\n";
     return 0;
 }

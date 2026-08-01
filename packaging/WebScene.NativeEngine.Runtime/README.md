@@ -3,12 +3,17 @@
 This package contains one reviewed native WebScene V8 DOM/CSS/scene engine for the RID in the
 package ID. It is produced by the release pipeline, not restored as a template.
 
-The package includes the native library, its required `icudtl.dat`, the applicable
-third-party notices, and a SHA-256/ABI/V8 build manifest. Release packages use V8
+The package includes the native library, its required `icudtl.dat`, the bootstrap snapshot
+and metadata sidecars, the applicable third-party notices, and a SHA-256/ABI/V8 build
+manifest. Release packages use V8
 pointer compression, its process-wide shared cage, and the size-optimized runtime
 policy. Those settings and dense-link status are recorded in the manifest and exposed
 as transitive MSBuild properties so a stale or incompatible V8 monolith cannot
 silently enter a release.
+The manifest also records the accepted `html5ever`, `cssparser`, Servo-selector,
+generated-WebIDL, and bootstrap-snapshot selections. Schema version 2 hashes every native
+and snapshot asset. Transitive build targets copy the snapshot beside the library for
+both build and publish outputs and fail if any required asset is absent.
 Release linkage also dead-strips unreachable native sections and restricts the
 dynamic export table to WebScene's public C ABI. Developer builds retain ordinary
 symbols unless `WEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON` is selected explicitly.

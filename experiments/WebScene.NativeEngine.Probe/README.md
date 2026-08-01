@@ -34,32 +34,34 @@ cmake -S experiments/WebScene.NativeEngine.Probe \
 cmake --build artifacts/native-engine-probe-v8 --config Release
 ```
 
-## Optional html5ever parser spike
+## Standards-based default stack
 
-The native runtime normally builds its legacy parser. Build the pinned `html5ever`
-comparison artifact as a separate binary:
+New build directories default to the accepted `html5ever` HTML parser, `cssparser` CSS
+syntax parser, Servo selector parser, generated WebIDL catalog, and V8 bootstrap snapshot.
+The Rust library is linked statically into the existing WebScene native library; it does
+not add a deployed dynamic library. For a V8-free build and parser tests:
 
 ```sh
 cmake -S experiments/WebScene.NativeEngine.Probe \
-  -B artifacts/native-engine-probe-html5ever \
+  -B artifacts/native-engine-probe-standards \
   -DCMAKE_BUILD_TYPE=Release \
-  -DWEBSCENE_NATIVE_ENGINE_HTML_PARSER=html5ever \
   -DWEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK=ON
-cmake --build artifacts/native-engine-probe-html5ever --config Release
-ctest --test-dir artifacts/native-engine-probe-html5ever --output-on-failure
-artifacts/native-engine-probe-html5ever/webscene_html_parser_benchmark
+cmake --build artifacts/native-engine-probe-standards --config Release
+ctest --test-dir artifacts/native-engine-probe-standards --output-on-failure
+artifacts/native-engine-probe-standards/webscene_html_parser_benchmark
 ```
 
-The Rust library is linked statically into the existing WebScene native library; it does
-not add a deployed dynamic library. `scripts/build-native-engine-runtime.sh` accepts
-`--html-parser html5ever`, and the Windows PowerShell equivalent accepts
-`-HtmlParser html5ever`, for equivalent packaged V8 comparisons. Comment preservation
-is the production policy; the discard mode exists only in the parser benchmark.
+The release scripts accept explicit `--html-parser`, `--css-parser`, `--selector-parser`,
+`--dom-bindings`, and `--v8-snapshot` overrides; the PowerShell script exposes the
+equivalent named parameters. The legacy implementations remain selectable for bounded
+comparisons, but are no longer the default. Comment preservation is the production
+policy; the discard mode exists only in the parser benchmark.
 
-## Optional generated DOM binding spike
+## Generated DOM bindings
 
-The native runtime keeps the handwritten binding catalog by default. Build the
-WebRef-validated generated `EventTarget` through `HTMLElement` comparison lane with:
+The native runtime defaults to the WebRef-validated generated `EventTarget` through
+`HTMLElement` catalog. An explicit comparison build can still select
+`-DWEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=legacy`.
 
 ```sh
 cmake -S experiments/WebScene.NativeEngine.Probe \
@@ -72,6 +74,11 @@ cmake -S experiments/WebScene.NativeEngine.Probe \
 The generated source is committed. Regenerate or verify it with the commands in
 `tools/webidl-v8-bindings/README.md`; CMake intentionally has no Node or network
 dependency.
+
+V8 release builds default to a bootstrap snapshot. The generated
+`webscene_bootstrap_snapshot.bin` and `webscene_bootstrap_snapshot.meta` files must remain
+beside the native library; the package targets copy all three files together and reject a
+missing sidecar.
 
 Certification telemetry and profiling hooks are excluded by default from both
 Release and Debug builds. Enable them only for compatibility evidence or native

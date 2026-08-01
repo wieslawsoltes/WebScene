@@ -1,13 +1,13 @@
 # Runtime architectural upgrade shortlist
 
-**Status:** Candidates evaluated; measured rollout order recorded below
+**Status:** Evaluated components promoted to native defaults; remaining limits recorded below
 
 **Date:** 2026-07-31
 
 ## Purpose
 
 This document records the small set of architectural upgrades that are worth
-investigating after reviewing Lightpanda's browser architecture and comparing it with
+investigating after reviewing upstream browser components and comparing them with
 WebScene's managed and native engines.
 
 An idea belongs here only if it has a credible path to at least one of these outcomes:
@@ -19,8 +19,6 @@ An idea belongs here only if it has a credible path to at least one of these out
 
 The recommendations are deliberately narrower than "make WebScene a browser." WebScene
 should retain its CSS cascade, layout, scene, Canvas, SVG, input, and renderer architecture.
-Lightpanda has no graphical rendering engine and its synthetic layout is not a replacement
-for those systems.
 
 ## Current baseline
 
@@ -67,11 +65,11 @@ artifact paths, and decision rationale are in
 
 | Candidate | Decision | Gate cleared | Important cost or limit |
 | --- | --- | --- | --- |
-| `html5ever` 0.39.0 | Adopted behind a rollout switch | Broad HTML compatibility and upstream parser reuse | Performance neutral; approximately +0.7% peak RSS |
-| Servo `cssparser` 0.37.0 | Rule in; streaming ABI adopted | CSS Syntax compatibility, 3/11 to 11/11 focused assertions; 23.8%-34.9% faster than owned adapter | Process RSS neutral; zero Rust CSS allocations/retention; upstream crate unmodified |
-| Generated WebIDL catalog | Rule in incrementally | Binding compatibility, 2/10 to 9/10 focused assertions | No material code/memory/performance win; prototype attributes need semantic callback refactoring |
-| V8 bootstrap snapshot | Rule in first | -27.1% independent context lifecycle, -11.6% shared lifecycle | +0.660% shipped size; per-RID sidecar packaging required |
-| Servo `selectors` 0.39.0 syntax | Rule in after ABI cleanup | Selector syntax/specificity, 1/10 to 10/10 focused and 1/9 to 8/9 pinned WPT | +24.7% selector stress; memory neutral; no maintained-code reduction |
+| `html5ever` 0.39.0 | Accepted default | Broad HTML compatibility and upstream parser reuse | Performance neutral; approximately +0.7% peak RSS |
+| Servo `cssparser` 0.37.0 | Accepted default; direct callback sink | CSS Syntax compatibility, 3/11 to 11/11 focused assertions; 23.8%-34.9% faster than the original owned Rust adapter | Final direct runtime sink is +2.3% on parser stress and memory neutral; no intermediate rule tree in production |
+| Generated WebIDL catalog | Accepted default, expand incrementally | Binding compatibility, 2/10 to 9/10 focused assertions | No material code/memory/performance win; attributes still need semantic callback refactoring |
+| V8 bootstrap snapshot | Accepted default and packaged | -27.1% independent context lifecycle, -11.6% shared lifecycle | +0.660% shipped size; per-RID sidecars are hashed and copied transitively |
+| Servo `selectors` 0.39.0 syntax | Accepted default | Selector syntax/specificity, 1/10 to 10/10 focused and 1/9 to 8/9 pinned WPT | +24.7% selector stress; memory neutral; no maintained-code reduction |
 | Lexbor CSS 1.4.0 (Lexbor v3.0.0) | Rule out | Required profile neutral, but no improvement over Servo | Focused CSS Syntax 10/11 vs Servo 11/11; +71% to +99% on valid parser fixtures; 3.4x 1 MiB parser-pool memory |
 
 None of these candidates reaches the memory-benefit gate. Memory reduction remains a
@@ -82,12 +80,11 @@ component adoption.
 
 ### Implementation status (2026-07-31)
 
-The first `html5ever` spike is implemented behind the compile-time
-`WEBSCENE_NATIVE_ENGINE_HTML_PARSER=legacy|html5ever` selection. The default remains
-`legacy` until the adoption gates below are evaluated with equivalent V8 runtime
-artifacts.
+The `html5ever` implementation is selected by default through the compile-time
+`WEBSCENE_NATIVE_ENGINE_HTML_PARSER=legacy|html5ever` setting. The legacy path remains for
+bounded comparisons while packaged-platform coverage is completed.
 
-The spike includes:
+The implementation includes:
 
 - a clean-room Rust `staticlib` pinned to `html5ever` 0.39.0 and a committed
   `Cargo.lock`;
@@ -126,9 +123,9 @@ path and should be deleted after packaged-platform coverage is complete.
 
 ### Decision
 
-Prototype one separately built Rust static library that provides coarse-grained standards
-parsing services to the native engine. Adopt upstream components directly; do not copy
-Lightpanda's AGPL integration code.
+Use one separately built Rust static library that provides coarse-grained standards
+parsing services to the native engine. Upstream components remain behind a reviewed
+WebScene-owned ABI.
 
 The first and strongest candidate is Servo's `html5ever`. It should replace all native
 HTML tree construction used by document loading, fragments and `innerHTML`, `DOMParser`,
@@ -144,9 +141,11 @@ creating a second foreign-function boundary:
 - a selector-parser spike only if it can emit WebScene's existing compiled selector IR
   without importing a second cascade or layout engine.
 
-CSS parsing must cross the ABI once per stylesheet and return a compact rule/declaration
-IR. It must not call across the ABI once per token. WebScene remains authoritative for
-the cascade, invalidation, computed values, layout, and rendering.
+CSS parsing crosses the ABI once per stylesheet and emits rule-boundary and declaration
+callbacks backed by borrowed input slices. The production sink writes final WebScene rule
+and declaration storage directly; the owned syntax tree remains only as a test collector.
+WebScene remains authoritative for the cascade, invalidation, computed values, layout,
+and rendering.
 
 ### Why it qualifies
 
@@ -315,10 +314,10 @@ first failing assertion. Preserve results between runs and report deltas by stan
 area. Promote stable relevant cases into the curated required/candidate profile rather
 than making the entire upstream suite a release gate.
 
-Reusable pieces include the WPT manifest and server themselves and the Apache-licensed
-Lightpanda demo runner's process-pool, crash-restart, memory-limit, and no-progress
-watchdog patterns. WebScene should adapt those patterns to its existing adapter rather
-than add CDP solely to run tests.
+Reusable pieces include the WPT manifest and server themselves plus conventional
+process-pool, crash-restart, memory-limit, and no-progress watchdog patterns. WebScene
+should adapt those patterns to its existing adapter rather than add CDP solely to run
+tests.
 
 ### Why it qualifies
 
@@ -344,14 +343,8 @@ the other changes safely.
 
 The following are not justified by the four outcome filters:
 
-- **Do not import Lightpanda's DOM, CSS, or bridge implementation.** The browser code is
-  AGPL-3.0-only by default, and its automation-oriented synthetic layout is below
-  WebScene's current renderer requirements. Reimplement useful patterns or adopt their
-  permissively licensed upstream dependencies directly after license review.
-- **Do not replace WebScene layout with Lightpanda layout.** Lightpanda has no graphical
-  renderer and approximates geometry for automation.
 - **Do not add another JavaScript engine.** WebScene native packages already use V8
-  15.3.10, newer than the reviewed Lightpanda revision.
+  15.3.10 and do not benefit from maintaining a second engine integration.
 - **Do not propose shared-isolate hosting as new work.** The native runtime already shares
   an isolate across contexts and has active/peak context metrics and lifecycle tests.
 - **Do not add CDP only for WPT.** It expands the product surface without improving the
@@ -363,12 +356,13 @@ The following are not justified by the four outcome filters:
 
 ## Recommended sequence
 
-1. Package the measured V8 bootstrap snapshot with strict fingerprints for each supported
-   RID, then enable it by default.
-2. Complete packaged-platform rollout of `html5ever`, then remove the legacy HTML parser.
-3. Use the completed borrowed-slice callback ABI, expand ecosystem coverage, promote the
-   standards module, and remove the syntax fallbacks. Do not fork `cssparser`; its public
-   parser traits were sufficient. Next remove the remaining C++ syntax-IR-to-runtime copy.
+1. Reproduce the accepted macOS package lane on every supported RID. Snapshot and parser
+   fingerprints are now strict and the accepted stack is the build and package default.
+2. Expand packaged-platform coverage, then remove the legacy HTML, CSS syntax, selector,
+   binding-catalog, and no-snapshot comparison paths.
+3. Keep the direct CSS callback sink. The remaining owned syntax collector is test-only;
+   do not fork `cssparser` unless a future required grammar cannot be expressed through its
+   public traits.
 4. Continue migrating operations and interface structure to generated WebIDL bindings;
    refactor semantic getter/setter callbacks before moving attributes to prototypes.
 5. Introduce external-memory accounting and lifetime regions category by category, using
@@ -380,12 +374,9 @@ components.
 
 ## Review basis
 
-This shortlist was prepared from a source-level comparison of:
-
-- Lightpanda browser commit `392bb4c772446c036e3ee11357205f806f331f5d`;
-- Lightpanda demo/WPT runner commit `25095f3ca042f8b80b79d83e8842f30154af80a0`;
-- WebScene native runtime, packaging, architecture records, and WPT component profile at
-  the date above.
+This shortlist was prepared from WebScene's native runtime, packaging, architecture
+records, WPT component profile, and the documented APIs of the evaluated upstream
+standards crates.
 
 The comparison is architectural evidence, not permission to copy code. Every adopted
 dependency or reused implementation must receive a separate version, license, security,

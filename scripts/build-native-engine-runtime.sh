@@ -9,14 +9,18 @@ v8_root=
 v8_output_root=
 v8_workspace=
 v8_revision=15.3.10
-html_parser=legacy
+html_parser=html5ever
+css_parser=cssparser
+selector_parser=servo
+dom_bindings=generated
+v8_snapshot=bootstrap
 thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
 }
 
 while (($# > 0)); do
@@ -29,6 +33,10 @@ while (($# > 0)); do
     --v8-workspace) v8_workspace="${2:-}"; shift 2 ;;
     --v8-revision) v8_revision="${2:-}"; shift 2 ;;
     --html-parser) html_parser="${2:-}"; shift 2 ;;
+    --css-parser) css_parser="${2:-}"; shift 2 ;;
+    --selector-parser) selector_parser="${2:-}"; shift 2 ;;
+    --dom-bindings) dom_bindings="${2:-}"; shift 2 ;;
+    --v8-snapshot) v8_snapshot="${2:-}"; shift 2 ;;
     --upstream-v8) upstream_v8=true; shift ;;
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
@@ -50,14 +58,32 @@ if [[ "$html_parser" != legacy && "$html_parser" != html5ever ]]; then
   echo "Unsupported HTML parser '$html_parser'; expected legacy or html5ever." >&2
   exit 1
 fi
+if [[ "$css_parser" != legacy && "$css_parser" != cssparser ]]; then
+  echo "Unsupported CSS parser '$css_parser'; expected legacy or cssparser." >&2
+  exit 1
+fi
+if [[ "$selector_parser" != legacy && "$selector_parser" != servo ]]; then
+  echo "Unsupported selector parser '$selector_parser'; expected legacy or servo." >&2
+  exit 1
+fi
+if [[ "$dom_bindings" != legacy && "$dom_bindings" != generated ]]; then
+  echo "Unsupported DOM bindings '$dom_bindings'; expected legacy or generated." >&2
+  exit 1
+fi
+if [[ "$v8_snapshot" != none && "$v8_snapshot" != bootstrap ]]; then
+  echo "Unsupported V8 snapshot '$v8_snapshot'; expected none or bootstrap." >&2
+  exit 1
+fi
+if [[ ( "$css_parser" == cssparser || "$selector_parser" == servo )
+    && "$html_parser" != html5ever ]]; then
+  echo "Servo CSS components require --html-parser html5ever." >&2
+  exit 1
+fi
 
 v8_configuration=Release
-build_variant=
+build_variant="-$html_parser-$css_parser-$selector_parser-$dom_bindings-$v8_snapshot"
 thin_lto_cmake=OFF
 partition_alloc_cmake=OFF
-if [[ "$html_parser" == html5ever ]]; then
-  build_variant+=-html5ever
-fi
 v8_webassembly=true
 if [[ "$thin_lto" == true ]]; then
   v8_configuration=ReleaseThinLto
@@ -192,12 +218,21 @@ icu_data="$v8_output_root/icudtl.dat"
 v8_args="$v8_output_root/args.gn"
 v8_license="$v8_root/LICENSE"
 icu_license="$v8_root/third_party/icu/LICENSE"
-for required in "$v8_root/include/v8.h" "$v8_monolith" "$icu_data" "$v8_args" "$v8_license" "$icu_license"; do
+for required in "$v8_root/include/v8.h" "$v8_root/include/v8-version.h" \
+    "$v8_monolith" "$icu_data" "$v8_args" "$v8_license" "$icu_license"; do
   if [[ ! -f "$required" ]]; then
     echo "Required native runtime input is missing: $required" >&2
     exit 1
   fi
 done
+IFS=. read -r expected_v8_major expected_v8_minor expected_v8_build _ <<< "$v8_revision"
+v8_version_header="$v8_root/include/v8-version.h"
+if ! grep -Eq "^#define V8_MAJOR_VERSION +$expected_v8_major$" "$v8_version_header" \
+    || ! grep -Eq "^#define V8_MINOR_VERSION +$expected_v8_minor$" "$v8_version_header" \
+    || ! grep -Eq "^#define V8_BUILD_NUMBER +$expected_v8_build$" "$v8_version_header"; then
+  echo "The V8 headers at '$v8_root' do not match requested revision $v8_revision." >&2
+  exit 1
+fi
 if ! grep -Eq '^v8_enable_pointer_compression *= *true$' "$v8_args" \
     || ! grep -Eq '^v8_enable_pointer_compression_shared_cage *= *true$' "$v8_args"; then
   echo "The V8 SDK at '$v8_root' is not the required pointer-compressed shared-cage build." >&2
@@ -253,6 +288,10 @@ cmake_args=(
   -DWEBSCENE_NATIVE_ENGINE_THIN_LTO="$thin_lto_cmake"
   -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
   -DWEBSCENE_NATIVE_ENGINE_HTML_PARSER="$html_parser"
+  -DWEBSCENE_NATIVE_ENGINE_CSS_PARSER="$css_parser"
+  -DWEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER="$selector_parser"
+  -DWEBSCENE_NATIVE_ENGINE_DOM_BINDINGS="$dom_bindings"
+  -DWEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT="$v8_snapshot"
   -DWEBSCENE_V8_ROOT="$v8_root"
   -DWEBSCENE_V8_OUTPUT_ROOT="$v8_output_root"
 )
@@ -316,6 +355,13 @@ if [[ ! -f "$native_path" ]]; then
   echo "Native engine build did not produce '$native_path'." >&2
   exit 1
 fi
+snapshot_path="$build_dir/webscene_bootstrap_snapshot.bin"
+snapshot_metadata_path="$build_dir/webscene_bootstrap_snapshot.meta"
+if [[ "$v8_snapshot" == bootstrap \
+    && ( ! -f "$snapshot_path" || ! -f "$snapshot_metadata_path" ) ]]; then
+  echo "Native engine build did not produce its bootstrap snapshot sidecars." >&2
+  exit 1
+fi
 ixwebsocket_license="$build_dir/_deps/webscene_ixwebsocket-src/LICENSE.txt"
 if [[ ! -f "$ixwebsocket_license" ]]; then
   echo "IXWebSocket license was not found at '$ixwebsocket_license'." >&2
@@ -347,7 +393,16 @@ pack_args=(
   "-p:WebSceneNativeEngineThinLto=$thin_lto"
   "-p:WebSceneNativeEngineV8Revision=$v8_revision"
   "-p:WebSceneNativeEngineHtmlParser=$html_parser"
+  "-p:WebSceneNativeEngineCssParser=$css_parser"
+  "-p:WebSceneNativeEngineSelectorParser=$selector_parser"
+  "-p:WebSceneNativeEngineDomBindings=$dom_bindings"
+  "-p:WebSceneNativeEngineV8Snapshot=$v8_snapshot"
 )
+if [[ "$v8_snapshot" == bootstrap ]]; then
+  pack_args+=(
+    "-p:WebSceneNativeEngineSnapshotPath=$snapshot_path"
+    "-p:WebSceneNativeEngineSnapshotMetadataPath=$snapshot_metadata_path")
+fi
 if [[ "$html_parser" == html5ever ]]; then
   pack_args+=(
     "-p:WebSceneNativeEngineHtmlParserNoticesPath=$repo_root/experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md")
@@ -409,7 +464,11 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
   --configfile "$consumer_nuget_config"
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
-for copied_asset in "$native_name" icudtl.dat webscene-native-runtime.json; do
+copied_assets=("$native_name" icudtl.dat webscene-native-runtime.json)
+if [[ "$v8_snapshot" == bootstrap ]]; then
+  copied_assets+=(webscene_bootstrap_snapshot.bin webscene_bootstrap_snapshot.meta)
+fi
+for copied_asset in "${copied_assets[@]}"; do
   copied_path="$consumer_dir/bin/Release/$consumer_framework/$rid/$copied_asset"
   if [[ ! -f "$copied_path" ]]; then
     echo "The runtime package did not copy '$copied_asset' to consumer output." >&2

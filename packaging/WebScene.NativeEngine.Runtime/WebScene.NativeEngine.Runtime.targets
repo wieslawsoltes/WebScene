@@ -3,6 +3,8 @@
     <WebSceneNativeEnginePackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</WebSceneNativeEnginePackageRoot>
     <WebSceneNativeEnginePackageAsset>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedFileName)</WebSceneNativeEnginePackageAsset>
     <WebSceneNativeEnginePackageIcuData>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedIcuFileName)</WebSceneNativeEnginePackageIcuData>
+    <WebSceneNativeEnginePackageSnapshot>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedSnapshotFileName)</WebSceneNativeEnginePackageSnapshot>
+    <WebSceneNativeEnginePackageSnapshotMetadata>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\$(WebSceneNativeEnginePackagedSnapshotMetadataFileName)</WebSceneNativeEnginePackageSnapshotMetadata>
     <WebSceneNativeEnginePackageManifest>$(WebSceneNativeEnginePackageRoot)runtimes\$(WebSceneNativeEnginePackagedRid)\native\webscene-native-runtime.json</WebSceneNativeEnginePackageManifest>
   </PropertyGroup>
 
@@ -22,6 +24,18 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="Always"
              ExcludeFromSingleFile="true" />
+    <Content Include="$(WebSceneNativeEnginePackageSnapshot)"
+             Link="$(WebSceneNativeEnginePackagedSnapshotFileName)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true"
+             Condition="'$(WebSceneNativeEngineV8Snapshot)' == 'bootstrap'" />
+    <Content Include="$(WebSceneNativeEnginePackageSnapshotMetadata)"
+             Link="$(WebSceneNativeEnginePackagedSnapshotMetadataFileName)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             ExcludeFromSingleFile="true"
+             Condition="'$(WebSceneNativeEngineV8Snapshot)' == 'bootstrap'" />
   </ItemGroup>
 
   <Target Name="ValidateWebSceneNativeRuntimePackage"
@@ -35,5 +49,9 @@
            Text="WebScene native runtime package is corrupt; its manifest is missing: $(WebSceneNativeEnginePackageManifest)" />
     <Error Condition="!Exists('$(WebSceneNativeEnginePackageIcuData)')"
            Text="WebScene native runtime package is corrupt; V8 ICU data is missing: $(WebSceneNativeEnginePackageIcuData)" />
+    <Error Condition="'$(WebSceneNativeEngineV8Snapshot)' == 'bootstrap' and !Exists('$(WebSceneNativeEnginePackageSnapshot)')"
+           Text="WebScene native runtime package is corrupt; V8 bootstrap snapshot is missing: $(WebSceneNativeEnginePackageSnapshot)" />
+    <Error Condition="'$(WebSceneNativeEngineV8Snapshot)' == 'bootstrap' and !Exists('$(WebSceneNativeEnginePackageSnapshotMetadata)')"
+           Text="WebScene native runtime package is corrupt; V8 bootstrap snapshot metadata is missing: $(WebSceneNativeEnginePackageSnapshotMetadata)" />
   </Target>
 </Project>

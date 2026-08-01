@@ -2,7 +2,9 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 using namespace webscene_native;
 
@@ -94,6 +96,63 @@ void invalid_utf8_is_rejected()
     require(!parsed, "invalid UTF-8 should fail explicitly");
 }
 
+class direct_sink final : public css_syntax_sink {
+public:
+    bool begin_rule(
+        uint32_t,
+        bool,
+        size_t parent_index,
+        std::string_view,
+        std::string_view,
+        size_t& rule_index) override
+    {
+        const auto expected_parent = stack.empty()
+            ? css_syntax_no_parent
+            : stack.back();
+        if (parent_index != expected_parent) return false;
+        rule_index = 100U + rule_count++;
+        stack.push_back(rule_index);
+        return true;
+    }
+
+    bool declaration(
+        std::string_view name,
+        std::string_view value,
+        bool important) override
+    {
+        if (name == "COLOR" && value == "red" && !important) saw_raw_color = true;
+        ++declaration_count;
+        return true;
+    }
+
+    bool end_rule(size_t rule_index, size_t) override
+    {
+        if (stack.empty() || stack.back() != rule_index) return false;
+        stack.pop_back();
+        return true;
+    }
+
+    std::vector<size_t> stack;
+    size_t rule_count{0U};
+    size_t declaration_count{0U};
+    bool saw_raw_color{false};
+};
+
+void direct_streaming_sink()
+{
+    direct_sink sink;
+    const auto parsed = stream_css_syntax_stylesheet(
+        ".a { COLOR: red } @media (min-width: 1px) { .b { width: 2px } }",
+        sink);
+    require(static_cast<bool>(parsed), parsed.error);
+    require(sink.stack.empty(), "direct callbacks preserve balanced rule nesting");
+    require(sink.rule_count == 3U, "direct callback receives all nested rules");
+    require(sink.declaration_count == 2U, "direct callback receives declarations once");
+    require(sink.saw_raw_color, "direct callback receives borrowed unnormalized syntax");
+    require(parsed.metrics.parser_allocation_count == 0U, "direct parser stream allocates no Rust output");
+    require(parsed.metrics.parser_retained_bytes == 0U, "direct parser stream retains no Rust output");
+}
+
 } // namespace
 
 int main()
@@ -101,6 +160,7 @@ int main()
     declaration_syntax();
     stylesheet_structure();
     invalid_utf8_is_rejected();
+    direct_streaming_sink();
     std::cout << "CSS parser tests passed\n";
     return 0;
 }

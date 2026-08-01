@@ -57,19 +57,19 @@ option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
     "Build the V8-free selected CSS syntax parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
     "Build the native V8 DOM binding lifecycle benchmark" OFF)
-set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "legacy" CACHE STRING
+set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "html5ever" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
-set(WEBSCENE_NATIVE_ENGINE_CSS_PARSER "legacy" CACHE STRING
+set(WEBSCENE_NATIVE_ENGINE_CSS_PARSER "cssparser" CACHE STRING
     "Native CSS syntax parser implementation: legacy or cssparser")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_CSS_PARSER PROPERTY STRINGS legacy cssparser)
-set(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER "legacy" CACHE STRING
+set(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER "servo" CACHE STRING
     "Native CSS selector parser implementation: legacy or servo")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER PROPERTY STRINGS legacy servo)
-set(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS "legacy" CACHE STRING
+set(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS "generated" CACHE STRING
     "Native DOM binding catalog: legacy or generated")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS PROPERTY STRINGS legacy generated)
-set(WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT "none" CACHE STRING
+set(WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT "bootstrap" CACHE STRING
     "V8 embedder startup snapshot: none or bootstrap")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT PROPERTY STRINGS none bootstrap)
 
@@ -87,7 +87,7 @@ endif()
 if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser"
     AND NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     message(FATAL_ERROR
-        "The cssparser prototype currently requires the shared html5ever Rust library")
+        "The cssparser implementation requires the shared html5ever Rust library")
 elseif(NOT WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "legacy"
     AND NOT WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser")
     message(FATAL_ERROR
@@ -97,7 +97,7 @@ endif()
 if(WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo"
     AND NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
     message(FATAL_ERROR
-        "The Servo selector prototype currently requires the shared html5ever Rust library")
+        "The Servo selector implementation requires the shared html5ever Rust library")
 elseif(NOT WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "legacy"
     AND NOT WEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER STREQUAL "servo")
     message(FATAL_ERROR
@@ -166,7 +166,7 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
             native/webscene_css_parser.cpp)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_NATIVE_ENGINE_CSSPARSER=1)
-        message(STATUS "WebScene native engine: cssparser syntax prototype selected")
+        message(STATUS "WebScene native engine: cssparser syntax parser selected")
     else()
         message(STATUS "WebScene native engine: legacy CSS syntax parser selected")
     endif()
@@ -175,7 +175,7 @@ if(WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
             native/webscene_selector_parser.cpp)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS=1)
-        message(STATUS "WebScene native engine: Servo selector parser prototype selected")
+        message(STATUS "WebScene native engine: Servo selector parser selected")
     else()
         message(STATUS "WebScene native engine: legacy selector parser selected")
     endif()

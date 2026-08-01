@@ -193,13 +193,33 @@ def validate_native_runtime(
                     f"{package}: native readme does not list {expected_package_id}"
                 )
 
+        required_assets = {
+            manifest["fileName"]: manifest["sha256"],
+            manifest["icuFileName"]: manifest["icuSha256"],
+            manifest["snapshotFileName"]: manifest["snapshotSha256"],
+            manifest["snapshotMetadataFileName"]: manifest["snapshotMetadataSha256"],
+        }
+        for file_name, expected_hash in required_assets.items():
+            asset_name = f"runtimes/{runtime_identifier}/native/{file_name}"
+            if asset_name not in archive.namelist():
+                raise RuntimeError(f"{package}: missing {asset_name}")
+            actual_hash = hashlib.sha256(archive.read(asset_name)).hexdigest()
+            if actual_hash.lower() != expected_hash.lower():
+                raise RuntimeError(
+                    f"{package}: {asset_name} hash does not match its manifest"
+                )
+
     expected = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "packageVersion": version,
         "runtimeIdentifier": runtime_identifier,
         "configuration": "Release",
         "v8Revision": NATIVE_V8_REVISIONS[runtime_identifier],
-        "htmlParser": "legacy",
+        "htmlParser": "html5ever",
+        "cssParser": "cssparser",
+        "selectorParser": "servo",
+        "domBindings": "generated",
+        "v8Snapshot": "bootstrap",
         "v8PointerCompression": True,
         "v8SharedCage": True,
         "v8OptimizeForSizeDefault": True,

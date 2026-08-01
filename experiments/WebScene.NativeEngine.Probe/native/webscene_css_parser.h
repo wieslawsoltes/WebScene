@@ -45,6 +45,38 @@ struct css_syntax_output final {
     explicit operator bool() const noexcept { return error.empty(); }
 };
 
+struct css_syntax_parse_result final {
+    css_syntax_metrics metrics;
+    std::string error;
+
+    explicit operator bool() const noexcept { return error.empty(); }
+};
+
+class css_syntax_sink {
+public:
+    virtual ~css_syntax_sink() = default;
+
+    virtual bool begin_rule(
+        uint32_t kind,
+        bool has_block,
+        size_t parent_index,
+        std::string_view name,
+        std::string_view prelude,
+        size_t& rule_index) = 0;
+    virtual bool declaration(
+        std::string_view name,
+        std::string_view value,
+        bool important) = 0;
+    virtual bool end_rule(size_t rule_index, size_t declaration_count) = 0;
+};
+
+css_syntax_parse_result stream_css_syntax_stylesheet(
+    std::string_view input,
+    css_syntax_sink& sink);
+css_syntax_parse_result stream_css_syntax_declarations(
+    std::string_view input,
+    css_syntax_sink& sink);
+
 css_syntax_output parse_css_syntax_stylesheet(std::string_view input);
 css_syntax_output parse_css_syntax_declarations(std::string_view input);
 
