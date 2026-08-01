@@ -86,9 +86,11 @@
         const std::filesystem::path& destination)
     {
 #if defined(_WIN32)
+        const auto native_temporary = runtime_file_path(temporary);
+        const auto native_destination = runtime_file_path(destination);
         return MoveFileExW(
-            temporary.c_str(),
-            destination.c_str(),
+            native_temporary.c_str(),
+            native_destination.c_str(),
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 #else
         std::error_code error;
@@ -236,7 +238,9 @@
             + "." + std::to_string(current_process_id())
             + "." + std::to_string(temporary_sequence.fetch_add(1, std::memory_order_relaxed))
             + ".tmp";
-        std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+        std::ofstream stream(
+            runtime_file_path(temporary),
+            std::ios::binary | std::ios::trunc);
         if (!stream) {
             remember_unpersisted_content();
             return;
@@ -502,7 +506,9 @@
             + "." + std::to_string(current_process_id())
             + "." + std::to_string(temporary_sequence.fetch_add(1, std::memory_order_relaxed))
             + ".tmp";
-        std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+        std::ofstream stream(
+            runtime_file_path(temporary),
+            std::ios::binary | std::ios::trunc);
         if (!stream) return;
         constexpr std::array<char, 8> magic{'H', 'M', 'L', 'N', 'V', '8', '0', '1'};
         constexpr uint32_t schema = 1U;

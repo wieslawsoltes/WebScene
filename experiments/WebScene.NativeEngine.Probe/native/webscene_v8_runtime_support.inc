@@ -32,6 +32,23 @@ struct binding_callback_stats final {
     uint64_t nanoseconds{0};
 };
 
+std::filesystem::path runtime_file_path(const std::filesystem::path& path)
+{
+#if defined(_WIN32)
+    std::error_code error;
+    auto absolute = std::filesystem::absolute(path, error);
+    if (error) absolute = path;
+    auto native = absolute.lexically_normal().native();
+    if (native.starts_with(L"\\\\?\\")) return std::filesystem::path(native);
+    if (native.starts_with(L"\\\\")) {
+        return std::filesystem::path(L"\\\\?\\UNC\\" + native.substr(2U));
+    }
+    return std::filesystem::path(L"\\\\?\\" + native);
+#else
+    return path;
+#endif
+}
+
 class binding_callback_timer final {
 public:
     explicit binding_callback_timer(binding_callback_stats* stats) noexcept
@@ -110,8 +127,9 @@ public:
         auto result = std::shared_ptr<immutable_byte_buffer>(
             new immutable_byte_buffer());
 #if defined(_WIN32)
+        const auto native_path = runtime_file_path(path);
         result->file_ = CreateFileW(
-            path.c_str(),
+            native_path.c_str(),
             GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_DELETE,
             nullptr,
