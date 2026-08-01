@@ -68,7 +68,7 @@ artifact paths, and decision rationale are in
 | Candidate | Decision | Gate cleared | Important cost or limit |
 | --- | --- | --- | --- |
 | `html5ever` 0.39.0 | Adopted behind a rollout switch | Broad HTML compatibility and upstream parser reuse | Performance neutral; approximately +0.7% peak RSS |
-| Servo `cssparser` 0.37.0 | Rule in | CSS Syntax compatibility, 3/11 to 11/11 focused assertions | +124% on a parser-only stress, but +2.32 ms absolute per 108 KiB; +0.85% RSS |
+| Servo `cssparser` 0.37.0 | Rule in; streaming ABI adopted | CSS Syntax compatibility, 3/11 to 11/11 focused assertions; 23.8%-34.9% faster than owned adapter | Process RSS neutral; zero Rust CSS allocations/retention; upstream crate unmodified |
 | Generated WebIDL catalog | Rule in incrementally | Binding compatibility, 2/10 to 9/10 focused assertions | No material code/memory/performance win; prototype attributes need semantic callback refactoring |
 | V8 bootstrap snapshot | Rule in first | -27.1% independent context lifecycle, -11.6% shared lifecycle | +0.660% shipped size; per-RID sidecar packaging required |
 | Servo `selectors` 0.39.0 syntax | Rule in after ABI cleanup | Selector syntax/specificity, 1/10 to 10/10 focused and 1/9 to 8/9 pinned WPT | +24.7% selector stress; memory neutral; no maintained-code reduction |
@@ -366,9 +366,9 @@ The following are not justified by the four outcome filters:
 1. Package the measured V8 bootstrap snapshot with strict fingerprints for each supported
    RID, then enable it by default.
 2. Complete packaged-platform rollout of `html5ever`, then remove the legacy HTML parser.
-3. Replace the owned Rust-result ABI with a callback/streaming adapter, beginning in the
-   repository wrapper rather than forking `cssparser`; expand ecosystem coverage, promote
-   the standards module, and remove the syntax fallbacks.
+3. Use the completed borrowed-slice callback ABI, expand ecosystem coverage, promote the
+   standards module, and remove the syntax fallbacks. Do not fork `cssparser`; its public
+   parser traits were sufficient. Next remove the remaining C++ syntax-IR-to-runtime copy.
 4. Continue migrating operations and interface structure to generated WebIDL bindings;
    refactor semantic getter/setter callbacks before moving attributes to prototypes.
 5. Introduce external-memory accounting and lifetime regions category by category, using

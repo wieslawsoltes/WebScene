@@ -10,7 +10,20 @@ struct webscene_css_byte_slice final {
     size_t length;
 };
 
-struct webscene_css_parse_result final {
+using webscene_css_begin_rule_callback = uint8_t(*)(
+    void*, uint32_t, uint8_t, size_t,
+    webscene_css_byte_slice, webscene_css_byte_slice, size_t*);
+using webscene_css_declaration_callback = uint8_t(*)(
+    void*, webscene_css_byte_slice, webscene_css_byte_slice, uint8_t);
+using webscene_css_end_rule_callback = uint8_t(*)(void*, size_t, size_t);
+
+struct webscene_css_sink_vtable final {
+    webscene_css_begin_rule_callback begin_rule;
+    webscene_css_declaration_callback declaration;
+    webscene_css_end_rule_callback end_rule;
+};
+
+struct webscene_css_stream_result final {
     uint32_t status;
     uint64_t parse_error_count;
     uint64_t rule_count;
@@ -18,32 +31,12 @@ struct webscene_css_parse_result final {
     uint64_t rust_allocation_count;
     uint64_t rust_peak_bytes;
     uint64_t rust_retained_bytes;
-    void* handle;
 };
 
-struct webscene_css_rule_view final {
-    uint32_t kind;
-    uint8_t has_block;
-    size_t parent_index;
-    webscene_css_byte_slice name;
-    webscene_css_byte_slice prelude;
-    size_t first_declaration;
-    size_t declaration_count;
-};
-
-struct webscene_css_declaration_view final {
-    webscene_css_byte_slice name;
-    webscene_css_byte_slice value;
-    uint8_t important;
-};
-
-uint32_t webscene_css_parser_abi_version();
-webscene_css_parse_result webscene_css_parse_stylesheet(webscene_css_byte_slice);
-webscene_css_parse_result webscene_css_parse_declarations(webscene_css_byte_slice);
-uint8_t webscene_css_rule_at(
-    const void*, size_t, webscene_css_rule_view*);
-uint8_t webscene_css_declaration_at(
-    const void*, size_t, webscene_css_declaration_view*);
-void webscene_css_free(void*);
+uint32_t webscene_css_stream_abi_version();
+webscene_css_stream_result webscene_css_stream_stylesheet(
+    webscene_css_byte_slice, const webscene_css_sink_vtable*, void*);
+webscene_css_stream_result webscene_css_stream_declarations(
+    webscene_css_byte_slice, const webscene_css_sink_vtable*, void*);
 
 } // extern "C"

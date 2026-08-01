@@ -77,9 +77,10 @@ values, property semantics, layout, and paint.
 - Peak temporary parser memory, process RSS, retained plateau, and package-size delta.
 
 **Decision:** **Rule in.** The compatibility gate is met and representative non-regression
-limits hold. The maintained-code gate is not met. Before the prototype becomes the only
-implementation, replace the owned Rust-plus-C++ copy with a borrowed or streaming ABI where
-practical, delete the legacy splitter/walker, and rerun the same evidence on packaged builds.
+limits hold. The maintained-code gate is not met. The owned Rust result has now been
+replaced by an allocation-free borrowed-slice callback ABI, clearing a material parser
+performance bottleneck without a `cssparser` fork. Delete the legacy splitter/walker and
+rerun the same evidence on packaged builds before making this the only implementation.
 
 **Current findings:**
 
@@ -87,9 +88,10 @@ practical, delete the legacy splitter/walker, and rerun the same evidence on pac
   `matching_css_brace`, `parse_css_declarations`, `parse_css_rules`, and the
   comment-removal loop in `add_stylesheet`. Selector-list splitting remains outside this
   candidate. This is below the 500-line maintained-code gate by itself.
-- The isolated prototype pins `cssparser` 0.37.0 in the same Rust static library as
-  `html5ever`; it makes one parse call, exposes a flat owned rule/declaration IR, and
-  immediately frees Rust storage after the C++ copy.
+- The prototype pins `cssparser` 0.37.0 in the same Rust static library as `html5ever`.
+  Its current adapter makes one parse call and streams rules/declarations into WebScene's
+  C++ vectors using borrowed input slices. The upstream crate is unmodified; only the
+  in-repository parser-trait adapter and versioned C ABI changed.
 - Syntax fixtures pass for nested blocks and functions, delimiters in quoted strings and
   URLs, comments containing delimiters, nested media/supports rules, font descriptors,
   keyframes, ASCII-insensitive ordinary property names and `!important`, case-sensitive
@@ -98,9 +100,8 @@ practical, delete the legacy splitter/walker, and rerun the same evidence on pac
   30 warm samples, the prototype parsed the generated 50 KiB stylesheet at 0.406 ms p50
   (120 MiB/s) and the 1 MiB stylesheet at 4.210 ms p50 (238 MiB/s).
 - The owned 1 MiB IR peaked at 4,120,235 Rust bytes and retained 2,423,899 bytes until
-  copied. This is a warning, not yet a process-memory regression result: a streaming or
-  borrowed final ABI could remove most of that temporary ownership if live measurements
-  justify adoption.
+  copied. The final streaming adapter performs zero Rust heap allocations for all four
+  benchmark fixtures and retains zero Rust bytes; C++ owns the only returned IR.
 - The crate is now Cargo-feature-gated, so a legacy CSS build does not link it. Matched
   linked engines measured 58,463,056 bytes (legacy) and 58,550,160 bytes (`cssparser`):
   +87,104 bytes, or +0.149%.
@@ -126,6 +127,18 @@ practical, delete the legacy splitter/walker, and rerun the same evidence on pac
 - The prototype adds substantially more maintained adapter/IR code than the roughly 205
   handwritten lines it can delete, so it is adopted for standards compatibility, not code
   reduction. Selector parsing remains a separate decision.
+- Against the owned adapter, matched five-process end-to-end parsing (five warmups, 30
+  samples) improves from 0.00538 to 0.00350 ms at 1 KiB (-34.9%), 0.238 to 0.159 ms at
+  50 KiB (-33.4%), 4.742 to 3.261 ms at 1 MiB (-31.2%), and 0.000875 to 0.000667 ms on
+  malformed recovery (-23.8%). These measurements include projection into C++ IR; the
+  earlier historical numbers above stopped at a different boundary and remain as a record
+  of the initial prototype.
+- Focused CSS Syntax remains 11/11 and the required profile remains exactly 104/110
+  documents and 431/433 subtests. Five focused runtime processes measured median peak RSS
+  at 186,073,088 bytes versus 186,515,456 for the owned adapter (-0.24%), which is neutral,
+  not a process-memory benefit. The full library shrinks 3,744 bytes after removing the
+  owned ABI. Net source change across the Rust adapter and C++ ABI/wrapper is one fewer
+  lines, so no parallel implementation remains.
 
 ### 2. Generated WebIDL-to-V8 bindings
 
@@ -534,3 +547,22 @@ Servo wrapper instead of changing standards parsers.
   fixtures, regresses malformed-declaration recovery, increases binary and adapter size,
   and offers no compatibility improvement over Servo. Next evaluate a streaming Servo
   adapter that emits directly into WebScene-owned vectors.
+
+### 2026-08-01 — Servo borrowed-slice streaming ABI
+
+- Implemented the follow-on without modifying or forking `cssparser`. The adapter uses its
+  public `AtRuleParser`, `QualifiedRuleParser`, and `DeclarationParser` traits to emit rule
+  begin/declaration/rule end callbacks in parse order. Callback inputs borrow the original
+  stylesheet; ordinary property and at-rule names are ASCII-normalized during the sole C++
+  copy. C++ callback bodies catch all exceptions so none can unwind through Rust.
+- Deleted the old boxed Rust rule/declaration tree, indexed view functions, free function,
+  and their C declarations. The result is one implementation, zero Rust allocations and
+  zero retained Rust bytes on the parser fixtures, a 3,744-byte smaller linked runtime,
+  and a net one-line reduction across the changed parser/ABI/wrapper files.
+- Raw ignored evidence is under `artifacts/servo-streaming-evaluation`: five-process
+  end-to-end microbenchmarks, five focused RSS samples, full runtime build, focused 11/11
+  result, and final required-profile 104/110 and 431/433 result. The native suite reaches
+  the unchanged SVG `currentColor` baseline failure after both parser suites pass.
+- Decision: adopt the streaming ABI. It improves matched parser throughput by 23.8% to
+  34.9% with exact compatibility parity and no size/RSS regression. Further optimization
+  should target the remaining C++ syntax-IR-to-runtime materialization, not a parser fork.

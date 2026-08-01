@@ -716,53 +716,17 @@ mod css_syntax {
     const CSS_RULE_AT: u32 = 1;
     const CSS_NO_PARENT: usize = usize::MAX;
 
-    #[derive(Default)]
-    struct CssDeclaration {
-        name: String,
-        value: String,
-        important: bool,
-    }
-
-    enum CssRule {
-        Style {
-            prelude: String,
-            declarations: Vec<CssDeclaration>,
-        },
-        At {
-            name: String,
-            prelude: String,
-            has_block: bool,
-            declarations: Vec<CssDeclaration>,
-            children: Vec<CssRule>,
-        },
-    }
-
-    struct CssAtPrelude {
-        name: String,
-        prelude: String,
-    }
-
-    enum CssBodyItem {
-        Declaration(CssDeclaration),
-        Ignored,
-    }
-
-    #[derive(Clone)]
-    struct CssSyntaxParser {
-        errors: std::rc::Rc<Cell<u64>>,
-    }
-
     fn trim_css_whitespace(value: &str) -> &str {
         value.trim_matches(|character| matches!(character, ' ' | '\t' | '\n' | '\r' | '\x0c'))
     }
 
-    fn consume_raw<'i>(input: &mut Parser<'i, '_>) -> String {
+    fn consume_raw<'i>(input: &mut Parser<'i, '_>) -> &'i str {
         let start = input.position();
         while input.next_including_whitespace_and_comments().is_ok() {}
-        trim_css_whitespace(input.slice_from(start)).to_string()
+        trim_css_whitespace(input.slice_from(start))
     }
 
-    fn consume_declaration_value<'i>(input: &mut Parser<'i, '_>) -> (String, bool) {
+    fn consume_declaration_value<'i>(input: &mut Parser<'i, '_>) -> (&'i str, bool) {
         let start = input.position();
         let end;
         let mut important = false;
@@ -786,14 +750,121 @@ mod css_syntax {
                 let _ = input.next_including_whitespace_and_comments();
             }
         }
-        (
-            trim_css_whitespace(input.slice(start..end)).to_string(),
-            important,
-        )
+        (trim_css_whitespace(input.slice(start..end)), important)
     }
 
-    impl<'i> DeclarationParser<'i> for CssSyntaxParser {
-        type Declaration = CssBodyItem;
+    fn css_input(input: ByteSlice) -> Option<&'static str> {
+        read_slice(input).and_then(|bytes| std::str::from_utf8(bytes).ok())
+    }
+
+    type CssBeginRuleCallback =
+        unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize) -> u8;
+    type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8) -> u8;
+    type CssEndRuleCallback = unsafe extern "C" fn(*mut c_void, usize, usize) -> u8;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct CssSinkVTable {
+        begin_rule: Option<CssBeginRuleCallback>,
+        declaration: Option<CssDeclarationCallback>,
+        end_rule: Option<CssEndRuleCallback>,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    pub struct CssStreamResult {
+        status: u32,
+        parse_error_count: u64,
+        rule_count: u64,
+        declaration_count: u64,
+        rust_allocation_count: u64,
+        rust_peak_bytes: u64,
+        rust_retained_bytes: u64,
+    }
+
+    #[derive(Clone)]
+    struct CssStreamState {
+        callbacks: CssSinkVTable,
+        context: *mut c_void,
+        errors: std::rc::Rc<Cell<u64>>,
+        callback_failed: std::rc::Rc<Cell<bool>>,
+        rule_count: std::rc::Rc<Cell<u64>>,
+        declaration_count: std::rc::Rc<Cell<u64>>,
+    }
+
+    impl CssStreamState {
+        fn begin_rule(
+            &self,
+            kind: u32,
+            has_block: bool,
+            parent_index: usize,
+            name: &str,
+            prelude: &str,
+        ) -> usize {
+            let mut index = usize::MAX;
+            let accepted = self.callbacks.begin_rule.is_some_and(|callback| unsafe {
+                callback(
+                    self.context,
+                    kind,
+                    u8::from(has_block),
+                    parent_index,
+                    ByteSlice::from_bytes(name.as_bytes()),
+                    ByteSlice::from_bytes(prelude.as_bytes()),
+                    &mut index,
+                ) != 0
+            });
+            if accepted {
+                self.rule_count.set(self.rule_count.get() + 1);
+            } else {
+                self.callback_failed.set(true);
+            }
+            index
+        }
+
+        fn declaration(&self, name: &str, value: &str, important: bool) {
+            let accepted = self.callbacks.declaration.is_some_and(|callback| unsafe {
+                callback(
+                    self.context,
+                    ByteSlice::from_bytes(name.as_bytes()),
+                    ByteSlice::from_bytes(value.as_bytes()),
+                    u8::from(important),
+                ) != 0
+            });
+            if accepted {
+                self.declaration_count.set(self.declaration_count.get() + 1);
+            } else {
+                self.callback_failed.set(true);
+            }
+        }
+
+        fn end_rule(&self, rule_index: usize, declaration_count: usize) {
+            let accepted = self.callbacks.end_rule.is_some_and(|callback| unsafe {
+                callback(self.context, rule_index, declaration_count) != 0
+            });
+            if !accepted {
+                self.callback_failed.set(true);
+            }
+        }
+    }
+
+    struct CssStreamPrelude<'i> {
+        name: CowRcStr<'i>,
+        prelude: &'i str,
+    }
+
+    #[derive(Clone)]
+    struct CssStreamingParser {
+        state: CssStreamState,
+        parent_index: usize,
+    }
+
+    enum CssStreamingBodyItem {
+        Declaration,
+        Ignored,
+    }
+
+    impl<'i> DeclarationParser<'i> for CssStreamingParser {
+        type Declaration = CssStreamingBodyItem;
         type Error = ();
 
         fn parse_value<'t>(
@@ -803,22 +874,14 @@ mod css_syntax {
             _declaration_start: &ParserState,
         ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
             let (value, important) = consume_declaration_value(input);
-            let name = if name.starts_with("--") {
-                name.to_string()
-            } else {
-                name.to_ascii_lowercase()
-            };
-            Ok(CssBodyItem::Declaration(CssDeclaration {
-                name,
-                value,
-                important,
-            }))
+            self.state.declaration(&name, value, important);
+            Ok(CssStreamingBodyItem::Declaration)
         }
     }
 
-    impl<'i> AtRuleParser<'i> for CssSyntaxParser {
-        type Prelude = CssAtPrelude;
-        type AtRule = CssRule;
+    impl<'i> AtRuleParser<'i> for CssStreamingParser {
+        type Prelude = CssStreamPrelude<'i>;
+        type AtRule = ();
         type Error = ();
 
         fn parse_prelude<'t>(
@@ -826,8 +889,8 @@ mod css_syntax {
             name: CowRcStr<'i>,
             input: &mut Parser<'i, 't>,
         ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-            Ok(CssAtPrelude {
-                name: name.to_ascii_lowercase(),
+            Ok(CssStreamPrelude {
+                name,
                 prelude: consume_raw(input),
             })
         }
@@ -837,13 +900,15 @@ mod css_syntax {
             prelude: Self::Prelude,
             _start: &ParserState,
         ) -> Result<Self::AtRule, ()> {
-            Ok(CssRule::At {
-                name: prelude.name,
-                prelude: prelude.prelude,
-                has_block: false,
-                declarations: Vec::new(),
-                children: Vec::new(),
-            })
+            let index = self.state.begin_rule(
+                CSS_RULE_AT,
+                false,
+                self.parent_index,
+                &prelude.name,
+                prelude.prelude,
+            );
+            self.state.end_rule(index, 0);
+            Ok(())
         }
 
         fn parse_block<'t>(
@@ -852,12 +917,26 @@ mod css_syntax {
             _start: &ParserState,
             input: &mut Parser<'i, 't>,
         ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
-            let mut declarations = Vec::new();
-            let mut children = Vec::new();
+            let index = self.state.begin_rule(
+                CSS_RULE_AT,
+                true,
+                self.parent_index,
+                &prelude.name,
+                prelude.prelude,
+            );
+            let mut declarations = 0usize;
             if prelude.name.eq_ignore_ascii_case("font-face")
                 || prelude.name.eq_ignore_ascii_case("page")
             {
-                declarations = parse_css_declaration_list(input, self.clone());
+                let before = self.state.declaration_count.get();
+                parse_css_stream_declaration_list(
+                    input,
+                    CssStreamingParser {
+                        state: self.state.clone(),
+                        parent_index: index,
+                    },
+                );
+                declarations = (self.state.declaration_count.get() - before) as usize;
             } else if prelude.name.eq_ignore_ascii_case("media")
                 || prelude.name.eq_ignore_ascii_case("supports")
                 || prelude.name.eq_ignore_ascii_case("layer")
@@ -865,23 +944,24 @@ mod css_syntax {
                 || prelude.name.eq_ignore_ascii_case("keyframes")
                 || prelude.name.eq_ignore_ascii_case("-webkit-keyframes")
             {
-                children = parse_css_rule_list(input, self.clone());
+                parse_css_stream_rule_list(
+                    input,
+                    CssStreamingParser {
+                        state: self.state.clone(),
+                        parent_index: index,
+                    },
+                );
             } else {
                 let _ = consume_raw(input);
             }
-            Ok(CssRule::At {
-                name: prelude.name,
-                prelude: prelude.prelude,
-                has_block: true,
-                declarations,
-                children,
-            })
+            self.state.end_rule(index, declarations);
+            Ok(())
         }
     }
 
-    impl<'i> QualifiedRuleParser<'i> for CssSyntaxParser {
-        type Prelude = String;
-        type QualifiedRule = CssRule;
+    impl<'i> QualifiedRuleParser<'i> for CssStreamingParser {
+        type Prelude = &'i str;
+        type QualifiedRule = ();
         type Error = ();
 
         fn parse_prelude<'t>(
@@ -901,16 +981,46 @@ mod css_syntax {
             _start: &ParserState,
             input: &mut Parser<'i, 't>,
         ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-            Ok(CssRule::Style {
-                prelude,
-                declarations: parse_css_declaration_list(input, self.clone()),
-            })
+            let index = self
+                .state
+                .begin_rule(CSS_RULE_STYLE, true, self.parent_index, "", prelude);
+            let before = self.state.declaration_count.get();
+            parse_css_stream_declaration_list(
+                input,
+                CssStreamingParser {
+                    state: self.state.clone(),
+                    parent_index: index,
+                },
+            );
+            self.state.end_rule(
+                index,
+                (self.state.declaration_count.get() - before) as usize,
+            );
+            Ok(())
         }
     }
 
-    impl<'i> AtRuleParser<'i> for CssDeclarationListParser {
+    struct CssStreamingDeclarationListParser {
+        parser: CssStreamingParser,
+    }
+
+    impl<'i> DeclarationParser<'i> for CssStreamingDeclarationListParser {
+        type Declaration = CssStreamingBodyItem;
+        type Error = ();
+
+        fn parse_value<'t>(
+            &mut self,
+            name: CowRcStr<'i>,
+            input: &mut Parser<'i, 't>,
+            declaration_start: &ParserState,
+        ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+            self.parser.parse_value(name, input, declaration_start)
+        }
+    }
+
+    impl<'i> AtRuleParser<'i> for CssStreamingDeclarationListParser {
         type Prelude = ();
-        type AtRule = CssBodyItem;
+        type AtRule = CssStreamingBodyItem;
         type Error = ();
 
         fn parse_prelude<'t>(
@@ -927,7 +1037,7 @@ mod css_syntax {
             _prelude: Self::Prelude,
             _start: &ParserState,
         ) -> Result<Self::AtRule, ()> {
-            Ok(CssBodyItem::Ignored)
+            Ok(CssStreamingBodyItem::Ignored)
         }
 
         fn parse_block<'t>(
@@ -937,35 +1047,17 @@ mod css_syntax {
             input: &mut Parser<'i, 't>,
         ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
             let _ = consume_raw(input);
-            Ok(CssBodyItem::Ignored)
+            Ok(CssStreamingBodyItem::Ignored)
         }
     }
 
-    impl<'i> QualifiedRuleParser<'i> for CssDeclarationListParser {
+    impl<'i> QualifiedRuleParser<'i> for CssStreamingDeclarationListParser {
         type Prelude = ();
-        type QualifiedRule = CssBodyItem;
+        type QualifiedRule = CssStreamingBodyItem;
         type Error = ();
     }
 
-    struct CssDeclarationListParser {
-        parser: CssSyntaxParser,
-    }
-
-    impl<'i> DeclarationParser<'i> for CssDeclarationListParser {
-        type Declaration = CssBodyItem;
-        type Error = ();
-
-        fn parse_value<'t>(
-            &mut self,
-            name: CowRcStr<'i>,
-            input: &mut Parser<'i, 't>,
-            declaration_start: &ParserState,
-        ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
-            self.parser.parse_value(name, input, declaration_start)
-        }
-    }
-
-    impl RuleBodyItemParser<'_, CssBodyItem, ()> for CssDeclarationListParser {
+    impl RuleBodyItemParser<'_, CssStreamingBodyItem, ()> for CssStreamingDeclarationListParser {
         fn parse_declarations(&self) -> bool {
             true
         }
@@ -975,274 +1067,138 @@ mod css_syntax {
         }
     }
 
-    fn parse_css_declaration_list<'i>(
+    fn parse_css_stream_declaration_list<'i>(
         input: &mut Parser<'i, '_>,
-        parser: CssSyntaxParser,
-    ) -> Vec<CssDeclaration> {
-        let errors = parser.errors.clone();
-        let mut body_parser = CssDeclarationListParser { parser };
-        RuleBodyParser::new(input, &mut body_parser)
-            .filter_map(|item| match item {
-                Ok(CssBodyItem::Declaration(declaration)) => Some(declaration),
-                Ok(CssBodyItem::Ignored) => None,
-                Err(_) => {
-                    errors.set(errors.get() + 1);
-                    None
-                }
-            })
-            .collect()
-    }
-
-    fn parse_css_rule_list<'i>(
-        input: &mut Parser<'i, '_>,
-        mut parser: CssSyntaxParser,
-    ) -> Vec<CssRule> {
-        let errors = parser.errors.clone();
-        StyleSheetParser::new(input, &mut parser)
-            .filter_map(|item| match item {
-                Ok(rule) => Some(rule),
-                Err(_) => {
-                    errors.set(errors.get() + 1);
-                    None
-                }
-            })
-            .collect()
-    }
-
-    struct FlatCssRule {
-        kind: u32,
-        parent_index: usize,
-        name: String,
-        prelude: String,
-        first_declaration: usize,
-        declaration_count: usize,
-        has_block: bool,
-    }
-
-    #[derive(Default)]
-    struct CssSyntaxOutput {
-        rules: Vec<FlatCssRule>,
-        declarations: Vec<CssDeclaration>,
-    }
-
-    fn flatten_css_rule(rule: CssRule, parent_index: usize, output: &mut CssSyntaxOutput) {
-        let rule_index = output.rules.len();
-        let (kind, name, prelude, has_block, declarations, children) = match rule {
-            CssRule::Style {
-                prelude,
-                declarations,
-            } => (
-                CSS_RULE_STYLE,
-                String::new(),
-                prelude,
-                true,
-                declarations,
-                Vec::new(),
-            ),
-            CssRule::At {
-                name,
-                prelude,
-                has_block,
-                declarations,
-                children,
-            } => (
-                CSS_RULE_AT,
-                name,
-                prelude,
-                has_block,
-                declarations,
-                children,
-            ),
-        };
-        let first_declaration = output.declarations.len();
-        let declaration_count = declarations.len();
-        output.declarations.extend(declarations);
-        output.rules.push(FlatCssRule {
-            kind,
-            parent_index,
-            name,
-            prelude,
-            first_declaration,
-            declaration_count,
-            has_block,
-        });
-        for child in children {
-            flatten_css_rule(child, rule_index, output);
+        parser: CssStreamingParser,
+    ) {
+        let errors = parser.state.errors.clone();
+        let mut body_parser = CssStreamingDeclarationListParser { parser };
+        for item in RuleBodyParser::new(input, &mut body_parser) {
+            if item.is_err() {
+                errors.set(errors.get() + 1);
+            }
         }
     }
 
-    #[repr(C)]
-    #[derive(Clone, Copy, Default)]
-    pub struct CssParseResult {
-        pub status: u32,
-        pub parse_error_count: u64,
-        pub rule_count: u64,
-        pub declaration_count: u64,
-        pub rust_allocation_count: u64,
-        pub rust_peak_bytes: u64,
-        pub rust_retained_bytes: u64,
-        pub handle: *mut c_void,
+    fn parse_css_stream_rule_list<'i>(input: &mut Parser<'i, '_>, mut parser: CssStreamingParser) {
+        let errors = parser.state.errors.clone();
+        for item in StyleSheetParser::new(input, &mut parser) {
+            if item.is_err() {
+                errors.set(errors.get() + 1);
+            }
+        }
     }
 
-    #[repr(C)]
-    #[derive(Clone, Copy, Default)]
-    pub struct CssRuleView {
-        pub kind: u32,
-        pub has_block: u8,
-        pub parent_index: usize,
-        pub name: ByteSlice,
-        pub prelude: ByteSlice,
-        pub first_declaration: usize,
-        pub declaration_count: usize,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Default)]
-    pub struct CssDeclarationView {
-        pub name: ByteSlice,
-        pub value: ByteSlice,
-        pub important: u8,
-    }
-
-    fn css_error(status: u32) -> CssParseResult {
-        CssParseResult {
+    fn css_stream_error(status: u32) -> CssStreamResult {
+        CssStreamResult {
             status,
             ..Default::default()
         }
     }
 
-    fn finish_css_parse(output: CssSyntaxOutput, parse_error_count: u64) -> CssParseResult {
-        let rule_count = output.rules.len() as u64;
-        let declaration_count = output.declarations.len() as u64;
-        let handle = Box::into_raw(Box::new(output)).cast::<c_void>();
-        CssParseResult {
-            status: STATUS_OK,
-            parse_error_count,
-            rule_count,
-            declaration_count,
+    unsafe fn css_stream_state(
+        callbacks: *const CssSinkVTable,
+        context: *mut c_void,
+    ) -> Result<CssStreamState, CssStreamResult> {
+        let Some(callbacks) = (unsafe { callbacks.as_ref() }).copied() else {
+            return Err(css_stream_error(STATUS_INVALID_ARGUMENT));
+        };
+        if context.is_null()
+            || callbacks.begin_rule.is_none()
+            || callbacks.declaration.is_none()
+            || callbacks.end_rule.is_none()
+        {
+            return Err(css_stream_error(STATUS_INVALID_ARGUMENT));
+        }
+        Ok(CssStreamState {
+            callbacks,
+            context,
+            errors: std::rc::Rc::new(Cell::new(0)),
+            callback_failed: std::rc::Rc::new(Cell::new(false)),
+            rule_count: std::rc::Rc::new(Cell::new(0)),
+            declaration_count: std::rc::Rc::new(Cell::new(0)),
+        })
+    }
+
+    fn finish_css_stream(state: CssStreamState) -> CssStreamResult {
+        CssStreamResult {
+            status: if state.callback_failed.get() {
+                STATUS_CALLBACK_FAILED
+            } else {
+                STATUS_OK
+            },
+            parse_error_count: state.errors.get(),
+            rule_count: state.rule_count.get(),
+            declaration_count: state.declaration_count.get(),
             rust_allocation_count: ALLOCATION_COUNT.with(Cell::get),
             rust_peak_bytes: ALLOCATION_PEAK.with(Cell::get),
             rust_retained_bytes: ALLOCATION_CURRENT.with(Cell::get),
-            handle,
         }
     }
 
-    fn css_input(input: ByteSlice) -> Result<&'static str, CssParseResult> {
-        read_slice(input)
-            .and_then(|bytes| std::str::from_utf8(bytes).ok())
-            .ok_or_else(|| css_error(STATUS_INVALID_ARGUMENT))
+    #[no_mangle]
+    pub extern "C" fn webscene_css_stream_abi_version() -> u32 {
+        1
     }
 
     #[no_mangle]
-    pub extern "C" fn webscene_css_parse_stylesheet(input: ByteSlice) -> CssParseResult {
+    pub unsafe extern "C" fn webscene_css_stream_stylesheet(
+        input: ByteSlice,
+        callbacks: *const CssSinkVTable,
+        context: *mut c_void,
+    ) -> CssStreamResult {
         let input = match css_input(input) {
-            Ok(input) => input,
+            Some(input) => input,
+            None => return css_stream_error(STATUS_INVALID_ARGUMENT),
+        };
+        let state = match unsafe { css_stream_state(callbacks, context) } {
+            Ok(state) => state,
             Err(error) => return error,
         };
         reset_allocation_metrics();
         catch_unwind(AssertUnwindSafe(|| {
-            let errors = std::rc::Rc::new(Cell::new(0));
-            let parser = CssSyntaxParser {
-                errors: errors.clone(),
-            };
             let mut parser_input = ParserInput::new(input);
             let mut parser_input = Parser::new(&mut parser_input);
-            let rules = parse_css_rule_list(&mut parser_input, parser);
-            let mut output = CssSyntaxOutput::default();
-            for rule in rules {
-                flatten_css_rule(rule, CSS_NO_PARENT, &mut output);
-            }
-            finish_css_parse(output, errors.get())
-        }))
-        .unwrap_or_else(|_| css_error(STATUS_PANIC))
-    }
-
-    #[no_mangle]
-    pub extern "C" fn webscene_css_parser_abi_version() -> u32 {
-        ABI_VERSION
-    }
-
-    #[no_mangle]
-    pub extern "C" fn webscene_css_parse_declarations(input: ByteSlice) -> CssParseResult {
-        let input = match css_input(input) {
-            Ok(input) => input,
-            Err(error) => return error,
-        };
-        reset_allocation_metrics();
-        catch_unwind(AssertUnwindSafe(|| {
-            let errors = std::rc::Rc::new(Cell::new(0));
-            let parser = CssSyntaxParser {
-                errors: errors.clone(),
-            };
-            let mut parser_input = ParserInput::new(input);
-            let mut parser_input = Parser::new(&mut parser_input);
-            let declarations = parse_css_declaration_list(&mut parser_input, parser);
-            finish_css_parse(
-                CssSyntaxOutput {
-                    rules: Vec::new(),
-                    declarations,
+            parse_css_stream_rule_list(
+                &mut parser_input,
+                CssStreamingParser {
+                    state: state.clone(),
+                    parent_index: CSS_NO_PARENT,
                 },
-                errors.get(),
-            )
+            );
+            finish_css_stream(state)
         }))
-        .unwrap_or_else(|_| css_error(STATUS_PANIC))
+        .unwrap_or_else(|_| css_stream_error(STATUS_PANIC))
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn webscene_css_rule_at(
-        handle: *const c_void,
-        index: usize,
-        output: *mut CssRuleView,
-    ) -> u8 {
-        let Some(handle) = (unsafe { (handle.cast::<CssSyntaxOutput>()).as_ref() }) else {
-            return 0;
+    pub unsafe extern "C" fn webscene_css_stream_declarations(
+        input: ByteSlice,
+        callbacks: *const CssSinkVTable,
+        context: *mut c_void,
+    ) -> CssStreamResult {
+        let input = match css_input(input) {
+            Some(input) => input,
+            None => return css_stream_error(STATUS_INVALID_ARGUMENT),
         };
-        let Some(output) = (unsafe { output.as_mut() }) else {
-            return 0;
+        let state = match unsafe { css_stream_state(callbacks, context) } {
+            Ok(state) => state,
+            Err(error) => return error,
         };
-        let Some(rule) = handle.rules.get(index) else {
-            return 0;
-        };
-        *output = CssRuleView {
-            kind: rule.kind,
-            has_block: u8::from(rule.has_block),
-            parent_index: rule.parent_index,
-            name: ByteSlice::from_bytes(rule.name.as_bytes()),
-            prelude: ByteSlice::from_bytes(rule.prelude.as_bytes()),
-            first_declaration: rule.first_declaration,
-            declaration_count: rule.declaration_count,
-        };
-        1
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn webscene_css_declaration_at(
-        handle: *const c_void,
-        index: usize,
-        output: *mut CssDeclarationView,
-    ) -> u8 {
-        let Some(handle) = (unsafe { (handle.cast::<CssSyntaxOutput>()).as_ref() }) else {
-            return 0;
-        };
-        let Some(output) = (unsafe { output.as_mut() }) else {
-            return 0;
-        };
-        let Some(declaration) = handle.declarations.get(index) else {
-            return 0;
-        };
-        *output = CssDeclarationView {
-            name: ByteSlice::from_bytes(declaration.name.as_bytes()),
-            value: ByteSlice::from_bytes(declaration.value.as_bytes()),
-            important: u8::from(declaration.important),
-        };
-        1
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn webscene_css_free(handle: *mut c_void) {
-        if !handle.is_null() {
-            drop(unsafe { Box::from_raw(handle.cast::<CssSyntaxOutput>()) });
-        }
+        reset_allocation_metrics();
+        catch_unwind(AssertUnwindSafe(|| {
+            let mut parser_input = ParserInput::new(input);
+            let mut parser_input = Parser::new(&mut parser_input);
+            parse_css_stream_declaration_list(
+                &mut parser_input,
+                CssStreamingParser {
+                    state: state.clone(),
+                    parent_index: CSS_NO_PARENT,
+                },
+            );
+            finish_css_stream(state)
+        }))
+        .unwrap_or_else(|_| css_stream_error(STATUS_PANIC))
     }
 }
 
