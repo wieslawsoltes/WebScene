@@ -212,6 +212,7 @@ public:
     bool try_take_console_message(std::string& message);
     bool dispatch_resize();
     bool refresh_media_environment();
+    void set_visible(bool visible) noexcept;
     bool dispatch_input(const webscene_input_event& event);
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;

@@ -121,7 +121,9 @@
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
             if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
-                if (host_visible_.load(std::memory_order_acquire)) {
+                const auto host_visible = host_visible_.load(std::memory_order_acquire);
+                if (runtime_ != nullptr) runtime_->set_visible(host_visible);
+                if (host_visible) {
                     hidden_low_memory_deadline.reset();
                 } else {
                     // Avoid collecting during a transient reparent/tab switch.

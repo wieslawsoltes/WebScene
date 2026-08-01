@@ -243,6 +243,7 @@
     uint64_t current_input_sequence{0};
     dom_node* active_element{nullptr};
     bool focus_visible{false};
+    bool document_visible{true};
     double last_animation_frame_timestamp_ms{0};
     double caret_blink_epoch_ms{0};
     std::string frame_last_error_value;

@@ -90,6 +90,8 @@ int main(int argc, char** argv)
     const auto warmups = argc > 2 ? std::max(0, std::atoi(argv[2])) : 5;
     const auto selector_workload = argc > 3
         && std::string_view(argv[3]) == "selectors";
+    const auto named_property_workload = argc > 3
+        && std::string_view(argv[3]) == "named-properties";
     constexpr std::string_view lifecycle_source = "1";
     constexpr std::string_view selector_source = R"JS(
 (() => {
@@ -123,10 +125,35 @@ int main(int argc, char** argv)
   return checksum;
 })()
 )JS";
-    const auto source = selector_workload ? selector_source : lifecycle_source;
+    constexpr std::string_view named_property_source = R"JS(
+(() => {
+  const root = document.createElement('section');
+  for (let index = 0; index < 1024; ++index) {
+    const node = document.createElement('div');
+    node.id = `named-property-benchmark-${index}`;
+    root.appendChild(node);
+  }
+  document.body.appendChild(root);
+  let checksum = 0;
+  for (let iteration = 0; iteration < 10000; ++iteration) {
+    checksum += String(document.dir ?? '').length;
+    checksum += document.hidden ? 1 : 0;
+    checksum += document.visibilityState === 'visible' ? 1 : 0;
+    checksum += globalThis.__webSceneComponentReady === true ? 1 : 0;
+  }
+  return checksum;
+})()
+)JS";
+    const auto source = selector_workload
+        ? selector_source
+        : named_property_workload
+            ? named_property_source
+            : lifecycle_source;
     const auto name = selector_workload
         ? std::string_view("selector-runtime-benchmark.js")
-        : std::string_view("dom-binding-benchmark.js");
+        : named_property_workload
+            ? std::string_view("named-property-runtime-benchmark.js")
+            : std::string_view("dom-binding-benchmark.js");
     if (webscene_engine_prewarm() == 0U) {
         std::cerr << "V8 prewarm failed\n";
         return 1;
@@ -147,7 +174,11 @@ int main(int argc, char** argv)
         std::cout << std::fixed << std::setprecision(3)
                   << "samples=" << samples
                   << " warmups=" << warmups
-                  << " mode=" << (selector_workload ? "selectors" : "lifecycle")
+                  << " mode=" << (selector_workload
+                        ? "selectors"
+                        : named_property_workload
+                            ? "named-properties"
+                            : "lifecycle")
                   << " mean_ms=" << mean
                   << " p50_ms=" << percentile(timings, 0.50)
                   << " p95_ms=" << percentile(timings, 0.95)

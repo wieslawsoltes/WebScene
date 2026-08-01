@@ -659,6 +659,10 @@
         if (self == nullptr) return v8::Intercepted::kNo;
         const auto name = to_utf8(info.GetIsolate(), property.As<v8::Value>());
         if (name.empty()) return v8::Intercepted::kNo;
+        // This WebScene-owned readiness flag is installed by component code.
+        // Before that assignment it cannot name a DOM element, so avoid an
+        // otherwise full-tree named-property search on every readiness poll.
+        if (name == "__webSceneComponentReady") return v8::Intercepted::kNo;
         const auto find_named = [&](const auto& recurse, dom_node& root) -> dom_node* {
             if (root.id_attribute == name) return &root;
             const auto named = root.attributes.find("name");

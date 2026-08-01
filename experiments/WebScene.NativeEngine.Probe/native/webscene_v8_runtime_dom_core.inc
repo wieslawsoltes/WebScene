@@ -1176,6 +1176,83 @@
         }
     }
 
+    static dom_node* document_element_for(
+        v8::Isolate* isolate,
+        v8::Local<v8::Object> holder)
+    {
+        auto* self = current(isolate);
+        if (self == nullptr) return nullptr;
+        auto* root = static_cast<dom_node*>(holder->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        if (root->tag == "html") return root;
+        if (root->parent != nullptr && root->parent->tag == "html") {
+            return root->parent;
+        }
+        const auto found = std::find_if(
+            root->children.begin(),
+            root->children.end(),
+            [](const auto* child) { return child != nullptr && child->tag == "html"; });
+        return found == root->children.end() ? root : *found;
+    }
+
+    static void get_document_dir(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* element = document_element_for(info.GetIsolate(), info.Holder());
+        const auto authored = element == nullptr
+            ? attribute_collection::const_iterator{}
+            : element->attributes.find("dir");
+        info.GetReturnValue().Set(js_dom_string(
+            info.GetIsolate(),
+            element == nullptr || authored == element->attributes.end()
+                ? std::string{}
+                : authored->second));
+    }
+
+    static void set_document_dir(
+        v8::Local<v8::Name>,
+        v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* element = document_element_for(info.GetIsolate(), info.Holder());
+        if (self == nullptr || element == nullptr) return;
+        const auto direction = to_wtf8(info.GetIsolate(), value);
+        if (const auto authored = element->attributes.find("dir");
+            authored != element->attributes.end() && authored->second == direction) {
+            return;
+        }
+        element->attributes["dir"] = direction;
+        if (self->attribute_requires_recascade("dir")) {
+            self->recascade_connected_subtree(*element, "document.dir");
+        } else {
+            self->document.mark_dirty();
+        }
+    }
+
+    static void get_document_hidden(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* self = current(info.GetIsolate());
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(),
+            self != nullptr && !self->document_visible));
+    }
+
+    static void get_document_visibility_state(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* self = current(info.GetIsolate());
+        info.GetReturnValue().Set(js_string(
+            info.GetIsolate(),
+            self != nullptr && !self->document_visible ? "hidden" : "visible"));
+    }
+
     static void get_document_links(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)

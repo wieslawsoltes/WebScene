@@ -595,6 +595,16 @@ struct v8_dom_runtime::implementation final {
         document_template->SetNativeDataProperty(js_string(isolate, "nodeName"), get_document_node_name);
         document_template->SetNativeDataProperty(js_string(isolate, "defaultView"), get_default_view);
         document_template->SetNativeDataProperty(js_string(isolate, "location"), get_document_location);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "dir"),
+            get_document_dir,
+            set_document_dir);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "hidden"),
+            get_document_hidden);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "visibilityState"),
+            get_document_visibility_state);
         document_template->SetNativeDataProperty(js_string(isolate, "links"), get_document_links);
         document_template->SetNativeDataProperty(
             js_string(isolate, "cookie"),
@@ -2774,6 +2784,11 @@ bool v8_dom_runtime::execute(const std::string& source, const std::string& docum
 bool v8_dom_runtime::load_url(const std::string& url)
 {
     return impl_->load_url(url);
+}
+
+void v8_dom_runtime::set_visible(bool visible) noexcept
+{
+    impl_->document_visible = visible;
 }
 
 void v8_dom_runtime::set_resource_root(std::string resource_root)

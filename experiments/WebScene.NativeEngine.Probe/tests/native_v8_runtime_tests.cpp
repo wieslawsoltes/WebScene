@@ -102,6 +102,7 @@ int main()
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
     test_viewport_hit_testing_traverses_zero_height_document_root();
+    test_document_direction_and_visibility_are_native_properties();
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();
     test_table_and_form_state_are_cold_for_ordinary_nodes();

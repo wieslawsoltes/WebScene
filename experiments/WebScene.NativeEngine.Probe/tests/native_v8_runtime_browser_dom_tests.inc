@@ -906,3 +906,52 @@ void test_resize_updates_device_pixel_ratio(webscene_engine* engine)
         fail("devicePixelRatio did not restore after the host scale transition: " + restored);
     }
 }
+void test_document_direction_and_visibility_are_native_properties()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "document state regression engine creation failed");
+    const auto initial = evaluate(engine, R"JS(
+        ({
+          dir: document.dir,
+          hidden: document.hidden,
+          visibilityState: document.visibilityState
+        })
+    )JS", "native-document-state-initial.js");
+    require(
+        initial == R"({"dir":"","hidden":false,"visibilityState":"visible"})",
+        "Document direction or initial visibility was not browser-shaped: " + initial);
+
+    const auto reflected = evaluate(engine, R"JS(
+        (() => {
+          document.dir = 'rtl';
+          return {
+            dir: document.dir,
+            attribute: document.documentElement.getAttribute('dir')
+          };
+        })()
+    )JS", "native-document-direction.js");
+    require(
+        reflected == R"({"dir":"rtl","attribute":"rtl"})",
+        "Document.dir did not reflect the document-element attribute: " + reflected);
+
+    require(
+        webscene_engine_set_visible(engine, 0U) != 0,
+        "document state engine rejected hidden visibility");
+    const auto hidden = evaluate(engine, R"JS(
+        ({ hidden: document.hidden, visibilityState: document.visibilityState })
+    )JS", "native-document-state-hidden.js");
+    require(
+        hidden == R"({"hidden":true,"visibilityState":"hidden"})",
+        "Document visibility did not follow the hidden host state: " + hidden);
+
+    require(
+        webscene_engine_set_visible(engine, 1U) != 0,
+        "document state engine rejected visible visibility");
+    const auto visible = evaluate(engine, R"JS(
+        ({ hidden: document.hidden, visibilityState: document.visibilityState })
+    )JS", "native-document-state-visible.js");
+    require(
+        visible == R"({"hidden":false,"visibilityState":"visible"})",
+        "Document visibility did not follow the restored host state: " + visible);
+    webscene_engine_destroy(engine);
+}
