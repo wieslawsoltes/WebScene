@@ -95,11 +95,11 @@ line();
 line("static bool generated_dom_receiver_is(");
 line("    v8::Isolate* isolate,");
 line("    v8::Local<v8::Value> receiver,");
-line("    generated_dom_interface interface)");
+line("    generated_dom_interface interface_kind)");
 line("{");
 line("    auto* self = current(isolate);");
 line("    if (self == nullptr || receiver.IsEmpty()) return false;");
-line("    switch (interface) {");
+line("    switch (interface_kind) {");
 for (const value of manifest.interfaces) {
   line(`    case generated_dom_interface::${safe(value.name)}:`);
   line(`        return !self->${value.template}.IsEmpty()`);

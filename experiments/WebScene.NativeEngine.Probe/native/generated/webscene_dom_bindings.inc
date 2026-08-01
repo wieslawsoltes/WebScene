@@ -45,11 +45,11 @@ static void illegal_dom_constructor(
 static bool generated_dom_receiver_is(
     v8::Isolate* isolate,
     v8::Local<v8::Value> receiver,
-    generated_dom_interface interface)
+    generated_dom_interface interface_kind)
 {
     auto* self = current(isolate);
     if (self == nullptr || receiver.IsEmpty()) return false;
-    switch (interface) {
+    switch (interface_kind) {
     case generated_dom_interface::EventTarget:
         return !self->event_target_template.IsEmpty()
             && self->event_target_template.Get(isolate)->HasInstance(receiver);

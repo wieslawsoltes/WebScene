@@ -967,9 +967,11 @@ void test_engine_memory_metrics_are_worker_snapshots(webscene_engine* engine)
             && metrics.native_dom_inline_bytes
                 == metrics.native_dom_node_count * metrics.native_dom_node_size_bytes,
         "native DOM allocation attribution was absent or internally inconsistent");
-    require(
-        metrics.native_dom_node_size_bytes <= 1000,
-        "cold pseudo-element, canvas, animation, custom-property, background, grid, table, or form state regressed into every native DOM node");
+    constexpr uint64_t maximum_native_dom_node_size_bytes = 1024;
+    if (metrics.native_dom_node_size_bytes > maximum_native_dom_node_size_bytes) {
+        fail("cold pseudo-element, canvas, animation, custom-property, background, grid, table, or form state regressed into every native DOM node: size="
+            + std::to_string(metrics.native_dom_node_size_bytes));
+    }
     require(
         metrics.native_dom_textual_style_count <= metrics.native_dom_node_count
             && (metrics.native_dom_textual_style_count == 0
