@@ -55,12 +55,28 @@ option(WEBSCENE_NATIVE_ENGINE_BUILD_HTML_PARSER_BENCHMARK
     "Build the V8-free html5ever parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
     "Build the V8-free cssparser syntax microbenchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
+    "Build the native V8 DOM binding lifecycle benchmark" OFF)
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "legacy" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
 set(WEBSCENE_NATIVE_ENGINE_CSS_PARSER "legacy" CACHE STRING
     "Native CSS syntax parser implementation: legacy or cssparser")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_CSS_PARSER PROPERTY STRINGS legacy cssparser)
+set(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS "legacy" CACHE STRING
+    "Native DOM binding catalog: legacy or generated")
+set_property(CACHE WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS PROPERTY STRINGS legacy generated)
+
+if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS=1)
+    message(STATUS "WebScene native engine: generated WebIDL DOM bindings selected")
+elseif(NOT WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "legacy")
+    message(FATAL_ERROR
+        "WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS must be legacy or generated")
+else()
+    message(STATUS "WebScene native engine: legacy DOM bindings selected")
+endif()
 
 if(WEBSCENE_NATIVE_ENGINE_CSS_PARSER STREQUAL "cssparser"
     AND NOT WEBSCENE_NATIVE_ENGINE_HTML_PARSER STREQUAL "html5ever")
@@ -334,6 +350,13 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         set_tests_properties(webscene_native_engine_tests PROPERTIES
             ENVIRONMENT
                 "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1;WEBSCENE_INTEROP_STRESS=1")
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK)
+        add_executable(webscene_dom_binding_benchmark
+            benchmarks/dom_binding_benchmark.cpp)
+        target_compile_features(webscene_dom_binding_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_dom_binding_benchmark PRIVATE
+            webscene_native_engine)
     endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")

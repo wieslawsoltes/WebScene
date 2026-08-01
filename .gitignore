@@ -278,6 +278,13 @@ __pycache__/
 # Cake - Uncomment if you are using it
 tools/**
 # !tools/packages.config
+!tools/webidl-v8-bindings/
+!tools/webidl-v8-bindings/dom-exposure.json
+!tools/webidl-v8-bindings/generate.mjs
+!tools/webidl-v8-bindings/package.json
+!tools/webidl-v8-bindings/package-lock.json
+!tools/webidl-v8-bindings/README.md
+tools/webidl-v8-bindings/node_modules/
 
 # Telerik's JustMock configuration file
 *.jmconfig

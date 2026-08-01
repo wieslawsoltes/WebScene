@@ -1,0 +1,13 @@
+{
+  "name": "webscene-webidl-v8-bindings",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "check": "node generate.mjs --check"
+  },
+  "dependencies": {
+    "@webref/idl": "3.82.1",
+    "webidl2": "24.5.0"
+  }
+}

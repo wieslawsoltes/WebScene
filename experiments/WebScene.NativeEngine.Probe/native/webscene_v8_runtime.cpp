@@ -2411,6 +2411,11 @@ struct v8_dom_runtime::implementation final {
         frame_window_template.Reset();
         document_template.Reset();
         element_template.Reset();
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        html_element_template.Reset();
+        node_template.Reset();
+        event_target_template.Reset();
+#endif
         frame_context.Reset();
         context.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -3161,8 +3166,15 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+#include "generated/webscene_dom_bindings.inc"
+#endif
+
     void install_templates(v8::Local<v8::Context> local_context)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        install_generated_dom_templates(local_context);
+#else
         auto element = v8::FunctionTemplate::New(isolate);
         element->SetClassName(js_string(isolate, "HTMLElement"));
         element->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3430,6 +3442,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "reset"),
             v8::FunctionTemplate::New(isolate, form_reset));
         element_template.Reset(isolate, element);
+#endif
 
         auto style = v8::ObjectTemplate::New(isolate);
         style->SetInternalFieldCount(2);
@@ -4995,6 +5008,9 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "DOMParser"),
             dom_parser_template->GetFunction(local_context).ToLocalChecked()).Check();
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        install_generated_dom_constructors(local_context, global);
+#else
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -5021,12 +5037,13 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "HTMLImageElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLInputElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "SVGElement"), element_constructor).Check();
+        global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
+        global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
+#endif
         install_document_constructor(
             local_context,
             global,
             document_object.Get(isolate));
-        global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
-        global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
         global->Set(
             local_context,
             js_string(isolate, "getSelection"),
@@ -10555,10 +10572,19 @@ struct v8_dom_runtime::implementation final {
         }
         if (known != node_wrappers.end()) node_wrappers.erase(known);
         auto local_context = isolate->GetCurrentContext();
-        auto object = element_template.Get(isolate)
-            ->InstanceTemplate()
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        auto selected_template = node.kind == dom_node_kind::element
+            ? (node.namespace_uri() == dom_node::html_namespace_uri
+                ? html_element_template.Get(isolate)
+                : element_template.Get(isolate))
+            : node_template.Get(isolate);
+        auto object = selected_template->InstanceTemplate()
+#else
+        auto object = element_template.Get(isolate)->InstanceTemplate()
+#endif
             ->NewInstance(local_context)
             .ToLocalChecked();
+#if !defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         v8::Local<v8::Value> element_constructor;
         const auto has_element_constructor = local_context->Global()
             ->Get(local_context, js_string(isolate, "Element"))
@@ -10575,10 +10601,14 @@ struct v8_dom_runtime::implementation final {
                 object->SetPrototype(local_context, element_prototype).Check();
             }
         }
+#endif
         object->SetAlignedPointerInInternalField(
             0,
             &node,
             v8::kEmbedderDataTypeTagDefault);
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        object->SetInternalField(1, v8::Undefined(isolate));
+#endif
         if (node.tag == "button" || node.tag == "fieldset" || node.tag == "input"
             || node.tag == "object" || node.tag == "output" || node.tag == "select"
             || node.tag == "textarea") {
@@ -24713,6 +24743,9 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "AbortController"), v8::FunctionTemplate::New(isolate, abort_controller_constructor)->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "matchMedia"), v8::Function::New(local_context, match_media).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "open"), v8::Function::New(local_context, window_open).ToLocalChecked()).Check();
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        install_generated_dom_constructors(local_context, global);
+#else
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
             local_context,
@@ -24731,12 +24764,13 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "HTMLImageElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLInputElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "SVGElement"), element_constructor).Check();
+        global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
+        global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
+#endif
         install_document_constructor(
             local_context,
             global,
             frame_document_value);
-        global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
-        global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "KeyboardEvent"),
             event_template->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "MouseEvent"),
@@ -28394,7 +28428,15 @@ struct v8_dom_runtime::implementation final {
             "unobserved-code-path",
             "listener registered but native dispatch has not been observed",
             "event-listener-registration");
-        if (self->in_frame_context() || type != "resize") {
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        const auto standalone_target_id = generated_standalone_event_target_id(
+            info.GetIsolate(), info.This());
+#endif
+        if (self->in_frame_context() || type != "resize"
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            || standalone_target_id.has_value()
+#endif
+        ) {
             uint32_t target_node_id = self->is_document_object(info.This())
                 ? std::numeric_limits<uint32_t>::max()
                 : 0U;
@@ -28407,6 +28449,11 @@ struct v8_dom_runtime::implementation final {
                     }
                 }
             }
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            if (target_node_id == 0U) {
+                target_node_id = standalone_target_id.value_or(0U);
+            }
+#endif
             auto name = to_utf8(info.GetIsolate(), info[1].As<v8::Function>()->GetName());
             if (name.empty()) name = "<anonymous>";
             self->frame_event_listeners[type].push_back(
@@ -28440,6 +28487,10 @@ struct v8_dom_runtime::implementation final {
         if (info.Length() < 2 || !info[1]->IsFunction()) return;
         const auto type = to_utf8(info.GetIsolate(), info[0]);
         const auto requested = info[1].As<v8::Function>();
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        const auto standalone_target_id = generated_standalone_event_target_id(
+            info.GetIsolate(), info.This());
+#endif
         bool requested_capture = false;
         if (info.Length() > 2) {
             if (info[2]->IsBoolean()) {
@@ -28453,7 +28504,11 @@ struct v8_dom_runtime::implementation final {
                 }
             }
         }
-        if (self->in_frame_context() || type != "resize") {
+        if (self->in_frame_context() || type != "resize"
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            || standalone_target_id.has_value()
+#endif
+        ) {
             uint32_t target_node_id = self->is_document_object(info.This())
                 ? std::numeric_limits<uint32_t>::max()
                 : 0U;
@@ -28466,6 +28521,11 @@ struct v8_dom_runtime::implementation final {
                     }
                 }
             }
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            if (target_node_id == 0U) {
+                target_node_id = standalone_target_id.value_or(0U);
+            }
+#endif
             auto listeners = self->frame_event_listeners.find(type);
             if (listeners == self->frame_event_listeners.end()) return;
             auto& registrations = listeners->second;
@@ -28904,6 +28964,11 @@ struct v8_dom_runtime::implementation final {
             : v8::Local<v8::Object> {};
         const auto receiver_is_document = !receiver.IsEmpty()
             && self->is_document_object(receiver);
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+        const auto standalone_target_id = receiver.IsEmpty()
+            ? std::optional<uint32_t>{}
+            : generated_standalone_event_target_id(info.GetIsolate(), receiver);
+#endif
         auto* target = receiver.IsEmpty() || receiver_is_document
             ? nullptr
             : unwrap_node(receiver);
@@ -28911,6 +28976,10 @@ struct v8_dom_runtime::implementation final {
             ? self->wrap_node(*target)
             : receiver_is_document
                 ? receiver
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+                : standalone_target_id.has_value()
+                    ? receiver
+#endif
                 : v8::Local<v8::Object>(local_context->Global());
         event->Set(local_context, js_string(info.GetIsolate(), "target"), target_value).Check();
         event->Set(local_context, js_string(info.GetIsolate(), "srcElement"), target_value).Check();
@@ -29018,8 +29087,18 @@ struct v8_dom_runtime::implementation final {
         if (target == nullptr) {
             const auto direct_target_id = receiver_is_document
                 ? std::numeric_limits<uint32_t>::max()
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+                : standalone_target_id.value_or(0U);
+#else
                 : 0U;
-            const auto direct_target = receiver_is_document ? document_target : global;
+#endif
+            const auto direct_target = receiver_is_document
+                ? document_target
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+                : standalone_target_id.has_value() ? receiver : global;
+#else
+                : global;
+#endif
             if (receiver_is_document
                 && !invoke_listeners(0U, global, true, 1)) return;
             if (!propagation_stopped()
@@ -29032,12 +29111,12 @@ struct v8_dom_runtime::implementation final {
                 && !invoke_listeners(0U, global, false, 3)) return;
             if (!receiver_is_document && !immediate_propagation_stopped()) {
                 v8::Local<v8::Value> handler;
-                if (global->Get(
+                if (direct_target->Get(
                         local_context,
                         js_string(info.GetIsolate(), property_name.c_str())).ToLocal(&handler)
                     && handler->IsFunction()) {
-                    set_phase(global, 2);
-                    invoke_callback(handler.As<v8::Function>(), global);
+                    set_phase(direct_target, 2);
+                    invoke_callback(handler.As<v8::Function>(), direct_target);
                 }
             }
         } else {
@@ -29343,7 +29422,15 @@ struct v8_dom_runtime::implementation final {
     v8::CpuProfiler* cpu_profiler{nullptr};
 #endif
     v8::Global<v8::Context> context;
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+    v8::Global<v8::FunctionTemplate> event_target_template;
+    v8::Global<v8::FunctionTemplate> node_template;
+#endif
     v8::Global<v8::FunctionTemplate> element_template;
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+    v8::Global<v8::FunctionTemplate> html_element_template;
+    uint32_t next_standalone_event_target_id{0x80000000U};
+#endif
     v8::Global<v8::ObjectTemplate> style_template;
     v8::Global<v8::ObjectTemplate> frame_document_template;
     v8::Global<v8::ObjectTemplate> frame_window_template;

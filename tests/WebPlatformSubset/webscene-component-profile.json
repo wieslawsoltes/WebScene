@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-webidl-binding-shape.html",
+      "type": "contract",
+      "capabilities": ["webidl-interface-inheritance", "webidl-operation-brands", "webidl-descriptors", "dom-wrapper-identity"],
+      "evidence": ["generated-webidl-to-v8-evaluation"],
+      "reason": "Candidate decision fixture for the generated EventTarget to HTMLElement binding slice. It measures distinct constructors and prototype inheritance, HTML/text/SVG wrapper brands, operation placement and lengths, illegal invocation, constructor behavior, attribute descriptor placement, and wrapper identity."
+    },
+    {
       "path": "contracts/css-syntax-parser-recovery.html",
       "type": "contract",
       "capabilities": ["css-syntax-component-values", "declaration-recovery", "ascii-case-insensitive-property-names", "important-token-parsing", "dynamic-style-reparse"],

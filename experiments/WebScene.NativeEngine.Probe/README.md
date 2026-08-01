@@ -56,6 +56,23 @@ not add a deployed dynamic library. `scripts/build-native-engine-runtime.sh` acc
 `-HtmlParser html5ever`, for equivalent packaged V8 comparisons. Comment preservation
 is the production policy; the discard mode exists only in the parser benchmark.
 
+## Optional generated DOM binding spike
+
+The native runtime keeps the handwritten binding catalog by default. Build the
+WebRef-validated generated `EventTarget` through `HTMLElement` comparison lane with:
+
+```sh
+cmake -S experiments/WebScene.NativeEngine.Probe \
+  -B artifacts/native-engine-probe-generated-bindings \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON \
+  -DWEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=generated
+```
+
+The generated source is committed. Regenerate or verify it with the commands in
+`tools/webidl-v8-bindings/README.md`; CMake intentionally has no Node or network
+dependency.
+
 Certification telemetry and profiling hooks are excluded by default from both
 Release and Debug builds. Enable them only for compatibility evidence or native
 profiling:

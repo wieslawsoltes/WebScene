@@ -1,0 +1,135 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>DOM WebIDL binding shape, brands, and wrapper identity</title>
+<body>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function equal(actual, expected, message) {
+    if (!Object.is(actual, expected)) throw new Error(`${message}: expected ${expected}, got ${actual}`);
+  }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({ name, status: "FAIL", message: String(error.message || error), stack: error.stack || null });
+    }
+  }
+  function throwsTypeError(body, message) {
+    let thrown = null;
+    try { body(); } catch (error) { thrown = error; }
+    assert(thrown instanceof TypeError, `${message}: ${thrown && thrown.constructor && thrown.constructor.name}`);
+  }
+
+  test("the four interface constructors and prototypes are distinct", () => {
+    assert(EventTarget !== Node && Node !== Element && Element !== HTMLElement,
+      "constructors were aliased");
+    equal(Object.getPrototypeOf(Node.prototype), EventTarget.prototype, "Node prototype parent");
+    equal(Object.getPrototypeOf(Element.prototype), Node.prototype, "Element prototype parent");
+    equal(Object.getPrototypeOf(HTMLElement.prototype), Element.prototype, "HTMLElement prototype parent");
+  });
+
+  test("HTML elements implement the complete interface chain", () => {
+    const element = document.createElement("div");
+    assert(element instanceof HTMLElement, "missing HTMLElement brand");
+    assert(element instanceof Element, "missing Element brand");
+    assert(element instanceof Node, "missing Node brand");
+    assert(element instanceof EventTarget, "missing EventTarget brand");
+    assert(HTMLElement.prototype.isPrototypeOf(element), "HTML wrapper prototype chain");
+  });
+
+  test("text wrappers have Node but not Element brands", () => {
+    const text = document.createTextNode("text");
+    assert(text instanceof Node, "text missing Node brand");
+    assert(text instanceof EventTarget, "text missing EventTarget brand");
+    assert(!(text instanceof Element), "text incorrectly has Element brand");
+    assert(!(text instanceof HTMLElement), "text incorrectly has HTMLElement brand");
+    assert(Node.prototype.isPrototypeOf(text), "text wrapper prototype chain");
+  });
+
+  test("SVG wrappers have Element but not HTMLElement brands", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    assert(svg instanceof SVGElement, "SVGElement alias did not match");
+    assert(svg instanceof Element && svg instanceof Node, "SVG interface chain missing");
+    assert(!(svg instanceof HTMLElement), "SVG incorrectly has HTMLElement brand");
+    assert(Element.prototype.isPrototypeOf(svg), "SVG wrapper prototype chain");
+  });
+
+  test("operations live on their declared interface prototypes", () => {
+    assert(Object.prototype.hasOwnProperty.call(EventTarget.prototype, "addEventListener"),
+      "EventTarget operation missing");
+    assert(Object.prototype.hasOwnProperty.call(Node.prototype, "appendChild"),
+      "Node operation missing");
+    assert(Object.prototype.hasOwnProperty.call(Element.prototype, "querySelector"),
+      "Element operation missing");
+    assert(Object.prototype.hasOwnProperty.call(HTMLElement.prototype, "click"),
+      "HTMLElement operation missing");
+    equal(Node.prototype.appendChild.length, 1, "appendChild length");
+    equal(Element.prototype.querySelector.length, 1, "querySelector length");
+  });
+
+  test("operation receiver brands reject plain objects", () => {
+    throwsTypeError(() => Node.prototype.appendChild.call({}, document.createElement("i")),
+      "Node.appendChild brand");
+    throwsTypeError(() => Element.prototype.querySelector.call({}, "i"),
+      "Element.querySelector brand");
+    throwsTypeError(() => HTMLElement.prototype.click.call({}), "HTMLElement.click brand");
+  });
+
+  test("non-constructible DOM interfaces throw", () => {
+    throwsTypeError(() => new Node(), "Node constructor");
+    throwsTypeError(() => new Element(), "Element constructor");
+    throwsTypeError(() => new HTMLElement(), "HTMLElement constructor");
+    assert(new EventTarget() instanceof EventTarget, "EventTarget was not constructible");
+  });
+
+  test("standalone EventTarget instances keep independent listener identity", () => {
+    const first = new EventTarget();
+    const second = new EventTarget();
+    let firstCalls = 0;
+    let secondCalls = 0;
+    first.addEventListener("probe", event => {
+      ++firstCalls;
+      assert(event.target === first, "first event target identity");
+      assert(event.currentTarget === first, "first currentTarget identity");
+    });
+    second.addEventListener("probe", () => ++secondCalls);
+    assert(first.dispatchEvent(new Event("probe")), "dispatch return value");
+    equal(firstCalls, 1, "first listener count");
+    equal(secondCalls, 0, "second listener cross-talk");
+    first.addEventListener("resize", () => ++firstCalls);
+    first.dispatchEvent(new Event("resize"));
+    equal(firstCalls, 2, "standalone resize listener count");
+  });
+
+  test("IDL attributes are inherited prototype accessors", () => {
+    const element = document.createElement("div");
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "id");
+    assert(descriptor && typeof descriptor.get === "function" && typeof descriptor.set === "function",
+      "Element.prototype.id accessor missing");
+    assert(descriptor.enumerable && descriptor.configurable, "id descriptor flags");
+    assert(!Object.prototype.hasOwnProperty.call(element, "id"), "id was installed on the wrapper");
+  });
+
+  test("wrapper identity survives generated prototype dispatch", () => {
+    const parent = document.createElement("div");
+    const child = document.createElement("span");
+    parent.appendChild(child);
+    assert(parent.firstChild === child, "firstChild lost wrapper identity");
+    assert(parent.querySelector("span") === child, "querySelector lost wrapper identity");
+    assert(parent.removeChild(child) === child, "removeChild lost wrapper identity");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+  const report = document.createElement("pre");
+  report.id = "webidl-binding-results";
+  report.textContent = JSON.stringify(state.results);
+  document.body.appendChild(report);
+</script>

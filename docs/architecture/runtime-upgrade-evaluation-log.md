@@ -125,7 +125,8 @@ practical, delete the legacy splitter/walker, and rerun the same evidence on pac
 
 ### 2. Generated WebIDL-to-V8 bindings
 
-**State:** Queued after the CSS syntax spike
+**State:** Ruled in for method/prototype compatibility; accessor migration remains
+conditional before making it default
 
 **Prototype boundary:** Generate the `EventTarget` -> `Node` -> `Element` ->
 `HTMLElement` interface family from pinned WebIDL input plus an explicit WebScene
@@ -138,7 +139,50 @@ exposure manifest. Keep native method behavior handwritten.
   conversions, exceptions, and wrapper identity against Chrome and the required profile.
 - Context-creation time, binary size, and RSS before considering snapshots.
 
-**Decision:** Pending.
+**Decision:** **Rule in the generated catalog and interface-template chain for operations,
+constructors, brands, and wrapper selection.** It meets the compatibility gate with exact
+required-profile parity and moves the focused browser-shaped denominator from 2/10 to
+9/10. It does not meet the code-reduction, memory, or performance benefit gates. Keep the
+legacy A/B switch until the generated path has packaged ecosystem coverage. Do not claim
+full WebIDL parity: V8 15.3 native property callbacks cannot expose the original receiver
+when an accessor is installed on a prototype, so attributes remain generated instance
+accessors and fail browser descriptor placement. Migrating attributes requires shared
+semantic getter/setter functions callable from V8 `FunctionCallback` accessors; duplicating
+76 implementations merely to move descriptors is rejected.
+
+**Current findings:**
+
+- The prototype pins build-time-only `@webref/idl` 3.82.1 (MIT) and `webidl2` 24.5.0
+  (W3C), validates an explicit 123-member exposure manifest against the standards corpus,
+  and commits reproducible generated C++. Normal builds have no Node, npm, network, or new
+  runtime dependency; `npm run check --prefix tools/webidl-v8-bindings` detects drift.
+- The legacy element catalog is 271 handwritten installation lines and duplicates about
+  50 constructor/alias lines across top-level and frame contexts. The new 192-line exposure
+  manifest plus 227-line generator does not yield a 500-line net maintained-code reduction
+  for this slice. The 2,194-line generated output is excluded from the handwritten count.
+- The generated V8 chain creates distinct `EventTarget`, `Node`, `Element`, and
+  `HTMLElement` templates, selects Node wrappers for text/fragments, Element for SVG, and
+  HTMLElement for HTML, installs operations on the declaring prototype with WebIDL
+  `.length`, V8 receiver signatures, illegal constructors, and per-object standalone
+  EventTarget listener identity. Wrapper identity remains native and stable.
+- Chrome passes 10/10 focused assertions. The matched legacy engine passes 2/10; the
+  generated engine passes 9/10. The generated path fixes constructor/prototype identity,
+  HTML/text/SVG brands, operation placement and arity, illegal invocation, illegal
+  constructors, standalone EventTarget isolation, and wrapper identity. Both WebScene
+  variants fail only the focused prototype-accessor descriptor assertion in the generated
+  path; legacy has seven additional failures.
+- The final required profile is exactly neutral at 104/110 documents and 431/433 subtests,
+  with the same five failures and hover timeout as the cssparser control. An early catalog
+  revision exposed a real `DocumentFragment.append` regression (103/110, 430/433); moving
+  the already-supported ParentNode operations to the shared Node layer restored exact
+  parity before the decision.
+- Matched Release/certification binaries are 52,399,408 bytes (legacy) and 52,460,048 bytes
+  (generated): +60,640 bytes, or +0.116%.
+- Across five processes, each with five warmups and 30 samples, the median ready-runtime
+  lifecycle p50 is 0.866 ms legacy versus 0.891 ms generated for independent isolates
+  (+2.9%), and 0.364 versus 0.379 ms with a shared isolate (+4.1%). Median peak RSS is
+  33,112,064 versus 33,243,136 bytes (+0.4%) isolated and 43,057,152 versus 42,811,392
+  bytes (-0.6%) shared. These are neutral non-regressions, not benefits.
 
 ### 3. V8 embedder startup snapshot
 
@@ -220,3 +264,28 @@ layout engine.
   Both variants completed their behavioral gates.
 - Decision: rule in for the demonstrated syntax compatibility gain. Do not bundle Servo
   selectors or another cascade/layout engine as part of this decision.
+
+### 2026-08-01 — generated WebIDL-to-V8 binding slice
+
+- Prototype base: `0fa1d52`; V8 15.3.10, macOS arm64, AppleClang 21, Release with
+  certification, html5ever, and cssparser. Build switch:
+  `WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=legacy|generated`.
+- Inputs and generator: `tools/webidl-v8-bindings`; generated output:
+  `experiments/WebScene.NativeEngine.Probe/native/generated/webscene_dom_bindings.inc`.
+  The pinned WebRef corpus is generation-time validation, not shipped code.
+- Focused raw results: `artifacts/webidl-evaluation/contract-legacy-eventtarget`,
+  `artifacts/webidl-evaluation/contract-generated-eventtarget`, and
+  `artifacts/webidl-evaluation/contract-chrome-final.html`.
+- Required-profile raw result: `artifacts/webidl-evaluation/required-generated-eventtarget`;
+  matched control: `artifacts/cssparser-evaluation/required-profile-cssparser-final`.
+- Timing/RSS raw samples: `artifacts/webidl-evaluation/benchmarks`. Fixture: create engine,
+  wait for a successful V8 evaluation, release the result, and destroy the engine; five
+  process samples per variant/mode, five warmups and 30 recorded lifecycles per process.
+- The V8 accessor-receiver constraint was found by compiling the prototype, not inferred:
+  `PropertyCallbackInfo` in V8 15.3 exposes `Holder()` but not the original receiver.
+  Instance accessors therefore retain current semantics and brand guards, while generated
+  method templates can use `Signature` for correct receiver enforcement.
+- Decision: rule in the generated operation/prototype catalog for compatibility, retain the
+  A/B switch during ecosystem validation, and treat prototype attribute descriptors as a
+  separately gated semantic-callback refactor rather than hiding duplicate behavior in the
+  generator.
