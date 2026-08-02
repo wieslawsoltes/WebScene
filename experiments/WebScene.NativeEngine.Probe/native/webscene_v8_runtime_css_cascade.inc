@@ -1850,14 +1850,19 @@
             }
         } else if (name == "grid-template-columns" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
-            grid.two_columns = has_multiple_grid_columns(value);
             grid.template_columns = parse_simple_grid_tracks(value);
+            grid.two_columns = grid.template_columns.size() > 1U
+                || (grid.template_columns.empty() && has_multiple_grid_columns(value));
             decision.classification = "partially-supported";
-            decision.semantic_slice = "two-column component grids and explicit fixed track lengths";
+            decision.semantic_slice =
+                "component grids with fixed, auto, fractional, and minmax track lengths";
         } else if (name == "grid-template-rows" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
-            grid.fractional_rows = value.find("1fr") != std::string::npos;
             grid.template_rows = parse_simple_grid_tracks(value);
+            grid.fractional_rows = std::any_of(
+                grid.template_rows.begin(),
+                grid.template_rows.end(),
+                [](const auto& track) { return track.fraction > 0; });
             decision.classification = "partially-supported";
             decision.semantic_slice = "fractional component rows and explicit fixed track lengths";
         } else if (!is_inline(inline_grid)

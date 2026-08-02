@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mixed inline timer runs retain DOM order on one line</title>
+<style>
+  body { margin: 0; font: 16px/20px Arial, sans-serif; }
+  #timer { width: 320px; color: #567; }
+  #elapsed { color: black; font: 700 28px/34px monospace; }
+  #suffix { white-space: nowrap; }
+</style>
+<div id="timer"><strong id="elapsed">0.1</strong><span id="suffix"> / 10.0 seconds</span></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const rect = id => document.getElementById(id).getBoundingClientRect();
+  const result = { name: "mixed inline descendants retain source order and one line box" };
+  try {
+    const timer = rect("timer"), elapsed = rect("elapsed"), suffix = rect("suffix");
+    if (!(elapsed.left < suffix.left && suffix.left >= elapsed.right - .01)) {
+      throw new Error("inline order=" + JSON.stringify({ elapsed, suffix }));
+    }
+    if (!(suffix.top >= timer.top && suffix.bottom <= timer.bottom + .01 && timer.height >= 34)) {
+      throw new Error("line box=" + JSON.stringify({ timer, elapsed, suffix }));
+    }
+    result.status = "PASS"; result.message = null; result.stack = null;
+  } catch (error) {
+    result.status = "FAIL"; result.message = String(error.message || error); result.stack = error.stack || null;
+  }
+  state.results.push(result);
+  state.diagnostics = [JSON.stringify({ timer: rect("timer"), elapsed: rect("elapsed"), suffix: rect("suffix") })];
+  state.harness = { status: result.status === "PASS" ? 0 : 1, message: null, stack: null };
+  state.complete = true;
+</script>

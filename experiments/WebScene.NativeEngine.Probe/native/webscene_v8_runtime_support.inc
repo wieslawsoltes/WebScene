@@ -1027,18 +1027,101 @@ bool has_multiple_grid_columns(std::string_view value)
     return track_count > 1U;
 }
 
-std::vector<css_length> parse_simple_grid_tracks(const std::string& value)
+std::vector<node_style::grid_data::track> parse_simple_grid_tracks(
+    const std::string& value)
 {
-    std::istringstream stream(value);
-    std::vector<css_length> tracks;
-    for (std::string token; stream >> token;) {
-        if (token == "none") return {};
-        if (token.find_first_of("([") != std::string::npos
-            || token.ends_with("fr") || token == "auto"
-            || token == "min-content" || token == "max-content") {
-            return {};
+    using grid_track = node_style::grid_data::track;
+    const auto trim = [](std::string_view input) {
+        const auto first = input.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) return std::string_view{};
+        return input.substr(first, input.find_last_not_of(" \t\r\n") - first + 1U);
+    };
+    const auto parse_fraction = [&](std::string_view token) {
+        token = trim(token);
+        if (!token.ends_with("fr")) return 0.0F;
+        token.remove_suffix(2U);
+        if (token.empty()) return 1.0F;
+        char* end = nullptr;
+        const auto text = std::string(token);
+        const auto result = std::strtof(text.c_str(), &end);
+        return end != text.c_str() && *end == '\0' && result > 0 ? result : 0.0F;
+    };
+    const auto parse_track = [&](std::string_view raw) -> std::optional<grid_track> {
+        const auto token = trim(raw);
+        if (token.empty()) return std::nullopt;
+        if (token == "auto" || token == "min-content" || token == "max-content") {
+            grid_track track;
+            track.kind = grid_track::sizing::automatic;
+            return track;
         }
-        tracks.push_back(native_document::parse_length(token));
+        if (const auto fraction = parse_fraction(token); fraction > 0) {
+            grid_track track;
+            track.kind = grid_track::sizing::fractional;
+            track.fraction = fraction;
+            return track;
+        }
+        if (token.starts_with("minmax(") && token.ends_with(')')) {
+            const auto arguments = token.substr(7U, token.size() - 8U);
+            auto comma = std::string_view::npos;
+            auto depth = 0;
+            for (size_t index = 0; index < arguments.size(); ++index) {
+                if (arguments[index] == '(') ++depth;
+                else if (arguments[index] == ')') --depth;
+                else if (arguments[index] == ',' && depth == 0) {
+                    comma = index;
+                    break;
+                }
+            }
+            if (comma == std::string_view::npos) return std::nullopt;
+            grid_track track;
+            track.kind = grid_track::sizing::minmax;
+            const auto minimum = trim(arguments.substr(0, comma));
+            const auto maximum = trim(arguments.substr(comma + 1U));
+            if (minimum != "auto" && minimum != "min-content"
+                && minimum != "max-content") {
+                track.minimum = native_document::parse_length(std::string(minimum));
+            }
+            track.fraction = parse_fraction(maximum);
+            if (track.fraction <= 0 && maximum != "auto"
+                && maximum != "min-content" && maximum != "max-content") {
+                track.maximum = native_document::parse_length(std::string(maximum));
+            }
+            return track;
+        }
+        grid_track track;
+        track.kind = grid_track::sizing::fixed;
+        track.minimum = native_document::parse_length(std::string(token));
+        track.maximum = track.minimum;
+        return track;
+    };
+
+    std::vector<std::string_view> tokens;
+    size_t token_start = std::string_view::npos;
+    auto parenthesis_depth = 0;
+    auto bracket_depth = 0;
+    for (size_t index = 0; index <= value.size(); ++index) {
+        const auto character = index < value.size() ? value[index] : ' ';
+        if (character == '(') ++parenthesis_depth;
+        else if (character == ')' && parenthesis_depth > 0) --parenthesis_depth;
+        else if (character == '[') ++bracket_depth;
+        else if (character == ']' && bracket_depth > 0) --bracket_depth;
+        const auto separator = parenthesis_depth == 0 && bracket_depth == 0
+            && std::isspace(static_cast<unsigned char>(character));
+        if (!separator && token_start == std::string_view::npos) token_start = index;
+        if (separator && token_start != std::string_view::npos) {
+            tokens.push_back(std::string_view(value).substr(token_start, index - token_start));
+            token_start = std::string_view::npos;
+        }
+    }
+
+    std::vector<grid_track> tracks;
+    for (auto token : tokens) {
+        token = trim(token);
+        if (token.empty() || token.front() == '[') continue;
+        if (token == "none" || token.starts_with("repeat(")) return {};
+        const auto parsed = parse_track(token);
+        if (!parsed.has_value()) return {};
+        tracks.push_back(*parsed);
     }
     return tracks;
 }

@@ -171,3 +171,24 @@ Against the clean parent commit, a 500-sample lifecycle load benchmark improved 
 ms to 32.598 ms (+0.055%), and four idle contexts over five seconds moved from 0.95407%
 to 0.95514% normalized CPU (+0.00107 percentage points). These figures establish a
 no-meaningful-regression baseline; future shadow work must preserve it.
+
+## Reported 7GUIs compatibility reductions
+
+The WebScene branch of the React 7GUIs sample reported three CSS/form adaptations against
+1.0.17. Current candidate coverage retains product-neutral reductions for all three:
+
+- a default single `select` is one collapsed native box, projects only its selected label,
+  and remains usable through the native pointer and keyboard boundary;
+- ordinary form grids support fixed, automatic, fractional, and bounded `minmax()` tracks,
+  gaps, source-order placement, and numeric row/column spans; and
+- mixed inline timer runs retain source order and one shared line box. This last case was
+  already repaired by the later inline-boundary whitespace work and needed regression
+  coverage rather than another engine path.
+
+These are candidate additions. The 110-document required profile remains unchanged and
+passes 110/110 after the layout changes. Select and Grid state stays behind existing
+optional form/style records; ordinary DOM nodes gain no fields or presenter controls.
+Against the clean parent, three alternating same-machine runs put the 500-sample lifecycle
+median-of-medians at 0.715/0.702 ms (parent/current) and the 30-sample light-DOM selector
+workload at 32.465/32.648 ms (+0.56%). This is within the established no-meaningful-
+regression envelope while the feature paths themselves remain pay for what is used.

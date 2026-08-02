@@ -741,6 +741,51 @@ void native_document::append_scene(
         }
     }
 
+    if (paint_self && is_collapsed_select(node)) {
+        const auto font_size = resolved_font_size(node);
+        const auto line_height = resolved_line_height(node, font_size);
+        const auto padding_left = resolve_length(
+            node, node.style.padding_left, node.layout.width, 0);
+        const auto padding_right = resolve_length(
+            node, node.style.padding_right, node.layout.width, 0);
+        const auto affordance_width = std::max(12.0F, font_size * 1.25F);
+        const auto text_x = node.layout.x + padding_left;
+        const auto text_y = node.layout.y
+            + std::max(0.0F, (node.layout.height - line_height) * 0.5F);
+        const auto text_width = std::max(
+            0.0F,
+            node.layout.width - padding_left - padding_right - affordance_width);
+        if (const auto* selected = selected_option_for(node); selected != nullptr) {
+            std::ostringstream resource;
+            resource << font_size << '\t' << line_height << '\t'
+                << resolved_font_weight(node) << '\t' << "start" << '\t'
+                << resolved_font_family(node) << '\t' << option_label(*selected);
+            commands.push_back(webscene_scene_command{
+                3U,
+                append_scene_string(resource.str(), strings, string_bytes),
+                text_x,
+                text_y,
+                text_width,
+                line_height,
+                with_opacity(resolved_foreground(node)),
+                node.id});
+        }
+        const auto center_x = node.layout.x + node.layout.width
+            - padding_right - affordance_width * 0.5F;
+        const auto center_y = node.layout.y + node.layout.height * 0.5F;
+        const auto arrow_color = with_opacity(resolved_foreground(node));
+        commands.push_back(webscene_scene_command{
+            2U, 100U,
+            center_x - 3.5F, center_y - 1.5F,
+            center_x, center_y + 2.0F,
+            arrow_color, node.id});
+        commands.push_back(webscene_scene_command{
+            2U, 100U,
+            center_x, center_y + 2.0F,
+            center_x + 3.5F, center_y - 1.5F,
+            arrow_color, node.id});
+    }
+
     if (paint_self && (node.tag == "input" || node.tag == "textarea")) {
         const auto font_size = resolved_font_size(node);
         const auto line_height = resolved_line_height(node, font_size);

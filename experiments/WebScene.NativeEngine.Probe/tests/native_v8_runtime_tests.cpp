@@ -230,6 +230,7 @@ int main()
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
     test_dropdown_runtime_primitives(engine);
+    test_collapsed_single_select_native_activation(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
     test_runtime_work_is_attributed();

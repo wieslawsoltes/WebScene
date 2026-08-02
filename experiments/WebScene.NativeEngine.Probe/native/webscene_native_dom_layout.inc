@@ -66,6 +66,28 @@ void native_document::layout_children(dom_node& parent)
     const auto marker_text = list_marker_text(parent);
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(parent, true) == "inside";
+    if (is_collapsed_select(parent)) {
+        const auto clear_option_layout = [&](const auto& self, dom_node& node) -> void {
+            node.visible = false;
+            node.layout = {};
+            node.text_layout_fragments.clear();
+            node.scroll_content_width = 0.0F;
+            node.scroll_content_height = 0.0F;
+            node.scroll_viewport_width = 0.0F;
+            node.scroll_viewport_height = 0.0F;
+            for (auto* child : node.children) {
+                if (child != nullptr) self(self, *child);
+            }
+        };
+        for (auto* child : parent.children) {
+            if (child != nullptr) clear_option_layout(clear_option_layout, *child);
+        }
+        parent.scroll_content_width = parent.layout.width;
+        parent.scroll_content_height = parent.layout.height;
+        parent.scroll_viewport_width = parent.layout.width;
+        parent.scroll_viewport_height = parent.layout.height;
+        return;
+    }
     if (composed_children(parent).empty() && !has_before && !has_after && !has_inside_marker) {
         return;
     }
@@ -991,13 +1013,72 @@ void native_document::layout_children(dom_node& parent)
     }
     const auto& parent_grid = parent.style.grid();
     if (is_grid_container(parent.style.display) && parent_grid.two_columns) {
-        struct grid_row final {
-            dom_node* first{nullptr};
-            dom_node* second{nullptr};
-            bool spanning{false};
+        using grid_track = node_style::grid_data::track;
+        struct grid_item final {
+            dom_node* node{nullptr};
+            size_t row{0};
+            size_t column{0};
+            size_t row_span{1};
+            size_t column_span{1};
         };
-        std::vector<grid_row> rows;
-        dom_node* pending = nullptr;
+        const auto column_count = std::max<size_t>(2U, parent_grid.template_columns.size());
+        const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string_view::npos) return std::nullopt;
+            const auto last = value.find_last_not_of(" \t\r\n");
+            value = value.substr(first, last - first + 1U);
+            if (value.empty() || value == "auto" || value.starts_with("span")) {
+                return std::nullopt;
+            }
+            int32_t result = 0;
+            const auto parsed = std::from_chars(
+                value.data(), value.data() + value.size(), result);
+            return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size()
+                ? std::optional<int32_t>{result}
+                : std::nullopt;
+        };
+        const auto parse_span = [&](std::string_view start_value,
+                                    std::string_view end_value,
+                                    size_t track_count) {
+            const auto start = parse_line(start_value);
+            const auto end = parse_line(end_value);
+            if (start.has_value() && end.has_value()) {
+                const auto normalized_end = *end < 0
+                    ? static_cast<int32_t>(track_count) + *end + 2
+                    : *end;
+                return static_cast<size_t>(std::max(1, normalized_end - *start));
+            }
+            const auto marker = end_value.find("span");
+            if (marker != std::string_view::npos) {
+                const auto digits = end_value.find_first_of("0123456789", marker + 4U);
+                if (digits != std::string_view::npos) {
+                    return std::max<size_t>(
+                        1U,
+                        static_cast<size_t>(parse_number(
+                            std::string(end_value.substr(digits)), 1.0F)));
+                }
+            }
+            return size_t{1};
+        };
+        std::vector<std::vector<bool>> occupied;
+        const auto ensure_rows = [&](size_t count) {
+            while (occupied.size() < count) occupied.emplace_back(column_count, false);
+        };
+        const auto fits = [&](size_t row, size_t column, size_t row_span, size_t column_span) {
+            if (column >= column_count || column + column_span > column_count) return false;
+            for (size_t candidate_row = row; candidate_row < row + row_span; ++candidate_row) {
+                if (candidate_row >= occupied.size()) continue;
+                for (size_t candidate_column = column;
+                     candidate_column < column + column_span;
+                     ++candidate_column) {
+                    if (occupied[candidate_row][candidate_column]) return false;
+                }
+            }
+            return true;
+        };
+        std::vector<grid_item> items;
+        auto auto_row = size_t{0};
+        auto auto_column = size_t{0};
         for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             // CSS Grid does not generate anonymous grid items for
@@ -1009,99 +1090,202 @@ void native_document::layout_children(dom_node& parent)
                 continue;
             }
             if (is_out_of_flow(child->style.position)) continue;
-            if (child->style.grid().span_all) {
-                if (pending != nullptr) rows.push_back({pending, nullptr, false});
-                pending = nullptr;
-                rows.push_back({child, nullptr, true});
-            } else if (pending == nullptr) {
-                pending = child;
-            } else {
-                rows.push_back({pending, child, false});
-                pending = nullptr;
+            const auto& placement = child->style.grid();
+            auto column_span = std::min(
+                column_count,
+                parse_span(
+                    placement.column_start_value,
+                    placement.column_end_value,
+                    column_count));
+            auto row_span = parse_span(
+                placement.row_start_value,
+                placement.row_end_value,
+                std::max<size_t>(parent_grid.template_rows.size(), 1U));
+            const auto authored_column = parse_line(placement.column_start_value);
+            const auto authored_row = parse_line(placement.row_start_value);
+            auto row = authored_row.has_value() && *authored_row > 0
+                ? static_cast<size_t>(*authored_row - 1) : auto_row;
+            auto column = authored_column.has_value() && *authored_column > 0
+                ? static_cast<size_t>(*authored_column - 1) : auto_column;
+            if (authored_column.has_value() && *authored_column < 0) {
+                column = static_cast<size_t>(std::max<int32_t>(
+                    0, static_cast<int32_t>(column_count) + *authored_column + 1));
+            }
+            if (column + column_span > column_count) {
+                column = column_count - column_span;
+            }
+            while (!fits(row, column, row_span, column_span)) {
+                if (!authored_column.has_value()) {
+                    ++column;
+                    if (column + column_span > column_count) {
+                        column = 0;
+                        ++row;
+                    }
+                } else {
+                    ++row;
+                }
+            }
+            ensure_rows(row + row_span);
+            for (size_t candidate_row = row; candidate_row < row + row_span; ++candidate_row) {
+                for (size_t candidate_column = column;
+                     candidate_column < column + column_span;
+                     ++candidate_column) {
+                    occupied[candidate_row][candidate_column] = true;
+                }
+            }
+            items.push_back({child, row, column, row_span, column_span});
+            auto_row = row;
+            auto_column = column + column_span;
+            if (auto_column >= column_count) {
+                auto_column = 0;
+                ++auto_row;
             }
         }
-        if (pending != nullptr) rows.push_back({pending, nullptr, false});
 
         const auto column_gap = resolve_length(
             parent, parent.style.column_gap, content.width, 0);
         const auto row_gap = resolve_length(
             parent, parent.style.row_gap, content.height, 0);
-        auto first_column_width = parent_grid.template_columns.size() >= 2U
-            ? resolve_length(
-                parent, parent_grid.template_columns[0], content.width, 0)
-            : 0.0F;
-        if (parent_grid.template_columns.size() < 2U) {
-            for (const auto& row : rows) {
-                if (row.spanning || row.first == nullptr) continue;
-                const auto margins = resolve_length(
-                        *row.first, row.first->style.margin_left, content.width, 0)
-                    + resolve_length(
-                        *row.first, row.first->style.margin_right, content.width, 0);
-                first_column_width = std::max(
-                    first_column_width,
-                    intrinsic_size(*row.first, true, content.width) + margins);
+        std::vector<float> column_widths(column_count, 0.0F);
+        auto fractional_weight = 0.0F;
+        for (size_t column = 0; column < parent_grid.template_columns.size(); ++column) {
+            const auto& track = parent_grid.template_columns[column];
+            if (track.kind == grid_track::sizing::fixed) {
+                column_widths[column] = resolve_length(
+                    parent, track.maximum, content.width, 0);
+            } else if (track.kind == grid_track::sizing::minmax) {
+                column_widths[column] = resolve_length(
+                    parent, track.minimum, content.width, 0);
+                if (track.fraction <= 0 && is_specified(track.maximum)) {
+                    column_widths[column] = std::max(
+                        column_widths[column],
+                        resolve_length(parent, track.maximum, content.width, 0));
+                }
             }
-            first_column_width = std::clamp(
-                first_column_width,
-                0.0F,
-                content.width * 0.6F);
+            fractional_weight += track.fraction;
         }
-        const auto second_column_width = parent_grid.template_columns.size() >= 2U
-            ? resolve_length(
-                parent, parent_grid.template_columns[1], content.width, 0)
-            : std::max(0.0F, content.width - column_gap - first_column_width);
-        auto row_y = content.y;
-        for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
-            const auto& row = rows[row_index];
-            auto row_height = 0.0F;
-            const auto measure_height = [&](const dom_node* child) {
-                if (child == nullptr) return 0.0F;
-                const auto margins = resolve_length(
-                        *child, child->style.margin_top, content.height, 0)
-                    + resolve_length(
-                        *child, child->style.margin_bottom, content.height, 0);
-                const auto authored = is_specified(child->style.height)
-                    ? outer_authored_size(*child, false, content.height)
-                    : intrinsic_size(*child, false, content.height);
-                return authored + margins;
-            };
-            row_height = row_index < parent_grid.template_rows.size()
-                ? resolve_length(
-                    parent, parent_grid.template_rows[row_index], content.height, 0)
-                : std::max(measure_height(row.first), measure_height(row.second));
-            const auto arrange = [&](dom_node* child, float x, float available_width) {
-                if (child == nullptr) return;
+        for (const auto& item : items) {
+            if (item.column_span != 1U) continue;
+            const auto authored_track = item.column < parent_grid.template_columns.size()
+                ? &parent_grid.template_columns[item.column] : nullptr;
+            if (authored_track != nullptr
+                && authored_track->kind != grid_track::sizing::automatic) continue;
+            const auto margins = resolve_length(
+                    *item.node, item.node->style.margin_left, content.width, 0)
+                + resolve_length(
+                    *item.node, item.node->style.margin_right, content.width, 0);
+            column_widths[item.column] = std::max(
+                column_widths[item.column],
+                intrinsic_size(*item.node, true, content.width) + margins);
+        }
+        const auto total_gap = column_gap * static_cast<float>(column_count - 1U);
+        const auto committed_width = std::accumulate(
+            column_widths.begin(), column_widths.end(), total_gap);
+        const auto fractional_space = std::max(0.0F, content.width - committed_width);
+        if (fractional_weight > 0) {
+            for (size_t column = 0; column < parent_grid.template_columns.size(); ++column) {
+                const auto& track = parent_grid.template_columns[column];
+                if (track.fraction <= 0) continue;
+                column_widths[column] = std::max(
+                    column_widths[column],
+                    fractional_space * track.fraction / fractional_weight);
+            }
+        } else if (committed_width < content.width && !column_widths.empty()) {
+            column_widths.back() += content.width - committed_width;
+        }
+
+        const auto row_count = std::max<size_t>(
+            occupied.size(), parent_grid.template_rows.size());
+        std::vector<float> row_heights(row_count, 0.0F);
+        auto fractional_row_weight = 0.0F;
+        for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
+            const auto& track = parent_grid.template_rows[row];
+            if (track.kind == grid_track::sizing::fixed) {
+                row_heights[row] = resolve_length(parent, track.maximum, content.height, 0);
+            } else if (track.kind == grid_track::sizing::minmax) {
+                row_heights[row] = resolve_length(parent, track.minimum, content.height, 0);
+            }
+            fractional_row_weight += track.fraction;
+        }
+        for (const auto& item : items) {
+            if (item.row_span != 1U || item.row >= row_heights.size()) continue;
+            const auto authored_track = item.row < parent_grid.template_rows.size()
+                ? &parent_grid.template_rows[item.row] : nullptr;
+            if (authored_track != nullptr
+                && authored_track->kind == grid_track::sizing::fixed) continue;
+            const auto margins = resolve_length(
+                    *item.node, item.node->style.margin_top, content.height, 0)
+                + resolve_length(
+                    *item.node, item.node->style.margin_bottom, content.height, 0);
+            const auto authored = is_specified(item.node->style.height)
+                ? outer_authored_size(*item.node, false, content.height)
+                : intrinsic_size(*item.node, false, content.height);
+            row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
+        }
+        const auto total_row_gap = row_count > 0
+            ? row_gap * static_cast<float>(row_count - 1U) : 0.0F;
+        const auto committed_height = std::accumulate(
+            row_heights.begin(), row_heights.end(), total_row_gap);
+        const auto fractional_row_space = std::max(0.0F, content.height - committed_height);
+        if (fractional_row_weight > 0) {
+            for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
+                const auto& track = parent_grid.template_rows[row];
+                if (track.fraction <= 0) continue;
+                row_heights[row] = std::max(
+                    row_heights[row],
+                    fractional_row_space * track.fraction / fractional_row_weight);
+            }
+        }
+
+        std::vector<float> column_offsets(column_count, content.x);
+        for (size_t column = 1; column < column_count; ++column) {
+            column_offsets[column] = column_offsets[column - 1U]
+                + column_widths[column - 1U] + column_gap;
+        }
+        std::vector<float> row_offsets(row_count, content.y);
+        for (size_t row = 1; row < row_count; ++row) {
+            row_offsets[row] = row_offsets[row - 1U] + row_heights[row - 1U] + row_gap;
+        }
+        for (const auto& item : items) {
+            const auto available_width = std::accumulate(
+                    column_widths.begin() + static_cast<std::ptrdiff_t>(item.column),
+                    column_widths.begin() + static_cast<std::ptrdiff_t>(item.column + item.column_span),
+                    0.0F)
+                + column_gap * static_cast<float>(item.column_span - 1U);
+            const auto available_height = std::accumulate(
+                    row_heights.begin() + static_cast<std::ptrdiff_t>(item.row),
+                    row_heights.begin() + static_cast<std::ptrdiff_t>(item.row + item.row_span),
+                    0.0F)
+                + row_gap * static_cast<float>(item.row_span - 1U);
+            const auto arrange = [&](dom_node* child) {
                 const auto margin_left = resolve_length(
                     *child, child->style.margin_left, available_width, 0);
                 const auto margin_right = resolve_length(
                     *child, child->style.margin_right, available_width, 0);
                 const auto margin_top = resolve_length(
-                    *child, child->style.margin_top, row_height, 0);
+                    *child, child->style.margin_top, available_height, 0);
                 const auto margin_bottom = resolve_length(
-                    *child, child->style.margin_bottom, row_height, 0);
+                    *child, child->style.margin_bottom, available_height, 0);
                 auto width = is_specified(child->style.width)
                     ? outer_authored_size(*child, true, available_width)
                     : std::max(0.0F, available_width - margin_left - margin_right);
                 auto height = is_specified(child->style.height)
-                    ? outer_authored_size(*child, false, row_height)
-                    : std::max(0.0F, row_height - margin_top - margin_bottom);
+                    ? outer_authored_size(*child, false, available_height)
+                    : std::max(0.0F, available_height - margin_top - margin_bottom);
                 layout_child(*child, parent.layout, {
-                    x + margin_left,
-                    row_y + margin_top,
+                    column_offsets[item.column] + margin_left,
+                    row_offsets[item.row] + margin_top,
                     width,
                     height});
             };
-            if (row.spanning) {
-                arrange(row.first, content.x, content.width);
-            } else {
-                arrange(row.first, content.x, first_column_width);
-                arrange(
-                    row.second,
-                    content.x + first_column_width + column_gap,
-                    second_column_width);
-            }
-            row_y += row_height + (row_index + 1U < rows.size() ? row_gap : 0.0F);
+            arrange(item.node);
         }
+        parent.scroll_content_width = std::max(
+            content.width,
+            std::accumulate(column_widths.begin(), column_widths.end(), total_gap));
+        parent.scroll_content_height = std::max(
+            content.height,
+            std::accumulate(row_heights.begin(), row_heights.end(), total_row_gap));
         return;
     }
     if (is_grid_container(parent.style.display) && parent_grid.fractional_rows) {
@@ -2152,6 +2336,23 @@ float native_document::intrinsic_size(
         }
         return constrain(height + padding);
     }
+    if (is_collapsed_select(node)) {
+        const auto font_size = resolved_font_size(node);
+        if (!horizontal) {
+            return constrain(resolved_line_height(node, font_size) + padding);
+        }
+        auto widest_label = 0.0F;
+        std::vector<const dom_node*> options;
+        collect_option_nodes(node, options);
+        for (const auto* option : options) {
+            widest_label = std::max(
+                widest_label,
+                measure_text_width(option_label(*option), node));
+        }
+        // Reserve a compact native disclosure affordance in addition to the
+        // widest option. This state exists only for an actual SELECT element.
+        return constrain(widest_label + font_size * 1.75F + padding);
+    }
     if (node.tag == "input") {
         auto type = std::string{"text"};
         if (const auto value = node.attributes.find("type"); value != node.attributes.end()) {
@@ -2235,46 +2436,135 @@ float native_document::intrinsic_size(
     }
 
     if (is_grid_container(node.style.display) && node.style.grid().two_columns) {
-        float first_column = 0;
-        float second_column = 0;
-        float row_height = 0;
-        float total_height = 0;
-        bool awaiting_second = false;
+        const auto& grid = node.style.grid();
+        const auto column_count = std::max<size_t>(2U, grid.template_columns.size());
+        struct intrinsic_grid_item final {
+            const dom_node* node{nullptr};
+            size_t row{0};
+            size_t column{0};
+            size_t row_span{1};
+            size_t column_span{1};
+        };
+        const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string_view::npos) return std::nullopt;
+            const auto last = value.find_last_not_of(" \t\r\n");
+            value = value.substr(first, last - first + 1U);
+            if (value.empty() || value == "auto" || value.starts_with("span")) {
+                return std::nullopt;
+            }
+            int32_t result = 0;
+            const auto parsed = std::from_chars(
+                value.data(), value.data() + value.size(), result);
+            return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size()
+                ? std::optional<int32_t>{result}
+                : std::nullopt;
+        };
+        const auto span_for = [&](std::string_view start_value,
+                                  std::string_view end_value,
+                                  size_t count) {
+            const auto start = parse_line(start_value);
+            const auto end = parse_line(end_value);
+            if (start.has_value() && end.has_value()) {
+                const auto normalized_end = *end < 0
+                    ? static_cast<int32_t>(count) + *end + 2 : *end;
+                return static_cast<size_t>(std::max(1, normalized_end - *start));
+            }
+            return size_t{1};
+        };
+        std::vector<std::vector<bool>> occupied;
+        std::vector<intrinsic_grid_item> items;
+        auto auto_row = size_t{0};
+        auto auto_column = size_t{0};
         for (const auto* child : composed_children(node)) {
             if (child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
                 || is_collapsible_whitespace_text(*child)) continue;
-            const auto child_width = intrinsic_size(*child, true, available)
-                + resolve_length(*child, child->style.margin_left, available, 0)
-                + resolve_length(*child, child->style.margin_right, available, 0);
-            const auto child_height = intrinsic_size(*child, false, available)
-                + resolve_length(*child, child->style.margin_top, available, 0)
-                + resolve_length(*child, child->style.margin_bottom, available, 0);
-            if (child->style.grid().span_all) {
-                if (awaiting_second) {
-                    total_height += row_height;
-                    row_height = 0;
-                    awaiting_second = false;
+            const auto& placement = child->style.grid();
+            const auto column_span = std::min(
+                column_count,
+                span_for(
+                    placement.column_start_value,
+                    placement.column_end_value,
+                    column_count));
+            const auto row_span = span_for(
+                placement.row_start_value,
+                placement.row_end_value,
+                std::max<size_t>(grid.template_rows.size(), 1U));
+            const auto authored_column = parse_line(placement.column_start_value);
+            const auto authored_row = parse_line(placement.row_start_value);
+            auto row = authored_row.has_value() && *authored_row > 0
+                ? static_cast<size_t>(*authored_row - 1) : auto_row;
+            auto column = authored_column.has_value() && *authored_column > 0
+                ? static_cast<size_t>(*authored_column - 1) : auto_column;
+            if (column + column_span > column_count) column = column_count - column_span;
+            const auto fits = [&](size_t candidate_row, size_t candidate_column) {
+                if (candidate_column + column_span > column_count) return false;
+                for (size_t row_index = candidate_row;
+                     row_index < candidate_row + row_span;
+                     ++row_index) {
+                    if (row_index >= occupied.size()) continue;
+                    for (size_t column_index = candidate_column;
+                         column_index < candidate_column + column_span;
+                         ++column_index) {
+                        if (occupied[row_index][column_index]) return false;
+                    }
                 }
-                total_height += child_height;
-                first_column = std::max(first_column, child_width);
-                continue;
+                return true;
+            };
+            while (!fits(row, column)) {
+                if (!authored_column.has_value()) {
+                    ++column;
+                    if (column + column_span > column_count) {
+                        column = 0;
+                        ++row;
+                    }
+                } else {
+                    ++row;
+                }
             }
-            if (!awaiting_second) {
-                first_column = std::max(first_column, child_width);
-                row_height = child_height;
-                awaiting_second = true;
-            } else {
-                second_column = std::max(second_column, child_width);
-                row_height = std::max(row_height, child_height);
-                total_height += row_height;
-                row_height = 0;
-                awaiting_second = false;
+            while (occupied.size() < row + row_span) {
+                occupied.emplace_back(column_count, false);
+            }
+            for (size_t row_index = row; row_index < row + row_span; ++row_index) {
+                for (size_t column_index = column;
+                     column_index < column + column_span;
+                     ++column_index) occupied[row_index][column_index] = true;
+            }
+            items.push_back({child, row, column, row_span, column_span});
+            auto_row = row;
+            auto_column = column + column_span;
+            if (auto_column >= column_count) {
+                auto_column = 0;
+                ++auto_row;
             }
         }
-        if (awaiting_second) total_height += row_height;
+        std::vector<float> columns(column_count, 0.0F);
+        std::vector<float> rows(std::max<size_t>(occupied.size(), grid.template_rows.size()), 0.0F);
+        for (const auto& item : items) {
+            const auto child_width = intrinsic_size(*item.node, true, available)
+                + resolve_length(*item.node, item.node->style.margin_left, available, 0)
+                + resolve_length(*item.node, item.node->style.margin_right, available, 0);
+            const auto child_height = intrinsic_size(*item.node, false, available)
+                + resolve_length(*item.node, item.node->style.margin_top, available, 0)
+                + resolve_length(*item.node, item.node->style.margin_bottom, available, 0);
+            const auto width_share = child_width / static_cast<float>(item.column_span);
+            for (size_t column = item.column;
+                 column < item.column + item.column_span;
+                 ++column) columns[column] = std::max(columns[column], width_share);
+            const auto height_share = child_height / static_cast<float>(item.row_span);
+            for (size_t row = item.row; row < item.row + item.row_span; ++row) {
+                rows[row] = std::max(rows[row], height_share);
+            }
+        }
+        const auto column_gap = resolve_length(node, node.style.column_gap, available, 0);
+        const auto row_gap = resolve_length(node, node.style.row_gap, available, 0);
+        const auto total_width = std::accumulate(columns.begin(), columns.end(), 0.0F)
+            + column_gap * static_cast<float>(columns.size() - 1U);
+        const auto total_height = std::accumulate(rows.begin(), rows.end(), 0.0F)
+            + (rows.empty() ? 0.0F : row_gap * static_cast<float>(rows.size() - 1U));
         return constrain(padding + (horizontal
-            ? first_column + second_column
+            ? total_width
             : total_height));
     }
 

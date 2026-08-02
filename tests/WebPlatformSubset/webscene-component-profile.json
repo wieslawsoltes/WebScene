@@ -820,6 +820,34 @@
   ],
   "candidate": [
     {
+      "path": "contracts/html-single-select-layout.html",
+      "type": "contract",
+      "capabilities": ["collapsed-single-select-layout", "selected-option-paint", "option-box-suppression", "programmatic-select-state"],
+      "evidence": ["reported-7guis-flight-booker-select-reduction"],
+      "reason": "Product-neutral reduction of the reported porting workaround: a default single-select is one replaced control, only its selected label is projected, option descendants do not enter page flow, and programmatic selectedIndex/value state remains live. Native pointer and keyboard tests separately cover user activation."
+    },
+    {
+      "path": "contracts/html-single-select-input.html",
+      "type": "testharness",
+      "capabilities": ["collapsed-single-select-pointer-activation", "select-focus", "select-input-change-events"],
+      "evidence": ["reported-7guis-flight-booker-select-interaction-reduction"],
+      "reason": "Native input-boundary companion to the layout contract. Because WebScene has no operating-system popup presenter, direct activation advances a collapsed select and publishes click/input/change while retaining standard value and selectedIndex state. The behavior is deliberately tested as a native component-runtime affordance rather than claimed as a browser popup implementation."
+    },
+    {
+      "path": "contracts/css-grid-form-layout.html",
+      "type": "contract",
+      "capabilities": ["grid-fractional-tracks", "grid-auto-tracks", "grid-minmax-tracks", "grid-gaps", "grid-explicit-placement", "grid-row-span"],
+      "evidence": ["reported-7guis-temperature-and-crud-grid-reduction"],
+      "reason": "Product-neutral reductions of the form layouts that were changed to flex during the 7GUIs port: equal fractional columns around an automatic separator, minmax fractional CRUD columns, source-order auto placement, and ordinary explicit row/column placement."
+    },
+    {
+      "path": "contracts/inline-mixed-timer-order.html",
+      "type": "contract",
+      "capabilities": ["mixed-inline-source-order", "mixed-font-line-box", "nowrap-inline-suffix"],
+      "evidence": ["reported-7guis-timer-inline-reduction"],
+      "reason": "Regression coverage for the timer composition reported against 1.0.17. The later inline-boundary whitespace fix already preserves source order on current main, so this candidate records the recovered behavior without adding another special layout path."
+    },
+    {
       "path": "contracts/custom-element-rendering.html",
       "type": "reftest",
       "reference": "contracts/custom-element-rendering-ref.html",

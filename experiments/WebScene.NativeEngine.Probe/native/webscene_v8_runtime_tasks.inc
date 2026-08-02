@@ -1651,6 +1651,25 @@
                 return set_active_element(next, input);
             }
         }
+        if (!prevented && target->tag == "select"
+            && !target->attributes.contains("multiple")
+            && (key_code == 35 || key_code == 36
+                || key_code == 38 || key_code == 40)) {
+            const auto changed = move_single_select_selection(
+                *target,
+                key_code == 38 ? -1 : key_code == 40 ? 1 : 0,
+                key_code == 36,
+                key_code == 35,
+                false);
+            if (changed) {
+                document.mark_dirty();
+                if (!dispatch_input_event_type(input, "input", *target)
+                    || !dispatch_input_event_type(input, "change", *target)) {
+                    return false;
+                }
+            }
+            return true;
+        }
         if (prevented || !is_text_control(target)) return true;
         ensure_form_value(*target);
         auto start = std::min(target->mutable_form_control().selection_start, target->mutable_form_control().value.size());
@@ -1737,9 +1756,72 @@
         return true;
     }
 
+    bool move_single_select_selection(
+        dom_node& select,
+        int offset,
+        bool first,
+        bool last,
+        bool wrap)
+    {
+        std::vector<dom_node*> options;
+        const auto collect = [&](const auto& self, dom_node& node) -> void {
+            for (auto* child : node.children) {
+                if (child == nullptr) continue;
+                if (child->tag == "option" && !child->attributes.contains("disabled")) {
+                    options.push_back(child);
+                }
+                self(self, *child);
+            }
+        };
+        collect(collect, select);
+        if (options.empty()) return false;
+
+        auto selected = options.end();
+        selected = std::find_if(options.begin(), options.end(), [](const auto* option) {
+            return option->form_control().selectedness_initialized
+                && option->form_control().selectedness;
+        });
+        if (selected == options.end()
+            && !select.form_control().selection_explicitly_empty) {
+            selected = std::find_if(options.begin(), options.end(), [](const auto* option) {
+                return option->attributes.contains("selected");
+            });
+        }
+        if (selected == options.end()
+            && !select.form_control().selection_explicitly_empty) {
+            selected = options.begin();
+        }
+        auto next = selected;
+        if (first) next = options.begin();
+        else if (last) next = options.end() - 1;
+        else if (selected == options.end()) next = options.begin();
+        else if (offset > 0) {
+            if (selected + 1 != options.end()) next = selected + 1;
+            else if (wrap) next = options.begin();
+        } else if (offset < 0) {
+            if (selected != options.begin()) next = selected - 1;
+            else if (wrap) next = options.end() - 1;
+        }
+        if (next == options.end() || next == selected) return false;
+        select.mutable_form_control().selection_explicitly_empty = false;
+        for (auto* option : options) {
+            option->mutable_form_control().selectedness_initialized = true;
+            option->mutable_form_control().selectedness = option == *next;
+        }
+        return true;
+    }
+
     bool apply_form_control_click_default(dom_node& target)
     {
-        if (target.tag != "input" || target.attributes.contains("disabled")) return false;
+        if (target.attributes.contains("disabled")) return false;
+        if (target.tag == "select" && !target.attributes.contains("multiple")) {
+            // WebScene has no operating-system popup surface. A direct native
+            // activation advances the collapsed selection, while Arrow keys
+            // retain the usual bounded navigation. This keeps ordinary two-
+            // choice component controls usable without a presenter widget.
+            return move_single_select_selection(target, 1, false, false, true);
+        }
+        if (target.tag != "input") return false;
         const auto type_iterator = target.attributes.find("type");
         auto type = type_iterator == target.attributes.end()
             ? std::string("text")
@@ -1793,7 +1875,7 @@
 
     dom_node* label_control_for_click(dom_node& target)
     {
-        if (target.tag == "input") return &target;
+        if (target.tag == "input" || target.tag == "select") return &target;
         auto* label = &target;
         while (label != nullptr && label->tag != "label") label = label->parent;
         if (label == nullptr) return nullptr;
@@ -1803,9 +1885,14 @@
             auto matches = document.query_selector_all(
                 active_root(),
                 "#" + explicit_control->second);
-            if (!matches.empty() && matches.front()->tag == "input") return matches.front();
+            if (!matches.empty()
+                && (matches.front()->tag == "input" || matches.front()->tag == "select")) {
+                return matches.front();
+            }
         }
         auto descendants = document.query_selector_all(*label, "input");
+        if (!descendants.empty()) return descendants.front();
+        descendants = document.query_selector_all(*label, "select");
         return descendants.empty() ? nullptr : descendants.front();
     }
 
