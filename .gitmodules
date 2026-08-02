@@ -1,6 +1,3 @@
-[submodule "third-party/clearscript"]
-	path = third-party/clearscript
-	url = https://github.com/wieslawsoltes/ClearScript.git
 [submodule "third-party/v8"]
 	path = third-party/v8
 	url = https://chromium.googlesource.com/v8/v8.git

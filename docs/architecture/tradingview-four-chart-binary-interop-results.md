@@ -152,7 +152,7 @@ Run the four-chart binary acceptance process:
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
 dotnet run \
-  --project benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj \
+  --project benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
   -c Release --no-build -- \
   probe generated-realtime-chart \
   --mode binary --charts 4 --ticks 600 --rate 60
@@ -169,7 +169,7 @@ the 1/4/8-engine matrix:
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
 dotnet run \
-  --project benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj \
+  --project benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
   -c Release --no-build -- \
   --filter '*GeneratedRealtimeChartInteropBenchmarks*' --job short
 ```
@@ -179,7 +179,7 @@ Exercise cancellation and transport-disposal races with:
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH="$PWD/artifacts/native-engine-interop-v8/libwebscene_native_engine.dylib" \
 dotnet run \
-  --project benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj \
+  --project benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
   -c Release --no-build -- \
   probe native-interop-race --batches 100 --width 32
 ```

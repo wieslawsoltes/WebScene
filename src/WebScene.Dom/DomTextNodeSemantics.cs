@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 /// <summary>
 /// Framework-neutral text-node transformation semantics. Text storage stays on

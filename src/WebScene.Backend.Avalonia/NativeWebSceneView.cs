@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using JavaScript.Avalonia;
 using WebScene.JavaScript.Interop;
 
 namespace WebScene.Backends.Avalonia.Native;

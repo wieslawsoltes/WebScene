@@ -14,7 +14,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
-    <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />

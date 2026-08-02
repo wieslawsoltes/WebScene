@@ -1,59 +1,59 @@
 # WebScene packages
 
-**Bring web components into native applications.**
+WebScene is a native web-UI runtime for trusted application content. It is not a WebView
+or general browser, and the package inventory does not include a managed engine or
+fallback.
 
-WebScene runs React, TypeScript, JavaScript, DOM, CSS, Canvas, SVG, and advanced
-existing web controls inside native application frameworks. It is designed for
-Flutter, Uno Platform, WPF, WinUI, Avalonia, and other native hosts while preserving
-native windows, composition, input, lifecycle, and platform integration.
+## .NET packages
 
-WebScene is not a WebView, embedded browser, Chromium/WebKit runtime, or Electron
-shell. Web-authored components execute against a native scene runtime and integrate
-through explicit host contracts.
+- `WebScene.Core` — portable values and contracts.
+- `WebScene.Dom`, `WebScene.Css`, and `WebScene.Graphics` — portable supporting
+  semantics and contracts.
+- `WebScene.Backend.Abstractions` — presenter capabilities and manifests.
+- `WebScene.Backend.Avalonia` — the reference native scene presenter.
+- `WebScene.Backend.Uno` — the current Uno presenter proof.
+- `WebScene.JavaScript.Interop` and
+  `WebScene.JavaScript.Interop.Generator` — strongly typed .NET interop generated
+  from reviewed TypeScript declarations.
+- `WebScene.Sdk` — component manifest, asset, lifecycle, diagnostics, and host-bridge
+  contracts.
+- `WebScene` — a separate HTML-inspired Avalonia authoring layer.
 
-## Choose a package
-
-- [`WebScene`](https://www.nuget.org/packages/WebScene/) provides the Avalonia
-  HTML-like authoring layer and managed presentation backend.
-- [`WebScene.Backend.Uno`](https://www.nuget.org/packages/WebScene.Backend.Uno/)
-  and [`WebScene.Backend.Avalonia`](https://www.nuget.org/packages/WebScene.Backend.Avalonia/)
-  integrate the portable runtime with native framework presentation.
-- [`WebScene.Sdk`](https://www.nuget.org/packages/WebScene.Sdk/) and
-  [`WebScene.Sdk.Avalonia`](https://www.nuget.org/packages/WebScene.Sdk.Avalonia/)
-  package and host React, TypeScript, and JavaScript components with compatibility,
-  lifecycle, diagnostics, and host-bridge contracts.
-- [`WebScene.JavaScript.Interop`](https://www.nuget.org/packages/WebScene.JavaScript.Interop/)
-  and [`WebScene.JavaScript.Interop.Generator`](https://www.nuget.org/packages/WebScene.JavaScript.Interop.Generator/)
-  generate strongly typed .NET interop APIs from reviewed TypeScript declaration
-  (`.d.ts`) files.
-- `WebScene.NativeEngine.Runtime.<rid>` supplies the verified native V8, DOM, CSS,
-  layout, Canvas, SVG, and immutable-scene runtime for a deployment platform.
+`WebScene.JavaScript`, `JavaScript.Avalonia.ClearScript`,
+`WebScene.Sdk.Avalonia`, and `WebScene.Templates` are discontinued. The former
+managed JavaScript/DOM host is not shipped as source or as a package. A reusable
+component host and templates will be published again only after a native
+implementation exists.
 
 ## Native runtime packages
 
-| Target platform | Runtime identifier | Package |
+| Target | RID | Package |
 | --- | --- | --- |
-| macOS on Apple silicon | `osx-arm64` | [`WebScene.NativeEngine.Runtime.osx-arm64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/) |
-| Linux x64 | `linux-x64` | [`WebScene.NativeEngine.Runtime.linux-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/) |
-| Windows x64 | `win-x64` | [`WebScene.NativeEngine.Runtime.win-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/) |
+| macOS Apple silicon | `osx-arm64` | `WebScene.NativeEngine.Runtime.osx-arm64` |
+| Linux x64 | `linux-x64` | `WebScene.NativeEngine.Runtime.linux-x64` |
+| Windows x64 | `win-x64` | `WebScene.NativeEngine.Runtime.win-x64` |
 
-Native applications must reference the runtime package matching their explicit
-`RuntimeIdentifier`. Each package includes the native module, ICU data, license
-notices, ABI information, and a reproducible build manifest.
+Reference exactly one runtime package matching the application's explicit
+`RuntimeIdentifier`. Each package includes the native engine, ICU data, notices, ABI
+metadata, V8 revision, and content hashes. Build targets reject a mismatched RID.
 
-## Release inventory
+Other RIDs modeled in build code are not release support claims until they have
+dedicated runners and verified packages.
 
-The release contains the `WebScene`, `WebScene.Core`, `WebScene.Dom`, `WebScene.Css`,
-`WebScene.Graphics`, `WebScene.JavaScript`, `WebScene.Backend.Abstractions`,
-`WebScene.Backend.Avalonia`, `WebScene.Backend.Uno`, `WebScene.JavaScript.Interop`,
-`WebScene.JavaScript.Interop.Generator`, `JavaScript.Avalonia.ClearScript`,
-`WebScene.Sdk`, `WebScene.Sdk.Avalonia`, and `WebScene.Templates` packages, plus the
-three native runtime packages listed above.
+## Building the package set
 
-Documentation, samples, compatibility policy, and issue tracking are available from
-the [WebScene repository](https://github.com/wieslawsoltes/WebScene).
+```bash
+scripts/pack-packages.sh --output artifacts/nuget-packages
+scripts/build-native-engine-runtime.sh --rid osx-arm64 \
+  --output artifacts/nuget-packages
+```
+
+The `NuGet packages` workflow builds the .NET packages and the three supported RID
+packages, verifies versions/dependencies/symbols/inventory, then runs clean consumers
+on the matching operating systems.
 
 ## License
 
-These packages use an MIT-based license with an additional Restricted Party Clause.
-See the packaged `LICENSE` file for the full terms.
+Packages carry the repository [license](../../LICENSE), including its Restricted Party
+Clause. It is a custom source-available license rather than unqualified MIT or an
+OSI-approved open-source license.

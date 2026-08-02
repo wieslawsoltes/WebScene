@@ -2,13 +2,11 @@ using System.Reflection;
 using System.Xml.Linq;
 using WebScene.Core;
 using WebScene.Css;
+using WebScene.Dom;
 using WebScene.Graphics;
-using WebScene.JavaScript;
 using WebScene.Sdk;
 using WebScene.Backends;
 using WebScene.Backends.Avalonia;
-using JavaScript.Avalonia;
-using JavaScript.Avalonia.ClearScript;
 using Xunit;
 
 namespace WebScene.Architecture.Tests;
@@ -74,17 +72,6 @@ public sealed class PortableDependencyTests
     }
 
     [Fact]
-    public void JavaScriptContractsHaveNoUiFrameworkOrEngineReferences()
-    {
-        AssertAssemblyHasNoReferences(
-            typeof(IWebSceneJavaScriptHost).Assembly,
-            s_forbiddenPortableReferences);
-        AssertPortableProject(
-            "WebScene.JavaScript",
-            "../WebScene.Core/WebScene.Core.csproj");
-    }
-
-    [Fact]
     public void DomCoreHasNoUiFrameworkOrEngineReferences()
     {
         AssertAssemblyHasNoReferences(
@@ -127,33 +114,39 @@ public sealed class PortableDependencyTests
             s_forbiddenPortableReferences);
         AssertPortableProject(
             "WebScene.Sdk",
-            "../WebScene.Core/WebScene.Core.csproj",
-            "../WebScene.JavaScript/WebScene.JavaScript.csproj");
+            "../WebScene.Core/WebScene.Core.csproj");
     }
 
     [Fact]
-    public void ClearScriptAdapterHasNoUiFrameworkOrAvaloniaRuntimeReference()
+    public void ManagedEngineProjectsAreAbsent()
     {
-        AssertAssemblyHasNoReferences(
-            typeof(ClearScriptV8Runtime).Assembly,
-            [
-                "Avalonia",
-                "JavaScript.Avalonia",
-                "Microsoft.UI.Xaml",
-                "PresentationCore",
-                "PresentationFramework",
-                "ProGPU",
-                "Uno"
-            ]);
-
-        var projectPath = Path.Combine(
+        Assert.False(File.Exists(Path.Combine(
             s_repositoryRoot,
             "src",
             "JavaScript.Avalonia.ClearScript",
-            "JavaScript.Avalonia.ClearScript.csproj");
-        var references = LoadDeclaredReferences(projectPath);
-        Assert.Contains("../WebScene.JavaScript/WebScene.JavaScript.csproj", references);
-        Assert.DoesNotContain("../JavaScript.Avalonia/JavaScript.Avalonia.csproj", references);
+            "JavaScript.Avalonia.ClearScript.csproj")));
+        Assert.False(File.Exists(Path.Combine(
+            s_repositoryRoot,
+            "src",
+            "WebScene.Sdk.Avalonia",
+            "WebScene.Sdk.Avalonia.csproj")));
+        var legacyAvaloniaDirectory = Path.Combine(s_repositoryRoot, "src", "JavaScript.Avalonia");
+        Assert.True(
+            !Directory.Exists(legacyAvaloniaDirectory)
+            || !Directory.EnumerateFiles(
+                legacyAvaloniaDirectory,
+                "*.cs",
+                SearchOption.TopDirectoryOnly).Any());
+        Assert.False(File.Exists(Path.Combine(
+            s_repositoryRoot,
+            "src",
+            "WebScene.JavaScript",
+            "WebScene.JavaScript.csproj")));
+
+        var solution = File.ReadAllText(Path.Combine(s_repositoryRoot, "WebScene.sln"));
+        Assert.DoesNotContain("ClearScript", solution, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("WebScene.Sdk.Avalonia", solution, StringComparison.Ordinal);
+        Assert.DoesNotContain("src\\WebScene.JavaScript\\WebScene.JavaScript.csproj", solution, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,12 +162,11 @@ public sealed class PortableDependencyTests
         Assert.Contains("../WebScene.Core/WebScene.Core.csproj", references);
         Assert.Contains("../WebScene.Backend.Abstractions/WebScene.Backend.Abstractions.csproj", references);
         Assert.Contains("../WebScene.Css/WebScene.Css.csproj", references);
-        Assert.Contains("../WebScene.Dom/WebScene.Dom.csproj", references);
-        Assert.Contains("../WebScene.Graphics/WebScene.Graphics.csproj", references);
-        Assert.Contains("../WebScene.JavaScript/WebScene.JavaScript.csproj", references);
+        Assert.Contains("../WebScene.JavaScript.Interop/WebScene.JavaScript.Interop.csproj", references);
+        Assert.DoesNotContain("../WebScene.Dom/WebScene.Dom.csproj", references);
+        Assert.DoesNotContain("../WebScene.Graphics/WebScene.Graphics.csproj", references);
+        Assert.DoesNotContain("../WebScene.JavaScript/WebScene.JavaScript.csproj", references);
         Assert.DoesNotContain("../JavaScript.Avalonia/JavaScript.Avalonia.csproj", references);
-        Assert.Equal("WebScene.Backend.Avalonia", typeof(AvaloniaBrowserHost).Assembly.GetName().Name);
-        Assert.Equal("WebScene.Backend.Avalonia", typeof(AvaloniaBackendHost).Assembly.GetName().Name);
         Assert.Equal(
             "WebScene.Backend.Avalonia",
             typeof(WebScene.Backends.Avalonia.Native.NativeSceneSurface).Assembly.GetName().Name);
@@ -195,20 +187,14 @@ public sealed class PortableDependencyTests
     }
 
     [Fact]
-    public void AvaloniaCapabilityManifestUsesThePublishedSchemaAndRuntimeType()
+    public void AvaloniaPresenterDoesNotPublishTheRemovedManagedBackendManifest()
     {
         var manifestPath = Path.Combine(
             s_repositoryRoot,
             "src",
             "WebScene.Backend.Avalonia",
             "webscene-backend.json");
-        var manifest = WebSceneBackendManifestSerializer.Parse(File.ReadAllText(manifestPath));
-        Assert.Equal(WebSceneBackendManifest.CurrentSchemaVersion, manifest.SchemaVersion);
-        Assert.Equal(WebSceneBackendSupportLevel.Advanced, manifest.MaximumSupportLevel);
-        Assert.Equal(typeof(AvaloniaBackendHost).FullName, manifest.BackendType);
-        Assert.Equal(
-            AvaloniaBackendHost.DefaultCapabilities,
-            WebSceneBackendManifestSerializer.ResolveCapabilities(manifest));
+        Assert.False(File.Exists(manifestPath));
 
         var schemaPath = Path.Combine(
             s_repositoryRoot,

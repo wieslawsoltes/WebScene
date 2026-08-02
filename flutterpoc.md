@@ -288,7 +288,7 @@ but they are required for a production backend.
 - Add SVG and image resources.
 - Add keyboard, committed text, IME, focus, capture, cursor, and lifecycle
   behavior.
-- Reuse the managed/native conformance fixtures and deterministic screenshots.
+- Reuse the native conformance fixtures and deterministic screenshots.
 
 ### Phase 5: Packaging
 

@@ -1,7 +1,7 @@
 using WebScene.Core;
 using System.Runtime.CompilerServices;
 
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 /// <summary>
 /// Stable JavaScript/DOM identity shared by documents, elements, text nodes, and

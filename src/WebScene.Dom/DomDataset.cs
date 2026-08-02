@@ -1,7 +1,7 @@
 using System.Dynamic;
 using System.Text;
 
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 public interface IDomDatasetAdapter
 {

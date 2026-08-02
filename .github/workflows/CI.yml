@@ -30,11 +30,9 @@ jobs:
     - name: Restore
       run: dotnet restore WebScene.sln
     - name: Build Release
-      run: dotnet build WebScene.sln -c Release --no-restore -p:WebSceneClearScriptNativeRequired=false -p:WebSceneClearScriptNativeRid=
+      run: dotnet build WebScene.sln -c Release --no-restore
     - name: Portable Core contracts
       run: dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release --no-build
-    - name: Portable JavaScript contracts
-      run: dotnet test tests/WebScene.JavaScript.Tests/WebScene.JavaScript.Tests.csproj -c Release --no-build
     - name: Portable DOM contracts
       run: dotnet test tests/WebScene.Dom.Tests/WebScene.Dom.Tests.csproj -c Release --no-build
     - name: Portable CSS and layout contracts
@@ -49,20 +47,18 @@ jobs:
       run: |
         npm ci --prefix tooling/webscene
         npm test --prefix tooling/webscene
-    - name: Build and execute R5 component catalog
+    - name: Build and test component assets
       run: |
         npm ci --prefix samples/components
         npm run build --prefix samples/components
         npm run check --prefix samples/components
         npm test --prefix samples/components
-    - name: R5 offline sample catalog
-      run: dotnet run --project tests/WebScene.Sdk.SampleSmoke/WebScene.Sdk.SampleSmoke.csproj -c Release --no-build
     - name: Architecture dependency gates
       run: dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release --no-build
     - name: Backend package smoke
       run: dotnet run --project tests/WebScene.Backend.PackageSmoke/WebScene.Backend.PackageSmoke.csproj -c Release --no-build
     - name: Avalonia headless tests
-      run: dotnet test tests/JavaScript.Avalonia.Tests/JavaScript.Avalonia.Tests.csproj -c Release --no-build
+      run: dotnet test tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj -c Release --no-build
     - name: WPT manifest integrity
       run: dotnet run --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj -c Release --no-build -- --selection all --list
     - name: Native C++ portability build (without V8)
@@ -75,45 +71,3 @@ jobs:
         -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
     - name: Compile native C++ portability target
       run: cmake --build artifacts/native-engine-portability --config Release --parallel
-
-  r0-artifacts:
-    name: R0 coverage and evidence
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        global-json-file: global.json
-    - name: Run reproducible R0 CI profile
-      run: scripts/run-r0-baseline.sh --profile ci
-    - name: Upload R0 evidence
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: r0-baseline-${{ github.sha }}
-        path: TestResults/R0/
-        if-no-files-found: error
-
-  r5-sdk:
-    name: R5 React and TypeScript SDK authority smoke
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        global-json-file: global.json
-    - name: Setup Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22
-    - name: Create, bundle, build, run, and publish R5 templates and samples
-      run: scripts/run-r5-sdk-smoke.sh
-    - name: Upload R5 evidence
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: r5-sdk-${{ github.sha }}
-        path: TestResults/R5/
-        if-no-files-found: error

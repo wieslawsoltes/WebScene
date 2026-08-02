@@ -108,7 +108,6 @@ internal sealed record RunnerOptions
     public string? TestFilter { get; init; }
     public bool ListOnly { get; init; }
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
-    public string Engine { get; init; } = "managed";
     public string? NativeLibraryPath { get; init; }
     public string? NativeCacheDirectory { get; init; }
 }

@@ -1,4 +1,4 @@
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 /// <summary>
 /// Typed tree operations used by framework-neutral fragment and parsed-document

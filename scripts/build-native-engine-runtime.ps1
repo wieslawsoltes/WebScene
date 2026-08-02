@@ -66,7 +66,7 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
     New-Item -ItemType Directory -Force -Path $V8Workspace | Out-Null
     # depot_tools may run without a persistent global Git configuration on
     # hosted Windows runners. Force LF checkouts for the pinned V8 sources so
-    # the upstream ClearScript patches apply identically on every platform.
+    # the pinned native V8 patches apply identically on every platform.
     $env:GIT_CONFIG_COUNT = "2"
     $env:GIT_CONFIG_KEY_0 = "core.autocrlf"
     $env:GIT_CONFIG_VALUE_0 = "false"
@@ -109,7 +109,7 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
         }
     }
     if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
-        Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/clearscript/V8/V8Patch.txt")
+        Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/v8-patches/V8Patch.txt")
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
     }
     if ($ThinLto) {
@@ -122,12 +122,12 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt")
     }
     if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
-        Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/clearscript/V8/BuildPatch.txt")
-        Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/clearscript/V8/ICUPatch.txt")
+        Apply-PatchOnce (Join-Path $V8Root "build") (Join-Path $repoRoot "third-party/v8-patches/BuildPatch.txt")
+        Apply-PatchOnce (Join-Path $V8Root "third_party/icu") (Join-Path $repoRoot "third-party/v8-patches/ICUPatch.txt")
     }
 
     # Backslash-escaped quotes survive PowerShell's native argument marshalling
-    # and reach GN as string delimiters (the form used by ClearScript itself).
+    # and reach GN as string delimiters.
     $gnArgs = 'chrome_pgo_phase=0 fatal_linker_warnings=false is_cfi=false is_component_build=false is_debug=false symbol_level=0 target_cpu=\"{0}\" treat_warnings_as_errors=false use_clang_modules=false use_custom_libcxx=false use_thin_lto={1} v8_embedder_string=\"-WebScene\" v8_enable_fuzztest=false v8_enable_partition_alloc={2} v8_enable_pointer_compression=true v8_enable_pointer_compression_shared_cage=true v8_enable_sandbox=false v8_enable_static_roots=false v8_enable_31bit_smis_on_64bit_arch=false v8_enable_temporal_support=false v8_monolithic=true v8_use_external_startup_data=false v8_target_cpu=\"{0}\"' -f $cpu, $thinLtoValue, $partitionAllocValue
     Push-Location $V8Root
     try {
@@ -286,7 +286,7 @@ $previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
 $env:WEBSCENE_NATIVE_ENGINE_PATH = $packageNativePath
 try {
     & dotnet run `
-        --project (Join-Path $repoRoot "benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj") `
+        --project (Join-Path $repoRoot "benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj") `
         -c Release -- `
         probe native-interop-race --batches 100 --width 32
     if ($LASTEXITCODE -ne 0) { throw "Native interop cancellation race probe failed." }

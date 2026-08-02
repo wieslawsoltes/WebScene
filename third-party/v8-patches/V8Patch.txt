@@ -1,0 +1,947 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index a5c7d847781..c37ff57facc 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -9,7 +9,6 @@ import("//build/config/coverage/coverage.gni")
+ import("//build/config/dcheck_always_on.gni")
+ import("//build/config/host_byteorder.gni")
+ import("//build/config/mips.gni")
+-import("//build/config/riscv.gni")
+ import("//build/config/sanitizers/sanitizers.gni")
+ import("//build_overrides/build.gni")
+ import("//third_party/icu/config.gni")
+@@ -1561,7 +1560,7 @@ config("toolchain") {
+   visibility = [ "./*" ]
+
+   defines = []
+-  cflags = []
++  cflags = [ "-D_SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING", "-DV8_TLS_USED_IN_LIBRARY", "-Wno-cast-function-type-mismatch", "-Wno-deprecated-this-capture" ]
+   ldflags = []
+
+   if (v8_current_cpu == "arm") {
+diff --git a/gni/v8.gni b/gni/v8.gni
+index b616a1f0abc..69b3a3f6344 100644
+--- a/gni/v8.gni
++++ b/gni/v8.gni
+@@ -4,6 +4,7 @@
+
+ import("//build/config/chrome_build.gni")
+ import("//build/config/compiler/pgo/pgo.gni")
++import("//build/config/dcheck_always_on.gni")
+ import("//build/config/features.gni")
+ import("//build/config/gclient_args.gni")
+ import("//build/config/ios/config.gni")
+@@ -213,7 +214,7 @@ declare_args() {
+   cppgc_enable_slow_api_checks = false
+
+   # Enable object names in cppgc for profiling purposes.
+-  cppgc_enable_object_names = is_chrome_for_testing
++  cppgc_enable_object_names = false
+
+   # Enable young generation in cppgc.
+   cppgc_enable_young_generation = false
+diff --git a/include/WebScene/polyfill.h b/include/WebScene/polyfill.h
+new file mode 100644
+index 00000000000..3a55fc7f8bc
+--- /dev/null
++++ b/include/WebScene/polyfill.h
+@@ -0,0 +1,49 @@
++#ifndef INCLUDE_CLEARSCRIPT_POLYFILL_H_
++#define INCLUDE_CLEARSCRIPT_POLYFILL_H_
++
++#ifdef __linux__
++
++#include <cstring>
++#include <memory>
++#include <sstream>
++#include <utility>
++
++namespace std {
++
++  // make_unique_for_overwrite
++  template <typename T>
++  constexpr unique_ptr<T> make_unique_for_overwrite() {
++    return unique_ptr<T>(new T);
++  }
++  template <typename T>
++  constexpr unique_ptr<T> make_unique_for_overwrite(const size_t _Size) {
++    return unique_ptr<T>(new remove_extent_t<T>[_Size]);
++  }
++
++  // format
++  inline void __append_format(std::ostringstream& oss, const char* fmt) {
++      oss << fmt;
++  }
++  template <typename T, typename... Rest>
++  void __append_format(std::ostringstream& oss, const char* fmt, T&& value, Rest&&... rest) {
++    const char* p = std::strstr(fmt, "{}");
++    if (!p) {
++        oss << fmt;
++        return;
++    }
++    oss.write(fmt, p - fmt);
++    oss << std::forward<T>(value);
++    __append_format(oss, p + 2, std::forward<Rest>(rest)...);
++  }
++  template <typename... Args>
++  std::string format(const char* fmt, Args&&... args) {
++    std::ostringstream oss;
++    __append_format(oss, fmt, std::forward<Args>(args)...);
++    return oss.str();
++  }
++
++}
++
++#endif // __linux__
++
++#endif // INCLUDE_CLEARSCRIPT_POLYFILL_H_
+diff --git a/include/libplatform/libplatform.h b/include/libplatform/libplatform.h
+index 6a34f432410..88a81ab4c40 100644
+--- a/include/libplatform/libplatform.h
++++ b/include/libplatform/libplatform.h
+@@ -49,6 +49,8 @@ V8_PLATFORM_EXPORT std::unique_ptr<v8::Platform> NewDefaultPlatform(
+     std::unique_ptr<v8::TracingController> tracing_controller = {},
+     PriorityMode priority_mode = PriorityMode::kDontApply);
+
++V8_PLATFORM_EXPORT std::unique_ptr<v8::PageAllocator> NewDefaultPageAllocator();
++
+ /**
+  * The same as NewDefaultPlatform but disables the worker thread pool.
+  * It must be used with the --single-threaded V8 flag.
+diff --git a/include/v8-initialization.h b/include/v8-initialization.h
+index abcaec458a4..a945e005d74 100644
+--- a/include/v8-initialization.h
++++ b/include/v8-initialization.h
+@@ -159,6 +159,7 @@ class V8_EXPORT V8 {
+    * of the data file has to be provided.
+    */
+   static bool InitializeICU(const char* icu_data_file = nullptr);
++  static bool InitializeICU(const char* icu_data_ptr, size_t size);
+
+   /**
+    * Initialize the ICU library bundled with V8. The embedder should only
+diff --git a/include/v8-internal.h b/include/v8-internal.h
+index 3828ddd7d00..dbeffb51cf9 100644
+--- a/include/v8-internal.h
++++ b/include/v8-internal.h
+@@ -20,6 +20,28 @@
+
+ #include "v8config.h"  // NOLINT(build/include_directory)
+
++#if defined(__linux__)
++    #if defined(__x86_64__)
++        __asm__(".symver exp, exp@GLIBC_2.2.5");
++        __asm__(".symver exp2, exp2@GLIBC_2.2.5");
++        __asm__(".symver log, log@GLIBC_2.2.5");
++        __asm__(".symver log2, log2@GLIBC_2.2.5");
++        __asm__(".symver pow, pow@GLIBC_2.2.5");
++    #elif defined(__aarch64__)
++        __asm__(".symver exp, exp@GLIBC_2.17");
++        __asm__(".symver exp2, exp2@GLIBC_2.17");
++        __asm__(".symver log, log@GLIBC_2.17");
++        __asm__(".symver log2, log2@GLIBC_2.17");
++        __asm__(".symver pow, pow@GLIBC_2.17");
++    #elif defined(__arm__)
++        __asm__(".symver exp, exp@GLIBC_2.4");
++        __asm__(".symver exp2, exp2@GLIBC_2.4");
++        __asm__(".symver log, log@GLIBC_2.4");
++        __asm__(".symver log2, log2@GLIBC_2.4");
++        __asm__(".symver pow, pow@GLIBC_2.4");
++    #endif
++#endif
++
+ namespace v8 {
+
+ class Array;
+diff --git a/include/v8-source-location.h b/include/v8-source-location.h
+index 057273ad8ef..9354c4a36dc 100644
+--- a/include/v8-source-location.h
++++ b/include/v8-source-location.h
+@@ -6,7 +6,16 @@
+ #define INCLUDE_SOURCE_LOCATION_H_
+
+ #include <cstddef>
+-#include <source_location>
++#if __has_include(<source_location>)
++  #include <source_location>
++#elif __has_include(<experimental/source_location>)
++  #include <experimental/source_location>
++  namespace std {
++    using source_location = experimental::source_location;
++  }
++#else
++  #error "source_location is not supported on this platform"
++#endif
+ #include <string>
+
+ #include "v8config.h"  // NOLINT(build/include_directory)
+diff --git a/include/v8-template.h b/include/v8-template.h
+index ad6749ee09f..6dbf37bdea8 100644
+--- a/include/v8-template.h
++++ b/include/v8-template.h
+@@ -991,6 +991,9 @@ class V8_EXPORT ObjectTemplate : public Template {
+    */
+   void SetImmutableProto();
+
++  bool IsHostDelegate() const;
++  void SetHostDelegate();
++
+   /**
+    * Support for TC39 "dynamic code brand checks" proposal.
+    *
+diff --git a/include/v8config.h b/include/v8config.h
+index 1624183738d..733ea95a503 100644
+--- a/include/v8config.h
++++ b/include/v8config.h
+@@ -600,7 +600,7 @@ path. Add it with -I<path> to the command line
+ // Use like:
+ //   V8_NOINLINE V8_PRESERVE_MOST void UnlikelyMethod();
+ #if V8_HAS_ATTRIBUTE_PRESERVE_MOST
+-# define V8_PRESERVE_MOST __attribute__((preserve_most))
++# define V8_PRESERVE_MOST /* DISABLED */
+ #else
+ # define V8_PRESERVE_MOST /* NOT SUPPORTED */
+ #endif
+diff --git a/src/api/api-natives.cc b/src/api/api-natives.cc
+index 80466c2e8f9..e0483580561 100644
+--- a/src/api/api-natives.cc
++++ b/src/api/api-natives.cc
+@@ -345,6 +345,9 @@ MaybeHandle<JSObject> InstantiateObject(Isolate* isolate,
+   if (info->immutable_proto()) {
+     JSObject::SetImmutableProto(isolate, object);
+   }
++  else if (info->host_delegate()) {
++    JSObject::SetHostDelegate(isolate, object);
++  }
+   if (!is_prototype) {
+     // Keep prototypes in slow-mode. Let them be lazily turned fast later on.
+     // TODO(dcarney): is this necessary?
+diff --git a/src/api/api.cc b/src/api/api.cc
+index 82bf5785579..fd2af70a962 100644
+--- a/src/api/api.cc
++++ b/src/api/api.cc
+@@ -1817,6 +1817,17 @@ void ObjectTemplate::SetImmutableProto() {
+   self->set_immutable_proto(true);
+ }
+
++bool ObjectTemplate::IsHostDelegate() const {
++  return Utils::OpenDirectHandle(this)->host_delegate();
++}
++
++void ObjectTemplate::SetHostDelegate() {
++  auto self = Utils::OpenDirectHandle(this);
++  i::Isolate* i_isolate = i::Isolate::Current();
++  EnterV8NoScriptNoExceptionScope api_scope(i_isolate);
++  self->set_host_delegate(true);
++}
++
+ bool ObjectTemplate::IsCodeLike() const {
+   return Utils::OpenDirectHandle(this)->code_like();
+ }
+@@ -6456,6 +6467,10 @@ bool v8::V8::InitializeICU(const char* icu_data_file) {
+   return i::InitializeICU(icu_data_file);
+ }
+
++bool v8::V8::InitializeICU(const char* icu_data_ptr, size_t size) {
++  return i::InitializeICU(icu_data_ptr, size);
++}
++
+ bool v8::V8::InitializeICUDefaultLocation(const char* exec_path,
+                                           const char* icu_data_file) {
+   return i::InitializeICUDefaultLocation(exec_path, icu_data_file);
+@@ -12621,9 +12636,9 @@ TryToCopyAndConvertArrayToCppBuffer<CTypeInfoBuilder<double>::Build().GetId(),
+
+ std::string SourceLocation::ToString() const {
+   if (!*this) return {};
+-  return (std::ostringstream{} << loc_.function_name() << '@'
+-                               << loc_.file_name() << ':' << loc_.line())
+-      .str();
++  std::ostringstream oss;
++  oss << loc_.function_name() << '@' << loc_.file_name() << ':' << loc_.line();
++  return oss.str();
+ }
+
+ }  // namespace v8
+diff --git a/src/ast/ast.cc b/src/ast/ast.cc
+index 46c40e0979a..a7b6935cefd 100644
+--- a/src/ast/ast.cc
++++ b/src/ast/ast.cc
+@@ -501,7 +501,7 @@ class PropertyDeduplicator {
+       : properties_(properties),
+         boilerplate_properties_(boilerplate_properties) {
+     if (use_hash_map()) {
+-      table_.emplace(8, LiteralMatcher(Literal::Match));
++      table_.emplace(8, LiteralMatcher());
+     }
+   }
+
+@@ -612,8 +612,9 @@ class PropertyDeduplicator {
+
+   base::SmallVector<ObjectLiteral::Property*, 8> deduplicated_properties_;
+
+-  using LiteralMatcher =
+-      base::HashEqualityThenKeyMatcher<void*, bool (*)(void*, void*)>;
++  struct LiteralMatcher: public base::HashEqualityThenKeyMatcher<void*, bool (*)(void*, void*)> {
++    explicit LiteralMatcher(): base::HashEqualityThenKeyMatcher<void*, bool (*)(void*, void*)>(Literal::Match) {}
++  };
+   std::optional<base::TemplateHashMapImpl<void*, int, LiteralMatcher,
+                                           base::DefaultAllocationPolicy>>
+       table_;
+diff --git a/src/base/functional/bind-internal.h b/src/base/functional/bind-internal.h
+index 160664af5dd..2fa94eca5af 100644
+--- a/src/base/functional/bind-internal.h
++++ b/src/base/functional/bind-internal.h
+@@ -120,6 +120,13 @@ BIND_INTERNAL_EXTRACT_CALLABLE_RUN_TYPE_WITH_QUALS(const noexcept);
+
+ #undef BIND_INTERNAL_EXTRACT_CALLABLE_RUN_TYPE_WITH_QUALS
+
++#if defined(_WIN32) && (!defined(V8_TARGET_ARCH_ARM64) || defined(_M_ARM64))
++  template <typename R, typename... Args>
++  struct ExtractCallableRunTypeImpl<std::function<R(Args...)>> {
++    using Type = R(Args...);
++  };
++#endif
++
+ // Evaluated to the RunType of the given callable type; e.g.
+ // `ExtractCallableRunType<decltype([](int, char*) { return 0.1; })>` ->
+ //     `double(int, char*)`.
+diff --git a/src/base/macros.h b/src/base/macros.h
+index da1a964d50d..9527d96935e 100644
+--- a/src/base/macros.h
++++ b/src/base/macros.h
+@@ -13,6 +13,15 @@
+ #include "src/base/compiler-specific.h"
+ #include "src/base/logging.h"
+
++#if defined(__linux__)
++namespace std {
++template <typename To, typename From>
++constexpr To bit_cast(const From& src) noexcept {
++    return __builtin_bit_cast(To, src);
++}
++} // namespace std
++#endif
++
+ // No-op macro which is used to work around MSVC's funky VA_ARGS support.
+ #define EXPAND(X) X
+
+@@ -142,10 +151,6 @@ namespace v8::base {
+
+ template <class Dest, class Source>
+ V8_INLINE constexpr Dest bit_cast(Source const& source) noexcept {
+-  static_assert(!std::is_pointer_v<Source>,
+-                "bit_cast must not be used on pointer types");
+-  static_assert(!std::is_pointer_v<Dest>,
+-                "bit_cast must not be used on pointer types");
+   static_assert(!std::is_reference_v<Dest>,
+                 "bit_cast must not be used on reference types");
+   static_assert(
+diff --git a/src/base/memcopy.h b/src/base/memcopy.h
+index b1d8a36b4cf..e9ab91d476e 100644
+--- a/src/base/memcopy.h
++++ b/src/base/memcopy.h
+@@ -8,6 +8,7 @@
+ #include <stdlib.h>
+
+ #include <atomic>
++#include <climits>
+
+ #include "include/v8config.h"
+ #include "src/base/base-export.h"
+diff --git a/src/base/platform/platform.h b/src/base/platform/platform.h
+index af626fffc4a..1db7d03d21c 100644
+--- a/src/base/platform/platform.h
++++ b/src/base/platform/platform.h
+@@ -52,6 +52,8 @@
+ #include <sanitizer/asan_interface.h>
+ #endif  // V8_USE_ADDRESS_SANITIZER
+
++#define V8_NO_FAST_TLS
++
+ #ifndef V8_NO_FAST_TLS
+ #if V8_CC_MSVC && V8_HOST_ARCH_IA32
+ // __readfsdword is supposed to be declared in intrin.h but it is missing from
+diff --git a/src/base/vector.h b/src/base/vector.h
+index 987e29cb64d..1b766af0680 100644
+--- a/src/base/vector.h
++++ b/src/base/vector.h
+@@ -12,6 +12,7 @@
+ #include <memory>
+ #include <type_traits>
+
++#include "include/WebScene/polyfill.h"
+ #include "src/base/algorithm.h"
+ #include "src/base/hashing.h"
+ #include "src/base/logging.h"
+diff --git a/src/bigint/bigint.h b/src/bigint/bigint.h
+index 5c94a5e5385..c3334cdfa7a 100644
+--- a/src/bigint/bigint.h
++++ b/src/bigint/bigint.h
+@@ -10,8 +10,11 @@
+ #include <algorithm>
+ #include <cstring>
+ #include <iostream>
++#include <memory>
+ #include <utility>
+
++#include "include/WebScene/polyfill.h"
++
+ namespace v8 {
+ namespace bigint {
+
+diff --git a/src/codegen/code-stub-assembler.cc b/src/codegen/code-stub-assembler.cc
+index 4a5ceff083c..23552696f63 100644
+--- a/src/codegen/code-stub-assembler.cc
++++ b/src/codegen/code-stub-assembler.cc
+@@ -2528,6 +2528,10 @@ TNode<Uint32T> CodeStubAssembler::LoadMapBitField3(TNode<Map> map) {
+   return LoadObjectField<Uint32T>(map, Map::kBitField3Offset);
+ }
+
++TNode<Uint32T> CodeStubAssembler::LoadMapHostBitField(TNode<Map> map) {
++  return LoadObjectField<Uint32T>(map, Map::kHostBitFieldOffset);
++}
++
+ TNode<Uint16T> CodeStubAssembler::LoadMapInstanceType(TNode<Map> map) {
+   return LoadObjectField<Uint16T>(map, Map::kInstanceTypeOffset);
+ }
+@@ -17040,6 +17044,11 @@ TNode<String> CodeStubAssembler::Typeof(
+
+   GotoIf(InstanceTypeEqual(instance_type, ODDBALL_TYPE), &if_oddball);
+
++  Label resume_default(this);
++  GotoIfNot(Word32And(LoadMapBitField(map), Int32Constant(Map::Bits1::HasNamedInterceptorBit::kMask)), &resume_default);
++  Branch(Word32And(LoadMapHostBitField(map), Int32Constant(Map::HostBits::IsHostDelegateBit::kMask)), &return_function, &return_object);
++  BIND(&resume_default);
++
+   TNode<Int32T> callable_or_undetectable_mask =
+       Word32And(LoadMapBitField(map),
+                 Int32Constant(Map::Bits1::IsCallableBit::kMask |
+diff --git a/src/codegen/code-stub-assembler.h b/src/codegen/code-stub-assembler.h
+index e20839cd698..e1d5d84d6ab 100644
+--- a/src/codegen/code-stub-assembler.h
++++ b/src/codegen/code-stub-assembler.h
+@@ -1439,6 +1439,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+   TNode<Int32T> LoadMapBitField2(TNode<Map> map);
+   // Load bit field 3 of a map.
+   TNode<Uint32T> LoadMapBitField3(TNode<Map> map);
++  // Load host bit field of a map.
++  TNode<Uint32T> LoadMapHostBitField(TNode<Map> map);
+   // Load the instance type of a map.
+   TNode<Uint16T> LoadMapInstanceType(TNode<Map> map);
+   // Load the ElementsKind of a map.
+diff --git a/src/diagnostics/unwinding-info-win64.cc b/src/diagnostics/unwinding-info-win64.cc
+index 1312609e5b6..2fc14899e1c 100644
+--- a/src/diagnostics/unwinding-info-win64.cc
++++ b/src/diagnostics/unwinding-info-win64.cc
+@@ -464,6 +464,14 @@ void InitUnwindingRecord(Record* record, size_t code_size_in_bytes) {
+ namespace {
+
+ V8_DECLARE_ONCE(load_ntdll_unwinding_functions_once);
++
++#if defined(V8_OS_WIN_X64)
++static decltype(
++    &::RtlAddFunctionTable) add_function_table_func = nullptr;
++static decltype(
++    &::RtlDeleteFunctionTable) delete_function_table_func = nullptr;
++#endif  // V8_OS_WIN_X64
++
+ static decltype(
+     &::RtlAddGrowableFunctionTable) add_growable_function_table_func = nullptr;
+ static decltype(
+@@ -471,6 +479,19 @@ static decltype(
+     nullptr;
+
+ void LoadNtdllUnwindingFunctionsOnce() {
++
++#if defined(V8_OS_WIN_X64)
++  HMODULE kernel32_module =
++	LoadLibraryEx(L"kernel32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
++  DCHECK_NOT_NULL(kernel32_module);
++  add_function_table_func =
++	reinterpret_cast<decltype(&::RtlAddFunctionTable)>(
++		::GetProcAddress(kernel32_module, "RtlAddFunctionTable"));
++  delete_function_table_func =
++	reinterpret_cast<decltype(&::RtlDeleteFunctionTable)>(
++		::GetProcAddress(kernel32_module, "RtlDeleteFunctionTable"));
++#endif  // V8_OS_WIN_X64
++
+   // Load functions from the ntdll.dll module.
+   HMODULE ntdll_module =
+       LoadLibraryEx(L"ntdll.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+@@ -493,6 +514,21 @@ void LoadNtdllUnwindingFunctions() {
+                  &LoadNtdllUnwindingFunctionsOnce);
+ }
+
++#if defined(V8_OS_WIN_X64)
++BOOLEAN AddFunctionTable(PRUNTIME_FUNCTION FunctionTable,
++                         DWORD EntryCount,
++                         DWORD64 BaseAddress) {
++  LoadNtdllUnwindingFunctions();
++  DCHECK_NOT_NULL(add_function_table_func);
++  return add_function_table_func(FunctionTable, EntryCount, BaseAddress);
++}
++BOOLEAN DeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable) {
++  LoadNtdllUnwindingFunctions();
++  DCHECK_NOT_NULL(delete_function_table_func);
++  return delete_function_table_func(FunctionTable);
++}
++#endif  // V8_OS_WIN_X64
++
+ bool AddGrowableFunctionTable(PVOID* DynamicTable,
+                               PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
+                               DWORD MaximumEntryCount, ULONG_PTR RangeBase,
+@@ -544,7 +580,7 @@ void RegisterNonABICompliantCodeRange(void* start, size_t size_in_bytes) {
+       ExceptionHandlerRecord* record = new (start) ExceptionHandlerRecord();
+       InitUnwindingRecord(record, size_in_bytes);
+
+-      CHECK(::RtlAddFunctionTable(record->runtime_function,
++      CHECK(AddFunctionTable(record->runtime_function,
+                                   kDefaultRuntimeFunctionCount,
+                                   reinterpret_cast<DWORD64>(start)));
+
+@@ -582,7 +618,7 @@ void UnregisterNonABICompliantCodeRange(void* start) {
+     if (unhandled_exception_callback_g) {
+       ExceptionHandlerRecord* record =
+           reinterpret_cast<ExceptionHandlerRecord*>(start);
+-      CHECK(::RtlDeleteFunctionTable(record->runtime_function));
++      CHECK(DeleteFunctionTable(record->runtime_function));
+
+       // Unprotect reserved page.
+       DWORD old_protect;
+diff --git a/src/execution/isolate-inl.h b/src/execution/isolate-inl.h
+index 393b3d61174..2ab14bd6bb7 100644
+--- a/src/execution/isolate-inl.h
++++ b/src/execution/isolate-inl.h
+@@ -34,7 +34,6 @@ Isolate::CurrentPerIsolateThreadData() {
+ // static
+ V8_INLINE Isolate* Isolate::Current() {
+   Isolate* isolate = TryGetCurrent();
+-  DCHECK_NOT_NULL(isolate);
+   return isolate;
+ }
+
+diff --git a/src/execution/stack-guard.cc b/src/execution/stack-guard.cc
+index 80159a5766f..0211048ac7e 100644
+--- a/src/execution/stack-guard.cc
++++ b/src/execution/stack-guard.cc
+@@ -249,6 +249,9 @@ void StackGuard::ThreadLocal::Initialize(Isolate* isolate,
+   const uintptr_t kLimitSize = v8_flags.stack_size * KB;
+   DCHECK_GT(base::Stack::GetStackStart(), kLimitSize);
+   uintptr_t limit = base::Stack::GetStackStart() - kLimitSize;
++  if (base::Stack::GetStackStart() < kLimitSize) {
++    limit = 0;
++  }
+   real_jslimit_ = SimulatorStack::JsLimitFromCLimit(isolate, limit);
+   set_jslimit(SimulatorStack::JsLimitFromCLimit(isolate, limit));
+ #ifdef USE_SIMULATOR
+@@ -397,6 +400,8 @@ Tagged<Object> StackGuard::HandleInterrupts(InterruptLevel level) {
+
+   isolate_->counters()->stack_interrupts()->Increment();
+
++  if (isolate_->has_exception()) return ReadOnlyRoots(isolate_).exception();
++
+   return ReadOnlyRoots(isolate_).undefined_value();
+ }
+
+diff --git a/src/heap/cppgc/heap-object-header.h b/src/heap/cppgc/heap-object-header.h
+index 1d89bff0779..6004a4496bd 100644
+--- a/src/heap/cppgc/heap-object-header.h
++++ b/src/heap/cppgc/heap-object-header.h
+@@ -354,7 +354,7 @@ uint16_t HeapObjectHeader::LoadEncoded() const {
+   if constexpr (mode == AccessMode::kNonAtomic) {
+     return half;
+   }
+-  return std::atomic_ref(const_cast<uint16_t&>(half)).load(memory_order);
++  return std::atomic_ref<uint16_t>(const_cast<uint16_t&>(half)).load(memory_order);
+ }
+
+ template <AccessMode mode, HeapObjectHeader::EncodedHalf part,
+diff --git a/src/heap/factory.cc b/src/heap/factory.cc
+index 2102070df07..c88887679b9 100644
+--- a/src/heap/factory.cc
++++ b/src/heap/factory.cc
+@@ -2448,6 +2448,7 @@ Tagged<Map> Factory::InitializeMap(Tagged<Map> map, InstanceType type,
+       Map::Bits3::ConstructionCounterBits::encode(Map::kNoSlackTracking) |
+       Map::Bits3::IsExtensibleBit::encode(true);
+   map->set_bit_field3(bit_field3);
++  map->set_host_bit_field(0);
+   map->set_instance_type(type);
+   map->init_prototype_and_constructor_or_back_pointer(roots);
+   map->set_instance_size(instance_size);
+diff --git a/src/heap/setup-heap-internal.cc b/src/heap/setup-heap-internal.cc
+index 78d5cc73249..b528296ce39 100644
+--- a/src/heap/setup-heap-internal.cc
++++ b/src/heap/setup-heap-internal.cc
+@@ -294,6 +294,7 @@ void InitializePartialMap(Isolate* isolate, Tagged<Map> map,
+       Map::Bits3::OwnsDescriptorsBit::encode(true) |
+       Map::Bits3::ConstructionCounterBits::encode(Map::kNoSlackTracking);
+   map->set_bit_field3(bit_field3);
++  map->set_host_bit_field(0);
+   DCHECK(!map->is_in_retained_map_list());
+   map->clear_padding();
+   map->set_elements_kind(TERMINAL_FAST_ELEMENTS_KIND);
+diff --git a/src/init/icu_util.cc b/src/init/icu_util.cc
+index f210b157032..b4327d37057 100644
+--- a/src/init/icu_util.cc
++++ b/src/init/icu_util.cc
+@@ -11,6 +11,7 @@
+ #if defined(V8_INTL_SUPPORT)
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+
+ #include "src/base/build_config.h"
+ #include "src/base/file-utils.h"
+@@ -103,6 +104,26 @@ bool InitializeICU(const char* icu_data_file) {
+ #endif
+ }
+
++bool InitializeICU(const char* icu_data_ptr, size_t size) {
++#if !defined(V8_INTL_SUPPORT)
++  return true;
++#else
++#if ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_STATIC
++  return true;
++#elif ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
++  if (!icu_data_ptr) return false;
++  if (g_icu_data_ptr) return true;
++  g_icu_data_ptr = new char[size];
++  memcpy(g_icu_data_ptr, icu_data_ptr, size);
++  atexit(free_icu_data_ptr);
++  UErrorCode err = U_ZERO_ERROR;
++  udata_setCommonData(reinterpret_cast<void*>(g_icu_data_ptr), &err);
++  udata_setFileAccess(UDATA_ONLY_PACKAGES, &err);
++  return err == U_ZERO_ERROR;
++#endif
++#endif
++}
++
+ #undef ICU_UTIL_DATA_FILE
+ #undef ICU_UTIL_DATA_STATIC
+
+diff --git a/src/init/icu_util.h b/src/init/icu_util.h
+index e127e75f10f..b0e4bd2d68e 100644
+--- a/src/init/icu_util.h
++++ b/src/init/icu_util.h
+@@ -5,6 +5,8 @@
+ #ifndef V8_INIT_ICU_UTIL_H_
+ #define V8_INIT_ICU_UTIL_H_
+
++#include <stddef.h>
++
+ namespace v8 {
+
+ namespace internal {
+@@ -12,6 +14,7 @@ namespace internal {
+ // Call this function to load ICU's data tables for the current process.  This
+ // function should be called before ICU is used.
+ bool InitializeICU(const char* icu_data_file);
++bool InitializeICU(const char* icu_data_ptr, size_t size);
+
+ // Like above, but using the default icudt[lb].dat location if icu_data_file is
+ // not specified.
+diff --git a/src/init/v8.cc b/src/init/v8.cc
+index 381748382db..21034d17c53 100644
+--- a/src/init/v8.cc
++++ b/src/init/v8.cc
+@@ -107,7 +107,6 @@ V8_DECLARE_ONCE(init_snapshot_once);
+ // static
+ void V8::InitializePlatform(v8::Platform* platform) {
+   AdvanceStartupState(V8StartupState::kPlatformInitializing);
+-  CHECK(!platform_);
+   CHECK_NOT_NULL(platform);
+   platform_ = platform;
+   v8::base::SetPrintStackTrace(platform_->GetStackTracePrinter());
+diff --git a/src/inspector/string-util.h b/src/inspector/string-util.h
+index 5607b6859c6..b5d5f35ea7d 100644
+--- a/src/inspector/string-util.h
++++ b/src/inspector/string-util.h
+@@ -53,9 +53,9 @@ class V8_EXPORT Binary {
+   String toBase64() const;
+   static Binary fromBase64(const String& base64, bool* success);
+   static Binary fromSpan(v8_crdtp::span<uint8_t> span) {
+-    return fromSpan(v8::MemorySpan<const uint8_t>(span.begin(), span.size()));
++    return fromV8Span(v8::MemorySpan<const uint8_t>(span.begin(), span.size()));
+   }
+-  static Binary fromSpan(v8::MemorySpan<const uint8_t> span) {
++  static Binary fromV8Span(v8::MemorySpan<const uint8_t> span) {
+     return Binary(
+         std::make_shared<std::vector<uint8_t>>(span.begin(), span.end()));
+   }
+diff --git a/src/inspector/v8-debugger-agent-impl.cc b/src/inspector/v8-debugger-agent-impl.cc
+index 2e78b588e85..e38e52be0de 100644
+--- a/src/inspector/v8-debugger-agent-impl.cc
++++ b/src/inspector/v8-debugger-agent-impl.cc
+@@ -1252,7 +1252,7 @@ Response V8DebuggerAgentImpl::getScriptSource(
+                      });
+     if (cachedScriptIt != m_cachedScripts.end()) {
+       *scriptSource = cachedScriptIt->source;
+-      *bytecode = protocol::Binary::fromSpan(v8::MemorySpan<const uint8_t>(
++      *bytecode = protocol::Binary::fromV8Span(v8::MemorySpan<const uint8_t>(
+           cachedScriptIt->bytecode.begin(), cachedScriptIt->bytecode.size()));
+       return Response::Success();
+     }
+@@ -1265,7 +1265,7 @@ Response V8DebuggerAgentImpl::getScriptSource(
+     if (span.size() > kWasmBytecodeMaxLength) {
+       return Response::ServerError(kWasmBytecodeExceedsTransferLimit);
+     }
+-    *bytecode = protocol::Binary::fromSpan(span);
++    *bytecode = protocol::Binary::fromV8Span(span);
+   }
+ #endif  // V8_ENABLE_WEBASSEMBLY
+   return Response::Success();
+@@ -1434,7 +1434,7 @@ Response V8DebuggerAgentImpl::getWasmBytecode(const String16& scriptId,
+   if (span.size() > kWasmBytecodeMaxLength) {
+     return Response::ServerError(kWasmBytecodeExceedsTransferLimit);
+   }
+-  *bytecode = protocol::Binary::fromSpan(span);
++  *bytecode = protocol::Binary::fromV8Span(span);
+   return Response::Success();
+ #else
+   return Response::ServerError("WebAssembly is disabled");
+diff --git a/src/interpreter/bytecode-generator.cc b/src/interpreter/bytecode-generator.cc
+index 7ea2e55528c..baef89a0482 100644
+--- a/src/interpreter/bytecode-generator.cc
++++ b/src/interpreter/bytecode-generator.cc
+@@ -7671,6 +7671,8 @@ static bool IsCharU(const AstRawString* str) {
+   return str->length() == 1 && str->FirstCharacter() == 'u';
+ }
+
++static bool disable_literal_compare_typeof_detection = true;
++
+ static bool IsLiteralCompareTypeof(CompareOperation* expr,
+                                    Expression** sub_expr,
+                                    TestTypeOfFlags::LiteralFlag* flag,
+@@ -7684,6 +7686,7 @@ static bool IsLiteralCompareTypeof(CompareOperation* expr,
+   DCHECK_NE(expr->op(), Token::kNotEq);
+   DCHECK_NE(expr->op(), Token::kNotEqStrict);
+
++  if (disable_literal_compare_typeof_detection) return false;
+   if (IsTypeof(expr->left()) && expr->right()->IsStringLiteral()) {
+     Literal* right_lit = expr->right()->AsLiteral();
+
+diff --git a/src/libplatform/default-platform.cc b/src/libplatform/default-platform.cc
+index 09ef613af85..8d395e548a4 100644
+--- a/src/libplatform/default-platform.cc
++++ b/src/libplatform/default-platform.cc
+@@ -57,6 +57,10 @@ std::unique_ptr<v8::Platform> NewDefaultPlatform(
+   return platform;
+ }
+
++std::unique_ptr<v8::PageAllocator> NewDefaultPageAllocator() {
++  return std::make_unique<v8::base::PageAllocator>();
++}
++
+ std::unique_ptr<v8::Platform> NewSingleThreadedDefaultPlatform(
+     IdleTaskSupport idle_task_support,
+     InProcessStackDumping in_process_stack_dumping,
+diff --git a/src/objects/js-duration-format.cc b/src/objects/js-duration-format.cc
+index 1eca7ba66d8..66967676a5a 100644
+--- a/src/objects/js-duration-format.cc
++++ b/src/objects/js-duration-format.cc
+@@ -807,7 +807,7 @@ void OutputFractional(const char* type, int64_t integer, int32_t powerOfTen,
+   // Pass in the value as int64_t and ask ICU to scale down.
+   nfOpts = nfOpts.scale(icu::number::Scale::powerOfTen(-powerOfTen));
+
+-  int64_t factor = static_cast<int64_t>(std::powl(10, powerOfTen));
++  int64_t factor = static_cast<int64_t>(std::pow(static_cast<long double>(10), static_cast<long double>(powerOfTen)));
+   int64_t bound = std::numeric_limits<int64_t>::max() / factor - 1;
+   UErrorCode status = U_ZERO_ERROR;
+   // Use faster ICU API formatInt if the value fit the precision int64_t,
+diff --git a/src/objects/js-objects.cc b/src/objects/js-objects.cc
+index e5aa556d80d..734f0c1b66d 100644
+--- a/src/objects/js-objects.cc
++++ b/src/objects/js-objects.cc
+@@ -5470,6 +5470,14 @@ void JSObject::SetImmutableProto(Isolate* isolate,
+   object->set_map(isolate, *new_map, kReleaseStore);
+ }
+
++void JSObject::SetHostDelegate(Isolate* isolate,
++                               DirectHandle<JSObject> object) {
++  DirectHandle<Map> map(object->map(), isolate);
++  if (map->is_host_delegate()) return;
++  DirectHandle<Map> new_map = Map::TransitionToHostDelegate(isolate, map);
++  object->set_map(isolate, *new_map, kReleaseStore);
++}
++
+ void JSObject::EnsureCanContainElements(Isolate* isolate,
+                                         DirectHandle<JSObject> object,
+                                         JavaScriptArguments* args,
+diff --git a/src/objects/js-objects.h b/src/objects/js-objects.h
+index 2ebc2019934..ff053197e55 100644
+--- a/src/objects/js-objects.h
++++ b/src/objects/js-objects.h
+@@ -857,6 +857,9 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
+   static void SetImmutableProto(Isolate* isolate,
+                                 DirectHandle<JSObject> object);
+
++  static void SetHostDelegate(Isolate* isolate,
++                                DirectHandle<JSObject> object);
++
+   // Initializes the body starting at |start_offset|. It is responsibility of
+   // the caller to initialize object header. Fill the pre-allocated fields with
+   // undefined_value and the rest with filler_map.
+diff --git a/src/objects/map-inl.h b/src/objects/map-inl.h
+index 050748b7f3c..c47b4a2cdde 100644
+--- a/src/objects/map-inl.h
++++ b/src/objects/map-inl.h
+@@ -157,6 +157,9 @@ BIT_FIELD_ACCESSORS(Map, bit_field3, may_have_interesting_properties,
+ BIT_FIELD_ACCESSORS(Map, relaxed_bit_field3, construction_counter,
+                     Map::Bits3::ConstructionCounterBits)
+
++// |host_bit_field| fields.
++BIT_FIELD_ACCESSORS(Map, host_bit_field, is_host_delegate, Map::HostBits::IsHostDelegateBit)
++
+ DEF_GETTER(Map, GetNamedInterceptor, Tagged<InterceptorInfo>) {
+   DCHECK(has_named_interceptor());
+   Tagged<FunctionTemplateInfo> info = GetFunctionTemplateInfo(cage_base);
+diff --git a/src/objects/map.cc b/src/objects/map.cc
+index 53b28c596be..0815fb7f6a9 100644
+--- a/src/objects/map.cc
++++ b/src/objects/map.cc
+@@ -1298,6 +1298,7 @@ Handle<Map> Map::RawCopy(Isolate* isolate, DirectHandle<Map> src_handle,
+     }
+     // Same as bit_field comment above.
+     raw->set_bit_field3(new_bit_field3);
++    raw->set_host_bit_field(src->host_bit_field());
+     if (v8_flags.proto_assign_seq_lazy_func_opt) {
+       if (Tagged<PrototypeSharedClosureInfo> infos;
+           src_handle->TryGetPrototypeSharedClosureInfo(&infos)) {
+@@ -1455,6 +1456,13 @@ DirectHandle<Map> Map::TransitionToImmutableProto(Isolate* isolate,
+   return new_map;
+ }
+
++DirectHandle<Map> Map::TransitionToHostDelegate(Isolate* isolate,
++                                          DirectHandle<Map> map) {
++  DirectHandle<Map> new_map = Map::Copy(isolate, map, "HostDelegate");
++  new_map->set_is_host_delegate(true);
++  return new_map;
++}
++
+ namespace {
+ void EnsureInitialMap(Isolate* isolate, DirectHandle<Map> map) {
+ #ifdef DEBUG
+diff --git a/src/objects/map.h b/src/objects/map.h
+index 31395ece2e2..df408cd14bc 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -367,6 +367,11 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
+   static_assert(kSlackTrackingCounterStart <=
+                 Bits3::ConstructionCounterBits::kMax);
+
++  // Bit positions for |host_bits|.
++  struct HostBits {
++    DEFINE_TORQUE_GENERATED_MAP_HOST_BIT_FIELDS()
++  };
++
+   // Inobject slack tracking is the way to reclaim unused inobject space.
+   //
+   // The instance size is initially determined by adding some slack to
+@@ -797,6 +802,8 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
+
+   DECL_BOOLEAN_ACCESSORS(is_immutable_proto)
+
++  DECL_BOOLEAN_ACCESSORS(is_host_delegate)
++
+   // This counter is used for in-object slack tracking.
+   // The in-object slack tracking is considered enabled when the counter is
+   // non zero. The counter only has a valid count for initial maps. For
+@@ -1003,6 +1010,9 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
+   static DirectHandle<Map> TransitionToImmutableProto(Isolate* isolate,
+                                                       DirectHandle<Map> map);
+
++  static DirectHandle<Map> TransitionToHostDelegate(Isolate* isolate,
++                                                    DirectHandle<Map> map);
++
+   static_assert(kInstanceTypeOffset == Internals::kMapInstanceTypeOffset);
+
+   class BodyDescriptor;
+diff --git a/src/objects/map.tq b/src/objects/map.tq
+index c4330bf5625..36e763f0b2d 100644
+--- a/src/objects/map.tq
++++ b/src/objects/map.tq
+@@ -34,6 +34,10 @@ bitfield struct MapBitFields3 extends uint32 {
+   construction_counter: int32: 3 bit;
+ }
+
++bitfield struct MapHostBitFields extends uint32 {
++  is_host_delegate: bool: 1 bit;
++}
++
+ extern class Map extends HeapObject {
+   macro PrototypeInfo(): PrototypeInfo labels HasNoPrototypeInfo {
+     typeswitch (this.transitions_or_prototype_info) {
+@@ -77,8 +81,8 @@ extern class Map extends HeapObject {
+   bit_field2: MapBitFields2;
+   bit_field3: MapBitFields3;
+
+-  @if(TAGGED_SIZE_8_BYTES) optional_padding: uint32;
+-  @ifnot(TAGGED_SIZE_8_BYTES) optional_padding: void;
++  host_bit_field: MapHostBitFields;
++  optional_padding: void;
+
+   prototype: JSReceiver|Null;
+   constructor_or_back_pointer_or_native_context: Object;
+diff --git a/src/objects/objects.cc b/src/objects/objects.cc
+index 9da7dfdf5e6..138c0026b5a 100644
+--- a/src/objects/objects.cc
++++ b/src/objects/objects.cc
+@@ -1015,7 +1015,12 @@ Handle<String> Object::TypeOf(Isolate* isolate, DirectHandle<Object> object) {
+   if (IsString(*object)) return isolate->factory()->string_string();
+   if (IsSymbol(*object)) return isolate->factory()->symbol_string();
+   if (IsBigInt(*object)) return isolate->factory()->bigint_string();
+-  if (IsCallable(*object)) return isolate->factory()->function_string();
++  if (IsJSObject(*object)) {
++    DirectHandle<JSObject> obj = Cast<JSObject>(object);
++    if (obj->HasNamedInterceptor()) {
++      return obj->map()->is_host_delegate() ? isolate->factory()->function_string() : isolate->factory()->object_string();
++    }
++  }  if (IsCallable(*object)) return isolate->factory()->function_string();
+   return isolate->factory()->object_string();
+ }
+
+diff --git a/src/objects/templates-inl.h b/src/objects/templates-inl.h
+index 407d5df1cd7..6a70d3a596c 100644
+--- a/src/objects/templates-inl.h
++++ b/src/objects/templates-inl.h
+@@ -254,6 +254,14 @@ void ObjectTemplateInfo::set_code_like(bool is_code_like) {
+   return set_data(IsCodeKindBit::update(data(), is_code_like));
+ }
+
++bool ObjectTemplateInfo::host_delegate() const {
++  return IsHostDelegateBit::decode(data());
++}
++
++void ObjectTemplateInfo::set_host_delegate(bool value) {
++  return set_data(IsHostDelegateBit::update(data(), value));
++}
++
+ bool FunctionTemplateInfo::IsTemplateFor(Tagged<JSObject> object) const {
+   return IsTemplateFor(object->map());
+ }
+diff --git a/src/objects/templates.h b/src/objects/templates.h
+index 2163d995a8e..dce2215299d 100644
+--- a/src/objects/templates.h
++++ b/src/objects/templates.h
+@@ -301,6 +301,7 @@ class ObjectTemplateInfo
+   DECL_INT_ACCESSORS(embedder_field_count)
+   DECL_BOOLEAN_ACCESSORS(immutable_proto)
+   DECL_BOOLEAN_ACCESSORS(code_like)
++  DECL_BOOLEAN_ACCESSORS(host_delegate)
+
+   // Starting from given object template's constructor walk up the inheritance
+   // chain till a function template that has an instance template is found.
+diff --git a/src/objects/templates.tq b/src/objects/templates.tq
+index 4668493d2b7..99ce72267c0 100644
+--- a/src/objects/templates.tq
++++ b/src/objects/templates.tq
+@@ -108,7 +108,8 @@ extern class FunctionTemplateInfo extends TemplateInfoWithProperties {
+ bitfield struct ObjectTemplateInfoFlags extends uint31 {
+   is_immutable_prototype: bool: 1 bit;
+   is_code_kind: bool: 1 bit;
+-  embedder_field_count: int32: 28 bit;
++  is_host_delegate: bool: 1 bit;
++  embedder_field_count: int32: 27 bit;
+ }
+
+ @generateUniqueMap

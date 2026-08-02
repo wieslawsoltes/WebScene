@@ -1,6 +1,6 @@
 # Runtime upgrade evaluation log
 
-**Status:** Evaluation complete; staged rollout work remains
+**Status:** Historical evaluation complete; native-only direction is governed by ADR 0013
 
 **Started:** 2026-08-01
 

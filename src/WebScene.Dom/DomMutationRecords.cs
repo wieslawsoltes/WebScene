@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 public sealed class DomMutationObserverOptions
 {

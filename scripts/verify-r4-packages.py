@@ -15,7 +15,6 @@ PORTABLE = {
     "WebScene.Dom",
     "WebScene.Css",
     "WebScene.Graphics",
-    "WebScene.JavaScript",
     "WebScene.Backend.Abstractions",
 }
 EXPECTED = PORTABLE | {"WebScene.Backend.Avalonia"}

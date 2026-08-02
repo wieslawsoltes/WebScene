@@ -19,7 +19,6 @@ using Avalonia.Rendering.Composition;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
-using JavaScript.Avalonia;
 #endif
 using WebScene.Core;
 using WebScene.Css;

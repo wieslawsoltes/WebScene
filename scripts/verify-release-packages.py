@@ -11,7 +11,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 
-MANAGED_PACKAGE_IDS = {
+PACKAGE_IDS = {
     "WebScene",
     "WebScene.Backend.Abstractions",
     "WebScene.Backend.Avalonia",
@@ -20,13 +20,9 @@ MANAGED_PACKAGE_IDS = {
     "WebScene.Css",
     "WebScene.Dom",
     "WebScene.Graphics",
-    "WebScene.JavaScript",
     "WebScene.JavaScript.Interop",
     "WebScene.JavaScript.Interop.Generator",
     "WebScene.Sdk",
-    "WebScene.Sdk.Avalonia",
-    "WebScene.Templates",
-    "JavaScript.Avalonia.ClearScript",
 }
 DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 NATIVE_V8_REVISIONS = {
@@ -36,7 +32,7 @@ NATIVE_V8_REVISIONS = {
 }
 PARTITION_ALLOC_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 REPOSITORY_URL = "https://github.com/wieslawsoltes/WebScene"
-REQUIRED_PACKAGE_TAGS = {"webscene", "web-components", "native-ui"}
+REQUIRED_PACKAGE_TAGS = {"webscene", "web-ui", "native-ui"}
 
 
 def read_nuspec(package: pathlib.Path) -> tuple[str, str, list[tuple[str, str]]]:
@@ -131,48 +127,6 @@ def validate_package_metadata(package: pathlib.Path, package_id: str) -> dict[st
     }
 
 
-def validate_template_defaults(package: pathlib.Path, version: str) -> None:
-    with zipfile.ZipFile(package) as archive:
-        template_configs = [
-            name for name in archive.namelist()
-            if name.endswith("/.template.config/template.json")
-        ]
-        if len(template_configs) != 3:
-            raise RuntimeError(
-                f"{package}: expected 3 template configurations, found {len(template_configs)}"
-            )
-        for config_name in template_configs:
-            config = json.loads(archive.read(config_name))
-            actual = (
-                config.get("symbols", {})
-                .get("websceneVersion", {})
-                .get("defaultValue")
-            )
-            if actual != version:
-                raise RuntimeError(
-                    f"{package}: {config_name} defaults WebScene packages to "
-                    f"{actual!r}, expected {version!r}"
-                )
-        template_projects = [
-            name for name in archive.namelist()
-            if name.endswith(".csproj") and "/content/" in name
-        ]
-        if len(template_projects) != 3:
-            raise RuntimeError(
-                f"{package}: expected 3 template projects, found {len(template_projects)}"
-            )
-        for project_name in template_projects:
-            project = ET.fromstring(archive.read(project_name))
-            dependencies = {
-                node.attrib.get("Include"): node.attrib.get("Version")
-                for node in project.findall(".//PackageReference")
-            }
-            if dependencies.get("Tmds.DBus.Protocol") != "0.21.3":
-                raise RuntimeError(
-                    f"{package}: {project_name} must pin Tmds.DBus.Protocol 0.21.3"
-                )
-
-
 def validate_native_runtime(
     package: pathlib.Path,
     runtime_identifier: str,
@@ -240,14 +194,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("package_directory", type=pathlib.Path)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--managed-only", action="store_true")
+    parser.add_argument("--packages-only", action="store_true")
     parser.add_argument("--native-rid", action="append", dest="native_rids")
     parser.add_argument("--output", type=pathlib.Path)
     args = parser.parse_args()
 
     native_rids = set(args.native_rids or DEFAULT_NATIVE_RIDS)
-    expected_ids = set(MANAGED_PACKAGE_IDS)
-    if not args.managed_only:
+    expected_ids = set(PACKAGE_IDS)
+    if not args.packages_only:
         expected_ids.update(f"WebScene.NativeEngine.Runtime.{rid}" for rid in native_rids)
 
     packages: dict[str, pathlib.Path] = {}
@@ -257,7 +211,7 @@ def main() -> int:
         if package.name.endswith(".snupkg"):
             continue
         package_id, version, package_dependencies = read_nuspec(package)
-        if args.managed_only and package_id.startswith("WebScene.NativeEngine.Runtime."):
+        if args.packages_only and package_id.startswith("WebScene.NativeEngine.Runtime."):
             continue
         if package_id not in expected_ids:
             raise RuntimeError(f"Unexpected package in release set: {package_id}")
@@ -275,8 +229,7 @@ def main() -> int:
     if missing:
         raise RuntimeError("Missing release packages: " + ", ".join(missing))
 
-    validate_template_defaults(packages["WebScene.Templates"], args.version)
-    if not args.managed_only:
+    if not args.packages_only:
         for runtime_identifier in sorted(native_rids):
             package_id = f"WebScene.NativeEngine.Runtime.{runtime_identifier}"
             validate_native_runtime(
@@ -287,7 +240,7 @@ def main() -> int:
 
     for package_id, package_dependencies in dependencies.items():
         for dependency_id, dependency_version in package_dependencies:
-            if dependency_id in MANAGED_PACKAGE_IDS and dependency_version != args.version:
+            if dependency_id in PACKAGE_IDS and dependency_version != args.version:
                 raise RuntimeError(
                     f"{package_id} depends on {dependency_id} {dependency_version}, "
                     f"expected {args.version}"
@@ -297,9 +250,8 @@ def main() -> int:
         package.name.removesuffix(f".{args.version}.snupkg")
         for package in args.package_directory.glob(f"*.{args.version}.snupkg")
     }
-    expected_symbol_ids = MANAGED_PACKAGE_IDS - {
+    expected_symbol_ids = PACKAGE_IDS - {
         "WebScene.JavaScript.Interop.Generator",
-        "WebScene.Templates",
     }
     missing_symbols = sorted(expected_symbol_ids - symbol_ids)
     if missing_symbols:
@@ -309,7 +261,7 @@ def main() -> int:
         "schemaVersion": 1,
         "status": "pass",
         "version": args.version,
-        "managedOnly": args.managed_only,
+        "packagesOnly": args.packages_only,
         "packageCount": len(packages),
         "symbolPackageCount": len(symbol_ids),
         "packages": {

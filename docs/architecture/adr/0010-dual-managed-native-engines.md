@@ -1,9 +1,12 @@
 # ADR 0010: Managed and native engines are first-class modes
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0013
 - **Date:** 2026-07-18
 
 ## Context
+
+This ADR records the earlier dual-engine decision. It is retained as architectural
+history; ADR 0013 removes the managed engine and replaces this decision.
 
 WebScene has a working managed DOM/CSS/JavaScript/Avalonia engine with broad behavioral,
 pixel, component-integration, and curated WPT coverage. The native V8 scene-engine work removes

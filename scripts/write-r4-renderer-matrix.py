@@ -69,7 +69,7 @@ def main() -> int:
                 "renderer": "Avalonia Skia/headless",
                 "status": "pass",
                 "supported": True,
-                "evidence": "AvaloniaBackendHostTests",
+                "evidence": "WebScene.Backend.Avalonia.Tests native presenter tests",
             },
             progpu,
         ],

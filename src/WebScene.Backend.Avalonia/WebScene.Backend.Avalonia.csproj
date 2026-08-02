@@ -7,7 +7,7 @@
     <TrimMode>copyused</TrimMode>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The complete Avalonia presentation backend for WebScene.</Description>
+    <Description>The reference Avalonia presenter and native scene integration for WebScene.</Description>
     <PackageId>WebScene.Backend.Avalonia</PackageId>
     <AssemblyName>WebScene.Backend.Avalonia</AssemblyName>
     <RootNamespace>WebScene.Backends.Avalonia</RootNamespace>
@@ -21,9 +21,6 @@
     <ProjectReference Include="..\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
     <ProjectReference Include="..\WebScene.Css\WebScene.Css.csproj" />
-    <ProjectReference Include="..\WebScene.Dom\WebScene.Dom.csproj" />
-    <ProjectReference Include="..\WebScene.Graphics\WebScene.Graphics.csproj" />
-    <ProjectReference Include="..\WebScene.JavaScript\WebScene.JavaScript.csproj" />
     <ProjectReference Include="..\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -35,13 +32,6 @@
     <PackageReference Include="Svg.Skia" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Keep the proven implementation byte-for-byte on the hot path while its
-         package ownership moves. -->
-    <Compile Include="..\JavaScript.Avalonia\*.cs" />
     <None Include="README.md" Pack="true" PackagePath="\" />
-    <None Include="webscene-backend.json"
-          Pack="true"
-          PackagePath="\"
-          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

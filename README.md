@@ -1,572 +1,193 @@
-<p align="center">
-  <img src="docs/assets/webscene-logo.jpg" alt="WebScene" width="900">
-</p>
+# WebScene
 
-<h1 align="center">WebScene</h1>
+WebScene is a native web-UI runtime for trusted, packaged content in .NET applications.
+It runs JavaScript in V8, implements a deliberately bounded DOM/CSS/layout/Canvas/SVG
+platform, and publishes immutable scene updates to native host presenters.
 
-<p align="center"><strong>Web components. Native performance.</strong></p>
+It is not a browser, WebView, Chromium shell, or implementation of the full web platform.
+The intended use is controlled UI that an application owns, tests, and ships: charts,
+dashboards, editors, diagramming surfaces, kiosks, and JavaScript UI plug-ins.
 
-<p align="center">
-  Run packaged React, TypeScript, and JavaScript components in native application frameworks through a high-performance scene pipeline—<strong>no WebView or embedded browser required.</strong>
-</p>
+## Why WebScene
 
-<table align="center">
-  <tr>
-    <td align="center" width="120">
-      <a href="https://flutter.dev/"><img src="docs/assets/platforms/flutter.svg" alt="Flutter" height="52"></a><br>
-      <strong>Flutter</strong>
-    </td>
-    <td align="center" width="120">
-      <a href="https://platform.uno/"><img src="docs/assets/platforms/uno.svg" alt="Uno Platform" height="52"></a><br>
-      <strong>Uno Platform</strong>
-    </td>
-    <td align="center" width="120">
-      <a href="https://learn.microsoft.com/dotnet/desktop/wpf/"><img src="docs/assets/platforms/wpf-dotnet.svg" alt="WPF" height="52"></a><br>
-      <strong>WPF</strong>
-    </td>
-    <td align="center" width="120">
-      <a href="https://learn.microsoft.com/windows/apps/winui/"><img src="docs/assets/platforms/winui.svg" alt="WinUI" height="52"></a><br>
-      <strong>WinUI</strong>
-    </td>
-    <td align="center" width="120">
-      <a href="https://avaloniaui.net/"><img src="docs/assets/platforms/avalonia.svg" alt="Avalonia" height="52"></a><br>
-      <strong>Avalonia</strong>
-    </td>
-  </tr>
-</table>
+- Hot DOM, CSS, layout, Canvas, SVG, and JavaScript work stays inside one native runtime.
+- The application UI thread consumes immutable scene state instead of servicing
+  fine-grained JavaScript-to-.NET calls.
+- Web-authored surfaces compose inside native application windows and lifecycle.
+- Host capabilities are explicit and can be exposed through typed TypeScript-to-.NET
+  interop rather than a browser-wide bridge.
+- Compatibility is stated as a versioned component profile and measured with a curated
+  WPT subset plus product-scale fixtures.
 
-<h3 align="center">NuGet packages</h3>
+The project has one engine: the native V8 scene engine. The former managed
+ClearScript/Avalonia engine, its fallback behavior, packages, templates, and samples have
+been removed.
 
-<table align="center">
-  <thead>
-    <tr>
-      <th align="left">Package family</th>
-      <th align="left">Published packages</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Product &amp; SDK</strong></td>
-      <td>
-        <a href="https://www.nuget.org/packages/WebScene/"><img src="https://img.shields.io/nuget/v/WebScene.svg?label=WebScene&amp;style=flat-square" alt="WebScene NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Sdk/"><img src="https://img.shields.io/nuget/v/WebScene.Sdk.svg?label=WebScene.Sdk&amp;style=flat-square" alt="WebScene.Sdk NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Sdk.Avalonia/"><img src="https://img.shields.io/nuget/v/WebScene.Sdk.Avalonia.svg?label=WebScene.Sdk.Avalonia&amp;style=flat-square" alt="WebScene.Sdk.Avalonia NuGet"></a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Framework backends</strong></td>
-      <td>
-        <a href="https://www.nuget.org/packages/WebScene.Backend.Uno/"><img src="https://img.shields.io/nuget/v/WebScene.Backend.Uno.svg?label=WebScene.Backend.Uno&amp;style=flat-square" alt="WebScene.Backend.Uno NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Backend.Avalonia/"><img src="https://img.shields.io/nuget/v/WebScene.Backend.Avalonia.svg?label=WebScene.Backend.Avalonia&amp;style=flat-square" alt="WebScene.Backend.Avalonia NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Backend.Abstractions/"><img src="https://img.shields.io/nuget/v/WebScene.Backend.Abstractions.svg?label=WebScene.Backend.Abstractions&amp;style=flat-square" alt="WebScene.Backend.Abstractions NuGet"></a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Runtime foundations</strong></td>
-      <td>
-        <a href="https://www.nuget.org/packages/WebScene.Core/"><img src="https://img.shields.io/nuget/v/WebScene.Core.svg?label=WebScene.Core&amp;style=flat-square" alt="WebScene.Core NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Dom/"><img src="https://img.shields.io/nuget/v/WebScene.Dom.svg?label=WebScene.Dom&amp;style=flat-square" alt="WebScene.Dom NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Css/"><img src="https://img.shields.io/nuget/v/WebScene.Css.svg?label=WebScene.Css&amp;style=flat-square" alt="WebScene.Css NuGet"></a>
-        <br>
-        <a href="https://www.nuget.org/packages/WebScene.Graphics/"><img src="https://img.shields.io/nuget/v/WebScene.Graphics.svg?label=WebScene.Graphics&amp;style=flat-square" alt="WebScene.Graphics NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.JavaScript/"><img src="https://img.shields.io/nuget/v/WebScene.JavaScript.svg?label=WebScene.JavaScript&amp;style=flat-square" alt="WebScene.JavaScript NuGet"></a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Interop &amp; tooling</strong></td>
-      <td>
-        <a href="https://www.nuget.org/packages/WebScene.JavaScript.Interop/"><img src="https://img.shields.io/nuget/v/WebScene.JavaScript.Interop.svg?label=WebScene.JavaScript.Interop&amp;style=flat-square" alt="WebScene.JavaScript.Interop NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.JavaScript.Interop.Generator/"><img src="https://img.shields.io/nuget/v/WebScene.JavaScript.Interop.Generator.svg?label=WebScene.JavaScript.Interop.Generator&amp;style=flat-square" alt="WebScene.JavaScript.Interop.Generator NuGet"></a>
-        <br>
-        <a href="https://www.nuget.org/packages/JavaScript.Avalonia.ClearScript/"><img src="https://img.shields.io/nuget/v/JavaScript.Avalonia.ClearScript.svg?label=JavaScript.Avalonia.ClearScript&amp;style=flat-square" alt="JavaScript.Avalonia.ClearScript NuGet"></a>
-        <a href="https://www.nuget.org/packages/WebScene.Templates/"><img src="https://img.shields.io/nuget/v/WebScene.Templates.svg?label=WebScene.Templates&amp;style=flat-square" alt="WebScene.Templates NuGet"></a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Native runtimes</strong></td>
-      <td>
-        <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/"><img src="https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.osx-arm64.svg?label=WebScene.NativeEngine.Runtime.osx-arm64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.osx-arm64 NuGet"></a>
-        <br>
-        <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/"><img src="https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.linux-x64.svg?label=WebScene.NativeEngine.Runtime.linux-x64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.linux-x64 NuGet"></a>
-        <br>
-        <a href="https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/"><img src="https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.win-x64.svg?label=WebScene.NativeEngine.Runtime.win-x64&amp;style=flat-square" alt="WebScene.NativeEngine.Runtime.win-x64 NuGet"></a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+## Current status
 
-<p align="center">
-  <a href="https://t.me/+RChokbByXQpkOTQ0"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?logo=telegram&amp;logoColor=white&amp;style=flat-square" alt="Telegram Community"></a>
-  <a href="https://www.reddit.com/r/WebScene/"><img src="https://img.shields.io/badge/Reddit-Community-FF4500?logo=reddit&amp;logoColor=white&amp;style=flat-square" alt="Reddit Community"></a>
-</p>
+WebScene is pre-production. The native architecture, runtime packages, deterministic
+test runner, Avalonia presenter, Uno proof, typed interop generator, and substantial
+Canvas/SVG/component workloads exist. Compatibility and packaging are advancing, but
+arbitrary websites and arbitrary React applications are not supported.
 
-## What WebScene enables
+Current reference applications include:
 
-**WebScene is a native component runtime for bringing web-authored experiences into Flutter, Uno Platform, WPF, WinUI, Avalonia, and other native application frameworks.** Teams can build component interfaces with React, TypeScript, JavaScript, DOM, CSS, Canvas, and SVG while each host retains its native windows, composition, input, lifecycle, and platform integration.
+- `samples/NativeRuntimeShowcase.Avalonia` — native runtime and scene presentation;
+- `samples/NativeMonacoEditor` — a demanding editor workload;
+- `samples/NativeTradingViewTerminal` — a Canvas/SVG-heavy application workload;
+- `samples/NativeRuntimeShowcase.Uno` — a second-host proof.
 
-- **Run advanced existing controls and libraries with high fidelity.** WebScene is exercised against an unchanged [Monaco Editor](docs/monaco-compatibilty.md) bundle and a [live charting terminal](samples/NativeRuntimeShowcase/README.md), covering demanding layout, text, Canvas/SVG, input, focus, observers, nested frames, and real-time data.
-- **Generate strongly typed .NET interop APIs from `.d.ts` files.** The TypeScript discovery tool emits the complete named type graph, an editable policy, and a coverage report; the Roslyn generator turns the reviewed surface into C# models, outbound proxies, functions, globals, and inbound adapters.
-- **Compose web and native UI as one application.** Components can call selected host services, participate in native input and lifecycle, and sit alongside XAML/C# or Flutter/Dart controls.
+Avalonia is the reference presenter. Uno is a proof, not yet a production-ready
+drop-in backend. WPF, WinUI, Flutter, and other presenter integrations are roadmap work
+and should not be presented as currently supported products.
 
-Its engine runs V8, DOM/CSS state, layout, input dispatch, Canvas, and SVG off the UI thread, then publishes immutable scene diffs to a framework-specific native presenter. Applications can combine those components with native controls, services, menus, accessibility, input, and lifecycle management instead of placing the experience in an isolated browser surface.
-
-WebScene packages trusted, versioned components with explicit compatibility profiles, offline assets, lifecycle diagnostics, and a capability-based bridge to host services. Flutter and Uno Platform provide integration proofs; WPF and WinUI are planned presenters; Avalonia is the reference implementation today. All presenters share the same portable contracts and immutable scene ABI. Support maturity is documented in [Managed and native backends](docs/backends.md).
-
-The familiar web authoring model is backed by native scene rendering: WebScene does not embed a WebView, browser control, Chromium/WebKit runtime, or Electron shell.
-
-The WebScene product family includes:
-
-- **WebScene** – the product brand and HTML-like direct-authoring layer.
-- **WebScene.NativeEngine.Runtime** – the native V8, DOM, CSS, layout, and scene engine.
-- **WebScene.Backend.Flutter** and **WebScene.Backend.Uno** – cross-framework integration proofs.
-- **WebScene.Backend.Avalonia** – native scene presentation and Avalonia host integration.
-- **WebScene.Sdk** – versioned component packaging, compatibility, lifecycle, and host-bridge contracts.
-- **WebScene.Sdk.Avalonia** – the XAML-first host for packaged React, TypeScript, and JavaScript components.
-- **WebScene.JavaScript.Interop** and **WebScene.JavaScript.Interop.Generator** – typed .NET interop models, proxies, and adapters generated from reviewed TypeScript declarations.
-- **JavaScript.Avalonia.ClearScript** – the managed compatibility engine and behavioral reference.
-
-## Highlights
-
-- **Native scene engine**: Run V8, DOM/CSS, layout, input, Canvas, and SVG off the UI thread, then publish immutable, damage-aware scene diffs to a framework-native presenter.
-- **Cross-framework presentation**: Target Flutter, Uno Platform, WPF, WinUI, and Avalonia through a shared runtime, portable contracts, and framework-specific presenters.
-- **High-fidelity component support**: Run sophisticated libraries such as Monaco Editor and complex real-time charting terminals with native-rendered layout, text, Canvas/SVG, input, focus, and live data.
-- **Strongly typed .NET interop**: Generate reviewable C# models, proxies, functions, globals, and callback adapters from TypeScript declaration files.
-- **Native application composition**: Place web-authored components alongside XAML/C# or Flutter/Dart UI, native controls, menus, settings, and operating-system services.
-- **Versioned component hosting**: Mount offline React, TypeScript, and JavaScript bundles through an engine-neutral component profile and framework host.
-- **Contract-based compatibility**: Share DOM, CSS, rendering, input, lifecycle, and cache contracts between native and managed engines, with support promoted through conformance gates.
-- **Capability-based host bridge**: Expose selected asynchronous .NET services to trusted components without granting an implicit application-wide API.
-- **DOM and event integration**: Query and mutate the projected visual surface while routing pointer, keyboard, text, focus, and routed-event behavior to JavaScript.
-- **HTML-like authoring and Canvas**: Use familiar markup, styling, and Canvas APIs directly when a packaged component is not the right abstraction.
-- **Browserless integration**: Deliver web-authored components without embedding a WebView or browser runtime.
-
-## WebScene compared with WebViews and browser-based solutions
-
-A WebView or embedded browser keeps the complete web stack and its renderer inside a
-browser-owned surface. The native application hosts and composites that surface, while
-the browser remains responsible for the DOM, CSS, layout, input, scripting, and
-painting.
-
-WebScene replaces that embedded surface with a component-oriented runtime and a native
-scene pipeline:
+## Architecture
 
 ```text
-WebView / embedded browser
-
-HTML + CSS + JavaScript
-        ↓
-Chromium, WebKit, or another browser engine
-        ↓
-Browser-owned rendered surface
-        ↓
-Native application composites the surface
-
-WebScene native engine
-
-HTML + CSS + JavaScript
-        ↓
-V8 + WebScene DOM, CSS, layout, events, Canvas, and SVG
-        ↓
-Immutable, damage-aware scene diff
-        ↓
-Framework presenter renders the scene as part of the native application
+trusted HTML/CSS/JavaScript
+            |
+            v
+native engine thread
+V8 + DOM + CSS + layout + events + Canvas/SVG
+            |
+            v
+immutable, reference-counted scene diffs
+            |
+            +----> Avalonia presenter
+            +----> Uno proof
+            +----> headless/conformance renderer
 ```
 
-| Area | WebView or embedded browser | WebScene |
-| --- | --- | --- |
-| Runtime | Uses an operating-system browser engine or bundles one, such as Chromium or WebKit. | Uses V8 with WebScene's own DOM, CSS, layout, event, Canvas, SVG, and scene engine. |
-| Rendering | The browser paints into a browser-owned surface. | A framework presenter consumes immutable scene diffs and draws them through the host graphics stack. |
-| Application composition | Native UI is composed around an embedded browser view. | Web-authored components participate in the native application's rendering, input, lifecycle, and service boundaries. |
-| Host integration | Commonly crosses a WebView messaging or JavaScript bridge. | Uses portable contracts and an explicit capability-based host bridge. |
-| Content model | Suited to general web navigation and broad browser compatibility. | Designed for trusted, packaged, versioned components with declared compatibility requirements and offline assets. |
-| Compatibility | Inherits the mature Web Platform coverage of the selected browser engine. | Implements a tested Web Platform subset; support is capability-driven and promoted through conformance gates. |
-| Deployment | Depends on an installed system WebView or ships a browser runtime with the application. | Ships the WebScene runtime and the framework-specific presenter required by the selected backend. |
+The engine owns live V8 and document state. Presenters never receive live DOM objects;
+they traverse immutable scene tables and maintain renderer-side caches by resource
+generation. Input, frame timestamps, evaluation requests, and resource operations cross
+an ordered native boundary.
 
-WebScene is therefore not a wrapper around WebView2, `WKWebView`, CEF, Electron, or
-another browser control. It can run supported HTML, CSS, and JavaScript without an
-embedded browser by owning the browser-like semantics needed by the component and
-projecting the result into the native scene. This also means WebScene is not currently
-a drop-in browser for arbitrary public websites: applications should package trusted
-components and validate their required capabilities against the selected
-[managed or native backend](docs/backends.md).
+The native parser stack uses html5ever for HTML and Servo-derived CSS parsing and
+selector matching. V8, ICU data, ABI metadata, licenses, and hashes ship in
+RID-specific runtime packages.
 
-## Proven with demanding web libraries
+See [the native engine design](docs/architecture/native-v8-scene-engine.md) and
+[backend status](docs/backends.md).
 
-WebScene targets more than small custom widgets. Its native compatibility and rendering
-gates exercise sophisticated, existing web software without replacing it with a
-framework-specific rewrite.
+## Packages
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/assets/screenshots/monaco-editor.png" alt="Monaco Editor running through WebScene's native scene runtime" width="100%">
-    </td>
-    <td width="50%" align="center"><strong>Live charting terminal</strong><br><sub>Real-time Canvas rendering in the native scene runtime</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Monaco Editor</strong><br><sub>Native text layout, syntax highlighting, editing, selection, and folding</sub></td>
-    <td align="center"><strong>Live charting terminal</strong><br><sub>Live charts, WebSockets, nested frames, toolbars, and interaction</sub></td>
-  </tr>
-</table>
+The repository produces these .NET packages:
 
-| Existing library | Demonstrated behavior |
-| --- | --- |
-| [Monaco Editor](docs/monaco-compatibilty.md) | An unchanged Monaco 0.56.0 bundle with measured text and layout, DOM mutation, syntax highlighting, focus, pointer selection, typing, and code folding. |
-| [Live charting terminal](samples/NativeRuntimeShowcase/README.md) | A live hosted terminal using nested frames, Canvas rendering, WebSockets, pointer and keyboard input, responsive layout, and interactive controls. |
+- `WebScene.Core`, `WebScene.Dom`, `WebScene.Css`, and `WebScene.Graphics` for
+  portable contracts and supporting semantics;
+- `WebScene.Backend.Abstractions`, `WebScene.Backend.Avalonia`, and
+  `WebScene.Backend.Uno` for presenter contracts and integrations;
+- `WebScene.JavaScript.Interop` and
+  `WebScene.JavaScript.Interop.Generator` for typed host interop;
+- `WebScene.Sdk` for component manifests, assets, lifecycle, and host-bridge
+  contracts; and
+- `WebScene` for the separate Avalonia HTML-inspired authoring layer.
 
-## Generate typed .NET APIs from `.d.ts`
+The native engine is supplied by one matching RID package:
 
-WebScene can turn a library's TypeScript declarations into a reviewable, strongly typed
-.NET interop surface:
+- `WebScene.NativeEngine.Runtime.osx-arm64`
+- `WebScene.NativeEngine.Runtime.linux-x64`
+- `WebScene.NativeEngine.Runtime.win-x64`
 
-```text
-library.d.ts
-    → type-graph discovery
-    → API manifest + editable policy + coverage report
-    → Roslyn source generation
-    → C# models + proxies + functions + globals + inbound adapters
-```
+A reusable native `WebSceneComponentHost` package and application templates are not
+currently published. Their reintroduction requires a native implementation; there is no
+managed fallback.
 
-Run discovery directly or use `webscene-interop-validate` to make declaration drift and
-unsupported fallbacks fail in CI:
+See [the NuGet inventory](docs/nuget/README.md).
+
+## Build
+
+Requirements depend on the target. The .NET solution requires the SDK pinned in
+`global.json`. Building the native runtime additionally requires CMake, a C++ toolchain,
+Rust for the parser libraries, and the V8 build prerequisites described by the runtime
+scripts.
 
 ```bash
-node tooling/webscene/interop-discover.mjs \
-  --declarations path/to/library.d.ts \
-  --output obj/library.webscene-interop-api.json \
-  --policy-output library.webscene-interop-policy.json \
-  --report-output obj/library.coverage.json \
-  --namespace MyApp.Interop \
-  --fail-on-fallbacks
+dotnet restore WebScene.sln
+dotnet build WebScene.sln -c Release --no-restore
+dotnet test WebScene.sln -c Release --no-build
 ```
 
-The repository's generated-interop all-surface gate demonstrates full declaration
-discovery with no handwritten C#, while the
-[native runtime showcase](samples/NativeRuntimeShowcase/README.md) generates its
-Monaco .NET API from `MonacoApi.d.ts` at build time.
-
-## Repository Layout
-
-| Path | Description |
-| --- | --- |
-| `src/WebScene.Core` | UI-framework-neutral values and host/backend contracts. |
-| `src/WebScene.Backend.Abstractions` | Backend manifests, validation, and capability negotiation. |
-| `src/WebScene.Backend.Flutter` | Flutter native-scene integration proof. |
-| `src/WebScene.Backend.Uno` | Uno Platform native-scene integration proof. |
-| `src/WebScene.Backend.Avalonia` | Current Avalonia presentation implementation. |
-| `src/WebScene` | WebScene markup library and HTML element implementations. |
-| `src/JavaScript.Avalonia` | Engine-neutral browser/DOM services for Avalonia. |
-| `src/JavaScript.Avalonia.ClearScript` | ClearScript/V8 execution adapter and shared compilation cache. |
-| `src/WebScene.JavaScript.Interop*` | Runtime contracts and Roslyn source generation for strongly typed `.d.ts`-derived .NET APIs. |
-| `src/WebScene.Sdk` | Portable Component Profile 1 product contracts and host bridge. |
-| `src/WebScene.Sdk.Avalonia` | Avalonia `WebSceneComponentHost` for packaged components. |
-| `tooling/webscene` | TypeScript declaration discovery and validation, component checker, and Vite/esbuild plugins. |
-| `templates/WebScene.Templates` | Component-host, hybrid, and TypeScript `dotnet new` templates. |
-| `samples/components` | Twelve versioned, offline component packages shared by backends. |
-| `samples/hosts/Avalonia` | Runnable `.csproj` hosts: the R5 catalog and three standalone product shapes. |
-| `third-party/clearscript` | ClearScript 7.5.1 source submodule on the WebScene native patch branch. |
-| `third-party/v8` | V8 14.7.173.23 source submodule on ClearScript's compatibility patch branch. |
-| `packaging/WebScene.NativeEngine.Runtime` | RID-specific native V8/DOM/CSS/scene runtime package definition. |
-| `samples/website` | WebScene showcase demonstrating markup, styling, and canvas scripting. |
-| `samples/JavaScriptPlayground` | Interactive playground with editable XAML, live preview, and JavaScript console for `JavaScript.Avalonia`. |
-| `samples/NativeRuntimeShowcase.*` | Native real-time chart canvas and generated-.NET-API Monaco showcase for Uno Platform and Avalonia. |
-
-## Getting Started
-
-### Prerequisites
-
-- .NET SDK 8.0 or later (see `global.json` for the tested version).
-- A platform supported by Avalonia (Windows, macOS, Linux).
-
-### Building the repository
-
-Initialize source dependencies before producing reviewed native runtime packages:
+Build and verify the native runtime on a matching host:
 
 ```bash
-git submodule update --init --recursive
+scripts/build-native-engine-runtime.sh --rid osx-arm64
+scripts/build-native-engine-runtime.sh --rid linux-x64
 ```
+
+```powershell
+./scripts/build-native-engine-runtime.ps1 -Rid win-x64
+```
+
+Run the Avalonia showcase with an explicit engine library:
 
 ```bash
-# Restore and build everything (libraries + samples)
-dotnet build WebScene.sln
+dotnet run --project samples/NativeRuntimeShowcase.Avalonia -c Release -- \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
-### Running the samples
+The same path can be supplied through `WEBSCENE_NATIVE_ENGINE_LIBRARY`.
+
+## Compatibility
+
+WebScene follows a bounded component profile rather than claiming browser conformance.
+The profile contains required, candidate, harness-blocked, and explicitly excluded
+tests. Required tests are release gates; broader candidate and upstream WPT exploration
+are discovery signals.
+
+List or run the native-only profile:
 
 ```bash
-# Browse and run all 12 R5 component packages
-dotnet run --project samples/hosts/Avalonia/WebScene.Sdk.SampleCatalog
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --selection all --list
 
-# Run one of the copyable R5 product-shape hosts
-dotnet run --project samples/hosts/Avalonia/ComponentHost.Basic
-dotnet run --project samples/hosts/Avalonia/Hybrid.ReactIslands
-dotnet run --project samples/hosts/Avalonia/TypeScriptDesktop
-
-# WebScene website sample
-dotnet run --project samples/website/website.csproj
-
-# JavaScript.Avalonia playground
-dotnet run --project samples/JavaScriptPlayground/JavaScriptPlayground.csproj
-
-# Validate the complete R5 SDK/template/sample workflow
-scripts/run-r5-sdk-smoke.sh
-
-# Execute all 12 catalog bundles through real Avalonia + V8 (native runtime required)
-scripts/run-r5-catalog-runtime-smoke.sh
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --selection required \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
-The R5 hosts use the reviewed patched ClearScript V8 native library and automatically
-copy it from the repository's stable per-RID cache. See
-[`samples/hosts/Avalonia/README.md`](samples/hosts/Avalonia/README.md) for the one-time
-native preparation command and optional environment overrides.
-
-### Creating a React/TypeScript application
-
-After installing the `WebScene.Templates` package, create one of the supported product
-shapes:
-
-```bash
-dotnet new webscene-component-host -n MyComponentHost
-dotnet new webscene-hybrid -n MyHybridApp
-dotnet new webscene-typescript -n MyTypeScriptApp
-cd MyTypeScriptApp/web
-npm install
-npm run build
-cd ..
-dotnet run
-```
-
-The web build runs the bounded compatibility checker and emits a versioned
-`webscene-component.json`. Host services are available only through declared,
-asynchronous `webscene.host.*` capabilities. Applications must also ship the reviewed
-RID-specific WebScene native runtime package used by the component-host workflow.
-
-### Consuming the libraries
-
-The stable package line is production-ready. The native scene engine is the flagship runtime
-for production workloads: it owns V8, DOM/CSS, layout, input, and scene construction
-off the UI thread, and the Avalonia host consumes immutable scene handles. The native
-engine is promoted by capability and performance gates rather than silent fallback.
-
-The packaged component-host samples currently use the managed ClearScript/Avalonia path
-as the compatibility reference. The component profile is engine-neutral, so the same
-packaged assets and conformance tests can be promoted to the native scene host as each
-capability group is validated. See [Managed and native backends](docs/backends.md) and
-[the native scene-engine design](docs/architecture/native-v8-scene-engine.md).
-
-Add the Avalonia backend and the native runtime package matching the target platform:
-
-```xml
-<ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.14" />
-  <!-- Choose one runtime package for the target platform. -->
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.14" />
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="1.0.14" /> -->
-  <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.14" /> -->
-</ItemGroup>
-```
-
-| Target platform | Runtime identifier | Native runtime package |
-| --- | --- | --- |
-| macOS on Apple silicon | `osx-arm64` | [`WebScene.NativeEngine.Runtime.osx-arm64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/) |
-| Linux x64 | `linux-x64` | [`WebScene.NativeEngine.Runtime.linux-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/) |
-| Windows x64 | `win-x64` | [`WebScene.NativeEngine.Runtime.win-x64`](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/) |
-
-Each runtime package copies the native module, ICU data, and version/ABI manifest
-to build and publish output.
-
-## Using the HTML-like authoring layer
-
-WebScene also supports direct authoring with HTML-like tags (heading levels, paragraphs, lists, sections, navigation, Canvas, and more) mapped to Avalonia presentation services. Packaged React/TypeScript components normally enter through `WebSceneComponentHost`; use this lower-level surface when you want to author the document directly:
-
-```xml
-<html xmlns="https://github.com/avaloniaui"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      x:Class="Demo.index"
-      title="WebScene Demo">
-  <head>
-    <link rel="stylesheet" href="avares://website/Assets/demo.css" type="text/css" />
-    <script type="text/javascript">
-      <![CDATA[
-      document.addEventListener('DOMContentLoaded', () => {
-        const canvas = document.getElementById('draw');
-        const ctx = canvas.getContext('2d');
-        canvas.addEventListener('pointermove', evt => {
-          ctx.lineTo(evt.x, evt.y);
-          ctx.stroke();
-        });
-      });
-      ]]>
-    </script>
-  </head>
-  <body>
-    <section class="card">
-      <h1>Hello from WebScene</h1>
-      <canvas id="draw" width="400" height="200" />
-    </section>
-  </body>
-</html>
-```
-
-WebScene parses the markup, applies classes and inline styles, wires `<canvas>` pointers to JavaScript, and allows scripts to manipulate the resulting visual tree.
-
-## Using JavaScript.Avalonia directly
-
-`AvaloniaBrowserHost` supplies browser/DOM services and `ClearScriptV8Runtime` supplies
-V8 execution:
-
-```csharp
-public partial class MainWindow : Window
-{
-    private readonly AvaloniaBrowserHost _browserHost;
-    private readonly ClearScriptV8Runtime _runtime;
-
-    public MainWindow()
-    {
-        InitializeComponent();
-        _browserHost = new AvaloniaBrowserHost(this);
-        _runtime = new ClearScriptV8Runtime(_browserHost);
-
-        _runtime.Execute("""
-const label = document.getElementById('OutputText');
-const button = document.getElementById('RunButton');
-
-if (button && label) {
-  button.addEventListener('click', () => {
-    label.textContent = 'Button clicked from JavaScript!';
-    setTimeout(() => label.textContent = 'Ready', 1000);
-  });
-}
-""");
-    }
-}
-```
-
-### Loading external scripts
-
-`ClearScriptV8Runtime` includes a CommonJS-style module loader that can resolve local
-files, Avalonia assets (`avares://`), or HTTP resources through the host's resource
-resolver.
-
-```javascript
-// CommonJS-style modules
-const math = require('./modules/math.js');
-const result = math.add(2, 3);
-
-// Execute a script for its side effects (e.g. UMD builds)
-window.importScripts('./vendor/charting.js');
-```
-
-Modules are executed once per host and cached; repeated `require` calls return the same `module.exports` instance.
-
-### Event payloads
-
-Handlers receive simple objects that expose `handled` flags for two-way communication:
-
-```js
-textBox.addEventListener('keydown', evt => {
-  if (evt.key === 'Enter') {
-    evt.handled = true; // stop Avalonia routing
-  }
-});
-```
-
-| Event | Payload |
-| --- | --- |
-| `pointer*`, `mouse*`, `click` | `{ x, y, button?, handled }` |
-| `keydown`, `keyup` | `{ key?, handled }` |
-| `textinput`, `input` | `{ text?, handled }` |
-
-## Architecture Overview
-
-```text
-WebScene.Sdk (components, profile, lifecycle, host bridge)
-                ↓
-WebScene portable cores + native V8/immutable-scene runtime
-                ↓
-Framework presenters and hosts
-                ↓
-Flutter · Uno Platform · WPF · WinUI · Avalonia
-```
-
-R0 through R5 are complete: the semantic cores are portable, Avalonia is the reference
-backend package, and the React/TypeScript SDK, compatibility profile, templates, and
-component catalog are packaged and tested. The native V8/immutable-scene engine is the
-performance path. The next milestone is to mature that path through real application
-lifecycle, compatibility, reliability, and certification evidence, then turn the
-existing portable contracts into a stable presenter SDK for additional native
-frameworks.
-
-WebScene supports a managed ClearScript/Avalonia compatibility mode and a native V8 mode
-that publishes immutable scene diffs. See [Managed and native backends](docs/backends.md)
-for selection guidance, runtime packages, release automation, and the precise status of
-Flutter, Uno Platform, WPF, WinUI, Avalonia, and direct GPU backend extensibility. The
-portable contracts are ready for backend authoring, but the shared coordinators and
-native scene-reader SDK still need extraction before every framework is a turnkey
-integration.
+There is no engine selector and no fallback. A missing native capability is visible as a
+native failure. See [the profile policy](tests/WebPlatformSubset/README.md).
 
 ## Roadmap
 
-WebScene's immediate roadmap is to extract the stable presenter SDK shared by Flutter,
-Uno Platform, WPF, WinUI, and Avalonia while continuing to mature the native Avalonia
-reference path: close application lifecycle and reliability gaps, promote native
-capability groups through shared compatibility gates, complete differential and
-unsupported-feature evidence, and keep the reusable runtime boundary exercised by real
-applications.
+The priority order is:
 
-The Flutter and Uno Platform proofs validate that boundary across managed and native
-host models. WPF and WinUI presenters follow once the scene-reader SDK and ABI are
-stable. Each framework integration should consume the same tested runtime rather than
-forking the DOM, CSS, JavaScript, or scene engines.
+1. Restore and hold the required native compatibility profile on every released RID.
+2. Publish a reusable native Avalonia component host with resource loading, lifecycle,
+   recovery, diagnostics, typed host calls, and multi-instance tests.
+3. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.
+4. Expand non-gating WPT discovery and promote valuable browser behavior into the
+   bounded release profile.
+5. Stabilize the presenter SDK, then promote additional hosts only with their own
+   conformance and product-workload evidence.
 
-The first lifecycle decision is complete. The private high-complexity charting sample now destroys
-inactive engines and performs a clean warm-cache restart from retained host
-configuration. Its saved-layout restore path was removed after manual failure and
-after exceeding the ordinary warm-engine baseline. Clean restart was selected for
-reliability and simplicity rather than a universal latency advantage.
+The strategic target is valuable trusted web-authored UI inside native applications,
+not a general browser and not blanket website compatibility.
 
-The first normalized application differential tranche has also produced and closed a
-product-neutral engine defect: transitions between `transform:none` and a transform
-list now expose their painted forward and reverse matrices, backed by a required
-Chrome/managed/native contract. The current application graph classifies its complete
-1,890-action denominator, but 1,021 actions remain blocked on reproducible state
-traversal. The next application milestone is to expand reversible frontier traversal,
-then rerun the isolated Chrome differential over the newly reachable edges.
+## Repository map
 
-See the [supported use cases](use-cases.md) and
-[architecture decisions](docs/architecture/README.md).
+| Path | Purpose |
+| --- | --- |
+| `experiments/WebScene.NativeEngine.Probe` | Native V8/DOM/CSS/layout/scene engine and C ABI |
+| `src/WebScene.Backend.Avalonia` | Avalonia presenter and native scene integration |
+| `src/WebScene.Backend.Uno` | Uno presenter proof |
+| `src/WebScene.*` | Portable contracts, semantics, SDK, and typed interop |
+| `packaging/WebScene.NativeEngine.Runtime` | RID runtime packaging |
+| `tests/WebPlatformSubset` | Native-only component profile and WPT runner |
+| `samples/Native*` | Native runtime reference workloads |
+| `third-party/v8` | Pinned V8 source submodule |
+| `third-party/v8-patches` | Native-owned V8/build/ICU patches |
 
-## Contributing
+## Security boundary
 
-Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request. When contributing code:
-
-1. Fork the repository and create a feature branch.
-2. Run `dotnet build` to ensure the solution compiles.
-3. Include tests or sample updates when applicable.
-4. Describe the motivation and details in your PR.
+WebScene currently targets trusted application content. It does not provide a
+browser-grade origin, permission, navigation, or process sandbox. Do not treat it as a
+safe renderer for arbitrary untrusted websites or scripts.
 
 ## License
 
-This repository uses an MIT-based license with an additional Restricted Party
-Clause. The restriction applies to the repository and its NuGet packages. See
-[LICENSE](LICENSE) for the full terms.
-
-If your organisation requires a different licensing arrangement, please reach out to discuss commercial options.
-
-## Acknowledgements
-
-- [Uno Platform](https://platform.uno/) for its cross-platform .NET application framework.
-- [WinUI](https://github.com/microsoft/microsoft-ui-xaml) for the native Windows UI framework.
-- [Flutter](https://flutter.dev/) for its cross-platform UI toolkit and embedder model.
-- [AvaloniaUI](https://github.com/AvaloniaUI/Avalonia) for the cross-platform UI framework.
-- [ClearScript](https://github.com/microsoft/ClearScript) for the V8 hosting layer.
-- [AngleSharp](https://anglesharp.github.io/) for HTML/CSS parsing used by WebScene.
-
----
-
-© Wiesław Šoltés. All rights reserved.
-
-## Usage Restriction Notice
-
-At maintainer request, AvaloniaUI OÜ may not use this repository in any form.
-
-This restriction is defined in the repository [LICENSE](LICENSE).
+The repository uses the terms in [LICENSE](LICENSE), including its Restricted Party
+Clause. Describe it as a custom source-available license, not unqualified MIT or an
+OSI-approved open-source license.

@@ -29,9 +29,8 @@ internal sealed record WptRenderSnapshot(
     byte[] Pixels);
 
 /// <summary>
-/// Adapts the experimental native V8/DOM engine to the same observable test
-/// contract as the managed Avalonia DOM. It deliberately has no managed-engine
-/// fallback: missing native capabilities must appear in the parity results.
+/// Adapts the native V8/DOM engine to the observable WPT subset contract.
+/// Missing native capabilities are reported directly; no fallback is available.
 /// </summary>
 internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
 {

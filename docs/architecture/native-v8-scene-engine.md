@@ -1,14 +1,13 @@
 # Native V8 + immutable scene engine
 
-**Status:** Accepted direction; compatibility and packaging remain incremental
+**Status:** Accepted production direction; compatibility and packaging remain incremental
 **Date:** 2026-07-20
 
 ## Purpose
 
-The native mode moves V8, DOM/CSS state, layout, input dispatch, and scene construction
-off the Avalonia UI thread. Its goal is to remove repeated V8-to-managed host-object
-dispatch from hot paths while keeping the managed engine as a supported compatibility
-implementation and differential oracle.
+The native engine owns V8, DOM/CSS state, layout, input dispatch, and scene construction
+off the Avalonia UI thread. It removes repeated JavaScript-to-.NET host-object dispatch
+from hot paths and is the sole WebScene execution engine.
 
 WebScene supplies browser-like primitives. Product libraries, bootstrap scripts, assets,
 facades, data adapters, and exact-reference integration tests belong to the consuming
@@ -79,8 +78,7 @@ frame input.
 
 The engine drains input, runs V8 tasks and microtasks, updates style/layout, and publishes
 at most the useful latest scene for a frame. Managed application API calls are marshalled
-to this same engine queue and may continue to use ClearScript in managed mode; native
-mode exposes an application-neutral command/evaluation boundary.
+to this same engine queue through an application-neutral command/evaluation boundary.
 
 ## Resources and readiness
 
@@ -95,15 +93,14 @@ retain additional product diagnostics outside WebScene.
 
 ## Compilation cache
 
-Both engines retain the persistent compilation-unit cache contract: key by engine/build
+The engine retains a persistent compilation-unit cache contract: key by engine/build
 identity plus source identity, validate cached data, recover from corruption, and report
-compiled versus reused units. Managed mode keeps its current cache. Native mode implements
-the same observable policy within the native owner so source compilation does not cross
-the hot boundary.
+compiled versus reused units. Cache ownership remains native so source compilation does
+not cross the hot boundary.
 
 ## Compatibility strategy
 
-Managed and native engines implement one test adapter contract:
+The native conformance runner implements one observable adapter contract:
 
 - load prepared HTML at a fixed viewport;
 - execute/evaluate JavaScript and return JSON state;
@@ -112,10 +109,10 @@ Managed and native engines implement one test adapter contract:
 - settle and capture a deterministic BGRA frame;
 - expose diagnostics and dispose engine-owned resources.
 
-Reduced HTML/CSS contracts and the curated WPT profile execute through both adapters.
+Reduced HTML/CSS contracts and the curated WPT profile execute directly against native.
 Product repositories own their full-library assets, bootstrap, screenshots, interaction
-tests, and performance gates. A native failure is recorded as a parity gap; tests do not
-silently switch engines.
+tests, and performance gates. A failure is reported directly; tests do not switch engines
+or fall back to another implementation.
 
 ## Renderer strategy
 
@@ -134,14 +131,12 @@ duplicate a substantial 2D drawing and text stack.
 Native mode is production-ready per capability group, not as an all-or-nothing browser:
 
 1. scene ABI validation, lifetime and stale-base recovery;
-2. managed/native shared conformance and deterministic pixel fixtures;
+2. native conformance and deterministic pixel fixtures;
 3. pointer capture, release, wheel, keyboard, focus and IME ordering;
 4. bounded queues, retained-memory plateaus and renderer resource eviction;
 5. warm/cold compilation-cache correctness and diagnostics;
 6. resize and interaction frame pacing under a consuming product workload;
 7. RID package matrix, signing, notarization and crash-symbol delivery.
-
-The managed mode remains supported while native capability groups are promoted.
 
 The initial automated package matrix builds and exercises macOS ARM64, Linux x64, and
 Windows x64. Relocatable runtime packaging and required conformance execution are in

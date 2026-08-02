@@ -5,8 +5,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-dotnet test tests/JavaScript.Avalonia.Tests/JavaScript.Avalonia.Tests.csproj \
-  -c Release -f net10.0 --filter FullyQualifiedName~AvaloniaBackendHostTests
+dotnet test tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj \
+  -c Release -f net10.0 --filter FullyQualifiedName~Native
 
 arguments=(
   --repo "$repo_root"

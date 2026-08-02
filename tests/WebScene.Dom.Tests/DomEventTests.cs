@@ -1,4 +1,5 @@
-using JavaScript.Avalonia;
+using WebScene.Core;
+using WebScene.Dom;
 using Xunit;
 
 namespace WebScene.Dom.Tests;

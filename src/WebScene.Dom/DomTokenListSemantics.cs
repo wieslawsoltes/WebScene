@@ -1,4 +1,4 @@
-namespace JavaScript.Avalonia;
+namespace WebScene.Dom;
 
 /// <summary>
 /// Framework-neutral DOMTokenList parsing and state-decision semantics. Backend

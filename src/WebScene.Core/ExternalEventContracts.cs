@@ -1,4 +1,4 @@
-namespace JavaScript.Avalonia;
+namespace WebScene.Core;
 
 /// <summary>
 /// Exposes the opaque engine-owned object behind a backend-neutral synthetic

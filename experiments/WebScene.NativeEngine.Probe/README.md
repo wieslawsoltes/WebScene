@@ -144,4 +144,4 @@ stable `fillStyle`, composite mode, or shadow state.
 
 Product hosts own their assets, bootstraps, readiness policy, API facade, screenshots,
 and compatibility/performance suites. WebScene keeps only reusable engine behavior and
-the shared managed/native conformance contracts.
+the native conformance contracts.

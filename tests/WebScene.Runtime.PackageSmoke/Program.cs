@@ -1,15 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using WebScene.Core;
-using JavaScript.Avalonia;
+using WebScene.Backends.Avalonia.Native;
 
-if (typeof(AvaloniaBrowserHost).Assembly.GetName().Name != "WebScene.Backend.Avalonia")
+if (typeof(NativeWebSceneView).Assembly.GetName().Name != "WebScene.Backend.Avalonia")
 {
-    return Fail("The Avalonia browser host did not come from WebScene.Backend.Avalonia.");
-}
-if (typeof(IWebSceneBackendHost).Assembly.GetName().Name != "WebScene.Core")
-{
-    return Fail("The backend contract did not come from WebScene.Core.");
+    return Fail("The native Avalonia presenter did not come from WebScene.Backend.Avalonia.");
 }
 
 var nativeFileName = OperatingSystem.IsWindows()
@@ -98,7 +93,7 @@ try
             "certification telemetry must be compiled out.");
     }
     Console.WriteLine(
-        $"WebScene package smoke: pass; backend={typeof(AvaloniaBrowserHost).Assembly.GetName().Name}; " +
+        $"WebScene package smoke: pass; presenter={typeof(NativeWebSceneView).Assembly.GetName().Name}; " +
         $"runtime={Path.GetFileName(nativePath)}; abi={abiVersion}; " +
         $"manifestAbi={manifestAbiVersion}; buildFeatures={buildFeatures}");
 }

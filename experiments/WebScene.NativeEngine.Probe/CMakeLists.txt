@@ -244,7 +244,7 @@ else()
     message(STATUS "WebScene native engine: certification telemetry excluded")
 endif()
 set(WEBSCENE_V8_ROOT
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/clearscript/V8/build/v8"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/v8"
     CACHE PATH
     "Path to the pinned V8 source/build root")
 

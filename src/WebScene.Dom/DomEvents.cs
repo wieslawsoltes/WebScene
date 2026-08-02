@@ -1,4 +1,6 @@
-namespace JavaScript.Avalonia;
+using WebScene.Core;
+
+namespace WebScene.Dom;
 
 public enum DomEventPhase
 {

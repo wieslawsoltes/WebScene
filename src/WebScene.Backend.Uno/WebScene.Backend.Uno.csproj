@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>true</IsPackable>
-    <Description>The Uno Platform Skia backend for WebScene.</Description>
+    <Description>Experimental Uno Platform Skia presenter for WebScene.</Description>
     <PackageId>WebScene.Backend.Uno</PackageId>
     <AssemblyName>WebScene.Backend.Uno</AssemblyName>
     <RootNamespace>WebScene.Backends.Uno</RootNamespace>

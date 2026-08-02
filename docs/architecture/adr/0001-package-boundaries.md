@@ -5,9 +5,8 @@
 
 ## Context
 
-`JavaScript.Avalonia` currently combines DOM, CSS, layout, rendering, scheduling and
-Avalonia presentation. ClearScript is packaged separately but consumes the
-Avalonia-specific host. Direct ProGPU, WPF, WinUI and Uno backends require reusable
+The original `JavaScript.Avalonia` implementation combined DOM, CSS, layout, rendering,
+scheduling, and Avalonia presentation. Direct native presenters require reusable
 semantics without turning Avalonia into an accidental transitive dependency.
 
 ## Decision

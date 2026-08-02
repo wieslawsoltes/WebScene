@@ -4,8 +4,7 @@ Status: Monaco Editor 0.56.0 now boots without application shims in the native
 WebScene runtime and is integrated into an actual Avalonia `NativeWebSceneView`
 sample. The source-built runtime passes the new Monaco prerequisite contract.
 
-This work targets the native V8/DOM/canvas path. It does not use the managed
-ClearScript backend and does not modify Monaco.
+This work targets the native V8/DOM/Canvas path and does not modify Monaco.
 
 ## What was incompatible
 
@@ -132,12 +131,6 @@ demonstrates:
 The page has no compatibility shim, visual text mirror, or document-level
 keyboard bridge.
 
-The same editor is also available from the `Monaco (native)` tab in
-`samples/JavaScriptPlayground`. The tab lazy-loads `NativeWebSceneView` and links
-the standalone sample's generated web assets, so it neither starts the managed
-ClearScript DOM path when launched with `--monaco` nor carries a second Monaco
-bundle.
-
 `samples/NativeMonacoEditor.Headless` loads the same unchanged page and Monaco
 bundle in Avalonia Headless with Skia and renders the retained native scene to
 PNG. Its integration gate sends a real top-level Avalonia click, types at the
@@ -162,11 +155,6 @@ Build and run:
   --package-version 11.3.4-monaco.1
 
 dotnet run --project samples/NativeMonacoEditor -c Release -- \
-  --native-library \
-  "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
-
-dotnet run --project samples/JavaScriptPlayground -c Release -- \
-  --monaco \
   --native-library \
   "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
 

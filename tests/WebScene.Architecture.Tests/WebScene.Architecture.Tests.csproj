@@ -10,11 +10,9 @@
     <ProjectReference Include="..\..\src\WebScene.Css\WebScene.Css.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Dom\WebScene.Dom.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Graphics\WebScene.Graphics.csproj" />
-    <ProjectReference Include="..\..\src\WebScene.JavaScript\WebScene.JavaScript.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Sdk\WebScene.Sdk.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
-    <ProjectReference Include="..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

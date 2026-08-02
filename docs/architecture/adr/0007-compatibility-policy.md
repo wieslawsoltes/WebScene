@@ -1,9 +1,12 @@
 # ADR 0007: Preserve public behavior through compatibility facades
 
-- **Status:** Superseded by ADR 0009 for pre-production package identities
+- **Status:** Superseded by ADR 0013
 - **Date:** 2026-07-15
 
 ## Context
+
+This ADR records the earlier migration policy. ADR 0013 intentionally removes the
+managed APIs before production because the project has no external users.
 
 The refactor changes package boundaries while applications already construct
 `AvaloniaBrowserHost`, use `AvaloniaDomElement.Control` and reference existing NuGet

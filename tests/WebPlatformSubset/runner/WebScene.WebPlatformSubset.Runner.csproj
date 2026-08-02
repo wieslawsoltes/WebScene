@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
-    <ProjectReference Include="..\..\..\src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,5 +19,4 @@
     <PackageReference Include="SkiaSharp.HarfBuzz" />
   </ItemGroup>
 
-  <Import Project="..\..\..\build\WebSceneClearScriptV8Native.targets" />
 </Project>

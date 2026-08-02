@@ -1,14 +1,15 @@
 # Runtime architectural upgrade shortlist
 
-**Status:** Evaluated components promoted to native defaults; remaining limits recorded below
+**Status:** Historical evaluation; native-only decision recorded by ADR 0013
 
 **Date:** 2026-07-31
 
 ## Purpose
 
 This document records the small set of architectural upgrades that are worth
-investigating after reviewing upstream browser components and comparing them with
-WebScene's managed and native engines.
+investigating after reviewing upstream browser components and the earlier dual-engine
+implementation. Managed-engine references below describe the historical evaluation
+baseline and are not current product support.
 
 An idea belongs here only if it has a credible path to at least one of these outcomes:
 
@@ -26,9 +27,6 @@ The relevant baseline is:
 
 - native runtime release packages use V8 15.3.10;
 - the native engine already shares a V8 isolate across engine contexts;
-- the managed compatibility engine uses ClearScript and its V8 14.7.173.23 compatibility
-  branch;
-- managed HTML parsing uses AngleSharp;
 - native HTML parsing, CSS syntax parsing, selector compilation, and V8 Web API binding
   installation are handwritten in `webscene_v8_runtime.cpp`;
 - the native runtime currently contains approximately 30,000 lines in that translation

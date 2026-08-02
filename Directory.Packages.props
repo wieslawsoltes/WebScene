@@ -21,7 +21,6 @@
     <PackageVersion Include="Uno.WinUI.Graphics2DSK" Version="6.5.153" />
     <PackageVersion Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="Microsoft.ClearScript.V8" Version="7.5.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageVersion Include="System.Text.Json" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

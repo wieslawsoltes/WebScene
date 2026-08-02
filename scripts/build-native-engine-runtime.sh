@@ -164,10 +164,10 @@ if [[ -z "$v8_root" ]]; then
     fi
   }
   if [[ "$upstream_v8" == false && "$v8_revision" != 15.3.10 ]]; then
-    apply_patch_once "$v8_root" "$repo_root/third-party/clearscript/V8/V8Patch.txt"
+  apply_patch_once "$v8_root" "$repo_root/third-party/v8-patches/V8Patch.txt"
     apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
-    apply_patch_once "$v8_root/build" "$repo_root/third-party/clearscript/V8/BuildPatch.txt"
-    apply_patch_once "$v8_root/third_party/icu" "$repo_root/third-party/clearscript/V8/ICUPatch.txt"
+  apply_patch_once "$v8_root/build" "$repo_root/third-party/v8-patches/BuildPatch.txt"
+  apply_patch_once "$v8_root/third_party/icu" "$repo_root/third-party/v8-patches/ICUPatch.txt"
   fi
   if [[ "$thin_lto" == true ]]; then
     apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ThinLtoPatch.txt"
@@ -433,7 +433,7 @@ dotnet run \
 
 WEBSCENE_NATIVE_ENGINE_PATH="$package_native_path" \
   dotnet run \
-    --project "$repo_root/benchmarks/JavaScript.Avalonia.Benchmarks/JavaScript.Avalonia.Benchmarks.csproj" \
+    --project "$repo_root/benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj" \
     -c Release -- \
     probe native-interop-race --batches 100 --width 32
 

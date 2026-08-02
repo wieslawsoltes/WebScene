@@ -11,11 +11,11 @@
     <WebSceneNativeEnginePlatformName Condition="'$(WebSceneNativeEngineRid)' == 'linux-x64'">Linux x64</WebSceneNativeEnginePlatformName>
     <WebSceneNativeEnginePlatformName Condition="'$(WebSceneNativeEngineRid)' == 'win-x64'">Windows x64</WebSceneNativeEnginePlatformName>
     <Title>WebScene Native Engine Runtime for $(WebSceneNativeEnginePlatformName)</Title>
-    <Description>Native WebScene V8, DOM, CSS, layout, Canvas, SVG, and immutable-scene runtime for $(WebSceneNativeEnginePlatformName) ($(WebSceneNativeEngineRid)), built to run web components in native applications without a WebView or embedded browser.</Description>
+    <Description>Native WebScene V8, DOM, CSS, layout, Canvas, SVG, and immutable-scene runtime for $(WebSceneNativeEnginePlatformName) ($(WebSceneNativeEngineRid)), built to run trusted web-authored UI without a WebView or embedded browser.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>webscene;web-components;dom;css;canvas;svg;v8;native;runtime;$(WebSceneNativeEngineRid)</PackageTags>
+    <PackageTags>webscene;web-ui;dom;css;canvas;svg;v8;native;runtime;$(WebSceneNativeEngineRid)</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <WebSceneNativeEngineAbiVersion>3</WebSceneNativeEngineAbiVersion>
     <WebSceneNativeEngineV8Revision>15.3.10</WebSceneNativeEngineV8Revision>

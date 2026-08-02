@@ -1,7 +1,5 @@
 using System.Text.Json;
-using System.Collections.Concurrent;
 using WebScene.Core;
-using WebScene.JavaScript;
 
 namespace WebScene.Sdk;
 
@@ -132,114 +130,6 @@ public sealed class WebSceneHostBridge
 
     private void Report(string code, WebSceneDiagnosticSeverity severity, string message)
         => _diagnostics?.Report(new WebSceneSdkDiagnostic(code, severity, message, _manifest.Id));
-}
-
-/// <summary>Callback adapter suitable for exposing as a single ClearScript host object.</summary>
-public sealed class WebSceneJavaScriptHostBridgeAdapter : IDisposable
-{
-    private readonly WebSceneHostBridge _bridge;
-    private readonly IWebSceneJavaScriptRuntime _runtime;
-    private readonly IWebSceneDispatcher _dispatcher;
-    private readonly ConcurrentDictionary<string, CancellationTokenSource> _requests = new(StringComparer.Ordinal);
-    private bool _disposed;
-
-    public WebSceneJavaScriptHostBridgeAdapter(
-        WebSceneHostBridge bridge,
-        IWebSceneJavaScriptRuntime runtime,
-        IWebSceneDispatcher dispatcher)
-    {
-        _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
-        _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-    }
-
-    public void invoke(string requestJson, object resolve, object reject)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        string requestId;
-        try
-        {
-            using var document = JsonDocument.Parse(requestJson);
-            requestId = document.RootElement.GetProperty("requestId").GetString()
-                        ?? throw new InvalidDataException("requestId is required.");
-        }
-        catch (Exception exception)
-        {
-            _dispatcher.Post(() => _runtime.Invoke(reject, exception.Message));
-            return;
-        }
-
-        var cancellation = new CancellationTokenSource();
-        if (!_requests.TryAdd(requestId, cancellation))
-        {
-            cancellation.Dispose();
-            _dispatcher.Post(() => _runtime.Invoke(reject, $"Duplicate host bridge request '{requestId}'."));
-            return;
-        }
-        _ = InvokeCoreAsync(requestId, requestJson, resolve, reject, cancellation);
-    }
-
-    public void cancel(string requestId)
-    {
-        if (!string.IsNullOrWhiteSpace(requestId) && _requests.TryGetValue(requestId, out var cancellation))
-        {
-            cancellation.Cancel();
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        _disposed = true;
-        foreach (var cancellation in _requests.Values)
-        {
-            cancellation.Cancel();
-        }
-        GC.SuppressFinalize(this);
-    }
-
-    private async Task InvokeCoreAsync(
-        string requestId,
-        string requestJson,
-        object resolve,
-        object reject,
-        CancellationTokenSource cancellation)
-    {
-        try
-        {
-            var response = await _bridge.InvokeJsonAsync(requestJson, cancellation.Token).ConfigureAwait(false);
-            PostIfActive(resolve, response);
-        }
-        catch (Exception exception)
-        {
-            PostIfActive(reject, exception.Message);
-        }
-        finally
-        {
-            _requests.TryRemove(requestId, out _);
-            cancellation.Dispose();
-        }
-    }
-
-    private void PostIfActive(object callback, object? value)
-    {
-        if (!_disposed)
-        {
-            _dispatcher.Post(() =>
-            {
-                if (!_disposed)
-                {
-                    _runtime.Invoke(callback, value);
-                }
-            });
-        }
-    }
 }
 
 public static class WebSceneHostBridgeBootstrap

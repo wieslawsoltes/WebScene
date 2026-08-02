@@ -14,9 +14,7 @@
     <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\WebScene.Css\WebScene.Css.csproj" />
     <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\WebScene.Dom\WebScene.Dom.csproj" />
     <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\WebScene.Graphics\WebScene.Graphics.csproj" />
-    <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\WebScene.JavaScript\WebScene.JavaScript.csproj" />
     <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
-    <_WebSceneManagedPackageProject Include="$(RepositoryRoot)src\JavaScript.Avalonia.ClearScript\JavaScript.Avalonia.ClearScript.csproj" />
   </ItemGroup>
 
   <Target Name="ValidateWebSceneRuntimeInputs">
@@ -24,8 +22,6 @@
            Text="PackWebSceneRuntime requires WebSceneNativeEngineRid." />
     <Error Condition="'$(WebSceneNativeEnginePath)' == '' or !Exists('$(WebSceneNativeEnginePath)')"
            Text="PackWebSceneRuntime requires an existing WebSceneNativeEnginePath." />
-    <Error Condition="'$(WebSceneClearScriptNativePath)' == '' or !Exists('$(WebSceneClearScriptNativePath)')"
-           Text="PackWebSceneRuntime requires an existing WebSceneClearScriptNativePath." />
   </Target>
 
   <Target Name="PackWebSceneRuntime" DependsOnTargets="ValidateWebSceneRuntimeInputs">
@@ -37,15 +33,11 @@
     <MSBuild Projects="$(RepositoryRoot)packaging\WebScene.NativeEngine.Runtime\WebScene.NativeEngine.Runtime.csproj"
              Targets="Pack"
              Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);WebSceneNativeEngineRid=$(WebSceneNativeEngineRid);WebSceneNativeEnginePath=$(WebSceneNativeEnginePath)" />
-    <MSBuild Projects="$(RepositoryRoot)packaging\JavaScript.Avalonia.ClearScript.Native\JavaScript.Avalonia.ClearScript.Native.csproj"
-             Targets="Pack"
-             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);WebSceneClearScriptNativeRid=$(WebSceneNativeEngineRid);WebSceneClearScriptNativePath=$(WebSceneClearScriptNativePath)" />
-
     <ItemGroup>
       <_WebSceneProductPackage Include="$(PackageOutputPath)*.$(WebScenePackageVersion).nupkg" />
     </ItemGroup>
-    <Error Condition="'@(_WebSceneProductPackage->Count())' != '10'"
-           Text="Expected 10 generic WebScene runtime packages at version $(WebScenePackageVersion), found @(_WebSceneProductPackage->Count())." />
+    <Error Condition="'@(_WebSceneProductPackage->Count())' != '7'"
+           Text="Expected 7 WebScene runtime packages at version $(WebScenePackageVersion), found @(_WebSceneProductPackage->Count())." />
     <GetFileHash Files="@(_WebSceneProductPackage)" Algorithm="SHA256">
       <Output TaskParameter="Items" ItemName="_WebSceneProductPackageHash" />
     </GetFileHash>
@@ -53,7 +45,7 @@
                       Lines="@(_WebSceneProductPackageHash->'%(FileHash)  %(Filename)%(Extension)')"
                       Overwrite="true" />
     <WriteLinesToFile File="$(PackageOutputPath)webscene-runtime.json"
-                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(WebScenePackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;,&quot;packageCount&quot;:10,&quot;checksums&quot;:&quot;packages.sha256&quot;}"
+                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(WebScenePackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;,&quot;packageCount&quot;:7,&quot;checksums&quot;:&quot;packages.sha256&quot;}"
                       Overwrite="true" />
     <Message Importance="high"
              Text="Packed generic WebScene runtime $(WebScenePackageVersion) for $(WebSceneNativeEngineRid) to $(PackageOutputPath)." />
