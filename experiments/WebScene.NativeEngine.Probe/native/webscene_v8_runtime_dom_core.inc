@@ -231,12 +231,82 @@
         }
     }
 
+    void notify_custom_elements_subtree(dom_node& root, const char* phase)
+    {
+        auto local_context = isolate->GetCurrentContext();
+        v8::Local<v8::Value> raw_callback;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "__webSceneCustomElementsNotifySubtree"))
+                .ToLocal(&raw_callback)
+            || !raw_callback->IsFunction()) {
+            return;
+        }
+        v8::Local<v8::Value> arguments[]{
+            wrap_node(root),
+            js_string(isolate, phase)
+        };
+        v8::TryCatch try_catch(isolate);
+        static_cast<void>(raw_callback.As<v8::Function>()->Call(
+            local_context,
+            local_context->Global(),
+            2,
+            arguments));
+        if (try_catch.HasCaught()) {
+            last_error = "Custom element subtree reaction failed: "
+                + describe_exception(try_catch, local_context);
+        }
+    }
+
+    void notify_custom_element_attribute(
+        dom_node& element,
+        const std::string& name,
+        const std::optional<std::string>& old_value,
+        const std::optional<std::string>& new_value,
+        const std::optional<std::string>& namespace_uri = std::nullopt)
+    {
+        auto local_context = isolate->GetCurrentContext();
+        v8::Local<v8::Value> raw_callback;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "__webSceneCustomElementsNotifyAttribute"))
+                .ToLocal(&raw_callback)
+            || !raw_callback->IsFunction()) {
+            return;
+        }
+        const auto dom_value = [&](const std::optional<std::string>& value) {
+            return value.has_value()
+                ? v8::Local<v8::Value>(js_dom_string(isolate, *value))
+                : v8::Local<v8::Value>(v8::Null(isolate));
+        };
+        v8::Local<v8::Value> arguments[]{
+            wrap_node(element),
+            js_dom_string(isolate, name),
+            dom_value(old_value),
+            dom_value(new_value),
+            dom_value(namespace_uri)
+        };
+        v8::TryCatch try_catch(isolate);
+        static_cast<void>(raw_callback.As<v8::Function>()->Call(
+            local_context,
+            local_context->Global(),
+            5,
+            arguments));
+        if (try_catch.HasCaught()) {
+            last_error = "Custom element attribute reaction failed: "
+                + describe_exception(try_catch, local_context);
+        }
+    }
+
     void detach_all_children(dom_node& parent)
     {
         auto children = parent.children;
         auto stylesheets_changed = false;
         for (auto* child : children) {
             if (child != nullptr) {
+                if (is_connected(*child)) {
+                    notify_custom_elements_subtree(*child, "disconnected");
+                }
                 stylesheets_changed |= deactivate_connected_stylesheets(*child, false);
             }
         }
@@ -1635,7 +1705,9 @@
             }
             return clone;
         };
-        info.GetReturnValue().Set(self->wrap_node(clone_subtree(clone_subtree, *source)));
+        auto& clone = clone_subtree(clone_subtree, *source);
+        self->notify_custom_elements_subtree(clone, "connected");
+        info.GetReturnValue().Set(self->wrap_node(clone));
     }
 
     static void get_element_by_id(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2316,6 +2388,7 @@
                     self->wrap_node(*fragment_child),
                     info.GetIsolate()->GetCurrentContext());
                 self->enqueue_iframe_hydration_if_needed(*fragment_child);
+                self->notify_custom_elements_subtree(*fragment_child, "connected");
             }
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
@@ -2326,6 +2399,9 @@
             return;
         }
         if (child != nullptr && child->parent != nullptr) {
+            if (self->is_connected(*child)) {
+                self->notify_custom_elements_subtree(*child, "disconnected");
+            }
             std::erase(child->parent->children, child);
             child->parent = nullptr;
         }
@@ -2346,6 +2422,7 @@
             info[0].As<v8::Object>(),
             info.GetIsolate()->GetCurrentContext());
         self->enqueue_iframe_hydration_if_needed(*child);
+        self->notify_custom_elements_subtree(*child, "connected");
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -2397,6 +2474,9 @@
                 continue;
             }
             if (candidate->parent != nullptr) {
+                if (self->is_connected(*candidate)) {
+                    self->notify_custom_elements_subtree(*candidate, "disconnected");
+                }
                 std::erase(candidate->parent->children, candidate);
                 candidate->parent = nullptr;
             }
@@ -2412,6 +2492,7 @@
                 self->wrap_node(*child),
                 info.GetIsolate()->GetCurrentContext());
             self->enqueue_iframe_hydration_if_needed(*child);
+            self->notify_custom_elements_subtree(*child, "connected");
         }
         self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*parent);
@@ -2432,6 +2513,9 @@
             return;
         }
         if (!self->blur_active_element_before_detach(*child)) return;
+        if (self->is_connected(*child)) {
+            self->notify_custom_elements_subtree(*child, "disconnected");
+        }
         self->deactivate_connected_stylesheets(*child);
         std::erase(parent->children, child);
         child->parent = nullptr;
@@ -2465,12 +2549,18 @@
             return;
         }
         if (replacement->parent != nullptr) {
+            if (self->is_connected(*replacement)) {
+                self->notify_custom_elements_subtree(*replacement, "disconnected");
+            }
             std::erase(replacement->parent->children, replacement);
             replacement->parent = nullptr;
         }
         const auto iterator = std::find(parent->children.begin(), parent->children.end(), previous);
         if (iterator == parent->children.end()) return;
         if (!self->blur_active_element_before_detach(*previous)) return;
+        if (self->is_connected(*previous)) {
+            self->notify_custom_elements_subtree(*previous, "disconnected");
+        }
         self->deactivate_connected_stylesheets(*previous, false);
         *iterator = replacement;
         replacement->parent = parent;
@@ -2484,6 +2574,7 @@
             info[0].As<v8::Object>(),
             info.GetIsolate()->GetCurrentContext());
         self->enqueue_iframe_hydration_if_needed(*replacement);
+        self->notify_custom_elements_subtree(*replacement, "connected");
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[1]);
     }
@@ -2508,6 +2599,9 @@
             auto* child = unwrap_node(info[index].As<v8::Object>());
             if (child == nullptr) continue;
             if (child->parent != nullptr) {
+                if (self->is_connected(*child)) {
+                    self->notify_custom_elements_subtree(*child, "disconnected");
+                }
                 std::erase(child->parent->children, child);
                 child->parent = nullptr;
             }
@@ -2515,6 +2609,7 @@
         }
         self->recascade_connected_subtree(*parent);
         self->activate_connected_stylesheet(*parent);
+        self->notify_custom_elements_subtree(*parent, "connected");
     }
 
     static void remove_element(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2523,6 +2618,9 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || node->parent == nullptr) return;
         if (!self->blur_active_element_before_detach(*node)) return;
+        if (self->is_connected(*node)) {
+            self->notify_custom_elements_subtree(*node, "disconnected");
+        }
         self->deactivate_connected_stylesheets(*node);
         std::erase(node->parent->children, node);
         node->parent = nullptr;
@@ -2587,6 +2685,10 @@
                 continue;
             }
             if (replacement->parent != nullptr) {
+                if (self->is_connected(*replacement)) {
+                    self->notify_custom_elements_subtree(
+                        *replacement, "disconnected");
+                }
                 std::erase(replacement->parent->children, replacement);
                 replacement->parent = nullptr;
             }
@@ -2598,6 +2700,9 @@
         if (position == parent->children.end()) return;
         auto insertion_index =
             static_cast<size_t>(position - parent->children.begin());
+        if (self->is_connected(*replaced)) {
+            self->notify_custom_elements_subtree(*replaced, "disconnected");
+        }
         self->deactivate_connected_stylesheets(*replaced);
         parent->children.erase(position);
         replaced->parent = nullptr;
@@ -2618,6 +2723,7 @@
                 self->wrap_node(*replacement),
                 info.GetIsolate()->GetCurrentContext());
             self->enqueue_iframe_hydration_if_needed(*replacement);
+            self->notify_custom_elements_subtree(*replacement, "connected");
         }
         self->document.mark_dirty();
     }
@@ -2672,6 +2778,7 @@
                 self->wrap_node(*child),
                 info.GetIsolate()->GetCurrentContext());
             self->enqueue_iframe_hydration_if_needed(*child);
+            self->notify_custom_elements_subtree(*child, "connected");
         }
         self->document.mark_dirty();
     }
@@ -2706,6 +2813,9 @@
             return;
         }
         if (child->parent != nullptr) {
+            if (self->is_connected(*child)) {
+                self->notify_custom_elements_subtree(*child, "disconnected");
+            }
             auto* old_parent = child->parent;
             const auto old = std::find(old_parent->children.begin(), old_parent->children.end(), child);
             if (old != old_parent->children.end()) {
@@ -2721,6 +2831,7 @@
         self->document.mark_dirty();
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
+        self->notify_custom_elements_subtree(*child, "connected");
         info.GetReturnValue().Set(info[1]);
     }
 
@@ -2736,6 +2847,9 @@
             return;
         }
         if (child->parent != nullptr) {
+            if (self->is_connected(*child)) {
+                self->notify_custom_elements_subtree(*child, "disconnected");
+            }
             std::erase(child->parent->children, child);
             child->parent = nullptr;
         }
@@ -2744,6 +2858,7 @@
         self->document.mark_dirty();
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
+        self->notify_custom_elements_subtree(*child, "connected");
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -2763,6 +2878,9 @@
             return;
         }
         if (child->parent != nullptr) {
+            if (self->is_connected(*child)) {
+                self->notify_custom_elements_subtree(*child, "disconnected");
+            }
             std::erase(child->parent->children, child);
             child->parent = nullptr;
         }
@@ -2773,6 +2891,7 @@
         self->document.mark_dirty();
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
+        self->notify_custom_elements_subtree(*child, "connected");
     }
 
     static void insert_before_self(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2833,6 +2952,8 @@
                     fragment_child);
                 self->recascade_connected_subtree(*fragment_child);
                 self->activate_connected_stylesheet(*fragment_child);
+                self->notify_custom_elements_subtree(
+                    *fragment_child, "connected");
             }
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
@@ -2871,6 +2992,9 @@
             }
         }
         if (child->parent != nullptr) {
+            if (self->is_connected(*child)) {
+                self->notify_custom_elements_subtree(*child, "disconnected");
+            }
             std::erase(child->parent->children, child);
             child->parent = nullptr;
         }
@@ -2878,6 +3002,7 @@
             if (self->document.append_child(*parent, *child)) {
                 self->recascade_connected_subtree(*child);
                 self->activate_connected_stylesheet(*child);
+                self->notify_custom_elements_subtree(*child, "connected");
                 info.GetReturnValue().Set(info[0]);
             }
             return;
@@ -2891,5 +3016,6 @@
         self->document.mark_dirty();
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
+        self->notify_custom_elements_subtree(*child, "connected");
         info.GetReturnValue().Set(info[0]);
     }

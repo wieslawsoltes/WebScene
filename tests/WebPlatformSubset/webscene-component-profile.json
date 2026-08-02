@@ -820,6 +820,51 @@
   ],
   "candidate": [
     {
+      "path": "contracts/custom-element-rendering.html",
+      "type": "reftest",
+      "reference": "contracts/custom-element-rendering-ref.html",
+      "capabilities": ["autonomous-custom-elements", "connected-callback", "innerhtml-upgrade", "component-layout-and-paint"],
+      "evidence": ["unseen-component-rendering", "native-and-chromium-differential"],
+      "reason": "Unchanged browser-authored custom element that creates a realistic light-DOM card from connectedCallback. The inert reference isolates lifecycle and upgrade behavior from ordinary CSS layout and paint; the optional Chromium oracle rejects a common-mode native test/reference false pass. Keep candidate until the autonomous-element slice is stable on every released RID."
+    },
+    {
+      "path": "contracts/custom-elements-lifecycle-primitives.html",
+      "type": "contract",
+      "capabilities": ["autonomous-custom-elements", "custom-element-construction", "parser-upgrade", "explicit-upgrade", "connected-disconnected-callbacks", "observed-attribute-reactions", "registry-validation"],
+      "evidence": ["unseen-component-readiness", "html-custom-elements-lifecycle"],
+      "reason": "Product-neutral vertical slice for the highest-impact standards-based component bootstrap gap. It requires parser-created and detached upgrades, direct and document construction, prototype identity, observed-attribute reactions, connection transitions, innerHTML-created elements, registry lookup, promise resolution, and DOM-shaped validation errors. Keep candidate until selected unchanged components and upstream Custom Elements discovery shards pass on every released RID."
+    },
+    {
+      "path": "custom-elements/CustomElementRegistry-getName.html",
+      "type": "testharness",
+      "capabilities": ["custom-element-registry-reverse-lookup", "custom-element-registry-validation"],
+      "evidence": ["upstream-custom-elements-discovery"]
+    },
+    {
+      "path": "custom-elements/HTMLElement-constructor.html",
+      "type": "testharness",
+      "capabilities": ["autonomous-custom-element-construction", "html-element-subclassing", "custom-element-prototype-identity"],
+      "evidence": ["upstream-custom-elements-discovery"]
+    },
+    {
+      "path": "custom-elements/attribute-changed-callback.html",
+      "type": "testharness",
+      "capabilities": ["custom-element-observed-attributes", "custom-element-attribute-reactions"],
+      "evidence": ["upstream-custom-elements-discovery"]
+    },
+    {
+      "path": "custom-elements/connected-callbacks.html",
+      "type": "testharness",
+      "capabilities": ["custom-element-connected-callback", "custom-element-subtree-insertion-reactions"],
+      "evidence": ["upstream-custom-elements-discovery"]
+    },
+    {
+      "path": "custom-elements/disconnected-callbacks.html",
+      "type": "testharness",
+      "capabilities": ["custom-element-disconnected-callback", "custom-element-subtree-removal-reactions"],
+      "evidence": ["upstream-custom-elements-discovery"]
+    },
+    {
       "path": "contracts/dom-webidl-binding-shape.html",
       "type": "contract",
       "capabilities": ["webidl-interface-inheritance", "webidl-operation-brands", "webidl-descriptors", "dom-wrapper-identity"],

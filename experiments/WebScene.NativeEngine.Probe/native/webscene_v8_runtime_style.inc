@@ -294,6 +294,10 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
+        const auto previous = node->attributes.find("style");
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
         node->clear_authored_style();
         node->style.clear_grid();
         node->style.inline_property_mask = 0U;
@@ -308,6 +312,8 @@
         node->style.inline_property_mask |= inline_property_mask;
         sync_style_attribute(*node);
         self->recascade_connected_subtree(*node, "style.cssText");
+        self->notify_custom_element_attribute(
+            *node, "style", old_value, node->attributes.at("style"));
     }
 
     static void style_set_property(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -317,6 +323,10 @@
         binding_callback_timer binding_timer(self->profile(binding_category::style));
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
+        const auto previous = node->attributes.find("style");
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
         const auto name = to_utf8(info.GetIsolate(), info[0]);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {
@@ -348,12 +358,16 @@
             }
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
             return;
         }
         if (value.empty()) {
             clear_inline_style(*node, name);
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
             return;
         }
         if (!valid_cssom_declaration_value(name, value)) return;
@@ -619,6 +633,8 @@
             node->style.inline_property_mask |= inline_white_space;
         }
         sync_style_attribute(*node);
+        self->notify_custom_element_attribute(
+            *node, "style", old_value, node->attributes.at("style"));
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);
@@ -982,6 +998,10 @@
         binding_callback_timer binding_timer(self->profile(binding_category::style));
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
+        const auto previous = node->attributes.find("style");
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
         const auto name = to_utf8(info.GetIsolate(), info[0]);
         if (name.starts_with("--")) {
             if (!valid_custom_property_name(name)) return;
@@ -991,11 +1011,15 @@
             authored.important_declarations.erase(name);
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
             return;
         }
         clear_inline_style(*node, name);
         sync_style_attribute(*node);
         self->recascade_connected_subtree(*node);
+        self->notify_custom_element_attribute(
+            *node, "style", old_value, node->attributes.at("style"));
     }
 
     static void get_style_property(
@@ -1449,6 +1473,10 @@
         binding_callback_timer binding_timer(self->profile(binding_category::style));
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
+        const auto previous = node->attributes.find("style");
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
         const auto raw_name = to_utf8(info.GetIsolate(), property);
         const auto name = css_property_idl_name(raw_name);
         if (raw_name.find('-') != std::string::npos) {
@@ -1478,6 +1506,8 @@
             clear_inline_style(*node, name);
             sync_style_attribute(*node);
             self->recascade_connected_subtree(*node);
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
             return;
         }
         if (!valid_cssom_declaration_value(name, value)) return;
@@ -1769,6 +1799,8 @@
             node->style.inline_property_mask |= inline_white_space;
         }
         sync_style_attribute(*node);
+        self->notify_custom_element_attribute(
+            *node, "style", old_value, node->attributes.at("style"));
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);

@@ -488,6 +488,11 @@
         activate_html5ever_subtree(parent);
         recascade_connected_subtree(parent);
         document.mark_dirty();
+        for (auto* child : parent.children) {
+            if (child != nullptr) {
+                notify_custom_elements_subtree(*child, "connected");
+            }
+        }
         return;
 #else
         std::vector<dom_node*> stack{&parent};
@@ -677,6 +682,11 @@
         // observes the finished tree.
         recascade_connected_subtree(parent);
         document.mark_dirty();
+        for (auto* child : parent.children) {
+            if (child != nullptr) {
+                notify_custom_elements_subtree(*child, "connected");
+            }
+        }
 #endif
     }
 

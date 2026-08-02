@@ -163,6 +163,7 @@ int main()
     test_insert_before_preserves_tree_identity_and_atomicity(engine);
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
     test_contextual_fragment_exposes_parent_node_members(engine);
+    test_autonomous_custom_element_lifecycle(engine);
     test_monaco_browser_primitives(engine);
     test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);

@@ -25,9 +25,16 @@
         if (node != nullptr) {
             self->record_feature(
                 "html", "attribute:id", "supported", {}, "html-attribute");
+            const auto previous = node->attributes.find("id");
+            const std::optional<std::string> old_value =
+                previous == node->attributes.end()
+                    ? std::nullopt
+                    : std::optional<std::string>(previous->second);
             node->id_attribute = to_wtf8(info.GetIsolate(), value);
             node->attributes["id"] = node->id_attribute;
             self->recascade_connected_subtree(*node, "className-property");
+            self->notify_custom_element_attribute(
+                *node, "id", old_value, node->id_attribute);
         }
     }
 
@@ -51,13 +58,22 @@
             self->record_feature(
                 "html", "attribute:class", "supported", {}, "html-attribute");
             const auto class_name = to_wtf8(info.GetIsolate(), value);
+            const auto previous = node->attributes.find("class");
+            const std::optional<std::string> old_value =
+                previous == node->attributes.end()
+                    ? std::nullopt
+                    : std::optional<std::string>(previous->second);
             if (node->class_name == class_name
                 && node->attributes.contains("class")) {
+                self->notify_custom_element_attribute(
+                    *node, "class", old_value, class_name);
                 return;
             }
             node->class_name = class_name;
             node->attributes["class"] = node->class_name;
             self->recascade_connected_subtree(*node, "setAttribute");
+            self->notify_custom_element_attribute(
+                *node, "class", old_value, node->class_name);
         }
     }
 

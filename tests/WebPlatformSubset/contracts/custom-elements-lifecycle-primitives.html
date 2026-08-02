@@ -1,0 +1,182 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Custom element construction, upgrade, and lifecycle primitives</title>
+<body>
+<webscene-upgrade id="preexisting" data-tone="blue"></webscene-upgrade>
+<div id="dynamic-host"></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function equal(actual, expected, message) {
+    if (!Object.is(actual, expected)) {
+      throw new Error(`${message}: expected ${expected}, got ${actual}`);
+    }
+  }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL", message: String(error.message || error),
+        stack: error.stack || null
+      });
+    }
+  }
+
+  const reactions = [];
+  class UpgradeElement extends HTMLElement {
+    static get observedAttributes() { return ["data-tone"]; }
+    constructor() {
+      super();
+      this.constructorCount = (this.constructorCount || 0) + 1;
+      reactions.push(`${this.id || "detached"}:constructor`);
+    }
+    connectedCallback() {
+      if (!this.firstElementChild) {
+        this.innerHTML = `<span class="content">upgraded</span>`;
+      }
+      reactions.push(`${this.id || "detached"}:connected`);
+    }
+    disconnectedCallback() {
+      reactions.push(`${this.id || "detached"}:disconnected`);
+    }
+    attributeChangedCallback(name, oldValue, newValue) {
+      reactions.push(
+        `${this.id || "detached"}:attribute:${name}:${oldValue}:${newValue}`);
+    }
+  }
+
+  test("define upgrades parser-created elements before returning", () => {
+    const preexisting = document.getElementById("preexisting");
+    customElements.define("webscene-upgrade", UpgradeElement);
+    assert(preexisting instanceof UpgradeElement, "parser-created element kept its old prototype");
+    equal(preexisting.constructorCount, 1, "parser-created constructor count");
+    equal(preexisting.querySelector(".content").textContent, "upgraded", "connected DOM mutation");
+    const expected = [
+      "preexisting:constructor",
+      "preexisting:attribute:data-tone:null:blue",
+      "preexisting:connected"
+    ];
+    equal(reactions.slice(0, 3).join("|"), expected.join("|"), "upgrade reaction order");
+    assert(customElements.get("webscene-upgrade") === UpgradeElement,
+      "registry get lost the constructor");
+    equal(customElements.getName(UpgradeElement), "webscene-upgrade", "registry reverse lookup");
+  });
+
+  test("createElement constructs immediately and connection transitions react", () => {
+    const element = document.createElement("webscene-upgrade");
+    element.id = "created";
+    assert(element instanceof UpgradeElement, "createElement did not construct the definition");
+    equal(element.constructorCount, 1, "createElement constructor count");
+    element.setAttribute("data-tone", "green");
+    document.body.appendChild(element);
+    document.body.removeChild(element);
+    document.body.appendChild(element);
+    equal(element.constructorCount, 1, "reconnection reconstructed the element");
+    const created = reactions.filter(value => value.startsWith("created:"));
+    equal(created.join("|"), [
+      "created:attribute:data-tone:null:green",
+      "created:connected",
+      "created:disconnected",
+      "created:connected"
+    ].join("|"), "created-element lifecycle");
+  });
+
+  test("constructors create autonomous custom elements", () => {
+    const element = new UpgradeElement();
+    element.id = "constructed";
+    equal(element.localName, "webscene-upgrade", "constructed localName");
+    assert(element instanceof UpgradeElement, "constructed prototype identity");
+    equal(element.constructorCount, 1, "direct constructor count");
+    document.body.appendChild(element);
+    assert(reactions.includes("constructed:connected"),
+      "directly constructed element did not connect");
+  });
+
+  test("innerHTML upgrades newly parsed custom elements", () => {
+    document.getElementById("dynamic-host").innerHTML =
+      `<webscene-upgrade id="inner" data-tone="violet"></webscene-upgrade>`;
+    const element = document.getElementById("inner");
+    assert(element instanceof UpgradeElement, "innerHTML element was not upgraded");
+    equal(element.constructorCount, 1, "innerHTML constructor count");
+    assert(reactions.includes("inner:attribute:data-tone:null:violet"),
+      "innerHTML initial observed attribute did not react");
+    assert(reactions.includes("inner:connected"),
+      "innerHTML element did not connect");
+  });
+
+  test("upgrade constructs matching elements in detached fragments", () => {
+    const element = document.createElement("webscene-late");
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(element);
+    class LateElement extends HTMLElement {
+      constructor() { super(); this.wasUpgraded = true; }
+    }
+    customElements.define("webscene-late", LateElement);
+    assert(!(element instanceof LateElement),
+      "define unexpectedly searched a detached fragment");
+    customElements.upgrade(fragment);
+    assert(element instanceof LateElement && element.wasUpgraded,
+      "registry.upgrade did not construct the detached element");
+  });
+
+  test("cloneNode upgrades autonomous elements and reacts to copied attributes", () => {
+    const preexisting = document.getElementById("preexisting");
+    const before = reactions.length;
+    const clone = preexisting.cloneNode(false);
+    assert(clone instanceof UpgradeElement, "clone kept the uncustomized prototype");
+    equal(clone.constructorCount, 1, "clone constructor count");
+    equal(clone.getAttribute("data-tone"), "blue", "clone copied observed attribute");
+    equal(reactions.slice(before).join("|"), [
+      "preexisting:constructor",
+      "preexisting:attribute:data-tone:null:blue"
+    ].join("|"), "clone construction and initial-attribute order");
+  });
+
+  test("invalid and duplicate definitions use DOM-shaped errors", () => {
+    let invalid;
+    try { customElements.define("invalid", class extends HTMLElement {}); }
+    catch (error) { invalid = error; }
+    assert(invalid && invalid.name === "SyntaxError", "invalid name did not throw SyntaxError");
+    let duplicate;
+    try { customElements.define("webscene-upgrade", class extends HTMLElement {}); }
+    catch (error) { duplicate = error; }
+    assert(duplicate && duplicate.name === "NotSupportedError",
+      "duplicate definition did not throw NotSupportedError");
+  });
+
+  test("unsupported customized built-in construction fails explicitly", () => {
+    class WebSceneBuiltIn extends HTMLButtonElement {}
+    customElements.define(
+      "webscene-built-in", WebSceneBuiltIn, { extends: "button" });
+    equal(customElements.getName(WebSceneBuiltIn), "webscene-built-in",
+      "customized built-in registry metadata");
+    let directError;
+    try { new WebSceneBuiltIn(); }
+    catch (error) { directError = error; }
+    assert(directError && directError.name === "TypeError",
+      "customized built-in direct construction was silently accepted");
+    let creationError;
+    try { document.createElement("button", { is: "webscene-built-in" }); }
+    catch (error) { creationError = error; }
+    assert(creationError && creationError.name === "NotSupportedError",
+      "customized built-in creation was silently accepted");
+  });
+
+  customElements.whenDefined("webscene-upgrade").then(constructor => {
+    test("whenDefined resolves with the registered constructor", () => {
+      assert(constructor === UpgradeElement, "whenDefined resolved incorrectly");
+    });
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  }, error => {
+    state.harness = { status: 1, message: String(error), stack: error.stack || null };
+    state.complete = true;
+  });
+</script>

@@ -108,10 +108,12 @@
       ],
       "methods": [
         { "name": "getAttribute", "callback": "get_attribute", "length": 1 },
-        { "name": "getAttributeNS", "callback": "get_attribute", "length": 2 },
+        { "name": "getAttributeNS", "callback": "get_attribute_ns", "length": 2 },
         { "name": "setAttribute", "callback": "set_attribute", "length": 2 },
         { "name": "setAttributeNS", "callback": "set_attribute_ns", "length": 3 },
         { "name": "removeAttribute", "callback": "remove_attribute", "length": 1 },
+        { "name": "removeAttributeNS", "callback": "remove_attribute_ns", "length": 2 },
+        { "name": "toggleAttribute", "callback": "toggle_attribute", "length": 1 },
         { "name": "hasAttribute", "callback": "has_attribute", "length": 1 },
         { "name": "querySelector", "callback": "element_query_selector", "length": 1 },
         { "name": "querySelectorAll", "callback": "element_query_selector_all", "length": 1 },
@@ -201,6 +203,7 @@
     "HTMLIFrameElement": "HTMLElement",
     "HTMLImageElement": "HTMLElement",
     "HTMLInputElement": "HTMLElement",
+    "HTMLParagraphElement": "HTMLElement",
     "SVGElement": "Element",
     "Window": "EventTarget"
   }

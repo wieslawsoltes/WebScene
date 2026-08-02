@@ -611,6 +611,45 @@ void test_contextual_fragment_exposes_parent_node_members(webscene_engine* engin
         "DocumentFragment ParentNode members or child identity regressed: " + result);
 }
 
+void test_autonomous_custom_element_lifecycle(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<native-lifecycle data-state="ready"></native-lifecycle>';
+          const reactions = [];
+          class NativeLifecycle extends HTMLElement {
+            static observedAttributes = ['data-state'];
+            constructor() {
+              super();
+              reactions.push('construct');
+            }
+            connectedCallback() { reactions.push('connected'); }
+            disconnectedCallback() { reactions.push('disconnected'); }
+            attributeChangedCallback(name, oldValue, newValue) {
+              reactions.push(`${name}:${oldValue}->${newValue}`);
+            }
+          }
+          customElements.define('native-lifecycle', NativeLifecycle);
+          const element = document.querySelector('native-lifecycle');
+          element.setAttribute('data-state', 'updated');
+          element.remove();
+          document.body.appendChild(element);
+          const constructed = new NativeLifecycle();
+          return {
+            reactions,
+            upgraded: element instanceof NativeLifecycle,
+            constructed: constructed instanceof NativeLifecycle
+              && constructed.localName === 'native-lifecycle',
+            registry: customElements.get('native-lifecycle') === NativeLifecycle
+              && customElements.getName(NativeLifecycle) === 'native-lifecycle'
+          };
+        })()
+    )JS", "native-custom-elements-lifecycle.js");
+    require(
+        result == R"({"reactions":["construct","data-state:null->ready","connected","data-state:ready->updated","disconnected","connected","construct"],"upgraded":true,"constructed":true,"registry":true})",
+        "autonomous custom-element construction or lifecycle regressed: " + result);
+}
+
 void test_monaco_browser_primitives(webscene_engine* engine)
 {
     execute(

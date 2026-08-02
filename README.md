@@ -30,6 +30,14 @@ test runner, Avalonia presenter, Uno proof, typed interop generator, and substan
 Canvas/SVG/component workloads exist. Compatibility and packaging are advancing, but
 arbitrary websites and arbitrary React applications are not supported.
 
+Autonomous Custom Elements now have a candidate compatibility slice: registry
+definition and lookup, parser and programmatic upgrade, `HTMLElement` subclass
+construction, observed-attribute reactions, and connected/disconnected callbacks for
+the main light DOM. Open/closed Shadow DOM, customized built-ins, adopted callbacks
+across document realms, ES module graphs, and the complete custom-element reaction
+queue are not supported claims. Components that require those features remain outside
+the current profile.
+
 Current reference applications include:
 
 - `samples/NativeRuntimeShowcase.Avalonia` — native runtime and scene presentation;
@@ -158,13 +166,16 @@ native failure. See [the profile policy](tests/WebPlatformSubset/README.md).
 
 The priority order is:
 
-1. Restore and hold the required native compatibility profile on every released RID.
-2. Publish a reusable native Avalonia component host with resource loading, lifecycle,
+1. Hold the required native compatibility profile on every released RID.
+2. Harden autonomous Custom Elements against broader unchanged WPT and representative
+   light-DOM component fixtures; design Shadow DOM only as a composed-tree feature
+   spanning cascade, layout, queries, events, hit testing, and paint.
+3. Publish a reusable native Avalonia component host with resource loading, lifecycle,
    recovery, diagnostics, typed host calls, and multi-instance tests.
-3. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.
-4. Expand non-gating WPT discovery and promote valuable browser behavior into the
+4. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.
+5. Expand non-gating WPT discovery and promote valuable browser behavior into the
    bounded release profile.
-5. Stabilize the presenter SDK, then promote additional hosts only with their own
+6. Stabilize the presenter SDK, then promote additional hosts only with their own
    conformance and product-workload evidence.
 
 The strategic target is valuable trusted web-authored UI inside native applications,

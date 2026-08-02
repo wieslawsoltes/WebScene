@@ -5,16 +5,16 @@
   "historicalEvidencePolicy": "Managed artifact paths and deleted managed test names are retained only as dated provenance for earlier capability decisions. They are not current gates or supported implementations; current claims require native evidence.",
   "nativeRequiredWptBaseline": {
     "recordedAt": "2026-08-02",
-    "evidence": "TestResults/NativeOnlyRemoval-Final-20260802/results.json/results.json",
-    "status": "failed",
+    "evidence": "TestResults/WptWhitespaceOracle-Final-20260802/results.json",
+    "status": "passed",
     "tests": 110,
-    "passed": 104,
-    "failed": 5,
-    "timedOut": 1,
-    "subtests": 433,
-    "subtestsPassed": 431,
-    "subtestsFailed": 2,
-    "note": "The current native required gate is red: five documents fail and one times out. The earlier 2026-07-26 native artifact recorded 110/110 documents and 434/434 assertions, so restoring and holding that native baseline is the first roadmap gate. No fallback result is accepted."
+    "passed": 110,
+    "failed": 0,
+    "timedOut": 0,
+    "subtests": 434,
+    "subtestsPassed": 434,
+    "subtestsFailed": 0,
+    "note": "The native required gate is green at 110/110 documents and 434/434 assertions. No fallback result is accepted."
   },
   "capabilities": [
     {
@@ -110,6 +110,14 @@
       "productEvidence": ["jQuery frame-element CSS feature path", "component libraries using hidden same-origin feature-probe frames", "future hosted component iframe composition"],
       "coverage": ["contracts/dom-iframe-initial-document-write.html", "test_initial_frame_document_write_and_hidden_style", "artifacts/web-platform-iframe-document-chrome-v1-20260723", "artifacts/web-platform-iframe-document-webscene-v5-20260723", "artifacts/ecosystem-consumers-iframe-document-v1-20260723"],
       "gap": "Chrome and native pass the bounded four-assertion contract, and the originating unchanged jQuery assertion passes the native runner. This claim covers only the synchronous initial same-origin source-less document and plain document.write replacement. Navigated frames, src/srcdoc fetching, nested browsing-context history, sandboxing, origin transitions, cross-origin access control, frame load/error sequencing, parser-executed scripts and styles during document.write, frame teardown under navigation, and arbitrary iframe rendering remain outside this bounded promotion."
+    },
+    {
+      "family": "autonomous-custom-elements",
+      "required": [],
+      "candidate": ["CustomElementRegistry define/get/getName/whenDefined/upgrade", "valid autonomous custom-element names and duplicate-definition errors", "HTMLElement subclass construction through document.createElement and new", "parser-created, innerHTML-created, and cloned element upgrade", "prototype identity", "initial and subsequent observed-attribute reactions", "main-document light-DOM connected and disconnected callbacks", "lifecycle-created light-DOM layout and paint"],
+      "productEvidence": ["unseen standards-authored component bootstrap", "Monaco browser primitive registry probe", "product-neutral connected light-DOM card"],
+      "coverage": ["contracts/custom-elements-lifecycle-primitives.html", "contracts/custom-element-rendering.html", "custom-elements/CustomElementRegistry-getName.html", "custom-elements/HTMLElement-constructor.html", "custom-elements/attribute-changed-callback.html", "custom-elements/connected-callbacks.html", "custom-elements/disconnected-callbacks.html", "test_autonomous_custom_element_lifecycle", "TestResults/CustomElements-Upstream-20260802-v2/results.json", "TestResults/CustomElement-Rendering-20260802-chromium-v1/results.json"],
+      "gap": "The local lifecycle contract passes 9/9 assertions, the unchanged upstream registry reverse-lookup test passes, the focused discovery shard reaches 40/118 assertions, and the lifecycle-created rendering reftest passes both native same-engine comparison and Chromium's independent test/reference comparison. This is a candidate autonomous/light-DOM slice, not a blanket Web Components claim. Customized built-in registry metadata is retained for standards-shaped reverse lookup, but direct and document construction fail explicitly rather than producing a falsely customized element. Spec-complete reaction microtask ordering and constructor failure rules, Attr-node mutation, adoptedCallback across real document realms, element definitions scoped to alternate realms, ShadowRoot/attachShadow, slots, composed-tree selectors/events/hit testing/layout/paint, declarative Shadow DOM, and ES module import graphs remain unsupported. Shadow DOM must be implemented through native composed-tree ownership across those subsystems; a JavaScript-only facade would create false compatibility."
     },
     {
       "family": "ecosystem-consumer-dom-primitives",

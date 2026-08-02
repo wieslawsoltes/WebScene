@@ -375,6 +375,10 @@
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
         const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
         const auto value = to_wtf8(info.GetIsolate(), info[1]);
+        const auto previous = node->attributes.find(name);
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {
             ++self->last_resize_attribute_counts[name];
@@ -384,6 +388,7 @@
         if (name == "class"
             && node->class_name == value
             && node->attributes.contains("class")) {
+            self->notify_custom_element_attribute(*node, name, old_value, value);
             return;
         }
         node->attributes[name] = value;
@@ -417,6 +422,7 @@
         } else {
             self->document.mark_dirty();
         }
+        self->notify_custom_element_attribute(*node, name, old_value, value);
     }
 
     static void set_attribute_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -427,7 +433,15 @@
         if (node == nullptr) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
         const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const std::optional<std::string> namespace_uri =
+            info[0]->IsNullOrUndefined()
+                ? std::nullopt
+                : std::optional<std::string>(to_wtf8(info.GetIsolate(), info[0]));
         const auto value = to_wtf8(info.GetIsolate(), info[2]);
+        const auto previous = node->attributes.find(name);
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
         self->record_html_attribute_feature(name, "setAttributeNS");
         node->attributes[name] = value;
         if (name == "id") node->id_attribute = value;
@@ -437,6 +451,8 @@
         } else {
             self->document.mark_dirty();
         }
+        self->notify_custom_element_attribute(
+            *node, name, old_value, value, namespace_uri);
     }
 
     static void remove_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -450,6 +466,7 @@
         if (!node->attributes.contains(name)) {
             return;
         }
+        const auto old_value = std::optional<std::string>(node->attributes.at(name));
         node->attributes.erase(name);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
@@ -466,6 +483,8 @@
         } else {
             self->document.mark_dirty();
         }
+        self->notify_custom_element_attribute(
+            *node, name, old_value, std::nullopt);
     }
 
     static void get_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -482,6 +501,92 @@
         } else {
             info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), match->second));
         }
+    }
+
+    static void get_attribute_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || info.Length() < 2) return;
+        const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
+        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto match = node->attributes.find(name);
+        if (match == node->attributes.end()) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+        } else {
+            info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), match->second));
+        }
+    }
+
+    static void remove_attribute_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || info.Length() < 2) return;
+        const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
+        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const std::optional<std::string> namespace_uri =
+            info[0]->IsNullOrUndefined()
+                ? std::nullopt
+                : std::optional<std::string>(to_wtf8(info.GetIsolate(), info[0]));
+        self->record_html_attribute_feature(name, "removeAttributeNS");
+        const auto match = node->attributes.find(name);
+        if (match == node->attributes.end()) return;
+        const auto old_value = std::optional<std::string>(match->second);
+        node->attributes.erase(name);
+        if (name == "id") node->id_attribute.clear();
+        else if (name == "class") node->class_name.clear();
+        else if (name == "src" && node->tag == "img") node->clear_replaced_image();
+        else if (name == "style") {
+            node->clear_authored_style();
+            node->style.inline_property_mask = 0U;
+            node->style.important_property_mask = 0U;
+        }
+        if (self->attribute_requires_recascade(name)) {
+            self->recascade_connected_subtree(*node);
+        } else {
+            self->document.mark_dirty();
+        }
+        self->notify_custom_element_attribute(
+            *node, name, old_value, std::nullopt, namespace_uri);
+    }
+
+    static void toggle_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr || info.Length() < 1) return;
+        const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
+        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const bool present = node->attributes.contains(name);
+        const bool force_present = info.Length() < 2 || info[1]->IsUndefined()
+            ? !present
+            : info[1]->BooleanValue(info.GetIsolate());
+        if (force_present == present) {
+            info.GetReturnValue().Set(present);
+            return;
+        }
+        if (force_present) {
+            node->attributes[name] = {};
+            if (name == "id") node->id_attribute.clear();
+            else if (name == "class") node->class_name.clear();
+            self->notify_custom_element_attribute(
+                *node, name, std::nullopt, std::string{});
+        } else {
+            const auto old_value = std::optional<std::string>(node->attributes.at(name));
+            node->attributes.erase(name);
+            if (name == "id") node->id_attribute.clear();
+            else if (name == "class") node->class_name.clear();
+            self->notify_custom_element_attribute(
+                *node, name, old_value, std::nullopt);
+        }
+        if (self->attribute_requires_recascade(name)) {
+            self->recascade_connected_subtree(*node);
+        } else {
+            self->document.mark_dirty();
+        }
+        info.GetReturnValue().Set(force_present);
     }
 
     static void has_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)

@@ -5,6 +5,12 @@
   "hashAlgorithm": "sha256",
   "files": {
     "LICENSE.md": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "custom-elements/CustomElementRegistry-getName.html": "01596a571af5bb6873b00411e9f5d93a3f65b3cb47c2499095d1735cdfb0a5e0",
+    "custom-elements/HTMLElement-constructor.html": "9d1ae705e8f4be6ea6d620adf81de6b568be331b3a86fa08f11b133468c03dff",
+    "custom-elements/attribute-changed-callback.html": "d8e17848b1d19b96b3d6414d78432d108b323566ae6810ec8b678bf9460153de",
+    "custom-elements/connected-callbacks.html": "430a06f2b7dad4f74c5501d66af808f9d9f8ab05e8c636997122e2d91b18bb64",
+    "custom-elements/disconnected-callbacks.html": "9047764906fb3b8a7ad9e52c28ab4793d2d90a6e424c81597cd69830acb9a699",
+    "custom-elements/resources/custom-elements-helpers.js": "dcf1ab8b58516ea42ab12d507ac259ecae375975a03c4755f5c0272370b3c76b",
     "css/CSS2/generated-content/after-content-display-002-ref.xht": "e5551a61ceabd6568883a1632851aa585cdf47b91ef47384f4ffa5a87fb01dd5",
     "css/CSS2/generated-content/before-after-positioned-002-ref.html": "7d1e00bde4aa120ee2750f3977bcb8da1ad9ab2d1e3bc38fa678d1a1a9e78a2d",
     "css/CSS2/generated-content/before-after-positioned-003.html": "a1eb42d386ad3c60c944d7198829508425f1a0cc3c0463f3c155512f078eae77",

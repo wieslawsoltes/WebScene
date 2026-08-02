@@ -111,3 +111,14 @@ for answering questions such as:
 Discovery results must not be merged into the release pass percentage or advertised as
 full standards support. The bounded required profile remains the public compatibility
 contract.
+
+The Custom Elements discovery shard pins unchanged upstream registry, constructor,
+attribute-reaction, connection, and disconnection tests alongside two product-neutral
+local fixtures. The lifecycle fixture is assertion based; the rendering fixture compares
+lifecycle-created light DOM with an inert reference and can use the Chromium oracle.
+The recorded 2026-08-02 native discovery baseline is 40/118 upstream/local assertions
+with the registry reverse-lookup document and local lifecycle document passing. The
+light-DOM rendering reftest also passes natively and Chromium independently considers
+its test and reference identical. Remaining failures are retained as discovery data,
+not hidden by expectations: they cluster around Attr mutation APIs, clone upgrade,
+alternate document realms, Shadow DOM, and unrelated iframe/XHR harness prerequisites.

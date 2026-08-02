@@ -361,8 +361,17 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "removeAttribute"),
             v8::FunctionTemplate::New(isolate, remove_attribute));
         element->PrototypeTemplate()->Set(
+            js_string(isolate, "removeAttributeNS"),
+            v8::FunctionTemplate::New(isolate, remove_attribute_ns));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "toggleAttribute"),
+            v8::FunctionTemplate::New(isolate, toggle_attribute));
+        element->PrototypeTemplate()->Set(
             js_string(isolate, "getAttribute"),
             v8::FunctionTemplate::New(isolate, get_attribute));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "getAttributeNS"),
+            v8::FunctionTemplate::New(isolate, get_attribute_ns));
         element->PrototypeTemplate()->Set(
             js_string(isolate, "hasAttribute"),
             v8::FunctionTemplate::New(isolate, has_attribute));
@@ -1814,41 +1823,257 @@ struct v8_dom_runtime::implementation final {
               }
             }
 
+            const installCustomElementsPlatform = () => {
+            if (globalThis.__webSceneCustomElementsNotifySubtree) return;
+            const NativeHTMLElement = globalThis.HTMLElement;
+            const nativeCreateElement = document.createElement;
             const definitions = new Map();
+            const constructorDefinitions = new Map();
             const pendingDefinitions = new Map();
-            const customElementsRegistry = {
-              define(name, constructor) {
-                const normalized = String(name).toLowerCase();
-                if (!normalized.includes('-') || typeof constructor !== 'function') {
-                  throw new TypeError('Invalid custom element definition');
+            const elementStates = new WeakMap();
+            const constructionStack = [];
+            const reservedNames = new Set([
+              'annotation-xml', 'color-profile', 'font-face',
+              'font-face-src', 'font-face-uri', 'font-face-format',
+              'font-face-name', 'missing-glyph'
+            ]);
+            // HTML's PotentialCustomElementName production. WebScene's DOM
+            // strings are WTF-8 backed; JavaScript sees the corresponding
+            // UTF-16 code units, which this expression validates directly.
+            const potentialName = /^[a-z](?:[.0-9_a-z-]|[\u00b7\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u037d\u037f-\u1fff\u200c-\u200d\u203f-\u2040\u2070-\u218f\u2c00-\ufeff\u{10000}-\u{effff}])*-(?:[.0-9_a-z-]|[\u00b7\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u037d\u037f-\u1fff\u200c-\u200d\u203f-\u2040\u2070-\u218f\u2c00-\ufeff\u{10000}-\u{effff}])*$/u;
+
+            const normalizeName = name => String(name);
+            const isValidName = name => potentialName.test(name)
+              && !reservedNames.has(name);
+            const syntaxError = name => new DOMException(
+              `'${name}' is not a valid custom element name`, 'SyntaxError');
+            const reportReactionError = error => {
+              try {
+                console.error(error && (error.stack || error.message) || String(error));
+              } catch (_) {}
+            };
+            const elementName = element => String(element && element.localName || '');
+            const elementChildren = element => {
+              const children = element && element.childNodes;
+              if (!children || typeof children.length !== 'number') return [];
+              return Array.from(children);
+            };
+            const walkElements = (root, callback) => {
+              if (!root) return;
+              const visit = node => {
+                if (!node) return;
+                if (node.nodeType === 1) callback(node);
+                for (const child of elementChildren(node)) visit(child);
+                if (node.nodeType === 11) {
+                  // DocumentFragment.childNodes is already visited above; the
+                  // branch documents that registry.upgrade includes fragments.
                 }
-                if (definitions.has(normalized)) {
-                  throw new Error(`Custom element already defined: ${normalized}`);
+              };
+              visit(root);
+            };
+            const invokeReaction = (element, callback, args) => {
+              if (typeof callback !== 'function') return;
+              try {
+                Reflect.apply(callback, element, args);
+              } catch (error) {
+                reportReactionError(error);
+              }
+            };
+
+            function WebSceneHTMLElement() {
+              if (!new.target) {
+                throw new TypeError(
+                  "Failed to construct 'HTMLElement': Please use the 'new' operator");
+              }
+              if (new.target === WebSceneHTMLElement) {
+                throw new TypeError('Illegal constructor');
+              }
+              const current = constructionStack[constructionStack.length - 1];
+              if (current && current.definition.constructor === new.target) {
+                if (current.constructed) {
+                  throw new TypeError('Custom element constructor called super() more than once');
                 }
-                definitions.set(normalized, constructor);
+                current.constructed = true;
+                Object.setPrototypeOf(current.element, current.definition.prototype);
+                return current.element;
+              }
+              const definition = constructorDefinitions.get(new.target);
+              if (!definition) throw new TypeError('Illegal constructor');
+              const element = Reflect.apply(
+                nativeCreateElement, document, [definition.name]);
+              Object.setPrototypeOf(element, definition.prototype);
+              elementStates.set(element, {
+                definition, state: 'custom', connected: false
+              });
+              return element;
+            }
+            Object.setPrototypeOf(WebSceneHTMLElement, NativeHTMLElement);
+            Object.defineProperty(WebSceneHTMLElement, 'name', {
+              value: 'HTMLElement', configurable: true
+            });
+            WebSceneHTMLElement.prototype = NativeHTMLElement.prototype;
+            Object.defineProperty(WebSceneHTMLElement.prototype, 'constructor', {
+              value: WebSceneHTMLElement, writable: true, configurable: true
+            });
+            Object.defineProperty(globalThis, 'HTMLElement', {
+              value: WebSceneHTMLElement, writable: true, configurable: true
+            });
+
+            const upgradeElement = (element, forcedDefinition = undefined) => {
+              const known = elementStates.get(element);
+              if (known) return known.state === 'custom' ? element : undefined;
+              const definition = forcedDefinition || definitions.get(elementName(element));
+              if (!definition) return undefined;
+              const state = { definition, state: 'failed', connected: false };
+              elementStates.set(element, state);
+              const construction = {
+                element, definition, constructed: false
+              };
+              constructionStack.push(construction);
+              try {
+                Object.setPrototypeOf(element, definition.prototype);
+                const result = Reflect.construct(
+                  definition.constructor, [], definition.constructor);
+                if (!construction.constructed || result !== element) {
+                  throw new TypeError(
+                    'Custom element constructor did not produce the element being upgraded');
+                }
+                state.state = 'custom';
+              } catch (error) {
+                Object.setPrototypeOf(element, NativeHTMLElement.prototype);
+                reportReactionError(error);
+                return undefined;
+              } finally {
+                constructionStack.pop();
+              }
+              if (definition.attributeChangedCallback) {
+                for (const name of definition.observedAttributes) {
+                  if (!element.hasAttribute(name)) continue;
+                  invokeReaction(
+                    element,
+                    definition.attributeChangedCallback,
+                    [name, null, element.getAttribute(name), null]);
+                }
+              }
+              return element;
+            };
+            const connectElement = element => {
+              const upgraded = upgradeElement(element);
+              const state = elementStates.get(element);
+              if (!upgraded || !state || state.state !== 'custom'
+                  || state.connected || !element.isConnected) return;
+              state.connected = true;
+              invokeReaction(
+                element, state.definition.connectedCallback, []);
+            };
+            const disconnectElement = element => {
+              const state = elementStates.get(element);
+              if (!state || state.state !== 'custom' || !state.connected) return;
+              state.connected = false;
+              invokeReaction(
+                element, state.definition.disconnectedCallback, []);
+            };
+            const notifySubtree = (root, phase) => {
+              if (phase === 'disconnected') {
+                walkElements(root, disconnectElement);
+                return;
+              }
+              walkElements(root, element => {
+                upgradeElement(element);
+                if (element.isConnected) connectElement(element);
+              });
+            };
+            const notifyAttribute = (
+              element, name, oldValue, newValue, namespace = null) => {
+              const state = elementStates.get(element);
+              if (!state || state.state !== 'custom') return;
+              const definition = state.definition;
+              if (!definition.attributeChangedCallback
+                  || !definition.observedAttributeSet.has(name)) return;
+              invokeReaction(
+                element,
+                definition.attributeChangedCallback,
+                [name, oldValue, newValue, namespace]);
+            };
+
+            function WebSceneCustomElementRegistry() {
+              throw new TypeError('Illegal constructor');
+            }
+            Object.defineProperty(WebSceneCustomElementRegistry, 'name', {
+              value: 'CustomElementRegistry', configurable: true
+            });
+            Object.defineProperty(
+              WebSceneCustomElementRegistry.prototype,
+              Symbol.toStringTag,
+              { value: 'CustomElementRegistry', configurable: true });
+            const customElementsRegistry = Object.create(
+              WebSceneCustomElementRegistry.prototype);
+            Object.defineProperties(WebSceneCustomElementRegistry.prototype, {
+              define: { value(name, constructor) {
+                const normalized = normalizeName(name);
+                if (!isValidName(normalized)) throw syntaxError(normalized);
+                if (typeof constructor !== 'function') {
+                  throw new TypeError('Custom element constructor must be callable');
+                }
+                if (definitions.has(normalized)
+                    || constructorDefinitions.has(constructor)) {
+                  throw new DOMException(
+                    'A custom element with this name or constructor is already defined',
+                    'NotSupportedError');
+                }
+                const prototype = constructor.prototype;
+                if (!prototype || typeof prototype !== 'object') {
+                  throw new TypeError('Custom element constructor has no object prototype');
+                }
+                const callback = name => {
+                  const value = prototype[name];
+                  if (value !== undefined && value !== null
+                      && typeof value !== 'function') {
+                    throw new TypeError(`${name} must be callable`);
+                  }
+                  return value == null ? undefined : value;
+                };
+                const attributeChangedCallback = callback('attributeChangedCallback');
+                const observedAttributes = attributeChangedCallback
+                  ? Array.from(constructor.observedAttributes || [], String)
+                  : [];
+                const definition = {
+                  name: normalized,
+                  constructor,
+                  prototype,
+                  connectedCallback: callback('connectedCallback'),
+                  disconnectedCallback: callback('disconnectedCallback'),
+                  adoptedCallback: callback('adoptedCallback'),
+                  attributeChangedCallback,
+                  observedAttributes,
+                  observedAttributeSet: new Set(observedAttributes)
+                };
+                definitions.set(normalized, definition);
+                constructorDefinitions.set(constructor, definition);
+                for (const element of document.querySelectorAll(normalized)) {
+                  upgradeElement(element, definition);
+                  connectElement(element);
+                }
                 const pending = pendingDefinitions.get(normalized);
                 if (pending) {
                   pending.resolve(constructor);
                   pendingDefinitions.delete(normalized);
                 }
-              },
-              get(name) {
-                return definitions.get(String(name).toLowerCase());
-              },
-              getName(constructor) {
-                for (const [name, known] of definitions) {
-                  if (known === constructor) return name;
+              }, writable: true, configurable: true },
+              get: { value(name) {
+                return definitions.get(normalizeName(name))?.constructor;
+              }, writable: true, configurable: true },
+              getName: { value(constructor) {
+                if (typeof constructor !== 'function') {
+                  throw new TypeError('Custom element constructor must be callable');
                 }
-                return null;
-              },
-              whenDefined(name) {
-                const normalized = String(name).toLowerCase();
-                if (!normalized.includes('-')) {
-                  return Promise.reject(new TypeError('Invalid custom element name'));
-                }
-                if (definitions.has(normalized)) {
-                  return Promise.resolve(definitions.get(normalized));
-                }
+                return constructorDefinitions.get(constructor)?.name ?? null;
+              }, writable: true, configurable: true },
+              whenDefined: { value(name) {
+                const normalized = normalizeName(name);
+                if (!isValidName(normalized)) return Promise.reject(syntaxError(normalized));
+                const definition = definitions.get(normalized);
+                if (definition) return Promise.resolve(definition.constructor);
                 let pending = pendingDefinitions.get(normalized);
                 if (!pending) {
                   let resolve;
@@ -1857,11 +2082,49 @@ struct v8_dom_runtime::implementation final {
                   pendingDefinitions.set(normalized, pending);
                 }
                 return pending.promise;
+              }, writable: true, configurable: true },
+              upgrade: { value(root) {
+                if (!root || typeof root !== 'object') {
+                  throw new TypeError('CustomElementRegistry.upgrade requires a Node');
+                }
+                walkElements(root, upgradeElement);
+              }, writable: true, configurable: true }
+            });
+
+            Object.defineProperty(document, 'createElement', {
+              value(...args) {
+                if (args[1] != null && args[1].is !== undefined) {
+                  throw new DOMException(
+                    'Customized built-in elements are not supported',
+                    'NotSupportedError');
+                }
+                const element = Reflect.apply(nativeCreateElement, this, args);
+                upgradeElement(element);
+                return element;
+              }, writable: true, configurable: true
+            });
+            Object.defineProperties(globalThis, {
+              __webSceneCustomElementsNotifySubtree: {
+                value: notifySubtree, configurable: true
               },
-              upgrade() {}
+              __webSceneCustomElementsNotifyAttribute: {
+                value: notifyAttribute, configurable: true
+              }
+            });
+            Object.defineProperty(globalThis, 'customElements', {
+              value: customElementsRegistry, configurable: true
+            });
+            Object.defineProperty(globalThis, 'CustomElementRegistry', {
+              value: WebSceneCustomElementRegistry,
+              writable: true,
+              configurable: true
+            });
             };
 
             Object.defineProperties(globalThis, {
+              __webSceneInstallCustomElementsPlatform: {
+                value: installCustomElementsPlatform, configurable: true
+              },
               queueMicrotask: {
                 value: enqueueMicrotask, writable: true, configurable: true
               },
@@ -1870,9 +2133,6 @@ struct v8_dom_runtime::implementation final {
               },
               TextDecoder: {
                 value: WebSceneTextDecoder, writable: true, configurable: true
-              },
-              customElements: {
-                value: customElementsRegistry, configurable: true
               }
             });
           })();
@@ -1881,6 +2141,29 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(source).c_str())).ToLocalChecked();
         script->Run(local_context).ToLocalChecked();
+    }
+
+    void install_custom_elements_platform(v8::Local<v8::Context> local_context)
+    {
+        v8::Local<v8::Value> raw_installer;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "__webSceneInstallCustomElementsPlatform"))
+                .ToLocal(&raw_installer)
+            || !raw_installer->IsFunction()) {
+            last_error = "The custom-elements bootstrap installer is unavailable.";
+            return;
+        }
+        v8::TryCatch try_catch(isolate);
+        static_cast<void>(raw_installer.As<v8::Function>()->Call(
+            local_context,
+            local_context->Global(),
+            0,
+            nullptr));
+        if (try_catch.HasCaught()) {
+            last_error = "Custom-elements bootstrap failed: "
+                + describe_exception(try_catch, local_context);
+        }
     }
 
     void install_globals(v8::Local<v8::Context> local_context)
@@ -2047,6 +2330,7 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "HTMLIFrameElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLImageElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLInputElement"), element_constructor).Check();
+        global->Set(local_context, js_string(isolate, "HTMLParagraphElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "SVGElement"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
@@ -2329,6 +2613,7 @@ struct v8_dom_runtime::implementation final {
         crypto_script->Run(local_context).ToLocalChecked();
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
+        install_custom_elements_platform(local_context);
         install_fetch_globals(local_context);
         install_intersection_observer_polyfill(local_context);
     }
