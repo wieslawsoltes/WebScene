@@ -2445,11 +2445,23 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) css_profile_candidate_checks += candidates.size();
 #endif
+        const auto* node_shadow_root = document.containing_shadow_root(node);
+        const auto rule_is_in_scope = [&](const css_rule& rule) {
+            if (rule.shadow_scope_root_id == 0U) return node_shadow_root == nullptr;
+            auto* scope_root = document.find_by_native_id(rule.shadow_scope_root_id);
+            if (scope_root == nullptr) return false;
+            const auto* scope = document.shadow_dom(*scope_root);
+            const auto host_selector = trim_css_view(rule.selector()) == ":host";
+            if (host_selector) return scope != nullptr && scope->host == &node;
+            if (scope != nullptr && scope->host == &node) return false;
+            return node_shadow_root == scope_root;
+        };
         std::vector<const css_rule*> matched_rules;
         std::vector<std::pair<int, const css_rule*>> matched_pseudo_rules;
         for (const auto index : candidates) {
             const auto& rule = css_rules[index];
             if (!rule.media_matches) continue;
+            if (!rule_is_in_scope(rule)) continue;
             std::string pseudo_origin;
             const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
@@ -2458,7 +2470,8 @@
                 }
                 continue;
             }
-            if (!css_rule_matches(node, rule)) continue;
+            if (trim_css_view(rule.selector()) != ":host"
+                && !css_rule_matches(node, rule)) continue;
             matched_rules.push_back(&rule);
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -2701,6 +2714,10 @@
     {
         apply_css_rules(node);
         for (auto* child : node.children) apply_css_rules_subtree(*child);
+        const auto* shadow = document.shadow_dom(node);
+        if (shadow != nullptr && shadow->root != nullptr) {
+            apply_css_rules_subtree(*shadow->root);
+        }
     }
 
     bool is_connected(const dom_node& node)
@@ -2842,7 +2859,7 @@
             if (std::any_of(
                     requests.begin(),
                     requests.end(),
-                    [root](const invalidation_request& existing) {
+                    [this, root](const invalidation_request& existing) {
                         return existing.subtree
                             && subtree_contains(*existing.root, root);
                     })) {
@@ -2851,7 +2868,7 @@
             if (subtree) {
                 std::erase_if(
                     requests,
-                    [root](const invalidation_request& existing) {
+                    [this, root](const invalidation_request& existing) {
                         return subtree_contains(*root, existing.root);
                     });
             }
@@ -2939,7 +2956,7 @@
         for (size_t index = 0; index < css_rules.size(); ++index) {
             index_css_rule(index);
             const auto& rule = css_rules[index];
-            if (!rule.media_matches
+            if (!rule.media_matches || rule.shadow_scope_root_id != 0U
                 || (rule.selector() != ":root" && rule.selector() != "html")) continue;
             for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")) continue;
@@ -3000,7 +3017,12 @@
             std::string stylesheet;
             append_node_text(*style, stylesheet);
             if (!stylesheet.empty()) {
-                add_stylesheet(std::move(stylesheet), base, style->id);
+                const auto* shadow_root = document.containing_shadow_root(*style);
+                add_stylesheet(
+                    std::move(stylesheet),
+                    base,
+                    style->id,
+                    shadow_root == nullptr ? 0U : shadow_root->id);
             }
         }
         recascade_after_stylesheet_change();

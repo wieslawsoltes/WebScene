@@ -72,6 +72,7 @@
     struct css_rule final {
         std::shared_ptr<const css_rule_payload> payload;
         uint32_t stylesheet_owner_id{0};
+        uint32_t shadow_scope_root_id{0};
         bool media_matches{true};
 
         const std::string& selector() const noexcept { return payload->selector; }

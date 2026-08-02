@@ -45,6 +45,257 @@
         document.layout(width, height);
     }
 
+    void refresh_all_shadow_distributions()
+    {
+        document.refresh_shadow_distributions();
+    }
+
+    static void throw_dom_exception(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        const char* message,
+        const char* name)
+    {
+        auto* isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        auto exception = v8::Object::New(isolate);
+        exception->Set(
+            local_context, js_string(isolate, "message"), js_string(isolate, message)).Check();
+        exception->Set(
+            local_context, js_string(isolate, "name"), js_string(isolate, name)).Check();
+        v8::Local<v8::Value> constructor;
+        if (local_context->Global()->Get(
+                local_context, js_string(isolate, "DOMException"))
+                .ToLocal(&constructor)
+            && constructor->IsFunction()) {
+            v8::Local<v8::Value> prototype;
+            if (constructor.As<v8::Function>()->Get(
+                    local_context, js_string(isolate, "prototype")).ToLocal(&prototype)
+                && prototype->IsObject()) {
+                exception->SetPrototype(local_context, prototype).Check();
+            }
+        }
+        isolate->ThrowException(exception);
+    }
+
+    static void attach_shadow(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* host = unwrap_node(info.This());
+        if (self == nullptr || host == nullptr
+            || host->kind != dom_node_kind::element) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "attachShadow requires an Element")));
+            return;
+        }
+        static const std::unordered_set<std::string_view> standard_shadow_hosts{
+            "article", "aside", "blockquote", "body", "div", "footer",
+            "h1", "h2", "h3", "h4", "h5", "h6", "header", "main",
+            "nav", "p", "section", "span"};
+        if (host->tag.find('-') == std::string::npos
+            && !standard_shadow_hosts.contains(host->tag)) {
+            throw_dom_exception(
+                info, "This element cannot host a shadow tree", "NotSupportedError");
+            return;
+        }
+        if (self->document.shadow_dom(*host) != nullptr
+            && self->document.shadow_dom(*host)->root != nullptr) {
+            throw_dom_exception(
+                info, "This element already hosts a shadow tree", "NotSupportedError");
+            return;
+        }
+        if (info.Length() < 1 || !info[0]->IsObject()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "attachShadow requires ShadowRootInit")));
+            return;
+        }
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto options = info[0].As<v8::Object>();
+        v8::Local<v8::Value> raw_mode;
+        if (!options->Get(local_context, js_string(info.GetIsolate(), "mode"))
+                .ToLocal(&raw_mode)) {
+            return;
+        }
+        const auto mode = to_utf8(info.GetIsolate(), raw_mode);
+        if (mode != "open" && mode != "closed") {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "ShadowRoot mode must be 'open' or 'closed'")));
+            return;
+        }
+        const auto open = mode == "open";
+        v8::Local<v8::Value> raw_delegates_focus;
+        const auto delegates_focus = options->Get(
+                local_context,
+                js_string(info.GetIsolate(), "delegatesFocus"))
+                .ToLocal(&raw_delegates_focus)
+            && raw_delegates_focus->BooleanValue(info.GetIsolate());
+        auto& root = self->document.create_node(
+            dom_node_kind::document_fragment, "#document-fragment");
+        root.parent = host;
+        // The ShadowRoot itself generates no box, but its logical children are
+        // parsed and mutated as visible participants in the host projection.
+        root.visible = true;
+        auto& host_state = self->document.mutable_shadow_dom(*host);
+        host_state.root = &root;
+        host_state.open = open;
+        host_state.delegates_focus = delegates_focus;
+        auto& root_state = self->document.mutable_shadow_dom(root);
+        root_state.host = host;
+        root_state.open = open;
+        root_state.delegates_focus = delegates_focus;
+        self->document.refresh_shadow_distributions();
+        self->document.mark_dirty();
+        info.GetReturnValue().Set(self->wrap_node(root));
+    }
+
+    static void get_shadow_root(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* host = unwrap_node(info.Holder());
+        const auto* state = host == nullptr ? nullptr : self->document.shadow_dom(*host);
+        auto* root = state != nullptr && state->open
+            ? state->root
+            : nullptr;
+        info.GetReturnValue().Set(root == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*root)));
+    }
+
+    static void get_shadow_host(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.Holder());
+        const auto* state = root == nullptr ? nullptr : self->document.shadow_dom(*root);
+        auto* host = state != nullptr
+            ? state->host
+            : nullptr;
+        info.GetReturnValue().Set(host == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*host)));
+    }
+
+    static void get_shadow_mode(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.Holder());
+        const auto* state = root == nullptr ? nullptr : self->document.shadow_dom(*root);
+        info.GetReturnValue().Set(js_string(
+            info.GetIsolate(), state != nullptr && !state->open ? "closed" : "open"));
+    }
+
+    static void get_shadow_delegates_focus(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.Holder());
+        const auto* state = root == nullptr ? nullptr : self->document.shadow_dom(*root);
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(),
+            state != nullptr && state->delegates_focus));
+    }
+
+    static void get_assigned_slot(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->refresh_all_shadow_distributions();
+        auto* node = unwrap_node(info.Holder());
+        const auto* state = node == nullptr ? nullptr : self->document.shadow_dom(*node);
+        auto* slot = state != nullptr
+            ? state->assigned_slot
+            : nullptr;
+        if (slot != nullptr) {
+            const auto* root = self->document.containing_shadow_root(*slot);
+            const auto* root_state = root == nullptr
+                ? nullptr
+                : self->document.shadow_dom(*root);
+            if (root_state != nullptr && !root_state->open) slot = nullptr;
+        }
+        info.GetReturnValue().Set(slot == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*slot)));
+    }
+
+    static void slot_assigned_nodes(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->refresh_all_shadow_distributions();
+        auto* slot = unwrap_node(info.This());
+        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
+        const auto count = state == nullptr ? 0 : state->assigned_nodes.size();
+        auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(count));
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        for (uint32_t index = 0; index < count; ++index) {
+            result->Set(
+                local_context, index,
+                self->wrap_node(*state->assigned_nodes[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
+    static void slot_assigned_elements(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->refresh_all_shadow_distributions();
+        auto* slot = unwrap_node(info.This());
+        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
+        std::vector<dom_node*> elements;
+        if (state != nullptr) {
+            for (auto* node : state->assigned_nodes) {
+                if (node != nullptr && node->kind == dom_node_kind::element) {
+                    elements.push_back(node);
+                }
+            }
+        }
+        auto result = v8::Array::New(
+            info.GetIsolate(), static_cast<int>(elements.size()));
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        for (uint32_t index = 0; index < elements.size(); ++index) {
+            result->Set(
+                local_context, index, self->wrap_node(*elements[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
+    static void get_root_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (self == nullptr || node == nullptr) return;
+        auto composed = false;
+        if (info.Length() > 0 && info[0]->IsObject()) {
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            v8::Local<v8::Value> value;
+            composed = info[0].As<v8::Object>()->Get(
+                    local_context, js_string(info.GetIsolate(), "composed"))
+                    .ToLocal(&value)
+                && value->BooleanValue(info.GetIsolate());
+        }
+        auto* root = node;
+        while (root->parent != nullptr) {
+            if (self->document.is_shadow_root(*root) && !composed) break;
+            root = root->parent;
+        }
+        if (root == &self->active_root()) {
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            v8::Local<v8::Value> document_value;
+            if (local_context->Global()->Get(
+                    local_context, js_string(info.GetIsolate(), "document"))
+                    .ToLocal(&document_value)) {
+                info.GetReturnValue().Set(document_value);
+                return;
+            }
+        }
+        info.GetReturnValue().Set(self->wrap_node(*root));
+    }
+
     void mark_cssom_layout_dirty(
         dom_node& node,
         std::string_view canonical_property_name)
@@ -126,11 +377,15 @@
     }
 
     template <typename Callback>
-    static void visit_subtree(dom_node& root, Callback&& callback)
+    void visit_subtree(dom_node& root, Callback&& callback) const
     {
         callback(root);
         for (auto* child : root.children) {
             if (child != nullptr) visit_subtree(*child, callback);
+        }
+        const auto* shadow = document.shadow_dom(root);
+        if (shadow != nullptr && shadow->root != nullptr) {
+            visit_subtree(*shadow->root, callback);
         }
     }
 
@@ -242,16 +497,25 @@
             || !raw_callback->IsFunction()) {
             return;
         }
-        v8::Local<v8::Value> arguments[]{
-            wrap_node(root),
-            js_string(isolate, phase)
-        };
         v8::TryCatch try_catch(isolate);
-        static_cast<void>(raw_callback.As<v8::Function>()->Call(
-            local_context,
-            local_context->Global(),
-            2,
-            arguments));
+        std::vector<dom_node*> reaction_roots{&root};
+        visit_subtree(root, [&](dom_node& node) {
+            if (&node != &root && document.is_shadow_root(node)) {
+                reaction_roots.push_back(&node);
+            }
+        });
+        for (auto* reaction_root : reaction_roots) {
+            v8::Local<v8::Value> arguments[]{
+                wrap_node(*reaction_root),
+                js_string(isolate, phase)
+            };
+            static_cast<void>(raw_callback.As<v8::Function>()->Call(
+                local_context,
+                local_context->Global(),
+                2,
+                arguments));
+            if (try_catch.HasCaught()) break;
+        }
         if (try_catch.HasCaught()) {
             last_error = "Custom element subtree reaction failed: "
                 + describe_exception(try_catch, local_context);
@@ -490,10 +754,14 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         auto selected_template = node.kind == dom_node_kind::element
             ? (node.namespace_uri() == dom_node::html_namespace_uri
-                ? html_element_template.Get(isolate)
+                ? (node.tag == "slot"
+                    ? html_slot_element_template.Get(isolate)
+                    : html_element_template.Get(isolate))
                 : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
-                ? document_fragment_template.Get(isolate)
+                ? (document.is_shadow_root(node)
+                    ? shadow_root_template.Get(isolate)
+                    : document_fragment_template.Get(isolate))
                 : node_template.Get(isolate);
         auto object = selected_template->InstanceTemplate()
 #else
@@ -1949,11 +2217,13 @@
 
     static void element_contains(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
         auto* root = unwrap_node(info.This());
         auto* candidate = info.Length() > 0 && info[0]->IsObject()
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
-        for (auto* node = candidate; root != nullptr && node != nullptr; node = node->parent) {
+        for (auto* node = candidate; root != nullptr && node != nullptr;
+            node = self->document.dom_parent(*node)) {
             if (node == root) {
                 info.GetReturnValue().Set(v8::True(info.GetIsolate()));
                 return;
@@ -1978,9 +2248,12 @@
             return;
         }
 
-        const auto build_path = [](dom_node* node) {
+        auto* self = current(info.GetIsolate());
+        const auto build_path = [self](dom_node* node) {
             std::vector<dom_node*> path;
-            for (; node != nullptr; node = node->parent) path.push_back(node);
+            for (; node != nullptr; node = self->document.dom_parent(*node)) {
+                path.push_back(node);
+            }
             std::reverse(path.begin(), path.end());
             return path;
         };
@@ -2096,7 +2369,8 @@
             throw_selector_syntax_error(info, selector);
             return;
         }
-        for (auto* candidate = node; candidate != nullptr; candidate = candidate->parent) {
+        for (auto* candidate = node; candidate != nullptr;
+            candidate = self->document.dom_parent(*candidate)) {
             if (self->compiled_css_selector_list_matches(
                     *candidate,
                     self->cached_css_selector_list(selector))) {
@@ -2111,7 +2385,7 @@
     {
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.This());
-        if (is_programmatically_focusable(node)) {
+        if (self->is_programmatically_focusable(node)) {
             webscene_input_event synthetic{};
             self->set_active_element(node, synthetic);
         }
@@ -2228,11 +2502,25 @@
             0,
             v8::kEmbedderDataTypeTagDefault));
         if (root == nullptr) root = &self->active_root();
-        auto* node = &exposed_body_for_root(*root);
+        dom_node* node = self->document.is_shadow_root(*root)
+            ? nullptr
+            : &exposed_body_for_root(*root);
         if (self->active_element != nullptr) {
+            const auto* active_shadow_root =
+                self->document.containing_shadow_root(*self->active_element);
+            if (!self->document.is_shadow_root(*root)
+                && active_shadow_root != nullptr
+                && self->focus_document_owner(root)
+                    == self->focus_document_owner(self->active_element)) {
+                const auto* state = self->document.shadow_dom(*active_shadow_root);
+                if (state != nullptr && state->host != nullptr) node = state->host;
+                info.GetReturnValue().Set(self->wrap_node(*node));
+                return;
+            }
             const auto root_owner = self->focus_document_owner(root);
             const auto active_owner = self->focus_document_owner(self->active_element);
-            if (root_owner == active_owner && subtree_contains(*root, self->active_element)) {
+            if (root_owner == active_owner
+                && self->subtree_contains(*root, self->active_element)) {
                 node = self->active_element;
             } else if (root_owner == 0U && active_owner != 0U) {
                 if (auto* owner = find_node_by_native_id(*root, active_owner); owner != nullptr) {
@@ -2240,7 +2528,9 @@
                 }
             }
         }
-        info.GetReturnValue().Set(self->wrap_node(*node));
+        info.GetReturnValue().Set(node == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*node)));
     }
 
     static void get_provisional_frame_active_element(
@@ -2254,7 +2544,7 @@
         if (known == self->provisional_frame_bodies.end() || known->second == nullptr) return;
         auto* root = known->second;
         auto* node = self->active_element != nullptr
-                && subtree_contains(*root, self->active_element)
+                && self->subtree_contains(*root, self->active_element)
             ? self->active_element
             : root;
         info.GetReturnValue().Set(self->wrap_node(*node));

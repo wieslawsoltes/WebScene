@@ -34,6 +34,7 @@
         { "name": "lastChild", "getter": "get_last_child" },
         { "name": "previousSibling", "getter": "get_previous_sibling" },
         { "name": "nextSibling", "getter": "get_next_sibling" },
+        { "name": "assignedSlot", "getter": "get_assigned_slot" },
         {
           "name": "__websceneNativeNodeId",
           "getter": "get_native_node_id",
@@ -58,6 +59,7 @@
         { "name": "append", "callback": "append_nodes", "length": 0 },
         { "name": "prepend", "callback": "prepend_child", "length": 0 },
         { "name": "replaceChildren", "callback": "replace_children", "length": 0 },
+        { "name": "getRootNode", "callback": "get_root_node", "length": 0 },
         { "name": "getBoundingClientRect", "callback": "get_bounding_client_rect", "length": 0 },
         { "name": "getClientRects", "callback": "get_client_rects", "length": 0 }
       ],
@@ -86,6 +88,21 @@
       "constants": []
     },
     {
+      "name": "ShadowRoot",
+      "template": "shadow_root_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "DocumentFragment",
+      "attributes": [
+        { "name": "host", "getter": "get_shadow_host" },
+        { "name": "mode", "getter": "get_shadow_mode" },
+        { "name": "delegatesFocus", "getter": "get_shadow_delegates_focus" },
+        { "name": "innerHTML", "getter": "get_inner_html", "setter": "set_inner_html" },
+        { "name": "activeElement", "getter": "get_active_element" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "Element",
       "template": "element_template",
       "constructor": "illegal_dom_constructor",
@@ -96,6 +113,7 @@
         { "name": "tagName", "getter": "get_tag_name" },
         { "name": "id", "getter": "get_id", "setter": "set_id" },
         { "name": "className", "getter": "get_class_name", "setter": "set_class_name" },
+        { "name": "slot", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "classList", "getter": "get_class_list" },
         { "name": "attributes", "getter": "get_attributes" },
         { "name": "children", "getter": "get_children" },
@@ -104,7 +122,8 @@
         { "name": "previousElementSibling", "getter": "get_previous_element_sibling" },
         { "name": "nextElementSibling", "getter": "get_next_element_sibling" },
         { "name": "innerHTML", "getter": "get_inner_html", "setter": "set_inner_html" },
-        { "name": "ownerSVGElement", "getter": "get_owner_svg_element" }
+        { "name": "ownerSVGElement", "getter": "get_owner_svg_element" },
+        { "name": "shadowRoot", "getter": "get_shadow_root" }
       ],
       "methods": [
         { "name": "getAttribute", "callback": "get_attribute", "length": 1 },
@@ -122,7 +141,8 @@
         { "name": "matches", "callback": "element_matches", "length": 1 },
         { "name": "closest", "callback": "element_closest", "length": 1 },
         { "name": "insertAdjacentElement", "callback": "insert_adjacent_element", "length": 2 },
-        { "name": "insertAdjacentHTML", "callback": "insert_adjacent_html", "length": 2 }
+        { "name": "insertAdjacentHTML", "callback": "insert_adjacent_html", "length": 2 },
+        { "name": "attachShadow", "callback": "attach_shadow", "length": 1 }
       ],
       "constants": []
     },
@@ -193,6 +213,20 @@
         { "name": "setSelectionRange", "callback": "element_set_selection_range", "length": 2 },
         { "name": "click", "callback": "element_click", "length": 0 },
         { "name": "reset", "callback": "form_reset", "length": 0 }
+      ],
+      "constants": []
+    },
+    {
+      "name": "HTMLSlotElement",
+      "template": "html_slot_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [
+        { "name": "name", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" }
+      ],
+      "methods": [
+        { "name": "assignedNodes", "callback": "slot_assigned_nodes", "length": 0 },
+        { "name": "assignedElements", "callback": "slot_assigned_elements", "length": 0 }
       ],
       "constants": []
     }

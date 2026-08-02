@@ -337,12 +337,17 @@
         info.GetReturnValue().Set(self->wrap_node(contents));
     }
 
-    static void get_parent_node(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    static void get_parent_node(
+        v8::Local<v8::Name> property,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto* node = unwrap_node(info.Holder());
+        const auto parent_element = to_utf8(info.GetIsolate(), property) == "parentElement";
         info.GetReturnValue().Set(node == nullptr || node->parent == nullptr
+                || self->document.is_shadow_root(*node)
+                || (parent_element && node->parent->kind != dom_node_kind::element)
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
             : v8::Local<v8::Value>(self->wrap_node(*node->parent)));
     }
@@ -860,7 +865,7 @@
         self->ensure_layout(node);
         if (node != nullptr) {
             for (auto* current_node = node; current_node != nullptr;
-                 current_node = current_node->parent) {
+                 current_node = self->document.composed_parent(*current_node)) {
                 if (current_node->style.display != display_mode::none) continue;
                 info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), 0));
                 return;
@@ -923,7 +928,7 @@
         self->ensure_layout(node);
         if (node == nullptr) return;
         for (auto* current_node = node; current_node != nullptr;
-             current_node = current_node->parent) {
+             current_node = self->document.composed_parent(*current_node)) {
             if (current_node->style.display != display_mode::none) continue;
             info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), 0));
             return;
@@ -958,7 +963,7 @@
         self->ensure_layout(node);
         if (node != nullptr) {
             for (auto* current_node = node; current_node != nullptr;
-                 current_node = current_node->parent) {
+                 current_node = self->document.composed_parent(*current_node)) {
                 if (current_node->style.display != display_mode::none) continue;
                 info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), 0));
                 return;
@@ -1148,7 +1153,9 @@
             return item_start - viewport_start;
         };
 
-        for (auto* ancestor = node->parent; ancestor != nullptr; ancestor = ancestor->parent) {
+        for (auto* ancestor = self->document.composed_parent(*node);
+            ancestor != nullptr;
+            ancestor = self->document.composed_parent(*ancestor)) {
             const auto maximum_x = std::max(
                 0.0F,
                 ancestor->scroll_content_width - ancestor->scroll_viewport_width);
@@ -1196,10 +1203,12 @@
         }
     }
 
-    static dom_node* find_offset_parent(dom_node& node)
+    static dom_node* find_offset_parent(native_document& document, dom_node& node)
     {
         if (node.style.position == position_mode::fixed) return nullptr;
-        for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+        for (auto* ancestor = document.composed_parent(node);
+            ancestor != nullptr;
+            ancestor = document.composed_parent(*ancestor)) {
             if (ancestor->tag == "body" || ancestor->style.position != position_mode::normal) {
                 return ancestor;
             }
@@ -1214,10 +1223,12 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        const auto* offset_parent = find_offset_parent(*node);
+        const auto* offset_parent = find_offset_parent(self->document, *node);
         const auto parent_x = offset_parent == nullptr ? 0.0F : offset_parent->layout.x;
         auto restored_scroll = 0.0F;
-        for (auto* ancestor = node->parent; ancestor != nullptr; ancestor = ancestor->parent) {
+        for (auto* ancestor = self->document.composed_parent(*node);
+            ancestor != nullptr;
+            ancestor = self->document.composed_parent(*ancestor)) {
             restored_scroll += ancestor->scroll_left;
             if (ancestor == offset_parent) break;
         }
@@ -1233,10 +1244,12 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        const auto* offset_parent = find_offset_parent(*node);
+        const auto* offset_parent = find_offset_parent(self->document, *node);
         const auto parent_y = offset_parent == nullptr ? 0.0F : offset_parent->layout.y;
         auto restored_scroll = 0.0F;
-        for (auto* ancestor = node->parent; ancestor != nullptr; ancestor = ancestor->parent) {
+        for (auto* ancestor = self->document.composed_parent(*node);
+            ancestor != nullptr;
+            ancestor = self->document.composed_parent(*ancestor)) {
             restored_scroll += ancestor->scroll_top;
             if (ancestor == offset_parent) break;
         }
@@ -1249,7 +1262,9 @@
     {
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
-        auto* offset_parent = node == nullptr ? nullptr : find_offset_parent(*node);
+        auto* offset_parent = node == nullptr
+            ? nullptr
+            : find_offset_parent(self->document, *node);
         info.GetReturnValue().Set(offset_parent == nullptr
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
             : v8::Local<v8::Value>(self->wrap_node(*offset_parent)));

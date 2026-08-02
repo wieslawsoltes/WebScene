@@ -979,6 +979,25 @@
         const auto immediate_propagation_stopped = [&]() {
             return read_boolean("__websceneImmediatePropagationStopped");
         };
+        const auto retargeted_node = [&](const dom_node* current_target) {
+            if (target == nullptr) return static_cast<dom_node*>(nullptr);
+            const auto* root = self->document.containing_shadow_root(*target);
+            if (root == nullptr) return target;
+            if (current_target != nullptr
+                && self->document.containing_shadow_root(*current_target) == root) {
+                return target;
+            }
+            const auto* state = self->document.shadow_dom(*root);
+            return state == nullptr || state->host == nullptr ? target : state->host;
+        };
+        const auto set_retargeted_target = [&](const dom_node* current_target) {
+            if (target == nullptr) return;
+            auto wrapper = self->wrap_node(*retargeted_node(current_target));
+            event->Set(
+                local_context, js_string(info.GetIsolate(), "target"), wrapper).Check();
+            event->Set(
+                local_context, js_string(info.GetIsolate(), "srcElement"), wrapper).Check();
+        };
         const auto set_phase = [&](v8::Local<v8::Object> current_target, int phase) {
             event->Set(
                 local_context,
@@ -1024,6 +1043,7 @@
             bool capture,
             int phase) {
             if (listeners == self->frame_event_listeners.end()) return true;
+            set_retargeted_target(self->document.find_by_native_id(target_id));
             set_phase(current_target, phase);
             const auto listener_count = listeners->second.size();
             for (size_t index = 0; index < listener_count; ++index) {
@@ -1047,6 +1067,7 @@
                     local_context,
                     js_string(info.GetIsolate(), property_name.c_str())).ToLocal(&handler)
                 || !handler->IsFunction()) return true;
+            set_retargeted_target(&node);
             set_phase(wrapper, phase);
             invoke_callback(handler.As<v8::Function>(), wrapper);
             return true;
@@ -1098,11 +1119,37 @@
             }
         } else {
             std::vector<dom_node*> ancestry;
-            for (auto* node = target; node != nullptr; node = node->parent) {
+            const auto composed = read_boolean("composed");
+            for (auto* node = target; node != nullptr;
+                node = self->document.event_parent(*node)) {
                 ancestry.push_back(node);
+                if (!composed && self->document.is_shadow_root(*node)) break;
             }
-            if (!invoke_listeners(0U, global, true, 1)) return;
-            if (!invoke_listeners(
+            const auto reaches_document = !ancestry.empty()
+                && ancestry.back() == &self->document.body();
+            auto composed_path = v8::Array::New(
+                info.GetIsolate(),
+                static_cast<int>(ancestry.size() + (reaches_document ? 2U : 0U)));
+            for (uint32_t index = 0; index < ancestry.size(); ++index) {
+                composed_path->Set(
+                    local_context, index, self->wrap_node(*ancestry[index])).Check();
+            }
+            if (reaches_document) {
+                composed_path->Set(
+                    local_context,
+                    static_cast<uint32_t>(ancestry.size()),
+                    document_target).Check();
+                composed_path->Set(
+                    local_context,
+                    static_cast<uint32_t>(ancestry.size() + 1U),
+                    global).Check();
+            }
+            event->Set(
+                local_context,
+                js_string(info.GetIsolate(), "__webSceneComposedPath"),
+                composed_path).Check();
+            if (reaches_document && !invoke_listeners(0U, global, true, 1)) return;
+            if (reaches_document && !invoke_listeners(
                     std::numeric_limits<uint32_t>::max(),
                     document_target,
                     true,
@@ -1124,13 +1171,13 @@
                     if (!invoke_listeners(node->id, wrapper, false, 3)
                         || (!immediate_propagation_stopped() && !invoke_property(*node, 3))) return;
                 }
-                if (!propagation_stopped()
+                if (reaches_document && !propagation_stopped()
                     && !invoke_listeners(
                         std::numeric_limits<uint32_t>::max(),
                         document_target,
                         false,
                         3)) return;
-                if (!propagation_stopped()
+                if (reaches_document && !propagation_stopped()
                     && !invoke_listeners(0U, global, false, 3)) return;
             }
         }

@@ -32,11 +32,15 @@ arbitrary websites and arbitrary React applications are not supported.
 
 Autonomous Custom Elements now have a candidate compatibility slice: registry
 definition and lookup, parser and programmatic upgrade, `HTMLElement` subclass
-construction, observed-attribute reactions, and connected/disconnected callbacks for
-the main light DOM. Open/closed Shadow DOM, customized built-ins, adopted callbacks
-across document realms, ES module graphs, and the complete custom-element reaction
-queue are not supported claims. Components that require those features remain outside
-the current profile.
+construction, observed-attribute reactions, and connected/disconnected callbacks.
+The first Shadow DOM slice adds native open/closed root ownership, `attachShadow()`,
+default and named slot distribution, scoped shadow styles, host-value inheritance, and
+one composed projection for layout, paint, hit testing, focus, and event paths. This is
+component-enabling candidate coverage, not a complete Web Components claim. Flattened
+or manual slots, `slotchange`, declarative Shadow DOM, `adoptedStyleSheets`, `::part`,
+`::slotted`, complete focus delegation and retargeting, customized built-ins, adopted
+callbacks across document realms, ES module graphs, and the complete custom-element
+reaction queue remain outside the supported profile.
 
 Current reference applications include:
 
@@ -167,9 +171,9 @@ native failure. See [the profile policy](tests/WebPlatformSubset/README.md).
 The priority order is:
 
 1. Hold the required native compatibility profile on every released RID.
-2. Harden autonomous Custom Elements against broader unchanged WPT and representative
-   light-DOM component fixtures; design Shadow DOM only as a composed-tree feature
-   spanning cascade, layout, queries, events, hit testing, and paint.
+2. Harden the candidate Custom Elements and Shadow DOM slices against broader unchanged
+   WPT and representative packaged components, promoting only behavior with complete
+   cascade/layout/input/paint evidence.
 3. Publish a reusable native Avalonia component host with resource loading, lifecycle,
    recovery, diagnostics, typed host calls, and multi-instance tests.
 4. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.

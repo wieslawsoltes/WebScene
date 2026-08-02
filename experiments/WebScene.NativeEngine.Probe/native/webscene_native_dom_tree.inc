@@ -70,7 +70,7 @@ float native_document::measure_inline_content_width(const dom_node& node) const
     auto width = node.text_content.empty()
         ? 0.0F
         : measure_text_width(node.text_content, node);
-    for (const auto* child : node.children) {
+    for (const auto* child : composed_children(node)) {
         if (child == nullptr || !child->visible
             || child->style.display == display_mode::none) {
             continue;
@@ -187,6 +187,177 @@ dom_node& native_document::body() noexcept
 const dom_node& native_document::body() const noexcept
 {
     return *body_;
+}
+
+bool native_document::has_shadow_dom() const noexcept
+{
+    return shadow_dom_storage_ != nullptr;
+}
+
+const native_document::shadow_dom_data* native_document::shadow_dom(
+    const dom_node& node) const noexcept
+{
+    if (shadow_dom_storage_ == nullptr) return nullptr;
+    const auto found = shadow_dom_storage_->node_data.find(node.id);
+    return found == shadow_dom_storage_->node_data.end() ? nullptr : &found->second;
+}
+
+native_document::shadow_dom_data& native_document::mutable_shadow_dom(dom_node& node)
+{
+    if (shadow_dom_storage_ == nullptr) {
+        shadow_dom_storage_ = std::make_unique<shadow_dom_storage>();
+    }
+    return shadow_dom_storage_->node_data[node.id];
+}
+
+bool native_document::is_shadow_root(const dom_node& node) const noexcept
+{
+    const auto* state = shadow_dom(node);
+    return node.kind == dom_node_kind::document_fragment
+        && state != nullptr
+        && state->host != nullptr;
+}
+
+dom_node* native_document::containing_shadow_root(dom_node& node) const noexcept
+{
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (is_shadow_root(*current)) return current;
+    }
+    return nullptr;
+}
+
+const dom_node* native_document::containing_shadow_root(
+    const dom_node& node) const noexcept
+{
+    return containing_shadow_root(const_cast<dom_node&>(node));
+}
+
+const std::vector<dom_node*>& native_document::composed_children(
+    const dom_node& node) const noexcept
+{
+    if (shadow_dom_storage_ == nullptr) return node.children;
+    const auto* state = shadow_dom(node);
+    if (state != nullptr && state->root != nullptr) return state->root->children;
+    if (node.tag == "slot"
+        && containing_shadow_root(node) != nullptr
+        && state != nullptr
+        && !state->assigned_nodes.empty()) {
+        return state->assigned_nodes;
+    }
+    return node.children;
+}
+
+std::vector<dom_node*>& native_document::composed_children(dom_node& node) noexcept
+{
+    return const_cast<std::vector<dom_node*>&>(
+        static_cast<const native_document&>(*this).composed_children(node));
+}
+
+void native_document::refresh_shadow_distributions()
+{
+    if (shadow_dom_storage_ == nullptr) return;
+
+    // Collect first because assigning slot roles can grow and rehash the cold
+    // side table. Hosts are ordinary stable node-pool pointers.
+    std::vector<dom_node*> hosts;
+    hosts.reserve(shadow_dom_storage_->node_data.size());
+    for (auto& [_, state] : shadow_dom_storage_->node_data) {
+        if (state.root != nullptr) hosts.push_back(state.root->parent);
+        state.assigned_slot = nullptr;
+        state.assigned_nodes.clear();
+    }
+    for (auto* host : hosts) {
+        if (host == nullptr) continue;
+        const auto* host_state = shadow_dom(*host);
+        auto* root = host_state == nullptr ? nullptr : host_state->root;
+        if (root == nullptr) continue;
+
+        std::vector<dom_node*> slots;
+        const auto collect_slots = [&](const auto& self, dom_node& node) -> void {
+            if (node.kind == dom_node_kind::element && node.tag == "slot") {
+                slots.push_back(&node);
+            }
+            for (auto* child : node.children) {
+                if (child != nullptr) self(self, *child);
+            }
+        };
+        collect_slots(collect_slots, *root);
+        for (auto* child : host->children) {
+            if (child == nullptr) continue;
+            if (child->kind != dom_node_kind::element
+                && child->kind != dom_node_kind::text) {
+                continue;
+            }
+            std::string_view slot_name;
+            if (child->kind == dom_node_kind::element) {
+                const auto authored = child->attributes.find("slot");
+                if (authored != child->attributes.end()) slot_name = authored->second;
+            }
+            const auto match = std::find_if(
+                slots.begin(), slots.end(), [&](const auto* slot) {
+                    const auto name = slot->attributes.find("name");
+                    const auto candidate = name == slot->attributes.end()
+                        ? std::string_view{}
+                        : std::string_view(name->second);
+                    return candidate == slot_name;
+                });
+            if (match == slots.end()) continue;
+            mutable_shadow_dom(**match).assigned_nodes.push_back(child);
+            mutable_shadow_dom(*child).assigned_slot = *match;
+        }
+    }
+}
+
+dom_node* native_document::composed_parent(dom_node& node) const noexcept
+{
+    if (shadow_dom_storage_ == nullptr) return node.parent;
+    const auto* state = shadow_dom(node);
+    if (state != nullptr && state->assigned_slot != nullptr) {
+        return state->assigned_slot;
+    }
+    // A direct light child without a matching slot has no flat-tree parent.
+    // Its logical DOM parent remains the host and is still used by DOM queries
+    // and the ordinary event path.
+    if (node.parent != nullptr) {
+        const auto* parent_state = shadow_dom(*node.parent);
+        if (parent_state != nullptr && parent_state->root != nullptr) return nullptr;
+    }
+    if (node.parent != nullptr && is_shadow_root(*node.parent)) {
+        return shadow_dom(*node.parent)->host;
+    }
+    if (is_shadow_root(node)) return state->host;
+    return node.parent;
+}
+
+const dom_node* native_document::composed_parent(const dom_node& node) const noexcept
+{
+    return composed_parent(const_cast<dom_node&>(node));
+}
+
+dom_node* native_document::event_parent(dom_node& node) const noexcept
+{
+    if (shadow_dom_storage_ == nullptr) return node.parent;
+    const auto* state = shadow_dom(node);
+    if (state != nullptr && state->assigned_slot != nullptr) {
+        return state->assigned_slot;
+    }
+    if (is_shadow_root(node)) return state->host;
+    return node.parent;
+}
+
+const dom_node* native_document::event_parent(const dom_node& node) const noexcept
+{
+    return event_parent(const_cast<dom_node&>(node));
+}
+
+dom_node* native_document::dom_parent(dom_node& node) const noexcept
+{
+    return is_shadow_root(node) ? nullptr : node.parent;
+}
+
+const dom_node* native_document::dom_parent(const dom_node& node) const noexcept
+{
+    return dom_parent(const_cast<dom_node&>(node));
 }
 
 dom_node& native_document::create_element(std::string tag)
@@ -326,6 +497,10 @@ size_t native_document::erase_detached_subtree(dom_node& root)
     const auto collect = [&](const auto& self, dom_node& node) -> void {
         if (!removed.insert(&node).second) return;
         if (node.template_contents != nullptr) self(self, *node.template_contents);
+        if (const auto* state = shadow_dom(node);
+            state != nullptr && state->root != nullptr) {
+            self(self, *state->root);
+        }
         for (auto* child : node.children) {
             if (child != nullptr) self(self, *child);
         }
@@ -335,6 +510,12 @@ size_t native_document::erase_detached_subtree(dom_node& root)
     for (const auto* node : removed) {
         if (node->id == 0U || node->id > native_id_index_.size()) continue;
         native_id_index_[node->id - 1U] = nullptr;
+    }
+    if (shadow_dom_storage_ != nullptr) {
+        for (const auto* node : removed) {
+            shadow_dom_storage_->node_data.erase(node->id);
+        }
+        if (shadow_dom_storage_->node_data.empty()) shadow_dom_storage_.reset();
     }
     std::erase_if(nodes_, [&](const auto& node) { return removed.contains(node.get()); });
     while (!native_id_index_.empty() && native_id_index_.back() == nullptr) {
@@ -369,13 +550,13 @@ std::vector<dom_node*> native_document::query_selector_all(
 
 dom_node* native_document::hit_test(dom_node& root, float x, float y)
 {
-    const auto nearest_element = [](dom_node* hit) {
-        while (hit != nullptr && hit->tag == "#text") hit = hit->parent;
+    const auto nearest_element = [this](dom_node* hit) {
+        while (hit != nullptr && hit->tag == "#text") hit = composed_parent(*hit);
         return hit;
     };
     std::vector<dom_node*> fixed;
-    for (auto* child : root.children) {
-        collect_fixed_positioned_nodes(*child, fixed);
+    for (auto* child : composed_children(root)) {
+        collect_fixed_positioned_nodes(*this, *child, fixed);
     }
     std::stable_sort(
         fixed.begin(),
@@ -387,6 +568,7 @@ dom_node* native_document::hit_test(dom_node& root, float x, float y)
         auto visibility_hidden = false;
         auto pointer_events_none = false;
         if (!stacking_ancestors_allow_hit(
+                *this,
                 **iterator,
                 root,
                 x,
@@ -406,8 +588,8 @@ dom_node* native_document::hit_test(dom_node& root, float x, float y)
         }
     }
     std::vector<dom_node*> elevated;
-    for (auto* child : root.children) {
-        collect_positive_stacking_nodes(*child, elevated);
+    for (auto* child : composed_children(root)) {
+        collect_positive_stacking_nodes(*this, *child, elevated);
     }
     std::stable_sort(
         elevated.begin(),
@@ -419,6 +601,7 @@ dom_node* native_document::hit_test(dom_node& root, float x, float y)
         auto visibility_hidden = false;
         auto pointer_events_none = false;
         if (!stacking_ancestors_allow_hit(
+                *this,
                 **iterator,
                 root,
                 x,
@@ -500,7 +683,8 @@ dom_node* native_document::hit_test_node(
         auto upper_bound = std::numeric_limits<int32_t>::max();
         while (true) {
             auto next_z = std::numeric_limits<int32_t>::min();
-            for (const auto* child : node.children) {
+            const auto& children = composed_children(node);
+            for (const auto* child : children) {
                 const auto z_index = node.style.z_index != 0
                     ? child->paint_z_index
                     : child->style.z_index;
@@ -509,7 +693,7 @@ dom_node* native_document::hit_test_node(
                 }
             }
             if (next_z == std::numeric_limits<int32_t>::min()) break;
-            for (auto iterator = node.children.rbegin(); iterator != node.children.rend(); ++iterator) {
+            for (auto iterator = children.rbegin(); iterator != children.rend(); ++iterator) {
                 const auto z_index = node.style.z_index != 0
                     ? (*iterator)->paint_z_index
                     : (*iterator)->style.z_index;
@@ -532,6 +716,7 @@ dom_node* native_document::hit_test_node(
 
 void native_document::clear()
 {
+    shadow_dom_storage_.reset();
     nodes_.clear();
     native_id_index_.clear();
     // A complete navigation invalidates every node, so no pooled allocation

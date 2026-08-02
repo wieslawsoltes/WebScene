@@ -155,6 +155,65 @@ void test_table_and_form_state_are_cold_for_ordinary_nodes()
         "specialized table or form-control state was not attributed");
 }
 
+void test_shadow_dom_state_is_document_cold_and_pay_for_use()
+{
+    webscene_native::native_document document;
+    for (auto index = 0; index < 128; ++index) {
+        auto& node = document.create_element("div");
+        require(
+            document.append_child(document.body(), node),
+            "shadow cold-state fixture could not append an ordinary node");
+    }
+    auto metrics = document.read_allocation_metrics();
+    require(
+        !document.has_shadow_dom()
+            && metrics.shadow_dom_role_count == 0
+            && metrics.shadow_dom_storage_bytes == 0,
+        "light DOM eagerly allocated Shadow DOM side-table state");
+
+    auto& host = document.create_element("section");
+    auto& light = document.create_element("span");
+    light.attributes["slot"] = "detail";
+    auto& root = document.create_element("#document-fragment");
+    auto& slot = document.create_element("slot");
+    slot.attributes["name"] = "detail";
+    require(
+        document.append_child(document.body(), host)
+            && document.append_child(host, light)
+            && document.append_child(root, slot),
+        "shadow pay-for-use fixture could not build its logical trees");
+    root.parent = &host;
+    auto& host_state = document.mutable_shadow_dom(host);
+    host_state.root = &root;
+    host_state.open = true;
+    auto& root_state = document.mutable_shadow_dom(root);
+    root_state.host = &host;
+    root_state.open = true;
+    document.refresh_shadow_distributions();
+
+    require(
+        document.composed_children(host).size() == 1
+            && document.composed_children(host).front() == &slot
+            && document.composed_children(slot).size() == 1
+            && document.composed_children(slot).front() == &light
+            && document.composed_parent(light) == &slot,
+        "allocated Shadow DOM state did not project the named slot");
+    metrics = document.read_allocation_metrics();
+    require(
+        document.has_shadow_dom()
+            && metrics.shadow_dom_role_count >= 4
+            && metrics.shadow_dom_storage_bytes > 0,
+        "used Shadow DOM roles were not attributed to cold storage");
+
+    document.clear();
+    metrics = document.read_allocation_metrics();
+    require(
+        !document.has_shadow_dom()
+            && metrics.shadow_dom_role_count == 0
+            && metrics.shadow_dom_storage_bytes == 0,
+        "document clear retained Shadow DOM side-table storage");
+}
+
 void test_document_clear_releases_and_reinitializes_node_pool()
 {
     webscene_native::native_document document;

@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Open Shadow DOM ownership, slots, scoping, focus, events, and lifecycle</title>
+<style>
+  .inside { color: rgb(180, 20, 20); }
+</style>
+<div id="host">
+  <span id="default-light">default light</span>
+  <span id="named-light" slot="detail">named light</span>
+</div>
+<div id="outside" class="inside">outside</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function equal(actual, expected, message) {
+    if (!Object.is(actual, expected)) {
+      throw new Error(`${message}: expected ${expected}, got ${actual}`);
+    }
+  }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL", message: String(error.message || error),
+        stack: error.stack || null
+      });
+    }
+  }
+
+  const host = document.getElementById("host");
+  const root = host.attachShadow({ mode: "open" });
+  root.innerHTML = `
+    <style>
+      :host { display: block; width: 240px; color: rgb(90, 30, 150); }
+      .inside { display: block; width: 120px; height: 24px; color: rgb(20, 110, 70); }
+    </style>
+    <div id="internal" class="inside"><span id="inherited">internal</span></div>
+    <span id="host-inherited">host inherited</span>
+    <slot></slot><slot name="detail"><b id="fallback">fallback</b></slot>
+    <button id="focus-target">focus</button>`;
+
+  test("open ShadowRoot identity and ownership", () => {
+    assert(root instanceof ShadowRoot, "attachShadow did not return a ShadowRoot");
+    assert(host.shadowRoot === root, "open root identity was not stable");
+    assert(root.host === host, "root.host did not expose its host");
+    equal(root.mode, "open", "root mode");
+    equal(root.delegatesFocus, false, "delegatesFocus default");
+    assert(root.parentNode === null && root.parentElement === null,
+      "ShadowRoot leaked its internal host link through parentNode");
+  });
+
+  test("DOM roots and query boundaries remain logical", () => {
+    const internal = root.querySelector("#internal");
+    assert(internal.getRootNode() === root, "uncomposed root was not ShadowRoot");
+    assert(internal.getRootNode({ composed: true }) === document,
+      "composed root was not the document");
+    assert(document.querySelector("#internal") === null,
+      "document query crossed the shadow boundary");
+    assert(host.querySelector("#internal") === null,
+      "host query crossed the shadow boundary");
+    assert(root.contains(internal), "ShadowRoot did not contain its child");
+    assert(!host.contains(internal), "host.contains crossed the shadow boundary");
+    assert(internal.closest("#host") === null, "closest crossed the shadow boundary");
+  });
+
+  test("default and named slots distribute direct light children", () => {
+    const slots = root.querySelectorAll("slot");
+    const defaultLight = document.getElementById("default-light");
+    const namedLight = document.getElementById("named-light");
+    equal(slots[0].assignedElements().length, 1, "default assigned element count");
+    assert(slots[0].assignedElements()[0] === defaultLight,
+      "default slot assigned the wrong element");
+    assert(slots[1].assignedElements()[0] === namedLight,
+      "named slot assigned the wrong element");
+    assert(defaultLight.assignedSlot === slots[0], "default assignedSlot identity");
+    assert(namedLight.assignedSlot === slots[1], "named assignedSlot identity");
+    assert(defaultLight.parentNode === host && namedLight.parentNode === host,
+      "distribution changed the logical parent");
+    equal(slots[1].name, "detail", "slot name reflection");
+    assert(defaultLight.getBoundingClientRect().width > 0
+      && namedLight.getBoundingClientRect().width > 0,
+      "assigned light children did not participate in composed layout");
+  });
+
+  test("shadow styles are scoped and host values inherit inward", () => {
+    const internalStyle = getComputedStyle(root.querySelector("#internal"));
+    const inheritedStyle = getComputedStyle(root.querySelector("#inherited"));
+    const hostInheritedStyle = getComputedStyle(root.querySelector("#host-inherited"));
+    const outsideStyle = getComputedStyle(document.getElementById("outside"));
+    equal(getComputedStyle(host).color, "rgb(90, 30, 150)", ":host selector color");
+    equal(getComputedStyle(host).width, "240px", ":host selector width");
+    equal(internalStyle.color, "rgb(20, 110, 70)", "shadow selector color");
+    equal(inheritedStyle.color, "rgb(20, 110, 70)", "shadow descendant inheritance");
+    equal(hostInheritedStyle.color, "rgb(90, 30, 150)", "host value inherited inward");
+    equal(outsideStyle.color, "rgb(180, 20, 20)", "document selector isolation");
+    equal(root.querySelector("#internal").getBoundingClientRect().width, 120,
+      "shadow layout did not use scoped width");
+  });
+
+  test("composed events share slot/root/host projection and retarget outside", () => {
+    const internal = root.querySelector("#internal");
+    const observed = [];
+    let internalPath = [];
+    internal.addEventListener("shadow-probe", event => {
+      observed.push(["internal", event.target]);
+      internalPath = event.composedPath();
+    });
+    root.addEventListener("shadow-probe", event => observed.push(["root", event.target]));
+    host.addEventListener("shadow-probe", event => observed.push(["host", event.target]));
+    document.body.addEventListener("shadow-probe", event => observed.push(["body", event.target]));
+    internal.dispatchEvent(new Event("shadow-probe", { bubbles: true, composed: true }));
+    assert(observed[0][1] === internal && observed[1][1] === internal,
+      "internal listeners saw a retargeted event");
+    assert(observed[2][1] === host && observed[3][1] === host,
+      "outside listeners did not see the host retarget");
+    assert(internalPath[0] === internal && internalPath.includes(root)
+      && internalPath.includes(host), "composedPath omitted internal/root/host entries");
+  });
+
+  test("non-composed events stop at ShadowRoot", () => {
+    const internal = root.querySelector("#internal");
+    let rootCount = 0;
+    let hostCount = 0;
+    root.addEventListener("local-probe", () => rootCount++);
+    host.addEventListener("local-probe", () => hostCount++);
+    internal.dispatchEvent(new Event("local-probe", { bubbles: true, composed: false }));
+    equal(rootCount, 1, "ShadowRoot local event count");
+    equal(hostCount, 0, "non-composed event escaped its root");
+  });
+
+  test("focus follows the composed tree while activeElement stays retargeted", () => {
+    const button = root.querySelector("#focus-target");
+    button.focus();
+    assert(root.activeElement === button, "ShadowRoot.activeElement lost internal focus");
+    assert(document.activeElement === host, "document.activeElement did not retarget to host");
+  });
+
+  test("custom-element reactions include connected shadow descendants", () => {
+    const reactions = [];
+    customElements.define("shadow-lifecycle", class extends HTMLElement {
+      connectedCallback() { reactions.push("connected"); }
+      disconnectedCallback() { reactions.push("disconnected"); }
+    });
+    const element = document.createElement("shadow-lifecycle");
+    root.appendChild(element);
+    host.remove();
+    document.body.appendChild(host);
+    equal(reactions.join("|"), "connected|disconnected|connected",
+      "shadow descendant lifecycle transitions");
+  });
+
+  test("duplicate roots fail and closed roots stay concealed", () => {
+    let duplicate = null;
+    try { host.attachShadow({ mode: "open" }); } catch (error) { duplicate = error; }
+    assert(duplicate && duplicate.name === "NotSupportedError", "duplicate attach error");
+    const closedHost = document.createElement("div");
+    const closed = closedHost.attachShadow({ mode: "closed" });
+    equal(closed.mode, "closed", "closed root mode");
+    assert(closed.host === closedHost, "closed root lost its host");
+    assert(closedHost.shadowRoot === null, "closed root leaked through host.shadowRoot");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

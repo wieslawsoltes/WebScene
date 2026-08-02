@@ -1147,6 +1147,18 @@ struct dom_node final {
 
 class native_document final {
 public:
+    // Shadow DOM state is kept entirely outside dom_node. A light-DOM-only
+    // document therefore preserves both sizeof(dom_node) and every per-node
+    // allocation. The side table is instantiated only by attachShadow().
+    struct shadow_dom_data final {
+        dom_node* root{nullptr};
+        dom_node* host{nullptr};
+        dom_node* assigned_slot{nullptr};
+        std::vector<dom_node*> assigned_nodes;
+        bool open{true};
+        bool delegates_focus{false};
+    };
+
     struct allocation_metrics final {
         uint64_t node_count{0};
         uint64_t node_object_size_bytes{0};
@@ -1183,6 +1195,8 @@ public:
         uint64_t authored_style_node_count{0};
         uint64_t authored_style_entry_count{0};
         uint64_t authored_style_storage_bytes{0};
+        uint64_t shadow_dom_role_count{0};
+        uint64_t shadow_dom_storage_bytes{0};
         uint64_t canvas_node_count{0};
         uint64_t canvas_storage_bytes{0};
         uint64_t text_measurement_cache_entry_count{0};
@@ -1210,6 +1224,21 @@ public:
     bool parser_remove_from_parent(dom_node& child) noexcept;
     bool parser_reparent_children(dom_node& source, dom_node& destination) noexcept;
     dom_node& parser_template_contents(dom_node& element);
+    bool has_shadow_dom() const noexcept;
+    const shadow_dom_data* shadow_dom(const dom_node& node) const noexcept;
+    shadow_dom_data& mutable_shadow_dom(dom_node& node);
+    bool is_shadow_root(const dom_node& node) const noexcept;
+    dom_node* containing_shadow_root(dom_node& node) const noexcept;
+    const dom_node* containing_shadow_root(const dom_node& node) const noexcept;
+    const std::vector<dom_node*>& composed_children(const dom_node& node) const noexcept;
+    std::vector<dom_node*>& composed_children(dom_node& node) noexcept;
+    void refresh_shadow_distributions();
+    dom_node* composed_parent(dom_node& node) const noexcept;
+    const dom_node* composed_parent(const dom_node& node) const noexcept;
+    dom_node* event_parent(dom_node& node) const noexcept;
+    const dom_node* event_parent(const dom_node& node) const noexcept;
+    dom_node* dom_parent(dom_node& node) const noexcept;
+    const dom_node* dom_parent(const dom_node& node) const noexcept;
     void remove_all_children(dom_node& parent);
     size_t erase_detached_subtree(dom_node& root);
     dom_node* find_by_native_id(uint32_t id) noexcept;
@@ -1266,6 +1295,10 @@ public:
     static uint32_t parse_color(const std::string& value);
 
 private:
+    struct shadow_dom_storage final {
+        std::unordered_map<uint32_t, shadow_dom_data> node_data;
+    };
+
     class tracking_memory_resource final : public std::pmr::memory_resource {
     public:
         size_t reserved_bytes() const noexcept { return reserved_bytes_; }
@@ -1382,7 +1415,7 @@ private:
         dom_node& node,
         const std::string& selector,
         std::vector<dom_node*>& result);
-    static dom_node* hit_test_node(
+    dom_node* hit_test_node(
         dom_node& node,
         float x,
         float y,
@@ -1404,6 +1437,7 @@ private:
             .largest_required_pool_block = sizeof(dom_node)},
         &node_pool_upstream_};
     std::vector<node_pointer> nodes_;
+    std::unique_ptr<shadow_dom_storage> shadow_dom_storage_;
     // Native IDs are monotonically assigned and are used on hot event and
     // detached-wrapper paths. Keep a sparse direct index rather than scanning
     // every live allocation for each lookup. Detached tail entries are

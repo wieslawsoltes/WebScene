@@ -783,3 +783,60 @@ void test_later_dom_overlay_background_paints_above_retained_canvas(webscene_eng
         overlay_covers_earlier_chart_dom,
         "a descendant z-index reordered an earlier ancestor above a later DOM overlay");
 }
+
+void test_shadow_dom_composed_runtime_geometry(webscene_engine* engine)
+{
+    resize(engine, 800, 600, 86U);
+    const auto geometry = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = '.title{font-weight:700}.detail{display:block;color:rgb(72,82,100)}';
+          document.body.appendChild(style);
+          const host = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'title';
+          title.slot = 'title';
+          title.textContent = 'Ready component';
+          const detail = document.createElement('div');
+          detail.className = 'detail';
+          detail.textContent = 'Slotted content follows one composed layout and paint tree.';
+          host.appendChild(title);
+          host.appendChild(detail);
+          document.body.appendChild(host);
+          const root = host.attachShadow({mode:'open'});
+          root.innerHTML = `<style>
+            :host{display:block;width:360px;margin:24px}
+            .card{display:flex;width:360px;padding:16px;gap:12px}
+            .badge{flex:0 0 40px;height:40px;background:rgb(44,84,164)}
+            .copy{flex:1 1 auto;min-width:0} slot,.fallback{display:block}
+          </style><div class="card"><div class="badge"></div><div class="copy">
+            <slot name="title"></slot><slot><span class="fallback">Fallback</span></slot>
+            </div></div>`;
+          const slots = root.querySelectorAll('slot');
+          const fallback = root.querySelector('.fallback');
+          const titleRect = title.getBoundingClientRect();
+          const detailRect = detail.getBoundingClientRect();
+          const fallbackWhileAssigned = fallback.getBoundingClientRect();
+          detail.slot = 'missing';
+          const hiddenDetailRect = detail.getBoundingClientRect();
+          const visibleFallbackRect = fallback.getBoundingClientRect();
+          detail.removeAttribute('slot');
+          const restoredDetailRect = detail.getBoundingClientRect();
+          const hiddenFallbackRect = fallback.getBoundingClientRect();
+          return slots[0].assignedElements().length === 1
+            && slots[1].assignedElements().length === 1
+            && titleRect.width > 0 && titleRect.height > 0
+            && detailRect.width > 0 && detailRect.height > 0
+            && fallbackWhileAssigned.width === 0 && fallbackWhileAssigned.height === 0
+            && hiddenDetailRect.width === 0 && hiddenDetailRect.height === 0
+            && visibleFallbackRect.width > 0 && visibleFallbackRect.height > 0
+            && restoredDetailRect.width > 0 && restoredDetailRect.height > 0
+            && hiddenFallbackRect.width === 0 && hiddenFallbackRect.height === 0;
+        })()
+    )JS", "native-shadow-composed-scene-setup.js");
+    require(
+        geometry == "true",
+        "shadow slot projection did not establish composed geometry: " + geometry);
+}

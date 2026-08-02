@@ -1,5 +1,41 @@
 void native_document::layout(float viewport_width, float viewport_height)
 {
+    if (shadow_dom_storage_ != nullptr) {
+        refresh_shadow_distributions();
+        // Nodes omitted by slot distribution must not retain geometry from an
+        // earlier projection. Clear only shadow-related logical subtrees; the
+        // composed layout below immediately restores every projected node.
+        const auto clear_projection_layout = [&](const auto& self, dom_node& node) -> void {
+            node.visible = false;
+            node.layout = {};
+            node.text_layout_fragments.clear();
+            node.scroll_content_width = 0.0F;
+            node.scroll_content_height = 0.0F;
+            node.scroll_viewport_width = 0.0F;
+            node.scroll_viewport_height = 0.0F;
+            if (node.style.before_pseudo().generated) {
+                node.style.mutable_before_pseudo().layout = {};
+            }
+            if (node.style.after_pseudo().generated) {
+                node.style.mutable_after_pseudo().layout = {};
+            }
+            node.list_marker_layout = {};
+            if (const auto* state = shadow_dom(node);
+                state != nullptr && state->root != nullptr) {
+                self(self, *state->root);
+            }
+            for (auto* child : node.children) {
+                if (child != nullptr) self(self, *child);
+            }
+        };
+        for (auto& [_, state] : shadow_dom_storage_->node_data) {
+            if (state.root == nullptr || state.root->parent == nullptr) continue;
+            for (auto* child : state.root->parent->children) {
+                if (child != nullptr) clear_projection_layout(clear_projection_layout, *child);
+            }
+            clear_projection_layout(clear_projection_layout, *state.root);
+        }
+    }
     viewport_width_ = std::max(1.0F, viewport_width);
     viewport_height_ = std::max(1.0F, viewport_height);
     body_->layout = {
@@ -9,9 +45,9 @@ void native_document::layout(float viewport_width, float viewport_height)
         std::max(1.0F, viewport_height)};
     body_->visible = true;
     layout_children(*body_);
-    update_paint_z_index(*body_);
+    update_paint_z_index(*this, *body_);
     auto retained_canvas_seen = false;
-    update_retained_canvas_paint_phase(*body_, retained_canvas_seen);
+    update_retained_canvas_paint_phase(*this, *body_, retained_canvas_seen);
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
@@ -30,7 +66,7 @@ void native_document::layout_children(dom_node& parent)
     const auto marker_text = list_marker_text(parent);
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(parent, true) == "inside";
-    if (parent.children.empty() && !has_before && !has_after && !has_inside_marker) {
+    if (composed_children(parent).empty() && !has_before && !has_after && !has_inside_marker) {
         return;
     }
 
@@ -68,7 +104,7 @@ void native_document::layout_children(dom_node& parent)
         0.0F,
         std::max(0.0F, parent.scroll_content_height - content.height));
     if (parent.style.display == display_mode::contents) {
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             // Collapsible indentation around flattened children generates no
             // box. Giving it the contents rectangle lets an invisible text node
@@ -88,7 +124,7 @@ void native_document::layout_children(dom_node& parent)
     // not generate independent layout containers even when authored with an
     // overriding display on their children.
     if (is_table_track(parent.style.display)) {
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = false;
             child->layout = {};
             child->scroll_content_width = 0;
@@ -102,10 +138,11 @@ void native_document::layout_children(dom_node& parent)
     // A table root with cells or other table-internal children but no authored
     // row still generates anonymous rows. Keep those boxes virtual: the DOM
     // remains unchanged while the participating children share a row grid.
-    if (is_table_container(parent.style.display) && !has_table_row_descendant(parent)) {
+    if (is_table_container(parent.style.display)
+        && !has_table_row_descendant(*this, parent)) {
         std::vector<float> explicit_columns;
         const auto collect_columns = [&](const auto& self, const dom_node& node) -> void {
-            for (const auto* child : node.children) {
+            for (const auto* child : composed_children(node)) {
                 if (child->style.display == display_mode::table_column) {
                     auto width = is_specified(child->style.width)
                         ? resolve_length(*child, child->style.width, content.width, 0)
@@ -125,7 +162,7 @@ void native_document::layout_children(dom_node& parent)
             direct_rows.push_back(std::move(current_row));
             current_row.clear();
         };
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             if (is_table_track(child->style.display)) {
                 flush_row();
                 continue;
@@ -232,7 +269,7 @@ void native_document::layout_children(dom_node& parent)
         size_t direct_row_index = 0;
         current_row.clear();
         dom_node* preceding_non_caption = nullptr;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible || is_table_track(child->style.display)
                 || is_collapsible_whitespace_text(*child)) {
@@ -276,7 +313,8 @@ void native_document::layout_children(dom_node& parent)
         return;
     }
 
-    if (is_table_container(parent.style.display) && has_table_row_descendant(parent)) {
+    if (is_table_container(parent.style.display)
+        && has_table_row_descendant(*this, parent)) {
         struct table_cell_placement final {
             dom_node* cell{nullptr};
             size_t column{0};
@@ -290,7 +328,7 @@ void native_document::layout_children(dom_node& parent)
 
         std::vector<table_row_placement> rows;
         std::function<void(dom_node&)> collect_rows = [&](dom_node& node) {
-            for (auto* child : node.children) {
+            for (auto* child : composed_children(node)) {
                 if (child->style.display == display_mode::none
                     || is_table_track(child->style.display)) continue;
                 if (child->style.display == display_mode::table_row) {
@@ -306,7 +344,7 @@ void native_document::layout_children(dom_node& parent)
         size_t column_count = 0;
         for (auto& row : rows) {
             size_t column = 0;
-            for (auto* child : row.row->children) {
+            for (auto* child : composed_children(*row.row)) {
                 if (child->style.display != display_mode::table_cell) continue;
                 while (column < occupied_rows.size() && occupied_rows[column] > 0) ++column;
                 const auto parse_span = [&](std::string_view name) {
@@ -463,7 +501,7 @@ void native_document::layout_children(dom_node& parent)
         }
 
         auto cursor_y = content.y;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible || is_table_track(child->style.display)) {
                 child->layout = {};
@@ -480,7 +518,9 @@ void native_document::layout_children(dom_node& parent)
                 height = child->table_layout().row_height;
             } else if (is_table_row_group(child->style.display)) {
                 for (const auto& row : rows) {
-                    if (row.row->parent == child) height += row.row->table_layout().row_height;
+                    if (composed_parent(*row.row) == child) {
+                        height += row.row->table_layout().row_height;
+                    }
                 }
             } else {
                 height = intrinsic_size(*child, false, content.height);
@@ -495,12 +535,12 @@ void native_document::layout_children(dom_node& parent)
     }
 
     if (is_table_row_group(parent.style.display)
-        && std::none_of(parent.children.begin(), parent.children.end(), [](const auto* child) {
+        && std::none_of(composed_children(parent).begin(), composed_children(parent).end(), [](const auto* child) {
             return child->style.display == display_mode::table_row;
         })) {
         std::vector<dom_node*> cells;
         std::vector<dom_node*> captions;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             if (child->style.display == display_mode::none
                 || is_table_track(child->style.display)) {
                 child->visible = false;
@@ -558,7 +598,7 @@ void native_document::layout_children(dom_node& parent)
 
     if (is_table_row_group(parent.style.display)) {
         auto cursor_y = content.y;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible) {
                 child->layout = {};
@@ -584,7 +624,7 @@ void native_document::layout_children(dom_node& parent)
         for (size_t column = 0; column < parent_table.column_widths.size(); ++column) {
             offsets[column + 1] = offsets[column] + parent_table.column_widths[column];
         }
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible) {
                 child->layout = {};
@@ -601,10 +641,10 @@ void native_document::layout_children(dom_node& parent)
                 content.y,
                 offsets[end] - offsets[child_table.column_index],
                 child_table.cell_height > 0 ? child_table.cell_height : content.height});
-            if (parent.style.align_items == align_mode::center && !child->children.empty()) {
+            if (parent.style.align_items == align_mode::center && !composed_children(*child).empty()) {
                 auto content_top = std::numeric_limits<float>::max();
                 auto content_bottom = std::numeric_limits<float>::lowest();
-                for (const auto* descendant : child->children) {
+                for (const auto* descendant : composed_children(*child)) {
                     if (!descendant->visible || is_out_of_flow(descendant->style.position)) continue;
                     content_top = std::min(content_top, descendant->layout.y);
                     content_bottom = std::max(
@@ -618,15 +658,15 @@ void native_document::layout_children(dom_node& parent)
                     std::function<void(dom_node&)> shift_subtree = [&](dom_node& node) {
                         node.layout.y += offset_y;
                         for (auto& fragment : node.text_layout_fragments) fragment.y += offset_y;
-                        for (auto* descendant : node.children) shift_subtree(*descendant);
+                        for (auto* descendant : composed_children(node)) shift_subtree(*descendant);
                     };
-                    for (auto* descendant : child->children) shift_subtree(*descendant);
+                    for (auto* descendant : composed_children(*child)) shift_subtree(*descendant);
                 }
             }
         }
         auto improper_x = offsets.empty() ? content.x : offsets.back();
         auto improper_height = content.height;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             if (child->style.display == display_mode::none
                 || child->style.display == display_mode::table_cell
                 || child->tag.starts_with('#')) continue;
@@ -683,8 +723,8 @@ void native_document::layout_children(dom_node& parent)
     const auto inline_formatting_context = !has_before && !has_after && !has_inside_marker
         && !is_flex_container(parent.style.display)
         && std::all_of(
-            parent.children.begin(),
-            parent.children.end(),
+            composed_children(parent).begin(),
+            composed_children(parent).end(),
             [](const dom_node* child) {
                 return child->style.display == display_mode::none
                     || is_out_of_flow(child->style.position)
@@ -734,7 +774,7 @@ void native_document::layout_children(dom_node& parent)
                 return false;
             }
             if (is_specified(node.style.width) || is_specified(node.style.height)) return false;
-            for (auto* child : node.children) {
+            for (auto* child : composed_children(node)) {
                 if (child->style.display != display_mode::none
                     && !is_out_of_flow(child->style.position)
                     && !is_inline_level(child->style.display)) {
@@ -745,7 +785,7 @@ void native_document::layout_children(dom_node& parent)
             return true;
         };
         auto supported = true;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             if (!collect_runs(*child)) {
                 supported = false;
                 break;
@@ -865,7 +905,7 @@ void native_document::layout_children(dom_node& parent)
                     for (const auto& fragment : node.text_layout_fragments) {
                         include({fragment.x, fragment.y, fragment.width, fragment.height});
                     }
-                    for (auto* child : node.children) {
+                    for (auto* child : composed_children(node)) {
                         layout_rect child_bounds{};
                         if (update_inline_box(*child, child_bounds)) include(child_bounds);
                     }
@@ -874,7 +914,7 @@ void native_document::layout_children(dom_node& parent)
                         : layout_rect{content.x + cursor_x, content.y + cursor_y, 0, 0};
                     return has_bounds;
                 };
-            for (auto* child : parent.children) {
+            for (auto* child : composed_children(parent)) {
                 layout_rect child_bounds{};
                 update_inline_box(*child, child_bounds);
             }
@@ -886,9 +926,9 @@ void native_document::layout_children(dom_node& parent)
                     static_anchors.size() - 1U)];
                 auto* containing_node = body_;
                 if (child.style.position == position_mode::absolute) {
-                    for (auto* ancestor = child.parent;
+                    for (auto* ancestor = composed_parent(child);
                         ancestor != nullptr && ancestor != body_;
-                        ancestor = ancestor->parent) {
+                        ancestor = composed_parent(*ancestor)) {
                         if (ancestor->style.position != position_mode::normal) {
                             containing_node = ancestor;
                             break;
@@ -958,7 +998,7 @@ void native_document::layout_children(dom_node& parent)
         };
         std::vector<grid_row> rows;
         dom_node* pending = nullptr;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             // CSS Grid does not generate anonymous grid items for
             // whitespace-only text. Counting indentation here creates extra
@@ -1066,7 +1106,7 @@ void native_document::layout_children(dom_node& parent)
     }
     if (is_grid_container(parent.style.display) && parent_grid.fractional_rows) {
         std::vector<dom_node*> flow_children;
-        for (auto* child : parent.children) {
+        for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible) {
                 child->layout = {};
@@ -1118,7 +1158,7 @@ void native_document::layout_children(dom_node& parent)
     std::optional<dom_node> after_item;
     const auto flex_container = is_flex_container(parent.style.display);
     std::vector<dom_node*> layout_items;
-    layout_items.reserve(parent.children.size() + 3U);
+    layout_items.reserve(composed_children(parent).size() + 3U);
     if (has_inside_marker) {
         marker_item.emplace(make_list_marker_layout_node(parent, marker_text));
         layout_items.push_back(&*marker_item);
@@ -1139,12 +1179,12 @@ void native_document::layout_children(dom_node& parent)
             child->layout = {};
             child->scroll_content_width = 0;
             child->scroll_content_height = 0;
-            for (auto* descendant : child->children) self(self, descendant);
+            for (auto* descendant : composed_children(*child)) self(self, descendant);
             return;
         }
         if (child != nullptr) layout_items.push_back(child);
     };
-    for (auto* child : parent.children) {
+    for (auto* child : composed_children(parent)) {
         append_layout_item(append_layout_item, child);
     }
     if (has_after) {
@@ -1559,7 +1599,7 @@ void native_document::layout_children(dom_node& parent)
             if (child->style.position == position_mode::absolute) {
                 for (auto* ancestor = &parent;
                     ancestor != nullptr && ancestor != body_;
-                    ancestor = ancestor->parent) {
+                    ancestor = composed_parent(*ancestor)) {
                     if (ancestor->style.position != position_mode::normal) {
                         containing_node = ancestor;
                         break;
@@ -1909,7 +1949,7 @@ void native_document::layout_children(dom_node& parent)
                         + (line_height - glyph_height) * 0.5F
                         + metrics.ascent;
                 }
-                for (const auto* descendant : node.children) {
+                for (const auto* descendant : composed_children(node)) {
                     if (const auto baseline = first_text_baseline(*descendant)) return baseline;
                 }
                 return std::nullopt;
@@ -1929,7 +1969,7 @@ void native_document::layout_children(dom_node& parent)
             const auto shift_subtree_y = [&](const auto& self, dom_node& node, float offset) -> void {
                 node.layout.y += offset;
                 for (auto& fragment : node.text_layout_fragments) fragment.y += offset;
-                for (auto* descendant : node.children) self(self, *descendant, offset);
+                for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
             };
             for (auto* child : ordered_children) {
                 if (!participates_in_flow(child) || !child->visible || !uses_baseline(*child)) continue;
@@ -1957,7 +1997,7 @@ void native_document::layout_children(dom_node& parent)
         const auto shift_subtree_y = [&](const auto& self, dom_node& node, float offset) -> void {
             node.layout.y += offset;
             for (auto& fragment : node.text_layout_fragments) fragment.y += offset;
-            for (auto* descendant : node.children) self(self, *descendant, offset);
+            for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
         };
         for (auto* child : ordered_children) {
             if (!participates_in_flow(child) || !child->visible
@@ -2051,12 +2091,13 @@ float native_document::intrinsic_size(
         return constrain(resolve_length(node, authored, available, 0)
             + (node.style.border_box ? 0.0F : padding));
     }
-    if ((is_table_container(node.style.display) && has_table_row_descendant(node))
+    if ((is_table_container(node.style.display)
+            && has_table_row_descendant(*this, node))
         || is_table_row_group(node.style.display)
         || node.style.display == display_mode::table_row) {
         std::vector<const dom_node*> rows;
         std::function<void(const dom_node&)> collect_rows = [&](const dom_node& current) {
-            for (const auto* child : current.children) {
+            for (const auto* child : composed_children(current)) {
                 if (child->style.display == display_mode::table_row) rows.push_back(child);
                 else if (is_table_row_group(child->style.display)) collect_rows(*child);
             }
@@ -2067,7 +2108,7 @@ float native_document::intrinsic_size(
             size_t count = 0;
             for (const auto* row : rows) {
                 size_t row_count = 0;
-                for (const auto* cell : row->children) {
+                for (const auto* cell : composed_children(*row)) {
                     if (cell->style.display != display_mode::table_cell) continue;
                     auto span = cell->attributes.find("colspan");
                     if (span == cell->attributes.end()) span = cell->attributes.find("colSpan");
@@ -2079,7 +2120,7 @@ float native_document::intrinsic_size(
             std::vector<float> columns(count, 0.0F);
             for (const auto* row : rows) {
                 size_t column = 0;
-                for (const auto* cell : row->children) {
+                for (const auto* cell : composed_children(*row)) {
                     if (cell->style.display != display_mode::table_cell) continue;
                     auto span_value = cell->attributes.find("colspan");
                     if (span_value == cell->attributes.end()) {
@@ -2102,7 +2143,7 @@ float native_document::intrinsic_size(
         for (const auto* row : rows) {
             auto row_height = is_specified(row->style.height)
                 ? resolve_length(*row, row->style.height, available, 0) : 0.0F;
-            for (const auto* cell : row->children) {
+            for (const auto* cell : composed_children(*row)) {
                 if (cell->style.display == display_mode::table_cell) {
                     row_height = std::max(row_height, intrinsic_size(*cell, false, available));
                 }
@@ -2176,7 +2217,7 @@ float native_document::intrinsic_size(
     const auto marker_text = list_marker_text(node);
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(node, true) == "inside";
-    if (node.children.empty() && !has_before && !has_after && !has_inside_marker) {
+    if (composed_children(node).empty() && !has_before && !has_after && !has_inside_marker) {
         if (!has_visible_text(node.text_content)) {
             const auto measured = horizontal && is_collapsible_whitespace_text(node)
                 ? measure_text_width(" ", node)
@@ -2199,7 +2240,7 @@ float native_document::intrinsic_size(
         float row_height = 0;
         float total_height = 0;
         bool awaiting_second = false;
-        for (const auto* child : node.children) {
+        for (const auto* child : composed_children(node)) {
             if (child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
                 || is_collapsible_whitespace_text(*child)) continue;
@@ -2241,7 +2282,7 @@ float native_document::intrinsic_size(
     std::optional<dom_node> before_item;
     std::optional<dom_node> after_item;
     std::vector<const dom_node*> intrinsic_items;
-    intrinsic_items.reserve(node.children.size() + 3U);
+    intrinsic_items.reserve(composed_children(node).size() + 3U);
     if (has_inside_marker) {
         marker_item.emplace(make_list_marker_layout_node(node, marker_text));
         intrinsic_items.push_back(&*marker_item);
@@ -2250,7 +2291,7 @@ float native_document::intrinsic_size(
         before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
         intrinsic_items.push_back(&*before_item);
     }
-    intrinsic_items.insert(intrinsic_items.end(), node.children.begin(), node.children.end());
+    intrinsic_items.insert(intrinsic_items.end(), composed_children(node).begin(), composed_children(node).end());
     if (has_after) {
         after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
         intrinsic_items.push_back(&*after_item);
@@ -2331,25 +2372,26 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
             static_cast<float>(lines.size()) * line_height);
     }
     layout_children(child);
-    const auto parent_constrains_height = child.parent != nullptr
-        && (is_specified(child.parent->style.height)
-            || is_specified(child.parent->style.max_height));
+    const auto* parent = composed_parent(child);
+    const auto parent_constrains_height = parent != nullptr
+        && (is_specified(parent->style.height)
+            || is_specified(parent->style.max_height));
     const auto constrained_overflow_height = child.style.overflow_y != overflow_mode::visible
         && (is_specified(child.style.max_height)
-            || (child.parent != nullptr
-                && is_flex_container(child.parent->style.display)
+            || (parent != nullptr
+                && is_flex_container(parent->style.display)
                 && parent_constrains_height));
-    const auto constrained_column_flex_item = child.parent != nullptr
-        && is_flex_container(child.parent->style.display)
-        && child.parent->style.direction == flex_direction::column
+    const auto constrained_column_flex_item = parent != nullptr
+        && is_flex_container(parent->style.display)
+        && parent->style.direction == flex_direction::column
         && parent_constrains_height;
     const auto table_track_sized = is_table_row_group(child.style.display)
         || child.style.display == display_mode::table_row
         || child.style.display == display_mode::table_cell;
     if (automatic_height && !constrained_overflow_height && !constrained_column_flex_item
-        && !table_track_sized && !child.children.empty()) {
+        && !table_track_sized && !composed_children(child).empty()) {
         auto content_bottom = child.layout.y;
-        for (const auto* descendant : child.children) {
+        for (const auto* descendant : composed_children(child)) {
             if (descendant == nullptr || !descendant->visible
                 || is_out_of_flow(descendant->style.position)) continue;
             content_bottom = std::max(
@@ -2385,7 +2427,7 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
             std::function<float(const dom_node&)> deepest_flow_bottom =
                 [&](const dom_node& node) {
                     auto bottom = node.layout.y;
-                    for (const auto* descendant : node.children) {
+                    for (const auto* descendant : composed_children(node)) {
                         if (descendant == nullptr || !descendant->visible
                             || is_out_of_flow(descendant->style.position)) continue;
                         bottom = std::max(

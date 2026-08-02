@@ -98,6 +98,36 @@ identity plus source identity, validate cached data, recover from corruption, an
 compiled versus reused units. Cache ownership remains native so source compilation does
 not cross the hot boundary.
 
+## Logical and composed DOM trees
+
+Shadow DOM adds a composed presentation tree without replacing the document's logical
+DOM tree. Hosts retain their light children for DOM queries and lifecycle ownership;
+their presentation children come from an attached shadow root, whose slots project the
+matching light children or their own fallback children. Code outside a root cannot use
+ordinary parent/child or selector APIs to traverse into it.
+
+The native document owns shadow roots, host links, slot assignment, mode and focus
+metadata in an optional side table. One composed-tree adapter is shared by layout,
+scene construction, geometry, hit testing, focus and event propagation. Cascade walks
+logical content plus attached roots so document rules stop at the boundary, shadow
+rules stay within their root, exact `:host` targets the owner, and inherited used values
+flow from host to shadow content. Event dispatch uses a boundary-aware parent chain so
+the internal path can include `ShadowRoot` while outside listeners observe the host.
+
+This separation is similar in purpose to a control's logical content versus its visual
+or templated presentation, but Shadow DOM also defines JavaScript-visible encapsulation,
+slot distribution, CSS scope and event retargeting. Those rules belong in the native DOM
+projection rather than in an Avalonia visual tree or presenter-specific adapter.
+
+Shadow support is pay for what is used. A light-DOM `dom_node` remains 976 bytes and a
+`native_document` adds only one nullable side-table pointer (296 to 304 bytes). No shadow
+roles or assignment vectors are allocated until shadow APIs are used, and ordinary
+layout pays one nullable-pointer check before distribution refresh. The 2026-08-02
+parent/current comparison measured 0.690/0.686 ms median over 500 lifecycle loads,
+32.580/32.598 ms median over 30 light-DOM selector workloads, and 0.95407%/0.95514%
+normalized CPU for four idle contexts over five seconds. These measurements are
+regression gates for future composed-tree work.
+
 ## Compatibility strategy
 
 The native conformance runner implements one observable adapter contract:

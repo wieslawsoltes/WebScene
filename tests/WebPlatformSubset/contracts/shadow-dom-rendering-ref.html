@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Shadow DOM lifecycle-created composed rendering reference</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: white; }
+  body { font: 16px/20px Arial, sans-serif; color: rgb(26, 34, 48); }
+  .host { display: block; width: 360px; margin: 24px; }
+  .card {
+    display: flex; box-sizing: border-box; width: 360px;
+    padding: 16px; gap: 12px; border: 2px solid rgb(44, 84, 164);
+    border-radius: 12px; background: rgb(238, 245, 255);
+  }
+  .badge { flex: 0 0 40px; height: 40px; border-radius: 20px;
+    background: rgb(44, 84, 164); }
+  .copy { flex: 1 1 auto; min-width: 0; }
+  .title { display: block; font-weight: 700; }
+  .detail { display: block; margin-top: 4px; color: rgb(72, 82, 100); }
+</style>
+<div class="host"><div class="card"><div class="badge"></div><div class="copy">
+  <div class="title">Ready component</div>
+  <div class="detail">Slotted content follows one composed layout and paint tree.</div>
+</div></div></div>

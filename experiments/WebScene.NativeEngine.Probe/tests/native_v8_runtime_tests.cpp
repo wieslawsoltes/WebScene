@@ -107,6 +107,7 @@ int main()
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
+    test_shadow_dom_state_is_document_cold_and_pay_for_use();
     test_document_clear_releases_and_reinitializes_node_pool();
     test_native_id_lookup_tracks_creation_erasure_and_clear();
     test_compact_attribute_collection_preserves_map_semantics();
@@ -164,6 +165,7 @@ int main()
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
     test_contextual_fragment_exposes_parent_node_members(engine);
     test_autonomous_custom_element_lifecycle(engine);
+    test_shadow_dom_composed_runtime_geometry(engine);
     test_monaco_browser_primitives(engine);
     test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);

@@ -100,6 +100,8 @@
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        html_slot_element_template.Reset();
+        shadow_root_template.Reset();
         document_fragment_template.Reset();
         node_template.Reset();
         event_target_template.Reset();

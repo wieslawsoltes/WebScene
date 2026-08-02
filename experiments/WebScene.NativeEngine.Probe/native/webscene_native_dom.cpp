@@ -153,11 +153,12 @@ bool is_table_track(display_mode display) noexcept
         || display == display_mode::table_column_group;
 }
 
-bool has_table_row_descendant(const dom_node& node)
+bool has_table_row_descendant(const native_document& document, const dom_node& node)
 {
-    for (const auto* child : node.children) {
+    for (const auto* child : document.composed_children(node)) {
         if (child->style.display == display_mode::table_row) return true;
-        if (is_table_row_group(child->style.display) && has_table_row_descendant(*child)) {
+        if (is_table_row_group(child->style.display)
+            && has_table_row_descendant(document, *child)) {
             return true;
         }
     }
@@ -169,13 +170,15 @@ struct paint_z_index_update final {
     bool contains_retained_canvas{false};
 };
 
-paint_z_index_update update_paint_z_index(dom_node& node) noexcept
+paint_z_index_update update_paint_z_index(
+    const native_document& document,
+    dom_node& node) noexcept
 {
     auto descendant_z_index = 0;
     auto contains_retained_canvas =
         node.tag == "canvas" && !node.canvas().commands.empty();
-    for (auto* child : node.children) {
-        const auto child_update = update_paint_z_index(*child);
+    for (auto* child : document.composed_children(node)) {
+        const auto child_update = update_paint_z_index(document, *child);
         descendant_z_index = std::max(
             descendant_z_index,
             child_update.z_index);
@@ -195,33 +198,42 @@ paint_z_index_update update_paint_z_index(dom_node& node) noexcept
     return {node.paint_z_index, contains_retained_canvas};
 }
 
-void collect_positive_stacking_nodes(dom_node& node, std::vector<dom_node*>& result)
+void collect_positive_stacking_nodes(
+    const native_document& document,
+    dom_node& node,
+    std::vector<dom_node*>& result)
 {
     if (node.style.z_index > 0) {
         result.push_back(&node);
     }
-    for (auto* child : node.children) {
-        collect_positive_stacking_nodes(*child, result);
+    for (auto* child : document.composed_children(node)) {
+        collect_positive_stacking_nodes(document, *child, result);
     }
 }
 
-void collect_fixed_positioned_nodes(dom_node& node, std::vector<dom_node*>& result)
+void collect_fixed_positioned_nodes(
+    const native_document& document,
+    dom_node& node,
+    std::vector<dom_node*>& result)
 {
     if (node.style.position == position_mode::fixed) {
         result.push_back(&node);
     }
-    for (auto* child : node.children) {
-        collect_fixed_positioned_nodes(*child, result);
+    for (auto* child : document.composed_children(node)) {
+        collect_fixed_positioned_nodes(document, *child, result);
     }
 }
 
-void update_retained_canvas_paint_phase(dom_node& node, bool& retained_canvas_seen)
+void update_retained_canvas_paint_phase(
+    const native_document& document,
+    dom_node& node,
+    bool& retained_canvas_seen)
 {
     node.paints_after_retained_canvas = retained_canvas_seen;
     if (node.tag == "canvas" && !node.canvas().commands.empty()) {
         retained_canvas_seen = true;
     }
-    auto paint_order = node.children;
+    auto paint_order = document.composed_children(node);
     if (std::any_of(paint_order.begin(), paint_order.end(), [](const auto* child) {
         return child->style.z_index != 0;
     })) {
@@ -235,19 +247,23 @@ void update_retained_canvas_paint_phase(dom_node& node, bool& retained_canvas_se
             });
     }
     for (auto* child : paint_order) {
-        update_retained_canvas_paint_phase(*child, retained_canvas_seen);
+        update_retained_canvas_paint_phase(document, *child, retained_canvas_seen);
     }
 }
 
-bool display_tree_allows_render(const dom_node& node) noexcept
+bool display_tree_allows_render(
+    const native_document& document,
+    const dom_node& node) noexcept
 {
-    for (auto* current = &node; current != nullptr; current = current->parent) {
+    for (auto* current = &node; current != nullptr;
+        current = document.composed_parent(*current)) {
         if (current->style.display == display_mode::none) return false;
     }
     return true;
 }
 
 bool stacking_ancestors_allow_hit(
+    const native_document& document,
     const dom_node& node,
     const dom_node& root,
     float x,
@@ -256,7 +272,9 @@ bool stacking_ancestors_allow_hit(
     bool& pointer_events_none)
 {
     std::vector<const dom_node*> ancestors;
-    for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+    for (auto* ancestor = document.composed_parent(node);
+        ancestor != nullptr;
+        ancestor = document.composed_parent(*ancestor)) {
         ancestors.push_back(ancestor);
         if (ancestor == &root) break;
     }

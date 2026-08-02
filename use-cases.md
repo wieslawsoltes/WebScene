@@ -26,6 +26,9 @@ against an explicit profile:
 
 These workloads benefit from keeping hot JavaScript/DOM/Canvas interactions native,
 sharing compilation artifacts, and publishing immutable scene changes to the host.
+The candidate Custom Elements and Shadow DOM slices also make packaged standards-shaped
+components a realistic certification target, provided their exact browser dependencies
+fit the published profile. They do not make arbitrary npm components a support claim.
 
 ## Native application composition
 

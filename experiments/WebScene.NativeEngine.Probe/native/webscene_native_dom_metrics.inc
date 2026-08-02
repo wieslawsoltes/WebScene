@@ -22,6 +22,18 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
         + text_measurement_cache_.size()
             * (sizeof(decltype(text_measurement_cache_)::value_type)
                 + 2U * sizeof(void*));
+    if (shadow_dom_storage_ != nullptr) {
+        result.shadow_dom_role_count = shadow_dom_storage_->node_data.size();
+        result.shadow_dom_storage_bytes = sizeof(shadow_dom_storage)
+            + shadow_dom_storage_->node_data.bucket_count() * sizeof(void*)
+            + shadow_dom_storage_->node_data.size()
+                * (sizeof(decltype(shadow_dom_storage_->node_data)::value_type)
+                    + 2U * sizeof(void*));
+        for (const auto& [_, state] : shadow_dom_storage_->node_data) {
+            result.shadow_dom_storage_bytes +=
+                state.assigned_nodes.capacity() * sizeof(dom_node*);
+        }
+    }
     for (const auto& [key, _] : text_measurement_cache_) {
         result.text_measurement_cache_storage_bytes +=
             key.text.capacity() + key.family.capacity() + 2U;

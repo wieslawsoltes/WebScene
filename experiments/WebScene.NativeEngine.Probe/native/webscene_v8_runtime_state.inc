@@ -14,10 +14,12 @@
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;
     v8::Global<v8::FunctionTemplate> document_fragment_template;
+    v8::Global<v8::FunctionTemplate> shadow_root_template;
 #endif
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> html_slot_element_template;
     uint32_t next_standalone_event_target_id{0x80000000U};
 #endif
     v8::Global<v8::ObjectTemplate> style_template;
@@ -119,6 +121,7 @@
     mutable std::unordered_map<std::string, compiled_css_selector_list>
         compiled_css_selector_lists;
     uint32_t active_stylesheet_owner_id{0};
+    uint32_t active_stylesheet_shadow_scope_root_id{0};
     std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_class;
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_id;

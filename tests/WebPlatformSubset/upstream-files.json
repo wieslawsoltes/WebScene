@@ -89,6 +89,9 @@
     "html/semantics/selectors/pseudo-classes/utils.js": "0596cbaa76db7608636c8c49c7e3ed841386e48ed8df962b1e45f338208f25d8",
     "resources/check-layout-th.js": "b15666105c99548df947b3b9182e78cbadc2871e53f51e26c7c7aa27cf0bef1c",
     "resources/testharness.js": "d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e",
+    "shadow-dom/Element-interface-shadowRoot-attribute.html": "d4e740808bfd51ae76593b05159943595baa127f7fa205054736c2e8aeef151a",
+    "shadow-dom/HTMLSlotElement-interface.html": "5e15195914e8800dcc6fa6de88aaa184316c42d85fa31eea0190a3eeabb00d60",
+    "shadow-dom/ShadowRoot-interface.html": "2332d49d844c3ac679ba3c4748bfee5d2a508d04763b9813e15666b05a323cf4",
     "uievents/order-of-events/focus-events/focus-automated-blink-webkit.html": "8630aec2d53c1b890c205f40e49059b010fae1d729f0b721239f391395b169c1"
   }
 }

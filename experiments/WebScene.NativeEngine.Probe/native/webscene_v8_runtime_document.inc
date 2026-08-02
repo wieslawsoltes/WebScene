@@ -244,7 +244,9 @@
         info.GetReturnValue().Set(result);
     }
 
-    static layout_rect transformed_client_bounds(const dom_node& node)
+    static layout_rect transformed_client_bounds(
+        const native_document& document,
+        const dom_node& node)
     {
         struct point final { double x; double y; };
         std::array<point, 4> corners{{
@@ -260,7 +262,8 @@
             return static_cast<double>(value.value);
         };
         constexpr double degrees_to_radians = 0.017453292519943295;
-        for (auto* current = &node; current != nullptr; current = current->parent) {
+        for (auto* current = &node; current != nullptr;
+             current = document.composed_parent(*current)) {
             const auto origin_x = static_cast<double>(current->layout.x)
                 + resolve_origin(current->style.transform_origin_x, current->layout.width);
             const auto origin_y = static_cast<double>(current->layout.y)
@@ -302,8 +305,9 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
-        const auto has_no_box = [](const dom_node* candidate) {
-            for (auto* current = candidate; current != nullptr; current = current->parent) {
+        const auto has_no_box = [self](const dom_node* candidate) {
+            for (auto* current = candidate; current != nullptr;
+                 current = self->document.composed_parent(*current)) {
                 if (current->style.display == display_mode::none) return true;
             }
             return false;
@@ -320,7 +324,9 @@
         const auto set = [&](const char* name, double value) {
             result->Set(local_context, js_string(info.GetIsolate(), name), v8::Number::New(info.GetIsolate(), value)).Check();
         };
-        const auto bounds = has_no_box ? layout_rect{} : transformed_client_bounds(*node);
+        const auto bounds = has_no_box
+            ? layout_rect{}
+            : transformed_client_bounds(self->document, *node);
         set("x", bounds.x);
         set("y", bounds.y);
         set("left", bounds.x);
@@ -339,7 +345,8 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
-        for (auto* current = node; current != nullptr; current = current->parent) {
+        for (auto* current = node; current != nullptr;
+             current = self->document.composed_parent(*current)) {
             if (current->style.display != display_mode::none) continue;
             info.GetReturnValue().Set(v8::Array::New(info.GetIsolate()));
             return;
@@ -352,7 +359,7 @@
         const auto set = [&](const char* name, double value) {
             rect->Set(local_context, js_string(info.GetIsolate(), name), v8::Number::New(info.GetIsolate(), value)).Check();
         };
-        const auto bounds = transformed_client_bounds(*node);
+        const auto bounds = transformed_client_bounds(self->document, *node);
         set("x", bounds.x);
         set("y", bounds.y);
         set("left", bounds.x);

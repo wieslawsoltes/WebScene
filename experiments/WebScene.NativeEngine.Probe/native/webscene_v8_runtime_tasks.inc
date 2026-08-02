@@ -1098,14 +1098,16 @@
             return read_event_boolean("__websceneImmediatePropagationStopped");
         };
 
-        std::vector<uint32_t> ancestry;
-        for (auto* node = &target; node != nullptr; node = node->parent) ancestry.push_back(node->id);
+        std::vector<dom_node*> ancestry;
+        for (auto* node = &target; node != nullptr; node = document.event_parent(*node)) {
+            ancestry.push_back(node);
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (std::string_view(type) == "mousemove") {
             std::ostringstream path;
             for (size_t index = 0; index < ancestry.size(); ++index) {
                 if (index != 0) path << '>';
-                path << ancestry[index];
+                path << ancestry[index]->id;
             }
             last_mousemove_ancestry = path.str();
         }
@@ -1113,12 +1115,28 @@
         ++input_event_dispatch_count;
         v8::Local<v8::Value> arguments[] = {event};
         const auto listeners = frame_event_listeners.find(type);
+        const auto retargeted_node = [&](const dom_node* current_target) {
+            const auto* root = document.containing_shadow_root(target);
+            if (root == nullptr) return &target;
+            if (current_target != nullptr
+                && document.containing_shadow_root(*current_target) == root) {
+                return &target;
+            }
+            const auto* state = document.shadow_dom(*root);
+            return state == nullptr || state->host == nullptr ? &target : state->host;
+        };
+        const auto set_retargeted_target = [&](const dom_node* current_target) {
+            auto wrapper = wrap_node(*retargeted_node(current_target));
+            event->Set(local_context, js_string(isolate, "target"), wrapper).Check();
+            event->Set(local_context, js_string(isolate, "srcElement"), wrapper).Check();
+        };
         const auto invoke_listeners = [&](
             uint32_t registered_target,
             v8::Local<v8::Object> current_target,
             bool capture,
             int event_phase) {
             if (listeners == frame_event_listeners.end()) return true;
+            set_retargeted_target(document.find_by_native_id(registered_target));
             event->Set(local_context, js_string(isolate, "currentTarget"), current_target).Check();
             set_number("eventPhase", event_phase);
             const auto listener_count = listeners->second.size();
@@ -1167,6 +1185,7 @@
             v8::Local<v8::Value> handler;
             if (!wrapper->Get(local_context, js_string(isolate, property_name.c_str())).ToLocal(&handler)
                 || !handler->IsFunction()) return true;
+            set_retargeted_target(&node);
             event->Set(local_context, js_string(isolate, "currentTarget"), wrapper).Check();
             set_number("eventPhase", event_phase);
             if (handler.As<v8::Function>()->Call(local_context, wrapper, 1, arguments).IsEmpty()) {
@@ -1194,14 +1213,10 @@
             isolate,
             static_cast<int>(ancestry.size() + 2U));
         for (size_t index = 0; index < ancestry.size(); ++index) {
-            auto* node = &target;
-            while (node != nullptr && node->id != ancestry[index]) node = node->parent;
-            if (node != nullptr) {
-                composed_path->Set(
-                    local_context,
-                    static_cast<uint32_t>(index),
-                    wrap_node(*node)).Check();
-            }
+            composed_path->Set(
+                local_context,
+                static_cast<uint32_t>(index),
+                wrap_node(*ancestry[index])).Check();
         }
         composed_path->Set(
             local_context,
@@ -1227,9 +1242,7 @@
                 1)) return false;
         for (size_t cursor = ancestry.size();
              !propagation_stopped() && cursor-- > 1;) {
-            dom_node* node = &target;
-            while (node != nullptr && node->id != ancestry[cursor]) node = node->parent;
-            if (node == nullptr) continue;
+            auto* node = ancestry[cursor];
             if (!invoke_listeners(node->id, wrap_node(*node), true, 1)) return false;
         }
         if (!propagation_stopped()) {
@@ -1242,13 +1255,9 @@
         }
         if (bubbles && !propagation_stopped()) {
             for (size_t cursor = 1;
-                 cursor < ancestry.size() && !propagation_stopped();
+                cursor < ancestry.size() && !propagation_stopped();
                  ++cursor) {
-                dom_node* node = &target;
-                while (node != nullptr && node->id != ancestry[cursor]) {
-                    node = node->parent;
-                }
-                if (node == nullptr) continue;
+                auto* node = ancestry[cursor];
                 auto wrapper = wrap_node(*node);
                 if (!invoke_listeners(node->id, wrapper, false, 3)
                     || (!immediate_propagation_stopped()
@@ -1321,12 +1330,12 @@
         return type == node->attributes.end() || type->second != "hidden";
     }
 
-    static bool is_effectively_visible_for_focus(const dom_node* node)
+    bool is_effectively_visible_for_focus(const dom_node* node)
     {
         auto visibility_resolved = false;
         auto visibility_hidden = false;
         for (auto* current_node = node; current_node != nullptr;
-             current_node = current_node->parent) {
+             current_node = document.composed_parent(*current_node)) {
             if (current_node->style.display == display_mode::none) return false;
             if (!visibility_resolved && current_node->style.visibility_specified) {
                 visibility_hidden = current_node->style.visibility_hidden;
@@ -1348,7 +1357,7 @@
         return true;
     }
 
-    static bool is_programmatically_focusable(const dom_node* node)
+    bool is_programmatically_focusable(const dom_node* node)
     {
         int tab_index = 0;
         return node != nullptr
@@ -1357,14 +1366,15 @@
             && (try_tab_index(node, tab_index) || is_natively_focusable(node));
     }
 
-    static bool is_pointer_focusable(const dom_node* node)
+    bool is_pointer_focusable(const dom_node* node)
     {
         return is_programmatically_focusable(node);
     }
 
     dom_node* nearest_pointer_focusable(dom_node* node)
     {
-        for (auto* current_node = node; current_node != nullptr; current_node = current_node->parent) {
+        for (auto* current_node = node; current_node != nullptr;
+            current_node = document.composed_parent(*current_node)) {
             if (is_pointer_focusable(current_node)) return current_node;
         }
         return nullptr;
@@ -1390,7 +1400,7 @@
                 }
                 ++order;
             }
-            for (auto* child : node.children) visit(*child);
+            for (auto* child : document.composed_children(node)) visit(*child);
         };
         visit(active_root());
         std::stable_sort(candidates.begin(), candidates.end(), [](const auto& left, const auto& right) {
@@ -1410,7 +1420,8 @@
 
     dom_node* nearest_text_control(dom_node* node)
     {
-        for (auto* current_node = node; current_node != nullptr; current_node = current_node->parent) {
+        for (auto* current_node = node; current_node != nullptr;
+            current_node = document.composed_parent(*current_node)) {
             if (is_text_control(current_node)) return current_node;
         }
         return nullptr;
@@ -1518,10 +1529,10 @@
         return true;
     }
 
-    static bool subtree_contains(const dom_node& root, const dom_node* candidate)
+    bool subtree_contains(const dom_node& root, const dom_node* candidate)
     {
         for (auto* current_node = candidate; current_node != nullptr;
-             current_node = current_node->parent) {
+             current_node = document.event_parent(*current_node)) {
             if (current_node == &root) return true;
         }
         return false;

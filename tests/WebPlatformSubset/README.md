@@ -121,4 +121,53 @@ with the registry reverse-lookup document and local lifecycle document passing. 
 light-DOM rendering reftest also passes natively and Chromium independently considers
 its test and reference identical. Remaining failures are retained as discovery data,
 not hidden by expectations: they cluster around Attr mutation APIs, clone upgrade,
-alternate document realms, Shadow DOM, and unrelated iframe/XHR harness prerequisites.
+alternate document realms, and unrelated iframe/XHR harness prerequisites.
+
+## Shadow DOM candidate milestone
+
+The first production-shaped Shadow DOM slice is deliberately one end-to-end vertical
+feature rather than a JavaScript-only API facade. The native document owns roots and
+slot assignment in an optional side table. A single composed projection then drives
+cascade inheritance, layout, paint, geometry, hit testing, focus, custom-element
+lifecycle traversal, and composed event paths, while ordinary DOM parent/child queries
+stay on the logical tree and outside listeners receive a retargeted host.
+
+The candidate claim covers:
+
+- `attachShadow({mode: "open" | "closed"})`, open-root identity and closed-root
+  concealment;
+- direct default and named slot assignment, fallback children, `assignedNodes()` and
+  `assignedElements()`;
+- ordinary shadow-contained selectors, exact `:host`, scoped author rules, and
+  inherited values from the host;
+- composed layout, paint, geometry, hit testing, focus ownership and a basic
+  single-root composed event path; and
+- lifecycle-created shadow content and connected custom elements inside a shadow root.
+
+It does not yet claim nested/flattened or manual distribution, `slotchange`, functional
+`:host()`, `:host-context()`, `::slotted`, `::part`, declarative Shadow DOM,
+`adoptedStyleSheets`/`styleSheets`, complete `delegatesFocus`, complete nested-root and
+`relatedTarget` retargeting, cloning/adoption semantics, or the full Web IDL prototype
+shape. These remain visible discovery failures rather than being papered over.
+
+Recorded 2026-08-02 evidence is:
+
+- the local primitive contract passes 9/9 assertions;
+- the native lifecycle-created rendering fixture exactly matches its inert reference,
+  and Chromium independently passes the same test/reference pair;
+- unchanged pinned WPT reaches 2/3 assertions for
+  `Element-interface-shadowRoot-attribute.html`, 13/18 for
+  `HTMLSlotElement-interface.html`, and 8/12 for `ShadowRoot-interface.html`; and
+- the unchanged failures identify prototype placement, absent `Text`,
+  `createProcessingInstruction` and `StyleSheetList` surfaces, plus flattened nested
+  slots. They are candidate discovery data; the required 110-document gate is
+  unchanged.
+
+The implementation is pay for what is used. `dom_node` remains 976 bytes before and
+after the milestone. `native_document` grows from 296 to 304 bytes for one nullable
+side-table pointer; a light-DOM document allocates no shadow roles or shadow bytes.
+Against the clean parent commit, a 500-sample lifecycle load benchmark improved from a
+0.690 ms to 0.686 ms median, a 30-sample light-DOM selector workload moved from 32.580
+ms to 32.598 ms (+0.055%), and four idle contexts over five seconds moved from 0.95407%
+to 0.95514% normalized CPU (+0.00107 percentage points). These figures establish a
+no-meaningful-regression baseline; future shadow work must preserve it.

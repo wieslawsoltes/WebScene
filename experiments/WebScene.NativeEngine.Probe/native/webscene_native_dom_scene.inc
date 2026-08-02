@@ -9,16 +9,16 @@ void native_document::build_scene(
     string_bytes.clear();
     append_scene(*body_, commands, strings, string_bytes, false, true);
     std::vector<dom_node*> fixed;
-    for (auto* child : body_->children) {
-        collect_fixed_positioned_nodes(*child, fixed);
+    for (auto* child : composed_children(*body_)) {
+        collect_fixed_positioned_nodes(*this, *child, fixed);
     }
     for (const auto* fixed_node : fixed) {
-        if (!display_tree_allows_render(*fixed_node)) continue;
+        if (!display_tree_allows_render(*this, *fixed_node)) continue;
         auto inherited_visibility_hidden = false;
         std::vector<const dom_node*> ancestors;
-        for (auto* ancestor = fixed_node->parent;
+        for (auto* ancestor = composed_parent(*fixed_node);
              ancestor != nullptr;
-             ancestor = ancestor->parent) {
+             ancestor = composed_parent(*ancestor)) {
             ancestors.push_back(ancestor);
         }
         for (auto iterator = ancestors.rbegin(); iterator != ancestors.rend(); ++iterator) {
@@ -44,7 +44,7 @@ void native_document::build_canvas_layouts(
         if (node->tag != "canvas"
             || !is_connected(*node)
             || !node->visible
-            || !display_tree_allows_render(*node)) {
+            || !display_tree_allows_render(*this, *node)) {
             continue;
         }
         const auto width = node->attributes.find("width");
@@ -82,7 +82,7 @@ void native_document::build_canvas_display_lists(
         if (node->tag != "canvas"
             || !is_connected(*node)
             || !node->visible
-            || !display_tree_allows_render(*node)
+            || !display_tree_allows_render(*this, *node)
             || canvas.commands.empty()) {
             continue;
         }
@@ -229,7 +229,7 @@ void native_document::append_scene(
     const auto paint_box_in_foreground = [&] {
         auto fixed_layer = false;
         auto outermost_z_index = 0;
-        for (auto* current = &node; current != nullptr; current = current->parent) {
+        for (auto* current = &node; current != nullptr; current = composed_parent(*current)) {
             // A fixed popup participates in the elevated overlay layer even
             // when a backdrop child uses z-index:-1 relative to that popup.
             if (current->style.position == position_mode::fixed) fixed_layer = true;
@@ -826,9 +826,9 @@ void native_document::append_scene(
                 resolved_text_transform(node, node.text_content),
                 node);
         }
-        if (height <= 0 && node.tag == "#text" && node.parent != nullptr) {
-            y = node.parent->layout.y;
-            height = node.parent->layout.height;
+        if (height <= 0 && node.tag == "#text" && composed_parent(node) != nullptr) {
+            y = composed_parent(node)->layout.y;
+            height = composed_parent(node)->layout.height;
         }
         if (height <= 0) height = line_height;
         const auto wraps = resolved_white_space_wraps(node);
@@ -862,8 +862,8 @@ void native_document::append_scene(
 
     if (node.tag == "svg" && paint_self) {
         auto box = node.layout;
-        if ((box.width <= 0 || box.height <= 0) && node.parent != nullptr) {
-            box = node.parent->layout;
+        if ((box.width <= 0 || box.height <= 0) && composed_parent(node) != nullptr) {
+            box = composed_parent(node)->layout;
         }
         if (box.width > 0 && box.height > 0) {
             const auto view_box = node.attributes.contains("viewBox")
@@ -910,12 +910,12 @@ void native_document::append_scene(
     }
 
     if (paint_self && node.tag == "path" && node.attributes.contains("d")) {
-        const dom_node* svg = node.parent;
-        while (svg != nullptr && svg->tag != "svg") svg = svg->parent;
+        const dom_node* svg = composed_parent(node);
+        while (svg != nullptr && svg->tag != "svg") svg = composed_parent(*svg);
         if (svg != nullptr) {
             auto box = svg->layout;
-            if ((box.width <= 0 || box.height <= 0) && svg->parent != nullptr) {
-                box = svg->parent->layout;
+            if ((box.width <= 0 || box.height <= 0) && composed_parent(*svg) != nullptr) {
+                box = composed_parent(*svg)->layout;
             }
             const auto view_box = svg->attributes.contains("viewBox")
                 ? svg->attributes.at("viewBox")
@@ -981,8 +981,9 @@ void native_document::append_scene(
         size_t source_order{};
     };
     std::vector<local_paint_entry> paint_order;
+    const auto& children = composed_children(node);
     paint_order.reserve(
-        node.children.size()
+        children.size()
         + (before_paints_after_content ? 1U : 0U)
         + (!after_paints_behind_content ? 1U : 0U));
     if (before_paints_after_content) {
@@ -992,8 +993,8 @@ void native_document::append_scene(
             node.style.before_pseudo().z_index,
             0U});
     }
-    for (size_t index = 0; index < node.children.size(); ++index) {
-        const auto* child = node.children[index];
+    for (size_t index = 0; index < children.size(); ++index) {
+        const auto* child = children[index];
         paint_order.push_back(local_paint_entry{
             child,
             nullptr,
@@ -1005,7 +1006,7 @@ void native_document::append_scene(
             nullptr,
             &node.style.after_pseudo(),
             node.style.after_pseudo().z_index,
-            node.children.size() + 1U});
+            children.size() + 1U});
     }
     std::stable_sort(
         paint_order.begin(),

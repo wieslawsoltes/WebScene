@@ -691,6 +691,7 @@
         const auto index = css_rules.size();
         css_rule rule;
         rule.stylesheet_owner_id = active_stylesheet_owner_id;
+        rule.shadow_scope_root_id = active_stylesheet_shadow_scope_root_id;
         rule.payload = intern_css_rule_payload(
             std::move(selector),
             declarations,
@@ -1383,6 +1384,16 @@
                 }
             }
         }
+        // The shared selector parser intentionally implements document-tree
+        // selectors and rejects Shadow DOM-only pseudo classes.  Preserve the
+        // production milestone's exact `:host` form here; cascade scope checks
+        // match it only against the owning host, so it never enters ordinary
+        // selector matching or leaks into the document tree.
+        if (trim_css_view(prelude) == ":host") {
+            inventory_css_selector(":host");
+            append_css_rule(":host", declarations, inherited_media);
+            return;
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
         const auto parsed_selectors = parse_selector_syntax(prelude);
         if (!parsed_selectors) return;
@@ -1833,7 +1844,8 @@
     size_t add_stylesheet(
         std::string css,
         const std::string& stylesheet_address = {},
-        uint32_t stylesheet_owner_id = 0)
+        uint32_t stylesheet_owner_id = 0,
+        uint32_t shadow_scope_root_id = 0)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_css_parse : nullptr);
@@ -1841,9 +1853,13 @@
         const auto first_new_rule = css_rules.size();
 #if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
         const auto previous_owner_id = active_stylesheet_owner_id;
+        const auto previous_shadow_scope_root_id =
+            active_stylesheet_shadow_scope_root_id;
         active_stylesheet_owner_id = stylesheet_owner_id;
+        active_stylesheet_shadow_scope_root_id = shadow_scope_root_id;
         parse_css_rules_with_cssparser(css, stylesheet_address);
         active_stylesheet_owner_id = previous_owner_id;
+        active_stylesheet_shadow_scope_root_id = previous_shadow_scope_root_id;
 #else
         size_t comment = 0;
         while ((comment = css.find("/*", comment)) != std::string::npos) {
@@ -1855,13 +1871,17 @@
             css.erase(comment, end - comment + 2U);
         }
         const auto previous_owner_id = active_stylesheet_owner_id;
+        const auto previous_shadow_scope_root_id =
+            active_stylesheet_shadow_scope_root_id;
         active_stylesheet_owner_id = stylesheet_owner_id;
+        active_stylesheet_shadow_scope_root_id = shadow_scope_root_id;
         parse_css_rules(css, 0, css.size(), {}, stylesheet_address);
         active_stylesheet_owner_id = previous_owner_id;
+        active_stylesheet_shadow_scope_root_id = previous_shadow_scope_root_id;
 #endif
         for (auto index = first_new_rule; index < css_rules.size(); ++index) {
             const auto& rule = css_rules[index];
-            if (!rule.media_matches) continue;
+            if (!rule.media_matches || rule.shadow_scope_root_id != 0U) continue;
             if (rule.selector() != ":root" && rule.selector() != "html") continue;
             for (const auto& declaration : rule.declarations()) {
                 if (!declaration.name.starts_with("--")) continue;
@@ -2599,8 +2619,9 @@
         if (!split.found || split.left.empty()) return !split.found;
 
         if (split.combinator == '>') {
-            return node.parent != nullptr
-                && css_selector_matches(*node.parent, split.left, scope_root);
+            const auto* parent = document.dom_parent(node);
+            return parent != nullptr
+                && css_selector_matches(*parent, split.left, scope_root);
         }
         if (split.combinator == '+') {
             const auto* sibling = previous_sibling(node);
@@ -2613,7 +2634,8 @@
             }
             return false;
         }
-        for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
+            ancestor = document.dom_parent(*ancestor)) {
             if (css_selector_matches(*ancestor, split.left, scope_root)) return true;
         }
         return false;
@@ -2638,9 +2660,10 @@
 
         const auto combinator = selector.combinators[component - 1U];
         if (combinator == '>') {
-            return node.parent != nullptr
+            const auto* parent = document.dom_parent(node);
+            return parent != nullptr
                 && compiled_css_selector_matches(
-                    *node.parent,
+                    *parent,
                     selector,
                     component - 1U,
                     scope_root);
@@ -2667,8 +2690,8 @@
             }
             return false;
         }
-        for (auto* ancestor = node.parent; ancestor != nullptr;
-            ancestor = ancestor->parent) {
+        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
+            ancestor = document.dom_parent(*ancestor)) {
             if (compiled_css_selector_matches(
                     *ancestor,
                     selector,

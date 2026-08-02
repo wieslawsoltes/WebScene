@@ -1104,6 +1104,42 @@
       "reason": "Product-neutral exact-pixel reduction that distinguishes subtree group opacity from fading only an element's own background."
     },
     {
+      "path": "contracts/shadow-dom-primitives.html",
+      "type": "contract",
+      "capabilities": ["open-shadow-root", "default-and-named-slots", "shadow-style-scoping", "composed-event-path", "event-retargeting", "shadow-focus-retargeting", "shadow-custom-element-lifecycle"],
+      "evidence": ["shadow-dom-native-side-table", "shadow-dom-product-neutral-contract"],
+      "reason": "Candidate production-shaped Shadow DOM slice. It requires cold native ownership, open identity plus closed-root concealment, logical DOM query boundaries, default/named distribution, scoped shadow CSS, composed layout geometry, event paths and outside retargeting, focus retargeting, and custom-element lifecycle through connected shadow descendants. slotchange/flattening, declarative Shadow DOM, adoptedStyleSheets, ::slotted/::part, and complete focus delegation remain outside this bounded milestone."
+    },
+    {
+      "path": "contracts/shadow-dom-rendering.html",
+      "type": "reftest",
+      "reference": "contracts/shadow-dom-rendering-ref.html",
+      "capabilities": ["custom-element-shadow-creation", "named-and-default-slot-rendering", "shadow-style-layout", "composed-paint-tree"],
+      "evidence": ["shadow-dom-native-reftest", "chromium-shadow-dom-oracle"],
+      "reason": "Candidate exact-pixel reduction of a lifecycle-created component whose shadow-owned flex shell, scoped style, and named/default light children must produce the same layout and paint as an inert reference. The optional Chromium oracle guards both reference validity and common-mode native failures."
+    },
+    {
+      "path": "shadow-dom/Element-interface-shadowRoot-attribute.html",
+      "type": "testharness",
+      "capabilities": ["element-shadow-root-attribute", "open-shadow-root-identity", "closed-root-concealment"],
+      "evidence": ["unchanged-pinned-wpt-shadow-root-attribute"],
+      "reason": "Unchanged upstream discovery coverage for Element.shadowRoot placement, open-root identity, and closed-root concealment."
+    },
+    {
+      "path": "shadow-dom/HTMLSlotElement-interface.html",
+      "type": "testharness",
+      "capabilities": ["html-slot-element-interface", "slot-name-reflection", "dynamic-slot-assignment", "flattened-slot-assignment"],
+      "evidence": ["unchanged-pinned-wpt-html-slot-element"],
+      "reason": "Unchanged upstream discovery coverage for the basic and nested slot surface. Default/named direct distribution and closed-root assignedSlot concealment are in scope; manual assignment, flattening and nested redistribution remain visible discovery gaps."
+    },
+    {
+      "path": "shadow-dom/ShadowRoot-interface.html",
+      "type": "testharness",
+      "capabilities": ["shadow-root-interface", "shadow-root-active-element", "shadow-root-inner-html", "shadow-root-style-sheets"],
+      "evidence": ["unchanged-pinned-wpt-shadow-root-interface"],
+      "reason": "Unchanged upstream discovery coverage. Open/closed ownership, activeElement and innerHTML inform this milestone while StyleSheetList remains deferred and is expected to keep this candidate partially failing."
+    },
+    {
       "path": "contracts/window-screen-primitives.html",
       "type": "contract",
       "capabilities": ["window-screen", "screen-stable-identity", "screen-dimensions", "screen-color-depth", "iframe-screen-realm"],
