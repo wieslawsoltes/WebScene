@@ -169,7 +169,9 @@ int main()
     test_visibility_inherits_for_computed_style_and_focus(engine);
     test_hover_specificity_preserves_visible_theme_icon(engine);
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
+    test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
+    test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
     test_calc_percent_with_pixel_offset(engine);
     test_flex_basis_reserves_fixed_track(engine);
     test_flex_flow_shorthand_controls_layout_and_cssom(engine);

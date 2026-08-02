@@ -70,7 +70,11 @@ void native_document::layout_children(dom_node& parent)
     if (parent.style.display == display_mode::contents) {
         for (auto* child : parent.children) {
             child->visible = parent.visible && child->style.display != display_mode::none;
-            if (!child->visible) {
+            // Collapsible indentation around flattened children generates no
+            // box. Giving it the contents rectangle lets an invisible text node
+            // mask the real descendant during hit testing.
+            if (!child->visible || is_collapsible_whitespace_text(*child)) {
+                child->visible = false;
                 child->layout = {};
                 continue;
             }
@@ -131,6 +135,10 @@ void native_document::layout_children(dom_node& parent)
                 flush_row();
                 continue;
             }
+            // Collapsible whitespace between table-internal boxes does not
+            // generate an anonymous cell. Treating source indentation as a
+            // column inflates shrink-to-fit tables and shifts every later cell.
+            if (is_collapsible_whitespace_text(*child)) continue;
             if (child->style.display != display_mode::none) current_row.push_back(child);
         }
         flush_row();
@@ -226,7 +234,9 @@ void native_document::layout_children(dom_node& parent)
         dom_node* preceding_non_caption = nullptr;
         for (auto* child : parent.children) {
             child->visible = parent.visible && child->style.display != display_mode::none;
-            if (!child->visible || is_table_track(child->style.display)) {
+            if (!child->visible || is_table_track(child->style.display)
+                || is_collapsible_whitespace_text(*child)) {
+                child->visible = false;
                 child->layout = {};
                 continue;
             }
@@ -950,7 +960,11 @@ void native_document::layout_children(dom_node& parent)
         dom_node* pending = nullptr;
         for (auto* child : parent.children) {
             child->visible = parent.visible && child->style.display != display_mode::none;
-            if (!child->visible) {
+            // CSS Grid does not generate anonymous grid items for
+            // whitespace-only text. Counting indentation here creates extra
+            // implicit rows and therefore extra gutters.
+            if (!child->visible || is_collapsible_whitespace_text(*child)) {
+                child->visible = false;
                 child->layout = {};
                 continue;
             }
@@ -1138,11 +1152,6 @@ void native_document::layout_children(dom_node& parent)
         layout_items.push_back(&*after_item);
     }
 
-    const auto participates_in_flow = [&](const dom_node* child) {
-        return child->style.display != display_mode::none
-            && !is_out_of_flow(child->style.position)
-            && !(flex_container && is_collapsible_whitespace_text(*child));
-    };
     const auto inline_flow = !flex_container && std::all_of(
         layout_items.begin(),
         layout_items.end(),
@@ -1153,6 +1162,34 @@ void native_document::layout_children(dom_node& parent)
         });
     const auto horizontal = (flex_container && parent.style.direction == flex_direction::row)
         || inline_flow;
+    std::vector<dom_node*> ordered_children = layout_items;
+    if (flex_container && parent.style.flex_reverse) {
+        std::reverse(ordered_children.begin(), ordered_children.end());
+    }
+    const auto is_collapsed_inline_boundary = [&](const dom_node* child) {
+        if (!inline_flow || !is_collapsible_whitespace_text(*child)) return false;
+        const auto current = std::find(ordered_children.begin(), ordered_children.end(), child);
+        const auto has_visible_before = std::any_of(
+            ordered_children.begin(), current, [](const dom_node* candidate) {
+                return candidate->style.display != display_mode::none
+                    && !is_out_of_flow(candidate->style.position)
+                    && !is_collapsible_whitespace_text(*candidate);
+            });
+        const auto after = current == ordered_children.end() ? current : current + 1;
+        const auto has_visible_after = std::any_of(
+            after, ordered_children.end(), [](const dom_node* candidate) {
+                return candidate->style.display != display_mode::none
+                    && !is_out_of_flow(candidate->style.position)
+                    && !is_collapsible_whitespace_text(*candidate);
+            });
+        return !has_visible_before || !has_visible_after;
+    };
+    const auto participates_in_flow = [&](const dom_node* child) {
+        return child->style.display != display_mode::none
+            && !is_out_of_flow(child->style.position)
+            && !(flex_container && is_collapsible_whitespace_text(*child))
+            && !is_collapsed_inline_boundary(child);
+    };
     const auto main_available = horizontal ? content.width : content.height;
     const auto constrain_size = [&](const dom_node& node, bool horizontal_axis, float size, float available) {
         const auto& minimum = horizontal_axis ? node.style.min_width : node.style.min_height;
@@ -1178,10 +1215,6 @@ void native_document::layout_children(dom_node& parent)
         }
         return std::max(0.0F, size);
     };
-    std::vector<dom_node*> ordered_children = layout_items;
-    if (flex_container && parent.style.flex_reverse) {
-        std::reverse(ordered_children.begin(), ordered_children.end());
-    }
     float fixed = 0;
     float grow = 0;
     size_t automatic_main_margin_count = 0U;
@@ -1438,9 +1471,9 @@ void native_document::layout_children(dom_node& parent)
         // Out-of-flow generated boxes can have empty content while still
         // painting a background or border. They are not anonymous flex
         // whitespace and must reach absolute/fixed positioning below.
-        if (flex_container
-            && !is_out_of_flow(child->style.position)
-            && is_collapsible_whitespace_text(*child)) {
+        if (!is_out_of_flow(child->style.position)
+            && ((flex_container && is_collapsible_whitespace_text(*child))
+                || is_collapsed_inline_boundary(child))) {
             child->visible = false;
             child->layout = {};
             continue;
@@ -2168,7 +2201,8 @@ float native_document::intrinsic_size(
         bool awaiting_second = false;
         for (const auto* child : node.children) {
             if (child->style.display == display_mode::none
-                || is_out_of_flow(child->style.position)) continue;
+                || is_out_of_flow(child->style.position)
+                || is_collapsible_whitespace_text(*child)) continue;
             const auto child_width = intrinsic_size(*child, true, available)
                 + resolve_length(*child, child->style.margin_left, available, 0)
                 + resolve_length(*child, child->style.margin_right, available, 0);

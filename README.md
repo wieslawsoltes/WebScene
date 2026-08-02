@@ -147,6 +147,10 @@ dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
   --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
+Pass `--chromium-path /absolute/path/to/chrome-or-chromium` to add non-gating
+Chromium validation and cross-engine pixel metrics for static reftests. This supplements
+the standard same-engine WPT comparison and can expose common-mode reference failures.
+
 There is no engine selector and no fallback. A missing native capability is visible as a
 native failure. See [the profile policy](tests/WebPlatformSubset/README.md).
 

@@ -2216,10 +2216,15 @@
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
 #endif
-        // Text nodes generate anonymous inline boxes and are not CSS selector
-        // subjects. Their inherited values are resolved from their ancestors.
-        if (node.tag == "#text") {
-            node.style.display = display_mode::inline_flow;
+        // Only elements are CSS selector subjects. Text nodes generate anonymous
+        // inline boxes; comments, doctypes, fragments, and other DOM-only nodes
+        // never generate boxes. In particular, do not replace the display:none
+        // assigned when a preserved comment was created with the default block
+        // display for an unknown tag during a subtree recascade.
+        if (node.kind != dom_node_kind::element) {
+            node.style.display = node.kind == dom_node_kind::text
+                ? display_mode::inline_flow
+                : display_mode::none;
             document.mark_dirty();
             return;
         }

@@ -870,6 +870,67 @@ void test_hover_invalidation_updates_functional_and_sibling_subjects(
             + hovered + ", unhovered=" + unhovered);
 }
 
+void test_hover_moves_between_block_and_display_contents_child(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .affected:hover { color: green; }
+              #hoveredContents { display: contents; }
+              #hovered, #hovered2 { width: 120px; height: 30px; }
+            </style>
+            <div id="hovered">first</div>
+            <div id="hoveredContents">
+              <div id="hovered2">second</div>
+            </div>`;
+          hovered.className = 'affected';
+          hoveredContents.className = 'affected';
+          globalThis.__hoverEvents = [];
+          hovered.addEventListener('mouseover', event => __hoverEvents.push(event.target.id));
+          hovered2.addEventListener('mouseover', event => __hoverEvents.push(event.target.id));
+        })()
+    )JS", "native-display-contents-hover-setup.js");
+    resize(engine, 320, 200, 106U);
+    const auto first_x = std::stod(evaluate(
+        engine,
+        "hovered.getBoundingClientRect().x + 5",
+        "native-display-contents-hover-first-x.js"));
+    const auto first_y = std::stod(evaluate(
+        engine,
+        "hovered.getBoundingClientRect().y + 5",
+        "native-display-contents-hover-first-y.js"));
+    const auto second_x = std::stod(evaluate(
+        engine,
+        "hovered2.getBoundingClientRect().x + 5",
+        "native-display-contents-hover-second-x.js"));
+    const auto second_y = std::stod(evaluate(
+        engine,
+        "hovered2.getBoundingClientRect().y + 5",
+        "native-display-contents-hover-second-y.js"));
+    pointer_move(engine, first_x, first_y, 107U);
+    require(
+        evaluate(
+            engine,
+            "__hoverEvents.length",
+            "native-display-contents-hover-first-result.js") == "1",
+        "the first hover move was not dispatched before entering display:contents");
+    pointer_move(engine, second_x, second_y, 108U);
+    const auto result = evaluate(engine, R"JS(
+        ({
+          events: __hoverEvents,
+          first: hovered.getBoundingClientRect(),
+          contents: hoveredContents.getBoundingClientRect(),
+          second: hovered2.getBoundingClientRect(),
+          secondColor: getComputedStyle(hovered2).color
+        })
+    )JS", "native-display-contents-hover-result.js");
+    require(
+        result.find(R"JSON("events":["hovered","hovered2"])JSON") != std::string::npos
+            && result.find(R"JSON("secondColor":"rgb(0, 128, 0)")JSON") != std::string::npos,
+        "hover did not move into a display:contents child: " + result);
+}
+
 void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -907,6 +968,67 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
     if (result != R"([344,344,344,169,"contents"])") {
         fail("a single 1fr grid track was split into columns: " + result);
     }
+}
+
+void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              x-table { display: table; }
+              x-td { display: table-cell; }
+              #grid {
+                display: grid;
+                width: 200px;
+                gap: 20px;
+                grid-template-columns: 90px 90px;
+                grid-template-rows: 90px 90px;
+              }
+            </style>
+            <div id="comment-host"><!--this comment must not render--><div style="height:10px"></div></div>
+            <div id="fractional-table" style="display:table">
+              <div style="display:table-cell;width:3.6px"></div>
+              <div style="display:table-cell;width:3.6px"></div>
+            </div>
+            <x-table id="anonymous-table"><x-td id="percentage-cell" style="width:50%;height:10px"></x-td> <x-td style="width:50px;height:10px"></x-td></x-table>
+            <div id="grid">
+              <div></div>
+              <div></div>
+              <div></div>
+              <div></div>
+            </div>
+            <div id="relative-container" style="width:100px;height:100px">
+              <span style="position:relative;left:100%">
+                <div id="relative-child" style="width:100px;height:100px;position:relative;left:-100px"></div>
+              </span>
+            </div>`;
+        })()
+    )JS", "native-non-rendered-layout-items-setup.js");
+
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const near = (actual, expected) => Math.abs(actual - expected) < 0.01;
+          const fractionalTable = document.getElementById('fractional-table').getBoundingClientRect();
+          const fractionalCells = document.querySelectorAll('#fractional-table > div');
+          const percentageCell = document.getElementById('percentage-cell').getBoundingClientRect();
+          const anonymousTable = document.getElementById('anonymous-table').getBoundingClientRect();
+          const relativeContainer = document.getElementById('relative-container').getBoundingClientRect();
+          const relativeChild = document.getElementById('relative-child').getBoundingClientRect();
+          return {
+            commentInvisible: near(document.getElementById('comment-host').getBoundingClientRect().height, 10),
+            fractionalTable: near(fractionalTable.width, 7.2)
+              && near(fractionalCells[0].getBoundingClientRect().width, 3.6)
+              && near(fractionalCells[1].getBoundingClientRect().width, 3.6),
+            anonymousTable: near(anonymousTable.width, 100) && near(percentageCell.width, 50),
+            gridWhitespace: near(document.getElementById('grid').getBoundingClientRect().height, 200),
+            leadingInlineWhitespace: near(relativeChild.left, relativeContainer.left)
+          };
+        })()
+    )JS", "native-non-rendered-layout-items-result.js");
+    require(
+        result == R"({"commentInvisible":true,"fractionalTable":true,"anonymousTable":true,"gridWhitespace":true,"leadingInlineWhitespace":true})",
+        "non-rendered DOM nodes unexpectedly participated in layout: " + result);
 }
 
 void test_calc_percent_with_pixel_offset(webscene_engine* engine)

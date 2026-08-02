@@ -62,6 +62,25 @@ Use `--test <substring>` for a focused document,
 `--timeout-seconds <seconds>` to alter the per-document timeout, and
 `--native-cache-directory <path>` to isolate V8 cache evidence.
 
+Static reftests can also collect an independent Chromium differential:
+
+```bash
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --selection candidate \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --chromium-path /absolute/path/to/chrome-or-chromium \
+  --output TestResults/WebPlatformSubset/chromium-oracle
+```
+
+The ordinary WPT result remains the exact native-test versus native-reference
+comparison. The optional Chromium lane separately renders the test and reference,
+records whether Chromium considers them identical, retains all four screenshots, and
+reports exact native-to-Chromium pixel-difference metrics. Cross-engine differences are
+diagnostic rather than gating because font rasterization, platform defaults, and the
+presenter stack need not be pixel-identical. A Chromium test/reference mismatch is a
+warning that the selected reftest or local browser environment is not a trustworthy
+oracle.
+
 Result JSON records the profile, pinned WPT revision, native ABI/library hash, selection,
 document status, assertions, diagnostics, and artifacts. A required failure produces a
 non-zero exit code.
@@ -70,7 +89,9 @@ non-zero exit code.
 
 - `testharness` runs the pinned WPT harness and records its assertions.
 - `reftest` settles and captures the native scene through the deterministic renderer,
-  then compares document and reference pixels.
+  then compares document and reference pixels. With `--chromium-path`, it also records
+  the independent Chromium self-comparison and cross-engine differential described
+  above.
 - `contract` runs a project-owned reduced behavior contract through the same native
   document and JavaScript boundary.
 

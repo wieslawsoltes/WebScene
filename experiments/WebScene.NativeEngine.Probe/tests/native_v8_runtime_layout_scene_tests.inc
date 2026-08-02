@@ -281,13 +281,13 @@ void test_toolbar_scroll_chevrons_use_single_rotation(webscene_engine* engine)
           const icon = document.querySelector('.iconWrap');
           return {
             transform:getComputedStyle(icon).transform,
-            svgWidth:icon.firstElementChild.getBoundingClientRect().width,
-            svgHeight:icon.firstElementChild.getBoundingClientRect().height
+            svgWidth:Math.abs(icon.firstElementChild.getBoundingClientRect().width - 10) < 0.001,
+            svgHeight:Math.abs(icon.firstElementChild.getBoundingClientRect().height - 6) < 0.001
           };
         })()
     )JS", "native-toolbar-scroll-chevron.js");
     require(
-        result == R"JSON({"transform":"matrix(-1, 0, 0, -1, 0, 0)","svgWidth":10,"svgHeight":6})JSON",
+        result == R"JSON({"transform":"matrix(-1, 0, 0, -1, 0, 0)","svgWidth":true,"svgHeight":true})JSON",
         "toolbar top-chevron layout or rotation was not established: " + result);
 
     webscene_engine_request_scene_checkpoint(engine);

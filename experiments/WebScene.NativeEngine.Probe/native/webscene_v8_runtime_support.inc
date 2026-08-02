@@ -617,6 +617,11 @@ void refresh_overflow_state(node_style& style)
 
 display_mode default_display_for_node(const dom_node& node)
 {
+    if (node.kind != dom_node_kind::element) {
+        return node.kind == dom_node_kind::text
+            ? display_mode::inline_flow
+            : display_mode::none;
+    }
     if (node.tag == "input") {
         const auto type = node.attributes.find("type");
         if (type != node.attributes.end()) {

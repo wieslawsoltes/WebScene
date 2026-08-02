@@ -45,6 +45,7 @@ internal sealed class RunArtifact
     public required string Runtime { get; init; }
     public required string Engine { get; init; }
     public string? NativeEngineIdentity { get; init; }
+    public string? ChromiumIdentity { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
     public required TimeSpan Duration { get; init; }
     public required string Selection { get; init; }
@@ -73,6 +74,27 @@ internal sealed class TestResult
     public string? Message { get; init; }
     public List<SubtestResult> Subtests { get; init; } = [];
     public Dictionary<string, string>? Artifacts { get; init; }
+    public ChromiumOracleResult? ChromiumOracle { get; init; }
+}
+
+internal sealed class ChromiumOracleResult
+{
+    public required string Status { get; init; }
+    public string? Message { get; init; }
+    public PixelComparison? ChromiumTestToReference { get; init; }
+    public PixelComparison? NativeToChromiumTest { get; init; }
+    public Dictionary<string, string>? Artifacts { get; init; }
+}
+
+internal sealed class PixelComparison
+{
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required long TotalPixels { get; init; }
+    public required long DifferingPixels { get; init; }
+    public required double DifferingRatio { get; init; }
+    public required int MaximumChannelDelta { get; init; }
+    public string? DifferenceBounds { get; init; }
 }
 
 internal sealed class SubtestResult
@@ -110,4 +132,5 @@ internal sealed record RunnerOptions
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
     public string? NativeLibraryPath { get; init; }
     public string? NativeCacheDirectory { get; init; }
+    public string? ChromiumPath { get; init; }
 }

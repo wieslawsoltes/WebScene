@@ -33,6 +33,7 @@ internal sealed partial class WptSubsetRunner
     private readonly string _testHarness;
     private readonly string _checkLayoutHarness;
     private readonly HashSet<string> _pinnedUpstreamFiles;
+    private readonly ChromiumReftestOracle? _chromiumOracle;
 
     internal WptSubsetRunner(RunnerOptions options)
     {
@@ -55,6 +56,9 @@ internal sealed partial class WptSubsetRunner
                     ?? throw new InvalidDataException("The profile manifest is empty.");
         _testHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "testharness.js"));
         _checkLayoutHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "check-layout-th.js"));
+        _chromiumOracle = string.IsNullOrWhiteSpace(options.ChromiumPath)
+            ? null
+            : new ChromiumReftestOracle(options.ChromiumPath, _manifest.Viewport, options.Timeout);
     }
 
     internal int Run()
@@ -90,6 +94,15 @@ internal sealed partial class WptSubsetRunner
             {
                 Console.WriteLine($"     {failedSubtest.Status}: {failedSubtest.Name}: {failedSubtest.Message}");
             }
+            if (result.ChromiumOracle is not null)
+            {
+                var crossEngine = result.ChromiumOracle.NativeToChromiumTest;
+                var differential = crossEngine is null
+                    ? string.Empty
+                    : $", native/Chromium differing pixels={crossEngine.DifferingPixels} " +
+                      $"({crossEngine.DifferingRatio:P3})";
+                Console.WriteLine($"     Chromium oracle: {result.ChromiumOracle.Status}{differential}");
+            }
         }
 
         timer.Stop();
@@ -101,6 +114,7 @@ internal sealed partial class WptSubsetRunner
             Runtime = _manifest.Runtime,
             Engine = "native",
             NativeEngineIdentity = ResolveNativeEngineIdentity(),
+            ChromiumIdentity = _chromiumOracle?.Identity,
             StartedAt = startedAt,
             Duration = timer.Elapsed,
             Selection = _options.Selection,
@@ -223,6 +237,21 @@ internal sealed partial class WptSubsetRunner
             var actual = RenderDocument(
                 File.ReadAllText(TestDocumentPath(test.Path)),
                 test.Path);
+            ChromiumOracleResult? chromiumOracle = null;
+            if (_chromiumOracle is not null)
+            {
+                var oracleArtifactDirectory = Path.Combine(
+                    _options.OutputDirectory,
+                    SanitizeArtifactName(test.Path));
+                Directory.CreateDirectory(oracleArtifactDirectory);
+                SavePixels(actual, Path.Combine(oracleArtifactDirectory, "native-actual.png"));
+                SavePixels(reference, Path.Combine(oracleArtifactDirectory, "native-reference.png"));
+                chromiumOracle = _chromiumOracle.Compare(
+                    TestDocumentPath(test.Path),
+                    TestDocumentPath(test.Reference),
+                    oracleArtifactDirectory,
+                    actual);
+            }
             timer.Stop();
             var equal = actual.PixelSize == reference.PixelSize && actual.Pixels.SequenceEqual(reference.Pixels);
             if (equal)
@@ -232,7 +261,8 @@ internal sealed partial class WptSubsetRunner
                     Path = test.Path,
                     Type = test.Type,
                     Status = "PASS",
-                    Duration = timer.Elapsed
+                    Duration = timer.Elapsed,
+                    ChromiumOracle = chromiumOracle
                 };
             }
 
@@ -253,6 +283,7 @@ internal sealed partial class WptSubsetRunner
                 Status = "FAIL",
                 Duration = timer.Elapsed,
                 Message = "Rendered pixels differ from the pinned WPT reference.",
+                ChromiumOracle = chromiumOracle,
                 Artifacts = new Dictionary<string, string>
                 {
                     ["actual"] = actualPath,
@@ -582,6 +613,13 @@ internal sealed partial class WptSubsetRunner
         {
             throw new InvalidDataException("The current headless adapter supports only deviceScaleFactor=1.");
         }
+        if (!string.IsNullOrWhiteSpace(_options.ChromiumPath)
+            && !File.Exists(_options.ChromiumPath))
+        {
+            throw new FileNotFoundException(
+                "The Chromium oracle executable was not found.",
+                _options.ChromiumPath);
+        }
 
         var allTests = _manifest.Required
             .Concat(_manifest.Candidate)
@@ -860,6 +898,7 @@ internal sealed partial class WptSubsetRunner
             results: [],
             errors: []
             , diagnostics: []
+            , inputActions: []
           };
           window.addEventListener('error', function (event) {
             state.errors.push(String(event && (event.message || event.error) || 'window error'));
@@ -874,6 +913,8 @@ internal sealed partial class WptSubsetRunner
             const pending = inputResolvers.get(Number(id));
             if (!pending) return;
             inputResolvers.delete(Number(id));
+            state.inputActions.push('completed:' + String(id) + ':' +
+              (error == null ? 'ok' : String(error)));
             if (error == null) pending.resolve();
             else pending.reject(new Error(String(error)));
           };
@@ -885,6 +926,13 @@ internal sealed partial class WptSubsetRunner
               }
               const id = nextInputAction++;
               inputResolvers.set(id, { resolve: resolve, reject: reject });
+              const rect = target.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const hit = document.elementFromPoint(centerX, centerY);
+              state.inputActions.push('queued:' + String(id) + ':' + String(type) + ':' +
+                String(target.id) + '@' + [rect.left, rect.top, rect.width, rect.height].join(',') +
+                ':hit=' + String(hit && hit.id || ''));
               window.__webSceneWptInputActions.push({
                 id: id,
                 type: String(type),
@@ -952,6 +1000,9 @@ internal sealed partial class WptSubsetRunner
               });
               if (window.events && typeof window.events === 'object') {
                 state.diagnostics.push('focus-events=' + JSON.stringify(window.events));
+              }
+              if (state.inputActions.length) {
+                state.diagnostics.push('input-actions=' + JSON.stringify(state.inputActions));
               }
               state.diagnostics.push(
                 'activeElement=' + String(document.activeElement && document.activeElement.id || ''));
