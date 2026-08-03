@@ -135,6 +135,128 @@ void test_parallel_resource_prefetch()
     webscene_engine_destroy(engine);
 }
 
+void test_inspector_navigation_resets_context_group()
+{
+    resource_server server{
+        .content = {
+            {"https://inspector-navigation.test/first.html", R"HTML(
+                <html><body><script>
+                  globalThis.__inspectorNavigationObject = { value: 41 };
+                </script></body></html>)HTML"},
+            {"https://inspector-navigation.test/second.html", R"HTML(
+                <html><body><script>
+                  globalThis.__inspectorNavigationResult = 42;
+                </script></body></html>)HTML"}
+        }};
+    const webscene_engine_options options{
+        sizeof(webscene_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "Inspector navigation engine creation failed");
+    for (auto attempt = 0;
+         attempt < 500 && webscene_engine_inspector_is_available(engine) == 0;
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        webscene_engine_inspector_is_available(engine) != 0,
+        "Inspector navigation engine did not publish availability");
+
+    inspector_test_messages messages;
+    const auto session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &messages,
+        0U);
+    require(session_id != 0U, "Inspector navigation session creation failed");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":2,"method":"Debugger.enable"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":1)"),
+        "Inspector navigation Runtime.enable did not respond");
+    require(
+        wait_for_inspector_message(messages, R"("id":2)"),
+        "Inspector navigation Debugger.enable did not respond");
+
+    const std::string first_url = "https://inspector-navigation.test/first.html";
+    require(
+        webscene_engine_load_url(engine, first_url.data(), first_url.size()) != 0,
+        "First Inspector navigation document load was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.scriptParsed")",
+            first_url),
+        "First navigation script was not reported to Inspector");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":3,"method":"Runtime.evaluate","params":{"expression":"globalThis.__inspectorNavigationObject","returnByValue":false,"objectGroup":"navigation-test"}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":3)", R"("objectId")"),
+        "Inspector navigation fixture did not return a remote object");
+    const auto object_response = find_inspector_message(
+        messages,
+        R"("id":3)",
+        R"("objectId")");
+    const auto stale_object_id = inspector_json_string(object_response, "objectId");
+    require(!stale_object_id.empty(), "Inspector navigation object id was empty");
+
+    const auto contexts_cleared_before = count_inspector_messages(
+        messages,
+        R"("method":"Runtime.executionContextsCleared")");
+    const std::string second_url = "https://inspector-navigation.test/second.html";
+    require(
+        webscene_engine_load_url(engine, second_url.data(), second_url.size()) != 0,
+        "Second Inspector navigation document load was rejected");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Runtime.executionContextsCleared")",
+            contexts_cleared_before + 1U),
+        "Navigation did not clear the Inspector execution-context group");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.executionContextCreated")",
+            second_url),
+        "Navigation did not publish the replacement context origin");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.scriptParsed")",
+            second_url),
+        "Second navigation script was not reported to Inspector");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":4,\"method\":\"Runtime.getProperties\",\"params\":{\"objectId\":\""}
+            + stale_object_id + "\",\"ownProperties\":true}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":4)", R"("error")"),
+        "A pre-navigation V8 remote object remained usable after context reset");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__inspectorNavigationResult",
+            "inspector-navigation-result.js") == "42",
+        "Replacement document did not finish after Inspector context reset");
+    require(
+        webscene_engine_inspector_disconnect(engine, session_id) != 0,
+        "Inspector navigation session disconnect was rejected");
+    webscene_engine_destroy(engine);
+}
+
 void test_document_script_failure_remains_diagnostic()
 {
     resource_server server{

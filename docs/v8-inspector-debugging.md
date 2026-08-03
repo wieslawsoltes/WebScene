@@ -122,6 +122,9 @@ toolchain rather than a source-map rewrite.
   isolate behind stale debugger work.
 - Iframe contexts use the same context group, allowing one DevTools target to
   debug the complete WebScene document.
+- Top-level document replacement resets the V8 Inspector context group, clears
+  stale remote objects and debugger state, and re-registers the root context
+  with the new document URL as its origin before new scripts execute.
 - The opt-in `WEBSCENE_V8_SHARED_ISOLATE` mode intentionally reports Inspector
   unavailable. Its independent engine workers share an isolate, which is not a
   safe ownership model for a per-view inspector pause loop.

@@ -167,16 +167,29 @@
 
     void register_inspector_context(
         v8::Local<v8::Context> local_context,
-        std::string_view name)
+        std::string_view name,
+        std::string_view origin = {})
     {
         if (inspector == nullptr || local_context.IsEmpty()) return;
-        const v8_inspector::V8ContextInfo context_info(
+        v8_inspector::V8ContextInfo context_info(
             local_context,
             inspector_context_group_id,
             v8_inspector::StringView(
                 reinterpret_cast<const uint8_t*>(name.data()),
                 name.size()));
+        context_info.origin = v8_inspector::StringView(
+            reinterpret_cast<const uint8_t*>(origin.data()),
+            origin.size());
         inspector->contextCreated(context_info);
+    }
+
+    void reset_inspector_context_group_for_navigation(
+        v8::Local<v8::Context> local_context,
+        std::string_view url)
+    {
+        if (inspector == nullptr || local_context.IsEmpty()) return;
+        inspector->resetContextGroup(inspector_context_group_id);
+        register_inspector_context(local_context, "WebScene", url);
     }
 
     void destroy_inspector_context(v8::Local<v8::Context> local_context)

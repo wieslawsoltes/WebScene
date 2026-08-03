@@ -116,6 +116,7 @@ int main()
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
     test_parallel_resource_prefetch();
+    test_inspector_navigation_resets_context_group();
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
