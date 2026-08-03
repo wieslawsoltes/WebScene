@@ -246,6 +246,11 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         webscene_engine_inspector_is_available(engine) != 0,
         "dedicated V8 isolate did not publish Inspector availability");
 
+    static_cast<void>(evaluate(
+        engine,
+        "console.log('webscene-inspector-before-attach');",
+        "webscene-inspector-before-attach.js"));
+
     inspector_test_messages messages;
     const auto session_id = webscene_engine_inspector_connect(
         engine,
@@ -268,6 +273,12 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":2)"),
         "Debugger.enable response was not forwarded");
+    require(
+        count_inspector_messages(
+            messages,
+            R"("method":"Runtime.consoleAPICalled")",
+            "webscene-inspector-before-attach") == 0U,
+        "Inspector retained console instrumentation while no session was attached");
 
     inspector_test_messages secondary_messages;
     const auto secondary_session_id = webscene_engine_inspector_connect(

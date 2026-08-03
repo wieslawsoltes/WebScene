@@ -144,6 +144,14 @@
             && inspector_ready.load(std::memory_order_acquire);
     }
 
+    bool inspector_instrumentation_active() const noexcept
+    {
+        // Context registration remains eager so a later debugger attachment can
+        // enumerate existing scripts. Expensive console/exception/async-stack
+        // instrumentation is pay-for-use once a session exists on the worker.
+        return inspector != nullptr && !inspector_sessions.empty();
+    }
+
     void initialize_inspector(v8::Local<v8::Context> local_context)
     {
         // A V8Inspector belongs to an isolate. WebScene's opt-in shared-isolate
@@ -208,7 +216,8 @@
         uint32_t id,
         bool recurring)
     {
-        if (inspector == nullptr) return;
+        if (!inspector_instrumentation_active()) return;
+        inspector_instrumented_async_tasks[id] = recurring;
         inspector->asyncTaskScheduled(
             v8_inspector::StringView(
                 reinterpret_cast<const uint8_t*>(name.data()),
@@ -219,22 +228,31 @@
 
     void inspector_async_task_started(uint32_t id)
     {
-        if (inspector != nullptr) {
+        if (inspector_instrumentation_active()
+            && inspector_instrumented_async_tasks.contains(id)) {
             inspector->asyncTaskStarted(inspector_async_task_id(id));
         }
     }
 
     void inspector_async_task_finished(uint32_t id)
     {
-        if (inspector != nullptr) {
+        const auto found = inspector_instrumented_async_tasks.find(id);
+        if (inspector_instrumentation_active()
+            && found != inspector_instrumented_async_tasks.end()) {
             inspector->asyncTaskFinished(inspector_async_task_id(id));
+            if (!found->second) inspector_instrumented_async_tasks.erase(found);
         }
     }
 
     void inspector_async_task_canceled(uint32_t id)
     {
-        if (inspector != nullptr) {
+        const auto found = inspector_instrumented_async_tasks.find(id);
+        if (inspector_instrumentation_active()
+            && found != inspector_instrumented_async_tasks.end()) {
             inspector->asyncTaskCanceled(inspector_async_task_id(id));
+        }
+        if (found != inspector_instrumented_async_tasks.end()) {
+            inspector_instrumented_async_tasks.erase(found);
         }
     }
 
@@ -250,7 +268,7 @@
         v8::TryCatch& try_catch,
         v8::Local<v8::Context> local_context)
     {
-        if (inspector == nullptr || !try_catch.HasCaught()
+        if (!inspector_instrumentation_active() || !try_catch.HasCaught()
             || local_context.IsEmpty()) return 0U;
         auto exception = try_catch.Exception();
         if (exception.IsEmpty()) return 0U;
@@ -296,7 +314,7 @@
         v8::Local<v8::Value> exception,
         const std::string& detailed_message)
     {
-        if (inspector == nullptr || local_context.IsEmpty()
+        if (!inspector_instrumentation_active() || local_context.IsEmpty()
             || exception.IsEmpty()) return 0U;
         const auto message_text = std::string("Uncaught (in promise) ")
             + to_utf8(isolate, exception);
@@ -317,7 +335,7 @@
         unsigned exception_id,
         std::string_view reason)
     {
-        if (inspector == nullptr || local_context.IsEmpty()
+        if (!inspector_instrumentation_active() || local_context.IsEmpty()
             || exception_id == 0U) return;
         const auto reason_text = std::string(reason);
         inspector->exceptionRevoked(
@@ -331,7 +349,7 @@
         v8::Isolate::MessageErrorLevel level,
         const std::vector<v8::Local<v8::Value>>& arguments)
     {
-        if (inspector == nullptr || local_context.IsEmpty()) return;
+        if (!inspector_instrumentation_active() || local_context.IsEmpty()) return;
         inspector->consoleAPICalled(local_context, level, arguments);
     }
 
@@ -501,6 +519,8 @@
                 inspector_sessions.erase(found);
             }
             if (inspector_sessions.empty()) {
+                inspector_instrumented_async_tasks.clear();
+                inspector->allAsyncTasksCanceled();
                 inspector_pause_loop_running = false;
             }
             break;
@@ -538,6 +558,7 @@
             if (session.session != nullptr) session.session->stop();
         }
         inspector_sessions.clear();
+        inspector_instrumented_async_tasks.clear();
         inspector->allAsyncTasksCanceled();
         destroy_all_inspector_contexts();
         inspector.reset();

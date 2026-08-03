@@ -94,6 +94,12 @@ must first present that token as a `token` query parameter or
 `Authorization: Bearer` header, so unauthenticated discovery cannot disclose
 the WebSocket credential.
 
+Inspector context registration stays available in dedicated-isolate builds so
+a debugger attached later can enumerate already-loaded scripts. Console,
+exception, promise-rejection, and async-stack instrumentation is inactive until
+the first Inspector session is established, avoiding per-event stack capture or
+Inspector message retention in ordinary inspector-disabled application runs.
+
 ## Original TypeScript, JavaScript, and source mutations
 
 V8 executes JavaScript, so `Debugger.scriptParsed` always identifies the
