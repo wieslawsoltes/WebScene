@@ -1,0 +1,108 @@
+name: Native V8 Inspector
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+    - main
+    - release/*
+    paths:
+    - '.github/workflows/native-v8-inspector.yml'
+    - 'experiments/WebScene.NativeEngine.Probe/**'
+    - 'packaging/WebScene.NativeEngine.Runtime/**'
+    - 'scripts/build-native-engine-runtime.sh'
+    - 'src/WebScene.Backend.Avalonia/**'
+    - 'src/WebScene.Backend.Uno/**'
+    - 'third-party/v8-patches/**'
+
+permissions:
+  contents: read
+
+jobs:
+  inspector:
+    name: Build and test V8 Inspector (osx-arm64)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: global.json
+    - id: v8-cache-key
+      name: Resolve pinned V8 SDK cache identity
+      shell: bash
+      run: echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+    - id: v8-cache
+      name: Restore pinned V8 Inspector SDK
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          artifacts/native-engine-v8/osx-arm64/v8/include
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/args.gn
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/icudtl.dat
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src
+          artifacts/native-engine-v8/osx-arm64/v8/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/partition_alloc/src
+        key: webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-${{ hashFiles('third-party/v8-patches/**') }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt') }}
+        restore-keys: |
+          webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-${{ hashFiles('third-party/v8-patches/**') }}-
+          webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-
+    - id: restored-v8-sdk
+      name: Validate restored V8 Inspector SDK
+      shell: bash
+      run: |
+        root="artifacts/native-engine-v8/osx-arm64/v8"
+        args="$root/out/arm64/ReleasePartitionAlloc/args.gn"
+        monolith="$root/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a"
+        if [[ -f "$root/include/v8.h" \
+          && -f "$root/include/v8-inspector.h" \
+          && $(grep -c 'virtual void consoleAPICalled' "$root/include/v8-inspector.h") -gt 0 \
+          && -f "$args" \
+          && -f "$monolith" \
+          && -f "$root/out/arm64/ReleasePartitionAlloc/icudtl.dat" \
+          && -f "$root/LICENSE" \
+          && -f "$root/third_party/icu/LICENSE" \
+          && -d "$root/third_party/partition_alloc/src" \
+          && -f "$root/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src/partition_alloc/buildflags.h" \
+          && $(grep -Ec '^v8_enable_pointer_compression *= *true$' "$args") -gt 0 \
+          && $(grep -Ec '^v8_enable_pointer_compression_shared_cage *= *true$' "$args") -gt 0 \
+          && $(grep -Ec '^v8_enable_partition_alloc *= *true$' "$args") -gt 0 \
+          && $(grep -Ec '^use_allocator_shim *= *false$' "$args") -gt 0 \
+          && $(grep -Ec '^use_partition_alloc_as_malloc *= *false$' "$args") -gt 0 ]]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          rm -rf "$root"
+        fi
+    - name: Build and run native V8 Inspector tests
+      shell: bash
+      run: |
+        v8_root=
+        if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
+          v8_root="$GITHUB_WORKSPACE/artifacts/native-engine-v8/osx-arm64/v8"
+        fi
+        scripts/build-native-engine-runtime.sh \
+          --rid osx-arm64 \
+          --v8-root "$v8_root" \
+          --v8-revision 15.3.10 \
+          --upstream-v8 \
+          --partition-alloc \
+          --output "$GITHUB_WORKSPACE/artifacts/native-v8-inspector-pr"
+    - name: Save completed V8 Inspector SDK
+      if: steps.v8-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          artifacts/native-engine-v8/osx-arm64/v8/include
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/args.gn
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/icudtl.dat
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src
+          artifacts/native-engine-v8/osx-arm64/v8/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/partition_alloc/src
+        key: webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-${{ hashFiles('third-party/v8-patches/**') }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt') }}
