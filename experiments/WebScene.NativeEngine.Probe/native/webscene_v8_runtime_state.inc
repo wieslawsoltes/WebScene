@@ -80,6 +80,7 @@
     session_storage_state outer_session_storage;
     session_storage_state outer_local_storage;
     std::unordered_map<uint32_t, std::unique_ptr<session_storage_state>> frame_session_storage;
+    std::vector<document_start_script> current_document_start_scripts;
     std::unordered_map<uint32_t, v8::Global<v8::Function>> frame_load_listeners;
     std::unordered_map<std::string, std::vector<event_listener_registration>>
         frame_event_listeners;
@@ -164,6 +165,8 @@
 #endif
     uint64_t frame_script_execution_count{0};
     uint64_t frame_script_error_count{0};
+    std::shared_ptr<std::atomic<uint64_t>> external_script_source_byte_count{
+        std::make_shared<std::atomic<uint64_t>>(0U)};
     static constexpr size_t maximum_compilation_cache_entries = 256U;
     static constexpr size_t maximum_compilation_cache_source_bytes = 256U * 1024U * 1024U;
     static constexpr size_t minimum_hot_cache_source_bytes = 4U * 1024U;

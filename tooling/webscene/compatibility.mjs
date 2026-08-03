@@ -10,7 +10,7 @@ export const knownCapabilities = Object.freeze([
 
 const rules = [
   unsupported(/\bnavigator\s*\.\s*serviceWorker\b/g, 'WEBSCENE1001', 'Service workers are not supported.'),
-  unsupported(/\b(?:localStorage|sessionStorage|indexedDB)\b/g, 'WEBSCENE1002', 'Browser storage is not supported; request host.settings instead.'),
+  unsupported(/\bindexedDB\b/g, 'WEBSCENE1002', 'IndexedDB is not supported.'),
   unsupported(/\b(?:Worker|SharedWorker|Worklet)\s*\(/g, 'WEBSCENE1003', 'Web workers and worklets are not supported.'),
   unsupported(/\b(?:RTCPeerConnection|MediaRecorder|AudioContext|webkitAudioContext)\b/g, 'WEBSCENE1004', 'WebRTC, recording, and Web Audio are not supported.'),
   unsupported(/\bnavigator\s*\.\s*(?:mediaDevices|geolocation)\b/g, 'WEBSCENE1005', 'Media devices and geolocation are not supported.'),

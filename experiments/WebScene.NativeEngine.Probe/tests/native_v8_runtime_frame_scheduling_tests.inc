@@ -528,6 +528,56 @@ void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
             "localStorage.getItem('layout')",
             "native-local-storage-frame-sharing.js") == R"("compact")",
         "same-origin localStorage did not remain shared between outer and frame contexts");
+
+    const auto coercion = evaluate(engine, R"JS(
+        (() => {
+          localStorage.clear();
+          const objectKey = { toString() { return 'object-key'; } };
+          const objectValue = { toString() { return 'object-value'; } };
+          localStorage.setItem(undefined, null);
+          localStorage.setItem(true, 42);
+          localStorage.setItem(objectKey, objectValue);
+          localStorage.setItem('\ud800', '\udc00');
+          localStorage.setItem('stable', 'first');
+          localStorage.setItem('stable', 'replacement');
+          const beforeReinsert = Array.from(
+            { length: localStorage.length },
+            (_, index) => localStorage.key(index))
+            .map(key => key.length === 1 && key.charCodeAt(0) === 0xd800
+              ? '<surrogate>' : key);
+          localStorage.removeItem(true);
+          localStorage.setItem(true, false);
+          const afterReinsert = Array.from(
+            { length: localStorage.length },
+            (_, index) => localStorage.key(index))
+            .map(key => key.length === 1 && key.charCodeAt(0) === 0xd800
+              ? '<surrogate>' : key);
+          let exceptional = false;
+          try {
+            localStorage.setItem(
+              { toString() { throw new Error('storage coercion'); } },
+              'must-not-be-written');
+          } catch (error) {
+            exceptional = error.message === 'storage coercion';
+          }
+          return {
+            undefinedValue: localStorage.getItem(undefined),
+            booleanValue: localStorage.getItem(true),
+            objectValue: localStorage.getItem(objectKey),
+            surrogateKey: localStorage.key(2).charCodeAt(0),
+            surrogateValue: localStorage.getItem('\ud800').charCodeAt(0),
+            beforeReinsert,
+            afterReinsert,
+            exceptional,
+            absent: localStorage.getItem('must-not-be-written'),
+            invalidKeys: [localStorage.key(-1), localStorage.key(999)]
+          };
+        })()
+    )JS", "native-storage-coercion.js");
+    require(
+        coercion == R"({"undefinedValue":"null","booleanValue":"false","objectValue":"object-value","surrogateKey":55296,"surrogateValue":56320,"beforeReinsert":["undefined","true","object-key","<surrogate>","stable"],"afterReinsert":["undefined","object-key","<surrogate>","stable","true"],"exceptional":true,"absent":null,"invalidKeys":[null,null]})",
+        "Web Storage coercion, Unicode, exception, or insertion ordering regressed: "
+            + coercion);
 }
 
 void test_window_post_message_is_queued(webscene_engine* engine)

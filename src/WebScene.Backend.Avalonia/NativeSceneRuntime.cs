@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using WebScene.Backends.Native;
 #if !WEBSCENE_UNO
 using Avalonia;
 using Avalonia.Controls;
@@ -318,10 +319,118 @@ public static unsafe partial class NativeWebSceneApi
     [DllImport(LibraryName, EntryPoint = "webscene_engine_load_url")]
     private static extern byte EngineLoadUrl(IntPtr engine, byte[] url, nuint urlLength);
 
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_load_url_with_options")]
+    private static extern byte EngineLoadUrlWithOptions(
+        IntPtr engine,
+        byte[] url,
+        nuint urlLength,
+        in NavigationOptions options);
+
     public static bool TryLoadUrl(IntPtr engine, string url)
     {
         var bytes = Encoding.UTF8.GetBytes(url);
         return EngineLoadUrl(engine, bytes, (nuint)bytes.Length) != 0;
+    }
+
+    public static bool TryLoadUrl(
+        IntPtr engine,
+        string url,
+        IReadOnlyList<WebSceneDocumentScript> documentStartScripts)
+    {
+        ArgumentNullException.ThrowIfNull(documentStartScripts);
+        if (documentStartScripts.Count == 0)
+        {
+            return TryLoadUrl(engine, url);
+        }
+
+        var urlBytes = Encoding.UTF8.GetBytes(url);
+        var descriptors = new DocumentScriptDescriptor[documentStartScripts.Count];
+        var pinnedBuffers = new List<GCHandle>(documentStartScripts.Count * 2 + 1);
+        try
+        {
+            for (var index = 0; index < documentStartScripts.Count; index++)
+            {
+                var script = documentStartScripts[index];
+                var sourceBytes = Encoding.UTF8.GetBytes(script.Source);
+                var nameBytes = Encoding.UTF8.GetBytes(script.Name);
+                var sourceHandle = GCHandle.Alloc(sourceBytes, GCHandleType.Pinned);
+                var nameHandle = GCHandle.Alloc(nameBytes, GCHandleType.Pinned);
+                pinnedBuffers.Add(sourceHandle);
+                pinnedBuffers.Add(nameHandle);
+                descriptors[index] = new DocumentScriptDescriptor
+                {
+                    StructSize = (uint)Marshal.SizeOf<DocumentScriptDescriptor>(),
+                    Flags = script.AllFrames
+                        ? DocumentScriptFlags.AllFrames
+                        : DocumentScriptFlags.None,
+                    Source = sourceHandle.AddrOfPinnedObject(),
+                    SourceLength = (nuint)sourceBytes.Length,
+                    Name = nameHandle.AddrOfPinnedObject(),
+                    NameLength = (nuint)nameBytes.Length
+                };
+            }
+
+            var descriptorHandle = GCHandle.Alloc(descriptors, GCHandleType.Pinned);
+            pinnedBuffers.Add(descriptorHandle);
+            var options = new NavigationOptions
+            {
+                StructSize = (uint)Marshal.SizeOf<NavigationOptions>(),
+                DocumentScriptCount = (uint)descriptors.Length,
+                DocumentScripts = descriptorHandle.AddrOfPinnedObject()
+            };
+            try
+            {
+                return EngineLoadUrlWithOptions(
+                    engine,
+                    urlBytes,
+                    (nuint)urlBytes.Length,
+                    in options) != 0;
+            }
+            catch (EntryPointNotFoundException error)
+            {
+                throw new InvalidOperationException(
+                    "The loaded WebScene native runtime does not support document-start " +
+                    "scripts. Install the WebScene 1.0.19 or newer native runtime package.",
+                    error);
+            }
+        }
+        finally
+        {
+            foreach (var handle in pinnedBuffers)
+            {
+                if (handle.IsAllocated)
+                {
+                    handle.Free();
+                }
+            }
+        }
+    }
+
+    internal static WebSceneDocumentScript[] ValidateLoadOptions(
+        NativeWebSceneLoadOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.Source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.NativeLibraryPath);
+        if (!Uri.TryCreate(options.Source, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException(
+                "The WebScene document source must be an absolute URI.",
+                nameof(options));
+        }
+        ArgumentNullException.ThrowIfNull(options.DocumentStartScripts);
+        var scripts = new WebSceneDocumentScript[options.DocumentStartScripts.Count];
+        for (var index = 0; index < options.DocumentStartScripts.Count; index++)
+        {
+            var script = options.DocumentStartScripts[index]
+                ?? throw new ArgumentException(
+                    $"Document-start script {index} must not be null.",
+                    nameof(options));
+            ArgumentException.ThrowIfNullOrWhiteSpace(script.Source);
+            ArgumentException.ThrowIfNullOrWhiteSpace(script.Name);
+            scripts[index] = script;
+        }
+        return scripts;
     }
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_set_resource_root")]

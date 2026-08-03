@@ -118,6 +118,9 @@
         // metrics are diagnostic snapshots, not scheduling inputs; keep the cached
         // ABI view reasonably fresh without placing the census on the hot path.
         const auto memory_metrics_now = std::chrono::steady_clock::now();
+        v8_external_script_source_bytes_.store(
+            runtime_->external_script_source_bytes(),
+            std::memory_order_relaxed);
         constexpr auto memory_metrics_refresh_interval =
             std::chrono::seconds(5);
         if (last_memory_metrics_update_

@@ -222,9 +222,22 @@
         : public v8::String::ExternalOneByteStringResource {
     public:
         explicit shared_external_one_byte_source(
-            std::shared_ptr<const immutable_text_source> source)
-            : source_(std::move(source))
+            std::shared_ptr<const immutable_text_source> source,
+            std::shared_ptr<std::atomic<uint64_t>> retained_bytes)
+            : source_(std::move(source)),
+              retained_bytes_(std::move(retained_bytes)),
+              retained_byte_count_(source_->size())
         {
+            retained_bytes_->fetch_add(
+                retained_byte_count_,
+                std::memory_order_relaxed);
+        }
+
+        ~shared_external_one_byte_source() override
+        {
+            retained_bytes_->fetch_sub(
+                retained_byte_count_,
+                std::memory_order_relaxed);
         }
 
         const char* data() const override
@@ -255,15 +268,30 @@
 
     private:
         std::shared_ptr<const immutable_text_source> source_;
+        std::shared_ptr<std::atomic<uint64_t>> retained_bytes_;
+        size_t retained_byte_count_;
     };
 
     class shared_external_two_byte_source final
         : public v8::String::ExternalStringResource {
     public:
         explicit shared_external_two_byte_source(
-            std::shared_ptr<const std::vector<uint16_t>> source)
-            : source_(std::move(source))
+            std::shared_ptr<const std::vector<uint16_t>> source,
+            std::shared_ptr<std::atomic<uint64_t>> retained_bytes)
+            : source_(std::move(source)),
+              retained_bytes_(std::move(retained_bytes)),
+              retained_byte_count_(source_->size() * sizeof(uint16_t))
         {
+            retained_bytes_->fetch_add(
+                retained_byte_count_,
+                std::memory_order_relaxed);
+        }
+
+        ~shared_external_two_byte_source() override
+        {
+            retained_bytes_->fetch_sub(
+                retained_byte_count_,
+                std::memory_order_relaxed);
         }
 
         const uint16_t* data() const override
@@ -291,6 +319,8 @@
 
     private:
         std::shared_ptr<const std::vector<uint16_t>> source_;
+        std::shared_ptr<std::atomic<uint64_t>> retained_bytes_;
+        size_t retained_byte_count_;
     };
 
     struct process_script_source_entry final {

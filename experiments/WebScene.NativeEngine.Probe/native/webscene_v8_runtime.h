@@ -13,6 +13,12 @@ namespace webscene_native {
 
 class native_document;
 
+struct document_start_script final {
+    std::string source;
+    std::string name;
+    bool all_frames{true};
+};
+
 struct interop_result_data_v3 final {
     uint32_t status{WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3};
     uint32_t root_value_index{0};
@@ -207,7 +213,9 @@ public:
 
     bool initialize();
     bool execute(const std::string& source, const std::string& document_name);
-    bool load_url(const std::string& url);
+    bool load_url(
+        const std::string& url,
+        std::vector<document_start_script> document_start_scripts = {});
     void set_resource_root(std::string resource_root);
     bool evaluate_interop_v3(
         const std::string& source,
@@ -279,6 +287,7 @@ public:
     void set_work_metrics_enabled(bool enabled) noexcept;
     work_metrics read_work_metrics() const noexcept;
     uint64_t process_resource_shared_bytes() const noexcept;
+    uint64_t external_script_source_bytes() const noexcept;
     uint64_t process_script_source_memory_hits() const noexcept;
     uint64_t process_script_source_shared_bytes() const noexcept;
     uint64_t shared_isolate_slot() const noexcept;

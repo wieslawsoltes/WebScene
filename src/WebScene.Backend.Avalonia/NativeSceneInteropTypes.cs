@@ -624,3 +624,29 @@ internal struct EngineOptions
     public IntPtr AnimationFrameRequestedCallback;
     public IntPtr AnimationFrameRequestedUserData;
 }
+
+[Flags]
+internal enum DocumentScriptFlags : uint
+{
+    None = 0,
+    AllFrames = 1
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct DocumentScriptDescriptor
+{
+    public uint StructSize;
+    public DocumentScriptFlags Flags;
+    public IntPtr Source;
+    public nuint SourceLength;
+    public IntPtr Name;
+    public nuint NameLength;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NavigationOptions
+{
+    public uint StructSize;
+    public uint DocumentScriptCount;
+    public IntPtr DocumentScripts;
+}

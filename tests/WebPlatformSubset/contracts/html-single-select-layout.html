@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Collapsed single-select controls do not expose option boxes</title>
+<style>
+  body { margin: 0; font: 16px/20px Arial, sans-serif; }
+  #choice {
+    display: inline-block;
+    width: 240px;
+    height: 39px;
+    padding: 8px 10px;
+    border: 1px solid #345;
+    box-sizing: border-box;
+  }
+  #following { width: 40px; height: 20px; background: green; }
+</style>
+<select id="choice">
+  <option value="one">One-way flight</option>
+  <option value="return" selected>Return flight</option>
+</select>
+<div id="following"></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const check = (name, assertion) => {
+    const result = { name };
+    try { assertion(); result.status = "PASS"; result.message = null; result.stack = null; }
+    catch (error) { result.status = "FAIL"; result.message = String(error.message || error); result.stack = error.stack || null; }
+    state.results.push(result);
+  };
+  const require = (value, message) => { if (!value) throw new Error(message); };
+  const close = (actual, expected) => Math.abs(actual - expected) <= .01;
+
+  check("a default single-select is one collapsed replaced control", () => {
+    const select = choice.getBoundingClientRect();
+    const following = document.getElementById("following").getBoundingClientRect();
+    require(close(select.width, 240) && close(select.height, 39), JSON.stringify(select));
+    require(close(following.top, 39), "following block moved to " + following.top);
+    for (const option of choice.options) {
+      const rect = option.getBoundingClientRect();
+      require(rect.width === 0 && rect.height === 0,
+        "option generated a visible box: " + JSON.stringify(rect));
+    }
+  });
+
+  check("the selected option remains the select value without rendering its siblings", () => {
+    require(choice.value === "return", "value=" + choice.value);
+    require(choice.selectedIndex === 1, "selectedIndex=" + choice.selectedIndex);
+    choice.selectedIndex = 0;
+    require(choice.value === "one" && choice.selectedIndex === 0,
+      "programmatic selection did not update the collapsed label state");
+  });
+
+  state.diagnostics = [JSON.stringify({
+    select: choice.getBoundingClientRect(),
+    options: Array.from(choice.options, option => option.getBoundingClientRect()),
+    following: document.getElementById("following").getBoundingClientRect()
+  })];
+  state.harness = { status: state.results.some(result => result.status !== "PASS") ? 1 : 0, message: null, stack: null };
+  state.complete = true;
+</script>

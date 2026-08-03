@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Uno.WinUI.Graphics2DSK;
 using SkiaSharp;
+using WebScene.Backends.Native;
 using WebScene.Core;
 using WebScene.JavaScript.Interop;
 using Windows.System;
@@ -537,6 +538,7 @@ internal static class NativeSceneDrawOperation
 
 public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 {
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly UnoNativeSceneSurface _surface = new();
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
@@ -682,77 +684,112 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         return NativeWebSceneApi.TryTakeHostRequest(_engine, out request);
     }
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
-        => await LoadAsync(
-            source,
-            nativeLibraryPath,
-            compilationCacheDirectory,
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            cancellationToken);
+
+    public Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            options,
             beforeNavigation: null,
             documentBarrierTimeout: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
 
     /// <summary>
     /// Loads a document after allowing an asynchronous host hook to observe
     /// the initialized native engine. Inspector hosts use this hook to enter
     /// waiting-for-debugger mode before any document script is queued.
     /// </summary>
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory,
         Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
         TimeSpan? documentBarrierTimeout = null,
         CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
-        await NativeWebSceneRuntime.PrewarmAsync(nativeLibraryPath, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(compilationCacheDirectory))
-        {
-            Directory.CreateDirectory(compilationCacheDirectory);
-        }
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            beforeNavigation,
+            documentBarrierTimeout,
+            cancellationToken);
 
-        var timeoutValue = documentBarrierTimeout ?? TimeSpan.FromSeconds(30);
-        if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(documentBarrierTimeout));
-        }
+    private async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? documentBarrierTimeout,
+        CancellationToken cancellationToken = default)
+    {
+        var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
+        await _lifecycleGate.WaitAsync(cancellationToken);
         try
         {
+            await UnloadCoreAsync();
+            await NativeWebSceneRuntime.PrewarmAsync(
+                options.NativeLibraryPath,
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
+            {
+                Directory.CreateDirectory(options.CompilationCacheDirectory);
+            }
+
+            var timeoutValue = documentBarrierTimeout ?? TimeSpan.FromSeconds(30);
+            if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(documentBarrierTimeout));
+            }
             var callbackSignal = new JavaScriptCallbackSignal();
-            _engine = NativeWebSceneApi.EngineCreate(
+            var engine = NativeWebSceneApi.EngineCreate(
                 0,
-                compilationCacheDirectory,
+                options.CompilationCacheDirectory,
                 new UnoResourceLoader(),
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify);
-            if (_engine == IntPtr.Zero)
+            if (engine == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
                     "The WebScene native engine could not be created.");
             }
+            _engine = engine;
             _interopCallbackSignal = callbackSignal;
-            _interop = new NativeInteropInvoker(_engine);
+            _interop = new NativeInteropInvoker(engine);
 
-            _surface.SetEngine(_engine);
-            Source = source;
+            _surface.SetEngine(engine);
+            Source = options.Source;
             if (beforeNavigation is not null)
             {
                 await beforeNavigation(this, cancellationToken)
                     .ConfigureAwait(false);
             }
-            if (!NativeWebSceneApi.TryLoadUrl(_engine, source))
+            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
+            if (!NativeWebSceneApi.TryLoadUrl(
+                    engine,
+                    options.Source,
+                    documentStartScripts))
             {
                 throw new InvalidOperationException(
-                    $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(_engine)}");
+                    $"Native WebScene rejected {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
             }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
+            using var timeout =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (timeoutValue != Timeout.InfiniteTimeSpan)
             {
                 timeout.CancelAfter(timeoutValue);
@@ -761,6 +798,13 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
                     "webscene-uno-document-barrier.js",
                     timeout.Token).ConfigureAwait(false);
+            NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
+            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene failed to load {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
             var documentBarrier =
                 documentBarrierText.Contains(
                     "hasDocumentElement",
@@ -771,29 +815,57 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             if (!documentBarrier)
             {
                 throw new InvalidOperationException(
-                    $"Native WebScene did not construct a document for {source}: "
-                    + NativeWebSceneApi.GetLastError(_engine));
+                    $"Native WebScene did not construct a document for {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
             }
         }
         catch
         {
-            await DisposeAsync().ConfigureAwait(false);
+            await UnloadCoreAsync();
             throw;
+        }
+        finally
+        {
+            _lifecycleGate.Release();
         }
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
+    {
+        await _lifecycleGate.WaitAsync();
+        try
+        {
+            await UnloadCoreAsync();
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task UnloadCoreAsync()
     {
         Source = null;
         _surface.SetEngine(IntPtr.Zero);
-        Interlocked.Exchange(ref _interop, null)?.Dispose();
+        var interop = Interlocked.Exchange(ref _interop, null);
         Interlocked.Exchange(ref _interopCallbackSignal, null);
-        if (_engine != IntPtr.Zero)
+        var engine = _engine;
+        _engine = IntPtr.Zero;
+        if (engine == IntPtr.Zero)
         {
-            NativeWebSceneApi.EngineDestroy(_engine);
-            _engine = IntPtr.Zero;
+            interop?.Dispose();
+            return;
         }
-        return ValueTask.CompletedTask;
+        interop?.CancelAll();
+        try
+        {
+            await Task.Run(() => NativeWebSceneApi.EngineDestroy(engine))
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            interop?.Dispose();
+        }
     }
 }
 

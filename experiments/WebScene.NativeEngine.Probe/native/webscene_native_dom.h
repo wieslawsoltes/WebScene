@@ -277,8 +277,22 @@ struct node_style final {
     }
 
     struct grid_data final {
-        std::vector<css_length> template_columns;
-        std::vector<css_length> template_rows;
+        struct track final {
+            enum class sizing : uint8_t {
+                fixed,
+                automatic,
+                fractional,
+                minmax
+            };
+
+            css_length minimum{};
+            css_length maximum{};
+            float fraction{0};
+            sizing kind{sizing::automatic};
+        };
+
+        std::vector<track> template_columns;
+        std::vector<track> template_rows;
         bool two_columns{false};
         bool fractional_rows{false};
         bool span_all{false};

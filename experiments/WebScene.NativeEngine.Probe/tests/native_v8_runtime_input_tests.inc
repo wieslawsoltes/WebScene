@@ -212,6 +212,89 @@ void keyboard_input(
     require(webscene_engine_enqueue(engine, &input) != 0, "keyboard input was rejected");
 }
 
+void test_collapsed_single_select_native_activation(webscene_engine* engine)
+{
+    resize(engine, 320, 140, 600U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #choice { position:absolute;left:20px;top:20px;width:240px;height:39px;
+                box-sizing:border-box;padding:8px 10px;color:rgb(18,52,86);font-size:16px; }
+            </style>
+            <select id="choice">
+              <option value="one">One-way flight</option>
+              <option value="return">Return flight</option>
+            </select>`;
+          globalThis.__selectEvents = [];
+          for (const type of ['click', 'input', 'change', 'keydown', 'keyup']) {
+            choice.addEventListener(type, () => __selectEvents.push(type));
+          }
+        })()
+    )JS", "native-collapsed-select-setup.js");
+    const auto initial = evaluate(engine, R"JS((() => {
+          const select = choice.getBoundingClientRect();
+          const options = Array.from(choice.options, option => option.getBoundingClientRect());
+          return [choice.value, select.width, select.height,
+            options.every(rect => rect.width === 0 && rect.height === 0)];
+        })())JS", "native-collapsed-select-initial.js");
+    require(
+        initial == R"(["one",240,39,true])",
+        "single select did not begin as one collapsed native control: " + initial);
+
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 40, 35, 601U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 40, 35, 602U, false);
+    const auto clicked = evaluate(engine, R"JS(({
+      value: choice.value,
+      index: choice.selectedIndex,
+      active: document.activeElement === choice,
+      events: __selectEvents
+    }))JS", "native-collapsed-select-clicked.js");
+    require(
+        clicked == R"({"value":"return","index":1,"active":true,"events":["click","input","change"]})",
+        "native select activation did not change value/focus/events: " + clicked);
+
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 38U, 603U);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 38U, 604U);
+    const auto keyed = evaluate(engine, R"JS(({
+      value: choice.value,
+      index: choice.selectedIndex,
+      events: __selectEvents
+    }))JS", "native-collapsed-select-keyed.js");
+    require(
+        keyed == R"({"value":"one","index":0,"events":["click","input","change","keydown","input","change","keyup"]})",
+        "ArrowUp did not navigate the focused native select: " + keyed);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_selected_label = false;
+    auto observed_unselected_label = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 3U || command.flags >= scene->string_count) continue;
+                const auto resource = scene->strings[command.flags];
+                const std::string_view text(
+                    scene->string_bytes + resource.byte_offset,
+                    resource.byte_length);
+                observed_selected_label = observed_selected_label
+                    || text.ends_with("One-way flight");
+                observed_unselected_label = observed_unselected_label
+                    || text.ends_with("Return flight");
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (observed_selected_label) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        observed_selected_label && !observed_unselected_label,
+        "the collapsed select scene did not project exactly its selected label");
+}
+
 void wheel_input(
     webscene_engine* engine,
     double x,

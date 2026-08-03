@@ -15,8 +15,11 @@
         return true;
     }
 
-    bool load_url(const std::string& url)
+    bool load_url(
+        const std::string& url,
+        std::vector<document_start_script> document_start_scripts)
     {
+        current_document_start_scripts = std::move(document_start_scripts);
         std::string html;
         std::string resolved_url;
         if (!load_text_resource(
@@ -278,6 +281,8 @@
         append_script_elements(body, scripts);
 #endif
 
+        if (!execute_document_start_scripts(local_context, false)) return false;
+
         const auto report_document_script_error = [&](const std::string& error) {
             std::lock_guard lock(console_message_mutex);
             constexpr size_t maximum_console_messages = 1024U;
@@ -397,6 +402,10 @@
             js_string(isolate, "readyState"),
             js_string(isolate, "complete")).Check();
         if (!dispatch_lifecycle_event(local_context->Global(), "load")) return false;
+        if (!current_document_start_scripts.empty()
+            && !hydrate_initial_document_start_frames()) {
+            return false;
+        }
         document.mark_dirty();
         last_error.clear();
         return true;

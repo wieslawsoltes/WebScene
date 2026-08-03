@@ -826,6 +826,58 @@ std::string collapsed_text(const dom_node& node, std::string value)
     return result;
 }
 
+bool is_collapsed_select(const dom_node& node)
+{
+    if (node.tag != "select" || node.attributes.contains("multiple")) return false;
+    const auto authored_size = node.attributes.find("size");
+    return authored_size == node.attributes.end()
+        || parse_number(authored_size->second, 0) <= 1.0F;
+}
+
+void collect_option_nodes(const dom_node& root, std::vector<const dom_node*>& result)
+{
+    for (const auto* child : root.children) {
+        if (child == nullptr) continue;
+        if (child->tag == "option") result.push_back(child);
+        collect_option_nodes(*child, result);
+    }
+}
+
+void append_dom_text(const dom_node& node, std::string& result)
+{
+    if (node.tag == "#text") result += node.text_content;
+    for (const auto* child : node.children) {
+        if (child != nullptr) append_dom_text(*child, result);
+    }
+}
+
+std::string option_label(const dom_node& option)
+{
+    if (const auto label = option.attributes.find("label");
+        label != option.attributes.end()) {
+        return label->second;
+    }
+    std::string result;
+    append_dom_text(option, result);
+    return collapsed_text(option, std::move(result));
+}
+
+const dom_node* selected_option_for(const dom_node& select)
+{
+    if (!is_collapsed_select(select)
+        || select.form_control().selection_explicitly_empty) return nullptr;
+    std::vector<const dom_node*> options;
+    collect_option_nodes(select, options);
+    for (const auto* option : options) {
+        if (option->form_control().selectedness_initialized
+            && option->form_control().selectedness) return option;
+    }
+    for (const auto* option : options) {
+        if (option->attributes.contains("selected")) return option;
+    }
+    return options.empty() ? nullptr : options.front();
+}
+
 float fallback_text_width(std::string_view value, float font_size)
 {
     if (font_size <= 0) return 0;

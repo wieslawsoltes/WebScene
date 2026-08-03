@@ -25,6 +25,7 @@ projects=(
   src/WebScene.Dom/WebScene.Dom.csproj
   src/WebScene.Css/WebScene.Css.csproj
   src/WebScene.Graphics/WebScene.Graphics.csproj
+  src/WebScene.JavaScript.Interop/WebScene.JavaScript.Interop.csproj
   src/WebScene.Backend.Abstractions/WebScene.Backend.Abstractions.csproj
   src/WebScene.Backend.Avalonia/WebScene.Backend.Avalonia.csproj
 )

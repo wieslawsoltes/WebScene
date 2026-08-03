@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using WebScene.Backends.Native;
 using WebScene.JavaScript.Interop;
 
 namespace WebScene.Backends.Avalonia.Native;
@@ -280,62 +281,81 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             ProcessComposition: NativeSceneSurface.CompositionFlowMetrics);
     }
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
-        => await LoadAsync(
-            source,
-            nativeLibraryPath,
-            compilationCacheDirectory,
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            cancellationToken);
+
+    public Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            options,
             beforeNavigation: null,
             firstDocumentSceneTimeout: null,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            cancellationToken);
 
     /// <summary>
     /// Loads a document after allowing an asynchronous host hook to observe
     /// the initialized native engine. Inspector hosts use this hook to enter
     /// waiting-for-debugger mode before any document script is queued.
     /// </summary>
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory,
         Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
         TimeSpan? firstDocumentSceneTimeout = null,
         CancellationToken cancellationToken = default)
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            beforeNavigation,
+            firstDocumentSceneTimeout,
+            cancellationToken);
+
+    private async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? firstDocumentSceneTimeout,
+        CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
-        if (!Uri.TryCreate(source, UriKind.Absolute, out _))
-        {
-            throw new ArgumentException(
-                "The WebScene document source must be an absolute URI.",
-                nameof(source));
-        }
+        var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
 
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(compilationCacheDirectory))
+            if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
             {
-                Directory.CreateDirectory(compilationCacheDirectory);
+                Directory.CreateDirectory(options.CompilationCacheDirectory);
             }
 
             _navigationCancellation =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
-                .PrewarmAsync(nativeLibraryPath, navigationToken)
+                .PrewarmAsync(options.NativeLibraryPath, navigationToken)
                 .ConfigureAwait(false);
 
             var resourceLoader = new AvaloniaResourceLoader();
             var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
-                compilationCacheDirectory,
+                options.CompilationCacheDirectory,
                 resourceLoader,
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify,
@@ -362,7 +382,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 },
                 DispatcherPriority.Send);
 
-            Source = source;
+            Source = options.Source;
             if (beforeNavigation is not null)
             {
                 await beforeNavigation(this, navigationToken)
@@ -370,12 +390,29 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
-            if (!NativeWebSceneApi.TryLoadUrl(engine, source))
+            if (!NativeWebSceneApi.TryLoadUrl(
+                    engine,
+                    options.Source,
+                    documentStartScripts))
             {
                 throw new InvalidOperationException(
-                    $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(engine)}");
+                    $"Native WebScene rejected {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
             }
 
+            using (await _interop.InvokeAsync(
+                       "true",
+                       "webscene-document-navigation-barrier.js",
+                       navigationToken).ConfigureAwait(false))
+            {
+            }
+            NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
+            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene failed to load {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
             await WaitForFirstDocumentSceneAsync(
                     engine,
                     beforeNavigationMetrics.PublishedScenes,

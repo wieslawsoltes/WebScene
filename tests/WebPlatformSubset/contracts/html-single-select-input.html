@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Collapsed single-select native activation updates selection</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  body { margin: 0; }
+  #choice { position: absolute; left: 20px; top: 20px; width: 240px; height: 39px; }
+</style>
+<select id="choice">
+  <option value="one">One-way flight</option>
+  <option value="return">Return flight</option>
+</select>
+<script>
+  const observed = [];
+  for (const type of ["click", "input", "change"]) {
+    choice.addEventListener(type, () => observed.push(type));
+  }
+
+  promise_test(async () => {
+    assert_equals(choice.value, "one", "initial value");
+    await test_driver.click(choice);
+    assert_equals(document.activeElement, choice, "activation focuses the select");
+    assert_equals(choice.value, "return", "activation advances the collapsed choice");
+    assert_equals(choice.selectedIndex, 1, "live selected index");
+    assert_array_equals(observed, ["click", "input", "change"], "activation event order");
+  }, "native collapsed select activation changes its live value without exposing option boxes");
+</script>

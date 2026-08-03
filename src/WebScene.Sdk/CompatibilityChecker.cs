@@ -35,7 +35,7 @@ public static partial class WebSceneCompatibilityChecker
     private static readonly Rule[] s_rules =
     [
         Unsupported(@"\bnavigator\s*\.\s*serviceWorker\b", "WEBSCENE1001", "Service workers are not supported."),
-        Unsupported(@"\b(?:localStorage|sessionStorage|indexedDB)\b", "WEBSCENE1002", "Browser storage is not supported; request host.settings instead."),
+        Unsupported(@"\bindexedDB\b", "WEBSCENE1002", "IndexedDB is not supported."),
         Unsupported(@"\b(?:Worker|SharedWorker|Worklet)\s*\(", "WEBSCENE1003", "Web workers and worklets are not supported."),
         Unsupported(@"\b(?:RTCPeerConnection|MediaRecorder|AudioContext|webkitAudioContext)\b", "WEBSCENE1004", "WebRTC, recording, and Web Audio are not supported."),
         Unsupported(@"\bnavigator\s*\.\s*(?:mediaDevices|geolocation)\b", "WEBSCENE1005", "Media devices and geolocation are not supported."),

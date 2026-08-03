@@ -84,6 +84,14 @@ try
                 $"The native runtime does not export required Inspector ABI symbol '{inspectorExport}'.");
         }
     }
+    if (!NativeLibrary.TryGetExport(
+            library,
+            "webscene_engine_load_url_with_options",
+            out _))
+    {
+        return Fail(
+            "The ABI 3 runtime is missing document-start navigation support.");
+    }
     if (NativeLibrary.TryGetExport(
             library,
             "webscene_engine_evaluate_json",

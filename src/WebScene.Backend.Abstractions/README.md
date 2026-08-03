@@ -13,3 +13,7 @@ their behavior.
 
 Hot paths should use typed structures and batched packets. Do not wrap each DOM node or
 Canvas command in another backend object merely to cross a package boundary.
+
+Native presenters share `NativeWebSceneLoadOptions` and `WebSceneDocumentScript` from
+the `WebScene.Backends.Native` namespace. Document-start scripts are ordered, copied
+into native navigation work, and may opt into child frames with `AllFrames`.

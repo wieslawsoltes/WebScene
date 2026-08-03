@@ -207,8 +207,8 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
     for (const auto* grid : grid_allocations) {
         result.grid_storage_bytes +=
             sizeof(node_style::grid_data) + 2U * sizeof(void*)
-            + grid->template_columns.capacity() * sizeof(css_length)
-            + grid->template_rows.capacity() * sizeof(css_length)
+            + grid->template_columns.capacity() * sizeof(node_style::grid_data::track)
+            + grid->template_rows.capacity() * sizeof(node_style::grid_data::track)
             + grid->area_value.capacity() + 1U
             + grid->row_value.capacity() + 1U
             + grid->row_start_value.capacity() + 1U

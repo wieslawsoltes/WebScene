@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/webscene-logo.jpg" alt="WebScene" width="900">
+</p>
+
 # WebScene
 
 WebScene is a native web-UI runtime for trusted, packaged content in .NET applications.
@@ -54,6 +58,30 @@ Current reference applications include:
 Avalonia is the reference presenter. Uno is a proof, not yet a production-ready
 drop-in backend. WPF, WinUI, Flutter, and other presenter integrations are roadmap work
 and should not be presented as currently supported products.
+
+## Native runtime workloads
+
+These reference applications run existing web workloads through the native V8 scene
+engine and native presenter, without an embedded WebView or browser surface.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/monaco-editor.png" alt="Monaco Editor running through WebScene's native scene runtime" width="100%">
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/tradingview-terminal.jpg" alt="TradingView terminal running through WebScene's native scene runtime" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Monaco Editor</strong><br><sub>Native text layout, syntax highlighting, editing, selection, and folding</sub></td>
+    <td align="center"><strong>TradingView terminal</strong><br><sub>Live charts, WebSockets, nested frames, toolbars, and interaction</sub></td>
+  </tr>
+</table>
+
+See the [Native Monaco editor sample](samples/NativeMonacoEditor/README.md) and
+[Native TradingView terminal sample](samples/NativeTradingViewTerminal/README.md)
+for build, run, and headless-proof instructions.
 
 ## Architecture
 

@@ -129,6 +129,8 @@ int main()
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
+    test_document_start_ordering_storage_and_fail_closed_errors();
+    test_four_navigation_workers_enter_startup_concurrently();
     test_parallel_resource_prefetch();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     test_inspector_navigation_resets_context_group();
@@ -256,6 +258,7 @@ int main()
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
     test_dropdown_runtime_primitives(engine);
+    test_collapsed_single_select_native_activation(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
     test_animation_frame_dispatch_is_attributed();
     test_runtime_work_is_attributed();

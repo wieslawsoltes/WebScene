@@ -838,7 +838,8 @@
                     shared != nullptr) {
                     auto resource =
                         std::make_unique<shared_external_one_byte_source>(
-                            std::move(shared));
+                            std::move(shared),
+                            external_script_source_byte_count);
                     v8::Local<v8::String> external;
                     if (v8::String::NewExternalOneByte(
                             isolate,
@@ -854,7 +855,8 @@
                 shared != nullptr) {
                 auto resource =
                     std::make_unique<shared_external_two_byte_source>(
-                        std::move(shared));
+                        std::move(shared),
+                        external_script_source_byte_count);
                 v8::Local<v8::String> external;
                 if (v8::String::NewExternalTwoByte(isolate, resource.get())
                         .ToLocal(&external)) {
@@ -1039,6 +1041,44 @@
                     std::chrono::steady_clock::now() - profile_started).count());
         }
 #endif
+        return true;
+    }
+
+    void report_document_start_error(const std::string& error)
+    {
+        std::lock_guard lock(console_message_mutex);
+        constexpr size_t maximum_console_messages = 1024U;
+        if (console_messages.size() >= maximum_console_messages) {
+            console_messages.pop_front();
+        }
+        console_messages.push_back("error\n" + error);
+    }
+
+    bool execute_document_start_scripts(
+        v8::Local<v8::Context> local_context,
+        bool frame)
+    {
+        for (const auto& script : current_document_start_scripts) {
+            if (frame && !script.all_frames) continue;
+            std::string error;
+            if (execute_in_context(
+                    local_context,
+                    script.source,
+                    script.name,
+                    error,
+                    true)) {
+                continue;
+            }
+            const auto diagnostic = std::string(frame
+                    ? "Frame document-start script '"
+                    : "Document-start script '")
+                + script.name + "' failed: " + error;
+            frame_last_error_value = diagnostic;
+            last_error = diagnostic;
+            ++frame_script_error_count;
+            report_document_start_error(diagnostic);
+            return false;
+        }
         return true;
     }
 
@@ -1821,6 +1861,9 @@
             local_frame_context,
             "WebScene frame " + std::to_string(frame.id));
 #endif
+        if (!execute_document_start_scripts(local_frame_context, true)) {
+            return false;
+        }
 
         const auto execute_group = [&](bool defer) {
             for (const auto& script : scripts) {
@@ -1948,5 +1991,20 @@
         if (!dispatch_lifecycle_event(frame_global, "load")) return false;
         perform_microtask_checkpoint();
         frame_last_error_value.clear();
+        return true;
+    }
+
+    bool hydrate_initial_document_start_frames()
+    {
+        while (!pending_frame_hydrations.empty()) {
+            auto* frame = pending_frame_hydrations.front();
+            pending_frame_hydrations.erase(pending_frame_hydrations.begin());
+            if (frame == nullptr) continue;
+            if (hydrate_frame(*frame)) continue;
+            frame->attributes["data-webscene-frame-error"] =
+                frame_last_error_value;
+            last_error = frame_last_error_value;
+            return false;
+        }
         return true;
     }

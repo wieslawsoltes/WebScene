@@ -740,18 +740,40 @@ struct v8_dom_runtime::implementation final {
         return storage;
     }
 
+    static bool storage_string(
+        v8::Isolate* isolate,
+        v8::Local<v8::Value> value,
+        std::string& result)
+    {
+        v8::Local<v8::String> text;
+        if (!value->ToString(isolate->GetCurrentContext()).ToLocal(&text)) {
+            return false;
+        }
+        result.assign(text->Utf8LengthV2(isolate), '\0');
+        const auto written = text->WriteUtf8V2(
+            isolate,
+            result.data(),
+            result.size(),
+            v8::String::WriteFlags::kNone);
+        result.resize(written);
+        return true;
+    }
+
     static void session_storage_get_item(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         current(info.GetIsolate())->record_feature(
             "web-api", "Storage.getItem", "supported", {}, "web-api-binding");
         auto* storage = require_session_storage(info);
         if (storage == nullptr) return;
-        const auto key = info.Length() > 0
-            ? to_utf8(info.GetIsolate(), info[0]) : std::string("undefined");
+        std::string key;
+        if (!storage_string(
+                info.GetIsolate(),
+                info.Length() > 0 ? info[0] : v8::Undefined(info.GetIsolate()),
+                key)) return;
         const auto known = storage->values.find(key);
         info.GetReturnValue().Set(known == storage->values.end()
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
-            : v8::Local<v8::Value>(js_string(info.GetIsolate(), known->second.c_str())));
+            : v8::Local<v8::Value>(js_dom_string(info.GetIsolate(), known->second)));
     }
 
     static void session_storage_set_item(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -760,10 +782,16 @@ struct v8_dom_runtime::implementation final {
             "web-api", "Storage.setItem", "supported", {}, "web-api-binding");
         auto* storage = require_session_storage(info);
         if (storage == nullptr) return;
-        const auto key = info.Length() > 0
-            ? to_utf8(info.GetIsolate(), info[0]) : std::string("undefined");
-        const auto value = info.Length() > 1
-            ? to_utf8(info.GetIsolate(), info[1]) : std::string("undefined");
+        std::string key;
+        std::string value;
+        if (!storage_string(
+                info.GetIsolate(),
+                info.Length() > 0 ? info[0] : v8::Undefined(info.GetIsolate()),
+                key)
+            || !storage_string(
+                info.GetIsolate(),
+                info.Length() > 1 ? info[1] : v8::Undefined(info.GetIsolate()),
+                value)) return;
         if (!storage->values.contains(key)) storage->keys.push_back(key);
         storage->values[key] = value;
     }
@@ -774,8 +802,11 @@ struct v8_dom_runtime::implementation final {
             "web-api", "Storage.removeItem", "supported", {}, "web-api-binding");
         auto* storage = require_session_storage(info);
         if (storage == nullptr) return;
-        const auto key = info.Length() > 0
-            ? to_utf8(info.GetIsolate(), info[0]) : std::string("undefined");
+        std::string key;
+        if (!storage_string(
+                info.GetIsolate(),
+                info.Length() > 0 ? info[0] : v8::Undefined(info.GetIsolate()),
+                key)) return;
         if (storage->values.erase(key) == 0U) return;
         std::erase(storage->keys, key);
     }
@@ -797,14 +828,15 @@ struct v8_dom_runtime::implementation final {
         auto* storage = require_session_storage(info);
         if (storage == nullptr) return;
         const auto context = info.GetIsolate()->GetCurrentContext();
-        const auto index = info.Length() > 0
-            ? info[0]->Uint32Value(context).FromMaybe(std::numeric_limits<uint32_t>::max())
-            : std::numeric_limits<uint32_t>::max();
+        const auto maybe_index = (info.Length() > 0
+            ? info[0]
+            : v8::Undefined(info.GetIsolate()))->Uint32Value(context);
+        if (maybe_index.IsNothing()) return;
+        const auto index = maybe_index.FromJust();
         info.GetReturnValue().Set(index >= storage->keys.size()
             ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
-            : v8::Local<v8::Value>(js_string(
-                info.GetIsolate(),
-                storage->keys[index].c_str())));
+            : v8::Local<v8::Value>(js_dom_string(
+                info.GetIsolate(), storage->keys[index])));
     }
 
     static void get_session_storage_length(
@@ -1668,7 +1700,7 @@ struct v8_dom_runtime::implementation final {
         // These are general browser primitives used by Monaco and other
         // component runtimes. Keep them inside WebScene's native realm so
         // applications do not have to patch third-party bundles.
-        constexpr std::string_view source = R"JS(
+        constexpr std::string_view source_parts[] = {R"JS(
           (() => {
             const enqueueMicrotask = callback => {
               if (typeof callback !== 'function') {
@@ -1830,7 +1862,8 @@ struct v8_dom_runtime::implementation final {
                 }
                 return result;
               }
-            }
+            })JS",
+            R"JS(
 
             const installCustomElementsPlatform = () => {
             if (globalThis.__webSceneCustomElementsNotifySubtree) return;
@@ -1965,7 +1998,8 @@ struct v8_dom_runtime::implementation final {
                 }
               }
               return element;
-            };
+            };)JS",
+            R"JS(
             const connectElement = element => {
               const upgraded = upgradeElement(element);
               const state = elementStates.get(element);
@@ -2145,10 +2179,12 @@ struct v8_dom_runtime::implementation final {
               }
             });
           })();
-        )JS";
+        )JS"};
+        std::string source;
+        for (const auto part : source_parts) source.append(part);
         auto script = v8::Script::Compile(
             local_context,
-            js_string(isolate, std::string(source).c_str())).ToLocalChecked();
+            js_string(isolate, source.c_str())).ToLocalChecked();
         script->Run(local_context).ToLocalChecked();
     }
 
@@ -3114,9 +3150,11 @@ bool v8_dom_runtime::execute(const std::string& source, const std::string& docum
     return impl_->execute(source, document_name);
 }
 
-bool v8_dom_runtime::load_url(const std::string& url)
+bool v8_dom_runtime::load_url(
+    const std::string& url,
+    std::vector<document_start_script> document_start_scripts)
 {
-    return impl_->load_url(url);
+    return impl_->load_url(url, std::move(document_start_scripts));
 }
 
 bool v8_dom_runtime::set_visible(bool visible)
@@ -3927,6 +3965,9 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         result.external_bytes = statistics.external_memory();
         result.malloced_bytes = statistics.malloced_memory();
         result.peak_malloced_bytes = statistics.peak_malloced_memory();
+        result.external_script_source_bytes =
+            impl_->external_script_source_byte_count->load(
+                std::memory_order_relaxed);
         // This API walks V8's code and metadata spaces. Four settled chart
         // documents calling it periodically consumed measurable CPU even
         // though these fields are diagnostic-only and ordinary production
@@ -3941,8 +3982,9 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
                     code_statistics.code_and_metadata_size();
                 result.bytecode_and_metadata_bytes =
                     code_statistics.bytecode_and_metadata_size();
-                result.external_script_source_bytes =
-                    code_statistics.external_script_source_size();
+                result.external_script_source_bytes = std::max<uint64_t>(
+                    result.external_script_source_bytes,
+                    code_statistics.external_script_source_size());
             }
         }
         const auto add_space = [](
@@ -4201,6 +4243,12 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         + impl_->hover_selector_dependencies.capacity()
             * sizeof(implementation::hover_selector_dependency);
     return result;
+}
+
+uint64_t v8_dom_runtime::external_script_source_bytes() const noexcept
+{
+    return impl_->external_script_source_byte_count->load(
+        std::memory_order_relaxed);
 }
 
 const std::string& v8_dom_runtime::frame_last_error() const noexcept
