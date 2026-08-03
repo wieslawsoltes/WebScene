@@ -9,6 +9,8 @@ namespace WebScene.NativeEngine.Benchmarks;
 internal static class NativeInspectorDisabledPerformanceProbe
 {
     private const uint InspectorBuildFeature = 1U << 1;
+    private const string ConsoleCompleteMarker = "__webscene_perf_console_complete__";
+    private const string WorkloadCompleteMarker = "__webscene_perf_workload_complete__";
 
     internal static int Run(string[] args)
     {
@@ -131,23 +133,16 @@ internal static class NativeInspectorDisabledPerformanceProbe
             {
                 Execute(
                     engines[index].Engine,
-                    ConsoleFixture(consoleIterations),
+                    ConsoleFixture(consoleIterations, ConsoleCompleteMarker),
                     $"inspector-disabled-console-{index}.js");
             }
+            var consoleCompletion = WaitForConsoleMarker(
+                engines,
+                ConsoleCompleteMarker,
+                TimeSpan.FromSeconds(10));
             consoleElapsed.Stop();
             process.Refresh();
             var consoleCpu = process.TotalProcessorTime - consoleCpuBefore;
-            var drainedConsoleMessages = 0;
-            foreach (var state in engines)
-            {
-                while (NativeWebSceneApi.TryTakeConsoleMessage(
-                           state.Engine,
-                           out _,
-                           out _))
-                {
-                    drainedConsoleMessages++;
-                }
-            }
 
             process.Refresh();
             var workloadCpuBefore = process.TotalProcessorTime;
@@ -156,9 +151,16 @@ internal static class NativeInspectorDisabledPerformanceProbe
             {
                 Execute(
                     engines[index].Engine,
-                    RepresentativeWorkload(workloadNodes, index),
+                    RepresentativeWorkload(
+                        workloadNodes,
+                        index,
+                        WorkloadCompleteMarker),
                     $"inspector-disabled-workload-{index}.js");
             }
+            var workloadCompletion = WaitForConsoleMarker(
+                engines,
+                WorkloadCompleteMarker,
+                TimeSpan.FromSeconds(10));
             workloadElapsed.Stop();
             process.Refresh();
             var workloadCpu = process.TotalProcessorTime - workloadCpuBefore;
@@ -215,7 +217,8 @@ internal static class NativeInspectorDisabledPerformanceProbe
                 consoleHeavy = new
                 {
                     calls = checked(contextCount * consoleIterations),
-                    drainedConsoleMessages,
+                    drainedConsoleMessages = consoleCompletion.Messages,
+                    completionSignals = consoleCompletion.Signals,
                     elapsedMilliseconds = consoleElapsed.Elapsed.TotalMilliseconds,
                     processCpuMilliseconds = consoleCpu.TotalMilliseconds,
                     normalizedProcessCpuPercent = NormalizeCpu(consoleCpu, consoleElapsed.Elapsed)
@@ -224,6 +227,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
                 {
                     contexts = contextCount,
                     nodesPerContext = workloadNodes,
+                    completionSignals = workloadCompletion.Signals,
                     elapsedMilliseconds = workloadElapsed.Elapsed.TotalMilliseconds,
                     processCpuMilliseconds = workloadCpu.TotalMilliseconds,
                     normalizedProcessCpuPercent = NormalizeCpu(workloadCpu, workloadElapsed.Elapsed)
@@ -356,14 +360,18 @@ internal static class NativeInspectorDisabledPerformanceProbe
             })();
             """;
 
-    private static string ConsoleFixture(int iterations)
+    private static string ConsoleFixture(int iterations, string marker)
         => $$"""
             for (let index = 0; index < {{iterations}}; index++) {
               console.log('inspector-disabled-console', index, { parity: true });
             }
+            console.log('{{marker}}');
             """;
 
-    private static string RepresentativeWorkload(int nodes, int context)
+    private static string RepresentativeWorkload(
+        int nodes,
+        int context,
+        string marker)
         => $$"""
             (() => {
               const style = document.createElement('style');
@@ -388,8 +396,47 @@ internal static class NativeInspectorDisabledPerformanceProbe
                 root.children[index].firstChild.textContent += '-updated';
               }
               document.querySelectorAll('.perf-row > .perf-value').length;
+              console.log('{{marker}}');
             })();
             """;
+
+    private static ConsoleCompletion WaitForConsoleMarker(
+        IReadOnlyList<EngineState> engines,
+        string marker,
+        TimeSpan timeout)
+    {
+        var completed = new bool[engines.Count];
+        var messages = 0;
+        var signals = 0;
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            for (var index = 0; index < engines.Count; index++)
+            {
+                if (completed[index]) continue;
+                while (NativeWebSceneApi.TryTakeConsoleMessage(
+                           engines[index].Engine,
+                           out _,
+                           out var message))
+                {
+                    if (string.Equals(message, marker, StringComparison.Ordinal))
+                    {
+                        completed[index] = true;
+                        signals++;
+                        break;
+                    }
+                    messages++;
+                }
+            }
+            if (signals == engines.Count)
+            {
+                return new ConsoleCompletion(messages, signals);
+            }
+            Thread.Sleep(1);
+        }
+        throw new TimeoutException(
+            $"The native runtime did not publish console marker '{marker}' within the bounded interval.");
+    }
 
     private static RuntimeWorkMetrics ReadRuntimeWork(IntPtr engine)
         => NativeWebSceneApi.TryGetRuntimeWorkMetrics(engine)
@@ -546,4 +593,6 @@ internal static class NativeInspectorDisabledPerformanceProbe
         ulong NativeDomAttributeStorageBytes,
         ulong NativeWrapperStorageBytes,
         ulong LatestSceneBytes);
+
+    private sealed record ConsoleCompletion(int Messages, int Signals);
 }
