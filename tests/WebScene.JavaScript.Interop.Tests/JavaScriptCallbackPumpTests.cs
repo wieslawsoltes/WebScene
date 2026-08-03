@@ -58,6 +58,32 @@ public sealed class JavaScriptCallbackPumpTests
     }
 
     [Fact]
+    public async Task NotificationBeforePumpStartupDrainsTheQueuedCallback()
+    {
+        var signal = new JavaScriptCallbackSignal();
+        var callbackQueued = 1;
+        var dispatched = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var invoker = new SignaledInvoker(
+            signal,
+            () =>
+            {
+                if (Interlocked.Exchange(ref callbackQueued, 0) != 1)
+                {
+                    return false;
+                }
+                dispatched.TrySetResult();
+                return true;
+            });
+
+        signal.Notify();
+        await using var pump = JavaScriptCallbackPump.Start(invoker);
+
+        await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(0, Volatile.Read(ref callbackQueued));
+    }
+
+    [Fact]
     public async Task SignalCanBeReusedAfterCancellation()
     {
         var signal = new JavaScriptCallbackSignal();

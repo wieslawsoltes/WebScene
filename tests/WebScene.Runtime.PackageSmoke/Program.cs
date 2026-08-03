@@ -72,6 +72,14 @@ try
             $"The native runtime manifest declares ABI {manifestAbiVersion}, " +
             $"but the library exports ABI {abiVersion}.");
     }
+    if (!NativeLibrary.TryGetExport(
+            library,
+            "webscene_engine_load_url_with_options",
+            out _))
+    {
+        return Fail(
+            "The ABI 3 runtime is missing document-start navigation support.");
+    }
     if (NativeLibrary.TryGetExport(
             library,
             "webscene_engine_evaluate_json",

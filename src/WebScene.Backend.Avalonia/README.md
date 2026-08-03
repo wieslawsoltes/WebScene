@@ -22,3 +22,18 @@ UI-to-compositor wake remains only for first presentation and cooperative live r
 This is currently an advanced integration surface rather than a turnkey component
 host. See the repository's native showcase, Monaco, and TradingView samples for the
 supported composition pattern.
+
+## Document-start scripts and storage
+
+Use `LoadAsync(NativeWebSceneLoadOptions)` to install ordered compatibility scripts
+after the loading document and location exist but before authored JavaScript. Scripts
+whose `AllFrames` value is true also run before authored scripts in each subsequently
+created frame. A document-start exception fails the initial load and includes the
+configured script name in native diagnostics.
+
+The 1.0.19 native runtime supplies synchronous, in-memory `localStorage` and
+`sessionStorage` objects for the current engine/page lifetime. It implements
+`length`, `key`, `getItem`, `setItem`, `removeItem`, and `clear`, including JavaScript
+string coercion, null results, and stable insertion order. This is a compatibility
+subset: it does not promise persistence, quotas, storage events, origin/reload
+semantics, cross-engine profiles, or IndexedDB.

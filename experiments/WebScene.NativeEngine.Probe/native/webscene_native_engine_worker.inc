@@ -577,7 +577,10 @@
                  ++iterator) {
                 auto& request = *iterator;
                 if (auto* url = std::get_if<url_request>(&request)) {
-                    if (runtime_ != nullptr && runtime_->load_url(url->url)) {
+                    if (runtime_ != nullptr
+                        && runtime_->load_url(
+                            url->url,
+                            std::move(url->document_start_scripts))) {
                         native_scene_active_ = true;
                         frame_scripts_executed_.store(
                             runtime_->frame_scripts_executed(),

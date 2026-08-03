@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Uno.WinUI.Graphics2DSK;
 using SkiaSharp;
+using WebScene.Backends.Native;
 using WebScene.Core;
 using WebScene.JavaScript.Interop;
 using Windows.System;
@@ -537,6 +538,7 @@ internal static class NativeSceneDrawOperation
 
 public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 {
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly UnoNativeSceneSurface _surface = new();
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
@@ -628,75 +630,142 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         return NativeWebSceneApi.TryTakeHostRequest(_engine, out request);
     }
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            cancellationToken);
+
+    public async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
-        await NativeWebSceneRuntime.PrewarmAsync(nativeLibraryPath, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(compilationCacheDirectory))
+        var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
+        await _lifecycleGate.WaitAsync(cancellationToken);
+        try
         {
-            Directory.CreateDirectory(compilationCacheDirectory);
-        }
+            await UnloadCoreAsync();
+            await NativeWebSceneRuntime.PrewarmAsync(
+                options.NativeLibraryPath,
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
+            {
+                Directory.CreateDirectory(options.CompilationCacheDirectory);
+            }
 
-        var callbackSignal = new JavaScriptCallbackSignal();
-        _engine = NativeWebSceneApi.EngineCreate(
-            0,
-            compilationCacheDirectory,
-            new UnoResourceLoader(),
-            _surface.OnNativeScenePublished,
-            interopCallbackAvailable: callbackSignal.Notify);
-        if (_engine == IntPtr.Zero)
+            var callbackSignal = new JavaScriptCallbackSignal();
+            var engine = NativeWebSceneApi.EngineCreate(
+                0,
+                options.CompilationCacheDirectory,
+                new UnoResourceLoader(),
+                _surface.OnNativeScenePublished,
+                interopCallbackAvailable: callbackSignal.Notify);
+            if (engine == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "The WebScene native engine could not be created.");
+            }
+            _engine = engine;
+            _interopCallbackSignal = callbackSignal;
+            _interop = new NativeInteropInvoker(engine);
+
+            _surface.SetEngine(engine);
+            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);
+            if (!NativeWebSceneApi.TryLoadUrl(
+                    engine,
+                    options.Source,
+                    documentStartScripts))
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene rejected {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
+
+            using var timeout =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            var documentBarrierText = await EvaluateTextAsync(
+                    "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
+                    "webscene-uno-document-barrier.js",
+                    timeout.Token);
+            NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
+            if (afterNavigation.ScriptErrors > beforeNavigation.ScriptErrors)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene failed to load {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
+            var documentBarrier =
+                documentBarrierText.Contains(
+                    "hasDocumentElement",
+                    StringComparison.Ordinal)
+                && documentBarrierText.Contains(
+                    "hasBody",
+                    StringComparison.Ordinal);
+            if (!documentBarrier)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene did not construct a document for {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
+
+            Source = options.Source;
+        }
+        catch
         {
-            throw new InvalidOperationException("The WebScene native engine could not be created.");
+            await UnloadCoreAsync();
+            throw;
         }
-        _interopCallbackSignal = callbackSignal;
-        _interop = new NativeInteropInvoker(_engine);
-
-        _surface.SetEngine(_engine);
-        if (!NativeWebSceneApi.TryLoadUrl(_engine, source))
+        finally
         {
-            throw new InvalidOperationException(
-                $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(_engine)}");
+            _lifecycleGate.Release();
         }
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        var documentBarrierText = await EvaluateTextAsync(
-                "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
-                "webscene-uno-document-barrier.js",
-                timeout.Token).ConfigureAwait(false);
-        var documentBarrier =
-            documentBarrierText.Contains(
-                "hasDocumentElement",
-                StringComparison.Ordinal)
-            && documentBarrierText.Contains(
-                "hasBody",
-                StringComparison.Ordinal);
-        if (!documentBarrier)
-        {
-            throw new InvalidOperationException(
-                $"Native WebScene did not construct a document for {source}: " +
-                NativeWebSceneApi.GetLastError(_engine));
-        }
-
-        Source = source;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        _surface.SetEngine(IntPtr.Zero);
-        Interlocked.Exchange(ref _interop, null)?.Dispose();
-        Interlocked.Exchange(ref _interopCallbackSignal, null);
-        if (_engine != IntPtr.Zero)
+        await _lifecycleGate.WaitAsync();
+        try
         {
-            NativeWebSceneApi.EngineDestroy(_engine);
-            _engine = IntPtr.Zero;
+            await UnloadCoreAsync();
         }
-        return ValueTask.CompletedTask;
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task UnloadCoreAsync()
+    {
+        Source = null;
+        _surface.SetEngine(IntPtr.Zero);
+        var interop = Interlocked.Exchange(ref _interop, null);
+        Interlocked.Exchange(ref _interopCallbackSignal, null);
+        var engine = _engine;
+        _engine = IntPtr.Zero;
+        if (engine == IntPtr.Zero)
+        {
+            interop?.Dispose();
+            return;
+        }
+        interop?.CancelAll();
+        try
+        {
+            await Task.Run(() => NativeWebSceneApi.EngineDestroy(engine))
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            interop?.Dispose();
+        }
     }
 }
 

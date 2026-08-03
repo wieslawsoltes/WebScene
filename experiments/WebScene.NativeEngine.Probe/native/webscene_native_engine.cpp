@@ -56,6 +56,8 @@ static_assert(sizeof(webscene_interop_callback_view_v3) == 88);
 static_assert(sizeof(webscene_interop_callback_completion_v3) == 96);
 static_assert(sizeof(webscene_interop_pool_metrics_v3) == 200);
 static_assert(sizeof(webscene_runtime_work_metrics) == 168);
+static_assert(sizeof(webscene_document_script) == 40);
+static_assert(sizeof(webscene_navigation_options) == 16);
 
 class input_ring final {
 public:
@@ -171,6 +173,7 @@ struct script_request final {
 
 struct url_request final {
     std::string url;
+    std::vector<webscene_native::document_start_script> document_start_scripts;
 };
 
 // These responsibility-focused fragments intentionally remain one translation
@@ -700,6 +703,18 @@ uint8_t webscene_engine_load_url(
     size_t url_length)
 {
     return engine != nullptr && engine->load_url(url, url_length) ? 1U : 0U;
+}
+
+uint8_t webscene_engine_load_url_with_options(
+    webscene_engine* engine,
+    const char* url,
+    size_t url_length,
+    const webscene_navigation_options* options)
+{
+    return engine != nullptr
+        && engine->load_url(url, url_length, options)
+        ? 1U
+        : 0U;
 }
 
 uint8_t webscene_engine_enqueue(webscene_engine* engine, const webscene_input_event* event)

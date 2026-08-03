@@ -114,6 +114,8 @@ int main()
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
+    test_document_start_ordering_storage_and_fail_closed_errors();
+    test_four_navigation_workers_enter_startup_concurrently();
     test_parallel_resource_prefetch();
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();

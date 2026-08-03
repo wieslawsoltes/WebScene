@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using WebScene.Backends.Native;
 using WebScene.JavaScript.Interop;
 
 namespace WebScene.Backends.Avalonia.Native;
@@ -226,42 +227,47 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             ProcessComposition: NativeSceneSurface.CompositionFlowMetrics);
     }
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         string source,
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            cancellationToken);
+
+    public async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
-        if (!Uri.TryCreate(source, UriKind.Absolute, out _))
-        {
-            throw new ArgumentException(
-                "The WebScene document source must be an absolute URI.",
-                nameof(source));
-        }
+        var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
 
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(compilationCacheDirectory))
+            if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
             {
-                Directory.CreateDirectory(compilationCacheDirectory);
+                Directory.CreateDirectory(options.CompilationCacheDirectory);
             }
 
             _navigationCancellation =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
-                .PrewarmAsync(nativeLibraryPath, navigationToken)
+                .PrewarmAsync(options.NativeLibraryPath, navigationToken)
                 .ConfigureAwait(false);
 
             var resourceLoader = new AvaloniaResourceLoader();
             var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
-                compilationCacheDirectory,
+                options.CompilationCacheDirectory,
                 resourceLoader,
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify,
@@ -289,18 +295,35 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 DispatcherPriority.Send);
 
             NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);
-            if (!NativeWebSceneApi.TryLoadUrl(engine, source))
+            if (!NativeWebSceneApi.TryLoadUrl(
+                    engine,
+                    options.Source,
+                    documentStartScripts))
             {
                 throw new InvalidOperationException(
-                    $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(engine)}");
+                    $"Native WebScene rejected {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
             }
 
+            using (await _interop.InvokeAsync(
+                       "true",
+                       "webscene-document-navigation-barrier.js",
+                       navigationToken).ConfigureAwait(false))
+            {
+            }
+            NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
+            if (afterNavigation.ScriptErrors > beforeNavigation.ScriptErrors)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene failed to load {options.Source}: " +
+                    NativeWebSceneApi.GetLastError(engine));
+            }
             await WaitForFirstDocumentSceneAsync(
                     engine,
                     beforeNavigation.PublishedScenes,
                     navigationToken)
                 .ConfigureAwait(false);
-            Source = source;
+            Source = options.Source;
         }
         catch
         {
