@@ -281,7 +281,6 @@ $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_n
 & dotnet run `
     --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
     -c Release -- `
-    --engine native `
     --selection required `
     --test contracts/responsive-release-list.html `
     --native-library $packageNativePath `
