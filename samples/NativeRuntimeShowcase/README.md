@@ -47,6 +47,12 @@ Run Flutter on macOS:
 
 `WEBSCENE_NATIVE_ENGINE_LIBRARY` can be used instead of the command-line option.
 Add `--editor` after the application arguments to start directly in Monaco.
+Add `--v8-inspector` to expose the active Avalonia WebScene isolate at
+`http://127.0.0.1:9229/json/list`; use `--v8-inspector-port <port>` to choose a
+different port. For example, `--editor --v8-inspector` provides a deterministic
+local target for Chrome `chrome://inspect` and the CDP Inspector app. The
+equivalent environment switches are `WEBSCENE_V8_INSPECTOR=1` and
+`WEBSCENE_V8_INSPECTOR_PORT`.
 For Flutter, use `WEBSCENE_INITIAL_DOCUMENT=monaco`.
 The showcase reuses the checked-in Monaco 0.56.0 assets from
 `samples/NativeMonacoEditor/Assets`; no browser control or WebView is involved.
