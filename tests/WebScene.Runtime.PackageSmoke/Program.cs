@@ -72,6 +72,18 @@ try
             $"The native runtime manifest declares ABI {manifestAbiVersion}, " +
             $"but the library exports ABI {abiVersion}.");
     }
+    foreach (var inspectorExport in new[]
+             {
+                 "webscene_engine_inspector_connect_v2",
+                 "webscene_engine_inspector_take_message"
+             })
+    {
+        if (!NativeLibrary.TryGetExport(library, inspectorExport, out _))
+        {
+            return Fail(
+                $"The native runtime does not export required Inspector ABI symbol '{inspectorExport}'.");
+        }
+    }
     if (NativeLibrary.TryGetExport(
             library,
             "webscene_engine_evaluate_json",

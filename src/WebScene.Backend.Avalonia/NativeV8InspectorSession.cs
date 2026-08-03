@@ -13,7 +13,10 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
 {
     private readonly IntPtr _engine;
     private readonly Channel<ReadOnlyMemory<byte>> _messages;
+    private readonly object _drainGate = new();
+    private Task? _drainTask;
     private int _disposed;
+    private int _nativeClosed;
 
     internal NativeV8InspectorSession(IntPtr engine, ulong sessionId)
     {
@@ -65,44 +68,149 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
         }
     }
 
-    internal void Publish(ReadOnlySpan<byte> message)
+    internal void NotifyMessagesAvailable()
     {
-        if (Volatile.Read(ref _disposed) != 0) return;
-        if (!_messages.Writer.TryWrite(message.ToArray()))
+        lock (_drainGate)
         {
-            _messages.Writer.TryComplete(new InvalidOperationException(
-                "The WebScene V8 Inspector output queue exceeded 1024 messages."));
+            if (Volatile.Read(ref _disposed) != 0
+                || _drainTask is { IsCompleted: false }) return;
+            _drainTask = Task.Run(DrainAvailableMessages);
+        }
+    }
+
+    private void DrainAvailableMessages()
+    {
+        while (Volatile.Read(ref _disposed) == 0)
+        {
+            while (Volatile.Read(ref _disposed) == 0)
+            {
+                var required = NativeWebSceneApi.GetInspectorMessageSize(
+                    _engine,
+                    SessionId);
+                if (required == 0) break;
+                if (required == nuint.MaxValue)
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector native output queue exceeded its 1,024-message or 16 MiB limit."));
+                    return;
+                }
+                if (required > int.MaxValue)
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector produced a message too large for the managed host."));
+                    return;
+                }
+                var message = new byte[(int)required];
+                var copied = NativeWebSceneApi.TakeInspectorMessage(
+                    _engine,
+                    SessionId,
+                    message);
+                if (copied == nuint.MaxValue)
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector native output queue overflowed while draining."));
+                    return;
+                }
+                if (copied == 0) break;
+                if (copied != required)
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector output message changed while it was being copied."));
+                    return;
+                }
+                if (!_messages.Writer.TryWrite(message))
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector managed output queue exceeded 1,024 messages."));
+                    return;
+                }
+            }
+
+            lock (_drainGate)
+            {
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    _drainTask = null;
+                    return;
+                }
+                if (NativeWebSceneApi.GetInspectorMessageSize(_engine, SessionId) == 0)
+                {
+                    _drainTask = null;
+                    return;
+                }
+            }
+        }
+        lock (_drainGate) _drainTask = null;
+    }
+
+    private void Fail(Exception error)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _messages.Writer.TryComplete(error);
         }
     }
 
     internal void CompleteFromEngine()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        var completeWriter = Interlocked.Exchange(ref _disposed, 1) == 0;
+        Task? drainTask;
+        lock (_drainGate) drainTask = _drainTask;
+        if (drainTask is not null)
+        {
+            try
+            {
+                drainTask.GetAwaiter().GetResult();
+            }
+            catch
+            {
+            }
+        }
+        if (completeWriter)
         {
             _messages.Writer.TryComplete();
         }
+        Interlocked.Exchange(ref _nativeClosed, 1);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        var completeWriter = Interlocked.Exchange(ref _disposed, 1) == 0;
+        Task? drainTask;
+        lock (_drainGate) drainTask = _drainTask;
+        if (drainTask is not null)
         {
-            return ValueTask.CompletedTask;
+            try
+            {
+                await drainTask.ConfigureAwait(false);
+            }
+            catch
+            {
+            }
         }
-        NativeWebSceneApi.CloseInspectorSession(_engine, SessionId);
-        _messages.Writer.TryComplete();
-        return ValueTask.CompletedTask;
+        if (Interlocked.Exchange(ref _nativeClosed, 1) == 0)
+        {
+            NativeWebSceneApi.CloseInspectorSession(_engine, SessionId);
+        }
+        if (completeWriter) _messages.Writer.TryComplete();
     }
 }
 
 public static unsafe partial class NativeWebSceneApi
 {
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_connect")]
-    private static extern ulong EngineInspectorConnect(
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_connect_v2")]
+    private static extern ulong EngineInspectorConnectV2(
         IntPtr engine,
-        IntPtr messageCallback,
+        IntPtr messageAvailableCallback,
         IntPtr userData,
         byte waitForDebugger);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_take_message")]
+    private static extern nuint EngineInspectorTakeMessage(
+        IntPtr engine,
+        ulong sessionId,
+        byte* destination,
+        nuint destinationCapacity);
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_dispatch")]
     private static extern byte EngineInspectorDispatch(
@@ -137,9 +245,9 @@ public static unsafe partial class NativeWebSceneApi
             throw new InvalidOperationException(
                 "The WebScene native engine callback bridge is unavailable.");
         }
-        var sessionId = EngineInspectorConnect(
+        var sessionId = EngineInspectorConnectV2(
             engine,
-            InspectorMessageAddress,
+            InspectorMessageAvailableAddress,
             GCHandle.ToIntPtr(bridgeHandle),
             waitForDebugger ? (byte)1 : (byte)0);
         if (sessionId == 0)
@@ -164,6 +272,24 @@ public static unsafe partial class NativeWebSceneApi
                 sessionId,
                 pointer,
                 (nuint)message.Length) != 0;
+        }
+    }
+
+    internal static nuint GetInspectorMessageSize(IntPtr engine, ulong sessionId)
+        => EngineInspectorTakeMessage(engine, sessionId, null, 0);
+
+    internal static nuint TakeInspectorMessage(
+        IntPtr engine,
+        ulong sessionId,
+        Span<byte> destination)
+    {
+        fixed (byte* pointer = destination)
+        {
+            return EngineInspectorTakeMessage(
+                engine,
+                sessionId,
+                pointer,
+                (nuint)destination.Length);
         }
     }
 

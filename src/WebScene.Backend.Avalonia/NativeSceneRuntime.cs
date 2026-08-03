@@ -165,10 +165,10 @@ public static unsafe partial class NativeWebSceneApi
         NotifyAnimationFrameRequested;
     private static readonly IntPtr AnimationFrameRequestedAddress =
         Marshal.GetFunctionPointerForDelegate(AnimationFrameRequested);
-    private static readonly InspectorMessageCallback InspectorMessage =
-        NotifyInspectorMessage;
-    private static readonly IntPtr InspectorMessageAddress =
-        Marshal.GetFunctionPointerForDelegate(InspectorMessage);
+    private static readonly InspectorMessageAvailableCallback InspectorMessageAvailable =
+        NotifyInspectorMessageAvailable;
+    private static readonly IntPtr InspectorMessageAvailableAddress =
+        Marshal.GetFunctionPointerForDelegate(InspectorMessageAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -292,6 +292,12 @@ public static unsafe partial class NativeWebSceneApi
 
     public static void EngineDestroy(IntPtr engine)
     {
+        if (EngineResourceBridges.TryGetValue(engine, out var existing)
+            && existing.IsAllocated)
+        {
+            (existing.Target as ResourceBridge)?
+                .CompleteInspectorSessionsBeforeEngineDestroy();
+        }
         EngineDestroyNative(engine);
         if (EngineResourceBridges.TryRemove(engine, out var bridge) && bridge.IsAllocated)
         {
@@ -371,11 +377,9 @@ public static unsafe partial class NativeWebSceneApi
     private delegate void AnimationFrameRequestedCallback(IntPtr userData);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void InspectorMessageCallback(
+    private delegate void InspectorMessageAvailableCallback(
         IntPtr userData,
-        ulong sessionId,
-        IntPtr message,
-        nuint messageLength);
+        ulong sessionId);
 
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
@@ -419,16 +423,14 @@ public static unsafe partial class NativeWebSceneApi
         }
     }
 
-    private static void NotifyInspectorMessage(
+    private static void NotifyInspectorMessageAvailable(
         IntPtr userData,
-        ulong sessionId,
-        IntPtr message,
-        nuint messageLength)
+        ulong sessionId)
     {
         try
         {
             var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
-            bridge?.NotifyInspectorMessage(sessionId, message, messageLength);
+            bridge?.NotifyInspectorMessageAvailable(sessionId);
         }
         catch (Exception error)
         {
@@ -559,12 +561,17 @@ public static unsafe partial class NativeWebSceneApi
 
         public void Dispose()
         {
+            CompleteInspectorSessionsBeforeEngineDestroy();
+            WebTypefaces.Dispose();
+        }
+
+        public void CompleteInspectorSessionsBeforeEngineDestroy()
+        {
             foreach (var session in _inspectorSessions.Values)
             {
                 session.CompleteFromEngine();
             }
             _inspectorSessions.Clear();
-            WebTypefaces.Dispose();
         }
 
         public void RegisterInspectorSession(NativeV8InspectorSession session)
@@ -573,20 +580,10 @@ public static unsafe partial class NativeWebSceneApi
         public void UnregisterInspectorSession(ulong sessionId)
             => _inspectorSessions.TryRemove(sessionId, out _);
 
-        public void NotifyInspectorMessage(
-            ulong sessionId,
-            IntPtr message,
-            nuint messageLength)
+        public void NotifyInspectorMessageAvailable(ulong sessionId)
         {
-            if (!_inspectorSessions.TryGetValue(sessionId, out var session)
-                || message == IntPtr.Zero
-                || messageLength == 0)
-            {
-                return;
-            }
-            var bytes = new byte[checked((int)messageLength)];
-            Marshal.Copy(message, bytes, 0, bytes.Length);
-            session.Publish(bytes);
+            if (_inspectorSessions.TryGetValue(sessionId, out var session))
+                session.NotifyMessagesAvailable();
         }
 
         public void NotifyScenePublished(NativeScenePublished scene)

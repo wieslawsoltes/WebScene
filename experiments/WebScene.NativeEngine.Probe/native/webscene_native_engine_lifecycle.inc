@@ -210,6 +210,59 @@
 #endif
     }
 
+    uint64_t connect_inspector_v2(
+        webscene_inspector_message_available_callback callback,
+        void* user_data,
+        bool wait_for_debugger)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(callback);
+        static_cast<void>(user_data);
+        static_cast<void>(wait_for_debugger);
+        return 0U;
+#else
+        auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
+        if (runtime == nullptr || callback == nullptr) return 0U;
+        auto output = std::make_shared<inspector_output_state>();
+        output->callback = callback;
+        output->user_data = user_data;
+        const auto session_id = runtime->connect_inspector(
+            [output](uint64_t id, std::string_view message) {
+                output->publish(id, message);
+            },
+            wait_for_debugger);
+        if (session_id == 0U) return 0U;
+        {
+            std::lock_guard lock(inspector_output_mutex_);
+            inspector_outputs_[session_id] = std::move(output);
+        }
+        signal_worker();
+        return session_id;
+#endif
+    }
+
+    size_t take_inspector_message(
+        uint64_t session_id,
+        char* destination,
+        size_t destination_capacity)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(session_id);
+        static_cast<void>(destination);
+        static_cast<void>(destination_capacity);
+        return 0U;
+#else
+        std::shared_ptr<inspector_output_state> output;
+        {
+            std::lock_guard lock(inspector_output_mutex_);
+            const auto found = inspector_outputs_.find(session_id);
+            if (found == inspector_outputs_.end()) return 0U;
+            output = found->second;
+        }
+        return output->take(destination, destination_capacity);
+#endif
+    }
+
     bool dispatch_inspector(
         uint64_t session_id,
         const char* message,
@@ -247,6 +300,10 @@
         auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
         if (runtime == nullptr
             || !runtime->disconnect_inspector(session_id)) return false;
+        {
+            std::lock_guard lock(inspector_output_mutex_);
+            inspector_outputs_.erase(session_id);
+        }
         signal_worker();
         return true;
 #endif

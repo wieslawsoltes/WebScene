@@ -21,12 +21,17 @@ typedef struct webscene_engine webscene_engine;
 typedef struct webscene_scene_view webscene_scene_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
 
-/* Receives one complete UTF-8 V8 Inspector Protocol message on the worker. */
+/* Legacy direct-message callback retained for ABI compatibility. */
 typedef void (*webscene_inspector_message_callback)(
     void* user_data,
     uint64_t session_id,
     const char* message,
     size_t message_length);
+
+/* Signals that one or more Inspector messages can be pulled off the worker. */
+typedef void (*webscene_inspector_message_available_callback)(
+    void* user_data,
+    uint64_t session_id);
 
 typedef enum webscene_input_kind {
     WEBSCENE_INPUT_POINTER_MOVE = 1,
@@ -884,6 +889,25 @@ WEBSCENE_API uint64_t webscene_engine_inspector_connect(
     webscene_inspector_message_callback message_callback,
     void* user_data,
     uint8_t wait_for_debugger);
+/*
+ * Preferred non-reentrant session contract. The callback only signals
+ * availability; use webscene_engine_inspector_take_message to copy messages.
+ */
+WEBSCENE_API uint64_t webscene_engine_inspector_connect_v2(
+    webscene_engine* engine,
+    webscene_inspector_message_available_callback message_available_callback,
+    void* user_data,
+    uint8_t wait_for_debugger);
+/*
+ * Returns zero when no message is queued, SIZE_MAX when the bounded output
+ * queue overflowed, or the required message size. A null/short destination
+ * leaves the front message queued; a sufficiently large destination pops it.
+ */
+WEBSCENE_API size_t webscene_engine_inspector_take_message(
+    webscene_engine* engine,
+    uint64_t session_id,
+    char* destination,
+    size_t destination_capacity);
 WEBSCENE_API uint8_t webscene_engine_inspector_dispatch(
     webscene_engine* engine,
     uint64_t session_id,

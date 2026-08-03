@@ -13,12 +13,21 @@ scripts execute. The outer document and every iframe realm are registered with
 `contextCreated` and removed with `contextDestroyed`. Every client connection
 gets an independent `V8InspectorSession` and channel.
 
-Native C ABI entry points connect, dispatch, and disconnect sessions. Calls may
-originate on any managed thread, but messages are queued and dispatched only on
-the engine worker that owns the isolate. When V8 pauses, the inspector client
-runs a nested message loop on that same worker so resume, step, evaluation,
-breakpoint, and live-edit commands remain responsive. Engine shutdown interrupts
-that loop and cannot hang on a paused script.
+Native C ABI entry points connect, dispatch, pull messages, and disconnect
+sessions. Calls may originate on any managed thread, but commands are queued
+and dispatched only on the engine worker that owns the isolate. V8 responses
+are copied into a bounded native queue; the worker emits only a non-reentrant
+availability signal. The managed session schedules draining away from the V8
+stack and uses a required-size copy, so managed code never receives complete
+JSON or calls back into the engine from the worker notification. The original
+direct-message callback remains exported for ABI compatibility, while managed
+hosts use `webscene_engine_inspector_connect_v2` and
+`webscene_engine_inspector_take_message`.
+
+When V8 pauses, the inspector client runs a nested message loop on that same
+worker so resume, step, evaluation, breakpoint, and live-edit commands remain
+responsive. Engine shutdown interrupts that loop and cannot hang on a paused
+script.
 
 WebScene also reports timer and animation-frame scheduling to V8's async-task
 instrumentation. With `Debugger.setAsyncCallStackDepth`, pauses inside
@@ -117,9 +126,11 @@ toolchain rather than a source-map rewrite.
   session.
 - Multiple clients receive independent V8 inspector sessions.
 - The native ABI rejects protocol messages larger than 16 MiB and bounds each
-  runtime's pending Inspector action queue at 1,024 entries. A session
-  disconnect removes its queued commands so overload cannot trap a paused
-  isolate behind stale debugger work.
+  runtime's pending Inspector action queue at 1,024 entries. The preferred
+  pull-based ABI also bounds each session's native output at 1,024 messages or
+  16 MiB and reports overflow explicitly to the managed reader. A session
+  disconnect removes its queued commands and output so overload cannot trap a
+  paused isolate behind stale debugger work.
 - Iframe contexts use the same context group, allowing one DevTools target to
   debug the complete WebScene document. Each frame emits its own execution
   context lifecycle, accepts context-targeted evaluation, and invalidates its
@@ -153,4 +164,9 @@ expandable V8 object ID. The same native session starts and stops V8 CPU and
 allocation sampling, validates returned profile trees, and reads live heap
 usage. Managed integration coverage starts the real discovery/WebSocket host,
 fetches `/json/list`, opens the authenticated endpoint with `ClientWebSocket`,
-and verifies complete CDP messages in both directions.
+and verifies complete CDP messages in both directions. ABI coverage also opens
+the pull-based session, verifies short-buffer retention and exact-size copies,
+forces its bounded output queue to report overflow, and confirms disconnect
+releases all queued output. A Release Avalonia host run validates Runtime and
+Debugger enablement, inspect-brk release, and live evaluation through the same
+pull bridge.

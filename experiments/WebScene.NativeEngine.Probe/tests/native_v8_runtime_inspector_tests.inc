@@ -11,6 +11,25 @@ struct blocking_inspector_sink final {
     bool released{false};
 };
 
+struct pull_inspector_notifications final {
+    std::mutex mutex;
+    std::condition_variable condition;
+    size_t count{0U};
+};
+
+void receive_inspector_message_available(
+    void* user_data,
+    uint64_t)
+{
+    auto& notifications =
+        *static_cast<pull_inspector_notifications*>(user_data);
+    {
+        std::lock_guard lock(notifications.mutex);
+        ++notifications.count;
+    }
+    notifications.condition.notify_all();
+}
+
 void receive_blocking_inspector_message(
     void* user_data,
     uint64_t,
@@ -112,6 +131,57 @@ std::string find_inspector_message(
                 && (second.empty() || message.find(second) != std::string::npos);
         });
     return found == messages.values.end() ? std::string{} : *found;
+}
+
+bool wait_for_pulled_inspector_message(
+    webscene_engine* engine,
+    uint64_t session_id,
+    pull_inspector_notifications& notifications,
+    std::string_view first,
+    std::string_view second = {})
+{
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto required = webscene_engine_inspector_take_message(
+            engine,
+            session_id,
+            nullptr,
+            0U);
+        require(
+            required != SIZE_MAX,
+            "The pull-based Inspector output queue unexpectedly overflowed");
+        if (required != 0U) {
+            std::vector<char> short_buffer(required - 1U);
+            require(
+                webscene_engine_inspector_take_message(
+                    engine,
+                    session_id,
+                    short_buffer.data(),
+                    short_buffer.size()) == required,
+                "A short Inspector pull did not retain the required message");
+            std::vector<char> message(required);
+            require(
+                webscene_engine_inspector_take_message(
+                    engine,
+                    session_id,
+                    message.data(),
+                    message.size()) == required,
+                "An exact Inspector pull did not copy the queued message");
+            const auto text = std::string_view(message.data(), message.size());
+            if (text.find(first) != std::string_view::npos
+                && (second.empty()
+                    || text.find(second) != std::string_view::npos)) {
+                return true;
+            }
+            continue;
+        }
+        std::unique_lock lock(notifications.mutex);
+        notifications.condition.wait_for(
+            lock,
+            std::chrono::milliseconds(25));
+    }
+    return false;
 }
 
 std::string inspector_json_string(
@@ -235,6 +305,97 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         webscene_engine_inspector_disconnect(engine, secondary_session_id) != 0,
         "The second Inspector session disconnect was rejected");
+
+    pull_inspector_notifications pull_notifications;
+    const auto pull_session_id = webscene_engine_inspector_connect_v2(
+        engine,
+        receive_inspector_message_available,
+        &pull_notifications,
+        0U);
+    require(
+        pull_session_id != 0U,
+        "The pull-based Inspector session creation failed");
+    dispatch_inspector_test_message(
+        engine,
+        pull_session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        pull_session_id,
+        R"({"id":2,"method":"Runtime.evaluate","params":{"expression":"6 * 7","returnByValue":true}})");
+    require(
+        wait_for_pulled_inspector_message(
+            engine,
+            pull_session_id,
+            pull_notifications,
+            R"("id":1)"),
+        "The pull-based Inspector session did not return Runtime.enable");
+    require(
+        wait_for_pulled_inspector_message(
+            engine,
+            pull_session_id,
+            pull_notifications,
+            R"("id":2)",
+            R"("value":42)"),
+        "The pull-based Inspector session did not return Runtime.evaluate");
+    require(
+        webscene_engine_inspector_disconnect(engine, pull_session_id) != 0,
+        "The pull-based Inspector session disconnect was rejected");
+    require(
+        webscene_engine_inspector_take_message(
+            engine,
+            pull_session_id,
+            nullptr,
+            0U) == 0U,
+        "The pull-based Inspector output survived session disconnect");
+
+    pull_inspector_notifications overflow_notifications;
+    const auto overflow_session_id = webscene_engine_inspector_connect_v2(
+        engine,
+        receive_inspector_message_available,
+        &overflow_notifications,
+        0U);
+    require(
+        overflow_session_id != 0U,
+        "The output-overflow Inspector session creation failed");
+    constexpr std::string_view overflow_request{
+        R"({"id":1,"method":"Runtime.evaluate","params":{"expression":"0"}})"};
+    auto accepted_overflow_requests = 0U;
+    const auto overflow_dispatch_deadline = std::chrono::steady_clock::now()
+        + std::chrono::seconds(5);
+    while (accepted_overflow_requests < 1050U
+        && std::chrono::steady_clock::now() < overflow_dispatch_deadline) {
+        if (webscene_engine_inspector_dispatch(
+                engine,
+                overflow_session_id,
+                overflow_request.data(),
+                overflow_request.size()) != 0) {
+            ++accepted_overflow_requests;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        accepted_overflow_requests == 1050U,
+        "The output-overflow Inspector fixture could not dispatch enough responses");
+    auto output_overflowed = false;
+    for (auto attempt = 0; attempt < 2500; ++attempt) {
+        if (webscene_engine_inspector_take_message(
+                engine,
+                overflow_session_id,
+                nullptr,
+                0U) == SIZE_MAX) {
+            output_overflowed = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        output_overflowed,
+        "The pull-based Inspector output queue did not report bounded overflow");
+    require(
+        webscene_engine_inspector_disconnect(engine, overflow_session_id) != 0,
+        "The output-overflow Inspector session disconnect was rejected");
 
     const std::string oversized_message(16U * 1024U * 1024U + 1U, 'x');
     require(
