@@ -14,4 +14,21 @@ WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
   probe native-context-memory
 ```
 
+The Inspector-disabled performance gate uses the same managed probe executable in
+separate processes for the control and candidate native libraries. It reports V8 build
+features, prewarm and warm context startup, first scene, idle CPU, timer/animation-frame
+throughput, console-heavy execution, a representative DOM workload, per-engine memory,
+and multi-view RSS as machine-readable JSON:
+
+```bash
+WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
+  dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release --no-build -- \
+  probe native-inspector-disabled-performance \
+  --contexts 4 --samples 10 --duration-ms 1500
+```
+
+Run each variant at least five times in alternating order. The probe rejects an
+Inspector-enabled candidate so the ordinary-production gate cannot accidentally measure
+the diagnostic runtime flavor.
+
 Run with `probe` and no recognized name to list the focused probes.
