@@ -95,7 +95,10 @@ JavaScript and source map (esbuild is the default JS/TS regenerator), preview
 the generated change, verify source fingerprints, and apply the regenerated
 unit with `Debugger.setScriptSource`. WebScene's raw transport requires no
 special mutation command: the resulting V8 live-edit request is forwarded
-unchanged. Additional compilers can implement the CDP regenerator contract for
+unchanged. V8 15.3 disables that command by default even in Inspector-enabled
+builds, so WebScene enables V8's `--inspector-live-edit` process capability;
+the privileged network endpoint itself remains disabled unless the host opts
+in. Additional compilers can implement the CDP regenerator contract for
 CoffeeScript, Svelte, Vue, Reason, or other languages that emit JavaScript and
 standard source maps.
 
@@ -133,7 +136,8 @@ toolchain rather than a source-map rewrite.
 
 Native integration coverage enables Runtime and Debugger, evaluates an
 expression, observes `Debugger.scriptParsed`, pauses on a `debugger` statement,
-resumes, verifies an async stack for a timer callback, receives uncaught errors
+resumes, verifies live-edit compile diagnostics and replacement execution,
+verifies an async stack for a timer callback, receives uncaught errors
 and promise rejections through `Runtime.exceptionThrown`, and confirms that a
 host console object arrives through `Runtime.consoleAPICalled` with an
 expandable V8 object ID. The same native session starts and stops V8 CPU and

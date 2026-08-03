@@ -77,6 +77,36 @@ bool wait_for_inspector_message_count(
         });
 }
 
+std::string find_inspector_message(
+    inspector_test_messages& messages,
+    std::string_view first,
+    std::string_view second = {})
+{
+    std::lock_guard lock(messages.mutex);
+    const auto found = std::find_if(
+        messages.values.begin(),
+        messages.values.end(),
+        [&](const auto& message) {
+            return message.find(first) != std::string::npos
+                && (second.empty() || message.find(second) != std::string::npos);
+        });
+    return found == messages.values.end() ? std::string{} : *found;
+}
+
+std::string inspector_json_string(
+    std::string_view message,
+    std::string_view property)
+{
+    const auto prefix = std::string{"\""} + std::string{property} + "\":\"";
+    const auto start = message.find(prefix);
+    if (start == std::string_view::npos) return {};
+    const auto value_start = start + prefix.size();
+    const auto end = message.find('"', value_start);
+    return end == std::string_view::npos
+        ? std::string{}
+        : std::string{message.substr(value_start, end - value_start)};
+}
+
 void dispatch_inspector_test_message(
     webscene_engine* engine,
     uint64_t session_id,
@@ -276,6 +306,70 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":47)", R"("value":73)"),
         "Inspector task boundary did not perform a V8 microtask checkpoint");
+
+    constexpr std::string_view live_edit_name{
+        "webscene-inspector-live-edit-target.js"};
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":48,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorLiveEdit = function webSceneInspectorLiveEdit(value) { return value + 1; };\n//# sourceURL=webscene-inspector-live-edit-target.js","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":48)"),
+        "Inspector live-edit fixture did not evaluate");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.scriptParsed")",
+            live_edit_name),
+        "Inspector live-edit fixture did not publish its script identity");
+    const auto live_edit_script_message = find_inspector_message(
+        messages,
+        R"("method":"Debugger.scriptParsed")",
+        live_edit_name);
+    const auto live_edit_script_id = inspector_json_string(
+        live_edit_script_message,
+        "scriptId");
+    require(
+        !live_edit_script_id.empty(),
+        "Inspector live-edit fixture did not expose a script id");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":49,\"method\":\"Debugger.setScriptSource\",\"params\":{\"scriptId\":\""}
+            + live_edit_script_id
+            + "\",\"scriptSource\":\"globalThis.webSceneInspectorLiveEdit = function webSceneInspectorLiveEdit(value) { return value + ; };\\n//# sourceURL=webscene-inspector-live-edit-target.js\",\"dryRun\":true}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":49)", R"("status":"CompileError")"),
+        "Inspector live-edit dry run did not return compile diagnostics");
+    const auto live_edit_source = std::string{
+        "globalThis.webSceneInspectorLiveEdit = function webSceneInspectorLiveEdit(value) { return value + 2; };\\n//# sourceURL=webscene-inspector-live-edit-target.js"};
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":50,\"method\":\"Debugger.setScriptSource\",\"params\":{\"scriptId\":\""}
+            + live_edit_script_id
+            + "\",\"scriptSource\":\"" + live_edit_source
+            + "\",\"dryRun\":true}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":50)", R"("status":"Ok")"),
+        "Inspector live-edit valid dry run was rejected");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":51,\"method\":\"Debugger.setScriptSource\",\"params\":{\"scriptId\":\""}
+            + live_edit_script_id
+            + "\",\"scriptSource\":\"" + live_edit_source
+            + "\",\"dryRun\":false}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":51)", R"("status":"Ok")"),
+        "Inspector live edit was not applied");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"JSON({"id":52,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorLiveEdit(5)","returnByValue":true}})JSON");
+    require(
+        wait_for_inspector_message(messages, R"("id":52)", R"("value":7)"),
+        "Inspector live-edited function did not execute its replacement source");
 
     constexpr std::string_view exception_source{
         "throw new Error('webscene-inspector-exception');"};
