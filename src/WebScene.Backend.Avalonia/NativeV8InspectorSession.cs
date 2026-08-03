@@ -199,7 +199,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
 public static unsafe partial class NativeWebSceneApi
 {
     [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_connect_v3")]
-    private static extern ulong EngineInspectorConnectV2(
+    private static extern ulong EngineInspectorConnectV3(
         IntPtr engine,
         IntPtr messageAvailableCallback,
         IntPtr userData,
@@ -245,7 +245,7 @@ public static unsafe partial class NativeWebSceneApi
             throw new InvalidOperationException(
                 "The WebScene native engine callback bridge is unavailable.");
         }
-        var sessionId = EngineInspectorConnectV2(
+        var sessionId = EngineInspectorConnectV3(
             engine,
             InspectorMessageAvailableAddress,
             GCHandle.ToIntPtr(bridgeHandle),
