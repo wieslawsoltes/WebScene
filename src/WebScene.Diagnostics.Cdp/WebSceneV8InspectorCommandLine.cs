@@ -11,6 +11,8 @@ public sealed record WebSceneV8InspectorLaunchConfiguration(
     bool WaitForDebugger,
     bool AllowRemoteConnections)
 {
+    public string? AccessToken { get; init; }
+
     public WebSceneV8InspectorOptions CreateHostOptions()
         => new()
         {
@@ -18,7 +20,8 @@ public sealed record WebSceneV8InspectorLaunchConfiguration(
             Address = Address,
             Port = Port,
             WaitForDebugger = WaitForDebugger,
-            AllowRemoteConnections = AllowRemoteConnections
+            AllowRemoteConnections = AllowRemoteConnections,
+            AccessToken = AccessToken
         };
 }
 
@@ -78,11 +81,29 @@ public static class WebSceneV8InspectorCommandLine
                 StringComparer.Ordinal)
             || IsTruthy(getEnvironmentVariable(
                 "WEBSCENE_INSPECT_ALLOW_REMOTE"));
+        var accessToken = getEnvironmentVariable("WEBSCENE_INSPECT_TOKEN");
+        if (!IPAddress.IsLoopback(address)
+            && allowRemote
+            && string.IsNullOrWhiteSpace(accessToken))
+        {
+            throw new ArgumentException(
+                "Remote WebScene Inspector launch requires WEBSCENE_INSPECT_TOKEN "
+                + "with at least 32 characters so the caller already knows the "
+                + "credential needed for authenticated discovery.");
+        }
+        if (!string.IsNullOrWhiteSpace(accessToken) && accessToken.Length < 32)
+        {
+            throw new ArgumentException(
+                "WEBSCENE_INSPECT_TOKEN must contain at least 32 characters.");
+        }
         return new WebSceneV8InspectorLaunchConfiguration(
             address,
             port,
             waitForDebugger,
-            allowRemote);
+            allowRemote)
+        {
+            AccessToken = accessToken
+        };
     }
 
     private static void ApplyEnvironmentEndpoint(

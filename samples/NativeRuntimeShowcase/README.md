@@ -67,9 +67,10 @@ supported. Environment equivalents are `WEBSCENE_INSPECT`,
 `WEBSCENE_V8_INSPECTOR_PORT`. Inspector hosting is off by default and binds to
 loopback. A non-loopback endpoint additionally requires
 `--webscene-inspect-allow-remote` (or `WEBSCENE_INSPECT_ALLOW_REMOTE=1`) and all
-remote discovery and WebSocket clients must present the generated access token.
-Read the token from the host startup log/configuration; unauthenticated remote
-discovery deliberately does not disclose it.
+remote discovery and WebSocket clients must present the configured access token.
+Set a caller-known token of at least 32 characters in
+`WEBSCENE_INSPECT_TOKEN`; unauthenticated remote discovery deliberately does not
+disclose it, and the showcase does not print it to the startup log.
 For Flutter, use `WEBSCENE_INITIAL_DOCUMENT=monaco`.
 The showcase reuses the checked-in Monaco 0.56.0 assets from
 `samples/NativeMonacoEditor/Assets`; no browser control or WebView is involved.

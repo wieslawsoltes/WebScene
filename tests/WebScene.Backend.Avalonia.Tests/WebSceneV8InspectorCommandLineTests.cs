@@ -60,4 +60,28 @@ public sealed class WebSceneV8InspectorCommandLineTests
 
         Assert.Null(configuration);
     }
+
+    [Fact]
+    public void RemoteLaunchRequiresCallerKnownDiscoveryToken()
+    {
+        var missingToken = new Dictionary<string, string>
+        {
+            ["WEBSCENE_INSPECT"] = "0.0.0.0:9333",
+            ["WEBSCENE_INSPECT_ALLOW_REMOTE"] = "true"
+        };
+        Assert.Throws<ArgumentException>(() =>
+            WebSceneV8InspectorCommandLine.Resolve(
+                ["showcase"],
+                name => missingToken.GetValueOrDefault(name)));
+
+        const string token = "0123456789abcdef0123456789abcdef";
+        missingToken["WEBSCENE_INSPECT_TOKEN"] = token;
+        var configuration = WebSceneV8InspectorCommandLine.Resolve(
+            ["showcase"],
+            name => missingToken.GetValueOrDefault(name));
+
+        Assert.NotNull(configuration);
+        Assert.Equal(token, configuration.AccessToken);
+        Assert.Equal(token, configuration.CreateHostOptions().AccessToken);
+    }
 }

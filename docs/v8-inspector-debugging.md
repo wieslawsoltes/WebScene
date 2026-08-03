@@ -94,6 +94,12 @@ must first present that token as a `token` query parameter or
 `Authorization: Bearer` header, so unauthenticated discovery cannot disclose
 the WebSocket credential.
 
+The showcase command-line launcher requires a caller-known token for a
+non-loopback endpoint. Set `WEBSCENE_INSPECT_TOKEN` to at least 32 characters
+alongside `WEBSCENE_INSPECT_ALLOW_REMOTE=1`; the same value authenticates remote
+discovery and WebSocket attachment without being placed in the process command
+line or printed to the startup log.
+
 Inspector context registration stays available in dedicated-isolate builds so
 a debugger attached later can enumerate already-loaded scripts. Console,
 exception, promise-rejection, and async-stack instrumentation is inactive until
