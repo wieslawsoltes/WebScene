@@ -190,7 +190,6 @@ jobs:
                 && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
-          && grep -q 'virtual void consoleAPICalled' "$root/include/v8-inspector.h" \
           && -f "$args" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
@@ -296,7 +295,6 @@ jobs:
                 && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
-          && grep -q 'virtual void consoleAPICalled' "$root/include/v8-inspector.h" \
           && -f "$args" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
