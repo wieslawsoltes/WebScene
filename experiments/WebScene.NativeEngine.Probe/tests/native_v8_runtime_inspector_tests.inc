@@ -134,6 +134,50 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         wait_for_inspector_message(messages, R"("id":4)"),
         "Debugger.resume response was not forwarded");
 
+    constexpr std::string_view exception_source{
+        "throw new Error('webscene-inspector-exception');"};
+    constexpr std::string_view exception_name{
+        "webscene-inspector-exception-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            exception_source.data(),
+            exception_source.size(),
+            exception_name.data(),
+            exception_name.size()) != 0,
+        "Inspector exception fixture was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-exception"),
+        "uncaught WebScene exception was not forwarded through Runtime.exceptionThrown");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            exception_name),
+        "Runtime.exceptionThrown did not retain the WebScene script URL");
+
+    constexpr std::string_view rejection_source{
+        "Promise.reject(new Error('webscene-inspector-rejection'));"};
+    constexpr std::string_view rejection_name{
+        "webscene-inspector-rejection-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            rejection_source.data(),
+            rejection_source.size(),
+            rejection_name.data(),
+            rejection_name.size()) != 0,
+        "Inspector promise-rejection fixture was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-rejection"),
+        "unhandled promise rejection was not forwarded through Runtime.exceptionThrown");
+
     dispatch_inspector_test_message(
         engine,
         session_id,

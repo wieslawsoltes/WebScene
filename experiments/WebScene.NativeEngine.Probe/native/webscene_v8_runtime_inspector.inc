@@ -225,6 +225,94 @@
         }
     }
 
+    static v8_inspector::StringView inspector_string_view(
+        const std::string& value) noexcept
+    {
+        return v8_inspector::StringView(
+            reinterpret_cast<const uint8_t*>(value.data()),
+            value.size());
+    }
+
+    unsigned report_inspector_exception(
+        v8::TryCatch& try_catch,
+        v8::Local<v8::Context> local_context)
+    {
+        if (inspector == nullptr || !try_catch.HasCaught()
+            || local_context.IsEmpty()) return 0U;
+        auto exception = try_catch.Exception();
+        if (exception.IsEmpty()) return 0U;
+
+        auto message_text = std::string("Uncaught ") + to_utf8(isolate, exception);
+        auto detailed_message = describe_exception(try_catch, local_context);
+        auto url = std::string{};
+        auto line = 0U;
+        auto column = 0U;
+        auto script_id = 0;
+        std::unique_ptr<v8_inspector::V8StackTrace> stack_trace;
+        auto message = try_catch.Message();
+        if (!message.IsEmpty()) {
+            const auto origin = message->GetScriptOrigin();
+            const auto resource_name = origin.ResourceName();
+            if (!resource_name.IsEmpty() && !resource_name->IsUndefined()) {
+                url = to_utf8(isolate, resource_name);
+            }
+            const auto source_line = message->GetLineNumber(local_context).FromMaybe(0);
+            if (source_line > 0) line = static_cast<unsigned>(source_line);
+            const auto source_column = message->GetStartColumn(local_context).FromMaybe(-1);
+            if (source_column >= 0) column = static_cast<unsigned>(source_column + 1);
+            script_id = origin.ScriptId();
+            auto v8_stack_trace = message->GetStackTrace();
+            if (!v8_stack_trace.IsEmpty()) {
+                stack_trace = inspector->createStackTrace(v8_stack_trace);
+            }
+        }
+        return inspector->exceptionThrown(
+            local_context,
+            inspector_string_view(message_text),
+            exception,
+            inspector_string_view(detailed_message),
+            inspector_string_view(url),
+            line,
+            column,
+            std::move(stack_trace),
+            script_id);
+    }
+
+    unsigned report_inspector_promise_rejection(
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Value> exception,
+        const std::string& detailed_message)
+    {
+        if (inspector == nullptr || local_context.IsEmpty()
+            || exception.IsEmpty()) return 0U;
+        const auto message_text = std::string("Uncaught (in promise) ")
+            + to_utf8(isolate, exception);
+        return inspector->exceptionThrown(
+            local_context,
+            inspector_string_view(message_text),
+            exception,
+            inspector_string_view(detailed_message),
+            {},
+            0U,
+            0U,
+            inspector->captureStackTrace(true),
+            0);
+    }
+
+    void revoke_inspector_exception(
+        v8::Local<v8::Context> local_context,
+        unsigned exception_id,
+        std::string_view reason)
+    {
+        if (inspector == nullptr || local_context.IsEmpty()
+            || exception_id == 0U) return;
+        const auto reason_text = std::string(reason);
+        inspector->exceptionRevoked(
+            local_context,
+            exception_id,
+            inspector_string_view(reason_text));
+    }
+
     void destroy_all_inspector_contexts()
     {
         if (inspector == nullptr || isolate == nullptr) return;

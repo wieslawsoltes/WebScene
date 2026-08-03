@@ -25,7 +25,9 @@
 
     struct pending_promise_rejection final {
         v8::Global<v8::Promise> promise;
+        v8::Global<v8::Context> context;
         std::string error;
+        unsigned inspector_exception_id{0U};
     };
 
     struct pending_interop_promise final {

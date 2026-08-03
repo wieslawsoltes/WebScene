@@ -3012,8 +3012,15 @@ struct v8_dom_runtime::implementation final {
         if (message.GetEvent() == v8::kPromiseHandlerAddedAfterReject) {
             std::erase_if(
                 self->pending_promise_rejections,
-                [&promise, isolate](auto& rejection) {
-                    return rejection.promise.Get(isolate)->StrictEquals(promise);
+                [&promise, isolate, self](auto& rejection) {
+                    if (!rejection.promise.Get(isolate)->StrictEquals(promise)) {
+                        return false;
+                    }
+                    self->revoke_inspector_exception(
+                        rejection.context.Get(isolate),
+                        rejection.inspector_exception_id,
+                        "Promise rejection was handled asynchronously");
+                    return true;
                 });
             return;
         }
@@ -3030,9 +3037,18 @@ struct v8_dom_runtime::implementation final {
                 error += "\n" + to_utf8(isolate, stack);
             }
         }
+        auto local_context = isolate->GetCurrentContext();
+        const auto inspector_exception_id = value.IsEmpty()
+            ? 0U
+            : self->report_inspector_promise_rejection(
+                local_context,
+                value,
+                error);
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
-            std::move(error)});
+            v8::Global<v8::Context>(isolate, local_context),
+            std::move(error),
+            inspector_exception_id});
     }
 
 #include "webscene_v8_runtime_state.inc"

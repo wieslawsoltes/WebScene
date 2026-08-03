@@ -1023,6 +1023,7 @@
                 script,
                 std::move(immutable_source))
             || script->Run(local_context).IsEmpty()) {
+            report_inspector_exception(try_catch, local_context);
             error = describe_exception(try_catch, local_context);
             return false;
         }

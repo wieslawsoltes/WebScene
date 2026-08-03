@@ -121,6 +121,7 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
+            report_inspector_exception(try_catch, task_context);
             inspector_async_task_finished(task.id);
             if (task.repeating) inspector_async_task_canceled(task.id);
             active_timer_id = 0;
@@ -336,6 +337,7 @@
                 target_global,
                 1,
                 arguments).IsEmpty()) {
+            report_inspector_exception(try_catch, target_context);
             last_error = "Window.postMessage dispatch failed: "
                 + describe_exception(try_catch, target_context);
             ++frame_script_error_count;
