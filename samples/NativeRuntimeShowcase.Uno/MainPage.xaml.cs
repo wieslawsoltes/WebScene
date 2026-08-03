@@ -85,6 +85,10 @@ public sealed partial class MainPage : Page
         EditorContent.Visibility = Visibility.Collapsed;
         await WaitForLayoutAsync(TerminalContent);
         await EnsureTerminalAsync();
+        await SelectInspectorTargetAsync(
+            _terminal,
+            "WebScene V8 · TradingView · Uno",
+            CancellationToken.None);
         DocumentText.Text = ShowcasePaths.TradingViewUrl;
         RefreshDiagnostics("TradingView terminal");
     }
@@ -149,6 +153,12 @@ public sealed partial class MainPage : Page
         EditorContent.Visibility = Visibility.Visible;
         await WaitForLayoutAsync(EditorContent);
         await EnsureEditorAsync();
+        await SelectInspectorTargetAsync(
+            _editor,
+            _customDocumentUri is null
+                ? "WebScene V8 · Monaco · Uno"
+                : "WebScene V8 · Custom document · Uno",
+            CancellationToken.None);
         DocumentText.Text = _currentFile?.Path ?? "GeneratedMonacoApi.cs";
         StatusText.Text =
             "Monaco ready · generated C# facade: MonacoEditor + MonacoApi";
