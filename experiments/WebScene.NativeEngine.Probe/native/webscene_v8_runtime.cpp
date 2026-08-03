@@ -1659,7 +1659,7 @@ struct v8_dom_runtime::implementation final {
         // These are general browser primitives used by Monaco and other
         // component runtimes. Keep them inside WebScene's native realm so
         // applications do not have to patch third-party bundles.
-        constexpr std::string_view source = R"JS(
+        constexpr std::string_view source_parts[] = {R"JS(
           (() => {
             const enqueueMicrotask = callback => {
               if (typeof callback !== 'function') {
@@ -1821,7 +1821,8 @@ struct v8_dom_runtime::implementation final {
                 }
                 return result;
               }
-            }
+            })JS",
+            R"JS(
 
             const installCustomElementsPlatform = () => {
             if (globalThis.__webSceneCustomElementsNotifySubtree) return;
@@ -1956,7 +1957,8 @@ struct v8_dom_runtime::implementation final {
                 }
               }
               return element;
-            };
+            };)JS",
+            R"JS(
             const connectElement = element => {
               const upgraded = upgradeElement(element);
               const state = elementStates.get(element);
@@ -2136,10 +2138,12 @@ struct v8_dom_runtime::implementation final {
               }
             });
           })();
-        )JS";
+        )JS"};
+        std::string source;
+        for (const auto part : source_parts) source.append(part);
         auto script = v8::Script::Compile(
             local_context,
-            js_string(isolate, std::string(source).c_str())).ToLocalChecked();
+            js_string(isolate, source.c_str())).ToLocalChecked();
         script->Run(local_context).ToLocalChecked();
     }
 

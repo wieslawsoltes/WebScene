@@ -20,10 +20,14 @@ def extract(source: str, marker: str) -> str:
     start = source.find(marker)
     if start < 0:
         raise RuntimeError(f"bootstrap marker not found: {marker}")
-    match = re.search(r'R"JS\((.*?)\)JS"', source[start:], re.DOTALL)
-    if match is None:
+    scope = source[start:]
+    compile_start = scope.find("auto script = v8::Script::Compile")
+    if compile_start >= 0:
+        scope = scope[:compile_start]
+    matches = re.findall(r'R"JS\((.*?)\)JS"', scope, re.DOTALL)
+    if not matches:
         raise RuntimeError(f"raw JavaScript literal not found after: {marker}")
-    return match.group(1).strip() + "\n"
+    return "".join(matches).strip() + "\n"
 
 
 def main() -> int:
