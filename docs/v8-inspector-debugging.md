@@ -77,7 +77,10 @@ var options = new WebSceneV8InspectorOptions
     Port = 9229
 };
 
-await using var inspector = new WebSceneV8InspectorHost(view, options);
+await using var inspector = new WebSceneV8InspectorHost(
+    view.OpenV8InspectorSession,
+    () => view.Source,
+    options);
 await inspector.StartAsync();
 ```
 
