@@ -48,9 +48,6 @@ jobs:
           artifacts/native-engine-v8/osx-arm64/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/osx-arm64/v8/third_party/partition_alloc/src
         key: webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-${{ hashFiles('third-party/v8-patches/**') }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt') }}
-        restore-keys: |
-          webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-${{ hashFiles('third-party/v8-patches/**') }}-
-          webscene-v8-sdk-v8-v8-15.3.10-pa-no-process-shim-macos-osx-arm64-
     - id: restored-v8-sdk
       name: Validate restored V8 Inspector SDK
       shell: bash
