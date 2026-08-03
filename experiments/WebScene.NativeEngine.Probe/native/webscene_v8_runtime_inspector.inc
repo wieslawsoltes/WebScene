@@ -395,7 +395,10 @@
             if (inspector_shutting_down) return false;
             inspector_actions.push_back(inspector_action{
                 inspector_action::kind::disconnect,
-                session_id});
+                session_id,
+                false,
+                {},
+                {}});
         }
         inspector_condition.notify_all();
         return true;

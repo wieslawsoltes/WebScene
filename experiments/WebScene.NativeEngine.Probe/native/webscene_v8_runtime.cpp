@@ -3187,7 +3187,17 @@ bool v8_dom_runtime::pump_inspector_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
-    return impl_->process_inspector_tasks(false);
+    const auto processed = impl_->process_inspector_tasks(false);
+    if (processed) {
+        // Inspector Runtime.evaluate is a host-entered JavaScript task. V8 uses
+        // an explicit microtask policy in WebScene, so the worker must establish
+        // the same task boundary as navigation, input, timer, and interop calls.
+        // This runs only after an outer Inspector action has completed; commands
+        // pumped by the nested pause loop call process_inspector_tasks directly
+        // and therefore cannot run page microtasks while JavaScript is paused.
+        impl_->perform_microtask_checkpoint();
+    }
+    return processed;
 }
 
 bool v8_dom_runtime::has_pending_inspector_tasks() const noexcept

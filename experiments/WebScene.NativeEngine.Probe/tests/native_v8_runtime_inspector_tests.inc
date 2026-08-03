@@ -39,6 +39,44 @@ bool wait_for_inspector_message(
         });
 }
 
+size_t count_inspector_messages(
+    inspector_test_messages& messages,
+    std::string_view first,
+    std::string_view second = {})
+{
+    std::lock_guard lock(messages.mutex);
+    return static_cast<size_t>(std::count_if(
+        messages.values.begin(),
+        messages.values.end(),
+        [&](const auto& message) {
+            return message.find(first) != std::string::npos
+                && (second.empty()
+                    || message.find(second) != std::string::npos);
+        }));
+}
+
+bool wait_for_inspector_message_count(
+    inspector_test_messages& messages,
+    std::string_view first,
+    size_t expected_count,
+    std::string_view second = {})
+{
+    std::unique_lock lock(messages.mutex);
+    return messages.available.wait_for(
+        lock,
+        std::chrono::seconds(5),
+        [&] {
+            return static_cast<size_t>(std::count_if(
+                messages.values.begin(),
+                messages.values.end(),
+                [&](const auto& message) {
+                    return message.find(first) != std::string::npos
+                        && (second.empty()
+                            || message.find(second) != std::string::npos);
+                })) >= expected_count;
+        });
+}
+
 void dispatch_inspector_test_message(
     webscene_engine* engine,
     uint64_t session_id,
@@ -133,6 +171,111 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":4)"),
         "Debugger.resume response was not forwarded");
+
+    const auto pauses_before_step = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    constexpr std::string_view step_source{
+        "function webSceneInspectorStep(value) {\n"
+        "  debugger;\n"
+        "  const incremented = value + 1;\n"
+        "  return incremented * 2;\n"
+        "}\n"
+        "globalThis.webSceneInspectorStepResult = webSceneInspectorStep(6);"};
+    constexpr std::string_view step_name{"webscene-inspector-step-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            step_source.data(),
+            step_source.size(),
+            step_name.data(),
+            step_name.size()) != 0,
+        "Inspector stepping fixture was rejected");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step + 1U),
+        "debugger statement did not pause the stepping fixture");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":40,"method":"Debugger.stepOver"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":40)"),
+        "Debugger.stepOver response was not forwarded");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step + 2U),
+        "Debugger.stepOver did not produce the next V8 pause");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":41,"method":"Debugger.resume"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":41)"),
+        "Debugger.resume after step did not respond");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":42,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorStepResult","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":42)", R"("value":14)"),
+        "stepped WebScene execution did not finish after resume");
+
+    const auto pauses_before_evaluation_step = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":43,"method":"Runtime.evaluate","params":{"expression":"(() => { let value = 6; debugger; value += 1; return value * 2; })()\n//# sourceURL=webscene-inspector-evaluation-step-target.js","returnByValue":true}})");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_evaluation_step + 1U),
+        "Runtime.evaluate did not pause its stepping fixture");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":44,"method":"Debugger.stepOver"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":44)"),
+        "Runtime.evaluate stepOver response was not forwarded");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_evaluation_step + 2U),
+        "Runtime.evaluate stepOver did not produce the next pause");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":45,"method":"Debugger.resume"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":45)"),
+        "Runtime.evaluate resume after step did not respond");
+    require(
+        wait_for_inspector_message(messages, R"("id":43)", R"("value":14)"),
+        "Runtime.evaluate did not complete after step and resume");
+
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":46,"method":"Runtime.evaluate","params":{"expression":"Promise.resolve().then(() => { globalThis.webSceneInspectorMicrotaskResult = 73; }); 'queued'","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":46)", R"("value":"queued")"),
+        "Runtime.evaluate microtask fixture did not respond");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":47,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorMicrotaskResult","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":47)", R"("value":73)"),
+        "Inspector task boundary did not perform a V8 microtask checkpoint");
 
     constexpr std::string_view exception_source{
         "throw new Error('webscene-inspector-exception');"};
