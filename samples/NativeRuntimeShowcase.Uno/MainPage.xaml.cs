@@ -17,6 +17,7 @@ public sealed partial class MainPage : Page
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();
     private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
+    private readonly string? _customDocumentUri;
     private WebSceneV8InspectorHost? _v8InspectorHost;
     private UnoNativeWebSceneView? _inspectedView;
     private string? _nativeLibraryPath;
@@ -31,6 +32,7 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(_arguments);
+        _customDocumentUri = ResolveDocumentArgument(_arguments);
         InitializeComponent();
         TerminalContent.Content = _terminal;
         EditorContent.Content = _editor;
@@ -47,6 +49,11 @@ public sealed partial class MainPage : Page
         {
             _nativeLibraryPath =
                 ShowcasePaths.ResolveNativeLibraryPath(_arguments);
+            if (_customDocumentUri is not null)
+            {
+                await ShowCustomDocumentAsync(_customDocumentUri);
+                return;
+            }
             if (_arguments.Contains("--editor", StringComparer.Ordinal))
             {
                 await ShowEditorAsync();
@@ -145,6 +152,38 @@ public sealed partial class MainPage : Page
         DocumentText.Text = _currentFile?.Path ?? "GeneratedMonacoApi.cs";
         StatusText.Text =
             "Monaco ready · generated C# facade: MonacoEditor + MonacoApi";
+    }
+
+    private async Task ShowCustomDocumentAsync(string documentUri)
+    {
+        TerminalContent.Visibility = Visibility.Collapsed;
+        EditorContent.Visibility = Visibility.Visible;
+        await WaitForLayoutAsync(EditorContent);
+        await _editor.LoadAsync(
+            documentUri,
+            _nativeLibraryPath!,
+            ShowcasePaths.CacheDirectory("Uno", "custom-document"),
+            PrepareInspectorAsync,
+            DocumentBarrierTimeout);
+        DocumentText.Text = documentUri;
+        StatusText.Text = "Custom WebScene document ready";
+        Console.WriteLine($"[WebScene Uno] Custom document ready: {documentUri}");
+    }
+
+    private static string? ResolveDocumentArgument(
+        IReadOnlyList<string> arguments)
+    {
+        for (var index = 0; index + 1 < arguments.Count; ++index)
+        {
+            if (arguments[index] != "--document") continue;
+            var configured = arguments[index + 1];
+            if (Uri.TryCreate(configured, UriKind.Absolute, out var uri))
+            {
+                return uri.AbsoluteUri;
+            }
+            return new Uri(Path.GetFullPath(configured)).AbsoluteUri;
+        }
+        return null;
     }
 
     private static async Task WaitForLayoutAsync(FrameworkElement element)
@@ -307,7 +346,9 @@ public sealed partial class MainPage : Page
         await SelectInspectorTargetAsync(
             view,
             ReferenceEquals(view, _editor)
-                ? "WebScene V8 · Monaco · Uno"
+                ? _customDocumentUri is null
+                    ? "WebScene V8 · Monaco · Uno"
+                    : "WebScene V8 · Custom document · Uno"
                 : "WebScene V8 · TradingView · Uno",
             cancellationToken);
     }

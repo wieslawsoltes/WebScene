@@ -39,6 +39,11 @@ dotnet run --project samples/NativeRuntimeShowcase.Uno -f net10.0-desktop \
   "$PWD/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
 ```
 
+The Uno host also accepts `--document <absolute-uri-or-path>` to load an
+arbitrary local application through the same native runtime. This is the
+validation lane for source-mapped React applications; combine it with
+`--webscene-inspect-brk` to attach before the bundle executes.
+
 Run Flutter on macOS:
 
 ```sh
