@@ -116,6 +116,10 @@ toolchain rather than a source-map rewrite.
   stacks, profiling domains, and V8 WebAssembly debugging travel over the raw
   session.
 - Multiple clients receive independent V8 inspector sessions.
+- The native ABI rejects protocol messages larger than 16 MiB and bounds each
+  runtime's pending Inspector action queue at 1,024 entries. A session
+  disconnect removes its queued commands so overload cannot trap a paused
+  isolate behind stale debugger work.
 - Iframe contexts use the same context group, allowing one DevTools target to
   debug the complete WebScene document.
 - The opt-in `WEBSCENE_V8_SHARED_ISOLATE` mode intentionally reports Inspector

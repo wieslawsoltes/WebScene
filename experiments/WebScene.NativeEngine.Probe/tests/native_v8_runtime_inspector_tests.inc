@@ -4,6 +4,27 @@ struct inspector_test_messages final {
     std::vector<std::string> values;
 };
 
+struct blocking_inspector_sink final {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool entered{false};
+    bool released{false};
+};
+
+void receive_blocking_inspector_message(
+    void* user_data,
+    uint64_t,
+    const char*,
+    size_t)
+{
+    auto& sink = *static_cast<blocking_inspector_sink*>(user_data);
+    std::unique_lock lock(sink.mutex);
+    if (sink.entered) return;
+    sink.entered = true;
+    sink.condition.notify_all();
+    sink.condition.wait(lock, [&] { return sink.released; });
+}
+
 void receive_inspector_test_message(
     void* user_data,
     uint64_t,
@@ -161,6 +182,97 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":2)"),
         "Debugger.enable response was not forwarded");
+
+    inspector_test_messages secondary_messages;
+    const auto secondary_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &secondary_messages,
+        0U);
+    require(
+        secondary_session_id != 0U && secondary_session_id != session_id,
+        "A second V8 Inspector client did not receive an independent session");
+    dispatch_inspector_test_message(
+        engine,
+        secondary_session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        secondary_session_id,
+        R"({"id":2,"method":"Debugger.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        secondary_session_id,
+        R"({"id":3,"method":"Runtime.evaluate","params":{"expression":"6 * 7","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(secondary_messages, R"("id":1)"),
+        "The second Inspector session did not enable Runtime");
+    require(
+        wait_for_inspector_message(secondary_messages, R"("id":2)"),
+        "The second Inspector session did not enable Debugger");
+    require(
+        wait_for_inspector_message(
+            secondary_messages,
+            R"("id":3)",
+            R"("value":42)"),
+        "The second Inspector session did not evaluate independently");
+    require(
+        webscene_engine_inspector_disconnect(engine, secondary_session_id) != 0,
+        "The second Inspector session disconnect was rejected");
+
+    const std::string oversized_message(16U * 1024U * 1024U + 1U, 'x');
+    require(
+        webscene_engine_inspector_dispatch(
+            engine,
+            session_id,
+            oversized_message.data(),
+            oversized_message.size()) == 0,
+        "The native Inspector ABI accepted a message larger than 16 MiB");
+
+    blocking_inspector_sink blocked_sink;
+    const auto saturated_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_blocking_inspector_message,
+        &blocked_sink,
+        0U);
+    require(saturated_session_id != 0U, "Inspector saturation session creation failed");
+    dispatch_inspector_test_message(
+        engine,
+        saturated_session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    {
+        std::unique_lock lock(blocked_sink.mutex);
+        require(
+            blocked_sink.condition.wait_for(
+                lock,
+                std::chrono::seconds(5),
+                [&] { return blocked_sink.entered; }),
+            "Inspector saturation callback did not enter");
+    }
+    constexpr std::string_view saturated_request{
+        R"({"id":2,"method":"Runtime.evaluate","params":{"expression":"0"}})"};
+    size_t accepted_saturated_requests = 0U;
+    while (webscene_engine_inspector_dispatch(
+        engine,
+        saturated_session_id,
+        saturated_request.data(),
+        saturated_request.size()) != 0) {
+        ++accepted_saturated_requests;
+        require(
+            accepted_saturated_requests <= 1024U,
+            "The native Inspector inbound queue did not enforce its safety limit");
+    }
+    require(
+        accepted_saturated_requests == 1024U,
+        "The native Inspector inbound queue rejected work before its documented limit");
+    require(
+        webscene_engine_inspector_disconnect(engine, saturated_session_id) != 0,
+        "Inspector disconnect was rejected while its inbound queue was saturated");
+    {
+        std::lock_guard lock(blocked_sink.mutex);
+        blocked_sink.released = true;
+    }
+    blocked_sink.condition.notify_all();
 
     dispatch_inspector_test_message(
         engine,
@@ -371,6 +483,195 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         wait_for_inspector_message(messages, R"("id":52)", R"("value":7)"),
         "Inspector live-edited function did not execute its replacement source");
 
+    const auto pauses_before_caught_exception = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":53,"method":"Debugger.setPauseOnExceptions","params":{"state":"all"}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":53)"),
+        "Inspector did not enable caught-exception pausing");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":54,"method":"Runtime.evaluate","params":{"expression":"try { throw new Error('webscene-inspector-caught'); } catch (error) { globalThis.webSceneInspectorCaught = error.message; }","returnByValue":true}})");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_caught_exception + 1U),
+        "A caught exception did not pause the WebScene isolate");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("reason":"exception")",
+            "webscene-inspector-caught"),
+        "Caught-exception pause did not expose its V8 exception data");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":55,"method":"Debugger.resume"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":55)"),
+        "Caught-exception pause did not resume");
+    require(
+        wait_for_inspector_message(messages, R"("id":54)"),
+        "Caught-exception Runtime.evaluate did not complete after resume");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":56,"method":"Debugger.setPauseOnExceptions","params":{"state":"none"}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":56)"),
+        "Inspector did not restore exception pausing to none");
+
+    const auto pauses_before_step_into = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    constexpr std::string_view step_into_source{
+        "function webSceneInspectorStepIntoInner(value) {\n"
+        "  const incremented = value + 1;\n"
+        "  return incremented;\n"
+        "}\n"
+        "function webSceneInspectorStepIntoOuter(value) {\n"
+        "  debugger;\n"
+        "  return webSceneInspectorStepIntoInner(value);\n"
+        "}\n"
+        "globalThis.webSceneInspectorStepIntoResult = webSceneInspectorStepIntoOuter(10);"};
+    constexpr std::string_view step_into_name{
+        "webscene-inspector-step-into-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            step_into_source.data(),
+            step_into_source.size(),
+            step_into_name.data(),
+            step_into_name.size()) != 0,
+        "Inspector step-into fixture was rejected");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step_into + 1U),
+        "Inspector step-into fixture did not pause");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":57,"method":"Debugger.stepInto"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":57)"),
+        "Debugger.stepInto response was not forwarded");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step_into + 2U),
+        "Debugger.stepInto did not reach the outer call statement");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":58,"method":"Debugger.stepInto"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":58)"),
+        "The second Debugger.stepInto response was not forwarded");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step_into + 3U),
+        "Debugger.stepInto did not enter the called function");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.paused")",
+            "webSceneInspectorStepIntoInner"),
+        "Debugger.stepInto pause did not identify the called function");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":59,"method":"Debugger.resume"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":59)"),
+        "Step-into fixture did not resume");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":60,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorStepIntoResult","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":60)", R"("value":11)"),
+        "Step-into execution did not complete");
+
+    const auto pauses_before_step_out = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    constexpr std::string_view step_out_source{
+        "function webSceneInspectorStepOutInner(value) {\n"
+        "  debugger;\n"
+        "  return value + 1;\n"
+        "}\n"
+        "function webSceneInspectorStepOutOuter(value) {\n"
+        "  const inner = webSceneInspectorStepOutInner(value);\n"
+        "  return inner + 1;\n"
+        "}\n"
+        "globalThis.webSceneInspectorStepOutResult = webSceneInspectorStepOutOuter(10);"};
+    constexpr std::string_view step_out_name{
+        "webscene-inspector-step-out-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            step_out_source.data(),
+            step_out_source.size(),
+            step_out_name.data(),
+            step_out_name.size()) != 0,
+        "Inspector step-out fixture was rejected");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step_out + 1U),
+        "Inspector step-out fixture did not pause in the inner function");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.paused")",
+            "webSceneInspectorStepOutInner"),
+        "Inspector step-out pause did not identify the inner function");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":61,"method":"Debugger.stepOut"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":61)"),
+        "Debugger.stepOut response was not forwarded");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_step_out + 2U),
+        "Debugger.stepOut did not pause in the caller");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Debugger.paused")",
+            "webSceneInspectorStepOutOuter"),
+        "Debugger.stepOut pause did not identify the caller");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":62,"method":"Debugger.resume"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":62)"),
+        "Step-out fixture did not resume");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":63,"method":"Runtime.evaluate","params":{"expression":"globalThis.webSceneInspectorStepOutResult","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":63)", R"("value":12)"),
+        "Step-out execution did not complete");
+
     constexpr std::string_view exception_source{
         "throw new Error('webscene-inspector-exception');"};
     constexpr std::string_view exception_name{
@@ -554,7 +855,39 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         wait_for_inspector_message(messages, R"("id":13)", R"("usedSize")"),
         "Runtime.getHeapUsage did not return V8 heap metrics");
 
+    const auto pauses_before_disconnect = count_inspector_messages(
+        messages,
+        R"("method":"Debugger.paused")");
+    constexpr std::string_view disconnect_source{
+        "debugger;\n"
+        "globalThis.webSceneInspectorDisconnectResult = 97;"};
+    constexpr std::string_view disconnect_name{
+        "webscene-inspector-disconnect-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            disconnect_source.data(),
+            disconnect_source.size(),
+            disconnect_name.data(),
+            disconnect_name.size()) != 0,
+        "Inspector disconnect-while-paused fixture was rejected");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Debugger.paused")",
+            pauses_before_disconnect + 1U),
+        "Inspector disconnect fixture did not pause");
     require(
         webscene_engine_inspector_disconnect(engine, session_id) != 0,
-        "V8 Inspector session disconnect was rejected");
+        "V8 Inspector session disconnect while paused was rejected");
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        if (evaluate(
+                engine,
+                "globalThis.webSceneInspectorDisconnectResult",
+                "webscene-inspector-disconnect-result.js") == "97") {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("Disconnecting the last Inspector session did not release the paused isolate");
 }

@@ -13,6 +13,7 @@
     std::unique_ptr<inspector_client> inspector_client_value;
     std::unique_ptr<v8_inspector::V8Inspector> inspector;
     std::unordered_map<uint64_t, inspector_session> inspector_sessions;
+    static constexpr size_t maximum_pending_inspector_actions = 1024U;
     mutable std::mutex inspector_mutex;
     std::condition_variable inspector_condition;
     std::deque<inspector_action> inspector_actions;

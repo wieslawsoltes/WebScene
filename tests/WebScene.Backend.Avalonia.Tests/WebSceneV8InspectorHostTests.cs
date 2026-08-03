@@ -13,6 +13,24 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class WebSceneV8InspectorHostTests
 {
     [Fact]
+    public async Task MessageLimitCannotExceedNativeInspectorAbiLimit()
+    {
+        await using var host = new WebSceneV8InspectorHost(
+            () => new FakeInspectorSession(),
+            () => "webscene://oversized-limit",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0,
+                MaxMessageBytes =
+                    WebSceneV8InspectorOptions.NativeMaximumMessageBytes + 1
+            });
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => host.StartAsync());
+    }
+
+    [Fact]
     public async Task EphemeralPortPublishesActualDiscoveryEndpoint()
     {
         await using var host = new WebSceneV8InspectorHost(

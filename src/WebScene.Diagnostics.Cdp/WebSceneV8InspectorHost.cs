@@ -10,6 +10,8 @@ namespace WebScene.Diagnostics.Cdp;
 
 public sealed class WebSceneV8InspectorOptions
 {
+    public const int NativeMaximumMessageBytes = 16 * 1024 * 1024;
+
     public bool Enabled { get; set; }
 
     public IPAddress Address { get; set; } = IPAddress.Loopback;
@@ -27,7 +29,7 @@ public sealed class WebSceneV8InspectorOptions
 
     public string? AccessToken { get; set; }
 
-    public int MaxMessageBytes { get; set; } = 16 * 1024 * 1024;
+    public int MaxMessageBytes { get; set; } = NativeMaximumMessageBytes;
 
     public TimeSpan KeepAliveInterval { get; set; } = TimeSpan.FromSeconds(30);
 }
@@ -446,7 +448,8 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         {
             throw new ArgumentOutOfRangeException(nameof(_options.Port));
         }
-        if (_options.MaxMessageBytes < 1024)
+        if (_options.MaxMessageBytes is < 1024
+            or > WebSceneV8InspectorOptions.NativeMaximumMessageBytes)
         {
             throw new ArgumentOutOfRangeException(nameof(_options.MaxMessageBytes));
         }

@@ -222,7 +222,10 @@
         return false;
 #else
         auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
-        if (runtime == nullptr || message == nullptr || message_length == 0U) {
+        static constexpr size_t maximum_inspector_message_bytes =
+            16U * 1024U * 1024U;
+        if (runtime == nullptr || message == nullptr || message_length == 0U
+            || message_length > maximum_inspector_message_bytes) {
             return false;
         }
         if (!runtime->dispatch_inspector_message(

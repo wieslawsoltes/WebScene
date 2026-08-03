@@ -357,7 +357,10 @@
             std::memory_order_relaxed);
         {
             std::lock_guard lock(inspector_mutex);
-            if (inspector_shutting_down) return 0U;
+            if (inspector_shutting_down
+                || inspector_actions.size() >= maximum_pending_inspector_actions) {
+                return 0U;
+            }
             inspector_actions.push_back(inspector_action{
                 inspector_action::kind::connect,
                 session_id,
@@ -375,7 +378,10 @@
             || !inspector_available_for_dispatch()) return false;
         {
             std::lock_guard lock(inspector_mutex);
-            if (inspector_shutting_down) return false;
+            if (inspector_shutting_down
+                || inspector_actions.size() >= maximum_pending_inspector_actions) {
+                return false;
+            }
             inspector_actions.push_back(inspector_action{
                 inspector_action::kind::dispatch,
                 session_id,
@@ -393,6 +399,21 @@
         {
             std::lock_guard lock(inspector_mutex);
             if (inspector_shutting_down) return false;
+            const auto existing_disconnect = std::find_if(
+                inspector_actions.begin(),
+                inspector_actions.end(),
+                [&](const auto& action) {
+                    return action.session_id == session_id
+                        && action.type == inspector_action::kind::disconnect;
+                });
+            if (existing_disconnect != inspector_actions.end()) return true;
+            std::erase_if(inspector_actions, [&](const auto& action) {
+                return action.session_id == session_id
+                    && action.type == inspector_action::kind::dispatch;
+            });
+            if (inspector_actions.size() >= maximum_pending_inspector_actions) {
+                return false;
+            }
             inspector_actions.push_back(inspector_action{
                 inspector_action::kind::disconnect,
                 session_id,
