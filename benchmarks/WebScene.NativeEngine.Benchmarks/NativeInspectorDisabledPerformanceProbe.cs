@@ -334,7 +334,6 @@ internal static class NativeInspectorDisabledPerformanceProbe
                     current.AnimationFramesInvoked - before[index].AnimationFramesInvoked < (ulong)frameTarget)
                 {
                     complete = false;
-                    break;
                 }
             }
             if (complete) return;
