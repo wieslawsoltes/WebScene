@@ -35,4 +35,20 @@ public sealed class CompatibilityCheckerTests
         Assert.True(report.IsCompatible);
         Assert.Single(report.Diagnostics, static value => value.Code == "WEBSCENE3001");
     }
+
+    [Fact]
+    public void AllowsInMemoryWebStorageButRejectsIndexedDbSpecifically()
+    {
+        var report = WebSceneCompatibilityChecker.Check(
+            "localStorage.setItem('theme', 'dark');\n" +
+            "sessionStorage.getItem('panel');\n" +
+            "indexedDB.open('durable');",
+            ComponentManifestTests.CreateManifest());
+
+        var diagnostic = Assert.Single(
+            report.Diagnostics,
+            static value => value.Code == "WEBSCENE1002");
+        Assert.Equal("IndexedDB is not supported.", diagnostic.Message);
+        Assert.Equal(3, diagnostic.Line);
+    }
 }

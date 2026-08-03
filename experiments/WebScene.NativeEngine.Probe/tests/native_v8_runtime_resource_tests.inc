@@ -60,6 +60,418 @@ size_t load_test_resource(
     return required;
 }
 
+void test_document_start_ordering_storage_and_fail_closed_errors()
+{
+    resource_server server{
+        .content = {
+            {"https://document-start.test/index.html", R"HTML(
+                <!doctype html><html><body><script>
+                  __documentStartTrace.push('authored-main');
+                  Promise.resolve().then(() =>
+                    __documentStartTrace.push('authored-main-microtask'));
+                  setTimeout(() =>
+                    __documentStartTrace.push('authored-main-timer'), 0);
+                  globalThis.__earliestStorage = [
+                    typeof localStorage, typeof sessionStorage,
+                    localStorage.getItem('document-start')
+                  ];
+                  const frame = document.createElement('iframe');
+                  document.body.appendChild(frame);
+                  const frameDocument = frame.contentDocument;
+                  frameDocument.open();
+                  frameDocument.write('<html><body><script>'
+                    + 'parent.__documentStartTrace.push("authored-frame");'
+                    + 'Promise.resolve().then(() => '
+                    + 'parent.__documentStartTrace.push("authored-frame-microtask"));'
+                    + 'globalThis.__frameStorage = ['
+                    + 'typeof localStorage, typeof sessionStorage,'
+                    + 'localStorage.getItem("document-start")];'
+                    + 'globalThis.__mainOnlyAbsent = '
+                    + 'typeof __documentStartMainOnly === "undefined";'
+                    + '<\/script></body></html>');
+                  frameDocument.close();
+                  globalThis.__documentStartFrame = frame;
+                </script></body></html>)HTML"},
+            {"https://document-start.test/failure.html", R"HTML(
+                <html><body><script>
+                  globalThis.__authoredRanAfterDocumentStartFailure = true;
+                </script></body></html>)HTML"},
+            {"https://document-start.test/frame-failure.html", R"HTML(
+                <html><body><script>
+                  var failingFrame = document.createElement('iframe');
+                  document.body.appendChild(failingFrame);
+                  var failingFrameDocument = failingFrame.contentDocument;
+                  failingFrameDocument.open();
+                  failingFrameDocument.write('<html><body><script>'
+                    + 'globalThis.__frameAuthoredAfterFailure = true;'
+                    + '<\/script></body></html>');
+                  failingFrameDocument.close();
+                  globalThis.__failingDocumentStartFrame = failingFrame;
+                </script></body></html>)HTML"}
+        }};
+    const webscene_engine_options engine_options{
+        sizeof(webscene_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = webscene_engine_create_with_options(&engine_options);
+    require(engine != nullptr, "document-start engine creation failed");
+
+    constexpr std::string_view all_frames_source =
+        "if (parent === window) {"
+        " globalThis.__documentStartTrace = ['start-all-main'];"
+        " globalThis.__documentStartEnvironment = ["
+        "   window === globalThis, /^https:/.test(location.href),"
+        "   document.readyState];"
+        " localStorage.setItem('document-start', 'ready');"
+        " queueMicrotask(() => __documentStartTrace.push('start-all-main-microtask'));"
+        "} else {"
+        " parent.__documentStartTrace.push('start-all-frame');"
+        " queueMicrotask(() => parent.__documentStartTrace.push('start-all-frame-microtask'));"
+        "}";
+    constexpr std::string_view all_frames_name = "storage-bootstrap.js";
+    constexpr std::string_view main_only_source =
+        "globalThis.__documentStartMainOnly = true;"
+        "__documentStartTrace.push('start-main-only');";
+    constexpr std::string_view main_only_name = "main-only-bootstrap.js";
+    const std::array<webscene_document_script, 2> scripts{{
+        {sizeof(webscene_document_script),
+            WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES,
+            all_frames_source.data(), all_frames_source.size(),
+            all_frames_name.data(), all_frames_name.size()},
+        {sizeof(webscene_document_script), 0U,
+            main_only_source.data(), main_only_source.size(),
+            main_only_name.data(), main_only_name.size()}
+    }};
+    const webscene_navigation_options navigation{
+        sizeof(webscene_navigation_options),
+        static_cast<uint32_t>(scripts.size()),
+        scripts.data()};
+    constexpr std::string_view url{"https://document-start.test/index.html"};
+    require(
+        webscene_engine_load_url_with_options(
+            engine, url.data(), url.size(), &navigation) != 0U,
+        "document-start navigation was rejected");
+    const auto result = evaluate(engine, R"JS(({
+      trace: __documentStartTrace,
+      environment: __documentStartEnvironment,
+      mainStorage: __earliestStorage,
+      frameStorage: __documentStartFrame.contentWindow.__frameStorage,
+      mainOnlyAbsent: __documentStartFrame.contentWindow.__mainOnlyAbsent
+    }))JS", "document-start-order-result.js");
+    require(
+        result == R"({"trace":["start-all-main","start-all-main-microtask","start-main-only","authored-main","authored-main-microtask","start-all-frame","start-all-frame-microtask","authored-frame","authored-frame-microtask"],"environment":[true,true,"loading"],"mainStorage":["object","object","ready"],"frameStorage":["object","object","ready"],"mainOnlyAbsent":true})",
+        "document-start ordering, AllFrames, or earliest storage visibility regressed: "
+            + result);
+    require(
+        evaluate(
+            engine,
+            "__documentStartTrace.at(-1)",
+            "document-start-timer-order-result.js")
+            == R"("authored-main-timer")",
+        "document-start startup timer did not run after initial microtasks and frame scripts");
+
+    constexpr std::string_view failure_source =
+        "throw new Error('document start exploded');";
+    constexpr std::string_view failure_name = "configured-failure-name.js";
+    const webscene_document_script failure_script{
+        sizeof(webscene_document_script), 0U,
+        failure_source.data(), failure_source.size(),
+        failure_name.data(), failure_name.size()};
+    const webscene_navigation_options failure_navigation{
+        sizeof(webscene_navigation_options), 1U, &failure_script};
+    constexpr std::string_view failure_url{
+        "https://document-start.test/failure.html"};
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    require(
+        webscene_engine_load_url_with_options(
+            engine,
+            failure_url.data(),
+            failure_url.size(),
+            &failure_navigation) != 0U,
+        "failing document-start navigation was not queued");
+    std::string diagnostic;
+    webscene_engine_metrics after{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_get_metrics(engine, &after);
+        diagnostic = last_error(engine);
+        if (after.script_errors > before.script_errors) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after.script_errors > before.script_errors
+            && diagnostic.find(failure_name) != std::string::npos,
+        "document-start failure did not retain its configured name: "
+            + diagnostic);
+    require(
+        evaluate(
+            engine,
+            "typeof globalThis.__authoredRanAfterDocumentStartFailure",
+            "document-start-fail-closed-result.js") == R"("undefined")",
+        "authored script ran after a document-start failure");
+    const auto console_required =
+        webscene_engine_take_console_message(engine, nullptr, 0U);
+    std::vector<char> console(console_required == 0U ? 1U : console_required, '\0');
+    if (console_required != 0U) {
+        webscene_engine_take_console_message(
+            engine, console.data(), console.size());
+    }
+    require(
+        std::string(console.data()).find(failure_name) != std::string::npos,
+        "document-start failure was not emitted to the console with its name");
+
+    constexpr std::string_view frame_failure_source =
+        "if (parent !== window) throw new Error('frame document start exploded');";
+    constexpr std::string_view frame_failure_name =
+        "configured-frame-failure-name.js";
+    const webscene_document_script frame_failure_script{
+        sizeof(webscene_document_script),
+        WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES,
+        frame_failure_source.data(), frame_failure_source.size(),
+        frame_failure_name.data(), frame_failure_name.size()};
+    const webscene_navigation_options frame_failure_navigation{
+        sizeof(webscene_navigation_options), 1U, &frame_failure_script};
+    constexpr std::string_view frame_failure_url{
+        "https://document-start.test/frame-failure.html"};
+    webscene_engine_get_metrics(engine, &before);
+    require(
+        webscene_engine_load_url_with_options(
+            engine,
+            frame_failure_url.data(),
+            frame_failure_url.size(),
+            &frame_failure_navigation) != 0U,
+        "failing frame document-start navigation was not queued");
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_get_metrics(engine, &after);
+        diagnostic = last_error(engine);
+        if (after.script_errors > before.script_errors) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after.script_errors > before.script_errors
+            && diagnostic.find(frame_failure_name) != std::string::npos,
+        "frame document-start failure did not fail navigation with its name: "
+            + diagnostic);
+    require(
+        evaluate(
+            engine,
+            "typeof __failingDocumentStartFrame.contentWindow."
+            "__frameAuthoredAfterFailure",
+            "frame-document-start-fail-closed-result.js") == R"("undefined")",
+        "frame authored script ran after its document-start failure");
+    webscene_engine_destroy(engine);
+}
+
+struct navigation_barrier_server final {
+    resource_server resources;
+    std::atomic<uint32_t> entered{0U};
+    std::atomic<bool> release{false};
+};
+
+size_t load_navigation_barrier_resource(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified,
+    char* destination,
+    size_t destination_capacity)
+{
+    auto& server = *static_cast<navigation_barrier_server*>(user_data);
+    if (destination == nullptr && kind == WEBSCENE_RESOURCE_DOCUMENT) {
+        server.entered.fetch_add(1U, std::memory_order_release);
+        while (!server.release.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+    return load_test_resource(
+        &server.resources,
+        kind,
+        url,
+        url_length,
+        entity_tag,
+        entity_tag_length,
+        last_modified,
+        destination,
+        destination_capacity);
+}
+
+void test_four_navigation_workers_enter_startup_concurrently()
+{
+    constexpr size_t engine_count = 4U;
+    navigation_barrier_server server{
+        .resources = resource_server{
+            .content = {
+              {"https://navigation-barrier.test/engine-0.html", R"HTML(
+                <html><body><script>
+                  globalThis.__authoredEngineIdentity =
+                    localStorage.getItem('engine-identity');
+                </script></body></html>)HTML"},
+              {"https://navigation-barrier.test/engine-1.html", R"HTML(
+                <html><body><script>
+                  globalThis.__authoredEngineIdentity =
+                    localStorage.getItem('engine-identity');
+                </script></body></html>)HTML"},
+              {"https://navigation-barrier.test/engine-2.html", R"HTML(
+                <html><body><script>
+                  globalThis.__authoredEngineIdentity =
+                    localStorage.getItem('engine-identity');
+                </script></body></html>)HTML"},
+              {"https://navigation-barrier.test/engine-3.html", R"HTML(
+                <html><body><script>
+                  globalThis.__authoredEngineIdentity =
+                    localStorage.getItem('engine-identity');
+                </script></body></html>)HTML"}}}};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.resource_load_callback = load_navigation_barrier_resource;
+    options.resource_load_user_data = &server;
+    std::array<webscene_engine*, engine_count> engines{};
+    for (auto& engine : engines) {
+        engine = webscene_engine_create_with_options(&options);
+        require(engine != nullptr, "navigation barrier engine creation failed");
+    }
+
+    std::array<std::string, engine_count> sources;
+    std::array<std::string, engine_count> names;
+    std::array<std::string, engine_count> urls;
+    std::array<webscene_document_script, engine_count> descriptors{};
+    std::array<webscene_navigation_options, engine_count> navigations{};
+    for (size_t index = 0U; index < engine_count; ++index) {
+        sources[index] = "localStorage.setItem('engine-identity', 'engine-"
+            + std::to_string(index) + "'); globalThis.__engineIdentity = 'engine-"
+            + std::to_string(index) + "';";
+        names[index] = "engine-" + std::to_string(index) + "-document-start.js";
+        urls[index] = "https://navigation-barrier.test/engine-"
+            + std::to_string(index) + ".html";
+        descriptors[index] = webscene_document_script{
+            sizeof(webscene_document_script), 0U,
+            sources[index].data(), sources[index].size(),
+            names[index].data(), names[index].size()};
+        navigations[index] = webscene_navigation_options{
+            sizeof(webscene_navigation_options), 1U, &descriptors[index]};
+        require(
+            webscene_engine_load_url_with_options(
+                engines[index],
+                urls[index].data(),
+                urls[index].size(),
+                &navigations[index]) != 0U,
+            "navigation barrier load was rejected");
+    }
+    for (size_t index = 0U; index < engine_count; ++index) {
+        sources[index].assign(sources[index].size(), 'x');
+        names[index].assign(names[index].size(), 'x');
+    }
+    for (auto attempt = 0;
+         attempt < 500
+            && server.entered.load(std::memory_order_acquire) < engine_count;
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        server.entered.load(std::memory_order_acquire) == engine_count,
+        "four navigation workers did not enter document startup concurrently");
+    server.release.store(true, std::memory_order_release);
+
+    for (size_t index = 0U; index < engine_count; ++index) {
+        const auto identity = "engine-" + std::to_string(index);
+        const auto result = evaluate(
+            engines[index],
+            "[globalThis.__engineIdentity, globalThis.__authoredEngineIdentity, "
+            "localStorage.getItem('engine-identity')]",
+            "navigation-barrier-result.js");
+        require(
+            result == "[\"" + identity + "\",\"" + identity
+                + "\",\"" + identity + "\"]",
+            "four-engine startup leaked globals or storage: " + result);
+    }
+
+    const std::array<webscene_interop_value_v3, 2> registration_values{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 1U, 0U},
+        {WEBSCENE_INTEROP_VALUE_NUMBER_V3, 0U, 0U, 0U,
+            std::bit_cast<uint64_t>(
+                static_cast<double>(WEBSCENE_INTEROP_CALLBACK_VOID_V3))}
+    }};
+    const std::array<webscene_interop_edge_v3, 1> registration_edges{{
+        {0U, 0U, 1U, 0U}
+    }};
+    const std::array<webscene_interop_value_v3, 1> empty_arguments{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 0U, 0U}
+    }};
+    for (size_t index = 0U; index < engine_count; ++index) {
+        const auto target_id = static_cast<uint64_t>(100U + index);
+        const webscene_interop_invoke_request_v3 registration{
+            static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+            3U,
+            WEBSCENE_INTEROP_CREATE_CALLBACK_FUNCTION_V3,
+            0U,
+            target_id,
+            nullptr,
+            0U,
+            nullptr,
+            0U,
+            registration_values.data(),
+            registration_values.size(),
+            registration_edges.data(),
+            registration_edges.size(),
+            nullptr,
+            0U,
+            0U,
+            WEBSCENE_INTEROP_RESULT_RETAINED_HANDLE_V3};
+        const auto* registered = invoke_generated(engines[index], registration);
+        require(
+            registered->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+                && registered->values[registered->root_value_index].kind
+                    == WEBSCENE_INTEROP_VALUE_HANDLE_V3,
+            "four-engine callback registration failed");
+        const auto callback_handle =
+            registered->values[registered->root_value_index].payload;
+        release_interop_result(registered);
+
+        const webscene_interop_invoke_request_v3 invoke_callback{
+            static_cast<uint32_t>(sizeof(webscene_interop_invoke_request_v3)),
+            3U,
+            WEBSCENE_INTEROP_INVOKE_FUNCTION_V3,
+            0U,
+            callback_handle,
+            nullptr,
+            0U,
+            nullptr,
+            0U,
+            empty_arguments.data(),
+            empty_arguments.size(),
+            nullptr,
+            0U,
+            nullptr,
+            0U,
+            0U,
+            WEBSCENE_INTEROP_RESULT_VOID_V3};
+        const auto* invoked = invoke_generated(engines[index], invoke_callback);
+        require(
+            invoked->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3,
+            "four-engine callback invocation failed");
+        release_interop_result(invoked);
+    }
+    for (size_t index = 0U; index < engine_count; ++index) {
+        const auto* callback = webscene_engine_take_callback_v3(engines[index]);
+        require(
+            callback != nullptr
+                && callback->target_id == static_cast<uint64_t>(100U + index)
+                && callback->return_kind == WEBSCENE_INTEROP_CALLBACK_VOID_V3,
+            "four-engine startup leaked or reordered callback queues");
+        webscene_interop_callback_release_v3(callback, callback->lease_id);
+        require(
+            webscene_engine_take_callback_v3(engines[index]) == nullptr,
+            "four-engine callback queue retained a foreign callback");
+    }
+    for (auto* engine : engines) webscene_engine_destroy(engine);
+}
+
 void test_parallel_resource_prefetch()
 {
     resource_server server{

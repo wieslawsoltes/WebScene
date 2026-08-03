@@ -549,6 +549,30 @@ typedef struct webscene_engine_options {
     void* animation_frame_requested_user_data;
 } webscene_engine_options;
 
+enum {
+    WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES = 1U << 0U
+};
+
+/*
+ * Fixed-layout document-start program descriptor. The engine copies every
+ * source and name before webscene_engine_load_url_with_options returns; callers
+ * retain no buffers for queued navigation work.
+ */
+typedef struct webscene_document_script {
+    uint32_t struct_size;
+    uint32_t flags;
+    const char* source;
+    size_t source_length;
+    const char* name;
+    size_t name_length;
+} webscene_document_script;
+
+typedef struct webscene_navigation_options {
+    uint32_t struct_size;
+    uint32_t document_script_count;
+    const webscene_document_script* document_scripts;
+} webscene_navigation_options;
+
 typedef struct webscene_engine_metrics {
     uint64_t enqueued_inputs;
     uint64_t dropped_inputs;
@@ -826,6 +850,11 @@ WEBSCENE_API uint8_t webscene_engine_load_url(
     webscene_engine* engine,
     const char* url,
     size_t url_length);
+WEBSCENE_API uint8_t webscene_engine_load_url_with_options(
+    webscene_engine* engine,
+    const char* url,
+    size_t url_length,
+    const webscene_navigation_options* options);
 WEBSCENE_API uint8_t webscene_engine_enqueue(webscene_engine* engine, const webscene_input_event* event);
 /*
  * Atomically submits a viewport update and its corresponding host rendering

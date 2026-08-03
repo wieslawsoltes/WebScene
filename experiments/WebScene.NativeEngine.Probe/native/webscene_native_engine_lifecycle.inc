@@ -197,9 +197,91 @@
 
     bool load_url(const char* value, size_t length)
     {
+        return enqueue_url(value, length, {});
+    }
+
+    bool load_url(
+        const char* value,
+        size_t length,
+        const webscene_navigation_options* options)
+    {
 #if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         static_cast<void>(value);
         static_cast<void>(length);
+        static_cast<void>(options);
+        set_last_error("Native engine was built without V8 support");
+        return false;
+#else
+        if (options == nullptr
+            || options->struct_size < sizeof(webscene_navigation_options)) {
+            set_last_error("Native navigation options are missing or too small");
+            return false;
+        }
+        constexpr uint32_t maximum_document_scripts = 256U;
+        constexpr size_t maximum_document_script_bytes = 16U * 1024U * 1024U;
+        if (options->document_script_count > maximum_document_scripts) {
+            set_last_error("Native navigation has too many document-start scripts");
+            return false;
+        }
+        if (options->document_script_count != 0U
+            && options->document_scripts == nullptr) {
+            set_last_error("Native navigation document-start descriptors are missing");
+            return false;
+        }
+
+        std::vector<webscene_native::document_start_script> scripts;
+        scripts.reserve(options->document_script_count);
+        size_t total_bytes = 0U;
+        for (uint32_t index = 0U;
+             index < options->document_script_count;
+             ++index) {
+            const auto& descriptor = options->document_scripts[index];
+            if (descriptor.struct_size < sizeof(webscene_document_script)) {
+                set_last_error(
+                    "Native navigation document-start descriptor is too small");
+                return false;
+            }
+            if ((descriptor.flags & ~WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES) != 0U) {
+                set_last_error(
+                    "Native navigation document-start descriptor has unknown flags");
+                return false;
+            }
+            if (descriptor.source == nullptr || descriptor.source_length == 0U) {
+                set_last_error("Document-start script source is empty");
+                return false;
+            }
+            if (descriptor.name == nullptr || descriptor.name_length == 0U) {
+                set_last_error("Document-start script name is empty");
+                return false;
+            }
+            if (descriptor.source_length > maximum_document_script_bytes
+                || descriptor.name_length > maximum_document_script_bytes
+                || total_bytes > maximum_document_script_bytes
+                    - descriptor.source_length
+                || total_bytes + descriptor.source_length
+                    > maximum_document_script_bytes - descriptor.name_length) {
+                set_last_error("Native navigation document-start scripts are too large");
+                return false;
+            }
+            total_bytes += descriptor.source_length + descriptor.name_length;
+            scripts.push_back(webscene_native::document_start_script{
+                std::string(descriptor.source, descriptor.source_length),
+                std::string(descriptor.name, descriptor.name_length),
+                (descriptor.flags & WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES) != 0U});
+        }
+        return enqueue_url(value, length, std::move(scripts));
+#endif
+    }
+
+    bool enqueue_url(
+        const char* value,
+        size_t length,
+        std::vector<webscene_native::document_start_script> scripts)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(value);
+        static_cast<void>(length);
+        static_cast<void>(scripts);
         set_last_error("Native engine was built without V8 support");
         return false;
 #else
@@ -218,7 +300,9 @@
             set_last_error("Native document queue is full");
             return false;
         }
-        script_work_.emplace_back(url_request{std::string(value, length)});
+        script_work_.emplace_back(url_request{
+            std::string(value, length),
+            std::move(scripts)});
         signal_worker();
         return true;
 #endif
