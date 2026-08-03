@@ -3,6 +3,8 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NativeRuntimeShowcase.Interop;
+using WebScene.Backends.Avalonia.Native;
+using WebScene.Diagnostics.Cdp;
 
 namespace NativeRuntimeShowcase.Avalonia;
 
@@ -12,6 +14,8 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _diagnosticsTimer;
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
+    private WebSceneV8InspectorHost? _v8InspectorHost;
+    private NativeWebSceneView? _inspectedView;
     private IStorageFile? _currentFile;
     private bool _editorLoading;
 
@@ -50,6 +54,9 @@ public sealed partial class MainWindow : Window
                 ShowcasePaths.TradingViewUrl,
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Avalonia", "tradingview"));
+            await SelectInspectorTargetAsync(
+                TerminalHost,
+                "WebScene V8 · TradingView");
             _diagnosticsTimer.Start();
             RefreshDiagnostics("TradingView terminal loaded");
         }
@@ -59,12 +66,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnShowTradingView(object? sender, RoutedEventArgs args)
+    private async void OnShowTradingView(object? sender, RoutedEventArgs args)
     {
-        TerminalHost.IsVisible = true;
-        EditorHost.IsVisible = false;
-        DocumentText.Text = ShowcasePaths.TradingViewUrl;
-        RefreshDiagnostics("TradingView terminal");
+        try
+        {
+            await SelectInspectorTargetAsync(
+                TerminalHost,
+                "WebScene V8 · TradingView");
+            TerminalHost.IsVisible = true;
+            EditorHost.IsVisible = false;
+            DocumentText.Text = ShowcasePaths.TradingViewUrl;
+            RefreshDiagnostics("TradingView terminal");
+        }
+        catch (Exception error)
+        {
+            ShowFailure("V8 Inspector startup failed", error);
+        }
     }
 
     private async void OnShowEditor(object? sender, RoutedEventArgs args)
@@ -82,6 +99,7 @@ public sealed partial class MainWindow : Window
     private async Task ShowEditorAsync()
     {
         await EnsureEditorAsync();
+        await SelectInspectorTargetAsync(EditorHost, "WebScene V8 · Monaco");
         TerminalHost.IsVisible = false;
         EditorHost.IsVisible = true;
         DocumentText.Text = _currentFile?.Name ?? "GeneratedMonacoApi.cs";
@@ -219,9 +237,84 @@ public sealed partial class MainWindow : Window
         Console.Error.WriteLine($"{title}: {error}");
     }
 
+    private bool IsV8InspectorEnabled()
+    {
+        if (_arguments.Contains("--v8-inspector", StringComparer.Ordinal))
+        {
+            return true;
+        }
+        var configured = Environment.GetEnvironmentVariable(
+            "WEBSCENE_V8_INSPECTOR");
+        return string.Equals(configured, "1", StringComparison.Ordinal)
+            || string.Equals(configured, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int ResolveV8InspectorPort()
+    {
+        string? configured = null;
+        for (var index = 0; index + 1 < _arguments.Count; ++index)
+        {
+            if (_arguments[index] == "--v8-inspector-port")
+            {
+                configured = _arguments[index + 1];
+                break;
+            }
+        }
+        configured ??= Environment.GetEnvironmentVariable(
+            "WEBSCENE_V8_INSPECTOR_PORT");
+        if (string.IsNullOrWhiteSpace(configured)) return 9229;
+        if (int.TryParse(configured, out var port) && port is > 0 and <= 65535)
+        {
+            return port;
+        }
+        throw new ArgumentException(
+            $"Invalid WebScene V8 Inspector port: '{configured}'.");
+    }
+
+    private async Task SelectInspectorTargetAsync(
+        NativeWebSceneView view,
+        string title)
+    {
+        if (!IsV8InspectorEnabled()) return;
+        if (ReferenceEquals(_inspectedView, view)
+            && _v8InspectorHost?.IsRunning == true)
+        {
+            return;
+        }
+        if (_v8InspectorHost is not null)
+        {
+            await _v8InspectorHost.DisposeAsync();
+        }
+        var host = new WebSceneV8InspectorHost(
+            view,
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = ResolveV8InspectorPort()
+            },
+            title: title);
+        try
+        {
+            await host.StartAsync();
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
+        _v8InspectorHost = host;
+        _inspectedView = view;
+        Console.WriteLine(
+            $"WebScene V8 Inspector discovery: {host.DiscoveryUri}json/list");
+    }
+
     private async void OnClosed(object? sender, EventArgs args)
     {
         _diagnosticsTimer.Stop();
+        if (_v8InspectorHost is not null)
+        {
+            await _v8InspectorHost.DisposeAsync();
+        }
         if (_editorSession is not null)
         {
             await _editorSession.DisposeAsync();

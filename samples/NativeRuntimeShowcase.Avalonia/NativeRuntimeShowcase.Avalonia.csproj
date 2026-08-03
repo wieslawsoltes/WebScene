@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Diagnostics.Cdp\WebScene.Diagnostics.Cdp.csproj" />
     <ProjectReference Include="..\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj" />
     <ProjectReference Include="..\NativeMonacoEditor.Assets\NativeMonacoEditor.Assets.csproj"
                       ReferenceOutputAssembly="false" />
