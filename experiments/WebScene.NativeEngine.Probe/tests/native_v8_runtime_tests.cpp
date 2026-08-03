@@ -138,6 +138,7 @@ int main()
     auto* engine = webscene_engine_create(64);
     require(engine != nullptr, "engine creation failed");
     test_v8_inspector_raw_cdp_session(engine);
+    test_v8_inspector_shutdown_releases_paused_engine();
     test_binary_interop_result_is_leased_and_pooled(engine);
     test_binary_interop_preserves_json_edge_semantics(engine);
     test_generated_binary_invocation_uses_tagged_arguments(engine);

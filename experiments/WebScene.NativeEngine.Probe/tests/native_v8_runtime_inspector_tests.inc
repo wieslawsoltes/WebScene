@@ -1027,3 +1027,73 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     }
     fail("Disconnecting the last Inspector session did not release the paused isolate");
 }
+
+void test_v8_inspector_shutdown_releases_paused_engine()
+{
+    if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) return;
+
+    auto* engine = webscene_engine_create(64);
+    require(engine != nullptr, "Inspector shutdown fixture engine creation failed");
+    for (auto attempt = 0;
+         attempt < 500 && webscene_engine_inspector_is_available(engine) == 0;
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        webscene_engine_inspector_is_available(engine) != 0,
+        "Inspector shutdown fixture did not become available");
+
+    inspector_test_messages messages;
+    const auto session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &messages,
+        0U);
+    require(session_id != 0U, "Inspector shutdown fixture session creation failed");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":2,"method":"Debugger.enable"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":1)"),
+        "Inspector shutdown fixture did not enable Runtime");
+    require(
+        wait_for_inspector_message(messages, R"("id":2)"),
+        "Inspector shutdown fixture did not enable Debugger");
+
+    constexpr std::string_view source{
+        "debugger;\n"
+        "globalThis.webSceneInspectorShutdownResult = 101;"};
+    constexpr std::string_view name{
+        "webscene-inspector-shutdown-while-paused.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            source.data(),
+            source.size(),
+            name.data(),
+            name.size()) != 0,
+        "Inspector shutdown-while-paused fixture was rejected");
+    require(
+        wait_for_inspector_message(messages, R"("method":"Debugger.paused")"),
+        "Inspector shutdown fixture did not pause the engine");
+
+    std::atomic<bool> destroyed{false};
+    std::thread destroyer([&] {
+        webscene_engine_destroy(engine);
+        destroyed.store(true, std::memory_order_release);
+    });
+    for (auto attempt = 0;
+         attempt < 2500 && !destroyed.load(std::memory_order_acquire);
+         ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        destroyed.load(std::memory_order_acquire),
+        "Destroying an Inspector-paused engine did not complete within five seconds");
+    destroyer.join();
+}
