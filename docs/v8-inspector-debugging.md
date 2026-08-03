@@ -89,7 +89,10 @@ The discovery document includes an authenticated
 `chrome://inspect` can poll it, while every WebSocket connection requires the
 random access token. Non-loopback binding requires
 `AllowRemoteConnections = true`; supply a strong explicit token when a stable
-remote URL is needed.
+remote URL is needed. Remote `/json`, `/json/list`, and `/json/version` requests
+must first present that token as a `token` query parameter or
+`Authorization: Bearer` header, so unauthenticated discovery cannot disclose
+the WebSocket credential.
 
 ## Original TypeScript, JavaScript, and source mutations
 

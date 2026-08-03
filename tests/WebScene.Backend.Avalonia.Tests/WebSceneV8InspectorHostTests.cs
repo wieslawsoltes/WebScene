@@ -155,6 +155,38 @@ public sealed class WebSceneV8InspectorHostTests
             CancellationToken.None);
     }
 
+    [Fact]
+    public async Task RemoteDiscoveryRequiresTokenBeforePublishingWebSocketUrl()
+    {
+        var address = GetNonLoopbackAddress();
+        await using var host = new WebSceneV8InspectorHost(
+            () => new FakeInspectorSession(),
+            () => "webscene://remote",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Address = address,
+                Port = 0,
+                AllowRemoteConnections = true
+            });
+        await host.StartAsync();
+
+        using var http = new HttpClient(new HttpClientHandler { UseProxy = false });
+        using var unauthorized = await http.GetAsync(
+            new Uri(host.DiscoveryUri, "json/list"));
+        var unauthorizedBody = await unauthorized.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.DoesNotContain(host.AccessToken, unauthorizedBody);
+
+        using var authorized = await http.GetAsync(
+            new Uri(host.DiscoveryUri, $"json/list?token={host.AccessToken}"));
+        var authorizedBody = await authorized.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
+        Assert.Contains($"token={host.AccessToken}", authorizedBody);
+    }
+
     private static int ReserveLoopbackPort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -163,6 +195,13 @@ public sealed class WebSceneV8InspectorHostTests
         listener.Stop();
         return port;
     }
+
+    private static IPAddress GetNonLoopbackAddress()
+        => Dns.GetHostAddresses(Dns.GetHostName()).FirstOrDefault(
+            address => address.AddressFamily == AddressFamily.InterNetwork
+                && !IPAddress.IsLoopback(address))
+            ?? throw new InvalidOperationException(
+                "The remote-discovery regression requires a non-loopback IPv4 address.");
 
     private sealed class FakeInspectorSession : INativeV8InspectorSession
     {

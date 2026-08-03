@@ -271,6 +271,15 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             context.Response.Close();
             return;
         }
+        var isDiscoveryRequest = path is "/json/version" or "/json" or "/json/list";
+        if (isDiscoveryRequest
+            && !IPAddress.IsLoopback(_options.Address)
+            && !IsAuthorized(context.Request))
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+            context.Response.Close();
+            return;
+        }
         if (path == "/json/version")
         {
             await WriteJsonAsync(
