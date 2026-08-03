@@ -21,6 +21,13 @@ typedef struct webscene_engine webscene_engine;
 typedef struct webscene_scene_view webscene_scene_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
 
+/* Receives one complete UTF-8 V8 Inspector Protocol message on the worker. */
+typedef void (*webscene_inspector_message_callback)(
+    void* user_data,
+    uint64_t session_id,
+    const char* message,
+    size_t message_length);
+
 typedef enum webscene_input_kind {
     WEBSCENE_INPUT_POINTER_MOVE = 1,
     WEBSCENE_INPUT_POINTER_DOWN = 2,
@@ -871,6 +878,22 @@ WEBSCENE_API uint8_t webscene_engine_execute_script(
     size_t source_length,
     const char* document_name,
     size_t document_name_length);
+/* Raw V8 Inspector/CDP sessions are available for dedicated isolates. */
+WEBSCENE_API uint64_t webscene_engine_inspector_connect(
+    webscene_engine* engine,
+    webscene_inspector_message_callback message_callback,
+    void* user_data,
+    uint8_t wait_for_debugger);
+WEBSCENE_API uint8_t webscene_engine_inspector_dispatch(
+    webscene_engine* engine,
+    uint64_t session_id,
+    const char* message,
+    size_t message_length);
+WEBSCENE_API uint8_t webscene_engine_inspector_disconnect(
+    webscene_engine* engine,
+    uint64_t session_id);
+WEBSCENE_API uint8_t webscene_engine_inspector_is_available(
+    const webscene_engine* engine);
 WEBSCENE_API uint64_t webscene_engine_begin_evaluate_v3(
     webscene_engine* engine,
     const webscene_interop_evaluate_request_v3* request,

@@ -185,6 +185,8 @@ public:
         resource_response& response)>;
     using interop_callback_sink_v3 =
         std::function<uint64_t(interop_callback_request_data_v3&&)>;
+    using inspector_message_sink =
+        std::function<void(uint64_t, std::string_view)>;
 
     v8_dom_runtime(
         native_document& document,
@@ -193,7 +195,8 @@ public:
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
-        interop_callback_sink_v3 interop_callback_sink = {});
+        interop_callback_sink_v3 interop_callback_sink = {},
+        std::function<bool()> shutdown_requested = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
@@ -222,6 +225,16 @@ public:
     uint64_t pending_callback_promises() const noexcept;
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
+    bool inspector_available() const noexcept;
+    uint64_t connect_inspector(
+        inspector_message_sink message_sink,
+        bool wait_for_debugger = false);
+    bool dispatch_inspector_message(
+        uint64_t session_id,
+        std::string message);
+    bool disconnect_inspector(uint64_t session_id);
+    bool pump_inspector_task();
+    bool has_pending_inspector_tasks() const noexcept;
     bool dispatch_resize();
     bool refresh_media_environment();
     bool set_visible(bool visible);

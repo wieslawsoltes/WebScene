@@ -668,6 +668,11 @@
             frame_documents.erase(id);
             frame_windows.erase(id);
             actual_frame_windows.erase(id);
+            if (const auto found = actual_frame_contexts.find(id);
+                found != actual_frame_contexts.end()
+                && !found->second.IsEmpty()) {
+                destroy_inspector_context(found->second.Get(isolate));
+            }
             actual_frame_contexts.erase(id);
             actual_frame_documents.erase(id);
             frame_session_storage.erase(id);

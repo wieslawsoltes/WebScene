@@ -6,13 +6,15 @@
         std::function<void()> host_request_available_value,
         std::function<void()> interop_callback_available_value,
         v8_dom_runtime::interop_callback_sink_v3
-            interop_callback_sink_value)
+            interop_callback_sink_value,
+        std::function<bool()> shutdown_requested_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
         , interop_callback_available(std::move(interop_callback_available_value))
         , interop_callback_sink(std::move(interop_callback_sink_value))
+        , shutdown_requested(std::move(shutdown_requested_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -47,6 +49,7 @@
         // handles or disposing the isolate. Socket callbacks never touch V8,
         // but they may still be appending to the native delivery queue.
         websocket_transport.shutdown();
+        shutdown_inspector();
         auto isolate_locker = lock_shared_isolate();
         websocket_bindings.clear();
         if (isolate != nullptr && !compilation_cache_directory.empty()) {

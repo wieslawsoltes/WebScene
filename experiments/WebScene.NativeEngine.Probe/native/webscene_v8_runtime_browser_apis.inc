@@ -31,6 +31,10 @@
             v8::Global<v8::Function>(info.GetIsolate(), info[0].As<v8::Function>()),
             {},
             -1});
+        self->inspector_async_task_scheduled(
+            "requestAnimationFrame",
+            id,
+            false);
         info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(), id));
     }
 
@@ -78,6 +82,10 @@
             v8::Global<v8::Function>(info.GetIsolate(), info[0].As<v8::Function>()),
             std::move(arguments),
             -1});
+        self->inspector_async_task_scheduled(
+            repeating ? "setInterval" : "setTimeout",
+            id,
+            repeating);
         info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(), id));
     }
 
@@ -101,9 +109,10 @@
         uint64_t cancelled_animation_frames = 0;
         const auto removed = std::erase_if(
             self->timers,
-            [id, &cancelled_animation_frames](const auto& timer) {
+            [self, id, &cancelled_animation_frames](const auto& timer) {
                 if (timer.id != id) return false;
                 if (timer.animation_frame) ++cancelled_animation_frames;
+                self->inspector_async_task_canceled(id);
                 return true;
             });
         if (self->work_metrics_enabled.load(std::memory_order_relaxed)) {

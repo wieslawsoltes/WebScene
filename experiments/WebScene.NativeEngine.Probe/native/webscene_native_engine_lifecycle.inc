@@ -187,6 +187,78 @@
 #endif
     }
 
+    uint64_t connect_inspector(
+        webscene_inspector_message_callback callback,
+        void* user_data,
+        bool wait_for_debugger)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(callback);
+        static_cast<void>(user_data);
+        static_cast<void>(wait_for_debugger);
+        return 0U;
+#else
+        auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
+        if (runtime == nullptr || callback == nullptr) return 0U;
+        const auto session_id = runtime->connect_inspector(
+            [callback, user_data](uint64_t id, std::string_view message) {
+                callback(user_data, id, message.data(), message.size());
+            },
+            wait_for_debugger);
+        if (session_id != 0U) signal_worker();
+        return session_id;
+#endif
+    }
+
+    bool dispatch_inspector(
+        uint64_t session_id,
+        const char* message,
+        size_t message_length)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(session_id);
+        static_cast<void>(message);
+        static_cast<void>(message_length);
+        return false;
+#else
+        auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
+        if (runtime == nullptr || message == nullptr || message_length == 0U) {
+            return false;
+        }
+        if (!runtime->dispatch_inspector_message(
+                session_id,
+                std::string(message, message_length))) {
+            return false;
+        }
+        signal_worker();
+        return true;
+#endif
+    }
+
+    bool disconnect_inspector(uint64_t session_id)
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        static_cast<void>(session_id);
+        return false;
+#else
+        auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
+        if (runtime == nullptr
+            || !runtime->disconnect_inspector(session_id)) return false;
+        signal_worker();
+        return true;
+#endif
+    }
+
+    bool inspector_available() const noexcept
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        return false;
+#else
+        const auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
+        return runtime != nullptr && runtime->inspector_available();
+#endif
+    }
+
     bool set_resource_root(const char* value, size_t length)
     {
         if (value == nullptr || length == 0U) return false;

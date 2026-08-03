@@ -41,10 +41,16 @@
         }
 #endif
         auto task_context = task.context.Get(isolate);
-        if (task_context.IsEmpty()) return true;
+        if (task_context.IsEmpty()) {
+            inspector_async_task_canceled(task.id);
+            return true;
+        }
         v8::Context::Scope task_context_scope(task_context);
         auto callback = task.callback.Get(isolate);
-        if (callback.IsEmpty()) return true;
+        if (callback.IsEmpty()) {
+            inspector_async_task_canceled(task.id);
+            return true;
+        }
         const auto collect_work_metrics =
             work_metrics_enabled.load(std::memory_order_relaxed);
         if (collect_work_metrics && task.animation_frame) {
@@ -105,6 +111,7 @@
         }
         active_timer_id = task.id;
         active_timer_cancelled = false;
+        inspector_async_task_started(task.id);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer callback_timer(
             profile_startup ? &startup_task_callbacks : nullptr);
@@ -114,6 +121,8 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
+            inspector_async_task_finished(task.id);
+            if (task.repeating) inspector_async_task_canceled(task.id);
             active_timer_id = 0;
             last_error = std::string(task.animation_frame
                     ? "requestAnimationFrame task failed: "
@@ -122,6 +131,7 @@
             return false;
         }
         perform_microtask_checkpoint();
+        inspector_async_task_finished(task.id);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             auto& stats = startup_task_profiles[task_profile_name];
@@ -169,6 +179,9 @@
         const auto cancelled = active_timer_cancelled;
         active_timer_id = 0;
         active_timer_cancelled = false;
+        if (cancelled && task.repeating) {
+            inspector_async_task_canceled(task.id);
+        }
         if (task.repeating && !cancelled) {
             const auto current = std::chrono::steady_clock::now();
             do {

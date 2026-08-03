@@ -14,6 +14,7 @@
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
+#include <v8-inspector.h>
 #include <v8-profiler.h>
 
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
@@ -81,6 +82,7 @@ void prewarm_v8_process()
 
 struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_state_types.inc"
+#include "webscene_v8_runtime_inspector.inc"
 #include "webscene_v8_runtime_lifecycle.inc"
     bool initialize()
     {
@@ -160,6 +162,7 @@ struct v8_dom_runtime::implementation final {
         v8::Context::Scope context_scope(local_context);
         install_templates(local_context);
         install_globals(local_context);
+        initialize_inspector(local_context);
         return true;
     }
 
@@ -3042,15 +3045,17 @@ v8_dom_runtime::v8_dom_runtime(
     resource_loader load_resource,
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
-    interop_callback_sink_v3 interop_callback_sink)
+    interop_callback_sink_v3 interop_callback_sink,
+    std::function<bool()> shutdown_requested)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
         std::move(compilation_cache_directory),
         std::move(load_resource),
-        std::move(host_request_available),
-        std::move(interop_callback_available),
-        std::move(interop_callback_sink)))
+          std::move(host_request_available),
+          std::move(interop_callback_available),
+          std::move(interop_callback_sink),
+          std::move(shutdown_requested)))
 {
 }
 
@@ -3132,6 +3137,46 @@ bool v8_dom_runtime::try_take_host_request(std::string& request)
 bool v8_dom_runtime::try_take_console_message(std::string& message)
 {
     return impl_->try_take_console_message(message);
+}
+
+bool v8_dom_runtime::inspector_available() const noexcept
+{
+    return impl_->inspector_ready.load(std::memory_order_acquire);
+}
+
+uint64_t v8_dom_runtime::connect_inspector(
+    inspector_message_sink message_sink,
+    bool wait_for_debugger)
+{
+    return impl_->connect_inspector(std::move(message_sink), wait_for_debugger);
+}
+
+bool v8_dom_runtime::dispatch_inspector_message(
+    uint64_t session_id,
+    std::string message)
+{
+    return impl_->dispatch_inspector_message(session_id, std::move(message));
+}
+
+bool v8_dom_runtime::disconnect_inspector(uint64_t session_id)
+{
+    return impl_->disconnect_inspector(session_id);
+}
+
+bool v8_dom_runtime::pump_inspector_task()
+{
+    if (!impl_->inspector_available_for_dispatch()) return false;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    return impl_->process_inspector_tasks(false);
+}
+
+bool v8_dom_runtime::has_pending_inspector_tasks() const noexcept
+{
+    return impl_->has_pending_inspector_tasks();
 }
 
 bool v8_dom_runtime::dispatch_resize()

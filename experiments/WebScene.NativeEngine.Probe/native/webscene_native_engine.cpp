@@ -227,6 +227,7 @@ private:
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
+    std::atomic<webscene_native::v8_dom_runtime*> inspector_runtime_{nullptr};
 #endif
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
@@ -742,6 +743,46 @@ uint8_t webscene_engine_execute_script(
         && engine->execute_script(source, source_length, document_name, document_name_length)
         ? 1U
         : 0U;
+}
+
+uint64_t webscene_engine_inspector_connect(
+    webscene_engine* engine,
+    webscene_inspector_message_callback message_callback,
+    void* user_data,
+    uint8_t wait_for_debugger)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->connect_inspector(
+            message_callback,
+            user_data,
+            wait_for_debugger != 0U);
+}
+
+uint8_t webscene_engine_inspector_dispatch(
+    webscene_engine* engine,
+    uint64_t session_id,
+    const char* message,
+    size_t message_length)
+{
+    return engine != nullptr
+        && engine->dispatch_inspector(session_id, message, message_length)
+        ? 1U
+        : 0U;
+}
+
+uint8_t webscene_engine_inspector_disconnect(
+    webscene_engine* engine,
+    uint64_t session_id)
+{
+    return engine != nullptr && engine->disconnect_inspector(session_id)
+        ? 1U
+        : 0U;
+}
+
+uint8_t webscene_engine_inspector_is_available(const webscene_engine* engine)
+{
+    return engine != nullptr && engine->inspector_available() ? 1U : 0U;
 }
 
 uint64_t webscene_engine_begin_evaluate_v3(

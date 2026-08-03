@@ -10,6 +10,16 @@
     v8::CpuProfiler* cpu_profiler{nullptr};
 #endif
     v8::Global<v8::Context> context;
+    std::unique_ptr<inspector_client> inspector_client_value;
+    std::unique_ptr<v8_inspector::V8Inspector> inspector;
+    std::unordered_map<uint64_t, inspector_session> inspector_sessions;
+    mutable std::mutex inspector_mutex;
+    std::condition_variable inspector_condition;
+    std::deque<inspector_action> inspector_actions;
+    std::atomic<uint64_t> next_inspector_session_id{1U};
+    std::atomic<bool> inspector_ready{false};
+    bool inspector_pause_loop_running{false};
+    bool inspector_shutting_down{false};
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;
@@ -91,6 +101,7 @@
     std::function<void()> host_request_available;
     std::function<void()> interop_callback_available;
     v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
+    std::function<bool()> shutdown_requested;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};

@@ -68,6 +68,7 @@ uint8_t measure_baseline_fixture_text(
 // feature; shared fixtures remain visible without additional test-only APIs.
 #include "native_v8_runtime_document_tests.inc"
 #include "native_v8_runtime_test_support.inc"
+#include "native_v8_runtime_inspector_tests.inc"
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
@@ -135,6 +136,7 @@ int main()
     test_process_wide_compilation_single_flight();
     auto* engine = webscene_engine_create(64);
     require(engine != nullptr, "engine creation failed");
+    test_v8_inspector_raw_cdp_session(engine);
     test_binary_interop_result_is_leased_and_pooled(engine);
     test_binary_interop_preserves_json_edge_semantics(engine);
     test_generated_binary_invocation_uses_tagged_arguments(engine);

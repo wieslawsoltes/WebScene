@@ -1813,6 +1813,9 @@
             v8::kEmbedderDataTypeTagDefault);
         frame_context.Reset(isolate, local_frame_context);
         install_frame_globals(local_frame_context, frame, frame_body);
+        register_inspector_context(
+            local_frame_context,
+            "WebScene frame " + std::to_string(frame.id));
 
         const auto execute_group = [&](bool defer) {
             for (const auto& script : scripts) {
