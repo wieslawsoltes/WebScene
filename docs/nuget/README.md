@@ -12,6 +12,8 @@ fallback.
 - `WebScene.Backend.Abstractions` — presenter capabilities and manifests.
 - `WebScene.Backend.Avalonia` — the reference native scene presenter.
 - `WebScene.Backend.Uno` — the current Uno presenter proof.
+- `WebScene.Diagnostics.Cdp` — optional Chrome discovery and WebSocket hosting for
+  raw native V8 Inspector sessions.
 - `WebScene.JavaScript.Interop` and
   `WebScene.JavaScript.Interop.Generator` — strongly typed .NET interop generated
   from reviewed TypeScript declarations.
