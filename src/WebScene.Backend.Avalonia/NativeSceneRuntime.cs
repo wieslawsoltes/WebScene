@@ -139,7 +139,7 @@ internal sealed class NativeSceneRenderObserver
     }
 }
 
-public static unsafe class NativeWebSceneApi
+public static unsafe partial class NativeWebSceneApi
 {
 
     private const string LibraryName = "webscene_native_engine";
@@ -165,6 +165,10 @@ public static unsafe class NativeWebSceneApi
         NotifyAnimationFrameRequested;
     private static readonly IntPtr AnimationFrameRequestedAddress =
         Marshal.GetFunctionPointerForDelegate(AnimationFrameRequested);
+    private static readonly InspectorMessageCallback InspectorMessage =
+        NotifyInspectorMessage;
+    private static readonly IntPtr InspectorMessageAddress =
+        Marshal.GetFunctionPointerForDelegate(InspectorMessage);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -366,6 +370,13 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void AnimationFrameRequestedCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void InspectorMessageCallback(
+        IntPtr userData,
+        ulong sessionId,
+        IntPtr message,
+        nuint messageLength);
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -405,6 +416,23 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native animation-frame notification] {error}");
+        }
+    }
+
+    private static void NotifyInspectorMessage(
+        IntPtr userData,
+        ulong sessionId,
+        IntPtr message,
+        nuint messageLength)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.NotifyInspectorMessage(sessionId, message, messageLength);
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[WebScene V8 inspector notification] {error}");
         }
     }
 
@@ -520,6 +548,8 @@ public static unsafe class NativeWebSceneApi
         Action? animationFrameRequested) : IDisposable
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<ulong, NativeV8InspectorSession>
+            _inspectorSessions = new();
 #if !WEBSCENE_UNO
         private readonly ConcurrentDictionary<string, byte> _registeredFontSources =
             new(StringComparer.Ordinal);
@@ -527,7 +557,37 @@ public static unsafe class NativeWebSceneApi
         internal NativeTextShaping.WebTypefaceRegistry WebTypefaces { get; } =
             NativeTextShaping.CreateWebTypefaceRegistry();
 
-        public void Dispose() => WebTypefaces.Dispose();
+        public void Dispose()
+        {
+            foreach (var session in _inspectorSessions.Values)
+            {
+                session.CompleteFromEngine();
+            }
+            _inspectorSessions.Clear();
+            WebTypefaces.Dispose();
+        }
+
+        public void RegisterInspectorSession(NativeV8InspectorSession session)
+            => _inspectorSessions[session.SessionId] = session;
+
+        public void UnregisterInspectorSession(ulong sessionId)
+            => _inspectorSessions.TryRemove(sessionId, out _);
+
+        public void NotifyInspectorMessage(
+            ulong sessionId,
+            IntPtr message,
+            nuint messageLength)
+        {
+            if (!_inspectorSessions.TryGetValue(sessionId, out var session)
+                || message == IntPtr.Zero
+                || messageLength == 0)
+            {
+                return;
+            }
+            var bytes = new byte[checked((int)messageLength)];
+            Marshal.Copy(message, bytes, 0, bytes.Length);
+            session.Publish(bytes);
+        }
 
         public void NotifyScenePublished(NativeScenePublished scene)
             => scenePublished(scene);

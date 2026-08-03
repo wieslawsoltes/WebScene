@@ -96,6 +96,22 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             callbackSignal.WaitAsync);
     }
 
+    /// <summary>
+    /// Opens a raw V8 Inspector Protocol session for this view's dedicated
+    /// isolate. The session can be forwarded unchanged to a CDP host.
+    /// </summary>
+    public INativeV8InspectorSession OpenV8InspectorSession(
+        bool waitForDebugger = false)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
+    }
+
     internal static NativePreferredColorScheme ResolvePreferredColorScheme(
         ThemeVariant themeVariant)
         => themeVariant == ThemeVariant.Dark
