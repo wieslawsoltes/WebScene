@@ -128,6 +128,22 @@ std::string inspector_json_string(
         : std::string{message.substr(value_start, end - value_start)};
 }
 
+int inspector_json_integer(
+    std::string_view message,
+    std::string_view property)
+{
+    const auto prefix = std::string{"\""} + std::string{property} + "\":";
+    const auto start = message.find(prefix);
+    if (start == std::string_view::npos) return -1;
+    const auto value_start = start + prefix.size();
+    int value = -1;
+    const auto parsed = std::from_chars(
+        message.data() + value_start,
+        message.data() + message.size(),
+        value);
+    return parsed.ec == std::errc{} ? value : -1;
+}
+
 void dispatch_inspector_test_message(
     webscene_engine* engine,
     uint64_t session_id,
@@ -671,6 +687,126 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":63)", R"("value":12)"),
         "Step-out execution did not complete");
+
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":64,"method":"Runtime.enable"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":64)"),
+        "Inspector iframe lifecycle could not re-enable Runtime");
+    const auto contexts_created_before_frame = count_inspector_messages(
+        messages,
+        R"("method":"Runtime.executionContextCreated")");
+    const auto contexts_destroyed_before_frame = count_inspector_messages(
+        messages,
+        R"("method":"Runtime.executionContextDestroyed")");
+    execute(
+        engine,
+        R"JS(
+          globalThis.__inspectorLifecycleFrame = document.createElement('iframe');
+          document.body.appendChild(globalThis.__inspectorLifecycleFrame);
+          const frameDocument = globalThis.__inspectorLifecycleFrame.contentDocument;
+          frameDocument.open();
+          frameDocument.write('<html><body><script>globalThis.__inspectorFrameLoaded = 42;</script></body></html>');
+          frameDocument.close();
+        )JS",
+        "webscene-inspector-frame-lifecycle.js");
+    for (auto attempt = 0;
+         attempt < 100
+            && count_inspector_messages(
+                messages,
+                R"("method":"Runtime.executionContextCreated")")
+                < contexts_created_before_frame + 1U;
+         ++attempt) {
+        static_cast<void>(evaluate(
+            engine,
+            "0",
+            "webscene-inspector-frame-task-pump.js"));
+    }
+    if (!wait_for_inspector_message_count(
+            messages,
+            R"("method":"Runtime.executionContextCreated")",
+            contexts_created_before_frame + 1U)) {
+        const auto frame_state = evaluate(
+            engine,
+            "({ connected: globalThis.__inspectorLifecycleFrame?.isConnected, "
+            "error: globalThis.__inspectorLifecycleFrame?.getAttribute('data-webscene-frame-error'), "
+            "ready: globalThis.__inspectorLifecycleFrame?.contentDocument?.readyState, "
+            "window: typeof globalThis.__inspectorLifecycleFrame?.contentWindow })",
+            "webscene-inspector-frame-state.js");
+        const auto frame_script_message = find_inspector_message(
+            messages,
+            R"("method":"Debugger.scriptParsed")",
+            "webscene-frame-inline");
+        fail(
+            "Inspector did not report the iframe execution context: "
+            + frame_state + " script=" + frame_script_message);
+    }
+    const auto frame_context_message = find_inspector_message(
+        messages,
+        R"("method":"Runtime.executionContextCreated")",
+        "WebScene frame");
+    const auto frame_context_id = inspector_json_integer(
+        frame_context_message,
+        "id");
+    require(frame_context_id > 0, "Inspector iframe execution context id was invalid");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":65,\"method\":\"Runtime.evaluate\",\"params\":{\"contextId\":"}
+            + std::to_string(frame_context_id)
+            + ",\"expression\":\"globalThis.__inspectorFrameObject = { value: 42 }\",\"returnByValue\":false,\"objectGroup\":\"frame-lifecycle\"}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":65)", R"("objectId")"),
+        "Inspector could not evaluate in the iframe execution context");
+    const auto frame_object_response = find_inspector_message(
+        messages,
+        R"("id":65)",
+        R"("objectId")");
+    const auto frame_object_id = inspector_json_string(
+        frame_object_response,
+        "objectId");
+    require(!frame_object_id.empty(), "Inspector iframe remote object id was empty");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":66,"method":"Runtime.evaluate","params":{"expression":"document.body.removeChild(globalThis.__inspectorLifecycleFrame); delete globalThis.__inspectorLifecycleFrame;","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":66)"),
+        "Inspector iframe removal did not complete");
+    for (auto attempt = 0;
+         attempt < 100
+            && count_inspector_messages(
+                messages,
+                R"("method":"Runtime.executionContextDestroyed")")
+                < contexts_destroyed_before_frame + 1U;
+         ++attempt) {
+        static_cast<void>(evaluate(
+            engine,
+            "0",
+            "webscene-inspector-frame-removal-pump.js"));
+    }
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Runtime.executionContextDestroyed")",
+            contexts_destroyed_before_frame + 1U),
+        "Inspector did not report the removed iframe execution context");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.executionContextDestroyed")",
+            "\"executionContextId\":" + std::to_string(frame_context_id)),
+        "Inspector destroyed a different execution context than the removed iframe");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        std::string{"{\"id\":67,\"method\":\"Runtime.getProperties\",\"params\":{\"objectId\":\""}
+            + frame_object_id + "\",\"ownProperties\":true}}" );
+    require(
+        wait_for_inspector_message(messages, R"("id":67)", R"("error")"),
+        "A removed iframe's V8 remote object remained usable");
 
     constexpr std::string_view exception_source{
         "throw new Error('webscene-inspector-exception');"};

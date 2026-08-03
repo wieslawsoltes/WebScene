@@ -121,7 +121,9 @@ toolchain rather than a source-map rewrite.
   disconnect removes its queued commands so overload cannot trap a paused
   isolate behind stale debugger work.
 - Iframe contexts use the same context group, allowing one DevTools target to
-  debug the complete WebScene document.
+  debug the complete WebScene document. Each frame emits its own execution
+  context lifecycle, accepts context-targeted evaluation, and invalidates its
+  remote objects when the frame is removed.
 - Top-level document replacement resets the V8 Inspector context group, clears
   stale remote objects and debugger state, and re-registers the root context
   with the new document URL as its origin before new scripts execute.

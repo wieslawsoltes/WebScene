@@ -389,8 +389,44 @@
         }
     }
 
+    void destroy_detached_frame_contexts(dom_node& root)
+    {
+        std::unordered_set<uint32_t> node_ids;
+        visit_subtree(root, [&](const dom_node& node) {
+            node_ids.insert(node.id);
+        });
+        for (const auto id : node_ids) {
+            const auto found = actual_frame_contexts.find(id);
+            if (found != actual_frame_contexts.end()
+                && !found->second.IsEmpty()) {
+                const auto local_context = found->second.Get(isolate);
+                destroy_inspector_context(local_context);
+                if (!frame_context.IsEmpty()
+                    && frame_context.Get(isolate) == local_context) {
+                    frame_context.Reset();
+                    frame_base_address.clear();
+                }
+            }
+            actual_frame_contexts.erase(id);
+            actual_frame_windows.erase(id);
+            actual_frame_documents.erase(id);
+            frame_session_storage.erase(id);
+            frame_load_listeners.erase(id);
+        }
+        for (auto& [type, listeners] : frame_event_listeners) {
+            static_cast<void>(type);
+            std::erase_if(listeners, [&](const auto& listener) {
+                return node_ids.contains(listener.target);
+            });
+        }
+    }
+
     void weaken_detached_subtree_wrappers(dom_node& root)
     {
+        // Detaching an iframe discards its browsing context immediately. DOM
+        // wrappers may remain alive for JavaScript references, but Inspector
+        // execution contexts and remote objects must not survive until the
+        // detached native subtree is eventually reclaimed.
         // A persistent V8 handle is a GC root. Keeping every historical DOM
         // wrapper strong therefore retains React's expando graph forever after
         // the corresponding native node is removed. Model a detached DOM tree
@@ -455,6 +491,7 @@
                 weaken(canvas_contexts, key);
             });
         }
+        destroy_detached_frame_contexts(root);
         register_detached_subtree(root);
     }
 
