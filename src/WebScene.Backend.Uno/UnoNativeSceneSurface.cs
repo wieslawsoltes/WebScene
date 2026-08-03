@@ -543,6 +543,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
+    private CancellationTokenSource? _navigationCancellation;
 
     public UnoNativeWebSceneView()
     {
@@ -741,9 +742,12 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         try
         {
             await UnloadCoreAsync();
+            _navigationCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime.PrewarmAsync(
                 options.NativeLibraryPath,
-                cancellationToken);
+                navigationToken);
             if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
             {
                 Directory.CreateDirectory(options.CompilationCacheDirectory);
@@ -774,7 +778,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             Source = options.Source;
             if (beforeNavigation is not null)
             {
-                await beforeNavigation(this, cancellationToken)
+                await beforeNavigation(this, navigationToken)
                     .ConfigureAwait(false);
             }
             NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
@@ -789,7 +793,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             using var timeout =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                CancellationTokenSource.CreateLinkedTokenSource(navigationToken);
             if (timeoutValue != Timeout.InfiniteTimeSpan)
             {
                 timeout.CancelAfter(timeoutValue);
@@ -830,21 +834,17 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _lifecycleGate.WaitAsync();
-        try
-        {
-            await UnloadCoreAsync();
-        }
-        finally
-        {
-            _lifecycleGate.Release();
-        }
-    }
+    public ValueTask DisposeAsync()
+        => UnoNativeWebSceneLifecycle.DisposeAsync(
+            _navigationCancellation,
+            _lifecycleGate,
+            UnloadCoreAsync);
 
     private async Task UnloadCoreAsync()
     {
+        _navigationCancellation?.Cancel();
+        _navigationCancellation?.Dispose();
+        _navigationCancellation = null;
         Source = null;
         _surface.SetEngine(IntPtr.Zero);
         var interop = Interlocked.Exchange(ref _interop, null);
@@ -865,6 +865,26 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         finally
         {
             interop?.Dispose();
+        }
+    }
+}
+
+internal static class UnoNativeWebSceneLifecycle
+{
+    public static async ValueTask DisposeAsync(
+        CancellationTokenSource? navigationCancellation,
+        SemaphoreSlim lifecycleGate,
+        Func<Task> unloadAsync)
+    {
+        navigationCancellation?.Cancel();
+        await lifecycleGate.WaitAsync();
+        try
+        {
+            await unloadAsync();
+        }
+        finally
+        {
+            lifecycleGate.Release();
         }
     }
 }
