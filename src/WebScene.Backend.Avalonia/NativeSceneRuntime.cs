@@ -292,11 +292,13 @@ public static unsafe partial class NativeWebSceneApi
 
     public static void EngineDestroy(IntPtr engine)
     {
+        ResourceBridge? resourceBridge = null;
         if (EngineResourceBridges.TryGetValue(engine, out var existing)
             && existing.IsAllocated)
         {
-            (existing.Target as ResourceBridge)?
-                .CompleteInspectorSessionsBeforeEngineDestroy();
+            resourceBridge = existing.Target as ResourceBridge;
+            resourceBridge?.InspectorLifetime.BeginClosingAndWait();
+            resourceBridge?.CompleteInspectorSessionsBeforeEngineDestroy();
         }
         EngineDestroyNative(engine);
         if (EngineResourceBridges.TryRemove(engine, out var bridge) && bridge.IsAllocated)
@@ -558,6 +560,8 @@ public static unsafe partial class NativeWebSceneApi
 #endif
         internal NativeTextShaping.WebTypefaceRegistry WebTypefaces { get; } =
             NativeTextShaping.CreateWebTypefaceRegistry();
+
+        internal NativeEngineLifetime InspectorLifetime { get; } = new();
 
         public void Dispose()
         {
