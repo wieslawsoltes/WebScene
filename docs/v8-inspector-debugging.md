@@ -21,7 +21,7 @@ availability signal. The managed session schedules draining away from the V8
 stack and uses a required-size copy, so managed code never receives complete
 JSON or calls back into the engine from the worker notification. The original
 direct-message callback remains exported for ABI compatibility, while managed
-hosts use `webscene_engine_inspector_connect_v2` and
+hosts use `webscene_engine_inspector_connect_v3` and
 `webscene_engine_inspector_take_message`.
 
 When V8 pauses, the inspector client runs a nested message loop on that same

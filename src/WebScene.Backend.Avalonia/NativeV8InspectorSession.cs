@@ -198,7 +198,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
 
 public static unsafe partial class NativeWebSceneApi
 {
-    [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_connect_v2")]
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_inspector_connect_v3")]
     private static extern ulong EngineInspectorConnectV2(
         IntPtr engine,
         IntPtr messageAvailableCallback,

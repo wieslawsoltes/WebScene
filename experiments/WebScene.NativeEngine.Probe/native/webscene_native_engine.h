@@ -29,7 +29,7 @@ typedef void (*webscene_inspector_message_callback)(
     size_t message_length);
 
 /* Signals that one or more Inspector messages can be pulled off the worker. */
-typedef void (*webscene_inspector_message_available_callback)(
+typedef void (*webscene_inspector_message_available_callback_v3)(
     void* user_data,
     uint64_t session_id);
 
@@ -893,9 +893,9 @@ WEBSCENE_API uint64_t webscene_engine_inspector_connect(
  * Preferred non-reentrant session contract. The callback only signals
  * availability; use webscene_engine_inspector_take_message to copy messages.
  */
-WEBSCENE_API uint64_t webscene_engine_inspector_connect_v2(
+WEBSCENE_API uint64_t webscene_engine_inspector_connect_v3(
     webscene_engine* engine,
-    webscene_inspector_message_available_callback message_available_callback,
+    webscene_inspector_message_available_callback_v3 message_available_callback,
     void* user_data,
     uint8_t wait_for_debugger);
 /*

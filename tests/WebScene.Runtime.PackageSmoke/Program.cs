@@ -74,7 +74,7 @@ try
     }
     foreach (var inspectorExport in new[]
              {
-                 "webscene_engine_inspector_connect_v2",
+                 "webscene_engine_inspector_connect_v3",
                  "webscene_engine_inspector_take_message"
              })
     {

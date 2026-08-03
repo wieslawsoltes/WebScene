@@ -307,7 +307,7 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         "The second Inspector session disconnect was rejected");
 
     pull_inspector_notifications pull_notifications;
-    const auto pull_session_id = webscene_engine_inspector_connect_v2(
+    const auto pull_session_id = webscene_engine_inspector_connect_v3(
         engine,
         receive_inspector_message_available,
         &pull_notifications,
@@ -350,7 +350,7 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         "The pull-based Inspector output survived session disconnect");
 
     pull_inspector_notifications overflow_notifications;
-    const auto overflow_session_id = webscene_engine_inspector_connect_v2(
+    const auto overflow_session_id = webscene_engine_inspector_connect_v3(
         engine,
         receive_inspector_message_available,
         &overflow_notifications,

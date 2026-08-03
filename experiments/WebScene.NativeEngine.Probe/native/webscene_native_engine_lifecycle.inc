@@ -211,7 +211,7 @@
     }
 
     uint64_t connect_inspector_v2(
-        webscene_inspector_message_available_callback callback,
+        webscene_inspector_message_available_callback_v3 callback,
         void* user_data,
         bool wait_for_debugger)
     {

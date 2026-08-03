@@ -177,7 +177,7 @@ struct inspector_output_state final {
     static constexpr size_t maximum_messages = 1024U;
     static constexpr size_t maximum_bytes = 16U * 1024U * 1024U;
 
-    webscene_inspector_message_available_callback callback{nullptr};
+    webscene_inspector_message_available_callback_v3 callback{nullptr};
     void* user_data{nullptr};
     std::mutex mutex;
     std::deque<std::string> messages;
@@ -816,9 +816,9 @@ uint64_t webscene_engine_inspector_connect(
             wait_for_debugger != 0U);
 }
 
-uint64_t webscene_engine_inspector_connect_v2(
+uint64_t webscene_engine_inspector_connect_v3(
     webscene_engine* engine,
-    webscene_inspector_message_available_callback message_available_callback,
+    webscene_inspector_message_available_callback_v3 message_available_callback,
     void* user_data,
     uint8_t wait_for_debugger)
 {
