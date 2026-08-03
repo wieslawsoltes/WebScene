@@ -156,6 +156,42 @@ public sealed class WebSceneV8InspectorHostTests
     }
 
     [Fact]
+    public async Task StopIgnoresConnectionFaultAlreadyObservedByHost()
+    {
+        var session = new FaultingInspectorSession();
+        await using var host = new WebSceneV8InspectorHost(
+            () => session,
+            () => "webscene://faulting-connection",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0
+            });
+        await host.StartAsync();
+
+        using var http = new HttpClient();
+        using var discovery = JsonDocument.Parse(
+            await http.GetStringAsync(new Uri(host.DiscoveryUri, "json/list")));
+        var websocketUrl = discovery.RootElement[0]
+            .GetProperty("webSocketDebuggerUrl")
+            .GetString();
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri(websocketUrl!), CancellationToken.None);
+        await socket.SendAsync(
+            Encoding.UTF8.GetBytes("{\"id\":1,\"method\":\"Runtime.enable\"}"),
+            WebSocketMessageType.Text,
+            true,
+            CancellationToken.None);
+        await session.SendEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var stop = host.StopAsync();
+        Assert.False(stop.IsCompleted);
+        session.FailSend(new InvalidOperationException("malformed client message"));
+
+        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task RemoteDiscoveryRequiresTokenBeforePublishingWebSocketUrl()
     {
         var address = GetNonLoopbackAddress();
@@ -231,6 +267,40 @@ public sealed class WebSceneV8InspectorHostTests
         {
             _outgoing.Writer.TryComplete();
             Received.Writer.TryComplete();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FaultingInspectorSession : INativeV8InspectorSession
+    {
+        private readonly Channel<ReadOnlyMemory<byte>> _outgoing =
+            Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
+        private readonly TaskCompletionSource<bool> _sendCompletion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> SendEntered { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ulong SessionId => 2;
+
+        public ValueTask SendAsync(
+            ReadOnlyMemory<byte> message,
+            CancellationToken cancellationToken = default)
+        {
+            SendEntered.TrySetResult(true);
+            return new ValueTask(_sendCompletion.Task);
+        }
+
+        public IAsyncEnumerable<ReadOnlyMemory<byte>> ReadAllAsync(
+            CancellationToken cancellationToken = default)
+            => _outgoing.Reader.ReadAllAsync(cancellationToken);
+
+        public void FailSend(Exception error)
+            => _sendCompletion.TrySetException(error);
+
+        public ValueTask DisposeAsync()
+        {
+            _outgoing.Writer.TryComplete();
             return ValueTask.CompletedTask;
         }
     }

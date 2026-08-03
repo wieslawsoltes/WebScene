@@ -222,17 +222,22 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
                 break;
             }
             var connectionId = Interlocked.Increment(ref _nextConnectionId);
-            var task = HandleAsync(context, cancellationToken);
-            lock (_gate) _connections[connectionId] = task;
-            _ = ObserveConnectionAsync(connectionId, task);
+            var handler = HandleAsync(context, cancellationToken);
+            var completion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_gate) _connections[connectionId] = completion.Task;
+            _ = ObserveConnectionAsync(connectionId, handler, completion);
         }
     }
 
-    private async Task ObserveConnectionAsync(long connectionId, Task task)
+    private async Task ObserveConnectionAsync(
+        long connectionId,
+        Task handler,
+        TaskCompletionSource<bool> completion)
     {
         try
         {
-            await task.ConfigureAwait(false);
+            await handler.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -243,6 +248,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         }
         finally
         {
+            completion.TrySetResult(true);
             lock (_gate) _connections.Remove(connectionId);
         }
     }
