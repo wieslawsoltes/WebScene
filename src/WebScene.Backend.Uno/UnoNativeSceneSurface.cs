@@ -571,6 +571,44 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
     }
 
+    /// <summary>
+    /// Waits until the engine worker has initialized the dedicated-isolate V8
+    /// Inspector. Engine creation is asynchronous, so startup hosts should use
+    /// this barrier before opening a pre-navigation session.
+    /// </summary>
+    public async ValueTask WaitForV8InspectorAvailableAsync(
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var timeoutValue = timeout ?? TimeSpan.FromSeconds(10);
+        using var deadline = new CancellationTokenSource(timeoutValue);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadline.Token);
+        try
+        {
+            while (true)
+            {
+                var engine = Volatile.Read(ref _engine);
+                if (engine == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException(
+                        "The native WebScene document is not loaded.");
+                }
+                if (NativeWebSceneApi.IsInspectorAvailable(engine)) return;
+                await Task.Delay(10, linked.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (
+            deadline.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "The dedicated-isolate V8 Inspector did not become available. "
+                + "Shared-isolate mode intentionally does not expose Inspector sessions.");
+        }
+    }
+
     public NativeJavaScriptInvoker CreateJavaScriptInvoker()
     {
         var engine = Volatile.Read(ref _engine);

@@ -243,15 +243,20 @@ public sealed partial class MainWindow : Window
         Console.Error.WriteLine($"{title}: {error}");
     }
 
-    private ValueTask PrepareInspectorAsync(
+    private async ValueTask PrepareInspectorAsync(
         NativeWebSceneView view,
         CancellationToken cancellationToken)
-        => new(SelectInspectorTargetAsync(
+    {
+        if (_inspectorLaunch is null) return;
+        await view.WaitForV8InspectorAvailableAsync(
+            cancellationToken: cancellationToken);
+        await SelectInspectorTargetAsync(
             view,
             ReferenceEquals(view, EditorHost)
                 ? "WebScene V8 · Monaco"
                 : "WebScene V8 · TradingView",
-            cancellationToken));
+            cancellationToken);
+    }
 
     private TimeSpan? FirstDocumentSceneTimeout
         => _inspectorLaunch?.WaitForDebugger == true

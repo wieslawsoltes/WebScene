@@ -297,15 +297,20 @@ public sealed partial class MainPage : Page
         Console.Error.WriteLine($"{title}: {error}");
     }
 
-    private ValueTask PrepareInspectorAsync(
+    private async ValueTask PrepareInspectorAsync(
         UnoNativeWebSceneView view,
         CancellationToken cancellationToken)
-        => new(SelectInspectorTargetAsync(
+    {
+        if (_inspectorLaunch is null) return;
+        await view.WaitForV8InspectorAvailableAsync(
+            cancellationToken: cancellationToken);
+        await SelectInspectorTargetAsync(
             view,
             ReferenceEquals(view, _editor)
                 ? "WebScene V8 · Monaco · Uno"
                 : "WebScene V8 · TradingView · Uno",
-            cancellationToken));
+            cancellationToken);
+    }
 
     private TimeSpan? DocumentBarrierTimeout
         => _inspectorLaunch?.WaitForDebugger == true
