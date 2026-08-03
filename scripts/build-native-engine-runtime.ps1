@@ -108,6 +108,9 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
             throw "Cannot apply or recognize V8 patch '$PatchPath' in '$Checkout'."
         }
     }
+    # WebScene owns the JavaScript console bindings. The inspector bridge keeps
+    # the original V8 values so CDP clients receive object ids and previews.
+    Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/v8-patches/V8InspectorConsolePatch.txt")
     if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/v8-patches/V8Patch.txt")
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
@@ -148,6 +151,10 @@ $icuLicense = Join-Path $V8Root "third_party/icu/LICENSE"
 $v8VersionHeader = Join-Path $V8Root "include/v8-version.h"
 @((Join-Path $V8Root "include/v8.h"), $v8VersionHeader, $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Required native runtime input is missing: $_" }
+}
+$v8InspectorHeader = Join-Path $V8Root "include/v8-inspector.h"
+if (-not (Select-String -Path $v8InspectorHeader -Pattern 'virtual void consoleAPICalled' -Quiet)) {
+    throw "The V8 SDK at '$V8Root' does not contain WebScene's inspector console bridge. Rebuild it with V8InspectorConsolePatch.txt."
 }
 $requestedV8Parts = $v8Revision.Split('.')
 if ($requestedV8Parts.Length -lt 3 `

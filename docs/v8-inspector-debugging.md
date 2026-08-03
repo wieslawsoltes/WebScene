@@ -69,6 +69,12 @@ Then:
 2. Open **Configure** under network targets and add `localhost:9229`.
 3. Select **inspect** on the discovered `WebScene V8` target.
 
+The Avalonia native showcase exposes this host directly when launched with
+`--v8-inspector` (and optionally `--v8-inspector-port 9229`). For a local,
+deterministic target, launch it with `--editor --v8-inspector`; the console logs
+the exact discovery URL. The equivalent environment switches are
+`WEBSCENE_V8_INSPECTOR=1` and `WEBSCENE_V8_INSPECTOR_PORT`.
+
 The discovery document includes an authenticated
 `webSocketDebuggerUrl`. Loopback discovery is unauthenticated so
 `chrome://inspect` can poll it, while every WebSocket connection requires the
@@ -112,15 +118,26 @@ toolchain rather than a source-map rewrite.
 - The opt-in `WEBSCENE_V8_SHARED_ISOLATE` mode intentionally reports Inspector
   unavailable. Its independent engine workers share an isolate, which is not a
   safe ownership model for a per-view inspector pause loop.
-- WebScene's current host-provided `console` object continues to feed the
-  existing console-message queue. Full Runtime console-event parity requires
-  routing those host console calls into V8 Inspector's console instrumentation.
+- WebScene's host-provided `console.log`, `console.warn`, and `console.error`
+  feed both the existing console-message queue and V8 Inspector's exact
+  `Runtime.consoleAPICalled` pipeline. Object arguments retain V8 remote-object
+  IDs and previews, so DevTools clients can expand them with
+  `Runtime.getProperties`.
+- Upstream V8 does not expose public console insertion for embedder-owned
+  console objects. WebScene applies the narrow, versioned
+  `V8InspectorConsolePatch.txt` bridge while building its pinned V8 SDK; the
+  implementation still delegates storage, stack capture, wrapping, and event
+  delivery to V8 Inspector.
 
 ## Validation
 
 Native integration coverage enables Runtime and Debugger, evaluates an
 expression, observes `Debugger.scriptParsed`, pauses on a `debugger` statement,
-resumes, and verifies an async stack for a timer callback. Managed integration
-coverage starts the real discovery/WebSocket host, fetches `/json/list`, opens
-the authenticated endpoint with `ClientWebSocket`, and verifies complete CDP
-messages in both directions.
+resumes, verifies an async stack for a timer callback, receives uncaught errors
+and promise rejections through `Runtime.exceptionThrown`, and confirms that a
+host console object arrives through `Runtime.consoleAPICalled` with an
+expandable V8 object ID. The same native session starts and stops V8 CPU and
+allocation sampling, validates returned profile trees, and reads live heap
+usage. Managed integration coverage starts the real discovery/WebSocket host,
+fetches `/json/list`, opens the authenticated endpoint with `ClientWebSocket`,
+and verifies complete CDP messages in both directions.

@@ -178,6 +178,31 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             "webscene-inspector-rejection"),
         "unhandled promise rejection was not forwarded through Runtime.exceptionThrown");
 
+    constexpr std::string_view console_source{
+        "console.warn('webscene-inspector-console', { answer: 42 });"};
+    constexpr std::string_view console_name{
+        "webscene-inspector-console-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            console_source.data(),
+            console_source.size(),
+            console_name.data(),
+            console_name.size()) != 0,
+        "Inspector console fixture was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.consoleAPICalled")",
+            "webscene-inspector-console"),
+        "WebScene console call was not forwarded through Runtime.consoleAPICalled");
+    require(
+        wait_for_inspector_message(
+            messages,
+            "webscene-inspector-console",
+            R"("objectId")"),
+        "Runtime.consoleAPICalled did not expose an expandable V8 object");
+
     dispatch_inspector_test_message(
         engine,
         session_id,
@@ -211,6 +236,86 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":6)"),
         "async timer Debugger.resume response was not forwarded");
+
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":7,"method":"Profiler.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":8,"method":"Profiler.start"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":7)"),
+        "Profiler.enable response was not forwarded");
+    require(
+        wait_for_inspector_message(messages, R"("id":8)"),
+        "Profiler.start response was not forwarded");
+    constexpr std::string_view profiler_source{
+        "let webSceneProfileTotal = 0;\n"
+        "for (let index = 0; index < 100000; ++index) {\n"
+        "  webSceneProfileTotal += Math.sqrt(index);\n"
+        "}\n"
+        "globalThis.webSceneProfileTotal = webSceneProfileTotal;"};
+    constexpr std::string_view profiler_name{
+        "webscene-inspector-profiler-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            profiler_source.data(),
+            profiler_source.size(),
+            profiler_name.data(),
+            profiler_name.size()) != 0,
+        "Inspector CPU-profiler fixture was rejected");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":9,"method":"Profiler.stop"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":9)", R"("nodes")"),
+        "Profiler.stop did not return a V8 CPU profile");
+
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":10,"method":"HeapProfiler.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":11,"method":"HeapProfiler.startSampling","params":{"samplingInterval":16384}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":10)"),
+        "HeapProfiler.enable response was not forwarded");
+    require(
+        wait_for_inspector_message(messages, R"("id":11)"),
+        "HeapProfiler.startSampling response was not forwarded");
+    constexpr std::string_view allocation_source{
+        "globalThis.webSceneInspectorAllocations = Array.from(\n"
+        "  { length: 256 }, (_, index) => ({ index, payload: 'x'.repeat(1024) }));"};
+    constexpr std::string_view allocation_name{
+        "webscene-inspector-allocation-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            allocation_source.data(),
+            allocation_source.size(),
+            allocation_name.data(),
+            allocation_name.size()) != 0,
+        "Inspector allocation-profiler fixture was rejected");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":12,"method":"HeapProfiler.stopSampling"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":12)", R"("head")"),
+        "HeapProfiler.stopSampling did not return a V8 allocation profile");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":13,"method":"Runtime.getHeapUsage"})");
+    require(
+        wait_for_inspector_message(messages, R"("id":13)", R"("usedSize")"),
+        "Runtime.getHeapUsage did not return V8 heap metrics");
 
     require(
         webscene_engine_inspector_disconnect(engine, session_id) != 0,

@@ -1,0 +1,85 @@
+diff --git a/include/v8-inspector.h b/include/v8-inspector.h
+index d2909b68..7b4b2a2d 100644
+--- a/include/v8-inspector.h
++++ b/include/v8-inspector.h
+@@ -12,6 +12,7 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "cppgc/garbage-collected.h"  // NOLINT(build/include_directory)
+ #include "v8-isolate.h"       // NOLINT(build/include_directory)
+@@ -401,6 +402,14 @@ class V8_EXPORT V8Inspector {
+   virtual void idleStarted() = 0;
+   virtual void idleFinished() = 0;
+ 
++  // Console instrumentation for embedders that provide their own console
++  // object instead of V8's internal ConsoleDelegate bindings. Values are
++  // retained and wrapped by Inspector, preserving object ids and previews.
++  virtual void consoleAPICalled(
++      v8::Local<v8::Context>, v8::Isolate::MessageErrorLevel,
++      const std::vector<v8::Local<v8::Value>>& arguments,
++      StringView consoleContext = {}) = 0;
++
+   // Async stack traces instrumentation.
+   virtual void asyncTaskScheduled(StringView taskName, void* task,
+                                   bool recurring) = 0;
+diff --git a/src/inspector/v8-inspector-impl.cc b/src/inspector/v8-inspector-impl.cc
+index acea5a50..02660df5 100644
+--- a/src/inspector/v8-inspector-impl.cc
++++ b/src/inspector/v8-inspector-impl.cc
+@@ -367,6 +367,38 @@ void V8InspectorImpl::idleStarted() { m_isolate->SetIdle(true); }
+ 
+ void V8InspectorImpl::idleFinished() { m_isolate->SetIdle(false); }
+ 
++void V8InspectorImpl::consoleAPICalled(
++    v8::Local<v8::Context> context, v8::Isolate::MessageErrorLevel level,
++    const std::vector<v8::Local<v8::Value>>& arguments,
++    StringView consoleContext) {
++  int groupId = contextGroupId(context);
++  if (!groupId) return;
++  ConsoleAPIType type = ConsoleAPIType::kLog;
++  switch (level) {
++    case v8::Isolate::kMessageDebug:
++      type = ConsoleAPIType::kDebug;
++      break;
++    case v8::Isolate::kMessageInfo:
++      type = ConsoleAPIType::kInfo;
++      break;
++    case v8::Isolate::kMessageError:
++      type = ConsoleAPIType::kError;
++      break;
++    case v8::Isolate::kMessageWarning:
++      type = ConsoleAPIType::kWarning;
++      break;
++    case v8::Isolate::kMessageLog:
++    case v8::Isolate::kMessageAll:
++      break;
++  }
++  std::unique_ptr<V8ConsoleMessage> consoleMessage =
++      V8ConsoleMessage::createForConsoleAPI(
++          context, InspectedContext::contextId(context), groupId, this,
++          m_client->currentTimeMS(), type, arguments,
++          toString16(consoleContext), m_debugger->captureStackTrace(true));
++  ensureConsoleMessageStorage(groupId)->addMessage(std::move(consoleMessage));
++}
++
+ unsigned V8InspectorImpl::exceptionThrown(
+     v8::Local<v8::Context> context, StringView message,
+     v8::Local<v8::Value> exception, StringView detailedMessage, StringView url,
+diff --git a/src/inspector/v8-inspector-impl.h b/src/inspector/v8-inspector-impl.h
+index 0bfffc30..5e88a698 100644
+--- a/src/inspector/v8-inspector-impl.h
++++ b/src/inspector/v8-inspector-impl.h
+@@ -104,6 +104,10 @@ class V8InspectorImpl : public V8Inspector {
+   void resetContextGroup(int contextGroupId) override;
+   void idleStarted() override;
+   void idleFinished() override;
++  void consoleAPICalled(
++      v8::Local<v8::Context>, v8::Isolate::MessageErrorLevel,
++      const std::vector<v8::Local<v8::Value>>& arguments,
++      StringView consoleContext = {}) override;
+   unsigned exceptionThrown(v8::Local<v8::Context>, StringView message,
+                            v8::Local<v8::Value> exception,
+                            StringView detailedMessage, StringView url,

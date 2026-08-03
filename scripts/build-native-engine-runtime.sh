@@ -163,6 +163,9 @@ if [[ -z "$v8_root" ]]; then
       exit 1
     fi
   }
+  # WebScene owns the JavaScript console bindings. The inspector bridge keeps
+  # the original V8 values so CDP clients receive object ids and previews.
+  apply_patch_once "$v8_root" "$repo_root/third-party/v8-patches/V8InspectorConsolePatch.txt"
   if [[ "$upstream_v8" == false && "$v8_revision" != 15.3.10 ]]; then
   apply_patch_once "$v8_root" "$repo_root/third-party/v8-patches/V8Patch.txt"
     apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
@@ -225,6 +228,11 @@ for required in "$v8_root/include/v8.h" "$v8_root/include/v8-version.h" \
     exit 1
   fi
 done
+if ! grep -q 'virtual void consoleAPICalled' "$v8_root/include/v8-inspector.h"; then
+  echo "The V8 SDK at '$v8_root' does not contain WebScene's inspector console bridge." >&2
+  echo "Rebuild it with third-party/v8-patches/V8InspectorConsolePatch.txt." >&2
+  exit 1
+fi
 IFS=. read -r expected_v8_major expected_v8_minor expected_v8_build _ <<< "$v8_revision"
 v8_version_header="$v8_root/include/v8-version.h"
 if ! grep -Eq "^#define V8_MAJOR_VERSION +$expected_v8_major$" "$v8_version_header" \

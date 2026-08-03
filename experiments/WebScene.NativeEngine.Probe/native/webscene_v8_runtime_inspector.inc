@@ -313,6 +313,15 @@
             inspector_string_view(reason_text));
     }
 
+    void report_inspector_console_message(
+        v8::Local<v8::Context> local_context,
+        v8::Isolate::MessageErrorLevel level,
+        const std::vector<v8::Local<v8::Value>>& arguments)
+    {
+        if (inspector == nullptr || local_context.IsEmpty()) return;
+        inspector->consoleAPICalled(local_context, level, arguments);
+    }
+
     void destroy_all_inspector_contexts()
     {
         if (inspector == nullptr || isolate == nullptr) return;
