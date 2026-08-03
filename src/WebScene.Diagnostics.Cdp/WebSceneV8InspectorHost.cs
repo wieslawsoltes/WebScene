@@ -4,7 +4,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using WebScene.Backends.Avalonia.Native;
+using WebScene.Backends;
 
 namespace WebScene.Diagnostics.Cdp;
 
@@ -51,21 +51,6 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
     private Task? _listenLoop;
     private INativeV8InspectorSession? _waitingSession;
     private long _nextConnectionId;
-
-    public WebSceneV8InspectorHost(
-        NativeWebSceneView view,
-        WebSceneV8InspectorOptions options,
-        string targetId = "webscene-v8",
-        string title = "WebScene V8")
-        : this(
-            view.OpenV8InspectorSession,
-            () => view.Source,
-            options,
-            targetId,
-            title)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-    }
 
     public WebSceneV8InspectorHost(
         Func<INativeV8InspectorSession> openSession,

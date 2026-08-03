@@ -4,7 +4,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using WebScene.Backends.Avalonia.Native;
+using WebScene.Backends;
 using WebScene.Diagnostics.Cdp;
 using Xunit;
 

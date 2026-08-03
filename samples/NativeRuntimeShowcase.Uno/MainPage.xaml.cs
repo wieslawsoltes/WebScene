@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using WebScene.Backends.Uno.Native;
+using WebScene.Diagnostics.Cdp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NativeRuntimeShowcase.Interop;
@@ -15,6 +16,9 @@ public sealed partial class MainPage : Page
     private readonly DispatcherTimer _diagnosticsTimer = new();
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();
+    private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
+    private WebSceneV8InspectorHost? _v8InspectorHost;
+    private UnoNativeWebSceneView? _inspectedView;
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
     private StorageFile? _currentFile;
@@ -26,6 +30,7 @@ public sealed partial class MainPage : Page
 
     public MainPage()
     {
+        _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(_arguments);
         InitializeComponent();
         TerminalContent.Content = _terminal;
         EditorContent.Content = _editor;
@@ -102,7 +107,9 @@ public sealed partial class MainPage : Page
             await _terminal.LoadAsync(
                 ShowcasePaths.TradingViewUrl,
                 _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "tradingview"));
+                ShowcasePaths.CacheDirectory("Uno", "tradingview"),
+                PrepareInspectorAsync,
+                DocumentBarrierTimeout);
             started.Stop();
             _terminalLoadElapsed = started.Elapsed;
             _terminalLoaded = true;
@@ -178,7 +185,9 @@ public sealed partial class MainPage : Page
             await _editor.LoadAsync(
                 new Uri(documentPath).AbsoluteUri,
                 _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "monaco"));
+                ShowcasePaths.CacheDirectory("Uno", "monaco"),
+                PrepareInspectorAsync,
+                DocumentBarrierTimeout);
             var session = new ShowcaseEditorSession(
                 _editor.CreateJavaScriptInvoker());
             try
@@ -288,9 +297,64 @@ public sealed partial class MainPage : Page
         Console.Error.WriteLine($"{title}: {error}");
     }
 
+    private ValueTask PrepareInspectorAsync(
+        UnoNativeWebSceneView view,
+        CancellationToken cancellationToken)
+        => new(SelectInspectorTargetAsync(
+            view,
+            ReferenceEquals(view, _editor)
+                ? "WebScene V8 · Monaco · Uno"
+                : "WebScene V8 · TradingView · Uno",
+            cancellationToken));
+
+    private TimeSpan? DocumentBarrierTimeout
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? Timeout.InfiniteTimeSpan
+            : null;
+
+    private async Task SelectInspectorTargetAsync(
+        UnoNativeWebSceneView view,
+        string title,
+        CancellationToken cancellationToken)
+    {
+        if (_inspectorLaunch is null) return;
+        if (ReferenceEquals(_inspectedView, view)
+            && _v8InspectorHost?.IsRunning == true)
+        {
+            return;
+        }
+        if (_v8InspectorHost is not null)
+        {
+            await _v8InspectorHost.DisposeAsync();
+        }
+        var host = new WebSceneV8InspectorHost(
+            view.OpenV8InspectorSession,
+            () => view.Source,
+            _inspectorLaunch.CreateHostOptions(),
+            title: title);
+        try
+        {
+            await host.StartAsync(cancellationToken);
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
+        _v8InspectorHost = host;
+        _inspectedView = view;
+        Console.WriteLine(
+            $"WebScene V8 Inspector{(_inspectorLaunch.WaitForDebugger ? " (waiting for debugger)" : string.Empty)} "
+            + $"discovery: {host.DiscoveryUri}json/list");
+    }
+
     private async void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _diagnosticsTimer.Stop();
+        if (_v8InspectorHost is not null)
+        {
+            await _v8InspectorHost.DisposeAsync();
+        }
         if (_editorSession is not null)
         {
             await _editorSession.DisposeAsync();

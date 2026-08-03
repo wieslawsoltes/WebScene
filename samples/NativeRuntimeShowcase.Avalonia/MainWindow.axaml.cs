@@ -1,4 +1,3 @@
-using System.Net;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -12,7 +11,7 @@ namespace NativeRuntimeShowcase.Avalonia;
 public sealed partial class MainWindow : Window
 {
     private readonly IReadOnlyList<string> _arguments;
-    private readonly V8InspectorLaunchConfiguration? _inspectorLaunch;
+    private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
     private readonly DispatcherTimer _diagnosticsTimer;
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
@@ -29,7 +28,7 @@ public sealed partial class MainWindow : Window
     internal MainWindow(IReadOnlyList<string> arguments)
     {
         _arguments = arguments;
-        _inspectorLaunch = ResolveV8InspectorLaunch(arguments);
+        _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(arguments);
         InitializeComponent();
         _diagnosticsTimer = new DispatcherTimer
         {
@@ -259,141 +258,6 @@ public sealed partial class MainWindow : Window
             ? Timeout.InfiniteTimeSpan
             : null;
 
-    private sealed record V8InspectorLaunchConfiguration(
-        IPAddress Address,
-        int Port,
-        bool WaitForDebugger,
-        bool AllowRemoteConnections);
-
-    private static V8InspectorLaunchConfiguration? ResolveV8InspectorLaunch(
-        IReadOnlyList<string> arguments)
-    {
-        var enabled = arguments.Contains("--v8-inspector", StringComparer.Ordinal);
-        var waitForDebugger = false;
-        string? endpoint = null;
-        foreach (var argument in arguments)
-        {
-            if (TryReadInspectorEndpoint(argument, "--webscene-inspect-brk", out var brk))
-            {
-                enabled = true;
-                waitForDebugger = true;
-                endpoint = brk ?? endpoint;
-            }
-            else if (TryReadInspectorEndpoint(argument, "--webscene-inspect", out var inspect))
-            {
-                enabled = true;
-                endpoint = inspect ?? endpoint;
-            }
-        }
-
-        var legacyEnabled = Environment.GetEnvironmentVariable(
-            "WEBSCENE_V8_INSPECTOR");
-        enabled = enabled || IsTruthy(legacyEnabled);
-        var configuredInspect = Environment.GetEnvironmentVariable(
-            "WEBSCENE_INSPECT");
-        if (!string.IsNullOrWhiteSpace(configuredInspect))
-        {
-            enabled = true;
-            if (!IsTruthy(configuredInspect)) endpoint = configuredInspect;
-        }
-        var configuredBreak = Environment.GetEnvironmentVariable(
-            "WEBSCENE_INSPECT_BRK");
-        if (!string.IsNullOrWhiteSpace(configuredBreak))
-        {
-            enabled = true;
-            waitForDebugger = true;
-            if (!IsTruthy(configuredBreak)) endpoint = configuredBreak;
-        }
-        if (!enabled) return null;
-
-        var address = IPAddress.Loopback;
-        var port = ResolveLegacyV8InspectorPort(arguments);
-        if (!string.IsNullOrWhiteSpace(endpoint))
-        {
-            (address, port) = ParseInspectorEndpoint(endpoint);
-        }
-        var allowRemote = arguments.Contains(
-                "--webscene-inspect-allow-remote",
-                StringComparer.Ordinal)
-            || IsTruthy(Environment.GetEnvironmentVariable(
-                "WEBSCENE_INSPECT_ALLOW_REMOTE"));
-        return new V8InspectorLaunchConfiguration(
-            address,
-            port,
-            waitForDebugger,
-            allowRemote);
-    }
-
-    private static bool TryReadInspectorEndpoint(
-        string argument,
-        string option,
-        out string? endpoint)
-    {
-        if (string.Equals(argument, option, StringComparison.Ordinal))
-        {
-            endpoint = null;
-            return true;
-        }
-        var prefix = option + "=";
-        if (argument.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            endpoint = argument[prefix.Length..];
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                throw new ArgumentException($"{option} requires an endpoint after '='.");
-            }
-            return true;
-        }
-        endpoint = null;
-        return false;
-    }
-
-    private static int ResolveLegacyV8InspectorPort(
-        IReadOnlyList<string> arguments)
-    {
-        string? configured = null;
-        for (var index = 0; index + 1 < arguments.Count; ++index)
-        {
-            if (arguments[index] == "--v8-inspector-port")
-            {
-                configured = arguments[index + 1];
-                break;
-            }
-        }
-        configured ??= Environment.GetEnvironmentVariable(
-            "WEBSCENE_V8_INSPECTOR_PORT");
-        if (string.IsNullOrWhiteSpace(configured)) return 9229;
-        if (int.TryParse(configured, out var port) && port is >= 0 and <= 65535)
-        {
-            return port;
-        }
-        throw new ArgumentException(
-            $"Invalid WebScene V8 Inspector port: '{configured}'.");
-    }
-
-    private static (IPAddress Address, int Port) ParseInspectorEndpoint(
-        string endpoint)
-    {
-        if (int.TryParse(endpoint, out var portOnly)
-            && portOnly is >= 0 and <= 65535)
-        {
-            return (IPAddress.Loopback, portOnly);
-        }
-        if (!Uri.TryCreate($"tcp://{endpoint}", UriKind.Absolute, out var uri)
-            || !IPAddress.TryParse(uri.Host, out var address)
-            || uri.Port is < 0 or > 65535)
-        {
-            throw new ArgumentException(
-                $"Invalid WebScene Inspector endpoint: '{endpoint}'. "
-                + "Use an IP address and port, for example 127.0.0.1:9229.");
-        }
-        return (address, uri.Port);
-    }
-
-    private static bool IsTruthy(string? value)
-        => string.Equals(value, "1", StringComparison.Ordinal)
-        || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-
     private async Task SelectInspectorTargetAsync(
         NativeWebSceneView view,
         string title,
@@ -410,15 +274,9 @@ public sealed partial class MainWindow : Window
             await _v8InspectorHost.DisposeAsync();
         }
         var host = new WebSceneV8InspectorHost(
-            view,
-            new WebSceneV8InspectorOptions
-            {
-                Enabled = true,
-                Address = _inspectorLaunch.Address,
-                Port = _inspectorLaunch.Port,
-                WaitForDebugger = _inspectorLaunch.WaitForDebugger,
-                AllowRemoteConnections = _inspectorLaunch.AllowRemoteConnections
-            },
+            view.OpenV8InspectorSession,
+            () => view.Source,
+            _inspectorLaunch.CreateHostOptions(),
             title: title);
         try
         {

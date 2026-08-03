@@ -19,7 +19,10 @@ await view.LoadAsync(
     cacheDirectory,
     async (readyView, cancellationToken) =>
     {
-        inspector = new WebSceneV8InspectorHost(readyView, options);
+        inspector = new WebSceneV8InspectorHost(
+            readyView.OpenV8InspectorSession,
+            () => readyView.Source,
+            options);
         await inspector.StartAsync(cancellationToken);
     },
     Timeout.InfiniteTimeSpan);
@@ -28,8 +31,10 @@ await view.LoadAsync(
 The before-navigation hook is required only for `WaitForDebugger`: it opens a
 V8 session before the document request is queued. V8 then waits until the first
 client sends `Runtime.runIfWaitingForDebugger`. The wait occurs on WebScene's
-engine worker, so the Avalonia dispatcher, discovery endpoint, and window remain
-responsive. Dispose `inspector` during application shutdown.
+engine worker, so the UI dispatcher, discovery endpoint, and window remain
+responsive. The raw session interface lives in `WebScene.Backend.Abstractions`,
+so the same host works with both Avalonia and Uno native views. Dispose
+`inspector` during application shutdown.
 
 Open `chrome://inspect`, add `localhost:9229` under **Discover network
 targets**, and select **inspect** for the WebScene target. The generated access

@@ -555,6 +555,22 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public EngineMetrics EngineMetrics => _surface.EngineMetrics;
 
+    /// <summary>
+    /// Opens a raw V8 Inspector Protocol session for this view's dedicated
+    /// isolate. The session can be forwarded unchanged to a CDP host.
+    /// </summary>
+    public INativeV8InspectorSession OpenV8InspectorSession(
+        bool waitForDebugger = false)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
+    }
+
     public NativeJavaScriptInvoker CreateJavaScriptInvoker()
     {
         var engine = Volatile.Read(ref _engine);
@@ -633,6 +649,26 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
+        => await LoadAsync(
+            source,
+            nativeLibraryPath,
+            compilationCacheDirectory,
+            beforeNavigation: null,
+            documentBarrierTimeout: null,
+            cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Loads a document after allowing an asynchronous host hook to observe
+    /// the initialized native engine. Inspector hosts use this hook to enter
+    /// waiting-for-debugger mode before any document script is queued.
+    /// </summary>
+    public async Task LoadAsync(
+        string source,
+        string nativeLibraryPath,
+        string? compilationCacheDirectory,
+        Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? documentBarrierTimeout = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
@@ -642,52 +678,75 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             Directory.CreateDirectory(compilationCacheDirectory);
         }
 
-        var callbackSignal = new JavaScriptCallbackSignal();
-        _engine = NativeWebSceneApi.EngineCreate(
-            0,
-            compilationCacheDirectory,
-            new UnoResourceLoader(),
-            _surface.OnNativeScenePublished,
-            interopCallbackAvailable: callbackSignal.Notify);
-        if (_engine == IntPtr.Zero)
+        var timeoutValue = documentBarrierTimeout ?? TimeSpan.FromSeconds(30);
+        if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
         {
-            throw new InvalidOperationException("The WebScene native engine could not be created.");
+            throw new ArgumentOutOfRangeException(nameof(documentBarrierTimeout));
         }
-        _interopCallbackSignal = callbackSignal;
-        _interop = new NativeInteropInvoker(_engine);
-
-        _surface.SetEngine(_engine);
-        if (!NativeWebSceneApi.TryLoadUrl(_engine, source))
+        try
         {
-            throw new InvalidOperationException(
-                $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(_engine)}");
-        }
+            var callbackSignal = new JavaScriptCallbackSignal();
+            _engine = NativeWebSceneApi.EngineCreate(
+                0,
+                compilationCacheDirectory,
+                new UnoResourceLoader(),
+                _surface.OnNativeScenePublished,
+                interopCallbackAvailable: callbackSignal.Notify);
+            if (_engine == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "The WebScene native engine could not be created.");
+            }
+            _interopCallbackSignal = callbackSignal;
+            _interop = new NativeInteropInvoker(_engine);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        var documentBarrierText = await EvaluateTextAsync(
-                "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
-                "webscene-uno-document-barrier.js",
-                timeout.Token).ConfigureAwait(false);
-        var documentBarrier =
-            documentBarrierText.Contains(
-                "hasDocumentElement",
-                StringComparison.Ordinal)
-            && documentBarrierText.Contains(
-                "hasBody",
-                StringComparison.Ordinal);
-        if (!documentBarrier)
+            _surface.SetEngine(_engine);
+            Source = source;
+            if (beforeNavigation is not null)
+            {
+                await beforeNavigation(this, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            if (!NativeWebSceneApi.TryLoadUrl(_engine, source))
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene rejected {source}: {NativeWebSceneApi.GetLastError(_engine)}");
+            }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            if (timeoutValue != Timeout.InfiniteTimeSpan)
+            {
+                timeout.CancelAfter(timeoutValue);
+            }
+            var documentBarrierText = await EvaluateTextAsync(
+                    "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
+                    "webscene-uno-document-barrier.js",
+                    timeout.Token).ConfigureAwait(false);
+            var documentBarrier =
+                documentBarrierText.Contains(
+                    "hasDocumentElement",
+                    StringComparison.Ordinal)
+                && documentBarrierText.Contains(
+                    "hasBody",
+                    StringComparison.Ordinal);
+            if (!documentBarrier)
+            {
+                throw new InvalidOperationException(
+                    $"Native WebScene did not construct a document for {source}: "
+                    + NativeWebSceneApi.GetLastError(_engine));
+            }
+        }
+        catch
         {
-            throw new InvalidOperationException(
-                $"Native WebScene did not construct a document for {source}: " +
-                NativeWebSceneApi.GetLastError(_engine));
+            await DisposeAsync().ConfigureAwait(false);
+            throw;
         }
-
-        Source = source;
     }
 
     public ValueTask DisposeAsync()
     {
+        Source = null;
         _surface.SetEngine(IntPtr.Zero);
         Interlocked.Exchange(ref _interop, null)?.Dispose();
         Interlocked.Exchange(ref _interopCallbackSignal, null);

@@ -47,11 +47,11 @@ Run Flutter on macOS:
 
 `WEBSCENE_NATIVE_ENGINE_LIBRARY` can be used instead of the command-line option.
 Add `--editor` after the application arguments to start directly in Monaco.
-Add `--webscene-inspect=127.0.0.1:9229` to expose the active Avalonia WebScene
+Add `--webscene-inspect=127.0.0.1:9229` to expose the active Avalonia or Uno WebScene
 isolate, or `--webscene-inspect-brk=127.0.0.1:9229` to start the discovery host
 before navigation and hold V8 before the first document script. Chrome or the
 CDP Inspector app releases that gate with `Runtime.runIfWaitingForDebugger`;
-the Avalonia window and discovery host stay responsive during the wait. Port
+the desktop window and discovery host stay responsive during the wait. Port
 `0` selects an ephemeral loopback port and the actual `/json/list` URL is
 printed to stdout. For example, `--editor --webscene-inspect-brk=127.0.0.1:0`
 provides a deterministic Monaco startup target.
