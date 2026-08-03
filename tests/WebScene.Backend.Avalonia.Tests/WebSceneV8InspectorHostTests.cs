@@ -13,6 +13,81 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class WebSceneV8InspectorHostTests
 {
     [Fact]
+    public async Task EphemeralPortPublishesActualDiscoveryEndpoint()
+    {
+        await using var host = new WebSceneV8InspectorHost(
+            () => new FakeInspectorSession(),
+            () => "webscene://ephemeral",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0
+            });
+
+        await host.StartAsync();
+
+        Assert.InRange(host.BoundPort, 1, 65535);
+        Assert.Equal(host.BoundPort, host.DiscoveryUri.Port);
+        using var http = new HttpClient();
+        using var discovery = JsonDocument.Parse(
+            await http.GetStringAsync(new Uri(host.DiscoveryUri, "json/list")));
+        Assert.Equal(
+            host.BoundPort,
+            new Uri(discovery.RootElement[0]
+                .GetProperty("webSocketDebuggerUrl")
+                .GetString()!).Port);
+    }
+
+    [Fact]
+    public async Task WaitForDebuggerPreopensAndReusesWaitingSession()
+    {
+        var session = new FakeInspectorSession();
+        var waits = new List<bool>();
+        await using var host = new WebSceneV8InspectorHost(
+            waitForDebugger =>
+            {
+                waits.Add(waitForDebugger);
+                return session;
+            },
+            () => "webscene://waiting",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0,
+                WaitForDebugger = true
+            });
+
+        await host.StartAsync();
+        Assert.Equal([true], waits);
+
+        using var http = new HttpClient();
+        using var discovery = JsonDocument.Parse(
+            await http.GetStringAsync(new Uri(host.DiscoveryUri, "json/list")));
+        var websocketUrl = discovery.RootElement[0]
+            .GetProperty("webSocketDebuggerUrl")
+            .GetString();
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri(websocketUrl!), CancellationToken.None);
+        await socket.SendAsync(
+            Encoding.UTF8.GetBytes(
+                "{\"id\":1,\"method\":\"Runtime.runIfWaitingForDebugger\"}"),
+            WebSocketMessageType.Text,
+            true,
+            CancellationToken.None);
+        var buffer = new byte[1024];
+        await socket.ReceiveAsync(buffer, CancellationToken.None);
+
+        Assert.Equal([true], waits);
+        Assert.Equal(
+            "{\"id\":1,\"method\":\"Runtime.runIfWaitingForDebugger\"}",
+            await session.Received.Reader.ReadAsync());
+        await socket.CloseAsync(
+            WebSocketCloseStatus.NormalClosure,
+            "test complete",
+            CancellationToken.None);
+    }
+
+    [Fact]
     public async Task DiscoveryAndWebSocketForwardCompleteInspectorMessages()
     {
         var port = ReserveLoopbackPort();

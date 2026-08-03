@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,6 +15,13 @@ public sealed class WebSceneV8InspectorOptions
     public IPAddress Address { get; set; } = IPAddress.Loopback;
 
     public int Port { get; set; } = 9229;
+
+    /// <summary>
+    /// Opens the first Inspector session in V8's waiting-for-debugger mode.
+    /// The engine worker remains paused until a client sends
+    /// Runtime.runIfWaitingForDebugger, while the host UI thread stays free.
+    /// </summary>
+    public bool WaitForDebugger { get; set; }
 
     public bool AllowRemoteConnections { get; set; }
 
@@ -31,7 +39,7 @@ public sealed class WebSceneV8InspectorOptions
 /// </summary>
 public sealed class WebSceneV8InspectorHost : IAsyncDisposable
 {
-    private readonly Func<INativeV8InspectorSession> _openSession;
+    private readonly Func<bool, INativeV8InspectorSession> _openSession;
     private readonly Func<string?> _targetUrl;
     private readonly WebSceneV8InspectorOptions _options;
     private readonly string _targetId;
@@ -41,6 +49,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
     private HttpListener? _listener;
     private CancellationTokenSource? _shutdown;
     private Task? _listenLoop;
+    private INativeV8InspectorSession? _waitingSession;
     private long _nextConnectionId;
 
     public WebSceneV8InspectorHost(
@@ -49,7 +58,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         string targetId = "webscene-v8",
         string title = "WebScene V8")
         : this(
-            () => view.OpenV8InspectorSession(),
+            view.OpenV8InspectorSession,
             () => view.Source,
             options,
             targetId,
@@ -60,6 +69,24 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
 
     public WebSceneV8InspectorHost(
         Func<INativeV8InspectorSession> openSession,
+        Func<string?> targetUrl,
+        WebSceneV8InspectorOptions options,
+        string targetId = "webscene-v8",
+        string title = "WebScene V8")
+    {
+        ArgumentNullException.ThrowIfNull(openSession);
+        _openSession = _ => openSession();
+        _targetUrl = targetUrl
+            ?? throw new ArgumentNullException(nameof(targetUrl));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _targetId = string.IsNullOrWhiteSpace(targetId)
+            ? throw new ArgumentException("A target id is required.", nameof(targetId))
+            : targetId;
+        _title = string.IsNullOrWhiteSpace(title) ? "WebScene V8" : title;
+    }
+
+    public WebSceneV8InspectorHost(
+        Func<bool, INativeV8InspectorSession> openSession,
         Func<string?> targetUrl,
         WebSceneV8InspectorOptions options,
         string targetId = "webscene-v8",
@@ -78,8 +105,14 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
 
     public bool IsRunning => _listener?.IsListening == true;
 
+    /// <summary>
+    /// The actual listening port. This differs from options.Port when zero was
+    /// requested for an ephemeral loopback endpoint.
+    /// </summary>
+    public int BoundPort { get; private set; }
+
     public Uri DiscoveryUri
-        => new($"http://{FormatAddress(_options.Address)}:{_options.Port}/");
+        => new($"http://{FormatAddress(_options.Address)}:{BoundPort}/");
 
     public string AccessToken { get; private set; } = string.Empty;
 
@@ -98,13 +131,31 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
                 ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
                     .ToLowerInvariant()
                 : _options.AccessToken;
+            BoundPort = ResolvePort(_options.Address, _options.Port);
             var listener = new HttpListener();
             listener.Prefixes.Add(
-                $"http://{FormatAddress(_options.Address)}:{_options.Port}/");
-            listener.Start();
-            _listener = listener;
-            _shutdown = new CancellationTokenSource();
-            _listenLoop = ListenAsync(listener, _shutdown.Token);
+                $"http://{FormatAddress(_options.Address)}:{BoundPort}/");
+            var shutdown = new CancellationTokenSource();
+            try
+            {
+                listener.Start();
+                _listener = listener;
+                _shutdown = shutdown;
+                _listenLoop = ListenAsync(listener, shutdown.Token);
+                if (_options.WaitForDebugger)
+                {
+                    _waitingSession = _openSession(true);
+                }
+            }
+            catch
+            {
+                _listener = null;
+                _shutdown = null;
+                _listenLoop = null;
+                listener.Close();
+                shutdown.Dispose();
+                throw;
+            }
         }
         return Task.CompletedTask;
     }
@@ -114,6 +165,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         HttpListener? listener;
         CancellationTokenSource? shutdown;
         Task? listenLoop;
+        INativeV8InspectorSession? waitingSession;
         lock (_gate)
         {
             listener = _listener;
@@ -122,10 +174,15 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             _listener = null;
             _shutdown = null;
             _listenLoop = null;
+            waitingSession = Interlocked.Exchange(ref _waitingSession, null);
         }
         if (listener is null) return;
         shutdown?.Cancel();
         listener.Close();
+        if (waitingSession is not null)
+        {
+            await waitingSession.DisposeAsync().ConfigureAwait(false);
+        }
         if (listenLoop is not null)
         {
             try
@@ -277,7 +334,8 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             _options.KeepAliveInterval)
             .ConfigureAwait(false);
         using var socket = accepted.WebSocket;
-        await using var inspector = _openSession();
+        await using var inspector = Interlocked.Exchange(ref _waitingSession, null)
+            ?? _openSession(false);
         using var connectionShutdown = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
         var receive = ReceiveBrowserMessagesAsync(
@@ -399,7 +457,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             throw new InvalidOperationException(
                 "Set WebSceneV8InspectorOptions.Enabled to true explicitly.");
         }
-        if (_options.Port is < 1 or > 65535)
+        if (_options.Port is < 0 or > 65535)
         {
             throw new ArgumentOutOfRangeException(nameof(_options.Port));
         }
@@ -426,6 +484,21 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
             ? $"[{address}]"
             : address.ToString();
+
+    private static int ResolvePort(IPAddress address, int requestedPort)
+    {
+        if (requestedPort != 0) return requestedPort;
+        var reservation = new TcpListener(address, 0);
+        reservation.Start();
+        try
+        {
+            return ((IPEndPoint)reservation.LocalEndpoint).Port;
+        }
+        finally
+        {
+            reservation.Stop();
+        }
+    }
 
     public ValueTask DisposeAsync() => new(StopAsync());
 }

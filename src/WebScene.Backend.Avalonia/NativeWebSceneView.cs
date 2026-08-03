@@ -247,6 +247,26 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         string nativeLibraryPath,
         string? compilationCacheDirectory = null,
         CancellationToken cancellationToken = default)
+        => await LoadAsync(
+            source,
+            nativeLibraryPath,
+            compilationCacheDirectory,
+            beforeNavigation: null,
+            firstDocumentSceneTimeout: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Loads a document after allowing an asynchronous host hook to observe
+    /// the initialized native engine. Inspector hosts use this hook to enter
+    /// waiting-for-debugger mode before any document script is queued.
+    /// </summary>
+    public async Task LoadAsync(
+        string source,
+        string nativeLibraryPath,
+        string? compilationCacheDirectory,
+        Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? firstDocumentSceneTimeout = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(nativeLibraryPath);
@@ -304,7 +324,14 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 },
                 DispatcherPriority.Send);
 
-            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);
+            Source = source;
+            if (beforeNavigation is not null)
+            {
+                await beforeNavigation(this, navigationToken)
+                    .ConfigureAwait(false);
+            }
+
+            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
             if (!NativeWebSceneApi.TryLoadUrl(engine, source))
             {
                 throw new InvalidOperationException(
@@ -313,10 +340,10 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
             await WaitForFirstDocumentSceneAsync(
                     engine,
-                    beforeNavigation.PublishedScenes,
+                    beforeNavigationMetrics.PublishedScenes,
+                    firstDocumentSceneTimeout ?? TimeSpan.FromSeconds(30),
                     navigationToken)
                 .ConfigureAwait(false);
-            Source = source;
         }
         catch
         {
@@ -331,6 +358,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public async Task UnloadAsync()
     {
+        _navigationCancellation?.Cancel();
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -347,12 +375,19 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private static async Task WaitForFirstDocumentSceneAsync(
         IntPtr engine,
         ulong previousSceneCount,
+        TimeSpan timeoutValue,
         CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeoutValue));
+        }
+        using var timeout = timeoutValue == Timeout.InfiniteTimeSpan
+            ? null
+            : new CancellationTokenSource(timeoutValue);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            timeout.Token);
+            timeout?.Token ?? CancellationToken.None);
         try
         {
             while (true)
@@ -367,10 +402,11 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
         }
         catch (OperationCanceledException) when (
-            timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            timeout?.IsCancellationRequested == true
+            && !cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
-                "WebScene did not publish the document's first native scene within 30 seconds.");
+                $"WebScene did not publish the document's first native scene within {timeoutValue}.");
         }
     }
 
