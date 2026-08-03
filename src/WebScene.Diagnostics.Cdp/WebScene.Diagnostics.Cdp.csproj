@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <Description>Chrome DevTools Protocol discovery and WebSocket hosting for WebScene's native V8 runtime.</Description>
+    <PackageId>WebScene.Diagnostics.Cdp</PackageId>
+    <AssemblyName>WebScene.Diagnostics.Cdp</AssemblyName>
+    <RootNamespace>WebScene.Diagnostics.Cdp</RootNamespace>
+    <PackageTags>webscene;v8;inspector;cdp;chrome-devtools;debugger</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
