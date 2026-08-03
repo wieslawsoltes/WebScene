@@ -68,7 +68,9 @@ uint8_t measure_baseline_fixture_text(
 // feature; shared fixtures remain visible without additional test-only APIs.
 #include "native_v8_runtime_document_tests.inc"
 #include "native_v8_runtime_test_support.inc"
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 #include "native_v8_runtime_inspector_tests.inc"
+#endif
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
@@ -94,8 +96,20 @@ int main()
         "certification build did not advertise certification telemetry");
 #else
     require(
-        webscene_engine_get_build_features() == 0,
+        (webscene_engine_get_build_features()
+            & WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION) == 0,
         "ordinary build unexpectedly advertised certification telemetry");
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    require(
+        (webscene_engine_get_build_features()
+            & WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR) != 0,
+        "Inspector flavor did not advertise V8 Inspector support");
+#else
+    require(
+        (webscene_engine_get_build_features()
+            & WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR) == 0,
+        "ordinary V8 runtime unexpectedly advertised Inspector support");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
     test_binary_reverse_callback_is_leased_and_completed();
@@ -116,7 +130,9 @@ int main()
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
     test_parallel_resource_prefetch();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     test_inspector_navigation_resets_context_group();
+#endif
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
@@ -137,8 +153,14 @@ int main()
     test_process_wide_compilation_single_flight();
     auto* engine = webscene_engine_create(64);
     require(engine != nullptr, "engine creation failed");
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     test_v8_inspector_raw_cdp_session(engine);
     test_v8_inspector_shutdown_releases_paused_engine();
+#else
+    require(
+        webscene_engine_inspector_is_available(engine) == 0,
+        "ordinary V8 runtime unexpectedly exposed Inspector support");
+#endif
     test_binary_interop_result_is_leased_and_pooled(engine);
     test_binary_interop_preserves_json_edge_semantics(engine);
     test_generated_binary_invocation_uses_tagged_arguments(engine);

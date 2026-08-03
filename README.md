@@ -130,9 +130,14 @@ scripts/build-native-engine-runtime.sh --rid osx-arm64
 scripts/build-native-engine-runtime.sh --rid linux-x64
 ```
 
+Add `--v8-inspector` only for a diagnostic runtime that supports Chrome/CDP
+debugging. The ordinary runtime compiles Inspector state and hooks out.
+
 ```powershell
 ./scripts/build-native-engine-runtime.ps1 -Rid win-x64
 ```
+
+Use `-V8Inspector` for the equivalent Windows diagnostic flavor.
 
 Run the Avalonia showcase with an explicit engine library:
 

@@ -35,6 +35,8 @@ target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE
 target_include_directories(webscene_native_engine PUBLIC native)
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
+    "Compile V8 Inspector state, hooks, queues, and worker dispatch into the runtime" OFF)
 option(WEBSCENE_V8_POINTER_COMPRESSION
     "Compile the embedder ABI for a pointer-compressed V8 monolith" OFF)
 option(WEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE
@@ -72,6 +74,13 @@ set_property(CACHE WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS PROPERTY STRINGS legacy g
 set(WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT "bootstrap" CACHE STRING
     "V8 embedder startup snapshot: none or bootstrap")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_V8_SNAPSHOT PROPERTY STRINGS none bootstrap)
+
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
+    AND NOT WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    message(FATAL_ERROR
+        "WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR requires "
+        "WEBSCENE_NATIVE_ENGINE_ENABLE_V8")
+endif()
 
 if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
     target_compile_definitions(webscene_native_engine PRIVATE
@@ -277,6 +286,13 @@ set(WEBSCENE_V8_ICU_DATA
     "${WEBSCENE_V8_OUTPUT_ROOT}/icudtl.dat")
 
 if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
+        message(STATUS "WebScene native engine: V8 Inspector flavor enabled")
+    else()
+        message(STATUS "WebScene native engine: V8 Inspector compiled out")
+    endif()
     if(NOT EXISTS "${WEBSCENE_V8_ROOT}/include/v8.h")
         message(FATAL_ERROR "WebScene native engine: V8 headers not found below ${WEBSCENE_V8_ROOT}")
     endif()
@@ -480,6 +496,10 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             tests/native_v8_runtime_tests.cpp
             native/webscene_native_dom.cpp)
         target_compile_features(webscene_native_engine_tests PRIVATE cxx_std_20)
+        if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
+            target_compile_definitions(webscene_native_engine_tests PRIVATE
+                WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
+        endif()
         target_link_libraries(webscene_native_engine_tests PRIVATE
             webscene_native_engine
             ixwebsocket)

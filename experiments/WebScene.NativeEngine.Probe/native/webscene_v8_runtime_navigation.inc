@@ -70,7 +70,9 @@
             {},
             "html-element");
         detach_all_children(viewport_root);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         reset_inspector_context_group_for_navigation(local_context, resolved_url);
+#endif
 
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
         const auto parsed_document = parse_html_document(document, viewport_root, html);

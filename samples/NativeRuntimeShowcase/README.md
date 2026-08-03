@@ -18,9 +18,14 @@ available:
 ```sh
 ./scripts/build-native-engine-runtime.sh \
   --rid osx-arm64 \
+  --v8-inspector \
   --output artifacts/native-runtime-showcase \
   --package-version 11.3.4-showcase.1
 ```
+
+`--v8-inspector` selects the diagnostic runtime flavor. Omit it for the
+ordinary production runtime, which compiles all V8 Inspector state and hooks
+out.
 
 Run Avalonia:
 

@@ -31,10 +31,12 @@
             v8::Global<v8::Function>(info.GetIsolate(), info[0].As<v8::Function>()),
             {},
             -1});
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         self->inspector_async_task_scheduled(
             "requestAnimationFrame",
             id,
             false);
+#endif
         info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(), id));
     }
 
@@ -82,10 +84,12 @@
             v8::Global<v8::Function>(info.GetIsolate(), info[0].As<v8::Function>()),
             std::move(arguments),
             -1});
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         self->inspector_async_task_scheduled(
             repeating ? "setInterval" : "setTimeout",
             id,
             repeating);
+#endif
         info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(), id));
     }
 
@@ -109,10 +113,16 @@
         uint64_t cancelled_animation_frames = 0;
         const auto removed = std::erase_if(
             self->timers,
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             [self, id, &cancelled_animation_frames](const auto& timer) {
+#else
+            [id, &cancelled_animation_frames](const auto& timer) {
+#endif
                 if (timer.id != id) return false;
                 if (timer.animation_frame) ++cancelled_animation_frames;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 self->inspector_async_task_canceled(id);
+#endif
                 return true;
             });
         if (self->work_metrics_enabled.load(std::memory_order_relaxed)) {
@@ -1376,15 +1386,19 @@
         auto local_context = isolate->GetCurrentContext();
         const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 2);
         constexpr std::array<std::string_view, 3> levels{"log", "warn", "error"};
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         constexpr std::array<v8::Isolate::MessageErrorLevel, 3> inspector_levels{
             v8::Isolate::kMessageLog,
             v8::Isolate::kMessageWarning,
             v8::Isolate::kMessageError};
         std::vector<v8::Local<v8::Value>> arguments;
         arguments.reserve(static_cast<size_t>(info.Length()));
+#endif
         std::ostringstream message;
         for (int index = 0; index < info.Length(); ++index) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             arguments.push_back(info[index]);
+#endif
             auto rendered = to_utf8(isolate, info[index]);
             if (info[index]->IsObject()) {
                 v8::TryCatch try_catch(isolate);
@@ -1401,10 +1415,12 @@
             }
             message << (index == 0 ? "" : " | ") << rendered;
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         self->report_inspector_console_message(
             local_context,
             inspector_levels[static_cast<size_t>(level_index)],
             arguments);
+#endif
         const auto payload = std::string(levels[static_cast<size_t>(level_index)])
             + '\n' + message.str();
         {

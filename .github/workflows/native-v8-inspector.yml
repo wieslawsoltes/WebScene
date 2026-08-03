@@ -88,6 +88,7 @@ jobs:
           --v8-revision 15.3.10 \
           --upstream-v8 \
           --partition-alloc \
+          --v8-inspector \
           --output "$GITHUB_WORKSPACE/artifacts/native-v8-inspector-pr"
     - name: Save completed V8 Inspector SDK
       if: steps.v8-cache.outputs.cache-hit != 'true'

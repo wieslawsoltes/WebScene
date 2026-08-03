@@ -22,7 +22,8 @@ param(
     [string] $V8Snapshot = "bootstrap",
     [switch] $UpstreamV8,
     [switch] $ThinLto,
-    [switch] $PartitionAlloc
+    [switch] $PartitionAlloc,
+    [switch] $V8Inspector
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,9 +39,11 @@ $thinLtoValue = if ($ThinLto) { "true" } else { "false" }
 $thinLtoCMake = if ($ThinLto) { "ON" } else { "OFF" }
 $partitionAllocValue = if ($PartitionAlloc) { "true" } else { "false" }
 $partitionAllocCMake = if ($PartitionAlloc) { "ON" } else { "OFF" }
+$v8InspectorCMake = if ($V8Inspector) { "ON" } else { "OFF" }
 $buildVariant = "-$HtmlParser-$CssParser-$SelectorParser-$DomBindings-$V8Snapshot"
 $buildVariant += if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
+$buildVariant += if ($V8Inspector) { "-inspector" } else { "" }
 if (($CssParser -eq "cssparser" -or $SelectorParser -eq "servo") -and $HtmlParser -ne "html5ever") {
     throw "Servo CSS components require -HtmlParser html5ever."
 }
@@ -193,6 +196,7 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    "-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=$v8InspectorCMake" `
     -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
     -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
@@ -248,6 +252,7 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8SharedCage=true",
     "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
     "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
+    "-p:WebSceneNativeEngineV8Inspector=$($V8Inspector.IsPresent.ToString().ToLowerInvariant())",
     "-p:WebSceneNativeEngineDenseLink=true",
     "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
     "-p:WebSceneNativeEngineV8Revision=$v8Revision",

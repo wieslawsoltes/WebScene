@@ -25,9 +25,13 @@
 
     struct pending_promise_rejection final {
         v8::Global<v8::Promise> promise;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         v8::Global<v8::Context> context;
+#endif
         std::string error;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         unsigned inspector_exception_id{0U};
+#endif
     };
 
     struct pending_interop_promise final {

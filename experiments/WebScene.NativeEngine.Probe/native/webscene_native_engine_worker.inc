@@ -88,17 +88,23 @@
                     webscene_native::interop_callback_request_data_v3&&
                         callback) {
                 return enqueue_callback_v3(std::move(callback));
-            },
+            }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            ,
             [token] {
                 return token.stop_requested();
-            });
+            }
+#endif
+            );
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
             runtime_.reset();
         } else {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             inspector_runtime_.store(runtime_.get(), std::memory_order_release);
+#endif
         }
 #endif
         publish_scene();
@@ -127,6 +133,7 @@
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             if (runtime_ != nullptr) {
                 constexpr uint32_t maximum_inspector_batch = 64U;
                 uint32_t inspector_tasks = 0U;
@@ -136,6 +143,7 @@
                     ++inspector_tasks;
                 }
             }
+#endif
             if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
                 const auto host_visible = host_visible_.load(std::memory_order_acquire);
                 if (runtime_ != nullptr
@@ -924,7 +932,9 @@
             wake_pending_ = false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         inspector_runtime_.store(nullptr, std::memory_order_release);
+#endif
         runtime_.reset();
 #endif
     }

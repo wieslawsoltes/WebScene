@@ -135,6 +135,7 @@ void test_parallel_resource_prefetch()
     webscene_engine_destroy(engine);
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 void test_inspector_navigation_resets_context_group()
 {
     resource_server server{
@@ -256,6 +257,7 @@ void test_inspector_navigation_resets_context_group()
         "Inspector navigation session disconnect was rejected");
     webscene_engine_destroy(engine);
 }
+#endif
 
 void test_document_script_failure_remains_diagnostic()
 {

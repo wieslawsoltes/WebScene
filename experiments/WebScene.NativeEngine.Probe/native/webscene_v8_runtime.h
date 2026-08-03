@@ -195,8 +195,11 @@ public:
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
-        interop_callback_sink_v3 interop_callback_sink = {},
-        std::function<bool()> shutdown_requested = {});
+        interop_callback_sink_v3 interop_callback_sink = {}
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        , std::function<bool()> shutdown_requested = {}
+#endif
+        );
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;

@@ -1023,7 +1023,9 @@
                 script,
                 std::move(immutable_source))
             || script->Run(local_context).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
+#endif
             error = describe_exception(try_catch, local_context);
             return false;
         }
@@ -1814,9 +1816,11 @@
             v8::kEmbedderDataTypeTagDefault);
         frame_context.Reset(isolate, local_frame_context);
         install_frame_globals(local_frame_context, frame, frame_body);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         register_inspector_context(
             local_frame_context,
             "WebScene frame " + std::to_string(frame.id));
+#endif
 
         const auto execute_group = [&](bool defer) {
             for (const auto& script : scripts) {

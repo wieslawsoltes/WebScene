@@ -192,7 +192,7 @@
         void* user_data,
         bool wait_for_debugger)
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         static_cast<void>(callback);
         static_cast<void>(user_data);
         static_cast<void>(wait_for_debugger);
@@ -215,7 +215,7 @@
         void* user_data,
         bool wait_for_debugger)
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         static_cast<void>(callback);
         static_cast<void>(user_data);
         static_cast<void>(wait_for_debugger);
@@ -246,7 +246,7 @@
         char* destination,
         size_t destination_capacity)
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         static_cast<void>(session_id);
         static_cast<void>(destination);
         static_cast<void>(destination_capacity);
@@ -268,7 +268,7 @@
         const char* message,
         size_t message_length)
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         static_cast<void>(session_id);
         static_cast<void>(message);
         static_cast<void>(message_length);
@@ -293,7 +293,7 @@
 
     bool disconnect_inspector(uint64_t session_id)
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         static_cast<void>(session_id);
         return false;
 #else
@@ -311,7 +311,7 @@
 
     bool inspector_available() const noexcept
     {
-#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         return false;
 #else
         const auto* runtime = inspector_runtime_.load(std::memory_order_acquire);

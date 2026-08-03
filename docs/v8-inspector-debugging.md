@@ -1,6 +1,6 @@
 # V8 Inspector and Chrome DevTools debugging
 
-WebScene exposes its dedicated native V8 isolate through the V8 Inspector
+The opt-in WebScene Inspector runtime flavor exposes its dedicated native V8 isolate through the V8 Inspector
 Protocol. The transport is raw CDP: WebScene does not reinterpret debugger
 commands or events, so Chrome DevTools and the CDP Inspector app see the same
 script IDs, execution contexts, call frames, scopes, breakpoints, exceptions,
@@ -8,7 +8,16 @@ live-edit results, and WebAssembly metadata produced by V8.
 
 ## Architecture
 
-Each `v8_dom_runtime` creates one `v8_inspector::V8Inspector` before document
+The ordinary production runtime compiles Inspector fields, queues, hooks,
+worker polling, and the `v8-inspector.h` dependency out. Build the explicit
+Inspector flavor with CMake
+`-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON`, the Unix runtime builder's
+`--v8-inspector` switch, or the Windows builder's `-V8Inspector` switch. The
+loaded binary advertises this capability through
+`WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR`; the stable Inspector ABI returns
+unavailable from ordinary binaries.
+
+Each Inspector-flavor `v8_dom_runtime` creates one `v8_inspector::V8Inspector` before document
 scripts execute. The outer document and every iframe realm are registered with
 `contextCreated` and removed with `contextDestroyed`. Every client connection
 gets an independent `V8InspectorSession` and channel.
@@ -100,11 +109,14 @@ alongside `WEBSCENE_INSPECT_ALLOW_REMOTE=1`; the same value authenticates remote
 discovery and WebSocket attachment without being placed in the process command
 line or printed to the startup log.
 
-Inspector context registration stays available in dedicated-isolate builds so
+Inspector context registration stays available in explicit Inspector-flavor,
+dedicated-isolate builds so
 a debugger attached later can enumerate already-loaded scripts. Console,
 exception, promise-rejection, and async-stack instrumentation is inactive until
 the first Inspector session is established, avoiding per-event stack capture or
-Inspector message retention in ordinary inspector-disabled application runs.
+Inspector message retention before a client attaches. Ordinary production
+runtimes have no Inspector state or hot-path checks at all because the feature
+is excluded at compile time.
 
 ## Original TypeScript, JavaScript, and source mutations
 

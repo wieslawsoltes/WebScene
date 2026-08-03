@@ -400,7 +400,9 @@
             if (found != actual_frame_contexts.end()
                 && !found->second.IsEmpty()) {
                 const auto local_context = found->second.Get(isolate);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 destroy_inspector_context(local_context);
+#endif
                 if (!frame_context.IsEmpty()
                     && frame_context.Get(isolate) == local_context) {
                     frame_context.Reset();
@@ -708,7 +710,9 @@
             if (const auto found = actual_frame_contexts.find(id);
                 found != actual_frame_contexts.end()
                 && !found->second.IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 destroy_inspector_context(found->second.Get(isolate));
+#endif
             }
             actual_frame_contexts.erase(id);
             actual_frame_documents.erase(id);

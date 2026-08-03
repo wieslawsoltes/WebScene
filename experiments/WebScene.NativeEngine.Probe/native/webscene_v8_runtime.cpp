@@ -14,7 +14,9 @@
 
 #include <libplatform/libplatform.h>
 #include <v8.h>
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 #include <v8-inspector.h>
+#endif
 #include <v8-profiler.h>
 
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
@@ -82,7 +84,9 @@ void prewarm_v8_process()
 
 struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_state_types.inc"
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 #include "webscene_v8_runtime_inspector.inc"
+#endif
 #include "webscene_v8_runtime_lifecycle.inc"
     bool initialize()
     {
@@ -162,7 +166,9 @@ struct v8_dom_runtime::implementation final {
         v8::Context::Scope context_scope(local_context);
         install_templates(local_context);
         install_globals(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         initialize_inspector(local_context);
+#endif
         return true;
     }
 
@@ -3012,14 +3018,20 @@ struct v8_dom_runtime::implementation final {
         if (message.GetEvent() == v8::kPromiseHandlerAddedAfterReject) {
             std::erase_if(
                 self->pending_promise_rejections,
-                [&promise, isolate, self](auto& rejection) {
+                [&promise, isolate
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    , self
+#endif
+                ](auto& rejection) {
                     if (!rejection.promise.Get(isolate)->StrictEquals(promise)) {
                         return false;
                     }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     self->revoke_inspector_exception(
                         rejection.context.Get(isolate),
                         rejection.inspector_exception_id,
                         "Promise rejection was handled asynchronously");
+#endif
                     return true;
                 });
             return;
@@ -3037,6 +3049,7 @@ struct v8_dom_runtime::implementation final {
                 error += "\n" + to_utf8(isolate, stack);
             }
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         auto local_context = isolate->GetCurrentContext();
         const auto inspector_exception_id = value.IsEmpty()
             ? 0U
@@ -3044,11 +3057,19 @@ struct v8_dom_runtime::implementation final {
                 local_context,
                 value,
                 error);
+#endif
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             v8::Global<v8::Context>(isolate, local_context),
-            std::move(error),
+#endif
+            std::move(error)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            ,
             inspector_exception_id});
+#else
+            });
+#endif
     }
 
 #include "webscene_v8_runtime_state.inc"
@@ -3061,8 +3082,11 @@ v8_dom_runtime::v8_dom_runtime(
     resource_loader load_resource,
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
-    interop_callback_sink_v3 interop_callback_sink,
-    std::function<bool()> shutdown_requested)
+    interop_callback_sink_v3 interop_callback_sink
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    , std::function<bool()> shutdown_requested
+#endif
+    )
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -3070,8 +3094,11 @@ v8_dom_runtime::v8_dom_runtime(
         std::move(load_resource),
           std::move(host_request_available),
           std::move(interop_callback_available),
-          std::move(interop_callback_sink),
-          std::move(shutdown_requested)))
+          std::move(interop_callback_sink)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+          , std::move(shutdown_requested)
+#endif
+          ))
 {
 }
 
@@ -3157,30 +3184,54 @@ bool v8_dom_runtime::try_take_console_message(std::string& message)
 
 bool v8_dom_runtime::inspector_available() const noexcept
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    return false;
+#else
     return impl_->inspector_ready.load(std::memory_order_acquire);
+#endif
 }
 
 uint64_t v8_dom_runtime::connect_inspector(
     inspector_message_sink message_sink,
     bool wait_for_debugger)
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    static_cast<void>(message_sink);
+    static_cast<void>(wait_for_debugger);
+    return 0U;
+#else
     return impl_->connect_inspector(std::move(message_sink), wait_for_debugger);
+#endif
 }
 
 bool v8_dom_runtime::dispatch_inspector_message(
     uint64_t session_id,
     std::string message)
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    static_cast<void>(session_id);
+    static_cast<void>(message);
+    return false;
+#else
     return impl_->dispatch_inspector_message(session_id, std::move(message));
+#endif
 }
 
 bool v8_dom_runtime::disconnect_inspector(uint64_t session_id)
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    static_cast<void>(session_id);
+    return false;
+#else
     return impl_->disconnect_inspector(session_id);
+#endif
 }
 
 bool v8_dom_runtime::pump_inspector_task()
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    return false;
+#else
     if (!impl_->inspector_available_for_dispatch()) return false;
     auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
@@ -3198,11 +3249,16 @@ bool v8_dom_runtime::pump_inspector_task()
         impl_->perform_microtask_checkpoint();
     }
     return processed;
+#endif
 }
 
 bool v8_dom_runtime::has_pending_inspector_tasks() const noexcept
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    return false;
+#else
     return impl_->has_pending_inspector_tasks();
+#endif
 }
 
 bool v8_dom_runtime::dispatch_resize()

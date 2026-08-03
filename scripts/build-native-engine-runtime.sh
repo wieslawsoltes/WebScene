@@ -18,9 +18,10 @@ thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
+v8_inspector=false
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc] [--v8-inspector]" >&2
 }
 
 while (($# > 0)); do
@@ -41,6 +42,7 @@ while (($# > 0)); do
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
     --partition-alloc) partition_alloc=true; shift ;;
+    --v8-inspector) v8_inspector=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -84,6 +86,7 @@ v8_configuration=Release
 build_variant="-$html_parser-$css_parser-$selector_parser-$dom_bindings-$v8_snapshot"
 thin_lto_cmake=OFF
 partition_alloc_cmake=OFF
+v8_inspector_cmake=OFF
 v8_webassembly=true
 if [[ "$thin_lto" == true ]]; then
   v8_configuration=ReleaseThinLto
@@ -99,6 +102,10 @@ if [[ "$partition_alloc" == true ]]; then
   v8_configuration+=PartitionAlloc
   build_variant+=-partitionalloc
   partition_alloc_cmake=ON
+fi
+if [[ "$v8_inspector" == true ]]; then
+  build_variant+=-inspector
+  v8_inspector_cmake=ON
 fi
 
 if [[ -z "$package_version" ]]; then
@@ -288,6 +295,7 @@ cmake_args=(
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE=Release
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR="$v8_inspector_cmake"
   -DWEBSCENE_V8_POINTER_COMPRESSION=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
   -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON
@@ -397,6 +405,7 @@ pack_args=(
   "-p:WebSceneNativeEngineV8SharedCage=true"
   "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true"
   "-p:WebSceneNativeEngineV8PartitionAlloc=$partition_alloc"
+  "-p:WebSceneNativeEngineV8Inspector=$v8_inspector"
   "-p:WebSceneNativeEngineDenseLink=true"
   "-p:WebSceneNativeEngineThinLto=$thin_lto"
   "-p:WebSceneNativeEngineV8Revision=$v8_revision"
@@ -452,10 +461,9 @@ consumer_nuget_config="$consumer_root/nuget.config"
 cmake -E copy_if_different \
   "$repo_root/packaging/WebScene.NativeEngine.Runtime/ConsumerSmoke.Directory.Packages.props" \
   "$consumer_root/Directory.Packages.props"
-consumer_framework=net8.0
-if [[ "$expected_kernel" == Linux ]]; then
-  # The compatibility image intentionally carries the pinned .NET 10 SDK.
-  consumer_framework=net10.0
+consumer_framework=net10.0
+if dotnet --list-sdks | grep -Eq '^8\.'; then
+  consumer_framework=net8.0
 fi
 dotnet new nugetconfig --force --output "$consumer_root"
 dotnet nuget add source "$output_dir" \

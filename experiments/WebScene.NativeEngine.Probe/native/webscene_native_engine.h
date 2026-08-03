@@ -819,11 +819,13 @@ typedef struct webscene_engine_memory_metrics {
  * document, isolate, or chart. This does not read or mutate compilation caches.
  */
 #define WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION (1U << 0U)
+#define WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR (1U << 1U)
 
 WEBSCENE_API uint32_t webscene_engine_get_abi_version(void);
 /*
  * Reports compile-time features of the loaded native binary. Certification
- * telemetry and profiling are absent unless the certification bit is present.
+ * telemetry/profiling and V8 Inspector hooks/state are absent unless their
+ * respective bits are present.
  */
 WEBSCENE_API uint32_t webscene_engine_get_build_features(void);
 WEBSCENE_API uint8_t webscene_engine_prewarm(void);

@@ -173,6 +173,7 @@ struct url_request final {
     std::string url;
 };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 struct inspector_output_state final {
     static constexpr size_t maximum_messages = 1024U;
     static constexpr size_t maximum_bytes = 16U * 1024U * 1024U;
@@ -226,6 +227,7 @@ struct inspector_output_state final {
         return required;
     }
 };
+#endif
 
 // These responsibility-focused fragments intentionally remain one translation
 // unit so the refactor cannot alter inlining or production code generation.
@@ -281,10 +283,12 @@ private:
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     std::atomic<webscene_native::v8_dom_runtime*> inspector_runtime_{nullptr};
     std::mutex inspector_output_mutex_;
     std::unordered_map<uint64_t, std::shared_ptr<inspector_output_state>>
         inspector_outputs_;
+#endif
 #endif
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
@@ -636,11 +640,14 @@ uint32_t webscene_engine_get_abi_version(void)
 
 uint32_t webscene_engine_get_build_features(void)
 {
+    uint32_t features = 0U;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-    return WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION;
-#else
-    return 0U;
+    features |= WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION;
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    features |= WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR;
+#endif
+    return features;
 }
 
 uint8_t webscene_engine_prewarm(void)
