@@ -108,6 +108,8 @@ public sealed class WebSceneV8InspectorHostTests
     [Fact]
     public async Task DiscoveryAndWebSocketForwardCompleteInspectorMessages()
     {
+        const string accessToken =
+            "base64+/token&with=reserved?chars-0123456789";
         var port = ReserveLoopbackPort();
         var session = new FakeInspectorSession();
         await using var host = new WebSceneV8InspectorHost(
@@ -117,7 +119,8 @@ public sealed class WebSceneV8InspectorHostTests
             {
                 Enabled = true,
                 Address = IPAddress.Loopback,
-                Port = port
+                Port = port,
+                AccessToken = accessToken
             });
         await host.StartAsync();
 
@@ -130,7 +133,10 @@ public sealed class WebSceneV8InspectorHostTests
             "file:///workspace/component.tsx",
             target.GetProperty("url").GetString());
         var websocketUrl = target.GetProperty("webSocketDebuggerUrl").GetString();
-        Assert.Contains($"token={host.AccessToken}", websocketUrl);
+        Assert.Equal(accessToken, host.AccessToken);
+        Assert.Contains(
+            $"token={Uri.EscapeDataString(accessToken)}",
+            websocketUrl);
 
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(new Uri(websocketUrl!), CancellationToken.None);

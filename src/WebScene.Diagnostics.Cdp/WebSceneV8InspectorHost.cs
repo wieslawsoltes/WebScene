@@ -303,7 +303,9 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         {
             var authority = context.Request.Url?.Authority
                 ?? $"{FormatAddress(_options.Address)}:{_options.Port}";
-            var websocketUrl = $"ws://{authority}/devtools/page/{_targetId}?token={AccessToken}";
+            var websocketUrl =
+                $"ws://{authority}/devtools/page/{_targetId}?token="
+                + Uri.EscapeDataString(AccessToken);
             await WriteJsonAsync(
                 context.Response,
                 new[]
