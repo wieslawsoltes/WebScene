@@ -543,7 +543,9 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
     private CancellationTokenSource? _navigationCancellation;
+    private Task? _disposeTask;
 
     public UnoNativeWebSceneView()
     {
@@ -738,12 +740,19 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
-        await _lifecycleGate.WaitAsync(cancellationToken);
+        var lifetimeToken = GetLifetimeToken();
+        using var loadCancellation =
+            UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+                cancellationToken,
+                lifetimeToken);
+        await _lifecycleGate.WaitAsync(loadCancellation.Token);
         try
         {
             await UnloadCoreAsync();
             _navigationCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+                    cancellationToken,
+                    lifetimeToken);
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime.PrewarmAsync(
                 options.NativeLibraryPath,
@@ -835,10 +844,40 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     }
 
     public ValueTask DisposeAsync()
-        => UnoNativeWebSceneLifecycle.DisposeAsync(
-            _navigationCancellation,
-            _lifecycleGate,
-            UnloadCoreAsync);
+    {
+        lock (_lifetimeCancellation)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private CancellationToken GetLifetimeToken()
+    {
+        lock (_lifetimeCancellation)
+        {
+            if (_disposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(UnoNativeWebSceneView));
+            }
+            return _lifetimeCancellation.Token;
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        try
+        {
+            await UnoNativeWebSceneLifecycle.DisposeAsync(
+                _lifetimeCancellation,
+                _lifecycleGate,
+                UnloadCoreAsync);
+        }
+        finally
+        {
+            _lifetimeCancellation.Dispose();
+        }
+    }
 
     private async Task UnloadCoreAsync()
     {
@@ -871,12 +910,19 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
 internal static class UnoNativeWebSceneLifecycle
 {
+    public static CancellationTokenSource CreateNavigationCancellation(
+        CancellationToken cancellationToken,
+        CancellationToken lifetimeToken)
+        => CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lifetimeToken);
+
     public static async ValueTask DisposeAsync(
-        CancellationTokenSource? navigationCancellation,
+        CancellationTokenSource lifetimeCancellation,
         SemaphoreSlim lifecycleGate,
         Func<Task> unloadAsync)
     {
-        navigationCancellation?.Cancel();
+        lifetimeCancellation.Cancel();
         await lifecycleGate.WaitAsync();
         try
         {
