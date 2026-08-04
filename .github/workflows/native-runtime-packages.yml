@@ -99,7 +99,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v8-v8-15.3.10-pa-no-process-shim-macos
+          v8_cache_generation: v9-v8-15.3.10-pa-no-process-shim-macos-inspector
           v8_cache_script: scripts/build-native-engine-runtime.sh
           v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt
         - os: ubuntu-latest
@@ -110,7 +110,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v11-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared
+          v8_cache_generation: v12-v8-15.3.10-pa-no-process-shim-ubuntu22-gcc12-lld-no-crel-shared-inspector
           v8_cache_script: scripts/build-native-engine-runtime.sh
           v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8BuildNoCrelPatch.txt
         - os: windows-2022
@@ -121,7 +121,7 @@ jobs:
           v8_revision: 15.3.10
           partition_alloc: true
           v8_configuration: ReleasePartitionAlloc
-          v8_cache_generation: v8-v8-15.3.10-pa-windows-compat
+          v8_cache_generation: v9-v8-15.3.10-pa-windows-compat-inspector
           v8_cache_script: scripts/build-native-engine-runtime.ps1
           v8_cache_patch: packaging/WebScene.NativeEngine.Runtime/patches/V8WindowsCompatibilityPatch.txt
     runs-on: ${{ matrix.os }}
@@ -190,6 +190,8 @@ jobs:
                 && grep -Eq '^v8_monolithic_for_shared_library *= *true$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
+          && -f "$root/include/v8-inspector.h" \
+          && $(grep -c 'virtual void consoleAPICalled' "$root/include/v8-inspector.h") -gt 0 \
           && -f "$args" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \
@@ -221,13 +223,13 @@ jobs:
           --v8-revision '${{ matrix.v8_revision }}' \
           --upstream-v8 \
           --partition-alloc \
+          --v8-inspector \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
     - name: Build, pack, and test Linux runtime
       if: matrix.rid == 'linux-x64'
       shell: bash
       run: |
         v8_root=
-        restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
           v8_root="/workspace/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         fi
@@ -251,6 +253,7 @@ jobs:
               --v8-revision '${{ matrix.v8_revision }}' \
               --upstream-v8 \
               --partition-alloc \
+              --v8-inspector \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
@@ -269,6 +272,7 @@ jobs:
           -V8Revision '${{ matrix.v8_revision }}' `
           -UpstreamV8 `
           -PartitionAlloc `
+          -V8Inspector `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
@@ -295,6 +299,8 @@ jobs:
                 && grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$args"; }; }
         }
         if [[ -f "$root/include/v8.h" \
+          && -f "$root/include/v8-inspector.h" \
+          && $(grep -c 'virtual void consoleAPICalled' "$root/include/v8-inspector.h") -gt 0 \
           && -f "$args" \
           && -f "$monolith" \
           && -f "$root/out/${{ matrix.cpu }}/${{ matrix.v8_configuration }}/icudtl.dat" \

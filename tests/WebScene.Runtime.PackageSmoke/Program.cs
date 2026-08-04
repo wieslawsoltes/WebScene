@@ -106,11 +106,12 @@ try
     var getBuildFeatures = Marshal.GetDelegateForFunctionPointer<GetBuildFeatures>(
         buildFeaturesExport);
     var buildFeatures = getBuildFeatures();
-    if (buildFeatures != 0)
+    const uint inspectorBuildFeature = 1U << 1;
+    if (buildFeatures != inspectorBuildFeature)
     {
         return Fail(
-            $"The packaged native runtime unexpectedly contains build features 0x{buildFeatures:X}; " +
-            "certification telemetry must be compiled out.");
+            $"The packaged native runtime has build features 0x{buildFeatures:X}; " +
+            $"expected Inspector-only feature 0x{inspectorBuildFeature:X}.");
     }
     Console.WriteLine(
         $"WebScene package smoke: pass; presenter={typeof(NativeWebSceneView).Assembly.GetName().Name}; " +

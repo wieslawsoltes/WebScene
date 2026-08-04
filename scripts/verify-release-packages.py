@@ -179,7 +179,7 @@ def validate_native_runtime(
         "v8SharedCage": True,
         "v8OptimizeForSizeDefault": True,
         "v8PartitionAlloc": runtime_identifier in PARTITION_ALLOC_NATIVE_RIDS,
-        "v8Inspector": False,
+        "v8Inspector": True,
         "denseLink": True,
         "thinLto": False,
         "certificationTelemetry": False,
