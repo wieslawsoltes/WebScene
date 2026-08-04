@@ -19,6 +19,7 @@ PACKAGE_IDS = {
     "WebScene.Core",
     "WebScene.Css",
     "WebScene.Dom",
+    "WebScene.Diagnostics.Cdp",
     "WebScene.Graphics",
     "WebScene.JavaScript.Interop",
     "WebScene.JavaScript.Interop.Generator",
