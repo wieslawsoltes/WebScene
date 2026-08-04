@@ -289,9 +289,9 @@
                 url = to_utf8(isolate, resource_name);
             }
             const auto source_line = message->GetLineNumber(local_context).FromMaybe(0);
-            if (source_line > 0) line = static_cast<unsigned>(source_line);
+            if (source_line > 0) line = static_cast<unsigned>(source_line - 1);
             const auto source_column = message->GetStartColumn(local_context).FromMaybe(-1);
-            if (source_column >= 0) column = static_cast<unsigned>(source_column + 1);
+            if (source_column >= 0) column = static_cast<unsigned>(source_column);
             script_id = origin.ScriptId();
             auto v8_stack_trace = message->GetStackTrace();
             if (!v8_stack_trace.IsEmpty()) {

@@ -1127,6 +1127,16 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             R"("method":"Runtime.exceptionThrown")",
             exception_name),
         "Runtime.exceptionThrown did not retain the WebScene script URL");
+    const auto exception_message = find_inspector_message(
+        messages,
+        R"("method":"Runtime.exceptionThrown")",
+        "webscene-inspector-exception");
+    require(
+        exception_message.find(R"("lineNumber":0)") != std::string::npos,
+        "Runtime.exceptionThrown did not convert the V8 line to zero-based CDP coordinates");
+    require(
+        exception_message.find(R"("columnNumber":0)") != std::string::npos,
+        "Runtime.exceptionThrown changed V8's already-zero-based column coordinate");
 
     constexpr std::string_view rejection_source{
         "Promise.reject(new Error('webscene-inspector-rejection'));"};
