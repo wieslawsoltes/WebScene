@@ -1,6 +1,6 @@
 # V8 Inspector and Chrome DevTools debugging
 
-The opt-in WebScene Inspector runtime flavor exposes its dedicated native V8 isolate through the V8 Inspector
+The WebScene production runtime exposes its dedicated native V8 isolate through the V8 Inspector
 Protocol. The transport is raw CDP: WebScene does not reinterpret debugger
 commands or events, so Chrome DevTools and the CDP Inspector app see the same
 script IDs, execution contexts, call frames, scopes, breakpoints, exceptions,
@@ -8,19 +8,19 @@ live-edit results, and WebAssembly metadata produced by V8.
 
 ## Architecture
 
-The ordinary production runtime compiles Inspector fields, queues, hooks,
-worker polling, and the `v8-inspector.h` dependency out. Build the explicit
-Inspector flavor with CMake
+Published production packages use the patched V8 SDK and compile Inspector
+support in. Build the equivalent runtime with CMake
 `-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON`, the Unix runtime builder's
 `--v8-inspector` switch, or the Windows builder's `-V8Inspector` switch. The
 loaded binary advertises this capability through
 `WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR`; the stable Inspector ABI returns
-unavailable from ordinary binaries.
+unavailable only from explicit feature-off control binaries.
 
-Each Inspector-flavor `v8_dom_runtime` creates one `v8_inspector::V8Inspector` before document
-scripts execute. The outer document and every iframe realm are registered with
-`contextCreated` and removed with `contextDestroyed`. Every client connection
-gets an independent `V8InspectorSession` and channel.
+Each runtime creates its `v8_inspector::V8Inspector` lazily when the engine
+worker processes the first debugger connection. The current outer document and
+iframe realms are registered at that boundary; later realms use
+`contextCreated` and `contextDestroyed` normally. Every client connection gets
+an independent `V8InspectorSession` and channel.
 
 Native C ABI entry points connect, dispatch, pull messages, and disconnect
 sessions. Calls may originate on any managed thread, but commands are queued

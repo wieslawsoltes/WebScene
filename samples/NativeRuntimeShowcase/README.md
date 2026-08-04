@@ -23,9 +23,10 @@ available:
   --package-version 11.3.4-showcase.1
 ```
 
-`--v8-inspector` selects the diagnostic runtime flavor. Omit it for the
-ordinary production runtime, which compiles all V8 Inspector state and hooks
-out.
+`--v8-inspector` matches the published production runtime. It includes the
+patched V8 Inspector capability, but does not allocate Inspector objects or
+session state until a debugger connects. Omit it only to build the feature-off
+performance control.
 
 Run Avalonia:
 

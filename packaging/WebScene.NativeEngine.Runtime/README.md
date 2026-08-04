@@ -19,8 +19,9 @@ dynamic export table to WebScene's public C ABI. Developer builds retain ordinar
 symbols unless `WEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON` is selected explicitly.
 Runtime packages compile with `WEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF`; feature
 inventories, diagnostic snapshots, native profiling state, and their hot-path
-counters are not shipped. The stable
-`webscene_engine_get_build_features` ABI reports zero for these package binaries.
+counters are not shipped. Production packages do include the patched V8 Inspector
+capability; the stable `webscene_engine_get_build_features` ABI reports only the
+V8 Inspector bit for these package binaries.
 The library locates ICU data relative to its own module, so the package remains
 relocatable.
 Browser-facing `WebSocket` support is implemented inside the native runtime

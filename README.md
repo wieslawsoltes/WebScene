@@ -154,18 +154,18 @@ dotnet test WebScene.sln -c Release --no-build
 Build and verify the native runtime on a matching host:
 
 ```bash
-scripts/build-native-engine-runtime.sh --rid osx-arm64
-scripts/build-native-engine-runtime.sh --rid linux-x64
+scripts/build-native-engine-runtime.sh --rid osx-arm64 --v8-inspector
+scripts/build-native-engine-runtime.sh --rid linux-x64 --v8-inspector
 ```
 
-Add `--v8-inspector` only for a diagnostic runtime that supports Chrome/CDP
-debugging. The ordinary runtime compiles Inspector state and hooks out.
+Published production packages use the patched V8 SDK and include Chrome/CDP
+debugging. Inspector objects, sessions, queues, callbacks, and managed registry
+state remain unallocated until a debugger connects. Omit `--v8-inspector` only
+when building the feature-off performance control.
 
 ```powershell
-./scripts/build-native-engine-runtime.ps1 -Rid win-x64
+./scripts/build-native-engine-runtime.ps1 -Rid win-x64 -V8Inspector
 ```
-
-Use `-V8Inspector` for the equivalent Windows diagnostic flavor.
 
 Run the Avalonia showcase with an explicit engine library:
 

@@ -1,40 +1,36 @@
 # V8 Inspector production performance gate
 
-The ordinary WebScene native package compiles V8 Inspector out. The opt-in
-Inspector package is a separate diagnostic flavor. Pull requests changing the
-Inspector must pass the required **Build and test V8 production flavor
-(osx-arm64)** job before merge.
+The WebScene native production package includes the patched V8 Inspector
+capability. Pull requests changing it must pass the required **Build and test
+Inspector-capable V8 production flavor (osx-arm64)** job before merge.
 
 ## Matched full-stack comparison
 
-The job creates two complete stacks:
+The job creates two native variants from the same source revision:
 
-- the control C# interop/view assemblies and production native library from the
-  current `origin/main` commit;
-- the candidate C# interop/view assemblies and production native library from
-  the pull request head.
+- an Inspector-free control built without the compile-time feature;
+- the patched Inspector-capable production library.
 
 “Managed” here describes the C# wrapper and view layer; it does not mean a
 second managed JavaScript runtime or a replacement for the native V8 engine.
 
-Both stacks use the same unmodified pinned V8 15.3.10 SDK and identical
-Inspector-disabled build flags. The candidate benchmark harness source is
-copied into the temporary control checkout so the measured workload is
-identical while each executable still references its own revision's managed
-WebScene projects. Pointing one candidate executable at two native libraries is
-not a valid full-stack comparison.
+Both variants use the same patched pinned V8 15.3.10 SDK, source revision,
+Release configuration, managed assemblies, workload, and package settings. The
+only intended difference is the native Inspector compile-time feature. This
+isolates the idle production cost from unrelated changes between commits.
 
 The gate runs 20 fresh processes per variant in repeated control, candidate,
 candidate, control order. It records source revisions and SHA-256 values for
-both managed backend assemblies and both native libraries. Raw process JSON and
+the managed backend assembly and both native libraries. Raw process JSON and
 the comparison report are uploaded as the
-`inspector-disabled-production-comparison` workflow artifact.
+`inspector-capable-production-comparison` workflow artifact.
 
 ## Connection-cost boundary
 
-The managed Inspector registry, per-engine lifetime, session table, callback
-delegate, native callback thunk, channels, and message buffers are created only
-when a native Inspector session is opened. Starting the normal `--inspect`
+The native `V8Inspector`, context registrations, managed Inspector registry,
+per-engine lifetime, session table, callback delegate, native callback thunk,
+channels, and message buffers are created only when a native Inspector session
+is opened. Starting the normal `--inspect`
 discovery listener does not open that session; the WebSocket upgrade from a
 DevTools client does. Ordinary showcase launches do not install the
 pre-navigation diagnostic hook.
@@ -46,10 +42,10 @@ break-on-start behavior rather than when the application merely uses WebScene.
 
 ## Acceptance policy
 
-Inspector-disabled builds must satisfy all of the following:
+Inspector-capable production builds must satisfy all of the following:
 
-- both libraries report build features `0` and package metadata reports
-  `v8Inspector: false`;
+- the control reports build features `0`, the candidate reports only the V8
+  Inspector feature bit, and package metadata reports `v8Inspector: true`;
 - completed timers, animation frames, console signals, and representative DOM
   workloads are identical;
 - ordinary workloads leave the managed Inspector registry uninitialized;
@@ -70,14 +66,15 @@ CPU, and RSS limits are measurement-noise guards, not feature budgets. A
 repeatable non-zero regression must be investigated and removed even if it is
 inside a guard.
 
-The production binary audit also rejects Inspector implementation markers such
-as the live-edit flag. Stable unavailable-returning ABI exports are retained so
-managed packages can load either native flavor safely.
+The production binary audit requires the live-edit implementation marker and
+Inspector-enabled package metadata. Stable unavailable-returning ABI exports
+remain in feature-off control builds.
 
 ## Local comparison
 
-Build and publish the same benchmark source separately against `main` and the
-candidate, then collect at least 20 JSON files per variant:
+Build the same revision once with Inspector disabled and once with Inspector
+enabled, publish one Release benchmark executable, then collect at least 20 JSON
+files per variant:
 
 ```bash
 WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \

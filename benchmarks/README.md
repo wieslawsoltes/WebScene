@@ -14,9 +14,10 @@ WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
   probe native-context-memory
 ```
 
-The Inspector-disabled performance gate builds the same probe source separately against
-the control and candidate managed projects, then runs each executable with its matching
-native library. It reports V8 build features, managed allocations, prewarm and warm
+The Inspector idle-cost gate builds the same source twice: once with Inspector
+compiled out and once as the patched Inspector-capable production runtime. Both
+variants use the same published managed benchmark executable. It reports V8 build
+features, managed allocations, prewarm and warm
 context startup, first scene, idle CPU, timer/animation-frame throughput, console-heavy
 execution, a representative DOM workload, per-engine memory, and multi-view RSS as
 machine-readable JSON:
@@ -31,9 +32,8 @@ WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
 Run at least 20 fresh processes per variant in control/candidate/candidate/control order,
 then use `scripts/compare-inspector-disabled-performance.py` to enforce the production
 thresholds. Timing and idle-CPU decisions use paired bootstrap 95% intervals so process
-noise is not mistaken for a regression. The probe rejects an Inspector-enabled library
-and fails if an ordinary workload initializes the managed Inspector registry, so the
-ordinary-production gate cannot accidentally measure or activate the diagnostic runtime
-flavor.
+noise is not mistaken for a regression. The comparison requires an Inspector-free
+control and an Inspector-capable candidate, and fails if ordinary work initializes the
+managed Inspector registry.
 
 Run with `probe` and no recognized name to list the focused probes.
