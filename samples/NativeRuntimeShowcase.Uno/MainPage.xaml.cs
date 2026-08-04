@@ -17,6 +17,7 @@ public sealed partial class MainPage : Page
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();
     private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
+    private readonly HashSet<UnoNativeWebSceneView> _inspectorBreakConsumed = [];
     private readonly string? _customDocumentUri;
     private WebSceneV8InspectorHost? _v8InspectorHost;
     private UnoNativeWebSceneView? _inspectedView;
@@ -383,10 +384,14 @@ public sealed partial class MainPage : Page
         {
             await _v8InspectorHost.DisposeAsync();
         }
+        var waitForDebugger = _inspectorLaunch.WaitForDebugger
+            && !_inspectorBreakConsumed.Contains(view);
+        var options = _inspectorLaunch.CreateHostOptions();
+        options.WaitForDebugger = waitForDebugger;
         var host = new WebSceneV8InspectorHost(
             view.OpenV8InspectorSession,
             () => view.Source,
-            _inspectorLaunch.CreateHostOptions(),
+            options,
             title: title);
         try
         {
@@ -397,10 +402,17 @@ public sealed partial class MainPage : Page
             await host.DisposeAsync();
             throw;
         }
+        if (waitForDebugger)
+        {
+            // --inspect-brk is a pre-navigation gate for each isolate. Once
+            // that view has been resumed, later target switching must not
+            // pause its already-loaded event loop again.
+            _inspectorBreakConsumed.Add(view);
+        }
         _v8InspectorHost = host;
         _inspectedView = view;
         Console.WriteLine(
-            $"WebScene V8 Inspector{(_inspectorLaunch.WaitForDebugger ? " (waiting for debugger)" : string.Empty)} "
+            $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
             + $"discovery: {host.DiscoveryUri}json/list");
     }
 
