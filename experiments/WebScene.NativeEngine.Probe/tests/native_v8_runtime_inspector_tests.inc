@@ -1308,6 +1308,17 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             R"("method":"Runtime.exceptionThrown")",
             "webscene-inspector-input-callback"),
         "input callback exception was not forwarded through Runtime.exceptionThrown");
+    const auto inspector_input_failure = take_input_dispatch_failure(engine);
+    require(
+        inspector_input_failure.starts_with(
+            "90003\n7\nNative keyboard input dispatch failed:")
+            && inspector_input_failure.find("webscene-inspector-input-callback")
+                != std::string::npos,
+        "Inspector input callback failure was not attributed to its native event: "
+            + inspector_input_failure);
+    require(
+        take_input_dispatch_failure(engine).empty(),
+        "Inspector input callback left an additional native failure queued");
     require(
         evaluate(
             engine,
