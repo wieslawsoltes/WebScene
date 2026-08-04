@@ -88,14 +88,7 @@
                     webscene_native::interop_callback_request_data_v3&&
                         callback) {
                 return enqueue_callback_v3(std::move(callback));
-            }
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            ,
-            [token] {
-                return token.stop_requested();
-            }
-#endif
-            );
+            });
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
         if (!runtime_->initialize()) {
@@ -133,17 +126,6 @@
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            if (runtime_ != nullptr) {
-                constexpr uint32_t maximum_inspector_batch = 64U;
-                uint32_t inspector_tasks = 0U;
-                while (inspector_tasks < maximum_inspector_batch
-                    && runtime_->has_pending_inspector_tasks()) {
-                    if (!runtime_->pump_inspector_task()) break;
-                    ++inspector_tasks;
-                }
-            }
-#endif
             if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
                 const auto host_visible = host_visible_.load(std::memory_order_acquire);
                 if (runtime_ != nullptr
@@ -598,6 +580,29 @@
                  iterator != script_work.end();
                  ++iterator) {
                 auto& request = *iterator;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                if (std::holds_alternative<inspector_pump_work>(request)) {
+                    if (auto* inspector_state = inspector_state_.load(
+                            std::memory_order_acquire)) {
+                        inspector_state->pump_enqueued.store(
+                            false,
+                            std::memory_order_release);
+                    }
+                    if (runtime_ != nullptr) {
+                        constexpr uint32_t maximum_inspector_batch = 64U;
+                        uint32_t inspector_tasks = 0U;
+                        while (inspector_tasks < maximum_inspector_batch
+                            && runtime_->has_pending_inspector_tasks()) {
+                            if (!runtime_->pump_inspector_task(token)) break;
+                            ++inspector_tasks;
+                        }
+                        if (runtime_->has_pending_inspector_tasks()) {
+                            enqueue_inspector_pump();
+                        }
+                    }
+                    continue;
+                }
+#endif
                 if (auto* url = std::get_if<url_request>(&request)) {
                     if (runtime_ != nullptr
                         && runtime_->load_url(

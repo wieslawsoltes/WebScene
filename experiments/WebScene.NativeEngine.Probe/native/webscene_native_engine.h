@@ -949,6 +949,9 @@ WEBSCENE_API uint8_t webscene_engine_inspector_disconnect(
     uint64_t session_id);
 WEBSCENE_API uint8_t webscene_engine_inspector_is_available(
     const webscene_engine* engine);
+/* Diagnostics: nonzero only after the first Inspector connection attempt. */
+WEBSCENE_API uint8_t webscene_engine_inspector_state_created(
+    const webscene_engine* engine);
 WEBSCENE_API uint64_t webscene_engine_begin_evaluate_v3(
     webscene_engine* engine,
     const webscene_interop_evaluate_request_v3* request,

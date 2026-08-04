@@ -55,12 +55,20 @@ public sealed partial class MainWindow : Window
                 return;
             }
             StatusText.Text = "Loading hosted TradingView terminal…";
-            await TerminalHost.LoadAsync(
-                ShowcasePaths.TradingViewUrl,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Avalonia", "tradingview"),
-                BeforeNavigationInspectorHook,
-                FirstDocumentSceneTimeout);
+            try
+            {
+                await TerminalHost.LoadAsync(
+                    ShowcasePaths.TradingViewUrl,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Avalonia", "tradingview"),
+                    BeforeNavigationInspectorHook,
+                    FirstDocumentSceneTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(TerminalHost);
+                throw;
+            }
             await SelectInspectorTargetAsync(
                 TerminalHost,
                 "WebScene V8 · TradingView");
@@ -137,12 +145,20 @@ public sealed partial class MainWindow : Window
             var documentPath = Path.Combine(
                 AppContext.BaseDirectory,
                 "index.html");
-            await EditorHost.LoadAsync(
-                new Uri(documentPath).AbsoluteUri,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Avalonia", "monaco"),
-                BeforeNavigationInspectorHook,
-                FirstDocumentSceneTimeout);
+            try
+            {
+                await EditorHost.LoadAsync(
+                    new Uri(documentPath).AbsoluteUri,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Avalonia", "monaco"),
+                    BeforeNavigationInspectorHook,
+                    FirstDocumentSceneTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(EditorHost);
+                throw;
+            }
             var session = new ShowcaseEditorSession(
                 EditorHost.CreateJavaScriptInvoker());
             try
@@ -322,6 +338,29 @@ public sealed partial class MainWindow : Window
             Console.WriteLine(
                 $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
                 + $"discovery: {host.DiscoveryUri}json/list");
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
+    private async Task ResetInspectorAfterFailedLoadAsync(
+        NativeWebSceneView view)
+    {
+        if (_inspectorLaunch is null) return;
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            _inspectorBreakConsumed.Remove(view);
+            if (!ReferenceEquals(_inspectedView, view)) return;
+            var host = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (host is not null)
+            {
+                await host.DisposeAsync();
+            }
         }
         finally
         {

@@ -41,7 +41,42 @@
     {
         worker_.request_stop();
         signal_worker();
+        worker_.join();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        delete inspector_state_.exchange(nullptr, std::memory_order_acq_rel);
+#endif
     }
+
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    engine_inspector_state* ensure_inspector_state()
+    {
+        auto* existing = inspector_state_.load(std::memory_order_acquire);
+        if (existing != nullptr) return existing;
+        auto candidate = std::make_unique<engine_inspector_state>();
+        auto* expected = static_cast<engine_inspector_state*>(nullptr);
+        if (inspector_state_.compare_exchange_strong(
+                expected,
+                candidate.get(),
+                std::memory_order_release,
+                std::memory_order_acquire)) {
+            return candidate.release();
+        }
+        return expected;
+    }
+
+    void enqueue_inspector_pump()
+    {
+        auto* state = ensure_inspector_state();
+        if (state->pump_enqueued.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+        {
+            std::lock_guard lock(script_mutex_);
+            script_work_.emplace_back(inspector_pump_work{});
+        }
+        signal_worker();
+    }
+#endif
 
     bool enqueue(const webscene_input_event& event)
     {
@@ -204,8 +239,8 @@
             [callback, user_data](uint64_t id, std::string_view message) {
                 callback(user_data, id, message.data(), message.size());
             },
-            wait_for_debugger);
-        if (session_id != 0U) signal_worker();
+            wait_for_debugger,
+            [this] { enqueue_inspector_pump(); });
         return session_id;
 #endif
     }
@@ -223,6 +258,7 @@
 #else
         auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
         if (runtime == nullptr || callback == nullptr) return 0U;
+        auto* inspector_state = ensure_inspector_state();
         auto output = std::make_shared<inspector_output_state>();
         output->callback = callback;
         output->user_data = user_data;
@@ -230,13 +266,13 @@
             [output](uint64_t id, std::string_view message) {
                 output->publish(id, message);
             },
-            wait_for_debugger);
+            wait_for_debugger,
+            [this] { enqueue_inspector_pump(); });
         if (session_id == 0U) return 0U;
         {
-            std::lock_guard lock(inspector_output_mutex_);
-            inspector_outputs_[session_id] = std::move(output);
+            std::lock_guard lock(inspector_state->output_mutex);
+            inspector_state->outputs[session_id] = std::move(output);
         }
-        signal_worker();
         return session_id;
 #endif
     }
@@ -252,11 +288,13 @@
         static_cast<void>(destination_capacity);
         return 0U;
 #else
+        auto* inspector_state = inspector_state_.load(std::memory_order_acquire);
+        if (inspector_state == nullptr) return 0U;
         std::shared_ptr<inspector_output_state> output;
         {
-            std::lock_guard lock(inspector_output_mutex_);
-            const auto found = inspector_outputs_.find(session_id);
-            if (found == inspector_outputs_.end()) return 0U;
+            std::lock_guard lock(inspector_state->output_mutex);
+            const auto found = inspector_state->outputs.find(session_id);
+            if (found == inspector_state->outputs.end()) return 0U;
             output = found->second;
         }
         return output->take(destination, destination_capacity);
@@ -286,7 +324,7 @@
                 std::string(message, message_length))) {
             return false;
         }
-        signal_worker();
+        enqueue_inspector_pump();
         return true;
 #endif
     }
@@ -300,11 +338,12 @@
         auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
         if (runtime == nullptr
             || !runtime->disconnect_inspector(session_id)) return false;
-        {
-            std::lock_guard lock(inspector_output_mutex_);
-            inspector_outputs_.erase(session_id);
+        if (auto* inspector_state = inspector_state_.load(
+                std::memory_order_acquire)) {
+            std::lock_guard lock(inspector_state->output_mutex);
+            inspector_state->outputs.erase(session_id);
         }
-        signal_worker();
+        enqueue_inspector_pump();
         return true;
 #endif
     }
@@ -316,6 +355,15 @@
 #else
         const auto* runtime = inspector_runtime_.load(std::memory_order_acquire);
         return runtime != nullptr && runtime->inspector_available();
+#endif
+    }
+
+    bool inspector_state_created() const noexcept
+    {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        return false;
+#else
+        return inspector_state_.load(std::memory_order_acquire) != nullptr;
 #endif
     }
 

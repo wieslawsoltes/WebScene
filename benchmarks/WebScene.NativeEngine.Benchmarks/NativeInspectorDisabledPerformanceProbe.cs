@@ -12,6 +12,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
     private const uint InspectorBuildFeature = 1U << 1;
     private const string ConsoleCompleteMarker = "__webscene_perf_console_complete__";
     private const string WorkloadCompleteMarker = "__webscene_perf_workload_complete__";
+    private static InspectorStateCreated? _inspectorStateCreated;
 
     internal static int Run(string[] args)
     {
@@ -40,6 +41,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
                 "Set WEBSCENE_NATIVE_ENGINE_PATH to the native V8 library.");
         }
         library = Path.GetFullPath(library);
+        _inspectorStateCreated = TryLoadInspectorStateCreated(library);
         var buildFeaturesExportAvailable = TryReadBuildFeatures(
             library,
             out var buildFeatures);
@@ -515,7 +517,20 @@ internal static class NativeInspectorDisabledPerformanceProbe
             value.NativeDomNodePoolReservedBytes,
             value.NativeDomAttributeStorageBytes,
             value.NativeWrapperStorageBytes,
-            value.LatestSceneBytes);
+            value.LatestSceneBytes,
+            (_inspectorStateCreated?.Invoke(engine) ?? 0) != 0);
+    }
+
+    private static InspectorStateCreated? TryLoadInspectorStateCreated(
+        string library)
+    {
+        var handle = NativeLibrary.Load(library);
+        return NativeLibrary.TryGetExport(
+            handle,
+            "webscene_engine_inspector_state_created",
+            out var address)
+            ? Marshal.GetDelegateForFunctionPointer<InspectorStateCreated>(address)
+            : null;
     }
 
     private static object Summarize(IEnumerable<double> values)
@@ -690,7 +705,11 @@ internal static class NativeInspectorDisabledPerformanceProbe
         ulong NativeDomNodePoolReservedBytes,
         ulong NativeDomAttributeStorageBytes,
         ulong NativeWrapperStorageBytes,
-        ulong LatestSceneBytes);
+        ulong LatestSceneBytes,
+        bool InspectorStateCreated);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate byte InspectorStateCreated(IntPtr engine);
 
     private sealed record ConsoleCompletion(int Messages, int Signals);
 }

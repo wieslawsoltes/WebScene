@@ -6,20 +6,13 @@
         std::function<void()> host_request_available_value,
         std::function<void()> interop_callback_available_value,
         v8_dom_runtime::interop_callback_sink_v3
-            interop_callback_sink_value
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        , std::function<bool()> shutdown_requested_value
-#endif
-        )
+            interop_callback_sink_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
         , interop_callback_available(std::move(interop_callback_available_value))
         , interop_callback_sink(std::move(interop_callback_sink_value))
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        , shutdown_requested(std::move(shutdown_requested_value))
-#endif
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -80,7 +73,9 @@
         interop_handles.clear();
         pending_promise_rejections.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        inspector_promise_rejections.clear();
+        if (auto* inspector_state = inspector_state_if_created()) {
+            inspector_state->promise_rejections.clear();
+        }
 #endif
         connected_resources.clear();
         resize_observers.clear();
@@ -760,7 +755,9 @@
             detached_dom_roots.shrink_to_fit();
             pending_promise_rejections.shrink_to_fit();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            inspector_promise_rejections.shrink_to_fit();
+            if (auto* inspector_state = inspector_state_if_created()) {
+                inspector_state->promise_rejections.shrink_to_fit();
+            }
 #endif
             document_cookies.shrink_to_fit();
             css_rules.shrink_to_fit();

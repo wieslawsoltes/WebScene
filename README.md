@@ -159,9 +159,10 @@ scripts/build-native-engine-runtime.sh --rid linux-x64 --v8-inspector
 ```
 
 Published production packages use the patched V8 SDK and include Chrome/CDP
-debugging. Inspector objects, sessions, queues, callbacks, and managed registry
-state remain unallocated until a debugger connects. Omit `--v8-inspector` only
-when building the feature-off performance control.
+debugging. Normal engine instances retain only the small atomic capability and
+lazy-state pointers; Inspector objects, sessions, mutexes, queues, callbacks,
+and managed registry state remain unallocated until a debugger connects. There
+is no separate production runtime flavor without CDP support.
 
 ```powershell
 ./scripts/build-native-engine-runtime.ps1 -Rid win-x64 -V8Inspector

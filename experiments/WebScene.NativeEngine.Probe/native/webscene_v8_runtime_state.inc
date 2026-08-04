@@ -11,23 +11,12 @@
 #endif
     v8::Global<v8::Context> context;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-    std::unique_ptr<inspector_client> inspector_client_value;
-    std::unique_ptr<v8_inspector::V8Inspector> inspector;
-    std::unordered_map<uint64_t, inspector_session> inspector_sessions;
-    std::unordered_map<uint32_t, bool> inspector_instrumented_async_tasks;
     static constexpr size_t maximum_pending_inspector_actions = 1024U;
     static constexpr size_t maximum_pending_inspector_action_bytes =
         16U * 1024U * 1024U;
-    mutable std::mutex inspector_mutex;
-    std::condition_variable inspector_condition;
-    std::deque<inspector_action> inspector_actions;
-    std::atomic<bool> inspector_actions_pending{false};
-    size_t pending_inspector_action_bytes{0U};
-    std::atomic<uint64_t> next_inspector_session_id{1U};
+    static constexpr size_t maximum_inspector_promise_rejections = 1024U;
+    std::atomic<inspector_state*> inspector_state_value{nullptr};
     std::atomic<bool> inspector_ready{false};
-    uint64_t inspector_waiting_session_id{0U};
-    bool inspector_pause_loop_running{false};
-    bool inspector_shutting_down{false};
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
@@ -111,9 +100,6 @@
     std::function<void()> host_request_available;
     std::function<void()> interop_callback_available;
     v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-    std::function<bool()> shutdown_requested;
-#endif
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -136,10 +122,6 @@
     bool detached_dom_gc_requested{false};
     std::string last_error;
     std::vector<pending_promise_rejection> pending_promise_rejections;
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-    static constexpr size_t maximum_inspector_promise_rejections = 1024U;
-    std::deque<inspector_promise_rejection> inspector_promise_rejections;
-#endif
     std::filesystem::path resource_root;
     std::string document_base_address;
     std::string frame_base_address;

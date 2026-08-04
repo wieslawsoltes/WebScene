@@ -5,6 +5,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -201,11 +202,7 @@ public:
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
-        interop_callback_sink_v3 interop_callback_sink = {}
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        , std::function<bool()> shutdown_requested = {}
-#endif
-        );
+        interop_callback_sink_v3 interop_callback_sink = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
@@ -239,12 +236,13 @@ public:
     bool inspector_available() const noexcept;
     uint64_t connect_inspector(
         inspector_message_sink message_sink,
-        bool wait_for_debugger = false);
+        bool wait_for_debugger = false,
+        std::function<void()> action_queued = {});
     bool dispatch_inspector_message(
         uint64_t session_id,
         std::string message);
     bool disconnect_inspector(uint64_t session_id);
-    bool pump_inspector_task();
+    bool pump_inspector_task(std::stop_token shutdown_token = {});
     bool has_pending_inspector_tasks() const noexcept;
     bool dispatch_resize();
     bool refresh_media_environment();

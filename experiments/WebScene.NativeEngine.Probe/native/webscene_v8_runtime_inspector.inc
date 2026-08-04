@@ -114,8 +114,7 @@
 
         void quitMessageLoopOnPause() override
         {
-            owner.inspector_pause_loop_running = false;
-            owner.inspector_condition.notify_all();
+            owner.quit_inspector_message_loop();
         }
 
         void runIfWaitingForDebugger(int) override
@@ -139,6 +138,52 @@
         }
     };
 
+    struct inspector_state final {
+        std::unique_ptr<inspector_client> client;
+        std::unique_ptr<v8_inspector::V8Inspector> inspector;
+        std::unordered_map<uint64_t, inspector_session> sessions;
+        std::unordered_map<uint32_t, bool> instrumented_async_tasks;
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::deque<inspector_action> actions;
+        size_t pending_action_bytes{0U};
+        std::atomic<uint64_t> next_session_id{1U};
+        uint64_t waiting_session_id{0U};
+        bool pause_loop_running{false};
+        bool shutting_down{false};
+        std::stop_token shutdown_token;
+        std::deque<inspector_promise_rejection> promise_rejections;
+    };
+
+    inspector_state* inspector_state_if_created() const noexcept
+    {
+        return inspector_state_value.load(std::memory_order_acquire);
+    }
+
+    inspector_state* ensure_inspector_state()
+    {
+        auto* existing = inspector_state_if_created();
+        if (existing != nullptr) return existing;
+        auto candidate = std::make_unique<inspector_state>();
+        auto* expected = static_cast<inspector_state*>(nullptr);
+        if (inspector_state_value.compare_exchange_strong(
+                expected,
+                candidate.get(),
+                std::memory_order_release,
+                std::memory_order_acquire)) {
+            return candidate.release();
+        }
+        return expected;
+    }
+
+    void quit_inspector_message_loop()
+    {
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return;
+        state->pause_loop_running = false;
+        state->condition.notify_all();
+    }
+
     bool inspector_available_for_dispatch() const noexcept
     {
         return isolate != nullptr
@@ -150,7 +195,9 @@
         // Inspector construction and context registration happen at the first
         // connection. Console/exception/async-stack instrumentation stays
         // pay-for-use while at least one session exists on the worker.
-        return inspector != nullptr && !inspector_sessions.empty();
+        auto* state = inspector_state_if_created();
+        return state != nullptr && state->inspector != nullptr
+            && !state->sessions.empty();
     }
 
     void initialize_inspector()
@@ -158,12 +205,14 @@
         // A V8Inspector belongs to an isolate. WebScene's opt-in shared-isolate
         // lane can host multiple independent engine workers, so exposing one
         // worker's session there would violate V8's isolate-thread ownership.
-        if (shared_isolate != nullptr || inspector != nullptr
+        auto* state = inspector_state_if_created();
+        if (state == nullptr || shared_isolate != nullptr
+            || state->inspector != nullptr
             || isolate == nullptr || context.IsEmpty()) return;
-        inspector_client_value = std::make_unique<inspector_client>(*this);
-        inspector = v8_inspector::V8Inspector::create(
+        state->client = std::make_unique<inspector_client>(*this);
+        state->inspector = v8_inspector::V8Inspector::create(
             isolate,
-            inspector_client_value.get());
+            state->client.get());
         register_inspector_context(
             context.Get(isolate),
             "WebScene",
@@ -182,7 +231,9 @@
         std::string_view name,
         std::string_view origin = {})
     {
-        if (inspector == nullptr || local_context.IsEmpty()) return;
+        auto* state = inspector_state_if_created();
+        if (state == nullptr || state->inspector == nullptr
+            || local_context.IsEmpty()) return;
         v8_inspector::V8ContextInfo context_info(
             local_context,
             inspector_context_group_id,
@@ -192,28 +243,32 @@
         context_info.origin = v8_inspector::StringView(
             reinterpret_cast<const uint8_t*>(origin.data()),
             origin.size());
-        inspector->contextCreated(context_info);
+        state->inspector->contextCreated(context_info);
     }
 
     void reset_inspector_context_group_for_navigation(
         v8::Local<v8::Context> local_context,
         std::string_view url)
     {
-        if (inspector == nullptr || local_context.IsEmpty()) return;
-        inspector_promise_rejections.clear();
-        inspector->resetContextGroup(inspector_context_group_id);
+        auto* state = inspector_state_if_created();
+        if (state == nullptr || state->inspector == nullptr
+            || local_context.IsEmpty()) return;
+        state->promise_rejections.clear();
+        state->inspector->resetContextGroup(inspector_context_group_id);
         register_inspector_context(local_context, "WebScene", url);
     }
 
     void destroy_inspector_context(v8::Local<v8::Context> local_context)
     {
-        if (inspector == nullptr || local_context.IsEmpty()) return;
+        auto* state = inspector_state_if_created();
+        if (state == nullptr || state->inspector == nullptr
+            || local_context.IsEmpty()) return;
         std::erase_if(
-            inspector_promise_rejections,
+            state->promise_rejections,
             [&local_context, this](auto& rejection) {
                 return rejection.context.Get(isolate) == local_context;
             });
-        inspector->contextDestroyed(local_context);
+        state->inspector->contextDestroyed(local_context);
     }
 
     static void* inspector_async_task_id(uint32_t id) noexcept
@@ -227,8 +282,9 @@
         bool recurring)
     {
         if (!inspector_instrumentation_active()) return;
-        inspector_instrumented_async_tasks[id] = recurring;
-        inspector->asyncTaskScheduled(
+        auto* state = inspector_state_if_created();
+        state->instrumented_async_tasks[id] = recurring;
+        state->inspector->asyncTaskScheduled(
             v8_inspector::StringView(
                 reinterpret_cast<const uint8_t*>(name.data()),
                 name.size()),
@@ -238,31 +294,36 @@
 
     void inspector_async_task_started(uint32_t id)
     {
-        if (inspector_instrumentation_active()
-            && inspector_instrumented_async_tasks.contains(id)) {
-            inspector->asyncTaskStarted(inspector_async_task_id(id));
+        auto* state = inspector_state_if_created();
+        if (state != nullptr && inspector_instrumentation_active()
+            && state->instrumented_async_tasks.contains(id)) {
+            state->inspector->asyncTaskStarted(inspector_async_task_id(id));
         }
     }
 
     void inspector_async_task_finished(uint32_t id)
     {
-        const auto found = inspector_instrumented_async_tasks.find(id);
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return;
+        const auto found = state->instrumented_async_tasks.find(id);
         if (inspector_instrumentation_active()
-            && found != inspector_instrumented_async_tasks.end()) {
-            inspector->asyncTaskFinished(inspector_async_task_id(id));
-            if (!found->second) inspector_instrumented_async_tasks.erase(found);
+            && found != state->instrumented_async_tasks.end()) {
+            state->inspector->asyncTaskFinished(inspector_async_task_id(id));
+            if (!found->second) state->instrumented_async_tasks.erase(found);
         }
     }
 
     void inspector_async_task_canceled(uint32_t id)
     {
-        const auto found = inspector_instrumented_async_tasks.find(id);
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return;
+        const auto found = state->instrumented_async_tasks.find(id);
         if (inspector_instrumentation_active()
-            && found != inspector_instrumented_async_tasks.end()) {
-            inspector->asyncTaskCanceled(inspector_async_task_id(id));
+            && found != state->instrumented_async_tasks.end()) {
+            state->inspector->asyncTaskCanceled(inspector_async_task_id(id));
         }
-        if (found != inspector_instrumented_async_tasks.end()) {
-            inspector_instrumented_async_tasks.erase(found);
+        if (found != state->instrumented_async_tasks.end()) {
+            state->instrumented_async_tasks.erase(found);
         }
     }
 
@@ -304,10 +365,12 @@
             script_id = origin.ScriptId();
             auto v8_stack_trace = message->GetStackTrace();
             if (!v8_stack_trace.IsEmpty()) {
-                stack_trace = inspector->createStackTrace(v8_stack_trace);
+                auto* state = inspector_state_if_created();
+                stack_trace = state->inspector->createStackTrace(v8_stack_trace);
             }
         }
-        return inspector->exceptionThrown(
+        auto* state = inspector_state_if_created();
+        return state->inspector->exceptionThrown(
             local_context,
             inspector_string_view(message_text),
             exception,
@@ -328,7 +391,8 @@
             || exception.IsEmpty()) return 0U;
         const auto message_text = std::string("Uncaught (in promise) ")
             + to_utf8(isolate, exception);
-        return inspector->exceptionThrown(
+        auto* state = inspector_state_if_created();
+        return state->inspector->exceptionThrown(
             local_context,
             inspector_string_view(message_text),
             exception,
@@ -336,7 +400,7 @@
             {},
             0U,
             0U,
-            inspector->captureStackTrace(true),
+            state->inspector->captureStackTrace(true),
             0);
     }
 
@@ -348,7 +412,8 @@
         if (!inspector_instrumentation_active() || local_context.IsEmpty()
             || exception_id == 0U) return;
         const auto reason_text = std::string(reason);
-        inspector->exceptionRevoked(
+        auto* state = inspector_state_if_created();
+        state->inspector->exceptionRevoked(
             local_context,
             exception_id,
             inspector_string_view(reason_text));
@@ -360,12 +425,15 @@
         const std::vector<v8::Local<v8::Value>>& arguments)
     {
         if (!inspector_instrumentation_active() || local_context.IsEmpty()) return;
-        inspector->consoleAPICalled(local_context, level, arguments);
+        auto* state = inspector_state_if_created();
+        state->inspector->consoleAPICalled(local_context, level, arguments);
     }
 
     void destroy_all_inspector_contexts()
     {
-        if (inspector == nullptr || isolate == nullptr) return;
+        auto* state = inspector_state_if_created();
+        if (state == nullptr || state->inspector == nullptr
+            || isolate == nullptr) return;
         auto local_frame_context = frame_context.IsEmpty()
             ? v8::Local<v8::Context>{}
             : frame_context.Get(isolate);
@@ -377,23 +445,25 @@
                 frame_context_registered = frame_context_registered
                     || (!local_frame_context.IsEmpty()
                         && local_context == local_frame_context);
-                inspector->contextDestroyed(local_context);
+                state->inspector->contextDestroyed(local_context);
             }
         }
         if (!local_frame_context.IsEmpty() && !frame_context_registered) {
-            inspector->contextDestroyed(local_frame_context);
+            state->inspector->contextDestroyed(local_frame_context);
         }
         if (!context.IsEmpty()) {
-            inspector->contextDestroyed(context.Get(isolate));
+            state->inspector->contextDestroyed(context.Get(isolate));
         }
     }
 
     uint64_t connect_inspector(
         v8_dom_runtime::inspector_message_sink sink,
-        bool wait_for_debugger)
+        bool wait_for_debugger,
+        const std::function<void()>& action_queued)
     {
         if (!sink || !inspector_available_for_dispatch()) return 0U;
-        const auto session_id = next_inspector_session_id.fetch_add(
+        auto* state = ensure_inspector_state();
+        const auto session_id = state->next_session_id.fetch_add(
             1U,
             std::memory_order_relaxed);
         auto acknowledgement = wait_for_debugger
@@ -403,21 +473,21 @@
             ? std::future<bool>{}
             : acknowledgement->get_future();
         {
-            std::lock_guard lock(inspector_mutex);
-            if (inspector_shutting_down
-                || inspector_actions.size() >= maximum_pending_inspector_actions) {
+            std::lock_guard lock(state->mutex);
+            if (state->shutting_down
+                || state->actions.size() >= maximum_pending_inspector_actions) {
                 return 0U;
             }
-            inspector_actions.push_back(inspector_action{
+            state->actions.push_back(inspector_action{
                 inspector_action::kind::connect,
                 session_id,
                 wait_for_debugger,
                 {},
                 std::move(sink),
                 acknowledgement});
-            inspector_actions_pending.store(true, std::memory_order_release);
         }
-        inspector_condition.notify_all();
+        state->condition.notify_all();
+        if (action_queued) action_queued();
         if (acknowledgement != nullptr) {
             try {
                 if (!connected.get()) return 0U;
@@ -432,80 +502,80 @@
     {
         if (session_id == 0U || message.empty()
             || !inspector_available_for_dispatch()) return false;
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return false;
         {
-            std::lock_guard lock(inspector_mutex);
+            std::lock_guard lock(state->mutex);
             const auto message_size = message.size();
-            if (inspector_shutting_down
-                || inspector_actions.size() >= maximum_pending_inspector_actions
+            if (state->shutting_down
+                || state->actions.size() >= maximum_pending_inspector_actions
                 || message_size > maximum_pending_inspector_action_bytes
-                || pending_inspector_action_bytes
+                || state->pending_action_bytes
                     > maximum_pending_inspector_action_bytes - message_size) {
                 return false;
             }
-            inspector_actions.push_back(inspector_action{
+            state->actions.push_back(inspector_action{
                 inspector_action::kind::dispatch,
                 session_id,
                 false,
                 std::move(message),
                 {},
                 nullptr});
-            pending_inspector_action_bytes += message_size;
-            inspector_actions_pending.store(true, std::memory_order_release);
+            state->pending_action_bytes += message_size;
         }
-        inspector_condition.notify_all();
+        state->condition.notify_all();
         return true;
     }
 
     bool disconnect_inspector(uint64_t session_id)
     {
         if (session_id == 0U || !inspector_available_for_dispatch()) return false;
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return false;
         {
-            std::lock_guard lock(inspector_mutex);
-            if (inspector_shutting_down) return false;
+            std::lock_guard lock(state->mutex);
+            if (state->shutting_down) return false;
             const auto existing_disconnect = std::find_if(
-                inspector_actions.begin(),
-                inspector_actions.end(),
+                state->actions.begin(),
+                state->actions.end(),
                 [&](const auto& action) {
                     return action.session_id == session_id
                         && action.type == inspector_action::kind::disconnect;
             });
-            if (existing_disconnect != inspector_actions.end()) return true;
+            if (existing_disconnect != state->actions.end()) return true;
             const auto pending_connect = std::find_if(
-                inspector_actions.begin(),
-                inspector_actions.end(),
+                state->actions.begin(),
+                state->actions.end(),
                 [&](const auto& action) {
                     return action.session_id == session_id
                         && action.type == inspector_action::kind::connect;
                 });
-            if (pending_connect != inspector_actions.end()) {
+            if (pending_connect != state->actions.end()) {
                 if (pending_connect->connection_acknowledgement != nullptr) {
                     try {
                         pending_connect->connection_acknowledgement->set_value(false);
                     } catch (const std::future_error&) {
                     }
                 }
-                for (auto action = inspector_actions.begin();
-                     action != inspector_actions.end();) {
+                for (auto action = state->actions.begin();
+                     action != state->actions.end();) {
                     if (action->session_id == session_id
                         && (action->type == inspector_action::kind::connect
                             || action->type == inspector_action::kind::dispatch)) {
-                        pending_inspector_action_bytes -= action->message.size();
-                        action = inspector_actions.erase(action);
+                        state->pending_action_bytes -= action->message.size();
+                        action = state->actions.erase(action);
                     } else {
                         ++action;
                     }
                 }
-                inspector_actions_pending.store(
-                    !inspector_actions.empty(),
-                    std::memory_order_release);
                 return true;
             }
-            for (auto action = inspector_actions.begin();
-                 action != inspector_actions.end();) {
+            for (auto action = state->actions.begin();
+                 action != state->actions.end();) {
                 if (action->session_id == session_id
                     && action->type == inspector_action::kind::dispatch) {
-                    pending_inspector_action_bytes -= action->message.size();
-                    action = inspector_actions.erase(action);
+                    state->pending_action_bytes -= action->message.size();
+                    action = state->actions.erase(action);
                 } else {
                     ++action;
                 }
@@ -514,53 +584,54 @@
             // payload. Prioritize it even when another session has filled the
             // payload queue so a waiting-for-debugger owner cannot be stranded
             // after its managed client has gone away.
-            inspector_actions.push_front(inspector_action{
+            state->actions.push_front(inspector_action{
                 inspector_action::kind::disconnect,
                 session_id,
                 false,
                 {},
                 {},
                 nullptr});
-            inspector_actions_pending.store(true, std::memory_order_release);
         }
-        inspector_condition.notify_all();
+        state->condition.notify_all();
         return true;
     }
 
     bool has_pending_inspector_tasks() const noexcept
     {
-        return inspector_actions_pending.load(std::memory_order_acquire);
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return false;
+        std::lock_guard lock(state->mutex);
+        return !state->actions.empty();
     }
 
     bool process_inspector_tasks(bool wait_for_message)
     {
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return false;
         inspector_action action;
         {
-            std::unique_lock lock(inspector_mutex);
+            std::unique_lock lock(state->mutex);
             if (wait_for_message) {
-                inspector_condition.wait_for(lock, std::chrono::milliseconds(25), [&] {
-                    return inspector_shutting_down
-                        || !inspector_actions.empty()
-                        || !inspector_pause_loop_running
-                        || (shutdown_requested && shutdown_requested());
+                state->condition.wait_for(lock, std::chrono::milliseconds(25), [&] {
+                    return state->shutting_down
+                        || !state->actions.empty()
+                        || !state->pause_loop_running
+                        || state->shutdown_token.stop_requested();
                 });
             }
-            if (inspector_shutting_down || inspector_actions.empty()) {
+            if (state->shutting_down || state->actions.empty()) {
                 return false;
             }
-            const auto message_size = inspector_actions.front().message.size();
-            action = std::move(inspector_actions.front());
-            inspector_actions.pop_front();
-            pending_inspector_action_bytes -= message_size;
-            inspector_actions_pending.store(
-                !inspector_actions.empty(),
-                std::memory_order_release);
+            const auto message_size = state->actions.front().message.size();
+            action = std::move(state->actions.front());
+            state->actions.pop_front();
+            state->pending_action_bytes -= message_size;
         }
 
         switch (action.type) {
         case inspector_action::kind::connect: {
             initialize_inspector();
-            if (inspector == nullptr) {
+            if (state->inspector == nullptr) {
                 if (action.connection_acknowledgement != nullptr) {
                     action.connection_acknowledgement->set_value(false);
                 }
@@ -572,7 +643,7 @@
             const auto pause_state = action.wait_for_debugger
                 ? v8_inspector::V8Inspector::kWaitingForDebugger
                 : v8_inspector::V8Inspector::kNotWaitingForDebugger;
-            auto session = inspector->connect(
+            auto session = state->inspector->connect(
                 inspector_context_group_id,
                 channel.get(),
                 {},
@@ -584,7 +655,7 @@
                 }
                 break;
             }
-            inspector_sessions.emplace(
+            state->sessions.emplace(
                 action.session_id,
                 inspector_session{std::move(channel), std::move(session)});
             if (action.connection_acknowledgement != nullptr) {
@@ -595,15 +666,15 @@
                 action.connection_acknowledgement->set_value(true);
             }
             if (action.wait_for_debugger) {
-                inspector_waiting_session_id = action.session_id;
+                state->waiting_session_id = action.session_id;
                 run_inspector_message_loop();
-                inspector_waiting_session_id = 0U;
+                state->waiting_session_id = 0U;
             }
             break;
         }
         case inspector_action::kind::dispatch: {
-            const auto found = inspector_sessions.find(action.session_id);
-            if (found != inspector_sessions.end()) {
+            const auto found = state->sessions.find(action.session_id);
+            if (found != state->sessions.end()) {
                 found->second.session->dispatchProtocolMessage(
                     v8_inspector::StringView(
                         reinterpret_cast<const uint8_t*>(action.message.data()),
@@ -612,19 +683,21 @@
             break;
         }
         case inspector_action::kind::disconnect: {
-            const auto found = inspector_sessions.find(action.session_id);
-            if (found != inspector_sessions.end()) {
+            const auto found = state->sessions.find(action.session_id);
+            if (found != state->sessions.end()) {
                 found->second.session->stop();
-                inspector_sessions.erase(found);
+                state->sessions.erase(found);
             }
-            if (inspector_waiting_session_id == action.session_id) {
-                inspector_waiting_session_id = 0U;
-                inspector_pause_loop_running = false;
+            if (state->waiting_session_id == action.session_id) {
+                state->waiting_session_id = 0U;
+                state->pause_loop_running = false;
             }
-            if (inspector_sessions.empty()) {
-                inspector_instrumented_async_tasks.clear();
-                if (inspector != nullptr) inspector->allAsyncTasksCanceled();
-                inspector_pause_loop_running = false;
+            if (state->sessions.empty()) {
+                state->instrumented_async_tasks.clear();
+                if (state->inspector != nullptr) {
+                    state->inspector->allAsyncTasksCanceled();
+                }
+                state->pause_loop_running = false;
             }
             break;
         }
@@ -634,44 +707,56 @@
 
     void run_inspector_message_loop()
     {
-        inspector_pause_loop_running = true;
-        while (inspector_pause_loop_running && !inspector_shutting_down
-            && !(shutdown_requested && shutdown_requested())) {
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return;
+        state->pause_loop_running = true;
+        while (state->pause_loop_running && !state->shutting_down
+            && !state->shutdown_token.stop_requested()) {
             process_inspector_tasks(true);
         }
-        inspector_pause_loop_running = false;
+        state->pause_loop_running = false;
     }
 
     void shutdown_inspector()
     {
         inspector_ready.store(false, std::memory_order_release);
+        auto* state = inspector_state_if_created();
+        if (state == nullptr) return;
         {
-            std::lock_guard lock(inspector_mutex);
-            inspector_shutting_down = true;
-            for (auto& action : inspector_actions) {
+            std::lock_guard lock(state->mutex);
+            state->shutting_down = true;
+            for (auto& action : state->actions) {
                 if (action.connection_acknowledgement != nullptr) {
-                    action.connection_acknowledgement->set_value(false);
+                    try {
+                        action.connection_acknowledgement->set_value(false);
+                    } catch (const std::future_error&) {
+                    }
                 }
             }
-            inspector_actions.clear();
-            pending_inspector_action_bytes = 0U;
-            inspector_actions_pending.store(false, std::memory_order_release);
+            state->actions.clear();
+            state->pending_action_bytes = 0U;
         }
-        inspector_pause_loop_running = false;
-        inspector_condition.notify_all();
-        if (inspector == nullptr || isolate == nullptr) return;
+        state->pause_loop_running = false;
+        state->condition.notify_all();
+        if (state->inspector == nullptr || isolate == nullptr) {
+            inspector_state_value.store(nullptr, std::memory_order_release);
+            delete state;
+            return;
+        }
         auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
-        for (auto& [id, session] : inspector_sessions) {
+        for (auto& [id, session] : state->sessions) {
             static_cast<void>(id);
             if (session.session != nullptr) session.session->stop();
         }
-        inspector_sessions.clear();
-        inspector_waiting_session_id = 0U;
-        inspector_instrumented_async_tasks.clear();
-        inspector->allAsyncTasksCanceled();
+        state->sessions.clear();
+        state->waiting_session_id = 0U;
+        state->instrumented_async_tasks.clear();
+        state->inspector->allAsyncTasksCanceled();
         destroy_all_inspector_contexts();
-        inspector.reset();
-        inspector_client_value.reset();
+        state->inspector.reset();
+        state->client.reset();
+        inspector_state_value.store(nullptr, std::memory_order_release);
+        delete state;
     }

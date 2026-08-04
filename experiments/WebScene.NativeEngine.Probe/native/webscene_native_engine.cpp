@@ -230,6 +230,15 @@ struct inspector_output_state final {
         return required;
     }
 };
+
+struct engine_inspector_state final {
+    std::atomic<bool> pump_enqueued{false};
+    std::mutex output_mutex;
+    std::unordered_map<uint64_t, std::shared_ptr<inspector_output_state>> outputs;
+};
+
+struct inspector_pump_work final {
+};
 #endif
 
 // These responsibility-focused fragments intentionally remain one translation
@@ -288,9 +297,7 @@ private:
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     std::atomic<webscene_native::v8_dom_runtime*> inspector_runtime_{nullptr};
-    std::mutex inspector_output_mutex_;
-    std::unordered_map<uint64_t, std::shared_ptr<inspector_output_state>>
-        inspector_outputs_;
+    std::atomic<engine_inspector_state*> inspector_state_{nullptr};
 #endif
 #endif
     std::deque<script_work_request> script_work_;
@@ -890,6 +897,11 @@ uint8_t webscene_engine_inspector_disconnect(
 uint8_t webscene_engine_inspector_is_available(const webscene_engine* engine)
 {
     return engine != nullptr && engine->inspector_available() ? 1U : 0U;
+}
+
+uint8_t webscene_engine_inspector_state_created(const webscene_engine* engine)
+{
+    return engine != nullptr && engine->inspector_state_created() ? 1U : 0U;
 }
 
 uint64_t webscene_engine_begin_evaluate_v3(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Inspector-capable idle workloads with an Inspector-free control."""
+"""Compare Inspector-capable production with the current-main baseline."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def main() -> int:
         if baseline.get("options") != changed.get("options"):
             raise RuntimeError("control and candidate benchmark options differ")
     for variant, samples, inspector_expected in (
-        ("control", control, False),
+        ("control", control, None),
         ("candidate", candidate, True),
     ):
         for sample in samples:
@@ -122,12 +122,20 @@ def main() -> int:
             if not isinstance(build_features, int) or build_features & ~2:
                 raise RuntimeError(
                     f"{variant}: unexpected native build features {build_features!r}")
-            if sample.get("inspectorCompiledIn") is not inspector_expected:
+            if (inspector_expected is not None
+                    and sample.get("inspectorCompiledIn") is not inspector_expected):
                 expectation = "Inspector-capable" if inspector_expected else "Inspector-free"
                 raise RuntimeError(f"{variant}: expected an {expectation} runtime")
             if sample.get("managedAllocations", {}).get("inspectorRegistryCreated") is not False:
                 raise RuntimeError(
                     f"{variant}: ordinary workloads initialized managed Inspector state")
+            for collection in ("blankLifecycleSamples", "blankViews", "workloadViews"):
+                if any(
+                    value.get("InspectorStateCreated") is not False
+                    for value in sample.get("memory", {}).get(collection, [])
+                ):
+                    raise RuntimeError(
+                        f"{variant}: ordinary workloads allocated native Inspector state")
 
     timing_paths = [
         "startup.prewarmMilliseconds",
@@ -251,6 +259,7 @@ def main() -> int:
         "NativeDomAttributeStorageBytes",
         "NativeWrapperStorageBytes",
         "LatestSceneBytes",
+        "InspectorStateCreated",
     )
     for collection_path in (
         "memory.blankLifecycleSamples",

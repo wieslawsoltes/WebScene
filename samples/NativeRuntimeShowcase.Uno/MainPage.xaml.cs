@@ -118,12 +118,20 @@ public sealed partial class MainPage : Page
                 ShowcasePaths.ResolveNativeLibraryPath(_arguments);
             StatusText.Text = "Loading hosted TradingView terminal…";
             var started = Stopwatch.StartNew();
-            await _terminal.LoadAsync(
-                ShowcasePaths.TradingViewUrl,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "tradingview"),
-                BeforeNavigationInspectorHook,
-                DocumentBarrierTimeout);
+            try
+            {
+                await _terminal.LoadAsync(
+                    ShowcasePaths.TradingViewUrl,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Uno", "tradingview"),
+                    BeforeNavigationInspectorHook,
+                    DocumentBarrierTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(_terminal);
+                throw;
+            }
             started.Stop();
             _terminalLoadElapsed = started.Elapsed;
             _terminalLoaded = true;
@@ -172,12 +180,24 @@ public sealed partial class MainPage : Page
         TerminalContent.Visibility = Visibility.Collapsed;
         EditorContent.Visibility = Visibility.Visible;
         await WaitForLayoutAsync(EditorContent);
-        await _editor.LoadAsync(
-            documentUri,
-            _nativeLibraryPath!,
-            ShowcasePaths.CacheDirectory("Uno", "custom-document"),
-            BeforeNavigationInspectorHook,
-            DocumentBarrierTimeout);
+        try
+        {
+            await _editor.LoadAsync(
+                documentUri,
+                _nativeLibraryPath!,
+                ShowcasePaths.CacheDirectory("Uno", "custom-document"),
+                BeforeNavigationInspectorHook,
+                DocumentBarrierTimeout);
+        }
+        catch
+        {
+            await ResetInspectorAfterFailedLoadAsync(_editor);
+            throw;
+        }
+        await SelectInspectorTargetAsync(
+            _editor,
+            "WebScene V8 · Custom document · Uno",
+            CancellationToken.None);
         DocumentText.Text = documentUri;
         StatusText.Text = "Custom WebScene document ready";
         Console.WriteLine($"[WebScene Uno] Custom document ready: {documentUri}");
@@ -234,12 +254,20 @@ public sealed partial class MainPage : Page
                 AppContext.BaseDirectory,
                 "index.html");
             var started = Stopwatch.StartNew();
-            await _editor.LoadAsync(
-                new Uri(documentPath).AbsoluteUri,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "monaco"),
-                BeforeNavigationInspectorHook,
-                DocumentBarrierTimeout);
+            try
+            {
+                await _editor.LoadAsync(
+                    new Uri(documentPath).AbsoluteUri,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Uno", "monaco"),
+                    BeforeNavigationInspectorHook,
+                    DocumentBarrierTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(_editor);
+                throw;
+            }
             var session = new ShowcaseEditorSession(
                 _editor.CreateJavaScriptInvoker());
             try
@@ -427,6 +455,29 @@ public sealed partial class MainPage : Page
             Console.WriteLine(
                 $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
                 + $"discovery: {host.DiscoveryUri}json/list");
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
+    private async Task ResetInspectorAfterFailedLoadAsync(
+        UnoNativeWebSceneView view)
+    {
+        if (_inspectorLaunch is null) return;
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            _inspectorBreakConsumed.Remove(view);
+            if (!ReferenceEquals(_inspectedView, view)) return;
+            var host = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (host is not null)
+            {
+                await host.DisposeAsync();
+            }
         }
         finally
         {

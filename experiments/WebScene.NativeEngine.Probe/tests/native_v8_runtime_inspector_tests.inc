@@ -234,6 +234,9 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         require(
             webscene_engine_inspector_is_available(engine) == 0,
             "shared-isolate engine exposed an unsafe per-worker inspector");
+        require(
+            webscene_engine_inspector_state_created(engine) == 0,
+            "shared-isolate engine allocated unused Inspector state");
         return;
     }
 
@@ -245,6 +248,9 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         webscene_engine_inspector_is_available(engine) != 0,
         "dedicated V8 isolate did not publish Inspector availability");
+    require(
+        webscene_engine_inspector_state_created(engine) == 0,
+        "ordinary dedicated isolate eagerly allocated Inspector state");
 
     static_cast<void>(evaluate(
         engine,
@@ -258,6 +264,9 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         &messages,
         0U);
     require(session_id != 0U, "V8 Inspector session creation failed");
+    require(
+        webscene_engine_inspector_state_created(engine) != 0,
+        "first Inspector connection did not allocate its lazy state");
 
     dispatch_inspector_test_message(
         engine,
@@ -1208,6 +1217,96 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         exception_message.find(R"("columnNumber":0)") != std::string::npos,
         "Runtime.exceptionThrown changed V8's already-zero-based column coordinate");
+
+    require(
+        evaluate(
+            engine,
+            R"JS(
+                globalThis.__websceneThrowingResize = () => {
+                    throw new Error('webscene-inspector-resize-callback');
+                };
+                addEventListener('resize', globalThis.__websceneThrowingResize);
+                'ready';
+            )JS",
+            "webscene-inspector-resize-callback.js") == "ready",
+        "Inspector resize-callback fixture was rejected");
+    const webscene_input_event inspector_resize{
+        WEBSCENE_INPUT_RESIZE,
+        0U,
+        90'001U,
+        801.0,
+        601.0,
+        1.0,
+        0.0};
+    require(
+        webscene_engine_enqueue(engine, &inspector_resize) != 0,
+        "Inspector resize callback input was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-resize-callback"),
+        "resize callback exception was not forwarded through Runtime.exceptionThrown");
+    require(
+        evaluate(
+            engine,
+            R"JS(
+                removeEventListener('resize', globalThis.__websceneThrowingResize);
+                globalThis.__websceneThrowingObserver = new ResizeObserver(() => {
+                    globalThis.__websceneThrowingObserver.disconnect();
+                    throw new Error('webscene-inspector-resize-observer');
+                });
+                globalThis.__websceneThrowingObserver.observe(document.body);
+                document.body.style.width = '799px';
+                'ready';
+            )JS",
+            "webscene-inspector-resize-observer.js") == "ready",
+        "Inspector ResizeObserver fixture was rejected");
+    const webscene_input_event inspector_observer_resize{
+        WEBSCENE_INPUT_RESIZE,
+        0U,
+        90'002U,
+        802.0,
+        602.0,
+        1.0,
+        0.0};
+    require(
+        webscene_engine_enqueue(engine, &inspector_observer_resize) != 0,
+        "Inspector ResizeObserver input was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-resize-observer"),
+        "ResizeObserver exception was not forwarded through Runtime.exceptionThrown");
+    require(
+        evaluate(
+            engine,
+            R"JS(
+                addEventListener('keydown', () => {
+                    throw new Error('webscene-inspector-input-callback');
+                });
+                'ready';
+            )JS",
+            "webscene-inspector-input-callback.js") == "ready",
+        "Inspector input-callback fixture was rejected");
+    const webscene_input_event inspector_key{
+        WEBSCENE_INPUT_KEY_DOWN,
+        0U,
+        90'003U,
+        65.0,
+        0.0,
+        0.0,
+        0.0};
+    require(
+        webscene_engine_enqueue(engine, &inspector_key) != 0,
+        "Inspector input callback event was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-input-callback"),
+        "input callback exception was not forwarded through Runtime.exceptionThrown");
 
     constexpr std::string_view rejection_source{
         "Promise.reject(new Error('webscene-inspector-rejection'));"};
