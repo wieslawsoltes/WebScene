@@ -21,6 +21,7 @@
     mutable std::mutex inspector_mutex;
     std::condition_variable inspector_condition;
     std::deque<inspector_action> inspector_actions;
+    std::atomic<bool> inspector_actions_pending{false};
     size_t pending_inspector_action_bytes{0U};
     std::atomic<uint64_t> next_inspector_session_id{1U};
     std::atomic<bool> inspector_ready{false};

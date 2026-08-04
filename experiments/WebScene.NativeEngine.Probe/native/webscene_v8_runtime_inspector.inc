@@ -153,25 +153,28 @@
         return inspector != nullptr && !inspector_sessions.empty();
     }
 
-    void initialize_inspector(v8::Local<v8::Context> local_context)
+    void initialize_inspector()
     {
         // A V8Inspector belongs to an isolate. WebScene's opt-in shared-isolate
         // lane can host multiple independent engine workers, so exposing one
         // worker's session there would violate V8's isolate-thread ownership.
-        if (shared_isolate != nullptr) return;
+        if (shared_isolate != nullptr || inspector != nullptr
+            || isolate == nullptr || context.IsEmpty()) return;
         inspector_client_value = std::make_unique<inspector_client>(*this);
         inspector = v8_inspector::V8Inspector::create(
             isolate,
             inspector_client_value.get());
-        static constexpr char context_name[] = "WebScene";
-        const v8_inspector::V8ContextInfo context_info(
-            local_context,
-            inspector_context_group_id,
-            v8_inspector::StringView(
-                reinterpret_cast<const uint8_t*>(context_name),
-                sizeof(context_name) - 1U));
-        inspector->contextCreated(context_info);
-        inspector_ready.store(true, std::memory_order_release);
+        register_inspector_context(
+            context.Get(isolate),
+            "WebScene",
+            document_base_address);
+        for (auto& [id, persistent_context] : actual_frame_contexts) {
+            if (persistent_context.IsEmpty()) continue;
+            const auto name = "WebScene frame " + std::to_string(id);
+            register_inspector_context(
+                persistent_context.Get(isolate),
+                name);
+        }
     }
 
     void register_inspector_context(
@@ -412,6 +415,7 @@
                 {},
                 std::move(sink),
                 acknowledgement});
+            inspector_actions_pending.store(true, std::memory_order_release);
         }
         inspector_condition.notify_all();
         if (acknowledgement != nullptr) {
@@ -446,6 +450,7 @@
                 {},
                 nullptr});
             pending_inspector_action_bytes += message_size;
+            inspector_actions_pending.store(true, std::memory_order_release);
         }
         inspector_condition.notify_all();
         return true;
@@ -490,6 +495,9 @@
                         ++action;
                     }
                 }
+                inspector_actions_pending.store(
+                    !inspector_actions.empty(),
+                    std::memory_order_release);
                 return true;
             }
             for (auto action = inspector_actions.begin();
@@ -513,6 +521,7 @@
                 {},
                 {},
                 nullptr});
+            inspector_actions_pending.store(true, std::memory_order_release);
         }
         inspector_condition.notify_all();
         return true;
@@ -520,8 +529,7 @@
 
     bool has_pending_inspector_tasks() const noexcept
     {
-        std::lock_guard lock(inspector_mutex);
-        return !inspector_actions.empty();
+        return inspector_actions_pending.load(std::memory_order_acquire);
     }
 
     bool process_inspector_tasks(bool wait_for_message)
@@ -544,10 +552,20 @@
             action = std::move(inspector_actions.front());
             inspector_actions.pop_front();
             pending_inspector_action_bytes -= message_size;
+            inspector_actions_pending.store(
+                !inspector_actions.empty(),
+                std::memory_order_release);
         }
 
         switch (action.type) {
         case inspector_action::kind::connect: {
+            initialize_inspector();
+            if (inspector == nullptr) {
+                if (action.connection_acknowledgement != nullptr) {
+                    action.connection_acknowledgement->set_value(false);
+                }
+                break;
+            }
             auto channel = std::make_unique<inspector_channel>(
                 action.session_id,
                 std::move(action.sink));
@@ -605,7 +623,7 @@
             }
             if (inspector_sessions.empty()) {
                 inspector_instrumented_async_tasks.clear();
-                inspector->allAsyncTasksCanceled();
+                if (inspector != nullptr) inspector->allAsyncTasksCanceled();
                 inspector_pause_loop_running = false;
             }
             break;
@@ -637,6 +655,7 @@
             }
             inspector_actions.clear();
             pending_inspector_action_bytes = 0U;
+            inspector_actions_pending.store(false, std::memory_order_release);
         }
         inspector_pause_loop_running = false;
         inspector_condition.notify_all();

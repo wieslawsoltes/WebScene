@@ -43,12 +43,8 @@ internal static class NativeInspectorDisabledPerformanceProbe
         var buildFeaturesExportAvailable = TryReadBuildFeatures(
             library,
             out var buildFeatures);
-        if ((buildFeatures & InspectorBuildFeature) != 0)
-        {
-            throw new InvalidOperationException(
-                "The Inspector-disabled performance gate requires the production runtime " +
-                "flavor, but the supplied library advertises V8 Inspector support.");
-        }
+        var inspectorCompiledIn =
+            (buildFeatures & InspectorBuildFeature) != 0;
 
         NativeWebSceneApi.ConfigureLibraryPath(library);
         var viewConstructionBytes = MeasureViewConstructionBytes();
@@ -190,13 +186,13 @@ internal static class NativeInspectorDisabledPerformanceProbe
 
             var result = new
             {
-                schema = "webscene-inspector-disabled-performance-v1",
+                schema = "webscene-inspector-idle-performance-v2",
                 capturedUtc = DateTimeOffset.UtcNow,
                 library,
                 libraryBytes = new FileInfo(library).Length,
                 buildFeatures,
                 buildFeaturesExportAvailable,
-                inspectorCompiledIn = false,
+                inspectorCompiledIn,
                 options = new
                 {
                     contextCount,

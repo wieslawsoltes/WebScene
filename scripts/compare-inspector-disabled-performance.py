@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare matched full-stack Inspector-disabled benchmark process samples."""
+"""Compare Inspector-capable idle workloads with an Inspector-free control."""
 
 from __future__ import annotations
 
@@ -113,10 +113,18 @@ def main() -> int:
     for baseline, changed in zip(control, candidate, strict=True):
         if baseline.get("options") != changed.get("options"):
             raise RuntimeError("control and candidate benchmark options differ")
-    for variant, samples in (("control", control), ("candidate", candidate)):
+    for variant, samples, inspector_expected in (
+        ("control", control, False),
+        ("candidate", candidate, True),
+    ):
         for sample in samples:
-            if sample.get("buildFeatures") != 0 or sample.get("inspectorCompiledIn") is not False:
-                raise RuntimeError(f"{variant}: an Inspector-enabled runtime entered the production comparison")
+            build_features = sample.get("buildFeatures")
+            if not isinstance(build_features, int) or build_features & ~2:
+                raise RuntimeError(
+                    f"{variant}: unexpected native build features {build_features!r}")
+            if sample.get("inspectorCompiledIn") is not inspector_expected:
+                expectation = "Inspector-capable" if inspector_expected else "Inspector-free"
+                raise RuntimeError(f"{variant}: expected an {expectation} runtime")
             if sample.get("managedAllocations", {}).get("inspectorRegistryCreated") is not False:
                 raise RuntimeError(
                     f"{variant}: ordinary workloads initialized managed Inspector state")
@@ -235,18 +243,20 @@ def main() -> int:
                     f"{key}: native memory totals differ ({baseline} != {changed})")
 
     report = {
-        "schema": "webscene-inspector-disabled-comparison-v2",
+        "schema": "webscene-inspector-idle-comparison-v3",
         "control": {
             "sourceSha": args.control_sha,
             "sampleCount": len(control),
             "managedAssemblySha256": digest(args.control_managed),
             "nativeLibrarySha256": digest(args.control_native),
+            "nativeLibraryBytes": args.control_native.stat().st_size,
         },
         "candidate": {
             "sourceSha": args.candidate_sha,
             "sampleCount": len(candidate),
             "managedAssemblySha256": digest(args.candidate_managed),
             "nativeLibrarySha256": digest(args.candidate_native),
+            "nativeLibraryBytes": args.candidate_native.stat().st_size,
         },
         "metrics": metrics,
         "failures": failures,

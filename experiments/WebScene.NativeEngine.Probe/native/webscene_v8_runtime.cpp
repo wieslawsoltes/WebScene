@@ -167,7 +167,12 @@ struct v8_dom_runtime::implementation final {
         install_templates(local_context);
         install_globals(local_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        initialize_inspector(local_context);
+        // Advertise the compiled capability once the isolate and its default
+        // context are ready. The V8Inspector object and context registrations
+        // remain pay-for-use until the worker processes the first connection.
+        inspector_ready.store(
+            shared_isolate == nullptr,
+            std::memory_order_release);
 #endif
         return true;
     }

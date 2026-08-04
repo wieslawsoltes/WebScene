@@ -1387,17 +1387,21 @@
         const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 2);
         constexpr std::array<std::string_view, 3> levels{"log", "warn", "error"};
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        const auto report_to_inspector =
+            self->inspector_instrumentation_active();
         constexpr std::array<v8::Isolate::MessageErrorLevel, 3> inspector_levels{
             v8::Isolate::kMessageLog,
             v8::Isolate::kMessageWarning,
             v8::Isolate::kMessageError};
         std::vector<v8::Local<v8::Value>> arguments;
-        arguments.reserve(static_cast<size_t>(info.Length()));
+        if (report_to_inspector) {
+            arguments.reserve(static_cast<size_t>(info.Length()));
+        }
 #endif
         std::ostringstream message;
         for (int index = 0; index < info.Length(); ++index) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            arguments.push_back(info[index]);
+            if (report_to_inspector) arguments.push_back(info[index]);
 #endif
             auto rendered = to_utf8(isolate, info[index]);
             if (info[index]->IsObject()) {
@@ -1416,10 +1420,12 @@
             message << (index == 0 ? "" : " | ") << rendered;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        self->report_inspector_console_message(
-            local_context,
-            inspector_levels[static_cast<size_t>(level_index)],
-            arguments);
+        if (report_to_inspector) {
+            self->report_inspector_console_message(
+                local_context,
+                inspector_levels[static_cast<size_t>(level_index)],
+                arguments);
+        }
 #endif
         const auto payload = std::string(levels[static_cast<size_t>(level_index)])
             + '\n' + message.str();
