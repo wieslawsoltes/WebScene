@@ -89,17 +89,48 @@ jobs:
           --upstream-v8 \
           --partition-alloc \
           --output "$GITHUB_WORKSPACE/artifacts/native-v8-production-pr"
+    - id: production-build
+      name: Resolve production build outputs
+      shell: bash
+      run: |
+        candidates=()
+        while IFS= read -r candidate; do
+          candidates+=("$candidate")
+        done < <(find artifacts/native-engine-runtime-build \
+          -mindepth 2 -maxdepth 2 -type f \
+          -name libwebscene_native_engine.dylib \
+          ! -path '*-inspector/*' -print)
+        if [[ ${#candidates[@]} -ne 1 ]]; then
+          printf 'Expected one production native library, found %s:\n' \
+            "${#candidates[@]}" >&2
+          printf '  %s\n' "${candidates[@]}" >&2
+          exit 1
+        fi
+        binary="${candidates[0]}"
+        directory=$(dirname "$binary")
+        manifest="$directory/package-smoke/runtimes/osx-arm64/native/webscene-native-runtime.json"
+        icu="$directory/package-smoke/runtimes/osx-arm64/native/icudtl.dat"
+        for output in "$binary" "$manifest" "$icu"; do
+          if [[ ! -f "$output" ]]; then
+            echo "Production build output is missing: $output" >&2
+            exit 1
+          fi
+        done
+        {
+          echo "binary=$binary"
+          echo "directory=$directory"
+          echo "manifest=$manifest"
+          echo "icu=$icu"
+        } >> "$GITHUB_OUTPUT"
     - name: Audit production binary
       shell: bash
       run: |
-        binary="artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
-        test -f "$binary"
-        if strings "$binary" | grep -E -- '--inspector-live-edit|Promise rejection was handled asynchronously' >/dev/null; then
+        binary="${{ steps.production-build.outputs.binary }}"
+        if grep -aE -- '--inspector-live-edit|Promise rejection was handled asynchronously' "$binary" >/dev/null; then
           echo "Inspector implementation markers leaked into the production binary." >&2
           exit 1
         fi
-        manifest=$(find artifacts/native-engine-runtime-build/osx-arm64/package-smoke -name webscene-native-runtime.json -print -quit)
-        test -n "$manifest"
+        manifest="${{ steps.production-build.outputs.manifest }}"
         python3 - "$manifest" <<'PY'
         import json
         import pathlib
@@ -113,10 +144,10 @@ jobs:
       run: |
         comparison="$GITHUB_WORKSPACE/artifacts/inspector-disabled-comparison"
         mkdir -p "$comparison/candidate-native" "$comparison/control-native"
-        cp artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib \
-          "$comparison/candidate-native/"
-        cp artifacts/native-engine-runtime-build/osx-arm64/package-smoke/runtimes/osx-arm64/native/icudtl.dat \
-          "$comparison/candidate-native/"
+        cp "${{ steps.production-build.outputs.binary }}" \
+          "$comparison/candidate-native/libwebscene_native_engine.dylib"
+        cp "${{ steps.production-build.outputs.icu }}" \
+          "$comparison/candidate-native/icudtl.dat"
         dotnet publish \
           benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
           -c Release -o "$comparison/candidate-managed"
@@ -137,10 +168,30 @@ jobs:
           --upstream-v8 \
           --partition-alloc \
           --output "$comparison/control-packages"
-        cp "$control/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib" \
-          "$comparison/control-native/"
-        cp "$control/artifacts/native-engine-runtime-build/osx-arm64/package-smoke/runtimes/osx-arm64/native/icudtl.dat" \
-          "$comparison/control-native/"
+        control_candidates=()
+        while IFS= read -r candidate; do
+          control_candidates+=("$candidate")
+        done < <(find "$control/artifacts/native-engine-runtime-build" \
+          -mindepth 2 -maxdepth 2 -type f \
+          -name libwebscene_native_engine.dylib \
+          ! -path '*-inspector/*' -print)
+        if [[ ${#control_candidates[@]} -ne 1 ]]; then
+          printf 'Expected one control native library, found %s:\n' \
+            "${#control_candidates[@]}" >&2
+          printf '  %s\n' "${control_candidates[@]}" >&2
+          exit 1
+        fi
+        control_binary="${control_candidates[0]}"
+        control_directory=$(dirname "$control_binary")
+        control_icu="$control_directory/package-smoke/runtimes/osx-arm64/native/icudtl.dat"
+        if [[ ! -f "$control_icu" ]]; then
+          echo "Control build output is missing: $control_icu" >&2
+          exit 1
+        fi
+        cp "$control_binary" \
+          "$comparison/control-native/libwebscene_native_engine.dylib"
+        cp "$control_icu" \
+          "$comparison/control-native/icudtl.dat"
         git -C "$control" rev-parse HEAD > "$comparison/control.sha"
         git rev-parse HEAD > "$comparison/candidate.sha"
     - name: Run matched no-Inspector performance gate
