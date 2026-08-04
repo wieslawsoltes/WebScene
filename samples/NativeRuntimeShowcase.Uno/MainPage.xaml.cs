@@ -122,7 +122,7 @@ public sealed partial class MainPage : Page
                 ShowcasePaths.TradingViewUrl,
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Uno", "tradingview"),
-                PrepareInspectorAsync,
+                BeforeNavigationInspectorHook,
                 DocumentBarrierTimeout);
             started.Stop();
             _terminalLoadElapsed = started.Elapsed;
@@ -176,7 +176,7 @@ public sealed partial class MainPage : Page
             documentUri,
             _nativeLibraryPath!,
             ShowcasePaths.CacheDirectory("Uno", "custom-document"),
-            PrepareInspectorAsync,
+            BeforeNavigationInspectorHook,
             DocumentBarrierTimeout);
         DocumentText.Text = documentUri;
         StatusText.Text = "Custom WebScene document ready";
@@ -238,7 +238,7 @@ public sealed partial class MainPage : Page
                 new Uri(documentPath).AbsoluteUri,
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Uno", "monaco"),
-                PrepareInspectorAsync,
+                BeforeNavigationInspectorHook,
                 DocumentBarrierTimeout);
             var session = new ShowcaseEditorSession(
                 _editor.CreateJavaScriptInvoker());
@@ -365,6 +365,12 @@ public sealed partial class MainPage : Page
                 : "WebScene V8 · TradingView · Uno",
             cancellationToken);
     }
+
+    private Func<UnoNativeWebSceneView, CancellationToken, ValueTask>?
+        BeforeNavigationInspectorHook
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? PrepareInspectorAsync
+            : null;
 
     private TimeSpan? DocumentBarrierTimeout
         => _inspectorLaunch?.WaitForDebugger == true

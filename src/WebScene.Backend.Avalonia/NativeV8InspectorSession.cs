@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -51,6 +52,64 @@ internal sealed class NativeEngineLifetime
     }
 }
 
+internal sealed class NativeInspectorEngineState
+{
+    private readonly ConcurrentDictionary<ulong, NativeV8InspectorSession> _sessions = new();
+
+    internal NativeEngineLifetime Lifetime { get; } = new();
+
+    internal void Register(NativeV8InspectorSession session)
+        => _sessions[session.SessionId] = session;
+
+    internal void Unregister(ulong sessionId)
+        => _sessions.TryRemove(sessionId, out _);
+
+    internal void Notify(ulong sessionId)
+    {
+        if (_sessions.TryGetValue(sessionId, out var session))
+            session.NotifyMessagesAvailable();
+    }
+
+    internal void Close()
+    {
+        Lifetime.BeginClosingAndWait();
+        foreach (var session in _sessions.Values)
+        {
+            session.CompleteFromEngine();
+        }
+        _sessions.Clear();
+    }
+}
+
+internal sealed class NativeInspectorRegistry
+{
+    private static NativeInspectorRegistry? _current;
+    private readonly ConcurrentDictionary<IntPtr, NativeInspectorEngineState> _engines = new();
+
+    internal static NativeInspectorRegistry? Current => Volatile.Read(ref _current);
+
+    internal static NativeInspectorRegistry GetOrCreate()
+    {
+        var current = Current;
+        if (current is not null) return current;
+        var created = new NativeInspectorRegistry();
+        return Interlocked.CompareExchange(ref _current, created, null) ?? created;
+    }
+
+    internal NativeInspectorEngineState GetOrCreateEngine(IntPtr engine)
+        => _engines.GetOrAdd(engine, static _ => new NativeInspectorEngineState());
+
+    internal void Notify(IntPtr engine, ulong sessionId)
+    {
+        if (_engines.TryGetValue(engine, out var state)) state.Notify(sessionId);
+    }
+
+    internal void CloseEngine(IntPtr engine)
+    {
+        if (_engines.TryRemove(engine, out var state)) state.Close();
+    }
+}
+
 internal sealed class NativeInspectorOutputByteBudget
 {
     public const long MaximumBytes = 16L * 1024 * 1024;
@@ -92,7 +151,7 @@ internal sealed class NativeInspectorOutputByteBudget
 public sealed class NativeV8InspectorSession : INativeV8InspectorSession
 {
     private readonly IntPtr _engine;
-    private readonly NativeEngineLifetime _engineLifetime;
+    private readonly NativeInspectorEngineState _engineState;
     private readonly Channel<ReadOnlyMemory<byte>> _messages;
     private readonly NativeInspectorOutputByteBudget _outputByteBudget = new();
     private readonly object _drainGate = new();
@@ -103,10 +162,10 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
     internal NativeV8InspectorSession(
         IntPtr engine,
         ulong sessionId,
-        NativeEngineLifetime engineLifetime)
+        NativeInspectorEngineState engineState)
     {
         _engine = engine;
-        _engineLifetime = engineLifetime;
+        _engineState = engineState;
         SessionId = sessionId;
         _messages = Channel.CreateBounded<ReadOnlyMemory<byte>>(
             new BoundedChannelOptions(1024)
@@ -133,7 +192,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                 "An Inspector request cannot be empty.",
                 nameof(message));
         }
-        if (!_engineLifetime.TryEnter())
+        if (!_engineState.Lifetime.TryEnter())
         {
             throw new ObjectDisposedException(nameof(NativeV8InspectorSession));
         }
@@ -153,7 +212,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
         }
         finally
         {
-            _engineLifetime.Exit();
+            _engineState.Lifetime.Exit();
         }
         return ValueTask.CompletedTask;
     }
@@ -185,7 +244,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
         {
             while (Volatile.Read(ref _disposed) == 0)
             {
-                if (!_engineLifetime.TryEnter()) return;
+                if (!_engineState.Lifetime.TryEnter()) return;
                 nuint required;
                 try
                 {
@@ -196,7 +255,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                 }
                 finally
                 {
-                    _engineLifetime.Exit();
+                    _engineState.Lifetime.Exit();
                 }
                 if (required == 0) break;
                 if (required == nuint.MaxValue)
@@ -211,46 +270,61 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                         "The WebScene V8 Inspector produced a message too large for the managed host."));
                     return;
                 }
-                var message = new byte[(int)required];
-                if (!_engineLifetime.TryEnter()) return;
-                nuint copied;
-                try
-                {
-                    if (Volatile.Read(ref _disposed) != 0) return;
-                    copied = NativeWebSceneApi.TakeInspectorMessage(
-                        _engine,
-                        SessionId,
-                        message);
-                }
-                finally
-                {
-                    _engineLifetime.Exit();
-                }
-                if (copied == nuint.MaxValue)
-                {
-                    Fail(new InvalidOperationException(
-                        "The WebScene V8 Inspector native output queue overflowed while draining."));
-                    return;
-                }
-                if (copied == 0) break;
-                if (copied != required)
-                {
-                    Fail(new InvalidOperationException(
-                        "The WebScene V8 Inspector output message changed while it was being copied."));
-                    return;
-                }
-                if (!_outputByteBudget.TryReserve(message.Length))
+                var messageLength = checked((int)required);
+                if (!_outputByteBudget.TryReserve(messageLength))
                 {
                     Fail(new InvalidOperationException(
                         "The WebScene V8 Inspector managed output queue exceeded its 16 MiB aggregate byte limit."));
                     return;
                 }
-                if (!_messages.Writer.TryWrite(message))
+                var reservationTransferred = false;
+                try
                 {
-                    _outputByteBudget.Release(message.Length);
-                    Fail(new InvalidOperationException(
-                        "The WebScene V8 Inspector managed output queue exceeded 1,024 messages."));
+                    var message = GC.AllocateUninitializedArray<byte>(messageLength);
+                    if (!_engineState.Lifetime.TryEnter()) return;
+                    nuint copied;
+                    try
+                    {
+                        if (Volatile.Read(ref _disposed) != 0) return;
+                        copied = NativeWebSceneApi.TakeInspectorMessage(
+                            _engine,
+                            SessionId,
+                            message);
+                    }
+                    finally
+                    {
+                        _engineState.Lifetime.Exit();
+                    }
+                    if (copied == nuint.MaxValue)
+                    {
+                        Fail(new InvalidOperationException(
+                            "The WebScene V8 Inspector native output queue overflowed while draining."));
+                        return;
+                    }
+                    if (copied == 0) break;
+                    if (copied != required)
+                    {
+                        Fail(new InvalidOperationException(
+                            "The WebScene V8 Inspector output message changed while it was being copied."));
+                        return;
+                    }
+                    if (!_messages.Writer.TryWrite(message))
+                    {
+                        Fail(new InvalidOperationException(
+                            "The WebScene V8 Inspector managed output queue exceeded 1,024 messages."));
+                        return;
+                    }
+                    reservationTransferred = true;
+                }
+                catch (Exception error)
+                {
+                    Fail(error);
                     return;
+                }
+                finally
+                {
+                    if (!reservationTransferred)
+                        _outputByteBudget.Release(messageLength);
                 }
             }
 
@@ -261,7 +335,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                     _drainTask = null;
                     return;
                 }
-                if (!_engineLifetime.TryEnter())
+                if (!_engineState.Lifetime.TryEnter())
                 {
                     _drainTask = null;
                     return;
@@ -274,7 +348,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                 }
                 finally
                 {
-                    _engineLifetime.Exit();
+                    _engineState.Lifetime.Exit();
                 }
                 if (!hasMessages)
                 {
@@ -336,7 +410,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
             NativeWebSceneApi.CloseInspectorSession(
                 _engine,
                 SessionId,
-                _engineLifetime);
+                _engineState);
         }
         if (completeWriter) _messages.Writer.TryComplete();
     }
@@ -378,15 +452,14 @@ public static unsafe partial class NativeWebSceneApi
         if (engine == IntPtr.Zero
             || !EngineResourceBridges.TryGetValue(engine, out var bridgeHandle)
             || !bridgeHandle.IsAllocated
-            || bridgeHandle.Target is not ResourceBridge bridge
-            || !bridge.InspectorLifetime.TryEnter()) return false;
-        try
+            || bridgeHandle.Target is not ResourceBridge bridge) return false;
+        _ = NativeInspectorRegistry.GetOrCreate();
+        lock (bridge)
         {
+            if (!EngineResourceBridges.TryGetValue(engine, out var currentHandle)
+                || !currentHandle.IsAllocated
+                || !ReferenceEquals(currentHandle.Target, bridge)) return false;
             return EngineInspectorIsAvailable(engine) != 0;
-        }
-        finally
-        {
-            bridge.InspectorLifetime.Exit();
         }
     }
 
@@ -405,32 +478,45 @@ public static unsafe partial class NativeWebSceneApi
             throw new InvalidOperationException(
                 "The WebScene native engine callback bridge is unavailable.");
         }
-        if (!bridge.InspectorLifetime.TryEnter())
+        var inspectorRegistry = NativeInspectorRegistry.GetOrCreate();
+        lock (bridge)
         {
-            throw new ObjectDisposedException("The WebScene native engine is shutting down.");
-        }
-        try
-        {
-            var sessionId = EngineInspectorConnectV3(
-                engine,
-                InspectorMessageAvailableAddress,
-                GCHandle.ToIntPtr(bridgeHandle),
-                waitForDebugger ? (byte)1 : (byte)0);
-            if (sessionId == 0)
+            if (!EngineResourceBridges.TryGetValue(engine, out var currentHandle)
+                || !currentHandle.IsAllocated
+                || !ReferenceEquals(currentHandle.Target, bridge))
             {
-                throw new InvalidOperationException(
-                    "V8 Inspector is unavailable. Shared-isolate mode does not support per-view inspector sessions.");
+                throw new ObjectDisposedException(
+                    "The WebScene native engine is shutting down.");
             }
-            var session = new NativeV8InspectorSession(
-                engine,
-                sessionId,
-                bridge.InspectorLifetime);
-            bridge.RegisterInspectorSession(session);
-            return session;
-        }
-        finally
-        {
-            bridge.InspectorLifetime.Exit();
+            var engineState = inspectorRegistry.GetOrCreateEngine(engine);
+            if (!engineState.Lifetime.TryEnter())
+            {
+                throw new ObjectDisposedException(
+                    "The WebScene native engine is shutting down.");
+            }
+            try
+            {
+                var sessionId = EngineInspectorConnectV3(
+                    engine,
+                    GetInspectorMessageAvailableAddress(),
+                    engine,
+                    waitForDebugger ? (byte)1 : (byte)0);
+                if (sessionId == 0)
+                {
+                    throw new InvalidOperationException(
+                        "V8 Inspector is unavailable. Shared-isolate mode does not support per-view inspector sessions.");
+                }
+                var session = new NativeV8InspectorSession(
+                    engine,
+                    sessionId,
+                    engineState);
+                engineState.Register(session);
+                return session;
+            }
+            finally
+            {
+                engineState.Lifetime.Exit();
+            }
         }
     }
 
@@ -470,17 +556,12 @@ public static unsafe partial class NativeWebSceneApi
     internal static void CloseInspectorSession(
         IntPtr engine,
         ulong sessionId,
-        NativeEngineLifetime engineLifetime)
+        NativeInspectorEngineState engineState)
     {
-        if (!engineLifetime.TryEnter()) return;
+        engineState.Unregister(sessionId);
+        if (!engineState.Lifetime.TryEnter()) return;
         try
         {
-            if (EngineResourceBridges.TryGetValue(engine, out var bridgeHandle)
-                && bridgeHandle.IsAllocated
-                && bridgeHandle.Target is ResourceBridge bridge)
-            {
-                bridge.UnregisterInspectorSession(sessionId);
-            }
             if (engine != IntPtr.Zero)
             {
                 EngineInspectorDisconnect(engine, sessionId);
@@ -488,7 +569,7 @@ public static unsafe partial class NativeWebSceneApi
         }
         finally
         {
-            engineLifetime.Exit();
+            engineState.Lifetime.Exit();
         }
     }
 }

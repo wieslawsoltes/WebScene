@@ -6,6 +6,41 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class NativeEngineLifetimeTests
 {
     [Fact]
+    public void OrdinaryViewAndResourceBridgeDoNotOwnInspectorLifetimeState()
+    {
+        var viewFields = typeof(NativeWebSceneView)
+            .GetFields(System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic)
+            .Select(field => field.Name)
+            .ToArray();
+        Assert.DoesNotContain("_lifetimeCancellation", viewFields);
+        Assert.DoesNotContain("_unloadCancellation", viewFields);
+        Assert.DoesNotContain("_disposeTask", viewFields);
+
+        var resourceBridge = typeof(NativeWebSceneApi)
+            .GetNestedType(
+                "ResourceBridge",
+                System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(resourceBridge);
+        var bridgeFields = resourceBridge!
+            .GetFields(System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic)
+            .Select(field => field.Name)
+            .ToArray();
+        Assert.DoesNotContain("_inspectorSessions", bridgeFields);
+        Assert.DoesNotContain(
+            bridgeFields,
+            field => field.Contains("InspectorLifetime", StringComparison.Ordinal));
+
+        var callbackRegistration = typeof(NativeWebSceneApi).GetNestedType(
+            "InspectorCallbackRegistration",
+            System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(callbackRegistration);
+        Assert.False(callbackRegistration!.Attributes.HasFlag(
+            System.Reflection.TypeAttributes.BeforeFieldInit));
+    }
+
+    [Fact]
     public async Task EngineDestroyWaitsForConcurrentInspectorSendLease()
     {
         var lifetime = new NativeEngineLifetime();

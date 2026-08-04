@@ -59,7 +59,7 @@ public sealed partial class MainWindow : Window
                 ShowcasePaths.TradingViewUrl,
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Avalonia", "tradingview"),
-                PrepareInspectorAsync,
+                BeforeNavigationInspectorHook,
                 FirstDocumentSceneTimeout);
             await SelectInspectorTargetAsync(
                 TerminalHost,
@@ -141,7 +141,7 @@ public sealed partial class MainWindow : Window
                 new Uri(documentPath).AbsoluteUri,
                 _nativeLibraryPath,
                 ShowcasePaths.CacheDirectory("Avalonia", "monaco"),
-                PrepareInspectorAsync,
+                BeforeNavigationInspectorHook,
                 FirstDocumentSceneTimeout);
             var session = new ShowcaseEditorSession(
                 EditorHost.CreateJavaScriptInvoker());
@@ -260,6 +260,12 @@ public sealed partial class MainWindow : Window
                 : "WebScene V8 · TradingView",
             cancellationToken);
     }
+
+    private Func<NativeWebSceneView, CancellationToken, ValueTask>?
+        BeforeNavigationInspectorHook
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? PrepareInspectorAsync
+            : null;
 
     private TimeSpan? FirstDocumentSceneTimeout
         => _inspectorLaunch?.WaitForDebugger == true

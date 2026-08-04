@@ -7,6 +7,20 @@ namespace WebScene.Backend.Uno.Tests;
 public sealed class NativeLoadContractTests
 {
     [Fact]
+    public void OrdinaryUnoViewDoesNotOwnInspectorLifetimeState()
+    {
+        var fields = typeof(UnoNativeWebSceneView)
+            .GetFields(System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic)
+            .Select(field => field.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("_lifetimeCancellation", fields);
+        Assert.DoesNotContain("_navigationCancellation", fields);
+        Assert.DoesNotContain("_disposeTask", fields);
+    }
+
+    [Fact]
     public void ViewRetainsLegacyAndOptionsLoadOverloads()
     {
         Assert.NotNull(typeof(UnoNativeWebSceneView).GetMethod(

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -21,11 +22,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private long _contextId;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
-    private readonly CancellationTokenSource _lifetimeCancellation = new();
-    private CancellationTokenSource _unloadCancellation = new();
-    private int _pendingUnloadRequests;
     private CancellationTokenSource? _navigationCancellation;
-    private Task? _disposeTask;
 
     public NativeWebSceneView()
         : this(useCompositionVisual: true)
@@ -338,14 +335,25 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
-        var (lifetimeToken, unloadToken) = GetNavigationTokens();
-        using var loadCancellation =
-            NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (beforeNavigation is not null)
+        {
+            lifetime ??= NativeWebSceneViewLifetimeRegistry.GetOrCreate(this);
+        }
+        CancellationTokenSource? loadCancellation = null;
+        if (lifetime is not null)
+        {
+            var (lifetimeToken, unloadToken) = lifetime.GetNavigationTokens();
+            loadCancellation = NativeWebSceneViewLifecycle.CreateNavigationCancellation(
                 cancellationToken,
                 lifetimeToken,
                 unloadToken);
+        }
+        using var disposeLoadCancellation = loadCancellation;
 
-        await _lifecycleGate.WaitAsync(loadCancellation.Token).ConfigureAwait(false);
+        await _lifecycleGate.WaitAsync(
+                loadCancellation?.Token ?? cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
@@ -354,11 +362,20 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 Directory.CreateDirectory(options.CompilationCacheDirectory);
             }
 
-            _navigationCancellation =
-                NativeWebSceneViewLifecycle.CreateNavigationCancellation(
-                    cancellationToken,
-                    lifetimeToken,
-                    unloadToken);
+            if (lifetime is null)
+            {
+                _navigationCancellation =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            }
+            else
+            {
+                var (lifetimeToken, unloadToken) = lifetime.GetNavigationTokens();
+                _navigationCancellation =
+                    NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                        cancellationToken,
+                        lifetimeToken,
+                        unloadToken);
+            }
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
@@ -446,15 +463,30 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public async Task UnloadAsync()
     {
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (lifetime is null)
+        {
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await UnloadCoreAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
+            return;
+        }
+
         Task? disposeTask;
         CancellationTokenSource? unloadCancellation;
-        lock (_lifetimeCancellation)
+        lock (lifetime)
         {
-            disposeTask = _disposeTask;
+            disposeTask = lifetime.DisposeTask;
             if (disposeTask is null)
             {
-                ++_pendingUnloadRequests;
-                unloadCancellation = _unloadCancellation;
+                ++lifetime.PendingUnloadRequests;
+                unloadCancellation = lifetime.UnloadCancellation;
             }
             else
             {
@@ -479,15 +511,17 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         {
             if (gateAcquired) _lifecycleGate.Release();
             CancellationTokenSource? completedGeneration = null;
-            lock (_lifetimeCancellation)
+            lock (lifetime)
             {
-                --_pendingUnloadRequests;
-                if (_pendingUnloadRequests == 0
-                    && _disposeTask is null
-                    && ReferenceEquals(_unloadCancellation, unloadCancellation))
+                --lifetime.PendingUnloadRequests;
+                if (lifetime.PendingUnloadRequests == 0
+                    && lifetime.DisposeTask is null
+                    && ReferenceEquals(
+                        lifetime.UnloadCancellation,
+                        unloadCancellation))
                 {
-                    completedGeneration = _unloadCancellation;
-                    _unloadCancellation = new CancellationTokenSource();
+                    completedGeneration = lifetime.UnloadCancellation;
+                    lifetime.UnloadCancellation = new CancellationTokenSource();
                 }
             }
             completedGeneration?.Dispose();
@@ -496,41 +530,29 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        lock (_lifetimeCancellation)
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (lifetime is null) return new ValueTask(UnloadAsync());
+        lock (lifetime)
         {
-            _disposeTask ??= DisposeCoreAsync();
-            return new ValueTask(_disposeTask);
+            lifetime.DisposeTask ??= DisposeCoreAsync(lifetime);
+            return new ValueTask(lifetime.DisposeTask);
         }
     }
 
-    private (CancellationToken Lifetime, CancellationToken Unload)
-        GetNavigationTokens()
-    {
-        lock (_lifetimeCancellation)
-        {
-            if (_disposeTask is not null)
-            {
-                throw new ObjectDisposedException(nameof(NativeWebSceneView));
-            }
-            return (
-                _lifetimeCancellation.Token,
-                _unloadCancellation.Token);
-        }
-    }
-
-    private async Task DisposeCoreAsync()
+    private async Task DisposeCoreAsync(NativeWebSceneViewLifetime lifetime)
     {
         try
         {
             await NativeWebSceneViewLifecycle.DisposeAsync(
-                    _lifetimeCancellation,
+                    lifetime.LifetimeCancellation,
                     _lifecycleGate,
                     UnloadCoreAsync)
                 .ConfigureAwait(false);
         }
         finally
         {
-            _lifetimeCancellation.Dispose();
+            lifetime.LifetimeCancellation.Dispose();
+            lifetime.UnloadCancellation.Dispose();
         }
     }
 
@@ -604,6 +626,57 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             // race the persistent pooled callback handles after this point.
             interop?.Dispose();
         }
+    }
+}
+
+internal sealed class NativeWebSceneViewLifetime
+{
+    internal CancellationTokenSource LifetimeCancellation { get; } = new();
+    internal CancellationTokenSource UnloadCancellation { get; set; } = new();
+    internal int PendingUnloadRequests { get; set; }
+    internal Task? DisposeTask { get; set; }
+
+    internal (CancellationToken Lifetime, CancellationToken Unload)
+        GetNavigationTokens()
+    {
+        lock (this)
+        {
+            if (DisposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(NativeWebSceneView));
+            }
+            return (LifetimeCancellation.Token, UnloadCancellation.Token);
+        }
+    }
+}
+
+internal static class NativeWebSceneViewLifetimeRegistry
+{
+    private static ConditionalWeakTable<NativeWebSceneView, NativeWebSceneViewLifetime>?
+        _lifetimes;
+
+    internal static NativeWebSceneViewLifetime? TryGet(NativeWebSceneView view)
+        => Volatile.Read(ref _lifetimes) is { } lifetimes
+            && lifetimes.TryGetValue(view, out var lifetime)
+                ? lifetime
+                : null;
+
+    internal static NativeWebSceneViewLifetime GetOrCreate(NativeWebSceneView view)
+    {
+        var lifetimes = Volatile.Read(ref _lifetimes);
+        if (lifetimes is null)
+        {
+            var created = new ConditionalWeakTable<
+                NativeWebSceneView,
+                NativeWebSceneViewLifetime>();
+            lifetimes = Interlocked.CompareExchange(
+                ref _lifetimes,
+                created,
+                null) ?? created;
+        }
+        return lifetimes.GetValue(
+            view,
+            static _ => new NativeWebSceneViewLifetime());
     }
 }
 

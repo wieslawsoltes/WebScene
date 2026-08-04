@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using WebScene.Backends.Avalonia.Native;
@@ -14,6 +15,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
 
     internal static int Run(string[] args)
     {
+        BenchmarkApp.EnsureInitialized();
         var contextCount = ReadIntOption(args, "--contexts", 4);
         var samples = ReadIntOption(args, "--samples", 10);
         var durationMilliseconds = ReadIntOption(args, "--duration-ms", 1_500);
@@ -49,31 +51,41 @@ internal static class NativeInspectorDisabledPerformanceProbe
         }
 
         NativeWebSceneApi.ConfigureLibraryPath(library);
+        var viewConstructionBytes = MeasureViewConstructionBytes();
         var process = Process.GetCurrentProcess();
         ForceCollection();
         process.Refresh();
         var processBaselineWorkingSet = process.WorkingSet64;
+        var processBaselineAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true);
         var prewarmStart = Stopwatch.GetTimestamp();
         if (NativeWebSceneApi.EnginePrewarm() == 0)
         {
             throw new InvalidOperationException("The native runtime failed to prewarm V8.");
         }
         var prewarmMilliseconds = Stopwatch.GetElapsedTime(prewarmStart).TotalMilliseconds;
+        var prewarmAllocatedBytes =
+            GC.GetTotalAllocatedBytes(precise: true) - processBaselineAllocatedBytes;
 
         var createMilliseconds = new List<double>(samples);
         var firstSceneMilliseconds = new List<double>(samples);
         var blankMemory = new List<MemorySample>(samples);
+        var blankLifecycleAllocatedBytes = new List<long>(samples);
         for (var sample = 0; sample < samples; sample++)
         {
-            using var state = CreateEngine();
+            var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+            var state = CreateEngine();
             createMilliseconds.Add(state.CreateMilliseconds);
             firstSceneMilliseconds.Add(state.FirstSceneMilliseconds);
             blankMemory.Add(ReadMemory(state.Engine));
+            state.Dispose();
+            blankLifecycleAllocatedBytes.Add(
+                GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore);
         }
 
         ForceCollection();
         process.Refresh();
         var beforeViewsWorkingSet = process.WorkingSet64;
+        var beforeViewsAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true);
         var engines = new List<EngineState>(contextCount);
         try
         {
@@ -92,6 +104,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
             ForceCollection();
             process.Refresh();
             var populatedViewsWorkingSet = process.WorkingSet64;
+            var populatedViewsAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true);
             var blankViewMemory = engines.Select(state => ReadMemory(state.Engine)).ToArray();
 
             var idleBefore = engines.Select(state => ReadRuntimeWork(state.Engine)).ToArray();
@@ -168,6 +181,12 @@ internal static class NativeInspectorDisabledPerformanceProbe
             process.Refresh();
             var workloadWorkingSet = process.WorkingSet64;
             var workloadMemory = engines.Select(state => ReadMemory(state.Engine)).ToArray();
+            var totalManagedBytesSinceBaseline = Math.Max(
+                0,
+                GC.GetTotalAllocatedBytes(precise: true)
+                    - processBaselineAllocatedBytes);
+            var inspectorRegistryCreated =
+                IsManagedInspectorRegistryCreated();
 
             var result = new
             {
@@ -244,6 +263,18 @@ internal static class NativeInspectorDisabledPerformanceProbe
                     blankLifecycleSamples = blankMemory,
                     blankViews = blankViewMemory,
                     workloadViews = workloadMemory
+                },
+                managedAllocations = new
+                {
+                    inspectorRegistryCreated,
+                    ordinaryViewConstructionBytes = viewConstructionBytes,
+                    prewarmBytes = prewarmAllocatedBytes,
+                    blankLifecycleBytes = Summarize(
+                        blankLifecycleAllocatedBytes.Select(static value => (double)value)),
+                    multiViewCreateBytes = Math.Max(
+                        0,
+                        populatedViewsAllocatedBytes - beforeViewsAllocatedBytes),
+                    totalBytesSinceBaseline = totalManagedBytesSinceBaseline
                 }
             };
             Console.WriteLine(JsonSerializer.Serialize(
@@ -531,6 +562,46 @@ internal static class NativeInspectorDisabledPerformanceProbe
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+    }
+
+    private static double MeasureViewConstructionBytes()
+    {
+        const int viewsPerBatch = 32;
+        const int batches = 7;
+        CreateViewBatch(8);
+        var measurements = new double[batches];
+        for (var batch = 0; batch < measurements.Length; ++batch)
+        {
+            ForceCollection();
+            var before = GC.GetTotalAllocatedBytes(precise: true);
+            CreateViewBatch(viewsPerBatch);
+            measurements[batch] =
+                (GC.GetTotalAllocatedBytes(precise: true) - before)
+                / (double)viewsPerBatch;
+        }
+        Array.Sort(measurements);
+        return Percentile(measurements, 0.5);
+    }
+
+    private static void CreateViewBatch(int count)
+    {
+        var views = new NativeWebSceneView[count];
+        for (var index = 0; index < views.Length; ++index)
+        {
+            views[index] = new NativeWebSceneView(useCompositionVisual: false);
+        }
+        GC.KeepAlive(views);
+    }
+
+    private static bool IsManagedInspectorRegistryCreated()
+    {
+        const string typeName =
+            "WebScene.Backends.Avalonia.Native.NativeInspectorRegistry";
+        var registryType = typeof(NativeWebSceneView).Assembly.GetType(typeName);
+        var current = registryType?.GetField(
+            "_current",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        return current?.GetValue(null) is not null;
     }
 
     private static int ReadIntOption(

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -543,9 +544,6 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
     private IntPtr _engine;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
-    private readonly CancellationTokenSource _lifetimeCancellation = new();
-    private CancellationTokenSource? _navigationCancellation;
-    private Task? _disposeTask;
 
     public UnoNativeWebSceneView()
     {
@@ -740,20 +738,33 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
-        var lifetimeToken = GetLifetimeToken();
-        using var loadCancellation =
-            UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+        var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
+        if (beforeNavigation is not null)
+        {
+            lifetime ??= UnoNativeWebSceneLifetimeRegistry.GetOrCreate(this);
+        }
+        CancellationTokenSource? loadCancellation = null;
+        if (lifetime is not null)
+        {
+            loadCancellation = UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
                 cancellationToken,
-                lifetimeToken);
-        await _lifecycleGate.WaitAsync(loadCancellation.Token);
+                lifetime.GetLifetimeToken());
+        }
+        using var disposeLoadCancellation = loadCancellation;
+        await _lifecycleGate.WaitAsync(
+            loadCancellation?.Token ?? cancellationToken);
         try
         {
             await UnloadCoreAsync();
-            _navigationCancellation =
-                UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
-                    cancellationToken,
-                    lifetimeToken);
-            var navigationToken = _navigationCancellation.Token;
+            var navigationToken = cancellationToken;
+            if (lifetime is not null)
+            {
+                lifetime.NavigationCancellation =
+                    UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+                        cancellationToken,
+                        lifetime.GetLifetimeToken());
+                navigationToken = lifetime.NavigationCancellation.Token;
+            }
             await NativeWebSceneRuntime.PrewarmAsync(
                 options.NativeLibraryPath,
                 navigationToken);
@@ -851,45 +862,51 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        lock (_lifetimeCancellation)
+        var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
+        if (lifetime is null) return new ValueTask(DisposeWithoutInspectorAsync());
+        lock (lifetime)
         {
-            _disposeTask ??= DisposeCoreAsync();
-            return new ValueTask(_disposeTask);
+            lifetime.DisposeTask ??= DisposeCoreAsync(lifetime);
+            return new ValueTask(lifetime.DisposeTask);
         }
     }
 
-    private CancellationToken GetLifetimeToken()
+    private async Task DisposeWithoutInspectorAsync()
     {
-        lock (_lifetimeCancellation)
+        await _lifecycleGate.WaitAsync();
+        try
         {
-            if (_disposeTask is not null)
-            {
-                throw new ObjectDisposedException(nameof(UnoNativeWebSceneView));
-            }
-            return _lifetimeCancellation.Token;
+            await UnloadCoreAsync();
+        }
+        finally
+        {
+            _lifecycleGate.Release();
         }
     }
 
-    private async Task DisposeCoreAsync()
+    private async Task DisposeCoreAsync(UnoNativeWebSceneLifetime lifetime)
     {
         try
         {
             await UnoNativeWebSceneLifecycle.DisposeAsync(
-                _lifetimeCancellation,
+                lifetime.LifetimeCancellation,
                 _lifecycleGate,
                 UnloadCoreAsync);
         }
         finally
         {
-            _lifetimeCancellation.Dispose();
+            lifetime.LifetimeCancellation.Dispose();
         }
     }
 
     private async Task UnloadCoreAsync()
     {
-        _navigationCancellation?.Cancel();
-        _navigationCancellation?.Dispose();
-        _navigationCancellation = null;
+        if (UnoNativeWebSceneLifetimeRegistry.TryGet(this) is { } lifetime)
+        {
+            lifetime.NavigationCancellation?.Cancel();
+            lifetime.NavigationCancellation?.Dispose();
+            lifetime.NavigationCancellation = null;
+        }
         Source = null;
         _surface.SetEngine(IntPtr.Zero);
         var interop = Interlocked.Exchange(ref _interop, null);
@@ -911,6 +928,55 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         {
             interop?.Dispose();
         }
+    }
+}
+
+internal sealed class UnoNativeWebSceneLifetime
+{
+    internal CancellationTokenSource LifetimeCancellation { get; } = new();
+    internal CancellationTokenSource? NavigationCancellation { get; set; }
+    internal Task? DisposeTask { get; set; }
+
+    internal CancellationToken GetLifetimeToken()
+    {
+        lock (this)
+        {
+            if (DisposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(UnoNativeWebSceneView));
+            }
+            return LifetimeCancellation.Token;
+        }
+    }
+}
+
+internal static class UnoNativeWebSceneLifetimeRegistry
+{
+    private static ConditionalWeakTable<UnoNativeWebSceneView, UnoNativeWebSceneLifetime>?
+        _lifetimes;
+
+    internal static UnoNativeWebSceneLifetime? TryGet(UnoNativeWebSceneView view)
+        => Volatile.Read(ref _lifetimes) is { } lifetimes
+            && lifetimes.TryGetValue(view, out var lifetime)
+                ? lifetime
+                : null;
+
+    internal static UnoNativeWebSceneLifetime GetOrCreate(UnoNativeWebSceneView view)
+    {
+        var lifetimes = Volatile.Read(ref _lifetimes);
+        if (lifetimes is null)
+        {
+            var created = new ConditionalWeakTable<
+                UnoNativeWebSceneView,
+                UnoNativeWebSceneLifetime>();
+            lifetimes = Interlocked.CompareExchange(
+                ref _lifetimes,
+                created,
+                null) ?? created;
+        }
+        return lifetimes.GetValue(
+            view,
+            static _ => new UnoNativeWebSceneLifetime());
     }
 }
 

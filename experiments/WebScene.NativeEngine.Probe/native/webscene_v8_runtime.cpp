@@ -3097,11 +3097,9 @@ struct v8_dom_runtime::implementation final {
         if (inspector_exception_id != 0U) {
             if (self->inspector_promise_rejections.size()
                 == self->maximum_inspector_promise_rejections) {
-                auto& expired = self->inspector_promise_rejections.front();
-                self->revoke_inspector_exception(
-                    expired.context.Get(isolate),
-                    expired.inspector_exception_id,
-                    "Promise rejection record limit reached");
+                // This cap bounds only WebScene's late-handler bookkeeping.
+                // The rejection is still unhandled, so evicting its tracking
+                // record must not tell CDP that the exception was revoked.
                 self->inspector_promise_rejections.pop_front();
             }
             self->inspector_promise_rejections.push_back({

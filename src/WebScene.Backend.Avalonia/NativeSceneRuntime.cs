@@ -166,10 +166,6 @@ public static unsafe partial class NativeWebSceneApi
         NotifyAnimationFrameRequested;
     private static readonly IntPtr AnimationFrameRequestedAddress =
         Marshal.GetFunctionPointerForDelegate(AnimationFrameRequested);
-    private static readonly InspectorMessageAvailableCallback InspectorMessageAvailable =
-        NotifyInspectorMessageAvailable;
-    private static readonly IntPtr InspectorMessageAvailableAddress =
-        Marshal.GetFunctionPointerForDelegate(InspectorMessageAvailable);
     private static string? _libraryPath;
 
     static NativeWebSceneApi()
@@ -293,20 +289,28 @@ public static unsafe partial class NativeWebSceneApi
 
     public static void EngineDestroy(IntPtr engine)
     {
-        ResourceBridge? resourceBridge = null;
-        if (EngineResourceBridges.TryGetValue(engine, out var existing)
-            && existing.IsAllocated)
+        if (EngineResourceBridges.TryRemove(engine, out var existing)
+            && existing.IsAllocated
+            && existing.Target is ResourceBridge resourceBridge)
         {
-            resourceBridge = existing.Target as ResourceBridge;
-            resourceBridge?.InspectorLifetime.BeginClosingAndWait();
-            resourceBridge?.CompleteInspectorSessionsBeforeEngineDestroy();
+            var inspectorRegistry = NativeInspectorRegistry.Current;
+            if (inspectorRegistry is null)
+            {
+                EngineDestroyNative(engine);
+            }
+            else
+            {
+                lock (resourceBridge)
+                {
+                    inspectorRegistry.CloseEngine(engine);
+                    EngineDestroyNative(engine);
+                }
+            }
+            resourceBridge.Dispose();
+            existing.Free();
+            return;
         }
         EngineDestroyNative(engine);
-        if (EngineResourceBridges.TryRemove(engine, out var bridge) && bridge.IsAllocated)
-        {
-            (bridge.Target as ResourceBridge)?.Dispose();
-            bridge.Free();
-        }
     }
 
     internal static NativeTextShaping.WebTypefaceRegistry? GetWebTypefaceRegistry(
@@ -492,6 +496,23 @@ public static unsafe partial class NativeWebSceneApi
         IntPtr userData,
         ulong sessionId);
 
+    private static class InspectorCallbackRegistration
+    {
+        internal static readonly InspectorMessageAvailableCallback Callback =
+            NotifyInspectorMessageAvailable;
+        internal static readonly IntPtr Address =
+            Marshal.GetFunctionPointerForDelegate(Callback);
+
+        // Suppress beforefieldinit so the delegate and thunk are created only
+        // when the first Inspector session is actually opened.
+        static InspectorCallbackRegistration()
+        {
+        }
+    }
+
+    internal static IntPtr GetInspectorMessageAvailableAddress()
+        => InspectorCallbackRegistration.Address;
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -540,8 +561,7 @@ public static unsafe partial class NativeWebSceneApi
     {
         try
         {
-            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
-            bridge?.NotifyInspectorMessageAvailable(sessionId);
+            NativeInspectorRegistry.Current?.Notify(userData, sessionId);
         }
         catch (Exception error)
         {
@@ -661,8 +681,6 @@ public static unsafe partial class NativeWebSceneApi
         Action? animationFrameRequested) : IDisposable
     {
         private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<ulong, NativeV8InspectorSession>
-            _inspectorSessions = new();
 #if !WEBSCENE_UNO
         private readonly ConcurrentDictionary<string, byte> _registeredFontSources =
             new(StringComparer.Ordinal);
@@ -670,33 +688,9 @@ public static unsafe partial class NativeWebSceneApi
         internal NativeTextShaping.WebTypefaceRegistry WebTypefaces { get; } =
             NativeTextShaping.CreateWebTypefaceRegistry();
 
-        internal NativeEngineLifetime InspectorLifetime { get; } = new();
-
         public void Dispose()
         {
-            CompleteInspectorSessionsBeforeEngineDestroy();
             WebTypefaces.Dispose();
-        }
-
-        public void CompleteInspectorSessionsBeforeEngineDestroy()
-        {
-            foreach (var session in _inspectorSessions.Values)
-            {
-                session.CompleteFromEngine();
-            }
-            _inspectorSessions.Clear();
-        }
-
-        public void RegisterInspectorSession(NativeV8InspectorSession session)
-            => _inspectorSessions[session.SessionId] = session;
-
-        public void UnregisterInspectorSession(ulong sessionId)
-            => _inspectorSessions.TryRemove(sessionId, out _);
-
-        public void NotifyInspectorMessageAvailable(ulong sessionId)
-        {
-            if (_inspectorSessions.TryGetValue(sessionId, out var session))
-                session.NotifyMessagesAvailable();
         }
 
         public void NotifyScenePublished(NativeScenePublished scene)

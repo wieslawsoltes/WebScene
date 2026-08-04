@@ -8,9 +8,11 @@ on:
     - release/*
     paths:
     - '.github/workflows/native-v8-inspector.yml'
+    - 'benchmarks/WebScene.NativeEngine.Benchmarks/**'
     - 'experiments/WebScene.NativeEngine.Probe/**'
     - 'packaging/WebScene.NativeEngine.Runtime/**'
     - 'scripts/build-native-engine-runtime.sh'
+    - 'scripts/compare-inspector-disabled-performance.py'
     - 'src/WebScene.Backend.Avalonia/**'
     - 'src/WebScene.Backend.Uno/**'
     - 'third-party/v8-patches/**'
@@ -19,6 +21,180 @@ permissions:
   contents: read
 
 jobs:
+  production:
+    name: Build and test V8 production flavor (osx-arm64)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: global.json
+    - id: v8-cache-key
+      name: Resolve production V8 SDK cache identity
+      shell: bash
+      run: echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+    - id: v8-cache
+      name: Restore unpatched production V8 SDK
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          artifacts/native-engine-v8/osx-arm64/v8/include
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/args.gn
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/icudtl.dat
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src
+          artifacts/native-engine-v8/osx-arm64/v8/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/partition_alloc/src
+        key: webscene-v8-sdk-production-v8-15.3.10-pa-macos-osx-arm64-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt') }}
+    - id: restored-v8-sdk
+      name: Validate unpatched production V8 SDK
+      shell: bash
+      run: |
+        root="artifacts/native-engine-v8/osx-arm64/v8"
+        args="$root/out/arm64/ReleasePartitionAlloc/args.gn"
+        monolith="$root/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a"
+        if [[ -f "$root/include/v8.h" \
+          && -f "$root/include/v8-inspector.h" \
+          && $(grep -c 'virtual void consoleAPICalled' "$root/include/v8-inspector.h") -eq 0 \
+          && -f "$args" \
+          && -f "$monolith" \
+          && -f "$root/out/arm64/ReleasePartitionAlloc/icudtl.dat" \
+          && -f "$root/LICENSE" \
+          && -f "$root/third_party/icu/LICENSE" \
+          && -d "$root/third_party/partition_alloc/src" \
+          && -f "$root/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src/partition_alloc/buildflags.h" \
+          && $(grep -Ec '^v8_enable_pointer_compression *= *true$' "$args") -gt 0 \
+          && $(grep -Ec '^v8_enable_pointer_compression_shared_cage *= *true$' "$args") -gt 0 \
+          && $(grep -Ec '^v8_enable_partition_alloc *= *true$' "$args") -gt 0 ]]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          rm -rf "$root"
+        fi
+    - name: Build and run production V8 tests
+      shell: bash
+      run: |
+        v8_root=
+        if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
+          v8_root="$GITHUB_WORKSPACE/artifacts/native-engine-v8/osx-arm64/v8"
+        fi
+        scripts/build-native-engine-runtime.sh \
+          --rid osx-arm64 \
+          --v8-root "$v8_root" \
+          --v8-revision 15.3.10 \
+          --upstream-v8 \
+          --partition-alloc \
+          --output "$GITHUB_WORKSPACE/artifacts/native-v8-production-pr"
+    - name: Audit production binary
+      shell: bash
+      run: |
+        binary="artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib"
+        test -f "$binary"
+        if strings "$binary" | grep -E -- '--inspector-live-edit|Promise rejection was handled asynchronously' >/dev/null; then
+          echo "Inspector implementation markers leaked into the production binary." >&2
+          exit 1
+        fi
+        manifest=$(find artifacts/native-engine-runtime-build/osx-arm64/package-smoke -name webscene-native-runtime.json -print -quit)
+        test -n "$manifest"
+        python3 - "$manifest" <<'PY'
+        import json
+        import pathlib
+        import sys
+        manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+        if manifest.get("v8Inspector") is not False:
+            raise SystemExit("production package does not declare v8Inspector=false")
+        PY
+    - name: Build matched main and candidate benchmark stacks
+      shell: bash
+      run: |
+        comparison="$GITHUB_WORKSPACE/artifacts/inspector-disabled-comparison"
+        mkdir -p "$comparison/candidate-native" "$comparison/control-native"
+        cp artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib \
+          "$comparison/candidate-native/"
+        cp artifacts/native-engine-runtime-build/osx-arm64/package-smoke/runtimes/osx-arm64/native/icudtl.dat \
+          "$comparison/candidate-native/"
+        dotnet publish \
+          benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
+          -c Release -o "$comparison/candidate-managed"
+
+        control="$RUNNER_TEMP/webscene-main"
+        git worktree add --detach "$control" origin/main
+        cp benchmarks/WebScene.NativeEngine.Benchmarks/NativeInspectorDisabledPerformanceProbe.cs \
+          "$control/benchmarks/WebScene.NativeEngine.Benchmarks/"
+        cp benchmarks/WebScene.NativeEngine.Benchmarks/Program.cs \
+          "$control/benchmarks/WebScene.NativeEngine.Benchmarks/Program.cs"
+        dotnet publish \
+          "$control/benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj" \
+          -c Release -o "$comparison/control-managed"
+        "$control/scripts/build-native-engine-runtime.sh" \
+          --rid osx-arm64 \
+          --v8-root "$GITHUB_WORKSPACE/artifacts/native-engine-v8/osx-arm64/v8" \
+          --v8-revision 15.3.10 \
+          --upstream-v8 \
+          --partition-alloc \
+          --output "$comparison/control-packages"
+        cp "$control/artifacts/native-engine-runtime-build/osx-arm64/libwebscene_native_engine.dylib" \
+          "$comparison/control-native/"
+        cp "$control/artifacts/native-engine-runtime-build/osx-arm64/package-smoke/runtimes/osx-arm64/native/icudtl.dat" \
+          "$comparison/control-native/"
+        git -C "$control" rev-parse HEAD > "$comparison/control.sha"
+        git rev-parse HEAD > "$comparison/candidate.sha"
+    - name: Run matched no-Inspector performance gate
+      shell: bash
+      run: |
+        comparison="$GITHUB_WORKSPACE/artifacts/inspector-disabled-comparison"
+        mkdir -p "$comparison/control-samples" "$comparison/candidate-samples"
+        run_sample() {
+          local variant="$1"
+          local index="$2"
+          WEBSCENE_NATIVE_ENGINE_PATH="$comparison/$variant-native/libwebscene_native_engine.dylib" \
+            dotnet "$comparison/$variant-managed/WebScene.NativeEngine.Benchmarks.dll" \
+              probe native-inspector-disabled-performance \
+              > "$comparison/$variant-samples/$(printf '%02d' "$index").json"
+        }
+        for group in $(seq 0 9); do
+          first=$((group * 2 + 1))
+          second=$((first + 1))
+          run_sample control "$first"
+          run_sample candidate "$first"
+          run_sample candidate "$second"
+          run_sample control "$second"
+        done
+        python3 scripts/compare-inspector-disabled-performance.py \
+          --control-dir "$comparison/control-samples" \
+          --candidate-dir "$comparison/candidate-samples" \
+          --control-sha "$(cat "$comparison/control.sha")" \
+          --candidate-sha "$(cat "$comparison/candidate.sha")" \
+          --control-managed "$comparison/control-managed/WebScene.Backend.Avalonia.dll" \
+          --candidate-managed "$comparison/candidate-managed/WebScene.Backend.Avalonia.dll" \
+          --control-native "$comparison/control-native/libwebscene_native_engine.dylib" \
+          --candidate-native "$comparison/candidate-native/libwebscene_native_engine.dylib" \
+          --output "$comparison/comparison.json"
+    - name: Upload production performance evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: inspector-disabled-production-comparison
+        path: artifacts/inspector-disabled-comparison
+    - name: Save completed production V8 SDK
+      if: steps.v8-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          artifacts/native-engine-v8/osx-arm64/v8/include
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/args.gn
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/obj/libv8_monolith.a
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/icudtl.dat
+          artifacts/native-engine-v8/osx-arm64/v8/out/arm64/ReleasePartitionAlloc/gen/third_party/partition_alloc/src
+          artifacts/native-engine-v8/osx-arm64/v8/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/icu/LICENSE
+          artifacts/native-engine-v8/osx-arm64/v8/third_party/partition_alloc/src
+        key: webscene-v8-sdk-production-v8-15.3.10-pa-macos-osx-arm64-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles('scripts/build-native-engine-runtime.sh', 'packaging/WebScene.NativeEngine.Runtime/patches/V8PartitionAllocMacVisibilityPatch.txt') }}
+
   inspector:
     name: Build and test V8 Inspector (osx-arm64)
     runs-on: macos-latest

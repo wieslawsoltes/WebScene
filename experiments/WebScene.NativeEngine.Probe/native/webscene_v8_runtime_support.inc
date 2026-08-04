@@ -1168,10 +1168,12 @@ void initialize_v8_process()
         if (optimize_for_size) {
             v8::V8::SetFlagsFromString("--optimize-for-size");
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         // V8 15.3 disables Debugger.setScriptSource by default even when the
         // Inspector is linked. WebScene keeps the transport opt-in, while an
         // attached debugger must retain the standard live-edit capability.
         v8::V8::SetFlagsFromString("--inspector-live-edit");
+#endif
         if (const auto preconfigured_old_space_mib =
                 unsigned_environment_value(
                     "WEBSCENE_V8_PRECONFIGURED_OLD_SPACE_MIB");

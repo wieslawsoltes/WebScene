@@ -1115,6 +1115,15 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     dispatch_inspector_test_message(
         engine,
         session_id,
+        std::string{"{\"id\":650,\"method\":\"Runtime.evaluate\",\"params\":{\"contextId\":"}
+            + std::to_string(frame_context_id)
+            + R"(,"expression":"parent.__websceneDetachedFrameCallbacks = 0; const record = () => ++parent.__websceneDetachedFrameCallbacks; setTimeout(record, 100); setInterval(record, 100); requestAnimationFrame(record); const originalTimeout = globalThis.setTimeout; globalThis.setTimeout = callback => originalTimeout(callback, 100); const channel = new MessageChannel(); channel.port1.onmessage = record; channel.port2.postMessage('queued'); globalThis.setTimeout = originalTimeout;","returnByValue":true}})" );
+    require(
+        wait_for_inspector_message(messages, R"("id":650)"),
+        "Inspector could not schedule detached-frame task fixtures");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
         R"({"id":66,"method":"Runtime.evaluate","params":{"expression":"document.body.removeChild(globalThis.__inspectorLifecycleFrame); delete globalThis.__inspectorLifecycleFrame;","returnByValue":true}})");
     require(
         wait_for_inspector_message(messages, R"("id":66)"),
@@ -1151,6 +1160,19 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         wait_for_inspector_message(messages, R"("id":67)", R"("error")"),
         "A removed iframe's V8 remote object remained usable");
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    for (auto attempt = 0; attempt < 10; ++attempt) {
+        static_cast<void>(evaluate(
+            engine,
+            "0",
+            "webscene-inspector-detached-frame-task-pump.js"));
+    }
+    require(
+        evaluate(
+            engine,
+            "globalThis.__websceneDetachedFrameCallbacks",
+            "webscene-inspector-detached-frame-result.js") == "0",
+        "A timer, animation frame, or MessageChannel callback ran after its iframe context was destroyed");
 
     constexpr std::string_view exception_source{
         "throw new Error('webscene-inspector-exception');"};
@@ -1235,6 +1257,59 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             R"("method":"Runtime.exceptionRevoked")",
             "Promise rejection was handled asynchronously"),
         "late promise handler did not revoke the promoted Inspector exception");
+
+    const auto revocations_before_rejection_cap = count_inspector_messages(
+        messages,
+        R"("method":"Runtime.exceptionRevoked")");
+    const auto exceptions_before_rejection_cap = count_inspector_messages(
+        messages,
+        R"("method":"Runtime.exceptionThrown")",
+        "webscene-inspector-capped-rejection-");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":68,"method":"Runtime.evaluate","params":{"expression":"globalThis.__websceneCappedRejections = Array.from({ length: 1025 }, (_, index) => Promise.reject(new Error('webscene-inspector-capped-rejection-' + index)));","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":68)"),
+        "Inspector rejection-cap fixture did not evaluate");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            exceptions_before_rejection_cap + 1025U,
+            "webscene-inspector-capped-rejection-"),
+        "Inspector did not report every rejection in the cap fixture");
+    require(
+        count_inspector_messages(
+            messages,
+            R"("method":"Runtime.exceptionRevoked")")
+            == revocations_before_rejection_cap,
+        "The Inspector tracking cap falsely revoked a still-unhandled rejection");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":69,"method":"Runtime.evaluate","params":{"expression":"globalThis.__websceneCappedRejections[1024].catch(() => {});","returnByValue":true}})");
+    require(
+        wait_for_inspector_message_count(
+            messages,
+            R"("method":"Runtime.exceptionRevoked")",
+            revocations_before_rejection_cap + 1U,
+            "Promise rejection was handled asynchronously"),
+        "A retained rejection record was not revoked after its late handler was added");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":70,"method":"Runtime.evaluate","params":{"expression":"globalThis.__websceneCappedRejections[0].catch(() => {});","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":70)"),
+        "Inspector could not handle the evicted rejection record");
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    require(
+        count_inspector_messages(
+            messages,
+            R"("method":"Runtime.exceptionRevoked")")
+            == revocations_before_rejection_cap + 1U,
+        "An evicted rejection record emitted a spurious late revocation");
 
     constexpr std::string_view console_source{
         "console.warn('webscene-inspector-console', { answer: 42 });"};
