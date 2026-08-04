@@ -321,6 +321,13 @@ internal static class NativeInspectorDisabledPerformanceProbe
         }
         var published = Volatile.Read(ref firstSceneTimestamp);
         firstScene.Dispose();
+        var startupError = NativeWebSceneApi.GetLastError(engine);
+        if (!string.IsNullOrWhiteSpace(startupError))
+        {
+            NativeWebSceneApi.EngineDestroy(engine);
+            throw new InvalidOperationException(
+                $"The native engine reported a startup error: {startupError}");
+        }
         return new EngineState(
             engine,
             Stopwatch.GetElapsedTime(start, created).TotalMilliseconds,
@@ -366,8 +373,33 @@ internal static class NativeInspectorDisabledPerformanceProbe
             if (complete) return;
             Thread.Sleep(10);
         }
+        var progress = string.Join(
+            "; ",
+            engines.Select((engine, index) =>
+            {
+                var current = ReadRuntimeWork(engine.Engine);
+                var baseline = before[index];
+                var timersFired = current.TimersFired - baseline.TimersFired;
+                var timersScheduled = current.TimersScheduled - baseline.TimersScheduled;
+                var framesInvoked =
+                    current.AnimationFramesInvoked - baseline.AnimationFramesInvoked;
+                var framesRequested =
+                    current.AnimationFramesRequested - baseline.AnimationFramesRequested;
+                var waits = current.WorkerWaits - baseline.WorkerWaits;
+                var signalled =
+                    current.WorkerSignalledWakes - baseline.WorkerSignalledWakes;
+                var timeouts =
+                    current.WorkerTimeoutWakes - baseline.WorkerTimeoutWakes;
+                return $"engine {index}: timers={timersFired}/{timerTarget}, " +
+                    $"scheduled={timersScheduled}, " +
+                    $"frames={framesInvoked}/{frameTarget}, " +
+                    $"requested={framesRequested}, waits={waits}, " +
+                    $"signalled={signalled}, timeouts={timeouts}, " +
+                    $"error={NativeWebSceneApi.GetLastError(engine.Engine)}";
+            }));
         throw new TimeoutException(
-            "The timer/animation-frame performance fixture did not complete within the bounded interval.");
+            "The timer/animation-frame performance fixture did not complete within the bounded interval. " +
+            progress);
     }
 
     private static string TimerAndFrameFixture(int timerTarget, int frameTarget)

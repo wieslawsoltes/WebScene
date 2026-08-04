@@ -111,7 +111,9 @@ jobs:
         directory=$(dirname "$binary")
         manifest="$directory/package-smoke/runtimes/osx-arm64/native/webscene-native-runtime.json"
         icu="$directory/package-smoke/runtimes/osx-arm64/native/icudtl.dat"
-        for output in "$binary" "$manifest" "$icu"; do
+        snapshot="$directory/webscene_bootstrap_snapshot.bin"
+        snapshot_metadata="$directory/webscene_bootstrap_snapshot.meta"
+        for output in "$binary" "$manifest" "$icu" "$snapshot" "$snapshot_metadata"; do
           if [[ ! -f "$output" ]]; then
             echo "Production build output is missing: $output" >&2
             exit 1
@@ -122,6 +124,8 @@ jobs:
           echo "directory=$directory"
           echo "manifest=$manifest"
           echo "icu=$icu"
+          echo "snapshot=$snapshot"
+          echo "snapshot-metadata=$snapshot_metadata"
         } >> "$GITHUB_OUTPUT"
     - name: Audit production binary
       shell: bash
@@ -149,6 +153,10 @@ jobs:
           "$comparison/candidate-native/libwebscene_native_engine.dylib"
         cp "${{ steps.production-build.outputs.icu }}" \
           "$comparison/candidate-native/icudtl.dat"
+        cp "${{ steps.production-build.outputs.snapshot }}" \
+          "$comparison/candidate-native/webscene_bootstrap_snapshot.bin"
+        cp "${{ steps.production-build.outputs.snapshot-metadata }}" \
+          "$comparison/candidate-native/webscene_bootstrap_snapshot.meta"
         dotnet publish \
           benchmarks/WebScene.NativeEngine.Benchmarks/WebScene.NativeEngine.Benchmarks.csproj \
           -c Release -o "$comparison/candidate-managed"
@@ -176,17 +184,25 @@ jobs:
         control_binary="${control_candidates[0]}"
         control_directory=$(dirname "$control_binary")
         control_icu="$control_directory/package-smoke/runtimes/osx-arm64/native/icudtl.dat"
-        if [[ ! -f "$control_icu" ]]; then
-          echo "Control build output is missing: $control_icu" >&2
-          exit 1
-        fi
+        control_snapshot="$control_directory/webscene_bootstrap_snapshot.bin"
+        control_snapshot_metadata="$control_directory/webscene_bootstrap_snapshot.meta"
+        for output in "$control_icu" "$control_snapshot" "$control_snapshot_metadata"; do
+          if [[ ! -f "$output" ]]; then
+            echo "Control build output is missing: $output" >&2
+            exit 1
+          fi
+        done
         cp "$control_binary" \
           "$comparison/control-native/libwebscene_native_engine.dylib"
         cp "$control_icu" \
           "$comparison/control-native/icudtl.dat"
+        cp "$control_snapshot" \
+          "$comparison/control-native/webscene_bootstrap_snapshot.bin"
+        cp "$control_snapshot_metadata" \
+          "$comparison/control-native/webscene_bootstrap_snapshot.meta"
         git rev-parse HEAD > "$comparison/control.sha"
         git rev-parse HEAD > "$comparison/candidate.sha"
-    - name: Run matched no-Inspector performance gate
+    - name: Run matched Inspector idle-cost performance gate
       shell: bash
       run: |
         comparison="$GITHUB_WORKSPACE/artifacts/inspector-capable-comparison"
