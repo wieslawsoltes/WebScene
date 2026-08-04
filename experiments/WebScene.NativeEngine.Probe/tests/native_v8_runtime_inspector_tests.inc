@@ -1283,9 +1283,10 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         evaluate(
             engine,
             R"JS(
-                addEventListener('keydown', () => {
+                globalThis.__websceneThrowingInput = () => {
                     throw new Error('webscene-inspector-input-callback');
-                });
+                };
+                addEventListener('keydown', globalThis.__websceneThrowingInput);
                 'ready';
             )JS",
             "webscene-inspector-input-callback.js") == R"("ready")",
@@ -1307,6 +1308,16 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             R"("method":"Runtime.exceptionThrown")",
             "webscene-inspector-input-callback"),
         "input callback exception was not forwarded through Runtime.exceptionThrown");
+    require(
+        evaluate(
+            engine,
+            R"JS(
+                removeEventListener('keydown', globalThis.__websceneThrowingInput);
+                delete globalThis.__websceneThrowingInput;
+                'removed';
+            )JS",
+            "webscene-inspector-input-callback-cleanup.js") == R"("removed")",
+        "Inspector input-callback fixture cleanup failed");
 
     constexpr std::string_view rejection_source{
         "Promise.reject(new Error('webscene-inspector-rejection'));"};
