@@ -197,6 +197,7 @@
         std::string_view url)
     {
         if (inspector == nullptr || local_context.IsEmpty()) return;
+        inspector_promise_rejections.clear();
         inspector->resetContextGroup(inspector_context_group_id);
         register_inspector_context(local_context, "WebScene", url);
     }
@@ -204,6 +205,11 @@
     void destroy_inspector_context(v8::Local<v8::Context> local_context)
     {
         if (inspector == nullptr || local_context.IsEmpty()) return;
+        std::erase_if(
+            inspector_promise_rejections,
+            [&local_context, this](auto& rejection) {
+                return rejection.context.Get(isolate) == local_context;
+            });
         inspector->contextDestroyed(local_context);
     }
 

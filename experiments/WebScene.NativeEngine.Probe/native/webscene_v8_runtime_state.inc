@@ -135,6 +135,10 @@
     bool detached_dom_gc_requested{false};
     std::string last_error;
     std::vector<pending_promise_rejection> pending_promise_rejections;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    static constexpr size_t maximum_inspector_promise_rejections = 1024U;
+    std::deque<inspector_promise_rejection> inspector_promise_rejections;
+#endif
     std::filesystem::path resource_root;
     std::string document_base_address;
     std::string frame_base_address;

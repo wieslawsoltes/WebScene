@@ -1206,6 +1206,36 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             "webscene-inspector-rejection"),
         "unhandled promise rejection was not forwarded through Runtime.exceptionThrown");
 
+    constexpr std::string_view late_handled_rejection_source{R"JS(
+        globalThis.__websceneLateHandledRejection =
+            Promise.reject(new Error('webscene-inspector-late-handled-rejection'));
+        setTimeout(() => {
+            globalThis.__websceneLateHandledRejection.catch(() => {});
+        }, 25);
+    )JS"};
+    constexpr std::string_view late_handled_rejection_name{
+        "webscene-inspector-late-handled-rejection-target.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            late_handled_rejection_source.data(),
+            late_handled_rejection_source.size(),
+            late_handled_rejection_name.data(),
+            late_handled_rejection_name.size()) != 0,
+        "late-handled Inspector promise-rejection fixture was rejected");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionThrown")",
+            "webscene-inspector-late-handled-rejection"),
+        "late-handled promise rejection was not initially reported");
+    require(
+        wait_for_inspector_message(
+            messages,
+            R"("method":"Runtime.exceptionRevoked")",
+            "Promise rejection was handled asynchronously"),
+        "late promise handler did not revoke the promoted Inspector exception");
+
     constexpr std::string_view console_source{
         "console.warn('webscene-inspector-console', { answer: 42 });"};
     constexpr std::string_view console_name{

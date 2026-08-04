@@ -3054,22 +3054,23 @@ struct v8_dom_runtime::implementation final {
         if (message.GetEvent() == v8::kPromiseHandlerAddedAfterReject) {
             std::erase_if(
                 self->pending_promise_rejections,
-                [&promise, isolate
+                [&promise, isolate](auto& rejection) {
+                    return rejection.promise.Get(isolate)->StrictEquals(promise);
+                });
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-                    , self
-#endif
-                ](auto& rejection) {
+            std::erase_if(
+                self->inspector_promise_rejections,
+                [&promise, isolate, self](auto& rejection) {
                     if (!rejection.promise.Get(isolate)->StrictEquals(promise)) {
                         return false;
                     }
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     self->revoke_inspector_exception(
                         rejection.context.Get(isolate),
                         rejection.inspector_exception_id,
                         "Promise rejection was handled asynchronously");
-#endif
                     return true;
                 });
+#endif
             return;
         }
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
@@ -3093,19 +3094,25 @@ struct v8_dom_runtime::implementation final {
                 local_context,
                 value,
                 error);
+        if (inspector_exception_id != 0U) {
+            if (self->inspector_promise_rejections.size()
+                == self->maximum_inspector_promise_rejections) {
+                auto& expired = self->inspector_promise_rejections.front();
+                self->revoke_inspector_exception(
+                    expired.context.Get(isolate),
+                    expired.inspector_exception_id,
+                    "Promise rejection record limit reached");
+                self->inspector_promise_rejections.pop_front();
+            }
+            self->inspector_promise_rejections.push_back({
+                v8::Global<v8::Promise>(isolate, promise),
+                v8::Global<v8::Context>(isolate, local_context),
+                inspector_exception_id});
+        }
 #endif
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            v8::Global<v8::Context>(isolate, local_context),
-#endif
-            std::move(error)
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-            ,
-            inspector_exception_id});
-#else
-            });
-#endif
+            std::move(error)});
     }
 
 #include "webscene_v8_runtime_state.inc"
