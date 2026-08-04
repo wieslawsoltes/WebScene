@@ -8,13 +8,12 @@ live-edit results, and WebAssembly metadata produced by V8.
 
 ## Architecture
 
-Published production packages use the patched V8 SDK and compile Inspector
-support in. Build the equivalent runtime with CMake
-`-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON`, the Unix runtime builder's
-`--v8-inspector` switch, or the Windows builder's `-V8Inspector` switch. The
-loaded binary advertises this capability through
+Published production packages and both runtime builders always use the patched
+V8 SDK and compile Inspector support in. Direct CMake builds that enable V8 do
+the same by default. The loaded binary advertises this capability through
 `WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR`; the stable Inspector ABI returns
-unavailable only from explicit feature-off control binaries.
+unavailable only from explicit low-level feature-off test/control binaries,
+which are never packaged or published.
 
 Each runtime creates its `v8_inspector::V8Inspector` lazily when the engine
 worker processes the first debugger connection. The current outer document and

@@ -26,7 +26,7 @@
     <WebSceneNativeEngineDenseLink Condition="'$(WebSceneNativeEngineDenseLink)' == ''">false</WebSceneNativeEngineDenseLink>
     <WebSceneNativeEngineThinLto Condition="'$(WebSceneNativeEngineThinLto)' == ''">false</WebSceneNativeEngineThinLto>
     <WebSceneNativeEngineCertificationTelemetry>false</WebSceneNativeEngineCertificationTelemetry>
-    <WebSceneNativeEngineV8Inspector Condition="'$(WebSceneNativeEngineV8Inspector)' == ''">false</WebSceneNativeEngineV8Inspector>
+    <WebSceneNativeEngineV8Inspector>true</WebSceneNativeEngineV8Inspector>
     <WebSceneNativeEngineHtmlParser Condition="'$(WebSceneNativeEngineHtmlParser)' == ''">html5ever</WebSceneNativeEngineHtmlParser>
     <WebSceneNativeEngineCssParser Condition="'$(WebSceneNativeEngineCssParser)' == ''">cssparser</WebSceneNativeEngineCssParser>
     <WebSceneNativeEngineSelectorParser Condition="'$(WebSceneNativeEngineSelectorParser)' == ''">servo</WebSceneNativeEngineSelectorParser>
@@ -138,8 +138,8 @@
            Text="WebSceneNativeEngineThinLto must be the JSON boolean true or false." />
     <Error Condition="'$(WebSceneNativeEngineCertificationTelemetry)' != 'false'"
            Text="Native runtime packages must compile certification telemetry out." />
-    <Error Condition="'$(WebSceneNativeEngineV8Inspector)' != 'true' and '$(WebSceneNativeEngineV8Inspector)' != 'false'"
-           Text="WebSceneNativeEngineV8Inspector must be the JSON boolean true or false." />
+    <Error Condition="'$(WebSceneNativeEngineV8Inspector)' != 'true'"
+           Text="Published native runtime packages must include V8 Inspector support." />
     <Error Condition="'$(WebSceneNativeEngineHtmlParser)' != 'legacy' and '$(WebSceneNativeEngineHtmlParser)' != 'html5ever'"
            Text="WebSceneNativeEngineHtmlParser must be legacy or html5ever." />
     <Error Condition="'$(WebSceneNativeEngineCssParser)' != 'legacy' and '$(WebSceneNativeEngineCssParser)' != 'cssparser'"

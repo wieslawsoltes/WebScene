@@ -223,7 +223,6 @@ jobs:
           --v8-revision '${{ matrix.v8_revision }}' \
           --upstream-v8 \
           --partition-alloc \
-          --v8-inspector \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
     - name: Build, pack, and test Linux runtime
       if: matrix.rid == 'linux-x64'
@@ -253,7 +252,6 @@ jobs:
               --v8-revision '${{ matrix.v8_revision }}' \
               --upstream-v8 \
               --partition-alloc \
-              --v8-inspector \
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
@@ -272,7 +270,6 @@ jobs:
           -V8Revision '${{ matrix.v8_revision }}' `
           -UpstreamV8 `
           -PartitionAlloc `
-          -V8Inspector `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching

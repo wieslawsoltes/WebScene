@@ -36,7 +36,8 @@ target_include_directories(webscene_native_engine PUBLIC native)
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
-    "Compile V8 Inspector state, hooks, queues, and worker dispatch into the runtime" OFF)
+    "Compile V8 Inspector state, hooks, queues, and worker dispatch into the runtime"
+    "${WEBSCENE_NATIVE_ENGINE_ENABLE_V8}")
 option(WEBSCENE_V8_POINTER_COMPRESSION
     "Compile the embedder ABI for a pointer-compressed V8 monolith" OFF)
 option(WEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE
@@ -289,7 +290,7 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
-        message(STATUS "WebScene native engine: V8 Inspector flavor enabled")
+        message(STATUS "WebScene native engine: V8 Inspector support enabled")
     else()
         message(STATUS "WebScene native engine: V8 Inspector compiled out")
     endif()

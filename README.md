@@ -154,8 +154,8 @@ dotnet test WebScene.sln -c Release --no-build
 Build and verify the native runtime on a matching host:
 
 ```bash
-scripts/build-native-engine-runtime.sh --rid osx-arm64 --v8-inspector
-scripts/build-native-engine-runtime.sh --rid linux-x64 --v8-inspector
+scripts/build-native-engine-runtime.sh --rid osx-arm64
+scripts/build-native-engine-runtime.sh --rid linux-x64
 ```
 
 Published production packages use the patched V8 SDK and include Chrome/CDP
@@ -165,7 +165,7 @@ and managed registry state remain unallocated until a debugger connects. There
 is no separate production runtime flavor without CDP support.
 
 ```powershell
-./scripts/build-native-engine-runtime.ps1 -Rid win-x64 -V8Inspector
+./scripts/build-native-engine-runtime.ps1 -Rid win-x64
 ```
 
 Run the Avalonia showcase with an explicit engine library:

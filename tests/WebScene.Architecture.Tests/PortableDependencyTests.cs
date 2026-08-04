@@ -150,6 +150,54 @@ public sealed class PortableDependencyTests
     }
 
     [Fact]
+    public void ProductionRuntimeBuildersAlwaysIncludeV8Inspector()
+    {
+        var unixBuilder = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            "scripts",
+            "build-native-engine-runtime.sh"));
+        Assert.Contains(
+            "-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON",
+            unixBuilder,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-p:WebSceneNativeEngineV8Inspector=true",
+            unixBuilder,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("--v8-inspector", unixBuilder, StringComparison.Ordinal);
+        Assert.DoesNotContain("--no-v8-inspector", unixBuilder, StringComparison.Ordinal);
+
+        var windowsBuilder = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            "scripts",
+            "build-native-engine-runtime.ps1"));
+        Assert.Contains(
+            "-DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON",
+            windowsBuilder,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-p:WebSceneNativeEngineV8Inspector=true",
+            windowsBuilder,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[switch] $V8Inspector", windowsBuilder, StringComparison.Ordinal);
+        Assert.DoesNotContain("NoV8Inspector", windowsBuilder, StringComparison.Ordinal);
+
+        var packageProject = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            "packaging",
+            "WebScene.NativeEngine.Runtime",
+            "WebScene.NativeEngine.Runtime.csproj"));
+        Assert.Contains(
+            "<WebSceneNativeEngineV8Inspector>true</WebSceneNativeEngineV8Inspector>",
+            packageProject,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Published native runtime packages must include V8 Inspector support.",
+            packageProject,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AvaloniaBackendPackageDependsInwardAndOwnsTheImplementation()
     {
         var projectPath = Path.Combine(
