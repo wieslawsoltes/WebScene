@@ -29,8 +29,7 @@ using the CDP Inspector application built from the merged V8 work in CDP.
 6. Verified the pause mapped to `main.jsx:20`, the call stack included
    `increment`, `executeDispatch`, and `runWithFiberInDEV`, the scope chain was
    inspectable, and the watch expression `count` resolved to `0`.
-7. Drove F10 and F5 through the packaged Inspector with Computer Use while
-   recording the desktop session.
+7. Drove F10 and F5 through the packaged Inspector with Computer Use.
 8. Controlled the Inspector application itself through its independent remote
    CDP endpoint to select the Runtime Scripts split and execute the target-side
    interaction, proving that remote inspection remains available while the app
@@ -56,10 +55,6 @@ React scheduling after leaving V8's nested Inspector message loop.
 ### Paused original source, call stack, scopes, and watch
 
 ![CDP Inspector paused in main.jsx with count watch](../assets/v8-inspector/7guis-cdp-inspector-paused-watch.png)
-
-### Recorded debug session
-
-[Download the 30-second pause, step, and resume recording](../assets/v8-inspector/7guis-cdp-inspector-debug-session.mp4).
 
 ## Chrome DevTools handoff
 
