@@ -424,8 +424,12 @@
             || !inspector_available_for_dispatch()) return false;
         {
             std::lock_guard lock(inspector_mutex);
+            const auto message_size = message.size();
             if (inspector_shutting_down
-                || inspector_actions.size() >= maximum_pending_inspector_actions) {
+                || inspector_actions.size() >= maximum_pending_inspector_actions
+                || message_size > maximum_pending_inspector_action_bytes
+                || pending_inspector_action_bytes
+                    > maximum_pending_inspector_action_bytes - message_size) {
                 return false;
             }
             inspector_actions.push_back(inspector_action{
@@ -435,6 +439,7 @@
                 std::move(message),
                 {},
                 nullptr});
+            pending_inspector_action_bytes += message_size;
         }
         inspector_condition.notify_all();
         return true;
@@ -468,17 +473,29 @@
                     } catch (const std::future_error&) {
                     }
                 }
-                std::erase_if(inspector_actions, [&](const auto& action) {
-                    return action.session_id == session_id
-                        && (action.type == inspector_action::kind::connect
-                            || action.type == inspector_action::kind::dispatch);
-                });
+                for (auto action = inspector_actions.begin();
+                     action != inspector_actions.end();) {
+                    if (action->session_id == session_id
+                        && (action->type == inspector_action::kind::connect
+                            || action->type == inspector_action::kind::dispatch)) {
+                        pending_inspector_action_bytes -= action->message.size();
+                        action = inspector_actions.erase(action);
+                    } else {
+                        ++action;
+                    }
+                }
                 return true;
             }
-            std::erase_if(inspector_actions, [&](const auto& action) {
-                return action.session_id == session_id
-                    && action.type == inspector_action::kind::dispatch;
-            });
+            for (auto action = inspector_actions.begin();
+                 action != inspector_actions.end();) {
+                if (action->session_id == session_id
+                    && action->type == inspector_action::kind::dispatch) {
+                    pending_inspector_action_bytes -= action->message.size();
+                    action = inspector_actions.erase(action);
+                } else {
+                    ++action;
+                }
+            }
             // Disconnect is a bounded lifecycle action, not untrusted CDP
             // payload. Prioritize it even when another session has filled the
             // payload queue so a waiting-for-debugger owner cannot be stranded
@@ -517,8 +534,10 @@
             if (inspector_shutting_down || inspector_actions.empty()) {
                 return false;
             }
+            const auto message_size = inspector_actions.front().message.size();
             action = std::move(inspector_actions.front());
             inspector_actions.pop_front();
+            pending_inspector_action_bytes -= message_size;
         }
 
         switch (action.type) {
@@ -611,6 +630,7 @@
                 }
             }
             inspector_actions.clear();
+            pending_inspector_action_bytes = 0U;
         }
         inspector_pause_loop_running = false;
         inspector_condition.notify_all();

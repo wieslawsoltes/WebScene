@@ -16,9 +16,12 @@
     std::unordered_map<uint64_t, inspector_session> inspector_sessions;
     std::unordered_map<uint32_t, bool> inspector_instrumented_async_tasks;
     static constexpr size_t maximum_pending_inspector_actions = 1024U;
+    static constexpr size_t maximum_pending_inspector_action_bytes =
+        16U * 1024U * 1024U;
     mutable std::mutex inspector_mutex;
     std::condition_variable inspector_condition;
     std::deque<inspector_action> inspector_actions;
+    size_t pending_inspector_action_bytes{0U};
     std::atomic<uint64_t> next_inspector_session_id{1U};
     std::atomic<bool> inspector_ready{false};
     uint64_t inspector_waiting_session_id{0U};

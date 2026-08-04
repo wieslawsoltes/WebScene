@@ -456,14 +456,63 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         webscene_engine_inspector_disconnect(engine, overflow_session_id) != 0,
         "The output-overflow Inspector session disconnect was rejected");
 
-    const std::string oversized_message(16U * 1024U * 1024U + 1U, 'x');
+    {
+        const std::string oversized_message(16U * 1024U * 1024U + 1U, 'x');
+        require(
+            webscene_engine_inspector_dispatch(
+                engine,
+                session_id,
+                oversized_message.data(),
+                oversized_message.size()) == 0,
+            "The native Inspector ABI accepted a message larger than 16 MiB");
+    }
+
+    blocking_inspector_sink byte_limited_sink;
+    const auto byte_limited_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_blocking_inspector_message,
+        &byte_limited_sink,
+        0U);
+    require(
+        byte_limited_session_id != 0U,
+        "Inspector byte-limit session creation failed");
+    dispatch_inspector_test_message(
+        engine,
+        byte_limited_session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    {
+        std::unique_lock lock(byte_limited_sink.mutex);
+        require(
+            byte_limited_sink.condition.wait_for(
+                lock,
+                std::chrono::seconds(5),
+                [&] { return byte_limited_sink.entered; }),
+            "Inspector byte-limit callback did not enter");
+    }
+    const std::string aggregate_limit_message(16U * 1024U * 1024U, 'x');
     require(
         webscene_engine_inspector_dispatch(
             engine,
-            session_id,
-            oversized_message.data(),
-            oversized_message.size()) == 0,
-        "The native Inspector ABI accepted a message larger than 16 MiB");
+            byte_limited_session_id,
+            aggregate_limit_message.data(),
+            aggregate_limit_message.size()) != 0,
+        "The native Inspector inbound queue rejected its documented byte limit");
+    constexpr std::string_view aggregate_overflow_message{"x"};
+    require(
+        webscene_engine_inspector_dispatch(
+            engine,
+            byte_limited_session_id,
+            aggregate_overflow_message.data(),
+            aggregate_overflow_message.size()) == 0,
+        "The native Inspector inbound queue exceeded its aggregate byte limit");
+    require(
+        webscene_engine_inspector_disconnect(engine, byte_limited_session_id) != 0,
+        "Inspector disconnect was rejected while its byte limit was saturated");
+    {
+        std::lock_guard lock(byte_limited_sink.mutex);
+        byte_limited_sink.released = true;
+    }
+    byte_limited_sink.condition.notify_all();
 
     inspector_test_messages saturation_waiting_messages;
     const auto saturation_waiting_session_id = webscene_engine_inspector_connect(
