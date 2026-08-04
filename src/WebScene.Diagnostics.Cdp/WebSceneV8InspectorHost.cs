@@ -45,6 +45,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
     private readonly Func<string?> _targetUrl;
     private readonly WebSceneV8InspectorOptions _options;
     private readonly string _targetId;
+    private readonly string _targetPathSegment;
     private readonly string _title;
     private readonly object _gate = new();
     private readonly Dictionary<long, Task> _connections = [];
@@ -69,6 +70,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         _targetId = string.IsNullOrWhiteSpace(targetId)
             ? throw new ArgumentException("A target id is required.", nameof(targetId))
             : targetId;
+        _targetPathSegment = Uri.EscapeDataString(_targetId);
         _title = string.IsNullOrWhiteSpace(title) ? "WebScene V8" : title;
     }
 
@@ -87,6 +89,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         _targetId = string.IsNullOrWhiteSpace(targetId)
             ? throw new ArgumentException("A target id is required.", nameof(targetId))
             : targetId;
+        _targetPathSegment = Uri.EscapeDataString(_targetId);
         _title = string.IsNullOrWhiteSpace(title) ? "WebScene V8" : title;
     }
 
@@ -125,22 +128,34 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             var shutdown = new CancellationTokenSource();
             try
             {
-                listener.Start();
-                _listener = listener;
-                _shutdown = shutdown;
-                _listenLoop = ListenAsync(listener, shutdown.Token);
+                // Reserve and fully create the waiting session before the
+                // listener is visible. Otherwise a polling browser can attach
+                // a normal session in the gap and leave the separate waiting
+                // session paused without a client.
                 if (_options.WaitForDebugger)
                 {
                     _waitingSession = _openSession(true);
                 }
+                listener.Start();
+                _listener = listener;
+                _shutdown = shutdown;
+                _listenLoop = ListenAsync(listener, shutdown.Token);
             }
             catch
             {
+                var waitingSession = Interlocked.Exchange(
+                    ref _waitingSession,
+                    null);
                 _listener = null;
                 _shutdown = null;
                 _listenLoop = null;
                 listener.Close();
                 shutdown.Dispose();
+                if (waitingSession is not null)
+                {
+                    waitingSession.DisposeAsync().AsTask()
+                        .GetAwaiter().GetResult();
+                }
                 throw;
             }
         }
@@ -260,7 +275,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         var path = context.Request.Url?.AbsolutePath.TrimEnd('/') ?? string.Empty;
         if (context.Request.IsWebSocketRequest)
         {
-            if (path != $"/devtools/page/{_targetId}"
+            if (path != $"/devtools/page/{_targetPathSegment}"
                 || !IsAuthorized(context.Request)
                 || !IsAllowedOrigin(context.Request.Headers["Origin"]))
             {
@@ -304,7 +319,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             var authority = context.Request.Url?.Authority
                 ?? $"{FormatAddress(_options.Address)}:{_options.Port}";
             var websocketUrl =
-                $"ws://{authority}/devtools/page/{_targetId}?token="
+                $"ws://{authority}/devtools/page/{_targetPathSegment}?token="
                 + Uri.EscapeDataString(AccessToken);
             await WriteJsonAsync(
                 context.Response,

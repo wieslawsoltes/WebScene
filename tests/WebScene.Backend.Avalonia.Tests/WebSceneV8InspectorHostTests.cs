@@ -106,6 +106,77 @@ public sealed class WebSceneV8InspectorHostTests
     }
 
     [Fact]
+    public async Task WaitForDebuggerSessionIsReservedBeforeListenerStarts()
+    {
+        var openEntered = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOpen = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var host = new WebSceneV8InspectorHost(
+            waitForDebugger =>
+            {
+                Assert.True(waitForDebugger);
+                openEntered.TrySetResult(true);
+                releaseOpen.Task.GetAwaiter().GetResult();
+                return new FakeInspectorSession();
+            },
+            () => "webscene://waiting-startup",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0,
+                WaitForDebugger = true
+            });
+
+        var start = Task.Run(() => host.StartAsync());
+        await openEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            Assert.False(host.IsRunning);
+        }
+        finally
+        {
+            releaseOpen.TrySetResult(true);
+        }
+
+        await start.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(host.IsRunning);
+    }
+
+    [Fact]
+    public async Task CustomTargetIdIsEncodedInDebuggerPath()
+    {
+        const string targetId = "custom?target#1";
+        await using var host = new WebSceneV8InspectorHost(
+            () => new FakeInspectorSession(),
+            () => "webscene://custom-target",
+            new WebSceneV8InspectorOptions
+            {
+                Enabled = true,
+                Port = 0
+            },
+            targetId);
+
+        await host.StartAsync();
+
+        using var http = new HttpClient();
+        using var discovery = JsonDocument.Parse(
+            await http.GetStringAsync(new Uri(host.DiscoveryUri, "json/list")));
+        var target = discovery.RootElement[0];
+        var websocketUrl = target.GetProperty("webSocketDebuggerUrl").GetString();
+        Assert.Equal(targetId, target.GetProperty("id").GetString());
+        Assert.Contains("/devtools/page/custom%3Ftarget%231", websocketUrl);
+
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri(websocketUrl!), CancellationToken.None);
+        Assert.Equal(WebSocketState.Open, socket.State);
+        await socket.CloseAsync(
+            WebSocketCloseStatus.NormalClosure,
+            "test complete",
+            CancellationToken.None);
+    }
+
+    [Fact]
     public async Task DiscoveryAndWebSocketForwardCompleteInspectorMessages()
     {
         const string accessToken =
