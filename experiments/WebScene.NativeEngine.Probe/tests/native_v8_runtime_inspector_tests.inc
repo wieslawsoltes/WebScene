@@ -1228,7 +1228,7 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
                 addEventListener('resize', globalThis.__websceneThrowingResize);
                 'ready';
             )JS",
-            "webscene-inspector-resize-callback.js") == "ready",
+            "webscene-inspector-resize-callback.js") == R"("ready")",
         "Inspector resize-callback fixture was rejected");
     const webscene_input_event inspector_resize{
         WEBSCENE_INPUT_RESIZE,
@@ -1260,7 +1260,7 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
                 document.body.style.width = '799px';
                 'ready';
             )JS",
-            "webscene-inspector-resize-observer.js") == "ready",
+            "webscene-inspector-resize-observer.js") == R"("ready")",
         "Inspector ResizeObserver fixture was rejected");
     const webscene_input_event inspector_observer_resize{
         WEBSCENE_INPUT_RESIZE,
@@ -1288,7 +1288,7 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
                 });
                 'ready';
             )JS",
-            "webscene-inspector-input-callback.js") == "ready",
+            "webscene-inspector-input-callback.js") == R"("ready")",
         "Inspector input-callback fixture was rejected");
     const webscene_input_event inspector_key{
         WEBSCENE_INPUT_KEY_DOWN,
