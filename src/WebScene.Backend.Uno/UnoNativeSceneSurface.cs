@@ -787,8 +787,11 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             Source = options.Source;
             if (beforeNavigation is not null)
             {
-                await beforeNavigation(this, navigationToken)
-                    .ConfigureAwait(false);
+                // Preserve Uno's UI synchronization context. A canceled
+                // inspector startup hook is handled by the teardown path
+                // below, which must detach the SKCanvasElement on its UI
+                // thread before destroying the native engine.
+                await beforeNavigation(this, navigationToken);
             }
             NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
             if (!NativeWebSceneApi.TryLoadUrl(
@@ -807,10 +810,13 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             {
                 timeout.CancelAfter(timeoutValue);
             }
+            // Do not suppress the captured UI context here. Cancellation and
+            // timeout both flow through the catch block, and UnloadCoreAsync
+            // calls the UI-bound UnoNativeSceneSurface.SetEngine method.
             var documentBarrierText = await EvaluateTextAsync(
-                    "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
-                    "webscene-uno-document-barrier.js",
-                    timeout.Token).ConfigureAwait(false);
+                "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
+                "webscene-uno-document-barrier.js",
+                timeout.Token);
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
             if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
