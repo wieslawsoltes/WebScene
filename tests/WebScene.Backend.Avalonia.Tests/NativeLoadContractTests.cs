@@ -95,11 +95,28 @@ public sealed class NativeLoadContractTests
         using var replacement =
             NativeWebSceneViewLifecycle.CreateNavigationCancellation(
                 CancellationToken.None,
-                lifetime.Token);
+                lifetime.Token,
+                CancellationToken.None);
         Assert.True(replacement.IsCancellationRequested);
         Assert.False(dispose.IsCompleted);
 
         gate.Release();
         await dispose.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public void ExplicitUnloadCancelsReplacementNavigationCreatedAfterRequest()
+    {
+        using var lifetime = new CancellationTokenSource();
+        using var unload = new CancellationTokenSource();
+
+        unload.Cancel();
+        using var replacement =
+            NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                CancellationToken.None,
+                lifetime.Token,
+                unload.Token);
+
+        Assert.True(replacement.IsCancellationRequested);
     }
 }

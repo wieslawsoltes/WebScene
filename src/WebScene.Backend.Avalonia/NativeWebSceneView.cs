@@ -22,6 +22,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private CancellationTokenSource _unloadCancellation = new();
+    private int _pendingUnloadRequests;
     private CancellationTokenSource? _navigationCancellation;
     private Task? _disposeTask;
 
@@ -336,11 +338,12 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
-        var lifetimeToken = GetLifetimeToken();
+        var (lifetimeToken, unloadToken) = GetNavigationTokens();
         using var loadCancellation =
             NativeWebSceneViewLifecycle.CreateNavigationCancellation(
                 cancellationToken,
-                lifetimeToken);
+                lifetimeToken,
+                unloadToken);
 
         await _lifecycleGate.WaitAsync(loadCancellation.Token).ConfigureAwait(false);
         try
@@ -354,7 +357,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             _navigationCancellation =
                 NativeWebSceneViewLifecycle.CreateNavigationCancellation(
                     cancellationToken,
-                    lifetimeToken);
+                    lifetimeToken,
+                    unloadToken);
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
@@ -442,15 +446,51 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public async Task UnloadAsync()
     {
-        _navigationCancellation?.Cancel();
-        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        Task? disposeTask;
+        CancellationTokenSource? unloadCancellation;
+        lock (_lifetimeCancellation)
+        {
+            disposeTask = _disposeTask;
+            if (disposeTask is null)
+            {
+                ++_pendingUnloadRequests;
+                unloadCancellation = _unloadCancellation;
+            }
+            else
+            {
+                unloadCancellation = null;
+            }
+        }
+        if (disposeTask is not null)
+        {
+            await disposeTask.ConfigureAwait(false);
+            return;
+        }
+
+        unloadCancellation!.Cancel();
+        var gateAcquired = false;
         try
         {
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            gateAcquired = true;
             await UnloadCoreAsync().ConfigureAwait(false);
         }
         finally
         {
-            _lifecycleGate.Release();
+            if (gateAcquired) _lifecycleGate.Release();
+            CancellationTokenSource? completedGeneration = null;
+            lock (_lifetimeCancellation)
+            {
+                --_pendingUnloadRequests;
+                if (_pendingUnloadRequests == 0
+                    && _disposeTask is null
+                    && ReferenceEquals(_unloadCancellation, unloadCancellation))
+                {
+                    completedGeneration = _unloadCancellation;
+                    _unloadCancellation = new CancellationTokenSource();
+                }
+            }
+            completedGeneration?.Dispose();
         }
     }
 
@@ -463,7 +503,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
-    private CancellationToken GetLifetimeToken()
+    private (CancellationToken Lifetime, CancellationToken Unload)
+        GetNavigationTokens()
     {
         lock (_lifetimeCancellation)
         {
@@ -471,7 +512,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             {
                 throw new ObjectDisposedException(nameof(NativeWebSceneView));
             }
-            return _lifetimeCancellation.Token;
+            return (
+                _lifetimeCancellation.Token,
+                _unloadCancellation.Token);
         }
     }
 
@@ -568,10 +611,12 @@ internal static class NativeWebSceneViewLifecycle
 {
     public static CancellationTokenSource CreateNavigationCancellation(
         CancellationToken cancellationToken,
-        CancellationToken lifetimeToken)
+        CancellationToken lifetimeToken,
+        CancellationToken unloadToken)
         => CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            lifetimeToken);
+            lifetimeToken,
+            unloadToken);
 
     public static async ValueTask DisposeAsync(
         CancellationTokenSource lifetimeCancellation,
