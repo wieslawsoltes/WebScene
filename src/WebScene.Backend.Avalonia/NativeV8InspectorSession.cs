@@ -51,11 +51,50 @@ internal sealed class NativeEngineLifetime
     }
 }
 
+internal sealed class NativeInspectorOutputByteBudget
+{
+    public const long MaximumBytes = 16L * 1024 * 1024;
+
+    private long _queuedBytes;
+
+    public long QueuedBytes => Volatile.Read(ref _queuedBytes);
+
+    public bool TryReserve(int messageBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(messageBytes);
+        while (true)
+        {
+            var queuedBytes = Volatile.Read(ref _queuedBytes);
+            if (messageBytes > MaximumBytes - queuedBytes) return false;
+            if (Interlocked.CompareExchange(
+                    ref _queuedBytes,
+                    queuedBytes + messageBytes,
+                    queuedBytes) == queuedBytes)
+            {
+                return true;
+            }
+        }
+    }
+
+    public void Release(int messageBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(messageBytes);
+        var remaining = Interlocked.Add(ref _queuedBytes, -messageBytes);
+        if (remaining < 0)
+        {
+            Interlocked.Add(ref _queuedBytes, messageBytes);
+            throw new InvalidOperationException(
+                "The Inspector output byte budget was released more than it was reserved.");
+        }
+    }
+}
+
 public sealed class NativeV8InspectorSession : INativeV8InspectorSession
 {
     private readonly IntPtr _engine;
     private readonly NativeEngineLifetime _engineLifetime;
     private readonly Channel<ReadOnlyMemory<byte>> _messages;
+    private readonly NativeInspectorOutputByteBudget _outputByteBudget = new();
     private readonly object _drainGate = new();
     private Task? _drainTask;
     private int _disposed;
@@ -125,6 +164,7 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
         await foreach (var message in _messages.Reader.ReadAllAsync(cancellationToken)
                            .ConfigureAwait(false))
         {
+            _outputByteBudget.Release(message.Length);
             yield return message;
         }
     }
@@ -199,8 +239,15 @@ public sealed class NativeV8InspectorSession : INativeV8InspectorSession
                         "The WebScene V8 Inspector output message changed while it was being copied."));
                     return;
                 }
+                if (!_outputByteBudget.TryReserve(message.Length))
+                {
+                    Fail(new InvalidOperationException(
+                        "The WebScene V8 Inspector managed output queue exceeded its 16 MiB aggregate byte limit."));
+                    return;
+                }
                 if (!_messages.Writer.TryWrite(message))
                 {
+                    _outputByteBudget.Release(message.Length);
                     Fail(new InvalidOperationException(
                         "The WebScene V8 Inspector managed output queue exceeded 1,024 messages."));
                     return;
