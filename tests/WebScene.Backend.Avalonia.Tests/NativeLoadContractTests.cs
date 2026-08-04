@@ -49,4 +49,57 @@ public sealed class NativeLoadContractTests
 
         Assert.True(script.AllFrames);
     }
+
+    [Fact]
+    public async Task DisposeCancelsNavigationBeforeWaitingForLifecycleGate()
+    {
+        using var gate = new SemaphoreSlim(1, 1);
+        using var lifetime = new CancellationTokenSource();
+        await gate.WaitAsync();
+        var unloaded = false;
+
+        var dispose = NativeWebSceneViewLifecycle.DisposeAsync(
+            lifetime,
+            gate,
+            () =>
+            {
+                unloaded = true;
+                return Task.CompletedTask;
+            }).AsTask();
+
+        Assert.True(SpinWait.SpinUntil(
+            () => lifetime.IsCancellationRequested,
+            TimeSpan.FromSeconds(1)));
+        Assert.False(dispose.IsCompleted);
+        Assert.False(unloaded);
+        gate.Release();
+        await dispose.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(unloaded);
+    }
+
+    [Fact]
+    public async Task DisposeCancelsReplacementNavigationCreatedWhileGateIsHeld()
+    {
+        using var gate = new SemaphoreSlim(1, 1);
+        using var lifetime = new CancellationTokenSource();
+        await gate.WaitAsync();
+
+        var dispose = NativeWebSceneViewLifecycle.DisposeAsync(
+            lifetime,
+            gate,
+            () => Task.CompletedTask).AsTask();
+
+        Assert.True(SpinWait.SpinUntil(
+            () => lifetime.IsCancellationRequested,
+            TimeSpan.FromSeconds(1)));
+        using var replacement =
+            NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                CancellationToken.None,
+                lifetime.Token);
+        Assert.True(replacement.IsCancellationRequested);
+        Assert.False(dispose.IsCompleted);
+
+        gate.Release();
+        await dispose.WaitAsync(TimeSpan.FromSeconds(2));
+    }
 }

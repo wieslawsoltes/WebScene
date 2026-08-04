@@ -21,7 +21,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private long _contextId;
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
     private CancellationTokenSource? _navigationCancellation;
+    private Task? _disposeTask;
 
     public NativeWebSceneView()
         : this(useCompositionVisual: true)
@@ -334,8 +336,13 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
+        var lifetimeToken = GetLifetimeToken();
+        using var loadCancellation =
+            NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                cancellationToken,
+                lifetimeToken);
 
-        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lifecycleGate.WaitAsync(loadCancellation.Token).ConfigureAwait(false);
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
@@ -345,7 +352,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _navigationCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                    cancellationToken,
+                    lifetimeToken);
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
@@ -445,7 +454,42 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
-    public ValueTask DisposeAsync() => new(UnloadAsync());
+    public ValueTask DisposeAsync()
+    {
+        lock (_lifetimeCancellation)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private CancellationToken GetLifetimeToken()
+    {
+        lock (_lifetimeCancellation)
+        {
+            if (_disposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(NativeWebSceneView));
+            }
+            return _lifetimeCancellation.Token;
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        try
+        {
+            await NativeWebSceneViewLifecycle.DisposeAsync(
+                    _lifetimeCancellation,
+                    _lifecycleGate,
+                    UnloadCoreAsync)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _lifetimeCancellation.Dispose();
+        }
+    }
 
     private static async Task WaitForFirstDocumentSceneAsync(
         IntPtr engine,
@@ -516,6 +560,33 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             // Engine destruction joins its worker, so no native completion can
             // race the persistent pooled callback handles after this point.
             interop?.Dispose();
+        }
+    }
+}
+
+internal static class NativeWebSceneViewLifecycle
+{
+    public static CancellationTokenSource CreateNavigationCancellation(
+        CancellationToken cancellationToken,
+        CancellationToken lifetimeToken)
+        => CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lifetimeToken);
+
+    public static async ValueTask DisposeAsync(
+        CancellationTokenSource lifetimeCancellation,
+        SemaphoreSlim lifecycleGate,
+        Func<Task> unloadAsync)
+    {
+        lifetimeCancellation.Cancel();
+        await lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await unloadAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            lifecycleGate.Release();
         }
     }
 }
