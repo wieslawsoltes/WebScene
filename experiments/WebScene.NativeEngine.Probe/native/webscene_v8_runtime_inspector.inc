@@ -452,8 +452,29 @@
                 [&](const auto& action) {
                     return action.session_id == session_id
                         && action.type == inspector_action::kind::disconnect;
-                });
+            });
             if (existing_disconnect != inspector_actions.end()) return true;
+            const auto pending_connect = std::find_if(
+                inspector_actions.begin(),
+                inspector_actions.end(),
+                [&](const auto& action) {
+                    return action.session_id == session_id
+                        && action.type == inspector_action::kind::connect;
+                });
+            if (pending_connect != inspector_actions.end()) {
+                if (pending_connect->connection_acknowledgement != nullptr) {
+                    try {
+                        pending_connect->connection_acknowledgement->set_value(false);
+                    } catch (const std::future_error&) {
+                    }
+                }
+                std::erase_if(inspector_actions, [&](const auto& action) {
+                    return action.session_id == session_id
+                        && (action.type == inspector_action::kind::connect
+                            || action.type == inspector_action::kind::dispatch);
+                });
+                return true;
+            }
             std::erase_if(inspector_actions, [&](const auto& action) {
                 return action.session_id == session_id
                     && action.type == inspector_action::kind::dispatch;

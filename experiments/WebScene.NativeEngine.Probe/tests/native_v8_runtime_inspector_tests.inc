@@ -534,6 +534,65 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         wait_for_inspector_message(messages, R"("id":3)", R"("value":42)"),
         "Runtime.evaluate result did not round-trip through raw CDP");
 
+    blocking_inspector_sink connect_race_blocker;
+    const auto connect_race_blocker_id = webscene_engine_inspector_connect(
+        engine,
+        receive_blocking_inspector_message,
+        &connect_race_blocker,
+        0U);
+    require(
+        connect_race_blocker_id != 0U,
+        "The connect/disconnect race blocker session was not created");
+    dispatch_inspector_test_message(
+        engine,
+        connect_race_blocker_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    {
+        std::unique_lock lock(connect_race_blocker.mutex);
+        require(
+            connect_race_blocker.condition.wait_for(
+                lock,
+                std::chrono::seconds(5),
+                [&] { return connect_race_blocker.entered; }),
+            "The connect/disconnect race blocker callback did not enter");
+    }
+    inspector_test_messages canceled_connect_messages;
+    const auto canceled_connect_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &canceled_connect_messages,
+        0U);
+    require(
+        canceled_connect_session_id != 0U,
+        "The pending Inspector connection was not queued");
+    require(
+        webscene_engine_inspector_disconnect(
+            engine,
+            canceled_connect_session_id) != 0,
+        "Disconnecting the pending Inspector connection was rejected");
+    require(
+        webscene_engine_inspector_disconnect(engine, connect_race_blocker_id) != 0,
+        "Disconnecting the connect/disconnect race blocker was rejected");
+    {
+        std::lock_guard lock(connect_race_blocker.mutex);
+        connect_race_blocker.released = true;
+    }
+    connect_race_blocker.condition.notify_all();
+    dispatch_inspector_test_message(
+        engine,
+        canceled_connect_session_id,
+        R"({"id":77,"method":"Runtime.enable"})");
+    dispatch_inspector_test_message(
+        engine,
+        session_id,
+        R"({"id":78,"method":"Runtime.evaluate","params":{"expression":"7 * 6","returnByValue":true}})");
+    require(
+        wait_for_inspector_message(messages, R"("id":78)", R"("value":42)"),
+        "The connect/disconnect ordering barrier did not complete");
+    require(
+        count_inspector_messages(canceled_connect_messages, R"("id":77)") == 0U,
+        "A disconnected pending connection was created after its disconnect");
+
     constexpr std::string_view source{
         "function webSceneInspectorPause(value) {\n"
         "  debugger;\n"
