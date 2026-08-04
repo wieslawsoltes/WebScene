@@ -465,6 +465,16 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
             oversized_message.size()) == 0,
         "The native Inspector ABI accepted a message larger than 16 MiB");
 
+    inspector_test_messages saturation_waiting_messages;
+    const auto saturation_waiting_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &saturation_waiting_messages,
+        1U);
+    require(
+        saturation_waiting_session_id != 0U,
+        "The saturation waiting Inspector session was not created");
+
     blocking_inspector_sink blocked_sink;
     const auto saturated_session_id = webscene_engine_inspector_connect(
         engine,
@@ -501,6 +511,12 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         accepted_saturated_requests == 1024U,
         "The native Inspector inbound queue rejected work before its documented limit");
+    require(
+        webscene_engine_inspector_disconnect(
+            engine,
+            saturation_waiting_session_id) != 0,
+        "The waiting Inspector owner disconnect was rejected while another "
+        "session saturated the inbound queue");
     require(
         webscene_engine_inspector_disconnect(engine, saturated_session_id) != 0,
         "Inspector disconnect was rejected while its inbound queue was saturated");

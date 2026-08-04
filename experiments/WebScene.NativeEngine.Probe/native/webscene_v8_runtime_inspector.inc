@@ -458,10 +458,11 @@
                 return action.session_id == session_id
                     && action.type == inspector_action::kind::dispatch;
             });
-            if (inspector_actions.size() >= maximum_pending_inspector_actions) {
-                return false;
-            }
-            inspector_actions.push_back(inspector_action{
+            // Disconnect is a bounded lifecycle action, not untrusted CDP
+            // payload. Prioritize it even when another session has filled the
+            // payload queue so a waiting-for-debugger owner cannot be stranded
+            // after its managed client has gone away.
+            inspector_actions.push_front(inspector_action{
                 inspector_action::kind::disconnect,
                 session_id,
                 false,
