@@ -18,6 +18,7 @@ public sealed partial class MainPage : Page
         Environment.GetCommandLineArgs();
     private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
     private readonly HashSet<UnoNativeWebSceneView> _inspectorBreakConsumed = [];
+    private readonly SemaphoreSlim _inspectorTargetGate = new(1, 1);
     private readonly string? _customDocumentUri;
     private WebSceneV8InspectorHost? _v8InspectorHost;
     private UnoNativeWebSceneView? _inspectedView;
@@ -28,6 +29,7 @@ public sealed partial class MainPage : Page
     private bool _terminalLoading;
     private bool _editorLoading;
     private bool _terminalDiagnosticsReported;
+    private int _inspectorShuttingDown;
     private TimeSpan _terminalLoadElapsed;
 
     public MainPage()
@@ -374,54 +376,76 @@ public sealed partial class MainPage : Page
         string title,
         CancellationToken cancellationToken)
     {
-        if (_inspectorLaunch is null) return;
-        if (ReferenceEquals(_inspectedView, view)
-            && _v8InspectorHost?.IsRunning == true)
-        {
-            return;
-        }
-        if (_v8InspectorHost is not null)
-        {
-            await _v8InspectorHost.DisposeAsync();
-        }
-        var waitForDebugger = _inspectorLaunch.WaitForDebugger
-            && !_inspectorBreakConsumed.Contains(view);
-        var options = _inspectorLaunch.CreateHostOptions();
-        options.WaitForDebugger = waitForDebugger;
-        var host = new WebSceneV8InspectorHost(
-            view.OpenV8InspectorSession,
-            () => view.Source,
-            options,
-            title: title);
+        if (_inspectorLaunch is null
+            || Volatile.Read(ref _inspectorShuttingDown) != 0) return;
+        await _inspectorTargetGate.WaitAsync(cancellationToken);
         try
         {
-            await host.StartAsync(cancellationToken);
+            if (Volatile.Read(ref _inspectorShuttingDown) != 0
+                || (ReferenceEquals(_inspectedView, view)
+                    && _v8InspectorHost?.IsRunning == true))
+            {
+                return;
+            }
+            if (_v8InspectorHost is not null)
+            {
+                await _v8InspectorHost.DisposeAsync();
+            }
+            var waitForDebugger = _inspectorLaunch.WaitForDebugger
+                && !_inspectorBreakConsumed.Contains(view);
+            var options = _inspectorLaunch.CreateHostOptions();
+            options.WaitForDebugger = waitForDebugger;
+            var host = new WebSceneV8InspectorHost(
+                view.OpenV8InspectorSession,
+                () => view.Source,
+                options,
+                title: title);
+            try
+            {
+                await host.StartAsync(cancellationToken);
+            }
+            catch
+            {
+                await host.DisposeAsync();
+                throw;
+            }
+            if (waitForDebugger)
+            {
+                // --inspect-brk is a pre-navigation gate for each isolate. Once
+                // that view has been resumed, later target switching must not
+                // pause its already-loaded event loop again.
+                _inspectorBreakConsumed.Add(view);
+            }
+            _v8InspectorHost = host;
+            _inspectedView = view;
+            Console.WriteLine(
+                $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
+                + $"discovery: {host.DiscoveryUri}json/list");
         }
-        catch
+        finally
         {
-            await host.DisposeAsync();
-            throw;
+            _inspectorTargetGate.Release();
         }
-        if (waitForDebugger)
-        {
-            // --inspect-brk is a pre-navigation gate for each isolate. Once
-            // that view has been resumed, later target switching must not
-            // pause its already-loaded event loop again.
-            _inspectorBreakConsumed.Add(view);
-        }
-        _v8InspectorHost = host;
-        _inspectedView = view;
-        Console.WriteLine(
-            $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
-            + $"discovery: {host.DiscoveryUri}json/list");
     }
 
     private async void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _diagnosticsTimer.Stop();
-        if (_v8InspectorHost is not null)
+        Interlocked.Exchange(ref _inspectorShuttingDown, 1);
+        await _inspectorTargetGate.WaitAsync();
+        try
         {
-            await _v8InspectorHost.DisposeAsync();
+            var inspectorHost = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (inspectorHost is not null)
+            {
+                await inspectorHost.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
         }
         if (_editorSession is not null)
         {
