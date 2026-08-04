@@ -54,7 +54,11 @@ Inspector-capable production builds must satisfy all of the following:
 - blank-lifecycle, blank multi-view, and post-workload native memory totals are
   identical for V8 heap, code/metadata, external script source, DOM nodes and
   storage, wrappers, and the latest scene;
-- median RSS does not increase by more than one 64 KiB measurement page;
+- the native library grows by no more than 1 MiB;
+- median incremental multi-view RSS does not increase by more than one 64 KiB
+  measurement page;
+- total workload RSS may additionally reflect the measured native-library size
+  delta because macOS includes resident file-backed executable pages;
 - idle CPU fails when its median increase exceeds 0.01 percentage points and
   the paired bootstrap 95% interval is also wholly above that limit;
 - timing fails when its median ratio exceeds 1.01 and the paired bootstrap 95%
@@ -62,9 +66,9 @@ Inspector-capable production builds must satisfy all of the following:
 
 Samples with matching indices are paired because the workflow deliberately
 alternates process order to cancel thermal and scheduler drift. The timing,
-CPU, and RSS limits are measurement-noise guards, not feature budgets. A
-repeatable non-zero regression must be investigated and removed even if it is
-inside a guard.
+CPU, allocation, incremental RSS, and native-memory limits guard runtime cost.
+The separate 1 MiB binary-size budget bounds the shipped Inspector code rather
+than disguising it as heap usage.
 
 The production binary audit requires the live-edit implementation marker and
 Inspector-enabled package metadata. Stable unavailable-returning ABI exports

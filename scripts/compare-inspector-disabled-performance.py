@@ -153,10 +153,19 @@ def main() -> int:
         "managedAllocations.blankLifecycleBytes.median",
         "managedAllocations.multiViewCreateBytes",
     ]
-    rss_paths = [
-        "memory.multiViewIncrementalWorkingSetBytes",
-        "memory.workloadWorkingSetBytes",
-    ]
+    control_native_bytes = args.control_native.stat().st_size
+    candidate_native_bytes = args.candidate_native.stat().st_size
+    native_library_growth_bytes = max(
+        0,
+        candidate_native_bytes - control_native_bytes)
+    native_library_growth_budget_bytes = 1024 * 1024
+    rss_allowances = {
+        "memory.multiViewIncrementalWorkingSetBytes": 65536,
+        # macOS WorkingSet64 includes resident file-backed executable pages.
+        # Account for the bounded Inspector code added to the dylib while still
+        # allowing only one measurement page of unrelated RSS movement.
+        "memory.workloadWorkingSetBytes": native_library_growth_bytes + 65536,
+    }
 
     failures: list[str] = []
     metrics: dict[str, Any] = {}
@@ -210,12 +219,27 @@ def main() -> int:
         if changed > baseline:
             failures.append(f"{path}: candidate allocated {changed - baseline:.0f} additional bytes")
 
-    for path in rss_paths:
+    metrics["nativeLibrarySizeBytes"] = {
+        "control": control_native_bytes,
+        "candidate": candidate_native_bytes,
+        "increase": native_library_growth_bytes,
+        "increaseBudget": native_library_growth_budget_bytes,
+    }
+    if native_library_growth_bytes > native_library_growth_budget_bytes:
+        failures.append(
+            "native library grew by more than the 1 MiB Inspector budget")
+
+    for path, allowed_increase in rss_allowances.items():
         baseline = median(control, path)
         changed = median(candidate, path)
-        metrics[path] = {"controlMedian": baseline, "candidateMedian": changed}
-        if changed > baseline + 65536:
-            failures.append(f"{path}: candidate exceeded control by more than 64 KiB")
+        metrics[path] = {
+            "controlMedian": baseline,
+            "candidateMedian": changed,
+            "allowedIncreaseBytes": allowed_increase,
+        }
+        if changed > baseline + allowed_increase:
+            failures.append(
+                f"{path}: candidate exceeded the {allowed_increase}-byte RSS allowance")
 
     memory_properties = (
         "V8UsedHeapBytes",
@@ -243,20 +267,20 @@ def main() -> int:
                     f"{key}: native memory totals differ ({baseline} != {changed})")
 
     report = {
-        "schema": "webscene-inspector-idle-comparison-v3",
+        "schema": "webscene-inspector-idle-comparison-v4",
         "control": {
             "sourceSha": args.control_sha,
             "sampleCount": len(control),
             "managedAssemblySha256": digest(args.control_managed),
             "nativeLibrarySha256": digest(args.control_native),
-            "nativeLibraryBytes": args.control_native.stat().st_size,
+            "nativeLibraryBytes": control_native_bytes,
         },
         "candidate": {
             "sourceSha": args.candidate_sha,
             "sampleCount": len(candidate),
             "managedAssemblySha256": digest(args.candidate_managed),
             "nativeLibrarySha256": digest(args.candidate_native),
-            "nativeLibraryBytes": args.candidate_native.stat().st_size,
+            "nativeLibraryBytes": candidate_native_bytes,
         },
         "metrics": metrics,
         "failures": failures,

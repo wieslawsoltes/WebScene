@@ -147,9 +147,9 @@
 
     bool inspector_instrumentation_active() const noexcept
     {
-        // Context registration remains eager so a later debugger attachment can
-        // enumerate existing scripts. Expensive console/exception/async-stack
-        // instrumentation is pay-for-use once a session exists on the worker.
+        // Inspector construction and context registration happen at the first
+        // connection. Console/exception/async-stack instrumentation stays
+        // pay-for-use while at least one session exists on the worker.
         return inspector != nullptr && !inspector_sessions.empty();
     }
 
