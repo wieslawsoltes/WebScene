@@ -270,11 +270,12 @@ std::string take_host_request(webscene_engine* engine)
 
 void execute(webscene_engine* engine, std::string_view source, std::string_view name)
 {
-    require(webscene_engine_execute_script(
-        engine,
-        source.data(), source.size(),
-        name.data(), name.size()) != 0,
-        "script was rejected");
+    if (webscene_engine_execute_script(
+            engine,
+            source.data(), source.size(),
+            name.data(), name.size()) == 0) {
+        fail("script was rejected: " + std::string(name));
+    }
 }
 
 void execute_and_wait(

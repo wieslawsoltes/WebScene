@@ -94,6 +94,10 @@
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
             runtime_.reset();
+        } else {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            inspector_runtime_.store(runtime_.get(), std::memory_order_release);
+#endif
         }
 #endif
         publish_scene();
@@ -576,6 +580,29 @@
                  iterator != script_work.end();
                  ++iterator) {
                 auto& request = *iterator;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                if (std::holds_alternative<inspector_pump_work>(request)) {
+                    if (auto* inspector_state = inspector_state_.load(
+                            std::memory_order_acquire)) {
+                        inspector_state->pump_enqueued.store(
+                            false,
+                            std::memory_order_release);
+                    }
+                    if (runtime_ != nullptr) {
+                        constexpr uint32_t maximum_inspector_batch = 64U;
+                        uint32_t inspector_tasks = 0U;
+                        while (inspector_tasks < maximum_inspector_batch
+                            && runtime_->has_pending_inspector_tasks()) {
+                            if (!runtime_->pump_inspector_task(token)) break;
+                            ++inspector_tasks;
+                        }
+                        if (runtime_->has_pending_inspector_tasks()) {
+                            enqueue_inspector_pump();
+                        }
+                    }
+                    continue;
+                }
+#endif
                 if (auto* url = std::get_if<url_request>(&request)) {
                     if (runtime_ != nullptr
                         && runtime_->load_url(
@@ -913,6 +940,9 @@
             wake_pending_ = false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        inspector_runtime_.store(nullptr, std::memory_order_release);
+#endif
         runtime_.reset();
 #endif
     }

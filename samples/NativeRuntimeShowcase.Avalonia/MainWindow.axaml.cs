@@ -3,17 +3,25 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NativeRuntimeShowcase.Interop;
+using WebScene.Backends.Avalonia.Native;
+using WebScene.Diagnostics.Cdp;
 
 namespace NativeRuntimeShowcase.Avalonia;
 
 public sealed partial class MainWindow : Window
 {
     private readonly IReadOnlyList<string> _arguments;
+    private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
+    private readonly HashSet<NativeWebSceneView> _inspectorBreakConsumed = [];
+    private readonly SemaphoreSlim _inspectorTargetGate = new(1, 1);
     private readonly DispatcherTimer _diagnosticsTimer;
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
+    private WebSceneV8InspectorHost? _v8InspectorHost;
+    private NativeWebSceneView? _inspectedView;
     private IStorageFile? _currentFile;
     private bool _editorLoading;
+    private int _inspectorShuttingDown;
 
     public MainWindow()
         : this(Environment.GetCommandLineArgs())
@@ -23,6 +31,7 @@ public sealed partial class MainWindow : Window
     internal MainWindow(IReadOnlyList<string> arguments)
     {
         _arguments = arguments;
+        _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(arguments);
         InitializeComponent();
         _diagnosticsTimer = new DispatcherTimer
         {
@@ -46,10 +55,23 @@ public sealed partial class MainWindow : Window
                 return;
             }
             StatusText.Text = "Loading hosted TradingView terminal…";
-            await TerminalHost.LoadAsync(
-                ShowcasePaths.TradingViewUrl,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Avalonia", "tradingview"));
+            try
+            {
+                await TerminalHost.LoadAsync(
+                    ShowcasePaths.TradingViewUrl,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Avalonia", "tradingview"),
+                    BeforeNavigationInspectorHook,
+                    FirstDocumentSceneTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(TerminalHost);
+                throw;
+            }
+            await SelectInspectorTargetAsync(
+                TerminalHost,
+                "WebScene V8 · TradingView");
             _diagnosticsTimer.Start();
             RefreshDiagnostics("TradingView terminal loaded");
         }
@@ -59,12 +81,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnShowTradingView(object? sender, RoutedEventArgs args)
+    private async void OnShowTradingView(object? sender, RoutedEventArgs args)
     {
-        TerminalHost.IsVisible = true;
-        EditorHost.IsVisible = false;
-        DocumentText.Text = ShowcasePaths.TradingViewUrl;
-        RefreshDiagnostics("TradingView terminal");
+        try
+        {
+            await SelectInspectorTargetAsync(
+                TerminalHost,
+                "WebScene V8 · TradingView");
+            TerminalHost.IsVisible = true;
+            EditorHost.IsVisible = false;
+            DocumentText.Text = ShowcasePaths.TradingViewUrl;
+            RefreshDiagnostics("TradingView terminal");
+        }
+        catch (Exception error)
+        {
+            ShowFailure("V8 Inspector startup failed", error);
+        }
     }
 
     private async void OnShowEditor(object? sender, RoutedEventArgs args)
@@ -82,6 +114,7 @@ public sealed partial class MainWindow : Window
     private async Task ShowEditorAsync()
     {
         await EnsureEditorAsync();
+        await SelectInspectorTargetAsync(EditorHost, "WebScene V8 · Monaco");
         TerminalHost.IsVisible = false;
         EditorHost.IsVisible = true;
         DocumentText.Text = _currentFile?.Name ?? "GeneratedMonacoApi.cs";
@@ -112,10 +145,20 @@ public sealed partial class MainWindow : Window
             var documentPath = Path.Combine(
                 AppContext.BaseDirectory,
                 "index.html");
-            await EditorHost.LoadAsync(
-                new Uri(documentPath).AbsoluteUri,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Avalonia", "monaco"));
+            try
+            {
+                await EditorHost.LoadAsync(
+                    new Uri(documentPath).AbsoluteUri,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Avalonia", "monaco"),
+                    BeforeNavigationInspectorHook,
+                    FirstDocumentSceneTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(EditorHost);
+                throw;
+            }
             var session = new ShowcaseEditorSession(
                 EditorHost.CreateJavaScriptInvoker());
             try
@@ -219,9 +262,131 @@ public sealed partial class MainWindow : Window
         Console.Error.WriteLine($"{title}: {error}");
     }
 
+    private async ValueTask PrepareInspectorAsync(
+        NativeWebSceneView view,
+        CancellationToken cancellationToken)
+    {
+        if (_inspectorLaunch is null) return;
+        await view.WaitForV8InspectorAvailableAsync(
+            cancellationToken: cancellationToken);
+        await SelectInspectorTargetAsync(
+            view,
+            ReferenceEquals(view, EditorHost)
+                ? "WebScene V8 · Monaco"
+                : "WebScene V8 · TradingView",
+            cancellationToken);
+    }
+
+    private Func<NativeWebSceneView, CancellationToken, ValueTask>?
+        BeforeNavigationInspectorHook
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? PrepareInspectorAsync
+            : null;
+
+    private TimeSpan? FirstDocumentSceneTimeout
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? Timeout.InfiniteTimeSpan
+            : null;
+
+    private async Task SelectInspectorTargetAsync(
+        NativeWebSceneView view,
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        if (_inspectorLaunch is null
+            || Volatile.Read(ref _inspectorShuttingDown) != 0) return;
+        await _inspectorTargetGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref _inspectorShuttingDown) != 0
+                || (ReferenceEquals(_inspectedView, view)
+                    && _v8InspectorHost?.IsRunning == true))
+            {
+                return;
+            }
+            if (_v8InspectorHost is not null)
+            {
+                await _v8InspectorHost.DisposeAsync();
+            }
+            var waitForDebugger = _inspectorLaunch.WaitForDebugger
+                && !_inspectorBreakConsumed.Contains(view);
+            var options = _inspectorLaunch.CreateHostOptions();
+            options.WaitForDebugger = waitForDebugger;
+            var host = new WebSceneV8InspectorHost(
+                view.OpenV8InspectorSession,
+                () => view.Source,
+                options,
+                title: title);
+            try
+            {
+                await host.StartAsync(cancellationToken);
+            }
+            catch
+            {
+                await host.DisposeAsync();
+                throw;
+            }
+            if (waitForDebugger)
+            {
+                // --inspect-brk is a pre-navigation gate for each isolate. Once
+                // that view has been resumed, later target switching must not
+                // pause its already-loaded event loop again.
+                _inspectorBreakConsumed.Add(view);
+            }
+            _v8InspectorHost = host;
+            _inspectedView = view;
+            Console.WriteLine(
+                $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
+                + $"discovery: {host.DiscoveryUri}json/list");
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
+    private async Task ResetInspectorAfterFailedLoadAsync(
+        NativeWebSceneView view)
+    {
+        if (_inspectorLaunch is null) return;
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            _inspectorBreakConsumed.Remove(view);
+            if (!ReferenceEquals(_inspectedView, view)) return;
+            var host = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (host is not null)
+            {
+                await host.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
     private async void OnClosed(object? sender, EventArgs args)
     {
         _diagnosticsTimer.Stop();
+        Interlocked.Exchange(ref _inspectorShuttingDown, 1);
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            var inspectorHost = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (inspectorHost is not null)
+            {
+                await inspectorHost.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
         if (_editorSession is not null)
         {
             await _editorSession.DisposeAsync();

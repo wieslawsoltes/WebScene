@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -95,6 +96,60 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         return new NativeJavaScriptInvoker(
             new NativeJavaScriptBinaryTransport(engine),
             callbackSignal.WaitAsync);
+    }
+
+    /// <summary>
+    /// Opens a raw V8 Inspector Protocol session for this view's dedicated
+    /// isolate. The session can be forwarded unchanged to a CDP host.
+    /// </summary>
+    public INativeV8InspectorSession OpenV8InspectorSession(
+        bool waitForDebugger = false)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
+    }
+
+    /// <summary>
+    /// Waits until the engine worker has initialized the dedicated-isolate V8
+    /// Inspector. Engine creation is asynchronous, so startup hosts should use
+    /// this barrier before opening a pre-navigation session.
+    /// </summary>
+    public async ValueTask WaitForV8InspectorAvailableAsync(
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var timeoutValue = timeout ?? TimeSpan.FromSeconds(10);
+        using var deadline = new CancellationTokenSource(timeoutValue);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadline.Token);
+        try
+        {
+            while (true)
+            {
+                var engine = Volatile.Read(ref _engine);
+                if (engine == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException(
+                        "The native WebScene document is not loaded.");
+                }
+                if (NativeWebSceneApi.IsInspectorAvailable(engine)) return;
+                await Task.Delay(10, linked.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (
+            deadline.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "The dedicated-isolate V8 Inspector did not become available. "
+                + "Shared-isolate mode intentionally does not expose Inspector sessions.");
+        }
     }
 
     internal static NativePreferredColorScheme ResolvePreferredColorScheme(
@@ -241,13 +296,64 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             },
             cancellationToken);
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            options,
+            beforeNavigation: null,
+            firstDocumentSceneTimeout: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Loads a document after allowing an asynchronous host hook to observe
+    /// the initialized native engine. Inspector hosts use this hook to enter
+    /// waiting-for-debugger mode before any document script is queued.
+    /// </summary>
+    public Task LoadAsync(
+        string source,
+        string nativeLibraryPath,
+        string? compilationCacheDirectory,
+        Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? firstDocumentSceneTimeout = null,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            beforeNavigation,
+            firstDocumentSceneTimeout,
+            cancellationToken);
+
+    private async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? firstDocumentSceneTimeout,
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (beforeNavigation is not null)
+        {
+            lifetime ??= NativeWebSceneViewLifetimeRegistry.GetOrCreate(this);
+        }
+        CancellationTokenSource? loadCancellation = null;
+        if (lifetime is not null)
+        {
+            var (lifetimeToken, unloadToken) = lifetime.GetNavigationTokens();
+            loadCancellation = NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                cancellationToken,
+                lifetimeToken,
+                unloadToken);
+        }
+        using var disposeLoadCancellation = loadCancellation;
 
-        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lifecycleGate.WaitAsync(
+                loadCancellation?.Token ?? cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
@@ -256,8 +362,20 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 Directory.CreateDirectory(options.CompilationCacheDirectory);
             }
 
-            _navigationCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (lifetime is null)
+            {
+                _navigationCancellation =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            }
+            else
+            {
+                var (lifetimeToken, unloadToken) = lifetime.GetNavigationTokens();
+                _navigationCancellation =
+                    NativeWebSceneViewLifecycle.CreateNavigationCancellation(
+                        cancellationToken,
+                        lifetimeToken,
+                        unloadToken);
+            }
             var navigationToken = _navigationCancellation.Token;
             await NativeWebSceneRuntime
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
@@ -294,7 +412,14 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 },
                 DispatcherPriority.Send);
 
-            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);
+            Source = options.Source;
+            if (beforeNavigation is not null)
+            {
+                await beforeNavigation(this, navigationToken)
+                    .ConfigureAwait(false);
+            }
+
+            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
             if (!NativeWebSceneApi.TryLoadUrl(
                     engine,
                     options.Source,
@@ -312,7 +437,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             {
             }
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
-            if (afterNavigation.ScriptErrors > beforeNavigation.ScriptErrors)
+            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
                 throw new InvalidOperationException(
                     $"Native WebScene failed to load {options.Source}: " +
@@ -320,10 +445,10 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
             await WaitForFirstDocumentSceneAsync(
                     engine,
-                    beforeNavigation.PublishedScenes,
+                    beforeNavigationMetrics.PublishedScenes,
+                    firstDocumentSceneTimeout ?? TimeSpan.FromSeconds(30),
                     navigationToken)
                 .ConfigureAwait(false);
-            Source = options.Source;
         }
         catch
         {
@@ -338,28 +463,115 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public async Task UnloadAsync()
     {
-        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (lifetime is null)
+        {
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await UnloadCoreAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
+            return;
+        }
+
+        Task? disposeTask;
+        CancellationTokenSource? unloadCancellation;
+        lock (lifetime)
+        {
+            disposeTask = lifetime.DisposeTask;
+            if (disposeTask is null)
+            {
+                ++lifetime.PendingUnloadRequests;
+                unloadCancellation = lifetime.UnloadCancellation;
+            }
+            else
+            {
+                unloadCancellation = null;
+            }
+        }
+        if (disposeTask is not null)
+        {
+            await disposeTask.ConfigureAwait(false);
+            return;
+        }
+
+        unloadCancellation!.Cancel();
+        var gateAcquired = false;
         try
         {
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            gateAcquired = true;
             await UnloadCoreAsync().ConfigureAwait(false);
         }
         finally
         {
-            _lifecycleGate.Release();
+            if (gateAcquired) _lifecycleGate.Release();
+            CancellationTokenSource? completedGeneration = null;
+            lock (lifetime)
+            {
+                --lifetime.PendingUnloadRequests;
+                if (lifetime.PendingUnloadRequests == 0
+                    && lifetime.DisposeTask is null
+                    && ReferenceEquals(
+                        lifetime.UnloadCancellation,
+                        unloadCancellation))
+                {
+                    completedGeneration = lifetime.UnloadCancellation;
+                    lifetime.UnloadCancellation = new CancellationTokenSource();
+                }
+            }
+            completedGeneration?.Dispose();
         }
     }
 
-    public ValueTask DisposeAsync() => new(UnloadAsync());
+    public ValueTask DisposeAsync()
+    {
+        var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
+        if (lifetime is null) return new ValueTask(UnloadAsync());
+        lock (lifetime)
+        {
+            lifetime.DisposeTask ??= DisposeCoreAsync(lifetime);
+            return new ValueTask(lifetime.DisposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync(NativeWebSceneViewLifetime lifetime)
+    {
+        try
+        {
+            await NativeWebSceneViewLifecycle.DisposeAsync(
+                    lifetime.LifetimeCancellation,
+                    _lifecycleGate,
+                    UnloadCoreAsync)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            lifetime.LifetimeCancellation.Dispose();
+            lifetime.UnloadCancellation.Dispose();
+        }
+    }
 
     private static async Task WaitForFirstDocumentSceneAsync(
         IntPtr engine,
         ulong previousSceneCount,
+        TimeSpan timeoutValue,
         CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeoutValue));
+        }
+        using var timeout = timeoutValue == Timeout.InfiniteTimeSpan
+            ? null
+            : new CancellationTokenSource(timeoutValue);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            timeout.Token);
+            timeout?.Token ?? CancellationToken.None);
         try
         {
             while (true)
@@ -374,10 +586,11 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
         }
         catch (OperationCanceledException) when (
-            timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            timeout?.IsCancellationRequested == true
+            && !cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
-                "WebScene did not publish the document's first native scene within 30 seconds.");
+                $"WebScene did not publish the document's first native scene within {timeoutValue}.");
         }
     }
 
@@ -412,6 +625,86 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             // Engine destruction joins its worker, so no native completion can
             // race the persistent pooled callback handles after this point.
             interop?.Dispose();
+        }
+    }
+}
+
+internal sealed class NativeWebSceneViewLifetime
+{
+    internal CancellationTokenSource LifetimeCancellation { get; } = new();
+    internal CancellationTokenSource UnloadCancellation { get; set; } = new();
+    internal int PendingUnloadRequests { get; set; }
+    internal Task? DisposeTask { get; set; }
+
+    internal (CancellationToken Lifetime, CancellationToken Unload)
+        GetNavigationTokens()
+    {
+        lock (this)
+        {
+            if (DisposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(NativeWebSceneView));
+            }
+            return (LifetimeCancellation.Token, UnloadCancellation.Token);
+        }
+    }
+}
+
+internal static class NativeWebSceneViewLifetimeRegistry
+{
+    private static ConditionalWeakTable<NativeWebSceneView, NativeWebSceneViewLifetime>?
+        _lifetimes;
+
+    internal static NativeWebSceneViewLifetime? TryGet(NativeWebSceneView view)
+        => Volatile.Read(ref _lifetimes) is { } lifetimes
+            && lifetimes.TryGetValue(view, out var lifetime)
+                ? lifetime
+                : null;
+
+    internal static NativeWebSceneViewLifetime GetOrCreate(NativeWebSceneView view)
+    {
+        var lifetimes = Volatile.Read(ref _lifetimes);
+        if (lifetimes is null)
+        {
+            var created = new ConditionalWeakTable<
+                NativeWebSceneView,
+                NativeWebSceneViewLifetime>();
+            lifetimes = Interlocked.CompareExchange(
+                ref _lifetimes,
+                created,
+                null) ?? created;
+        }
+        return lifetimes.GetValue(
+            view,
+            static _ => new NativeWebSceneViewLifetime());
+    }
+}
+
+internal static class NativeWebSceneViewLifecycle
+{
+    public static CancellationTokenSource CreateNavigationCancellation(
+        CancellationToken cancellationToken,
+        CancellationToken lifetimeToken,
+        CancellationToken unloadToken)
+        => CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lifetimeToken,
+            unloadToken);
+
+    public static async ValueTask DisposeAsync(
+        CancellationTokenSource lifetimeCancellation,
+        SemaphoreSlim lifecycleGate,
+        Func<Task> unloadAsync)
+    {
+        lifetimeCancellation.Cancel();
+        await lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await unloadAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            lifecycleGate.Release();
         }
     }
 }

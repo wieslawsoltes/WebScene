@@ -176,6 +176,71 @@ struct url_request final {
     std::vector<webscene_native::document_start_script> document_start_scripts;
 };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+struct inspector_output_state final {
+    static constexpr size_t maximum_messages = 1024U;
+    static constexpr size_t maximum_bytes = 16U * 1024U * 1024U;
+
+    webscene_inspector_message_available_callback_v3 callback{nullptr};
+    void* user_data{nullptr};
+    std::mutex mutex;
+    std::deque<std::string> messages;
+    size_t queued_bytes{0U};
+    bool overflowed{false};
+
+    void publish(uint64_t session_id, std::string_view message)
+    {
+        auto notify = false;
+        {
+            std::lock_guard lock(mutex);
+            if (overflowed) return;
+            if (message.size() > maximum_bytes
+                || messages.size() >= maximum_messages
+                || queued_bytes > maximum_bytes - message.size()) {
+                messages.clear();
+                queued_bytes = 0U;
+                overflowed = true;
+                notify = true;
+            } else {
+                messages.emplace_back(message);
+                queued_bytes += message.size();
+                notify = true;
+            }
+        }
+        if (notify && callback != nullptr) {
+            try {
+                callback(user_data, session_id);
+            } catch (...) {
+            }
+        }
+    }
+
+    size_t take(char* destination, size_t destination_capacity)
+    {
+        std::lock_guard lock(mutex);
+        if (overflowed) return SIZE_MAX;
+        if (messages.empty()) return 0U;
+        const auto required = messages.front().size();
+        if (destination == nullptr || destination_capacity < required) {
+            return required;
+        }
+        std::memcpy(destination, messages.front().data(), required);
+        messages.pop_front();
+        queued_bytes -= required;
+        return required;
+    }
+};
+
+struct engine_inspector_state final {
+    std::atomic<bool> pump_enqueued{false};
+    std::mutex output_mutex;
+    std::unordered_map<uint64_t, std::shared_ptr<inspector_output_state>> outputs;
+};
+
+struct inspector_pump_work final {
+};
+#endif
+
 // These responsibility-focused fragments intentionally remain one translation
 // unit so the refactor cannot alter inlining or production code generation.
 #include "webscene_native_engine_interop_types.inc"
@@ -230,6 +295,10 @@ private:
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    std::atomic<webscene_native::v8_dom_runtime*> inspector_runtime_{nullptr};
+    std::atomic<engine_inspector_state*> inspector_state_{nullptr};
+#endif
 #endif
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
@@ -581,11 +650,14 @@ uint32_t webscene_engine_get_abi_version(void)
 
 uint32_t webscene_engine_get_build_features(void)
 {
+    uint32_t features = 0U;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-    return WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION;
-#else
-    return 0U;
+    features |= WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION;
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    features |= WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR;
+#endif
+    return features;
 }
 
 uint8_t webscene_engine_prewarm(void)
@@ -757,6 +829,79 @@ uint8_t webscene_engine_execute_script(
         && engine->execute_script(source, source_length, document_name, document_name_length)
         ? 1U
         : 0U;
+}
+
+uint64_t webscene_engine_inspector_connect(
+    webscene_engine* engine,
+    webscene_inspector_message_callback message_callback,
+    void* user_data,
+    uint8_t wait_for_debugger)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->connect_inspector(
+            message_callback,
+            user_data,
+            wait_for_debugger != 0U);
+}
+
+uint64_t webscene_engine_inspector_connect_v3(
+    webscene_engine* engine,
+    webscene_inspector_message_available_callback_v3 message_available_callback,
+    void* user_data,
+    uint8_t wait_for_debugger)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->connect_inspector_v2(
+            message_available_callback,
+            user_data,
+            wait_for_debugger != 0U);
+}
+
+size_t webscene_engine_inspector_take_message(
+    webscene_engine* engine,
+    uint64_t session_id,
+    char* destination,
+    size_t destination_capacity)
+{
+    return engine == nullptr
+        ? 0U
+        : engine->take_inspector_message(
+            session_id,
+            destination,
+            destination_capacity);
+}
+
+uint8_t webscene_engine_inspector_dispatch(
+    webscene_engine* engine,
+    uint64_t session_id,
+    const char* message,
+    size_t message_length)
+{
+    return engine != nullptr
+        && engine->dispatch_inspector(session_id, message, message_length)
+        ? 1U
+        : 0U;
+}
+
+uint8_t webscene_engine_inspector_disconnect(
+    webscene_engine* engine,
+    uint64_t session_id)
+{
+    return engine != nullptr && engine->disconnect_inspector(session_id)
+        ? 1U
+        : 0U;
+}
+
+uint8_t webscene_engine_inspector_is_available(const webscene_engine* engine)
+{
+    return engine != nullptr && engine->inspector_available() ? 1U : 0U;
+}
+
+uint8_t webscene_engine_inspector_state_created(const webscene_engine* engine)
+{
+    return engine != nullptr && engine->inspector_state_created() ? 1U : 0U;
 }
 
 uint64_t webscene_engine_begin_evaluate_v3(

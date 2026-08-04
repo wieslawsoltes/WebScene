@@ -100,6 +100,7 @@ if [[ "$partition_alloc" == true ]]; then
   build_variant+=-partitionalloc
   partition_alloc_cmake=ON
 fi
+build_variant+=-inspector
 
 if [[ -z "$package_version" ]]; then
   package_version="$(
@@ -163,6 +164,9 @@ if [[ -z "$v8_root" ]]; then
       exit 1
     fi
   }
+  # WebScene owns the JavaScript console bindings. The inspector bridge keeps
+  # the original V8 values so CDP clients receive object ids and previews.
+  apply_patch_once "$v8_root" "$repo_root/third-party/v8-patches/V8InspectorConsolePatch.txt"
   if [[ "$upstream_v8" == false && "$v8_revision" != 15.3.10 ]]; then
   apply_patch_once "$v8_root" "$repo_root/third-party/v8-patches/V8Patch.txt"
     apply_patch_once "$v8_root" "$repo_root/packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt"
@@ -225,6 +229,11 @@ for required in "$v8_root/include/v8.h" "$v8_root/include/v8-version.h" \
     exit 1
   fi
 done
+if ! grep -q 'virtual void consoleAPICalled' "$v8_root/include/v8-inspector.h"; then
+  echo "The V8 SDK at '$v8_root' does not contain WebScene's inspector console bridge." >&2
+  echo "Rebuild it with third-party/v8-patches/V8InspectorConsolePatch.txt." >&2
+  exit 1
+fi
 IFS=. read -r expected_v8_major expected_v8_minor expected_v8_build _ <<< "$v8_revision"
 v8_version_header="$v8_root/include/v8-version.h"
 if ! grep -Eq "^#define V8_MAJOR_VERSION +$expected_v8_major$" "$v8_version_header" \
@@ -280,6 +289,7 @@ cmake_args=(
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE=Release
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
   -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON
@@ -389,6 +399,7 @@ pack_args=(
   "-p:WebSceneNativeEngineV8SharedCage=true"
   "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true"
   "-p:WebSceneNativeEngineV8PartitionAlloc=$partition_alloc"
+  "-p:WebSceneNativeEngineV8Inspector=true"
   "-p:WebSceneNativeEngineDenseLink=true"
   "-p:WebSceneNativeEngineThinLto=$thin_lto"
   "-p:WebSceneNativeEngineV8Revision=$v8_revision"
@@ -444,10 +455,9 @@ consumer_nuget_config="$consumer_root/nuget.config"
 cmake -E copy_if_different \
   "$repo_root/packaging/WebScene.NativeEngine.Runtime/ConsumerSmoke.Directory.Packages.props" \
   "$consumer_root/Directory.Packages.props"
-consumer_framework=net8.0
-if [[ "$expected_kernel" == Linux ]]; then
-  # The compatibility image intentionally carries the pinned .NET 10 SDK.
-  consumer_framework=net10.0
+consumer_framework=net10.0
+if dotnet --list-sdks | grep -Eq '^8\.'; then
+  consumer_framework=net8.0
 fi
 dotnet new nugetconfig --force --output "$consumer_root"
 dotnet nuget add source "$output_dir" \

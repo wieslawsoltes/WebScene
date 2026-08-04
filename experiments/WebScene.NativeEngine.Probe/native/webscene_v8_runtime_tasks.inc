@@ -41,10 +41,20 @@
         }
 #endif
         auto task_context = task.context.Get(isolate);
-        if (task_context.IsEmpty()) return true;
+        if (task_context.IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            inspector_async_task_canceled(task.id);
+#endif
+            return true;
+        }
         v8::Context::Scope task_context_scope(task_context);
         auto callback = task.callback.Get(isolate);
-        if (callback.IsEmpty()) return true;
+        if (callback.IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            inspector_async_task_canceled(task.id);
+#endif
+            return true;
+        }
         const auto collect_work_metrics =
             work_metrics_enabled.load(std::memory_order_relaxed);
         if (collect_work_metrics && task.animation_frame) {
@@ -105,6 +115,9 @@
         }
         active_timer_id = task.id;
         active_timer_cancelled = false;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        inspector_async_task_started(task.id);
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer callback_timer(
             profile_startup ? &startup_task_callbacks : nullptr);
@@ -114,6 +127,11 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            report_inspector_exception(try_catch, task_context);
+            inspector_async_task_finished(task.id);
+            if (task.repeating) inspector_async_task_canceled(task.id);
+#endif
             active_timer_id = 0;
             last_error = std::string(task.animation_frame
                     ? "requestAnimationFrame task failed: "
@@ -122,6 +140,9 @@
             return false;
         }
         perform_microtask_checkpoint();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        inspector_async_task_finished(task.id);
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
             auto& stats = startup_task_profiles[task_profile_name];
@@ -169,6 +190,11 @@
         const auto cancelled = active_timer_cancelled;
         active_timer_id = 0;
         active_timer_cancelled = false;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        if (cancelled && task.repeating) {
+            inspector_async_task_canceled(task.id);
+        }
+#endif
         if (task.repeating && !cancelled) {
             const auto current = std::chrono::steady_clock::now();
             do {
@@ -323,6 +349,9 @@
                 target_global,
                 1,
                 arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            report_inspector_exception(try_catch, target_context);
+#endif
             last_error = "Window.postMessage dispatch failed: "
                 + describe_exception(try_catch, target_context);
             ++frame_script_error_count;
@@ -569,6 +598,9 @@
                 if (callback.IsEmpty()) continue;
                 v8::TryCatch try_catch(isolate);
                 if (callback->Call(local_context, global, 1, arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    report_inspector_exception(try_catch, local_context);
+#endif
                     last_error = describe_exception(try_catch);
                     return false;
                 }
@@ -651,6 +683,11 @@
                             local_frame_context->Global(),
                             1,
                             arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                        report_inspector_exception(
+                            try_catch,
+                            local_frame_context);
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                         stop_cpu_profile();
 #endif
@@ -788,6 +825,9 @@
                     observer_context->Global(),
                     2,
                     arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                report_inspector_exception(try_catch, observer_context);
+#endif
                 last_error = describe_exception(try_catch, observer_context);
                 return false;
             }
@@ -1908,12 +1948,18 @@
         v8::Context::Scope context_scope(local_context);
         ensure_layout();
         v8::TryCatch try_catch(isolate);
+        const auto report_input_exception = [&] {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            report_inspector_exception(try_catch, local_context);
+#endif
+        };
         if (input.kind == WEBSCENE_INPUT_KEY_DOWN
             || input.kind == WEBSCENE_INPUT_KEY_UP
             || input.kind == WEBSCENE_INPUT_TEXT) {
             if (!dispatch_keyboard_or_text(input)) {
                 last_error = "Native keyboard input dispatch failed: "
                     + describe_exception(try_catch, local_context);
+                report_input_exception();
                 return false;
             }
             return true;
@@ -1960,6 +2006,7 @@
                 if (!dispatch_input_event_type(input, "pointerout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
                         + describe_exception(try_catch, local_context);
+                    report_input_exception();
                     return false;
                 }
                 for (auto* exited = previous_hover_target;
@@ -1968,12 +2015,14 @@
                     if (!dispatch_input_event_type(input, "pointerleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
                             + describe_exception(try_catch, local_context);
+                        report_input_exception();
                         return false;
                     }
                 }
                 if (!dispatch_input_event_type(input, "mouseout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
                         + describe_exception(try_catch, local_context);
+                    report_input_exception();
                     return false;
                 }
                 for (auto* exited = previous_hover_target;
@@ -1982,6 +2031,7 @@
                     if (!dispatch_input_event_type(input, "mouseleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
                             + describe_exception(try_catch, local_context);
+                        report_input_exception();
                         return false;
                     }
                 }
@@ -1997,24 +2047,28 @@
             if (!dispatch_input_event_type(input, "pointerover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
                     + describe_exception(try_catch, local_context);
+                report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "pointerenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
                         + describe_exception(try_catch, local_context);
+                    report_input_exception();
                     return false;
                 }
             }
             if (!dispatch_input_event_type(input, "mouseover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
                     + describe_exception(try_catch, local_context);
+                report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "mouseenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
                         + describe_exception(try_catch, local_context);
+                    report_input_exception();
                     return false;
                 }
             }
@@ -2144,6 +2198,7 @@
                     *target,
                     observe_default ? &event_default_prevented : nullptr)) {
                 last_error = "Native input dispatch failed: " + describe_exception(try_catch, local_context);
+                report_input_exception();
                 return false;
             }
             if (input.kind == WEBSCENE_INPUT_WHEEL) {
@@ -2201,6 +2256,7 @@
                 if (!dispatch_input_event_type(input, "scroll", *scroll_target)) {
                     last_error = "Native scroll dispatch failed: "
                         + describe_exception(try_catch, local_context);
+                    report_input_exception();
                     return false;
                 }
                 break;

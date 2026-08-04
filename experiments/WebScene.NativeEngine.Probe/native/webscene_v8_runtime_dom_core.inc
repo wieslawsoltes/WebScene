@@ -389,8 +389,103 @@
         }
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    void cancel_detached_frame_context_tasks(
+        v8::Local<v8::Context> local_context)
+    {
+        uint64_t cancelled_animation_frames = 0;
+        const auto cancelled_timers = std::erase_if(
+            timers,
+            [&](const auto& timer) {
+                if (timer.context.Get(isolate) != local_context) return false;
+                if (timer.animation_frame) ++cancelled_animation_frames;
+                inspector_async_task_canceled(timer.id);
+                return true;
+            });
+        if (work_metrics_enabled.load(std::memory_order_relaxed)) {
+            work.animation_frames_cancelled += cancelled_animation_frames;
+            work.timers_cancelled +=
+                cancelled_timers - cancelled_animation_frames;
+        }
+
+        // A frame callback can synchronously remove its own iframe. Prevent a
+        // repeating task that is currently outside `timers` from being queued
+        // again after the callback returns.
+        if (active_timer_id != 0U
+            && isolate->GetCurrentContext() == local_context) {
+            active_timer_cancelled = true;
+        }
+
+        std::erase_if(
+            pending_window_messages,
+            [&](const auto& task) {
+                return task.target_context.Get(isolate) == local_context;
+            });
+        std::erase_if(
+            connected_resources,
+            [&](const auto& task) {
+                return task.context.Get(isolate) == local_context;
+            });
+        std::erase_if(
+            resize_observers,
+            [&](const auto& observer) {
+                return observer != nullptr
+                    && observer->context.Get(isolate) == local_context;
+            });
+        for (auto iterator = websocket_bindings.begin();
+             iterator != websocket_bindings.end();) {
+            if (iterator->second.context.Get(isolate) != local_context) {
+                ++iterator;
+                continue;
+            }
+            static_cast<void>(websocket_transport.close(
+                iterator->first,
+                1001U,
+                "Frame browsing context was discarded"));
+            iterator = websocket_bindings.erase(iterator);
+        }
+    }
+
+    void destroy_detached_frame_contexts(dom_node& root)
+    {
+        std::unordered_set<uint32_t> node_ids;
+        visit_subtree(root, [&](const dom_node& node) {
+            node_ids.insert(node.id);
+        });
+        for (const auto id : node_ids) {
+            const auto found = actual_frame_contexts.find(id);
+            if (found != actual_frame_contexts.end()
+                && !found->second.IsEmpty()) {
+                const auto local_context = found->second.Get(isolate);
+                cancel_detached_frame_context_tasks(local_context);
+                destroy_inspector_context(local_context);
+                if (!frame_context.IsEmpty()
+                    && frame_context.Get(isolate) == local_context) {
+                    frame_context.Reset();
+                    frame_base_address.clear();
+                }
+            }
+            actual_frame_contexts.erase(id);
+            actual_frame_windows.erase(id);
+            actual_frame_documents.erase(id);
+            frame_session_storage.erase(id);
+            frame_load_listeners.erase(id);
+        }
+        for (auto& [type, listeners] : frame_event_listeners) {
+            static_cast<void>(type);
+            std::erase_if(listeners, [&](const auto& listener) {
+                return node_ids.contains(listener.target);
+            });
+        }
+    }
+#endif
+
     void weaken_detached_subtree_wrappers(dom_node& root)
     {
+        // Detaching an iframe discards its browsing context immediately. DOM
+        // wrappers may remain alive for JavaScript references, but Inspector
+        // execution contexts and remote objects must not survive until the
+        // detached native subtree is eventually reclaimed.
         // A persistent V8 handle is a GC root. Keeping every historical DOM
         // wrapper strong therefore retains React's expando graph forever after
         // the corresponding native node is removed. Model a detached DOM tree
@@ -455,6 +550,9 @@
                 weaken(canvas_contexts, key);
             });
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        destroy_detached_frame_contexts(root);
+#endif
         register_detached_subtree(root);
     }
 
@@ -668,6 +766,13 @@
             frame_documents.erase(id);
             frame_windows.erase(id);
             actual_frame_windows.erase(id);
+            if (const auto found = actual_frame_contexts.find(id);
+                found != actual_frame_contexts.end()
+                && !found->second.IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                destroy_inspector_context(found->second.Get(isolate));
+#endif
+            }
             actual_frame_contexts.erase(id);
             actual_frame_documents.erase(id);
             frame_session_storage.erase(id);

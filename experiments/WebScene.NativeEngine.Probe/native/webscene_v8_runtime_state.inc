@@ -10,6 +10,14 @@
     v8::CpuProfiler* cpu_profiler{nullptr};
 #endif
     v8::Global<v8::Context> context;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    static constexpr size_t maximum_pending_inspector_actions = 1024U;
+    static constexpr size_t maximum_pending_inspector_action_bytes =
+        16U * 1024U * 1024U;
+    static constexpr size_t maximum_inspector_promise_rejections = 1024U;
+    std::atomic<inspector_state*> inspector_state_value{nullptr};
+    std::atomic<bool> inspector_ready{false};
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;

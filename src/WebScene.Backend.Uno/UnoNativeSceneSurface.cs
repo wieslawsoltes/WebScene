@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -557,6 +558,60 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public EngineMetrics EngineMetrics => _surface.EngineMetrics;
 
+    /// <summary>
+    /// Opens a raw V8 Inspector Protocol session for this view's dedicated
+    /// isolate. The session can be forwarded unchanged to a CDP host.
+    /// </summary>
+    public INativeV8InspectorSession OpenV8InspectorSession(
+        bool waitForDebugger = false)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
+    }
+
+    /// <summary>
+    /// Waits until the engine worker has initialized the dedicated-isolate V8
+    /// Inspector. Engine creation is asynchronous, so startup hosts should use
+    /// this barrier before opening a pre-navigation session.
+    /// </summary>
+    public async ValueTask WaitForV8InspectorAvailableAsync(
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var timeoutValue = timeout ?? TimeSpan.FromSeconds(10);
+        using var deadline = new CancellationTokenSource(timeoutValue);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadline.Token);
+        try
+        {
+            while (true)
+            {
+                var engine = Volatile.Read(ref _engine);
+                if (engine == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException(
+                        "The native WebScene document is not loaded.");
+                }
+                if (NativeWebSceneApi.IsInspectorAvailable(engine)) return;
+                await Task.Delay(10, linked.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (
+            deadline.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "The dedicated-isolate V8 Inspector did not become available. "
+                + "Shared-isolate mode intentionally does not expose Inspector sessions.");
+        }
+    }
+
     public NativeJavaScriptInvoker CreateJavaScriptInvoker()
     {
         var engine = Volatile.Read(ref _engine);
@@ -644,23 +699,85 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             },
             cancellationToken);
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         NativeWebSceneLoadOptions options,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            options,
+            beforeNavigation: null,
+            documentBarrierTimeout: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Loads a document after allowing an asynchronous host hook to observe
+    /// the initialized native engine. Inspector hosts use this hook to enter
+    /// waiting-for-debugger mode before any document script is queued.
+    /// </summary>
+    public Task LoadAsync(
+        string source,
+        string nativeLibraryPath,
+        string? compilationCacheDirectory,
+        Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? documentBarrierTimeout = null,
+        CancellationToken cancellationToken = default)
+        => LoadAsync(
+            new NativeWebSceneLoadOptions
+            {
+                Source = source,
+                NativeLibraryPath = nativeLibraryPath,
+                CompilationCacheDirectory = compilationCacheDirectory
+            },
+            beforeNavigation,
+            documentBarrierTimeout,
+            cancellationToken);
+
+    private async Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? documentBarrierTimeout,
         CancellationToken cancellationToken = default)
     {
         var documentStartScripts = NativeWebSceneApi.ValidateLoadOptions(options);
-        await _lifecycleGate.WaitAsync(cancellationToken);
+        var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
+        if (beforeNavigation is not null)
+        {
+            lifetime ??= UnoNativeWebSceneLifetimeRegistry.GetOrCreate(this);
+        }
+        CancellationTokenSource? loadCancellation = null;
+        if (lifetime is not null)
+        {
+            loadCancellation = UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+                cancellationToken,
+                lifetime.GetLifetimeToken());
+        }
+        using var disposeLoadCancellation = loadCancellation;
+        await _lifecycleGate.WaitAsync(
+            loadCancellation?.Token ?? cancellationToken);
         try
         {
             await UnloadCoreAsync();
+            var navigationToken = cancellationToken;
+            if (lifetime is not null)
+            {
+                lifetime.NavigationCancellation =
+                    UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
+                        cancellationToken,
+                        lifetime.GetLifetimeToken());
+                navigationToken = lifetime.NavigationCancellation.Token;
+            }
             await NativeWebSceneRuntime.PrewarmAsync(
                 options.NativeLibraryPath,
-                cancellationToken);
+                navigationToken);
             if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
             {
                 Directory.CreateDirectory(options.CompilationCacheDirectory);
             }
 
+            var timeoutValue = documentBarrierTimeout ?? TimeSpan.FromSeconds(30);
+            if (timeoutValue != Timeout.InfiniteTimeSpan && timeoutValue <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(documentBarrierTimeout));
+            }
             var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
@@ -678,7 +795,16 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             _interop = new NativeInteropInvoker(engine);
 
             _surface.SetEngine(engine);
-            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigation);
+            Source = options.Source;
+            if (beforeNavigation is not null)
+            {
+                // Preserve Uno's UI synchronization context. A canceled
+                // inspector startup hook is handled by the teardown path
+                // below, which must detach the SKCanvasElement on its UI
+                // thread before destroying the native engine.
+                await beforeNavigation(this, navigationToken);
+            }
+            NativeWebSceneApi.EngineGetMetrics(engine, out var beforeNavigationMetrics);
             if (!NativeWebSceneApi.TryLoadUrl(
                     engine,
                     options.Source,
@@ -690,14 +816,20 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             using var timeout =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                CancellationTokenSource.CreateLinkedTokenSource(navigationToken);
+            if (timeoutValue != Timeout.InfiniteTimeSpan)
+            {
+                timeout.CancelAfter(timeoutValue);
+            }
+            // Do not suppress the captured UI context here. Cancellation and
+            // timeout both flow through the catch block, and UnloadCoreAsync
+            // calls the UI-bound UnoNativeSceneSurface.SetEngine method.
             var documentBarrierText = await EvaluateTextAsync(
-                    "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
-                    "webscene-uno-document-barrier.js",
-                    timeout.Token);
+                "({ hasDocumentElement: !!document.documentElement, hasBody: !!document.body })",
+                "webscene-uno-document-barrier.js",
+                timeout.Token);
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
-            if (afterNavigation.ScriptErrors > beforeNavigation.ScriptErrors)
+            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
                 throw new InvalidOperationException(
                     $"Native WebScene failed to load {options.Source}: " +
@@ -716,8 +848,6 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     $"Native WebScene did not construct a document for {options.Source}: " +
                     NativeWebSceneApi.GetLastError(engine));
             }
-
-            Source = options.Source;
         }
         catch
         {
@@ -730,7 +860,18 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
+        if (lifetime is null) return new ValueTask(DisposeWithoutInspectorAsync());
+        lock (lifetime)
+        {
+            lifetime.DisposeTask ??= DisposeCoreAsync(lifetime);
+            return new ValueTask(lifetime.DisposeTask);
+        }
+    }
+
+    private async Task DisposeWithoutInspectorAsync()
     {
         await _lifecycleGate.WaitAsync();
         try
@@ -743,8 +884,29 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         }
     }
 
+    private async Task DisposeCoreAsync(UnoNativeWebSceneLifetime lifetime)
+    {
+        try
+        {
+            await UnoNativeWebSceneLifecycle.DisposeAsync(
+                lifetime.LifetimeCancellation,
+                _lifecycleGate,
+                UnloadCoreAsync);
+        }
+        finally
+        {
+            lifetime.LifetimeCancellation.Dispose();
+        }
+    }
+
     private async Task UnloadCoreAsync()
     {
+        if (UnoNativeWebSceneLifetimeRegistry.TryGet(this) is { } lifetime)
+        {
+            lifetime.NavigationCancellation?.Cancel();
+            lifetime.NavigationCancellation?.Dispose();
+            lifetime.NavigationCancellation = null;
+        }
         Source = null;
         _surface.SetEngine(IntPtr.Zero);
         var interop = Interlocked.Exchange(ref _interop, null);
@@ -765,6 +927,82 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         finally
         {
             interop?.Dispose();
+        }
+    }
+}
+
+internal sealed class UnoNativeWebSceneLifetime
+{
+    internal CancellationTokenSource LifetimeCancellation { get; } = new();
+    internal CancellationTokenSource? NavigationCancellation { get; set; }
+    internal Task? DisposeTask { get; set; }
+
+    internal CancellationToken GetLifetimeToken()
+    {
+        lock (this)
+        {
+            if (DisposeTask is not null)
+            {
+                throw new ObjectDisposedException(nameof(UnoNativeWebSceneView));
+            }
+            return LifetimeCancellation.Token;
+        }
+    }
+}
+
+internal static class UnoNativeWebSceneLifetimeRegistry
+{
+    private static ConditionalWeakTable<UnoNativeWebSceneView, UnoNativeWebSceneLifetime>?
+        _lifetimes;
+
+    internal static UnoNativeWebSceneLifetime? TryGet(UnoNativeWebSceneView view)
+        => Volatile.Read(ref _lifetimes) is { } lifetimes
+            && lifetimes.TryGetValue(view, out var lifetime)
+                ? lifetime
+                : null;
+
+    internal static UnoNativeWebSceneLifetime GetOrCreate(UnoNativeWebSceneView view)
+    {
+        var lifetimes = Volatile.Read(ref _lifetimes);
+        if (lifetimes is null)
+        {
+            var created = new ConditionalWeakTable<
+                UnoNativeWebSceneView,
+                UnoNativeWebSceneLifetime>();
+            lifetimes = Interlocked.CompareExchange(
+                ref _lifetimes,
+                created,
+                null) ?? created;
+        }
+        return lifetimes.GetValue(
+            view,
+            static _ => new UnoNativeWebSceneLifetime());
+    }
+}
+
+internal static class UnoNativeWebSceneLifecycle
+{
+    public static CancellationTokenSource CreateNavigationCancellation(
+        CancellationToken cancellationToken,
+        CancellationToken lifetimeToken)
+        => CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lifetimeToken);
+
+    public static async ValueTask DisposeAsync(
+        CancellationTokenSource lifetimeCancellation,
+        SemaphoreSlim lifecycleGate,
+        Func<Task> unloadAsync)
+    {
+        lifetimeCancellation.Cancel();
+        await lifecycleGate.WaitAsync();
+        try
+        {
+            await unloadAsync();
+        }
+        finally
+        {
+            lifecycleGate.Release();
         }
     }
 }

@@ -8,7 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\WebScene.Backend.Abstractions\WebScene.Backend.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
     <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop.Generator\WebScene.JavaScript.Interop.Generator.csproj"
                       OutputItemType="Analyzer"
@@ -22,5 +24,6 @@
     <PackageReference Include="Avalonia.Headless" />
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" />
   </ItemGroup>
 </Project>

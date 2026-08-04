@@ -417,7 +417,11 @@ using script_work_request =
         interop_invoke_work_v3,
         interop_cancel_work_v3,
         interop_callback_completion_work_v3,
-        interop_callback_cancel_work_v3>;
+        interop_callback_cancel_work_v3
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        , inspector_pump_work
+#endif
+        >;
 
 bool validate_interop_invoke_request_v3(
     const webscene_interop_invoke_request_v3& request,

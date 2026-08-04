@@ -20,6 +20,8 @@ dashboards, editors, diagramming surfaces, kiosks, and JavaScript UI plug-ins.
 - Web-authored surfaces compose inside native application windows and lifecycle.
 - Host capabilities are explicit and can be exposed through typed TypeScript-to-.NET
   interop rather than a browser-wide bridge.
+- Dedicated native V8 isolates expose raw Inspector/CDP sessions and an optional
+  Chrome discovery host; see [V8 Inspector debugging](docs/v8-inspector-debugging.md).
 - Compatibility is stated as a versioned component profile and measured with a curated
   WPT subset plus product-scale fixtures.
 
@@ -155,6 +157,12 @@ Build and verify the native runtime on a matching host:
 scripts/build-native-engine-runtime.sh --rid osx-arm64
 scripts/build-native-engine-runtime.sh --rid linux-x64
 ```
+
+Published production packages use the patched V8 SDK and include Chrome/CDP
+debugging. Normal engine instances retain only the small atomic capability and
+lazy-state pointers; Inspector objects, sessions, mutexes, queues, callbacks,
+and managed registry state remain unallocated until a debugger connects. There
+is no separate production runtime flavor without CDP support.
 
 ```powershell
 ./scripts/build-native-engine-runtime.ps1 -Rid win-x64

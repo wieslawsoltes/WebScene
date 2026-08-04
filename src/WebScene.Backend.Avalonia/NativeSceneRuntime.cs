@@ -140,7 +140,7 @@ internal sealed class NativeSceneRenderObserver
     }
 }
 
-public static unsafe class NativeWebSceneApi
+public static unsafe partial class NativeWebSceneApi
 {
 
     private const string LibraryName = "webscene_native_engine";
@@ -289,12 +289,28 @@ public static unsafe class NativeWebSceneApi
 
     public static void EngineDestroy(IntPtr engine)
     {
-        EngineDestroyNative(engine);
-        if (EngineResourceBridges.TryRemove(engine, out var bridge) && bridge.IsAllocated)
+        if (EngineResourceBridges.TryRemove(engine, out var existing)
+            && existing.IsAllocated
+            && existing.Target is ResourceBridge resourceBridge)
         {
-            (bridge.Target as ResourceBridge)?.Dispose();
-            bridge.Free();
+            var inspectorRegistry = NativeInspectorRegistry.Current;
+            if (inspectorRegistry is null)
+            {
+                EngineDestroyNative(engine);
+            }
+            else
+            {
+                lock (resourceBridge)
+                {
+                    inspectorRegistry.CloseEngine(engine);
+                    EngineDestroyNative(engine);
+                }
+            }
+            resourceBridge.Dispose();
+            existing.Free();
+            return;
         }
+        EngineDestroyNative(engine);
     }
 
     internal static NativeTextShaping.WebTypefaceRegistry? GetWebTypefaceRegistry(
@@ -475,6 +491,28 @@ public static unsafe class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void AnimationFrameRequestedCallback(IntPtr userData);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void InspectorMessageAvailableCallback(
+        IntPtr userData,
+        ulong sessionId);
+
+    private static class InspectorCallbackRegistration
+    {
+        internal static readonly InspectorMessageAvailableCallback Callback =
+            NotifyInspectorMessageAvailable;
+        internal static readonly IntPtr Address =
+            Marshal.GetFunctionPointerForDelegate(Callback);
+
+        // Suppress beforefieldinit so the delegate and thunk are created only
+        // when the first Inspector session is actually opened.
+        static InspectorCallbackRegistration()
+        {
+        }
+    }
+
+    internal static IntPtr GetInspectorMessageAvailableAddress()
+        => InspectorCallbackRegistration.Address;
+
     private static void NotifyHostRequestAvailable(IntPtr userData)
     {
         try
@@ -514,6 +552,20 @@ public static unsafe class NativeWebSceneApi
         {
             Console.Error.WriteLine(
                 $"[WebScene native animation-frame notification] {error}");
+        }
+    }
+
+    private static void NotifyInspectorMessageAvailable(
+        IntPtr userData,
+        ulong sessionId)
+    {
+        try
+        {
+            NativeInspectorRegistry.Current?.Notify(userData, sessionId);
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[WebScene V8 inspector notification] {error}");
         }
     }
 
@@ -636,7 +688,10 @@ public static unsafe class NativeWebSceneApi
         internal NativeTextShaping.WebTypefaceRegistry WebTypefaces { get; } =
             NativeTextShaping.CreateWebTypefaceRegistry();
 
-        public void Dispose() => WebTypefaces.Dispose();
+        public void Dispose()
+        {
+            WebTypefaces.Dispose();
+        }
 
         public void NotifyScenePublished(NativeScenePublished scene)
             => scenePublished(scene);

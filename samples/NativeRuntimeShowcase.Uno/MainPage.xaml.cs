@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using WebScene.Backends.Uno.Native;
+using WebScene.Diagnostics.Cdp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NativeRuntimeShowcase.Interop;
@@ -15,6 +16,12 @@ public sealed partial class MainPage : Page
     private readonly DispatcherTimer _diagnosticsTimer = new();
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();
+    private readonly WebSceneV8InspectorLaunchConfiguration? _inspectorLaunch;
+    private readonly HashSet<UnoNativeWebSceneView> _inspectorBreakConsumed = [];
+    private readonly SemaphoreSlim _inspectorTargetGate = new(1, 1);
+    private readonly string? _customDocumentUri;
+    private WebSceneV8InspectorHost? _v8InspectorHost;
+    private UnoNativeWebSceneView? _inspectedView;
     private string? _nativeLibraryPath;
     private ShowcaseEditorSession? _editorSession;
     private StorageFile? _currentFile;
@@ -22,10 +29,13 @@ public sealed partial class MainPage : Page
     private bool _terminalLoading;
     private bool _editorLoading;
     private bool _terminalDiagnosticsReported;
+    private int _inspectorShuttingDown;
     private TimeSpan _terminalLoadElapsed;
 
     public MainPage()
     {
+        _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(_arguments);
+        _customDocumentUri = ResolveDocumentArgument(_arguments);
         InitializeComponent();
         TerminalContent.Content = _terminal;
         EditorContent.Content = _editor;
@@ -42,6 +52,11 @@ public sealed partial class MainPage : Page
         {
             _nativeLibraryPath =
                 ShowcasePaths.ResolveNativeLibraryPath(_arguments);
+            if (_customDocumentUri is not null)
+            {
+                await ShowCustomDocumentAsync(_customDocumentUri);
+                return;
+            }
             if (_arguments.Contains("--editor", StringComparer.Ordinal))
             {
                 await ShowEditorAsync();
@@ -73,6 +88,10 @@ public sealed partial class MainPage : Page
         EditorContent.Visibility = Visibility.Collapsed;
         await WaitForLayoutAsync(TerminalContent);
         await EnsureTerminalAsync();
+        await SelectInspectorTargetAsync(
+            _terminal,
+            "WebScene V8 · TradingView · Uno",
+            CancellationToken.None);
         DocumentText.Text = ShowcasePaths.TradingViewUrl;
         RefreshDiagnostics("TradingView terminal");
     }
@@ -99,10 +118,20 @@ public sealed partial class MainPage : Page
                 ShowcasePaths.ResolveNativeLibraryPath(_arguments);
             StatusText.Text = "Loading hosted TradingView terminal…";
             var started = Stopwatch.StartNew();
-            await _terminal.LoadAsync(
-                ShowcasePaths.TradingViewUrl,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "tradingview"));
+            try
+            {
+                await _terminal.LoadAsync(
+                    ShowcasePaths.TradingViewUrl,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Uno", "tradingview"),
+                    BeforeNavigationInspectorHook,
+                    DocumentBarrierTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(_terminal);
+                throw;
+            }
             started.Stop();
             _terminalLoadElapsed = started.Elapsed;
             _terminalLoaded = true;
@@ -135,9 +164,59 @@ public sealed partial class MainPage : Page
         EditorContent.Visibility = Visibility.Visible;
         await WaitForLayoutAsync(EditorContent);
         await EnsureEditorAsync();
+        await SelectInspectorTargetAsync(
+            _editor,
+            _customDocumentUri is null
+                ? "WebScene V8 · Monaco · Uno"
+                : "WebScene V8 · Custom document · Uno",
+            CancellationToken.None);
         DocumentText.Text = _currentFile?.Path ?? "GeneratedMonacoApi.cs";
         StatusText.Text =
             "Monaco ready · generated C# facade: MonacoEditor + MonacoApi";
+    }
+
+    private async Task ShowCustomDocumentAsync(string documentUri)
+    {
+        TerminalContent.Visibility = Visibility.Collapsed;
+        EditorContent.Visibility = Visibility.Visible;
+        await WaitForLayoutAsync(EditorContent);
+        try
+        {
+            await _editor.LoadAsync(
+                documentUri,
+                _nativeLibraryPath!,
+                ShowcasePaths.CacheDirectory("Uno", "custom-document"),
+                BeforeNavigationInspectorHook,
+                DocumentBarrierTimeout);
+        }
+        catch
+        {
+            await ResetInspectorAfterFailedLoadAsync(_editor);
+            throw;
+        }
+        await SelectInspectorTargetAsync(
+            _editor,
+            "WebScene V8 · Custom document · Uno",
+            CancellationToken.None);
+        DocumentText.Text = documentUri;
+        StatusText.Text = "Custom WebScene document ready";
+        Console.WriteLine($"[WebScene Uno] Custom document ready: {documentUri}");
+    }
+
+    private static string? ResolveDocumentArgument(
+        IReadOnlyList<string> arguments)
+    {
+        for (var index = 0; index + 1 < arguments.Count; ++index)
+        {
+            if (arguments[index] != "--document") continue;
+            var configured = arguments[index + 1];
+            if (Uri.TryCreate(configured, UriKind.Absolute, out var uri))
+            {
+                return uri.AbsoluteUri;
+            }
+            return new Uri(Path.GetFullPath(configured)).AbsoluteUri;
+        }
+        return null;
     }
 
     private static async Task WaitForLayoutAsync(FrameworkElement element)
@@ -175,10 +254,20 @@ public sealed partial class MainPage : Page
                 AppContext.BaseDirectory,
                 "index.html");
             var started = Stopwatch.StartNew();
-            await _editor.LoadAsync(
-                new Uri(documentPath).AbsoluteUri,
-                _nativeLibraryPath,
-                ShowcasePaths.CacheDirectory("Uno", "monaco"));
+            try
+            {
+                await _editor.LoadAsync(
+                    new Uri(documentPath).AbsoluteUri,
+                    _nativeLibraryPath,
+                    ShowcasePaths.CacheDirectory("Uno", "monaco"),
+                    BeforeNavigationInspectorHook,
+                    DocumentBarrierTimeout);
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(_editor);
+                throw;
+            }
             var session = new ShowcaseEditorSession(
                 _editor.CreateJavaScriptInvoker());
             try
@@ -288,9 +377,133 @@ public sealed partial class MainPage : Page
         Console.Error.WriteLine($"{title}: {error}");
     }
 
+    private async ValueTask PrepareInspectorAsync(
+        UnoNativeWebSceneView view,
+        CancellationToken cancellationToken)
+    {
+        if (_inspectorLaunch is null) return;
+        await view.WaitForV8InspectorAvailableAsync(
+            cancellationToken: cancellationToken);
+        await SelectInspectorTargetAsync(
+            view,
+            ReferenceEquals(view, _editor)
+                ? _customDocumentUri is null
+                    ? "WebScene V8 · Monaco · Uno"
+                    : "WebScene V8 · Custom document · Uno"
+                : "WebScene V8 · TradingView · Uno",
+            cancellationToken);
+    }
+
+    private Func<UnoNativeWebSceneView, CancellationToken, ValueTask>?
+        BeforeNavigationInspectorHook
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? PrepareInspectorAsync
+            : null;
+
+    private TimeSpan? DocumentBarrierTimeout
+        => _inspectorLaunch?.WaitForDebugger == true
+            ? Timeout.InfiniteTimeSpan
+            : null;
+
+    private async Task SelectInspectorTargetAsync(
+        UnoNativeWebSceneView view,
+        string title,
+        CancellationToken cancellationToken)
+    {
+        if (_inspectorLaunch is null
+            || Volatile.Read(ref _inspectorShuttingDown) != 0) return;
+        await _inspectorTargetGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref _inspectorShuttingDown) != 0
+                || (ReferenceEquals(_inspectedView, view)
+                    && _v8InspectorHost?.IsRunning == true))
+            {
+                return;
+            }
+            if (_v8InspectorHost is not null)
+            {
+                await _v8InspectorHost.DisposeAsync();
+            }
+            var waitForDebugger = _inspectorLaunch.WaitForDebugger
+                && !_inspectorBreakConsumed.Contains(view);
+            var options = _inspectorLaunch.CreateHostOptions();
+            options.WaitForDebugger = waitForDebugger;
+            var host = new WebSceneV8InspectorHost(
+                view.OpenV8InspectorSession,
+                () => view.Source,
+                options,
+                title: title);
+            try
+            {
+                await host.StartAsync(cancellationToken);
+            }
+            catch
+            {
+                await host.DisposeAsync();
+                throw;
+            }
+            if (waitForDebugger)
+            {
+                // --inspect-brk is a pre-navigation gate for each isolate. Once
+                // that view has been resumed, later target switching must not
+                // pause its already-loaded event loop again.
+                _inspectorBreakConsumed.Add(view);
+            }
+            _v8InspectorHost = host;
+            _inspectedView = view;
+            Console.WriteLine(
+                $"WebScene V8 Inspector{(waitForDebugger ? " (waiting for debugger)" : string.Empty)} "
+                + $"discovery: {host.DiscoveryUri}json/list");
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
+    private async Task ResetInspectorAfterFailedLoadAsync(
+        UnoNativeWebSceneView view)
+    {
+        if (_inspectorLaunch is null) return;
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            _inspectorBreakConsumed.Remove(view);
+            if (!ReferenceEquals(_inspectedView, view)) return;
+            var host = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (host is not null)
+            {
+                await host.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
+    }
+
     private async void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _diagnosticsTimer.Stop();
+        Interlocked.Exchange(ref _inspectorShuttingDown, 1);
+        await _inspectorTargetGate.WaitAsync();
+        try
+        {
+            var inspectorHost = _v8InspectorHost;
+            _v8InspectorHost = null;
+            _inspectedView = null;
+            if (inspectorHost is not null)
+            {
+                await inspectorHost.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _inspectorTargetGate.Release();
+        }
         if (_editorSession is not null)
         {
             await _editorSession.DisposeAsync();

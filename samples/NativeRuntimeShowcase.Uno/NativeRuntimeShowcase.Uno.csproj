@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebScene.Backend.Uno\WebScene.Backend.Uno.csproj" />
+    <ProjectReference Include="..\..\src\WebScene.Diagnostics.Cdp\WebScene.Diagnostics.Cdp.csproj" />
     <ProjectReference Include="..\NativeRuntimeShowcase.Interop\NativeRuntimeShowcase.Interop.csproj" />
     <ProjectReference Include="..\NativeMonacoEditor.Assets\NativeMonacoEditor.Assets.csproj"
                       ReferenceOutputAssembly="false" />

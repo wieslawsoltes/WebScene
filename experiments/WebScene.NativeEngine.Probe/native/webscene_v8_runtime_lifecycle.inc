@@ -47,6 +47,9 @@
         // handles or disposing the isolate. Socket callbacks never touch V8,
         // but they may still be appending to the native delivery queue.
         websocket_transport.shutdown();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        shutdown_inspector();
+#endif
         auto isolate_locker = lock_shared_isolate();
         websocket_bindings.clear();
         if (isolate != nullptr && !compilation_cache_directory.empty()) {
@@ -69,6 +72,11 @@
         pending_callback_promises.clear();
         interop_handles.clear();
         pending_promise_rejections.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        if (auto* inspector_state = inspector_state_if_created()) {
+            inspector_state->promise_rejections.clear();
+        }
+#endif
         connected_resources.clear();
         resize_observers.clear();
         frame_documents.clear();
@@ -746,6 +754,11 @@
             pending_frame_hydrations.shrink_to_fit();
             detached_dom_roots.shrink_to_fit();
             pending_promise_rejections.shrink_to_fit();
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            if (auto* inspector_state = inspector_state_if_created()) {
+                inspector_state->promise_rejections.shrink_to_fit();
+            }
+#endif
             document_cookies.shrink_to_fit();
             css_rules.shrink_to_fit();
             for (auto& [name, keyframes] : opacity_keyframes) {

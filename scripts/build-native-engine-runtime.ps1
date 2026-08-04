@@ -41,6 +41,7 @@ $partitionAllocCMake = if ($PartitionAlloc) { "ON" } else { "OFF" }
 $buildVariant = "-$HtmlParser-$CssParser-$SelectorParser-$DomBindings-$V8Snapshot"
 $buildVariant += if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
+$buildVariant += "-inspector"
 if (($CssParser -eq "cssparser" -or $SelectorParser -eq "servo") -and $HtmlParser -ne "html5ever") {
     throw "Servo CSS components require -HtmlParser html5ever."
 }
@@ -108,6 +109,9 @@ if ([string]::IsNullOrWhiteSpace($V8Root)) {
             throw "Cannot apply or recognize V8 patch '$PatchPath' in '$Checkout'."
         }
     }
+    # WebScene owns the JavaScript console bindings. The inspector bridge keeps
+    # the original V8 values so CDP clients receive object ids and previews.
+    Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/v8-patches/V8InspectorConsolePatch.txt")
     if (-not $UpstreamV8 -and $v8Revision -ne "15.3.10") {
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "third-party/v8-patches/V8Patch.txt")
         Apply-PatchOnce $V8Root (Join-Path $repoRoot "packaging/WebScene.NativeEngine.Runtime/patches/V8ToolchainPatch.txt")
@@ -149,6 +153,10 @@ $v8VersionHeader = Join-Path $V8Root "include/v8-version.h"
 @((Join-Path $V8Root "include/v8.h"), $v8VersionHeader, $v8Monolith, $icuData, $v8Args, $v8License, $icuLicense) | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Required native runtime input is missing: $_" }
 }
+$v8InspectorHeader = Join-Path $V8Root "include/v8-inspector.h"
+if (-not (Select-String -Path $v8InspectorHeader -Pattern 'virtual void consoleAPICalled' -Quiet)) {
+    throw "The V8 SDK at '$V8Root' does not contain WebScene's inspector console bridge. Rebuild it with V8InspectorConsolePatch.txt."
+}
 $requestedV8Parts = $v8Revision.Split('.')
 if ($requestedV8Parts.Length -lt 3 `
     -or -not (Select-String -Path $v8VersionHeader -Pattern "^#define V8_MAJOR_VERSION\s+$($requestedV8Parts[0])$" -Quiet) `
@@ -186,6 +194,7 @@ $buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buil
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
     -DWEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT=ON `
@@ -241,6 +250,7 @@ $packArguments = @(
     "-p:WebSceneNativeEngineV8SharedCage=true",
     "-p:WebSceneNativeEngineV8OptimizeForSizeDefault=true",
     "-p:WebSceneNativeEngineV8PartitionAlloc=$partitionAllocValue",
+    "-p:WebSceneNativeEngineV8Inspector=true",
     "-p:WebSceneNativeEngineDenseLink=true",
     "-p:WebSceneNativeEngineThinLto=$thinLtoValue",
     "-p:WebSceneNativeEngineV8Revision=$v8Revision",
