@@ -326,6 +326,27 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         waiting_session_id != 0U && waiting_session_id != session_id,
         "The waiting Inspector session was not created independently");
+    webscene_engine_metrics before_waiting_script{};
+    webscene_engine_get_metrics(engine, &before_waiting_script);
+    constexpr std::string_view waiting_script{
+        "globalThis.webSceneInspectorWaitingBarrier = 73;"};
+    constexpr std::string_view waiting_script_name{
+        "webscene-inspector-waiting-barrier.js"};
+    require(
+        webscene_engine_execute_script(
+            engine,
+            waiting_script.data(),
+            waiting_script.size(),
+            waiting_script_name.data(),
+            waiting_script_name.size()) != 0,
+        "The waiting Inspector barrier script was rejected");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    webscene_engine_metrics during_waiting_script{};
+    webscene_engine_get_metrics(engine, &during_waiting_script);
+    require(
+        during_waiting_script.executed_scripts
+            == before_waiting_script.executed_scripts,
+        "Script work ran before the acknowledged waiting Inspector session resumed");
     dispatch_inspector_test_message(
         engine,
         waiting_session_id,
@@ -339,8 +360,8 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
     require(
         evaluate(
             engine,
-            "40 + 2",
-            "webscene-inspector-waiting-disconnect-result.js") == "42",
+            "globalThis.webSceneInspectorWaitingBarrier",
+            "webscene-inspector-waiting-disconnect-result.js") == "73",
         "Disconnecting the waiting Inspector session did not release the worker "
         "while another session remained attached");
 

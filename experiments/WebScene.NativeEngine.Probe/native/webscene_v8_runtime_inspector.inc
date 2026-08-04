@@ -96,6 +96,7 @@
         bool wait_for_debugger{false};
         std::string message;
         v8_dom_runtime::inspector_message_sink sink;
+        std::shared_ptr<std::promise<bool>> connection_acknowledgement;
     };
 
     struct inspector_client final : v8_inspector::V8InspectorClient {
@@ -386,6 +387,12 @@
         const auto session_id = next_inspector_session_id.fetch_add(
             1U,
             std::memory_order_relaxed);
+        auto acknowledgement = wait_for_debugger
+            ? std::make_shared<std::promise<bool>>()
+            : nullptr;
+        auto connected = acknowledgement == nullptr
+            ? std::future<bool>{}
+            : acknowledgement->get_future();
         {
             std::lock_guard lock(inspector_mutex);
             if (inspector_shutting_down
@@ -397,9 +404,17 @@
                 session_id,
                 wait_for_debugger,
                 {},
-                std::move(sink)});
+                std::move(sink),
+                acknowledgement});
         }
         inspector_condition.notify_all();
+        if (acknowledgement != nullptr) {
+            try {
+                if (!connected.get()) return 0U;
+            } catch (const std::future_error&) {
+                return 0U;
+            }
+        }
         return session_id;
     }
 
@@ -418,7 +433,8 @@
                 session_id,
                 false,
                 std::move(message),
-                {}});
+                {},
+                nullptr});
         }
         inspector_condition.notify_all();
         return true;
@@ -450,7 +466,8 @@
                 session_id,
                 false,
                 {},
-                {}});
+                {},
+                nullptr});
         }
         inspector_condition.notify_all();
         return true;
@@ -496,9 +513,22 @@
                 {},
                 v8_inspector::V8Inspector::kFullyTrusted,
                 pause_state);
+            if (session == nullptr) {
+                if (action.connection_acknowledgement != nullptr) {
+                    action.connection_acknowledgement->set_value(false);
+                }
+                break;
+            }
             inspector_sessions.emplace(
                 action.session_id,
                 inspector_session{std::move(channel), std::move(session)});
+            if (action.connection_acknowledgement != nullptr) {
+                // Release the host only after the waiting session exists on
+                // the isolate worker. The host may now queue navigation, but
+                // the nested Inspector loop below prevents scripts from
+                // running until Runtime.runIfWaitingForDebugger or disconnect.
+                action.connection_acknowledgement->set_value(true);
+            }
             if (action.wait_for_debugger) {
                 inspector_waiting_session_id = action.session_id;
                 run_inspector_message_loop();
@@ -553,6 +583,11 @@
         {
             std::lock_guard lock(inspector_mutex);
             inspector_shutting_down = true;
+            for (auto& action : inspector_actions) {
+                if (action.connection_acknowledgement != nullptr) {
+                    action.connection_acknowledgement->set_value(false);
+                }
+            }
             inspector_actions.clear();
         }
         inspector_pause_loop_running = false;
