@@ -236,6 +236,11 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             {
                 break;
             }
+            catch (ObjectDisposedException) when (
+                cancellationToken.IsCancellationRequested || !listener.IsListening)
+            {
+                break;
+            }
             var connectionId = Interlocked.Increment(ref _nextConnectionId);
             var handler = HandleAsync(context, cancellationToken);
             var completion = new TaskCompletionSource<bool>(
