@@ -21,6 +21,7 @@
     std::deque<inspector_action> inspector_actions;
     std::atomic<uint64_t> next_inspector_session_id{1U};
     std::atomic<bool> inspector_ready{false};
+    uint64_t inspector_waiting_session_id{0U};
     bool inspector_pause_loop_running{false};
     bool inspector_shutting_down{false};
 #endif

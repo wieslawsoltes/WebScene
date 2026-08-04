@@ -499,7 +499,11 @@
             inspector_sessions.emplace(
                 action.session_id,
                 inspector_session{std::move(channel), std::move(session)});
-            if (action.wait_for_debugger) run_inspector_message_loop();
+            if (action.wait_for_debugger) {
+                inspector_waiting_session_id = action.session_id;
+                run_inspector_message_loop();
+                inspector_waiting_session_id = 0U;
+            }
             break;
         }
         case inspector_action::kind::dispatch: {
@@ -517,6 +521,10 @@
             if (found != inspector_sessions.end()) {
                 found->second.session->stop();
                 inspector_sessions.erase(found);
+            }
+            if (inspector_waiting_session_id == action.session_id) {
+                inspector_waiting_session_id = 0U;
+                inspector_pause_loop_running = false;
             }
             if (inspector_sessions.empty()) {
                 inspector_instrumented_async_tasks.clear();
@@ -558,6 +566,7 @@
             if (session.session != nullptr) session.session->stop();
         }
         inspector_sessions.clear();
+        inspector_waiting_session_id = 0U;
         inspector_instrumented_async_tasks.clear();
         inspector->allAsyncTasksCanceled();
         destroy_all_inspector_contexts();

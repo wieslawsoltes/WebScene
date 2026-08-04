@@ -317,6 +317,33 @@ void test_v8_inspector_raw_cdp_session(webscene_engine* engine)
         webscene_engine_inspector_disconnect(engine, secondary_session_id) != 0,
         "The second Inspector session disconnect was rejected");
 
+    inspector_test_messages waiting_messages;
+    const auto waiting_session_id = webscene_engine_inspector_connect(
+        engine,
+        receive_inspector_test_message,
+        &waiting_messages,
+        1U);
+    require(
+        waiting_session_id != 0U && waiting_session_id != session_id,
+        "The waiting Inspector session was not created independently");
+    dispatch_inspector_test_message(
+        engine,
+        waiting_session_id,
+        R"({"id":1,"method":"Runtime.enable"})");
+    require(
+        wait_for_inspector_message(waiting_messages, R"("id":1)"),
+        "The waiting Inspector session did not enter its message loop");
+    require(
+        webscene_engine_inspector_disconnect(engine, waiting_session_id) != 0,
+        "The waiting Inspector session disconnect was rejected");
+    require(
+        evaluate(
+            engine,
+            "40 + 2",
+            "webscene-inspector-waiting-disconnect-result.js") == "42",
+        "Disconnecting the waiting Inspector session did not release the worker "
+        "while another session remained attached");
+
     pull_inspector_notifications pull_notifications;
     const auto pull_session_id = webscene_engine_inspector_connect_v3(
         engine,
