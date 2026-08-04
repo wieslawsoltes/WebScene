@@ -26,7 +26,7 @@ Active investigations:
 - [Sandwich multi-chart performance recommendations](sandwich-multi-chart-performance-recommendations.md)
 - [ADR 0012 — Pooled binary native JavaScript interop](adr/0012-pooled-binary-native-javascript-interop.md)
 - [TradingView four-chart binary interop results](tradingview-four-chart-binary-interop-results.md)
-- [V8 Inspector production performance gate](v8-inspector-production-performance.md)
+- [V8 Inspector production performance validation](v8-inspector-production-performance.md)
 
 Implementation guides:
 

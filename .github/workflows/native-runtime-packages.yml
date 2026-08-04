@@ -13,6 +13,25 @@ on:
     - main
     tags:
     - 'v*'
+  pull_request:
+    branches:
+    - main
+    - release/*
+    paths:
+    - '.github/workflows/native-runtime-packages.yml'
+    - 'experiments/WebScene.NativeEngine.Probe/**'
+    - 'packaging/WebScene.NativeEngine.Runtime/**'
+    - 'scripts/build-native-engine-runtime.sh'
+    - 'scripts/build-native-engine-runtime-linux-container.sh'
+    - 'scripts/build-native-engine-runtime.ps1'
+    - 'scripts/pack-packages.sh'
+    - 'scripts/verify-release-packages.py'
+    - 'src/WebScene.Backend.Abstractions/**'
+    - 'src/WebScene.Backend.Avalonia/**'
+    - 'src/WebScene.Backend.Uno/**'
+    - 'src/WebScene.Diagnostics.Cdp/**'
+    - 'tests/WebScene.Runtime.PackageSmoke/**'
+    - 'third-party/v8-patches/**'
 
 permissions:
   contents: read

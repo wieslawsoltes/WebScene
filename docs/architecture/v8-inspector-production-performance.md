@@ -1,12 +1,14 @@
-# V8 Inspector production performance gate
+# V8 Inspector production performance validation
 
 The WebScene native production package includes the patched V8 Inspector
-capability. Pull requests changing it must pass the required **Build, test, and
-benchmark Inspector-capable production (osx-arm64)** job before merge.
+capability on macOS, Linux, and Windows. Pull requests changing the native
+runtime or its packaging run the existing production package matrix for all
+three supported RIDs. Performance comparisons are deliberate local or release
+investigations rather than a GitHub Actions prerequisite.
 
 ## Matched full-stack comparison
 
-The job compares two complete revisions:
+The comparison procedure compares two complete revisions:
 
 - the current `main` runtime and managed backend as the historical control;
 - the pull request's Inspector-capable production runtime and managed backend.
@@ -21,11 +23,10 @@ runtime flavor. Production packaging always includes CDP support. Comparing the
 full revisions protects the user-visible requirement that ordinary workloads
 do not regress relative to the runtime being replaced.
 
-The gate runs 20 fresh processes per variant in repeated control, candidate,
+The procedure runs 20 fresh processes per variant in repeated control, candidate,
 candidate, control order. It records source revisions and SHA-256 values for
-the managed backend assembly and both native libraries. Raw process JSON and
-the comparison report are uploaded as the
-`inspector-capable-production-comparison` workflow artifact.
+the managed backend assembly and both native libraries. Keep the raw process
+JSON and comparison report with the investigation evidence.
 
 ## Connection-cost boundary
 
@@ -46,7 +47,7 @@ before document JavaScript is queued, otherwise it cannot guarantee a pause at
 startup. This cost is therefore paid when the user explicitly requests the
 break-on-start behavior rather than when the application merely uses WebScene.
 
-## Acceptance policy
+## Comparison policy
 
 Inspector-capable production builds must satisfy all of the following:
 
@@ -72,15 +73,16 @@ Inspector-capable production builds must satisfy all of the following:
 - timing fails when its median ratio exceeds 1.01 and the paired bootstrap 95%
   interval is also wholly above 1.01.
 
-Samples with matching indices are paired because the workflow deliberately
+Samples with matching indices are paired because the procedure deliberately
 alternates process order to cancel thermal and scheduler drift. The timing,
 CPU, allocation, incremental RSS, and native-memory limits guard runtime cost.
 The separate 1 MiB binary-size budget bounds the shipped Inspector code rather
 than disguising it as heap usage.
 
-The production binary audit requires the live-edit implementation marker and
-Inspector-enabled package metadata. Stable unavailable-returning ABI exports
-remain for compatibility with historical runtimes.
+The production package matrix validates the native tests, package metadata,
+complete package set, and clean consumers on macOS, Linux, and Windows. Stable
+unavailable-returning ABI exports remain for compatibility with historical
+runtimes.
 
 ## Local comparison
 
