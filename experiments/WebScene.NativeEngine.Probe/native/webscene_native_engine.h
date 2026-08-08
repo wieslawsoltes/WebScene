@@ -19,6 +19,7 @@ extern "C" {
 
 typedef struct webscene_engine webscene_engine;
 typedef struct webscene_scene_view webscene_scene_view;
+typedef struct webscene_dom_snapshot_view webscene_dom_snapshot_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
 
 /* Legacy direct-message callback retained for ABI compatibility. */
@@ -450,6 +451,83 @@ struct webscene_scene_view {
     uint32_t string_count;
     uint32_t string_byte_count;
     uint32_t reserved;
+};
+
+/* UTF-8 slice into webscene_dom_snapshot_view::string_bytes. */
+typedef struct webscene_dom_string_ref {
+    uint32_t byte_offset;
+    uint32_t byte_length;
+} webscene_dom_string_ref;
+
+typedef struct webscene_dom_attribute_snapshot {
+    webscene_dom_string_ref name;
+    webscene_dom_string_ref value;
+} webscene_dom_attribute_snapshot;
+
+typedef struct webscene_dom_property_snapshot {
+    webscene_dom_string_ref name;
+    webscene_dom_string_ref value;
+} webscene_dom_property_snapshot;
+
+/* Resolved CSS pixel geometry. layout is the border box. */
+typedef struct webscene_dom_box_snapshot {
+    float x;
+    float y;
+    float width;
+    float height;
+    float margin_left;
+    float margin_top;
+    float margin_right;
+    float margin_bottom;
+    float border_left;
+    float border_top;
+    float border_right;
+    float border_bottom;
+    float padding_left;
+    float padding_top;
+    float padding_right;
+    float padding_bottom;
+} webscene_dom_box_snapshot;
+
+typedef struct webscene_dom_node_snapshot {
+    uint32_t node_id;
+    uint32_t parent_id;
+    /* CDP-compatible nodeType: element=1, text=3, comment=8, fragment=11. */
+    uint32_t node_type;
+    uint32_t flags;
+    uint32_t child_count;
+    uint32_t attribute_offset;
+    uint32_t attribute_count;
+    uint32_t property_offset;
+    uint32_t property_count;
+    webscene_dom_string_ref node_name;
+    webscene_dom_string_ref node_value;
+    webscene_dom_string_ref namespace_uri;
+    webscene_dom_box_snapshot box;
+} webscene_dom_node_snapshot;
+
+/*
+ * Immutable worker-produced DOM diagnostics. All pointers remain valid until
+ * webscene_dom_snapshot_release is called. Native node ids are stable for one
+ * document and are invalidated by a navigation (document_epoch changes).
+ */
+struct webscene_dom_snapshot_view {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint64_t document_revision;
+    uint64_t document_epoch;
+    const webscene_dom_node_snapshot* nodes;
+    const webscene_dom_attribute_snapshot* attributes;
+    const webscene_dom_property_snapshot* properties;
+    const char* string_bytes;
+    const void* lease_token;
+    uint32_t node_count;
+    uint32_t attribute_count;
+    uint32_t property_count;
+    uint32_t string_byte_count;
+    uint32_t highlighted_node_id;
+    uint32_t selected_node_id;
+    uint64_t selection_sequence;
 };
 
 typedef enum webscene_resource_kind {
@@ -1050,6 +1128,18 @@ WEBSCENE_API size_t webscene_engine_copy_canvas_layouts(
  * renderer (for example after compositor/context recreation).
  */
 WEBSCENE_API uint8_t webscene_engine_request_scene_checkpoint(webscene_engine* engine);
+/* Acquires the latest worker-produced authored DOM and computed-layout snapshot. */
+WEBSCENE_API const webscene_dom_snapshot_view*
+webscene_engine_acquire_dom_snapshot(webscene_engine* engine);
+WEBSCENE_API void webscene_dom_snapshot_release(
+    const webscene_dom_snapshot_view* snapshot);
+/* Enables picker interception and controls the native box-model overlay. */
+WEBSCENE_API uint8_t webscene_engine_set_dom_inspect_mode(
+    webscene_engine* engine,
+    uint8_t enabled);
+WEBSCENE_API uint8_t webscene_engine_set_dom_highlight(
+    webscene_engine* engine,
+    uint32_t node_id);
 WEBSCENE_API const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine);
 /*
  * Enables the bounded ordered consumer lane and acquires its oldest pending

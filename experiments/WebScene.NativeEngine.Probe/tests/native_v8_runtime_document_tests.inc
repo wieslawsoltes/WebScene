@@ -318,6 +318,62 @@ void test_compact_attribute_collection_preserves_map_semantics()
         "compact attribute erase did not preserve map semantics");
 }
 
+void test_dom_diagnostics_snapshot_preserves_authored_tree_and_box_model()
+{
+    webscene_native::native_document document;
+    auto& card = document.create_element("section");
+    card.attributes["id"] = "probe";
+    card.attributes["class"] = "card";
+    card.style.width = {120, webscene_native::length_unit::pixels};
+    card.style.height = {40, webscene_native::length_unit::pixels};
+    card.style.padding_left = {8, webscene_native::length_unit::pixels};
+    card.style.border_left_width = {2, webscene_native::length_unit::pixels};
+    auto& text = document.create_node(webscene_native::dom_node_kind::text, "#text");
+    text.text_content = "Hello";
+    require(
+        document.append_child(document.body(), card)
+            && document.append_child(card, text),
+        "DOM diagnostics fixture could not build its authored tree");
+    document.layout(800, 600);
+
+    std::vector<webscene_dom_node_snapshot> nodes;
+    std::vector<webscene_dom_attribute_snapshot> attributes;
+    std::vector<webscene_dom_property_snapshot> properties;
+    std::vector<char> bytes;
+    document.build_dom_snapshot(nodes, attributes, properties, bytes);
+    const auto read = [&](webscene_dom_string_ref value) {
+        require(
+            static_cast<size_t>(value.byte_offset) + value.byte_length
+                <= bytes.size(),
+            "DOM diagnostics snapshot published an invalid UTF-8 slice");
+        return std::string(
+            bytes.data() + value.byte_offset,
+            value.byte_length);
+    };
+
+    require(
+        nodes.size() == 3
+            && nodes[0].node_id == document.body().id
+            && nodes[1].node_id == card.id
+            && nodes[1].parent_id == document.body().id
+            && nodes[2].node_id == text.id
+            && nodes[2].parent_id == card.id
+            && nodes[2].node_type == 3
+            && read(nodes[2].node_value) == "Hello",
+        "DOM diagnostics snapshot lost stable authored tree identity");
+    require(
+        nodes[1].attribute_count == 2
+            && read(attributes[nodes[1].attribute_offset].name) == "id"
+            && read(attributes[nodes[1].attribute_offset].value) == "probe",
+        "DOM diagnostics snapshot lost authored attributes");
+    require(
+        std::abs(nodes[1].box.width - 130.0F) < 0.01F
+            && std::abs(nodes[1].box.padding_left - 8.0F) < 0.01F
+            && std::abs(nodes[1].box.border_left - 2.0F) < 0.01F
+            && nodes[1].property_count > 20,
+        "DOM diagnostics snapshot lost resolved layout or computed style");
+}
+
 void test_out_of_flow_client_geometry_reuse_is_scoped()
 {
     webscene_native::native_document document;

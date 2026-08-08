@@ -45,6 +45,11 @@ static_assert(sizeof(webscene_canvas_layout) == 32);
 static_assert(sizeof(webscene_canvas_layer) == 64);
 static_assert(sizeof(webscene_canvas_command) == 80);
 static_assert(sizeof(webscene_scene_string) == 8);
+static_assert(sizeof(webscene_dom_string_ref) == 8);
+static_assert(sizeof(webscene_dom_attribute_snapshot) == 16);
+static_assert(sizeof(webscene_dom_property_snapshot) == 16);
+static_assert(sizeof(webscene_dom_box_snapshot) == 64);
+static_assert(sizeof(webscene_dom_node_snapshot) == 124);
 static_assert(sizeof(webscene_damage_rect) == 16);
 static_assert(sizeof(webscene_scene_view) == 136);
 static_assert(sizeof(webscene_interop_value_v3) == 24);
@@ -136,6 +141,18 @@ struct scene final {
     std::unordered_map<uint32_t, canvas_layer_version> full_layer_versions;
     uint64_t dom_hash{0};
     uint64_t published_timestamp_nanoseconds{0};
+};
+
+struct dom_snapshot final {
+    uint64_t document_revision{0};
+    uint64_t document_epoch{0};
+    std::vector<webscene_dom_node_snapshot> nodes;
+    std::vector<webscene_dom_attribute_snapshot> attributes;
+    std::vector<webscene_dom_property_snapshot> properties;
+    std::vector<char> string_bytes;
+    uint32_t highlighted_node_id{0};
+    uint32_t selected_node_id{0};
+    uint64_t selection_sequence{0};
 };
 
 uint64_t retained_scene_bytes(const scene& value)
@@ -329,6 +346,12 @@ private:
     std::atomic<uint64_t> interop_request_oversize_allocations_{0};
     std::atomic<uint64_t> next_interop_operation_id_{1U};
     std::shared_ptr<const scene> latest_{};
+    std::shared_ptr<const dom_snapshot> latest_dom_snapshot_{};
+    std::atomic<bool> dom_diagnostics_enabled_{false};
+    std::atomic<bool> dom_inspect_mode_{false};
+    std::atomic<uint32_t> dom_highlighted_node_id_{0};
+    std::atomic<uint32_t> dom_selected_node_id_{0};
+    std::atomic<uint64_t> dom_selection_sequence_{0};
     std::atomic<bool> ordered_scene_consumer_{false};
     std::condition_variable wake_;
     std::mutex wake_mutex_;
@@ -638,6 +661,34 @@ struct webscene_scene_lease final {
         }
         acknowledgement->pending_scenes.pop_front();
         return true;
+    }
+};
+
+struct webscene_dom_snapshot_lease final {
+    std::shared_ptr<const dom_snapshot> value;
+    webscene_dom_snapshot_view view{};
+
+    explicit webscene_dom_snapshot_lease(
+        std::shared_ptr<const dom_snapshot> snapshot_value)
+        : value(std::move(snapshot_value))
+    {
+        view = webscene_dom_snapshot_view{
+            static_cast<uint32_t>(sizeof(webscene_dom_snapshot_view)),
+            3U,
+            value->document_revision,
+            value->document_epoch,
+            value->nodes.data(),
+            value->attributes.data(),
+            value->properties.data(),
+            value->string_bytes.data(),
+            this,
+            static_cast<uint32_t>(value->nodes.size()),
+            static_cast<uint32_t>(value->attributes.size()),
+            static_cast<uint32_t>(value->properties.size()),
+            static_cast<uint32_t>(value->string_bytes.size()),
+            value->highlighted_node_id,
+            value->selected_node_id,
+            value->selection_sequence};
     }
 };
 
@@ -1138,6 +1189,42 @@ uint8_t webscene_engine_set_preferred_color_scheme(
         && engine->set_preferred_color_scheme(preferred_color_scheme)
         ? 1U
         : 0U;
+}
+
+const webscene_dom_snapshot_view*
+webscene_engine_acquire_dom_snapshot(webscene_engine* engine)
+{
+    if (engine == nullptr) return nullptr;
+    auto snapshot = engine->acquire_dom_snapshot();
+    if (!snapshot) return nullptr;
+    try {
+        auto* lease = new webscene_dom_snapshot_lease(std::move(snapshot));
+        return &lease->view;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void webscene_dom_snapshot_release(const webscene_dom_snapshot_view* snapshot)
+{
+    if (snapshot == nullptr || snapshot->lease_token == nullptr) return;
+    delete static_cast<webscene_dom_snapshot_lease*>(
+        const_cast<void*>(snapshot->lease_token));
+}
+
+uint8_t webscene_engine_set_dom_inspect_mode(
+    webscene_engine* engine,
+    uint8_t enabled)
+{
+    return engine != nullptr && engine->set_dom_inspect_mode(enabled != 0U)
+        ? 1U : 0U;
+}
+
+uint8_t webscene_engine_set_dom_highlight(
+    webscene_engine* engine,
+    uint32_t node_id)
+{
+    return engine != nullptr && engine->set_dom_highlight(node_id) ? 1U : 0U;
 }
 
 const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine)

@@ -433,7 +433,8 @@ public sealed partial class MainPage : Page
                 view.OpenV8InspectorSession,
                 () => view.Source,
                 options,
-                title: title);
+                title: title,
+                domInspector: view);
             try
             {
                 await host.StartAsync(cancellationToken);

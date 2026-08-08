@@ -44,6 +44,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
     private readonly Func<bool, INativeV8InspectorSession> _openSession;
     private readonly Func<string?> _targetUrl;
     private readonly WebSceneV8InspectorOptions _options;
+    private readonly INativeDomInspector? _domInspector;
     private readonly string _targetId;
     private readonly string _targetPathSegment;
     private readonly string _title;
@@ -60,13 +61,15 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         Func<string?> targetUrl,
         WebSceneV8InspectorOptions options,
         string targetId = "webscene-v8",
-        string title = "WebScene V8")
+        string title = "WebScene V8",
+        INativeDomInspector? domInspector = null)
     {
         ArgumentNullException.ThrowIfNull(openSession);
         _openSession = _ => openSession();
         _targetUrl = targetUrl
             ?? throw new ArgumentNullException(nameof(targetUrl));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _domInspector = domInspector;
         _targetId = string.IsNullOrWhiteSpace(targetId)
             ? throw new ArgumentException("A target id is required.", nameof(targetId))
             : targetId;
@@ -79,13 +82,15 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         Func<string?> targetUrl,
         WebSceneV8InspectorOptions options,
         string targetId = "webscene-v8",
-        string title = "WebScene V8")
+        string title = "WebScene V8",
+        INativeDomInspector? domInspector = null)
     {
         _openSession = openSession
             ?? throw new ArgumentNullException(nameof(openSession));
         _targetUrl = targetUrl
             ?? throw new ArgumentNullException(nameof(targetUrl));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _domInspector = domInspector;
         _targetId = string.IsNullOrWhiteSpace(targetId)
             ? throw new ArgumentException("A target id is required.", nameof(targetId))
             : targetId;
@@ -358,8 +363,11 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
             _options.KeepAliveInterval)
             .ConfigureAwait(false);
         using var socket = accepted.WebSocket;
-        await using var inspector = Interlocked.Exchange(ref _waitingSession, null)
+        var nativeInspector = Interlocked.Exchange(ref _waitingSession, null)
             ?? _openSession(false);
+        await using var inspector = new WebSceneCdpSession(
+            nativeInspector,
+            _domInspector);
         using var connectionShutdown = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
         var receive = ReceiveBrowserMessagesAsync(

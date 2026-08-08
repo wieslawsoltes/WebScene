@@ -75,7 +75,11 @@ try
     foreach (var inspectorExport in new[]
              {
                  "webscene_engine_inspector_connect_v3",
-                 "webscene_engine_inspector_take_message"
+                 "webscene_engine_inspector_take_message",
+                 "webscene_engine_acquire_dom_snapshot",
+                 "webscene_dom_snapshot_release",
+                 "webscene_engine_set_dom_inspect_mode",
+                 "webscene_engine_set_dom_highlight"
              })
     {
         if (!NativeLibrary.TryGetExport(library, inspectorExport, out _))

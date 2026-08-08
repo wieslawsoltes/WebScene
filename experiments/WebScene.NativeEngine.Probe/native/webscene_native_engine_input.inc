@@ -13,6 +13,39 @@
         case WEBSCENE_INPUT_POINTER_UP:
             pointer_x_ = event.x;
             pointer_y_ = event.y;
+            if (dom_inspect_mode_.load(std::memory_order_acquire)) {
+                if (document_.dirty()) {
+                    document_.layout(
+                        static_cast<float>(viewport_width_),
+                        static_cast<float>(viewport_height_));
+                }
+                auto* inspected = document_.hit_test(
+                    document_.body(),
+                    static_cast<float>(event.x),
+                    static_cast<float>(event.y));
+                const auto inspected_id = inspected == nullptr ? 0U : inspected->id;
+                const auto highlight_changed = dom_highlighted_node_id_.exchange(
+                    inspected_id,
+                    std::memory_order_acq_rel) != inspected_id;
+                auto selection_changed = false;
+                if (event.kind == WEBSCENE_INPUT_POINTER_DOWN
+                    && inspected_id != 0U) {
+                    dom_selected_node_id_.store(
+                        inspected_id,
+                        std::memory_order_release);
+                    dom_selection_sequence_.fetch_add(
+                        1U,
+                        std::memory_order_acq_rel);
+                    selection_changed = true;
+                }
+                if (highlight_changed || selection_changed) {
+                    checkpoint_requested_.store(true, std::memory_order_release);
+                }
+                current_cursor_.store(
+                    WEBSCENE_CURSOR_CROSSHAIR,
+                    std::memory_order_release);
+                break;
+            }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
             if (runtime_ != nullptr && !runtime_->dispatch_input(event)) {
                 script_errors_.fetch_add(1, std::memory_order_relaxed);

@@ -1,8 +1,8 @@
 # V8 Inspector and Chrome DevTools debugging
 
 The WebScene production runtime exposes its dedicated native V8 isolate through the V8 Inspector
-Protocol. The transport is raw CDP: WebScene does not reinterpret debugger
-commands or events, so Chrome DevTools and the CDP Inspector app see the same
+Protocol. V8-owned domains use a raw CDP path: WebScene does not reinterpret
+their commands or events, so Chrome DevTools and the CDP Inspector app see the same
 script IDs, execution contexts, call frames, scopes, breakpoints, exceptions,
 live-edit results, and WebAssembly metadata produced by V8.
 
@@ -79,9 +79,31 @@ var options = new WebSceneV8InspectorOptions
 await using var inspector = new WebSceneV8InspectorHost(
     view.OpenV8InspectorSession,
     () => view.Source,
-    options);
+    options,
+    domInspector: view);
 await inspector.StartAsync();
 ```
+
+The optional `domInspector` capability adds renderer-owned `DOM`, `CSS`, and
+`Overlay` domains to the same connection. It exposes immutable native-worker
+snapshots of the authored tree (including React output), stable document-local
+node ids, attributes, common computed properties, resolved box geometry,
+highlighting, and hover/click picking. WebScene reserves CDP node id `1` for
+`#document`; authored native ids map deterministically to `nativeId + 1`, and
+renderer-inline text receives stable snapshot-only ids. Navigation invalidates
+the document, while later mutations emit `DOM.documentUpdated`.
+
+The initial Elements slice supports `DOM.getDocument`, `DOM.describeNode`,
+`DOM.getAttributes`, `DOM.getNodeForLocation`, `DOM.getBoxModel`,
+`DOM.resolveNode`, `CSS.getComputedStyleForNode`,
+`CSS.getMatchedStylesForNode`, `Overlay.highlightNode`,
+`Overlay.hideHighlight`, and `Overlay.setInspectMode`. The CDP Inspector's
+legacy `DOM.highlightNode`/`DOM.hideHighlight` aliases are accepted too.
+Minimal Accessibility tree and selected-node responses populate the Inspector's
+accessibility details. Editing attributes/styles and complete
+Accessibility/event-listener projection are follow-up work; unsupported
+renderer-domain commands return a CDP method error instead of being misrouted
+to V8.
 
 Then:
 
@@ -193,7 +215,10 @@ expandable V8 object ID. The same native session starts and stops V8 CPU and
 allocation sampling, validates returned profile trees, and reads live heap
 usage. Managed integration coverage starts the real discovery/WebSocket host,
 fetches `/json/list`, opens the authenticated endpoint with `ClientWebSocket`,
-and verifies complete CDP messages in both directions. ABI coverage also opens
+exercises DOM/CSS/Overlay routing and picker notification, and proves Runtime
+messages retain their exact input bytes. A bundled React component test verifies
+that worker snapshots expose React-authored nodes, computed layout, stable
+identity, and a later DOM mutation. ABI coverage also opens
 the pull-based session, verifies short-buffer retention and exact-size copies,
 forces its bounded output queue to report overflow, and confirms disconnect
 releases all queued output. A Release Avalonia host run validates Runtime and

@@ -20,8 +20,9 @@ dashboards, editors, diagramming surfaces, kiosks, and JavaScript UI plug-ins.
 - Web-authored surfaces compose inside native application windows and lifecycle.
 - Host capabilities are explicit and can be exposed through typed TypeScript-to-.NET
   interop rather than a browser-wide bridge.
-- Dedicated native V8 isolates expose raw Inspector/CDP sessions and an optional
-  Chrome discovery host; see [V8 Inspector debugging](docs/v8-inspector-debugging.md).
+- Dedicated native V8 isolates expose raw debugging domains plus native
+  DOM/CSS/Overlay element inspection through an optional Chrome discovery host;
+  see [V8 Inspector debugging](docs/v8-inspector-debugging.md).
 - Compatibility is stated as a versioned component profile and measured with a curated
   WPT subset plus product-scale fixtures.
 

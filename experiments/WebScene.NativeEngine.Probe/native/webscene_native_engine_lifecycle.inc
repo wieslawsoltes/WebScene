@@ -183,6 +183,55 @@
             std::memory_order_acquire);
     }
 
+    std::shared_ptr<const dom_snapshot> acquire_dom_snapshot()
+    {
+        const auto was_enabled = dom_diagnostics_enabled_.exchange(
+            true,
+            std::memory_order_acq_rel);
+        auto snapshot = std::atomic_load_explicit(
+            &latest_dom_snapshot_,
+            std::memory_order_acquire);
+        if (!was_enabled || !snapshot) {
+            checkpoint_requested_.store(true, std::memory_order_release);
+            signal_worker();
+        }
+        return snapshot;
+    }
+
+    bool set_dom_inspect_mode(bool enabled)
+    {
+        dom_diagnostics_enabled_.store(true, std::memory_order_release);
+        const auto mode_changed = dom_inspect_mode_.exchange(
+            enabled,
+            std::memory_order_acq_rel) != enabled;
+        auto highlight_changed = false;
+        if (!enabled) {
+            highlight_changed = dom_highlighted_node_id_.exchange(
+                0U,
+                std::memory_order_acq_rel) != 0U;
+            current_cursor_.store(
+                WEBSCENE_CURSOR_DEFAULT,
+                std::memory_order_release);
+        }
+        if (mode_changed || highlight_changed) {
+            checkpoint_requested_.store(true, std::memory_order_release);
+            signal_worker();
+        }
+        return true;
+    }
+
+    bool set_dom_highlight(uint32_t node_id)
+    {
+        dom_diagnostics_enabled_.store(true, std::memory_order_release);
+        if (dom_highlighted_node_id_.exchange(
+                node_id,
+                std::memory_order_acq_rel) != node_id) {
+            checkpoint_requested_.store(true, std::memory_order_release);
+            signal_worker();
+        }
+        return true;
+    }
+
     bool execute_script(
         const char* source,
         size_t source_length,

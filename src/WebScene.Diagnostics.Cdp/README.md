@@ -1,7 +1,10 @@
 # WebScene.Diagnostics.Cdp
 
-This optional package forwards WebScene's native V8 Inspector Protocol session
-unchanged through a Chrome-compatible discovery and WebSocket endpoint.
+This optional package combines WebScene's renderer-owned Elements domains with
+its native V8 Inspector session behind one Chrome-compatible discovery and
+WebSocket endpoint. Runtime, Debugger, Profiler, and other V8 messages are
+forwarded byte-for-byte; only DOM, CSS, and Overlay commands are handled by
+WebScene's native DOM diagnostics.
 
 ```csharp
 var options = new WebSceneV8InspectorOptions
@@ -22,7 +25,8 @@ await view.LoadAsync(
         inspector = new WebSceneV8InspectorHost(
             readyView.OpenV8InspectorSession,
             () => readyView.Source,
-            options);
+            options,
+            domInspector: readyView);
         await inspector.StartAsync(cancellationToken);
     },
     Timeout.InfiniteTimeSpan);
@@ -35,6 +39,13 @@ engine worker, so the UI dispatcher, discovery endpoint, and window remain
 responsive. The raw session interface lives in `WebScene.Backend.Abstractions`,
 so the same host works with both Avalonia and Uno native views. Dispose
 `inspector` during application shutdown.
+
+Passing `domInspector: view` enables the Elements tree, computed style, box
+model, node highlighting, and the hover/click element picker. Snapshots are
+produced on the engine worker from the authored DOM; the host never walks live
+V8 objects or an Avalonia/Uno visual tree. Native ids remain stable until the
+next navigation, and DOM mutations publish `DOM.documentUpdated` so clients
+refresh React-rendered content.
 
 Open `chrome://inspect`, add `localhost:9229` under **Discover network
 targets**, and select **inspect** for the WebScene target. The generated access

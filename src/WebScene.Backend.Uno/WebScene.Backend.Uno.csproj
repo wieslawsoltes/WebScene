@@ -44,5 +44,6 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropValues.cs" Link="NativeInteropValues.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneRuntime.cs" Link="NativeWebSceneRuntime.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeV8InspectorSession.cs" Link="NativeV8InspectorSession.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeDomInspector.cs" Link="NativeDomInspector.cs" />
   </ItemGroup>
 </Project>

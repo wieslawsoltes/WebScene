@@ -14,6 +14,7 @@
         scene_publication_attempts_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_started = std::chrono::steady_clock::now();
         auto next = std::make_shared<scene>();
+        std::shared_ptr<dom_snapshot> next_dom_snapshot;
         next->commands.reserve(command_count_ + 4U);
 
         uint64_t hash = 1469598103934665603ULL;
@@ -83,6 +84,67 @@
                 next->commands,
                 next->canvas_strings,
                 next->canvas_string_bytes);
+            if (dom_diagnostics_enabled_.load(std::memory_order_acquire)) {
+                next_dom_snapshot = std::make_shared<dom_snapshot>();
+                next_dom_snapshot->document_revision = document_.scene_generation();
+                next_dom_snapshot->document_epoch = document_.document_epoch();
+                next_dom_snapshot->highlighted_node_id =
+                    dom_highlighted_node_id_.load(std::memory_order_acquire);
+                next_dom_snapshot->selected_node_id =
+                    dom_selected_node_id_.load(std::memory_order_acquire);
+                next_dom_snapshot->selection_sequence =
+                    dom_selection_sequence_.load(std::memory_order_acquire);
+                document_.build_dom_snapshot(
+                    next_dom_snapshot->nodes,
+                    next_dom_snapshot->attributes,
+                    next_dom_snapshot->properties,
+                    next_dom_snapshot->string_bytes);
+                const auto highlighted = std::find_if(
+                    next_dom_snapshot->nodes.begin(),
+                    next_dom_snapshot->nodes.end(),
+                    [&](const auto& node) {
+                        return node.node_id
+                            == next_dom_snapshot->highlighted_node_id;
+                    });
+                if (highlighted != next_dom_snapshot->nodes.end()
+                    && highlighted->box.width > 0
+                    && highlighted->box.height > 0) {
+                    const auto& box = highlighted->box;
+                    const auto append_overlay = [&](float x, float y, float width,
+                                                    float height, uint32_t rgba) {
+                        if (width <= 0 || height <= 0) return;
+                        next->commands.push_back(webscene_scene_command{
+                            1U, 0U, x, y, width, height, rgba, 0U,
+                            0, 0, 0, 0, 0});
+                    };
+                    append_overlay(
+                        box.x - box.margin_left,
+                        box.y - box.margin_top,
+                        box.width + box.margin_left + box.margin_right,
+                        box.height + box.margin_top + box.margin_bottom,
+                        0xF5C54230U);
+                    append_overlay(
+                        box.x,
+                        box.y,
+                        box.width,
+                        box.height,
+                        0xF2B13445U);
+                    append_overlay(
+                        box.x + box.border_left,
+                        box.y + box.border_top,
+                        std::max(0.0F, box.width - box.border_left - box.border_right),
+                        std::max(0.0F, box.height - box.border_top - box.border_bottom),
+                        0x8BC34A45U);
+                    append_overlay(
+                        box.x + box.border_left + box.padding_left,
+                        box.y + box.border_top + box.padding_top,
+                        std::max(0.0F, box.width - box.border_left - box.border_right
+                            - box.padding_left - box.padding_right),
+                        std::max(0.0F, box.height - box.border_top - box.border_bottom
+                            - box.padding_top - box.padding_bottom),
+                        0x42A5F555U);
+                }
+            }
             last_scene_build_nanoseconds_.store(
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - scene_build_started).count()),
@@ -366,6 +428,12 @@
             &latest_,
             std::move(published_scene),
             std::memory_order_release);
+        if (next_dom_snapshot) {
+            std::atomic_store_explicit(
+                &latest_dom_snapshot_,
+                std::shared_ptr<const dom_snapshot>(std::move(next_dom_snapshot)),
+                std::memory_order_release);
+        }
         published_scenes_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_nanoseconds =
             static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(

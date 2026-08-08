@@ -716,6 +716,7 @@ dom_node* native_document::hit_test_node(
 
 void native_document::clear()
 {
+    ++document_epoch_;
     shadow_dom_storage_.reset();
     nodes_.clear();
     native_id_index_.clear();

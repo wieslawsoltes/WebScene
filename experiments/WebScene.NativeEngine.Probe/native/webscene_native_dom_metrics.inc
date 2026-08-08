@@ -578,6 +578,11 @@ uint64_t native_document::scene_generation() const noexcept
     return scene_generation_;
 }
 
+uint64_t native_document::document_epoch() const noexcept
+{
+    return document_epoch_;
+}
+
 void native_document::mark_scene_changed() noexcept
 {
     ++scene_generation_;

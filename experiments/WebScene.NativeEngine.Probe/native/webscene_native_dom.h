@@ -1271,6 +1271,11 @@ public:
         std::vector<webscene_canvas_command>& canvas_commands,
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes) const;
+    void build_dom_snapshot(
+        std::vector<webscene_dom_node_snapshot>& nodes,
+        std::vector<webscene_dom_attribute_snapshot>& attributes,
+        std::vector<webscene_dom_property_snapshot>& properties,
+        std::vector<char>& string_bytes) const;
 
     uint64_t layout_passes() const noexcept;
     size_t node_count() const noexcept;
@@ -1281,6 +1286,7 @@ public:
     std::string describe_busiest_canvas() const;
     layout_rect busiest_canvas_layout() const noexcept;
     uint64_t scene_generation() const noexcept;
+    uint64_t document_epoch() const noexcept;
     void mark_scene_changed() noexcept;
     bool dirty() const noexcept;
     void mark_dirty() noexcept;
@@ -1478,6 +1484,7 @@ private:
     bool dirty_{true};
     bool globally_dirty_{true};
     uint64_t scene_generation_{1};
+    uint64_t document_epoch_{1};
     std::vector<dom_node*> out_of_flow_geometry_dirty_roots_;
 };
 

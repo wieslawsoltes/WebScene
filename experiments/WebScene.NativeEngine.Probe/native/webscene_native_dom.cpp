@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <iomanip>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -921,6 +922,7 @@ uint32_t append_scene_string(
 #include "webscene_native_dom_layout.inc"
 #include "webscene_native_dom_scene.inc"
 #include "webscene_native_dom_metrics.inc"
+#include "webscene_native_dom_snapshot.inc"
 #include "webscene_native_dom_animations.inc"
 #include "webscene_native_dom_css_values.inc"
 } // namespace webscene_native

@@ -1222,3 +1222,124 @@ void test_hidden_document_defers_presentation_work()
         "restored visibility did not publish the deferred document state");
     webscene_engine_destroy(engine);
 }
+void test_react_component_dom_is_inspectable_and_refreshes_after_mutation()
+{
+    const auto repository_root = std::filesystem::path(__FILE__)
+        .parent_path().parent_path().parent_path().parent_path();
+    const auto bundle_path = repository_root
+        / "samples/components/ComponentHost.Basic/dist/main.js";
+    std::ifstream stream(bundle_path, std::ios::binary);
+    require(stream.good(), "React Elements fixture bundle was not found");
+    std::string bundle{
+        std::istreambuf_iterator<char>(stream),
+        std::istreambuf_iterator<char>()};
+
+    auto* engine = webscene_engine_create(64);
+    require(engine != nullptr, "React Elements fixture engine creation failed");
+    const auto release_engine = std::unique_ptr<webscene_engine, decltype(&webscene_engine_destroy)>(
+        engine, webscene_engine_destroy);
+    const auto acknowledge_latest = [&] {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine)) {
+            static_cast<void>(webscene_scene_acknowledge(scene));
+            webscene_scene_release(scene);
+        }
+    };
+    acknowledge_latest();
+    if (const auto* initial_snapshot = webscene_engine_acquire_dom_snapshot(engine)) {
+        webscene_dom_snapshot_release(initial_snapshot);
+    }
+    execute_and_wait(engine, bundle, "react-elements-bundle.js");
+    const auto mounted = evaluate(
+        engine,
+        "mount(); true;",
+        "react-elements-mount.js");
+    require(mounted == "true", "React Elements fixture did not mount");
+
+    uint32_t heading_id = 0U;
+    uint64_t mounted_revision = 0U;
+    for (auto attempt = 0; attempt < 500 && heading_id == 0U; ++attempt) {
+        acknowledge_latest();
+        const auto* snapshot = webscene_engine_acquire_dom_snapshot(engine);
+        if (snapshot != nullptr) {
+            const auto read = [&](webscene_dom_string_ref value) {
+                require(
+                    static_cast<uint64_t>(value.byte_offset) + value.byte_length
+                        <= snapshot->string_byte_count,
+                    "React DOM snapshot contained an invalid string slice");
+                return std::string(
+                    snapshot->string_bytes + value.byte_offset,
+                    value.byte_length);
+            };
+            for (uint32_t index = 0; index < snapshot->node_count; ++index) {
+                const auto& node = snapshot->nodes[index];
+                if (read(node.node_name) == "h1") {
+                    heading_id = node.node_id;
+                    mounted_revision = snapshot->document_revision;
+                    require(
+                        node.property_count > 20U && node.box.width > 0,
+                        "React heading did not expose computed style and box geometry");
+                    break;
+                }
+            }
+            webscene_dom_snapshot_release(snapshot);
+        }
+        if (heading_id == 0U) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    require(heading_id != 0U, "React-authored heading was absent from the DOM snapshot");
+    acknowledge_latest();
+
+    require(
+        evaluate(
+            engine,
+            "document.querySelector('h1').textContent='Inspected React'; true;",
+            "react-elements-mutation.js") == "true",
+        "React Elements mutation fixture failed");
+    auto mutation_observed = false;
+    uint64_t observed_revision = 0U;
+    uint32_t observed_text_parent_id = 0U;
+    std::string observed_text;
+    for (auto attempt = 0; attempt < 500 && !mutation_observed; ++attempt) {
+        acknowledge_latest();
+        const auto* snapshot = webscene_engine_acquire_dom_snapshot(engine);
+        if (snapshot != nullptr) {
+            const auto read = [&](webscene_dom_string_ref value) {
+                return std::string(
+                    snapshot->string_bytes + value.byte_offset,
+                    value.byte_length);
+            };
+            for (uint32_t index = 0; index < snapshot->node_count; ++index) {
+                const auto& node = snapshot->nodes[index];
+                if (node.node_type == 3U) {
+                    const auto text = read(node.node_value);
+                    if (node.parent_id == heading_id) {
+                        observed_revision = snapshot->document_revision;
+                        observed_text_parent_id = node.parent_id;
+                        observed_text = text;
+                    }
+                    if (text == "Inspected React") {
+                        observed_revision = snapshot->document_revision;
+                        observed_text_parent_id = node.parent_id;
+                        observed_text = text;
+                        mutation_observed = node.parent_id == heading_id
+                            && snapshot->document_revision > mounted_revision;
+                        break;
+                    }
+                }
+            }
+            webscene_dom_snapshot_release(snapshot);
+        }
+        if (!mutation_observed) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    require(
+        mutation_observed,
+        "React DOM mutation did not preserve node identity and advance the snapshot"
+            " (heading=" + std::to_string(heading_id)
+            + ", parent=" + std::to_string(observed_text_parent_id)
+            + ", mounted-revision=" + std::to_string(mounted_revision)
+            + ", observed-revision=" + std::to_string(observed_revision)
+            + ", text='" + observed_text + "')");
+}

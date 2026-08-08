@@ -13,7 +13,8 @@ namespace WebScene.Backends.Avalonia.Native;
 /// The native engine owns navigation, DOM, JavaScript, CSS, layout, and scene
 /// production; the attached Avalonia surface projects those scenes with Skia.
 /// </summary>
-public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
+public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable,
+    INativeDomInspector
 {
     private static long s_nextContextId;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
@@ -112,6 +113,54 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 "The native WebScene document is not loaded.");
         }
         return NativeWebSceneApi.OpenInspectorSession(engine, waitForDebugger);
+    }
+
+    public async ValueTask<NativeDomSnapshot> GetDomSnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The native WebScene document is not loaded.");
+        }
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = NativeWebSceneApi.TryGetDomSnapshot(engine);
+            if (snapshot is not null) return snapshot;
+            await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+        }
+        throw new TimeoutException(
+            "The native WebScene DOM snapshot was not published within two seconds.");
+    }
+
+    public ValueTask SetDomInspectModeAsync(
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero || !NativeWebSceneApi.SetDomInspectMode(engine, enabled))
+        {
+            throw new InvalidOperationException(
+                "The native WebScene DOM picker is unavailable.");
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask SetDomHighlightAsync(
+        uint nativeNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var engine = Volatile.Read(ref _engine);
+        if (engine == IntPtr.Zero || !NativeWebSceneApi.SetDomHighlight(engine, nativeNodeId))
+        {
+            throw new InvalidOperationException(
+                "The native WebScene DOM highlight is unavailable.");
+        }
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>

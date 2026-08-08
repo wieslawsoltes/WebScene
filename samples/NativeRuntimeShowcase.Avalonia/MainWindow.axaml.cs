@@ -316,7 +316,8 @@ public sealed partial class MainWindow : Window
                 view.OpenV8InspectorSession,
                 () => view.Source,
                 options,
-                title: title);
+                title: title,
+                domInspector: view);
             try
             {
                 await host.StartAsync(cancellationToken);
