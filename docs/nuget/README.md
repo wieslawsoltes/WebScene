@@ -19,13 +19,14 @@ fallback.
   from reviewed TypeScript declarations.
 - `WebScene.Sdk` — component manifest, asset, lifecycle, diagnostics, and host-bridge
   contracts.
+- `WebScene.Sdk.Avalonia` — reusable native Avalonia component host, isolated package
+  resource policy, lifecycle, recovery, diagnostics, and capability bridge wiring.
 - `WebScene` — a separate HTML-inspired Avalonia authoring layer.
 
 `WebScene.JavaScript`, `JavaScript.Avalonia.ClearScript`,
-`WebScene.Sdk.Avalonia`, and `WebScene.Templates` are discontinued. The former
-managed JavaScript/DOM host is not shipped as source or as a package. A reusable
-component host and templates will be published again only after a native
-implementation exists.
+and `WebScene.Templates` are discontinued. The former managed JavaScript/DOM host is
+not shipped as source or as a package. `WebScene.Sdk.Avalonia` has returned as a
+native-only implementation; application templates remain future work.
 
 ## Native runtime packages
 

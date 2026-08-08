@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="WebScene.Backend.Avalonia"
                       Version="$(WebScenePackageVersion)" />
+    <PackageReference Include="WebScene.Sdk.Avalonia"
+                      Version="$(WebScenePackageVersion)" />
     <PackageReference Include="WebScene.NativeEngine.Runtime.$(RuntimeIdentifier)"
                       Version="$(WebScenePackageVersion)" />
   </ItemGroup>
