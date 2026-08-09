@@ -112,6 +112,22 @@ RID-specific runtime packages.
 See [the native engine design](docs/architecture/native-v8-scene-engine.md) and
 [backend status](docs/backends.md).
 
+## Documentation
+
+The DocFX documentation includes host setup, lifecycle, and .NET-to-JavaScript
+interop guides for both presenters:
+
+- [Use WebScene with Avalonia](docfx/articles/avalonia.md)
+- [Use WebScene with Uno Platform](docfx/articles/uno.md)
+- [.NET and JavaScript interop](docfx/articles/javascript-interop.md)
+- [Packages and deployment](docfx/articles/packages-and-deployment.md)
+- [Content and resource loading](docfx/articles/content-and-resources.md)
+- [Lifecycle and diagnostics](docfx/articles/lifecycle-and-diagnostics.md)
+- [Compatibility and security](docfx/articles/compatibility-and-security.md)
+- [Troubleshooting](docfx/articles/troubleshooting.md)
+
+Build the documentation site locally with `./build-docs.sh`.
+
 ## Packages
 
 The repository produces these .NET packages:
