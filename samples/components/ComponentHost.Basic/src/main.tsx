@@ -24,7 +24,7 @@ function App(): React.ReactNode {
     setTimeout(() => setTimerState('Timer completed'), 350);
   };
   return <main style={shellStyle}>
-    <SampleHeader eyebrow="Component Profile 1" title="Basic component host" detail="DOM, CSS, pointer events, timers, SVG and Canvas projected to Avalonia—without a WebView." />
+    <SampleHeader eyebrow="Component Profile 1" title="Basic component host" detail="DOM, CSS, pointer events, timers, SVG and Canvas projected to Avalonia or Uno—without a WebView." />
     <div style={rowStyle}>
       <Badge tone="success">Mounted</Badge>
       <Badge>Offline package</Badge>

@@ -12,8 +12,8 @@ and SVG implementation; and immutable scenes are presented by the native host UI
 
 | Host | Status | Start here |
 | --- | --- | --- |
-| Avalonia | Reference presenter and recommended integration | [Use WebScene with Avalonia](articles/avalonia.md) |
-| Uno Platform | Skia presenter proof; not yet production-ready | [Use WebScene with Uno Platform](articles/uno.md) |
+| Avalonia | Supported reference presenter | [Use WebScene with Avalonia](articles/avalonia.md) |
+| Uno Platform | Supported Skia desktop presenter | [Use WebScene with Uno Platform](articles/uno.md) |
 
 Both presenters expose the same native JavaScript boundary. Use
 [`EvaluateTextAsync`](articles/javascript-interop.md#evaluate-small-diagnostic-expressions)

@@ -32,7 +32,7 @@ been removed.
 ## Current status
 
 WebScene is pre-production. The native architecture, runtime packages, deterministic
-test runner, Avalonia presenter, Uno proof, typed interop generator, and substantial
+test runner, supported Avalonia and Uno presenters, typed interop generator, and substantial
 Canvas/SVG/component workloads exist. Compatibility and packaging are advancing, but
 arbitrary websites and arbitrary React applications are not supported.
 
@@ -53,11 +53,13 @@ Current reference applications include:
 - `samples/NativeRuntimeShowcase.Avalonia` — native runtime and scene presentation;
 - `samples/NativeMonacoEditor` — a demanding editor workload;
 - `samples/NativeTradingViewTerminal` — a Canvas/SVG-heavy application workload;
-- `samples/NativeRuntimeShowcase.Uno` — a second-host proof.
+- `samples/NativeRuntimeShowcase.Uno` — the Uno Skia component and runtime showcase.
 
-Avalonia is the reference presenter. Uno is a proof, not yet a production-ready
-drop-in backend. WPF, WinUI, Flutter, and other presenter integrations are roadmap work
-and should not be presented as currently supported products.
+Avalonia is the reference presenter. Uno Platform is a first-class supported presenter
+for Skia desktop applications on the published native RIDs. Both hosts expose the same
+packaged component lifecycle through framework-specific SDK controls. WPF, WinUI,
+Flutter, and other presenter integrations are roadmap work and should not be presented
+as currently supported products.
 
 ## Native runtime workloads
 
@@ -96,7 +98,7 @@ V8 + DOM + CSS + layout + events + Canvas/SVG
 immutable, reference-counted scene diffs
             |
             +----> Avalonia presenter
-            +----> Uno proof
+            +----> Uno Skia presenter
             +----> headless/conformance renderer
 ```
 
@@ -140,7 +142,8 @@ The repository produces these .NET packages:
   `WebScene.JavaScript.Interop.Generator` for typed host interop;
 - `WebScene.Sdk` for component manifests, assets, lifecycle, and host-bridge
   contracts;
-- `WebScene.Sdk.Avalonia` for the reusable native `WebSceneComponentHost`; and
+- `WebScene.Sdk.Avalonia` and `WebScene.Sdk.Uno` for framework-native reusable
+  `WebSceneComponentHost` controls; and
 - `WebScene` for the separate Avalonia HTML-inspired authoring layer.
 
 The native engine is supplied by one matching RID package:
@@ -226,8 +229,8 @@ The priority order is:
 2. Harden the candidate Custom Elements and Shadow DOM slices against broader unchanged
    WPT and representative packaged components, promoting only behavior with complete
    cascade/layout/input/paint evidence.
-3. Harden the reusable native Avalonia component host with product-scale recovery,
-   typed host-call, and multi-instance fixtures.
+3. Harden the reusable native Avalonia and Uno component hosts with product-scale
+   recovery, typed host-call, and multi-instance fixtures.
 4. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.
 5. Expand non-gating WPT discovery and promote valuable browser behavior into the
    bounded release profile.
@@ -244,7 +247,8 @@ not a general browser and not blanket website compatibility.
 | `experiments/WebScene.NativeEngine.Probe` | Native V8/DOM/CSS/layout/scene engine and C ABI |
 | `src/WebScene.Backend.Avalonia` | Avalonia presenter and native scene integration |
 | `src/WebScene.Sdk.Avalonia` | Reusable native Avalonia component host |
-| `src/WebScene.Backend.Uno` | Uno presenter proof |
+| `src/WebScene.Backend.Uno` | Supported Uno Skia desktop presenter |
+| `src/WebScene.Sdk.Uno` | Reusable native Uno component host |
 | `src/WebScene.*` | Portable contracts, semantics, SDK, and typed interop |
 | `packaging/WebScene.NativeEngine.Runtime` | RID runtime packaging |
 | `tests/WebPlatformSubset` | Native-only component profile and WPT runner |

@@ -101,7 +101,8 @@ The base document must be an absolute URI. Preserve the bundle directory structu
 publish output and match filename casing on Linux.
 
 Remember that `avares:` is Avalonia-only. Uno supports `file:`, `data:`, and HTTP(S)
-through its current proof loader. See [Content and resource loading](content-and-resources.md).
+through its native resource loader. Packaged components use the isolated loader owned
+by `WebScene.Sdk.Uno`. See [Content and resource loading](content-and-resources.md).
 
 ## Generated interop is unavailable
 

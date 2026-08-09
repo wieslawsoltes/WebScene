@@ -48,7 +48,8 @@ capacity claim.
 | Path | Purpose |
 | --- | --- |
 | [`src/WebScene.Backend.Avalonia`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Backend.Avalonia) | Reference presenter and native view |
-| [`src/WebScene.Backend.Uno`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Backend.Uno) | Uno Skia presenter proof |
+| [`src/WebScene.Backend.Uno`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Backend.Uno) | Supported Uno Skia desktop presenter |
+| [`src/WebScene.Sdk.Uno`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Sdk.Uno) | Reusable Uno packaged-component host |
 | [`src/WebScene.JavaScript.Interop`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.JavaScript.Interop) | Runtime-neutral interop contracts |
 | [`src/WebScene.Diagnostics.Cdp`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Diagnostics.Cdp) | Chrome discovery and Inspector forwarding |
 | [`experiments/WebScene.NativeEngine.Probe`](https://github.com/wieslawsoltes/WebScene/tree/main/experiments/WebScene.NativeEngine.Probe) | Native V8/DOM/CSS/layout/scene engine |

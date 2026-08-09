@@ -8,8 +8,8 @@ not a browser-conformance claim and not a sandbox for arbitrary content.
 | Area | Current position |
 | --- | --- |
 | Engine | One native V8/DOM/CSS/layout/Canvas/SVG engine; no managed fallback |
-| Avalonia | Reference presenter and current integration authority |
-| Uno | Skia presenter proof; not a production support claim |
+| Avalonia | Supported reference presenter |
+| Uno | Supported Skia desktop presenter on the published native RIDs |
 | Runtime platforms | `osx-arm64`, `linux-x64`, and `win-x64` |
 | Content | Trusted, packaged, application-owned UI |
 | General websites | Not supported as a product goal |
@@ -113,8 +113,8 @@ When documenting or marketing an integration:
 
 - Describe the license as the repository's custom source-available license with a
   Restricted Party Clause, not unqualified MIT or OSI-approved open source.
-- Describe Uno as an experimental proof until its missing conformance and platform
-  gates are complete.
+- Scope Uno support to Skia desktop and the published native RIDs; do not imply support
+  for Uno browser, mobile, or non-Skia targets.
 - Describe candidate web-platform behavior as candidate coverage, not supported browser
   compatibility.
 - State the exact RID and WebScene version behind performance or compatibility claims.

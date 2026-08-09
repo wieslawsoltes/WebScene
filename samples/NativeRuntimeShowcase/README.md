@@ -1,10 +1,11 @@
 # Native runtime showcase
 
-This showcase runs the hosted
+This showcase mounts the packaged `ComponentHost.Basic` React application through the
+framework-native component host. It also runs the hosted
 [`https://trading-terminal.tradingview-widget.com/`](https://trading-terminal.tradingview-widget.com/)
 application and a local, unchanged Monaco Editor bundle through WebScene's native
-V8/DOM/canvas runtime. The same experience is available through Avalonia, Uno
-Skia, and Flutter hosts.
+V8/DOM/canvas runtime. Uno starts in the packaged component host by default;
+Avalonia, Uno Skia, and Flutter retain the product-scale runtime workloads.
 
 The editor's .NET API is generated at build time from
 `NativeRuntimeShowcase.Interop/MonacoApi.d.ts`. Both hosts use the emitted
@@ -49,6 +50,8 @@ The Uno host also accepts `--document <absolute-uri-or-path>` to load an
 arbitrary local application through the same native runtime. This is the
 validation lane for source-mapped React applications; combine it with
 `--webscene-inspect-brk` to attach before the bundle executes.
+Use `--tradingview` to start Uno directly in the hosted TradingView workload or
+`--editor` to start in Monaco instead of the default packaged component.
 
 Run Flutter on macOS:
 

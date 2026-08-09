@@ -8,8 +8,10 @@ runtime identifier explicit.
 
 | Package | Use it for |
 | --- | --- |
-| `WebScene.Backend.Avalonia` | Reference Avalonia presenter and native runtime wrapper |
-| `WebScene.Backend.Uno` | Experimental Uno Skia presenter |
+| `WebScene.Backend.Avalonia` | Supported reference Avalonia presenter and native runtime wrapper |
+| `WebScene.Backend.Uno` | Supported Uno Skia desktop presenter and native runtime wrapper |
+| `WebScene.Sdk.Avalonia` | Packaged component host for Avalonia |
+| `WebScene.Sdk.Uno` | Packaged component host for Uno Platform |
 | `WebScene.NativeEngine.Runtime.<RID>` | V8, ICU data, bootstrap snapshot, ABI metadata, and native licenses for one RID |
 | `WebScene.JavaScript.Interop` | Runtime-neutral typed interop contracts |
 | `WebScene.JavaScript.Interop.Generator` | Build-time C# generation from reviewed TypeScript APIs |

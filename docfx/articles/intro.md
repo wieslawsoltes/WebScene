@@ -21,13 +21,13 @@ trusted HTML, CSS, and JavaScript
 
 ## Supported hosts
 
-`WebScene.Backend.Avalonia` is the reference presenter. It is the integration to use
-when evaluating WebScene for an Avalonia application.
+`WebScene.Backend.Avalonia` is the supported reference presenter for Avalonia
+applications.
 
-`WebScene.Backend.Uno` proves that the presenter boundary can support another XAML
-framework. It is currently experimental and requires Uno's Skia renderer. It does not
-yet carry a production support claim for complete input, text, IME, accessibility,
-resource, lifecycle, packaging, or conformance behavior.
+`WebScene.Backend.Uno` is a first-class supported presenter for Uno Platform Skia
+desktop applications. `WebScene.Sdk.Avalonia` and `WebScene.Sdk.Uno` expose equivalent
+`WebSceneComponentHost` controls over the same Component Profile 1 package, isolated
+resource, lifecycle, capability, and diagnostic contracts.
 
 WebScene currently publishes runtime packages for these application RIDs:
 
