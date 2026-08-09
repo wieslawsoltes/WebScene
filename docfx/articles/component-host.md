@@ -1,8 +1,8 @@
 # Package and host a component
 
-`WebSceneComponentHost` is the recommended Avalonia integration. It turns a
-Component Profile 1 package into one reusable XAML control and owns the repetitive
-runtime work:
+`WebSceneComponentHost` is the recommended Avalonia and Uno Platform integration. The
+framework-specific controls turn a Component Profile 1 package into one reusable XAML
+surface and own the repetitive runtime work:
 
 - manifest and asset validation;
 - compatibility preflight before authored code runs;
@@ -11,14 +11,11 @@ runtime work:
 - capability-gated calls from JavaScript to application services; and
 - state, failure, compatibility, and diagnostic reporting.
 
-The component host is currently available for Avalonia. Uno uses the lower-level
-presenter described in [Use WebScene with Uno Platform](uno.md).
-
 > [!IMPORTANT]
-> The native component-host implementation is available on `main`. Use a
-> `WebScene.Sdk.Avalonia` package version that contains the native
-> `WebSceneComponentHost` from PR #9. If that package has not been published yet,
-> consume the project from `main`; older packages do not provide this implementation.
+> The native component-host implementations are available on `main`. Until matching
+> `WebScene.Sdk.Avalonia` and `WebScene.Sdk.Uno` packages are published, consume the
+> corresponding project from `main`; older package versions may not contain these
+> controls.
 
 ## 1. Create a component package
 
@@ -96,6 +93,7 @@ native runtime. Replace `VERSION` with one version shared by all WebScene packag
 </PropertyGroup>
 
 <ItemGroup>
+  <!-- Use WebScene.Sdk.Uno in an Uno Skia desktop application. -->
   <PackageReference Include="WebScene.Sdk.Avalonia" Version="VERSION" />
   <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64"
                     Version="VERSION" />
@@ -103,12 +101,13 @@ native runtime. Replace `VERSION` with one version shared by all WebScene packag
 ```
 
 Use `linux-x64` or `win-x64` in both places for the other published desktop
-runtimes. `WebScene.Sdk.Avalonia` brings in the portable SDK and Avalonia presenter
-transitively.
+runtimes. `WebScene.Sdk.Avalonia` brings in the portable SDK and Avalonia presenter;
+`WebScene.Sdk.Uno` brings in the same SDK and the Uno Skia presenter.
 
 When consuming the repository before the package release, replace the SDK package
-reference with a project reference to
-`src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj`.
+reference with a project reference to the corresponding
+`src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj` or
+`src/WebScene.Sdk.Uno/WebScene.Sdk.Uno.csproj`.
 
 ## 3. Copy the package to application output
 
@@ -125,6 +124,8 @@ absolute. Preserve the package layout in build and publish output:
 
 ## 4. Add one XAML control
 
+Avalonia uses the Avalonia SDK namespace:
+
 ```xml
 <Window
     x:Class="WebSceneDemo.MainWindow"
@@ -137,13 +138,28 @@ absolute. Preserve the package layout in build and publish output:
 </Window>
 ```
 
+Uno uses the WinUI XAML namespace and Uno SDK host:
+
+```xml
+<Page
+    x:Class="WebSceneDemo.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ws="using:WebScene.Sdk.Uno">
+  <ws:WebSceneComponentHost
+      x:Name="ComponentHost"
+      PackagePath="components/StatusPanel" />
+</Page>
+```
+
 That is the complete basic integration. `AutoMount` defaults to `true`: attaching
 the control mounts the component and detaching it unmounts the component. The host
 finds the native library beside the application. For development builds only, set
 `NativeLibraryPath` or `WEBSCENE_NATIVE_ENGINE_LIBRARY` when the library is
 elsewhere.
 
-Dispose the host when its owning window or application lifetime ends:
+Dispose the host when its owning window, page, or application lifetime ends. For
+example, an Avalonia window can use:
 
 ```csharp
 Closed += async (_, _) => await ComponentHost.DisposeAsync();

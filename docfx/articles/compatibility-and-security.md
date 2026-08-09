@@ -8,8 +8,8 @@ not a browser-conformance claim and not a sandbox for arbitrary content.
 | Area | Current position |
 | --- | --- |
 | Engine | One native V8/DOM/CSS/layout/Canvas/SVG engine; no managed fallback |
-| Avalonia | Recommended Component Profile 1 host plus the reference presenter |
-| Uno | Skia presenter proof; not a production support claim |
+| Avalonia | First-class Component Profile 1 host plus the reference presenter |
+| Uno | First-class Component Profile 1 host for Skia desktop |
 | Runtime platforms | `osx-arm64`, `linux-x64`, and `win-x64` |
 | Content | Trusted, manifest-declared, packaged, application-owned UI |
 | General websites | Not supported as a product goal |
@@ -85,7 +85,7 @@ sandboxed browser technology.
 
 ## Host capability design
 
-For packaged Avalonia components, declare every required `host.*` capability in
+For packaged Avalonia and Uno components, declare every required `host.*` capability in
 `webscene-component.json` and register only the matching application handlers.
 `WebSceneComponentHost` denies a request when either half is missing. This is an
 authorization boundary inside a trusted in-process application, not a renderer

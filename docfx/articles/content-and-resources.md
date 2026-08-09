@@ -1,9 +1,9 @@
 # Content and resource loading
 
-For Avalonia applications, package content for `WebSceneComponentHost`. The host
-validates the manifest, performs compatibility preflight, and serves only declared
-assets from an isolated per-instance virtual origin. Direct document URLs remain
-available for advanced Avalonia use and for the current Uno presenter proof.
+For Avalonia and Uno applications, package content for the framework's
+`WebSceneComponentHost`. Both hosts validate the manifest, perform compatibility
+preflight, and serve only declared assets from an isolated per-instance virtual
+origin. Direct document URLs remain available for advanced presenter-level use.
 
 ## Recommended component package
 

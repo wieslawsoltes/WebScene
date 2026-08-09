@@ -1,6 +1,7 @@
 # .NET and JavaScript interop
 
-Avalonia's `WebSceneComponentHost` provides two complementary interop paths:
+The Avalonia and Uno `WebSceneComponentHost` controls provide two complementary
+interop paths:
 
 - a capability-gated, JSON-only bridge for component-to-application service requests;
 - the underlying native ABI 3 invoker for generated, typed .NET-to-JavaScript APIs.

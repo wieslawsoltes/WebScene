@@ -5,15 +5,11 @@ Uno Platform is a first-class WebScene host for Skia desktop applications.
 `WebScene.Sdk.Uno` provides the reusable WinUI `WebSceneComponentHost` for packaged
 Component Profile 1 applications.
 
-The reusable `WebSceneComponentHost` currently targets Avalonia only. Uno therefore
-uses the direct presenter API and owns document loading, native-library resolution,
-navigation, and disposal. Do not copy the Avalonia component-host XAML into an Uno
-project.
-
-> [!WARNING]
-> The Uno backend is a presenter proof, not a production-ready drop-in backend. It
-> requires Uno's Skia renderer and does not yet carry complete input, text, IME,
-> accessibility, resource, lifecycle, packaging, or conformance guarantees.
+The Uno host exposes the same package validation, compatibility preflight, virtual
+origin, lifecycle, capability bridge, interop, and diagnostics model as the Avalonia
+host through Uno-native WinUI XAML. It requires Uno's Skia renderer and currently
+supports desktop applications on `osx-arm64`, `linux-x64`, and `win-x64`; Uno browser,
+mobile, and non-Skia targets are outside this support statement.
 
 ## 1. Configure a Skia desktop project
 
@@ -130,10 +126,9 @@ using var interop = ComponentHost.View.CreateJavaScriptInvoker();
 ```
 
 The same typed interop API manifest, policy, and generated facade can be placed in a
-framework-neutral class library and used by both host projects. The component host's
-`webscene.host.*` capability bridge and Component Profile 1 mount lifecycle are not
-yet installed automatically by the Uno presenter. See
-[.NET and JavaScript interop](javascript-interop.md).
+framework-neutral class library and used by both host projects. The component host
+installs the same `webscene.host.*` capability bridge and Component Profile 1 mount
+lifecycle used by Avalonia. See [.NET and JavaScript interop](javascript-interop.md).
 
 ## Diagnostics and validation
 

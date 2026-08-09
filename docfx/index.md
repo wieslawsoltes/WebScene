@@ -4,9 +4,9 @@ WebScene embeds trusted, packaged web-authored UI in .NET applications without a
 WebView. JavaScript runs in V8; WebScene owns its bounded DOM, CSS, layout, Canvas,
 and SVG implementation; and immutable scenes are presented by the native host UI.
 
-For Avalonia, `WebSceneComponentHost` is the recommended entry point: add one XAML
-control, point it at a component package, and let the host validate, mount, isolate,
-diagnose, and unmount it.
+For Avalonia and Uno Platform, `WebSceneComponentHost` is the recommended entry point:
+add one framework-native XAML control, point it at a component package, and let the
+host validate, mount, isolate, diagnose, and unmount it.
 
 > [!IMPORTANT]
 > WebScene is pre-production and is not a browser or a security sandbox. Use it only
@@ -16,10 +16,10 @@ diagnose, and unmount it.
 
 | Host | Status | Start here |
 | --- | --- | --- |
-| Avalonia | Component host and reference presenter; recommended integration | [Package and host a component](articles/component-host.md) |
-| Uno Platform | Skia presenter proof; not yet production-ready | [Use WebScene with Uno Platform](articles/uno.md) |
+| Avalonia | First-class component host and reference presenter | [Use WebScene with Avalonia](articles/avalonia.md) |
+| Uno Platform | First-class component host for Skia desktop | [Use WebScene with Uno Platform](articles/uno.md) |
 
-The Avalonia component host also installs a capability-gated service bridge. Use that
+Both component hosts install the same capability-gated service bridge. Use that
 bridge for component-to-application requests, generated typed bindings for repeated
 .NET-to-JavaScript calls, and
 [`EvaluateTextAsync`](articles/javascript-interop.md#evaluate-small-diagnostic-expressions)

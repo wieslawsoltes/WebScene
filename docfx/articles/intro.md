@@ -11,8 +11,8 @@ trusted component package
  manifest + declared assets
              |
              v
- Avalonia WebSceneComponentHost
- validation + lifecycle + bridge
+ Avalonia or Uno WebSceneComponentHost
+  validation + lifecycle + bridge
              |
              v
     WebScene native engine
@@ -22,22 +22,21 @@ trusted component package
       immutable scenes
              |
              v
-   Avalonia reference presenter
+ Avalonia or Uno Skia presenter
 ```
 
 ## Supported hosts
 
-`WebScene.Sdk.Avalonia.WebSceneComponentHost` is the recommended application surface.
-It composes the portable Component Profile 1 SDK with the
-`WebScene.Backend.Avalonia` reference presenter. Most applications should use the
-component host; use `NativeWebSceneView` directly only for advanced document or
-backend-level integration.
+`WebScene.Sdk.Avalonia.WebSceneComponentHost` and
+`WebScene.Sdk.Uno.WebSceneComponentHost` are the recommended application surfaces.
+Both compose the portable Component Profile 1 SDK with a framework-native presenter
+and expose the same package, lifecycle, capability, interop, and diagnostics model.
+Use `NativeWebSceneView` or `UnoNativeWebSceneView` directly only for advanced document
+or backend-level integration.
 
-`WebScene.Backend.Uno` proves that the presenter boundary can support another XAML
-framework. It is currently experimental and requires Uno's Skia renderer. It does not
-yet carry a production support claim for complete input, text, IME, accessibility,
-resource, lifecycle, packaging, or conformance behavior. The reusable component host
-is not yet available for Uno.
+Avalonia remains the reference presenter. Uno is a first-class supported host for
+Skia desktop applications on the published native RIDs. This does not imply Uno
+browser, mobile, non-Skia, or general browser compatibility.
 
 WebScene currently publishes runtime packages for these application RIDs:
 
@@ -65,7 +64,7 @@ or content sandbox. Never use it as the trust boundary for untrusted HTML or Jav
 
 - [Package and host a component](component-host.md)
 - [Use WebScene with Avalonia](avalonia.md)
-- [Host a document in Uno Platform](uno.md)
+- [Use WebScene with Uno Platform](uno.md)
 - [Call JavaScript from .NET with generated bindings](javascript-interop.md)
 - [Package and publish an application](packages-and-deployment.md)
 - [Choose a content and resource strategy](content-and-resources.md)

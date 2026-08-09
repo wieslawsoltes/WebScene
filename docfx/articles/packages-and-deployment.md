@@ -9,9 +9,10 @@ explicit.
 | Package | Use it for |
 | --- | --- |
 | `WebScene.Sdk` | Component manifest, package, compatibility, lifecycle, diagnostics, and host-bridge contracts |
-| `WebScene.Sdk.Avalonia` | Recommended Avalonia `WebSceneComponentHost`; brings in the SDK and reference presenter |
+| `WebScene.Sdk.Avalonia` | First-class Avalonia `WebSceneComponentHost`; brings in the SDK and reference presenter |
+| `WebScene.Sdk.Uno` | First-class Uno Skia desktop `WebSceneComponentHost`; brings in the SDK and Uno presenter |
 | `WebScene.Backend.Avalonia` | Advanced direct Avalonia presenter and native runtime wrapper |
-| `WebScene.Backend.Uno` | Experimental Uno Skia presenter |
+| `WebScene.Backend.Uno` | Advanced direct Uno Skia desktop presenter and native runtime wrapper |
 | `WebScene.NativeEngine.Runtime.<RID>` | V8, ICU data, bootstrap snapshot, ABI metadata, and native licenses for one RID |
 | `WebScene.JavaScript.Interop` | Runtime-neutral typed interop contracts |
 | `WebScene.JavaScript.Interop.Generator` | Build-time C# generation from reviewed TypeScript APIs |
@@ -19,8 +20,8 @@ explicit.
 
 The portable `WebScene.Core`, `WebScene.Dom`, `WebScene.Css`, and
 `WebScene.Graphics` packages support backend and testing scenarios. A normal
-Avalonia application obtains these and `WebScene.Backend.Avalonia` transitively from
-`WebScene.Sdk.Avalonia`.
+application obtains these and its framework presenter transitively from
+`WebScene.Sdk.Avalonia` or `WebScene.Sdk.Uno`.
 
 `WebScene` is a separate HTML-inspired Avalonia authoring layer. It does not host the
 native V8 engine and should not be substituted for `WebScene.Backend.Avalonia` in these
@@ -34,9 +35,10 @@ guides.
 | Linux, x64 | `linux-x64` | `WebScene.NativeEngine.Runtime.linux-x64` |
 | Windows, x64 | `win-x64` | `WebScene.NativeEngine.Runtime.win-x64` |
 
-For example, a component-hosted Avalonia application targeting Windows x64 uses:
-Replace `VERSION` with a version that contains the native component host and use it
-for both references:
+For example, a component-hosted Avalonia application targeting Windows x64 uses the
+following. An Uno application substitutes `WebScene.Sdk.Uno` while retaining the same
+RID package. Replace `VERSION` with a version that contains the native component host
+and use it for both references:
 
 ```xml
 <PropertyGroup>
@@ -132,9 +134,10 @@ cleared.
 
 ## Development from source
 
-When consuming `main` before a component-host package is published, use a project
-reference to `src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj`. Do not install
-an older package with a different component-host implementation.
+When consuming `main` before component-host packages are published, use a project
+reference to `src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj` or
+`src/WebScene.Sdk.Uno/WebScene.Sdk.Uno.csproj`. Do not install an older package with a
+different component-host implementation.
 
 When consuming a locally built native engine instead of a runtime package, build the
 matching RID and set the host's `NativeLibraryPath` to the absolute output path:
