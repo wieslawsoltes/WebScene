@@ -72,6 +72,22 @@
     throwsTypeError(() => new ProcessingInstruction(), "ProcessingInstruction constructor");
   });
 
+  test("Attr wrappers preserve identity, namespace, ownership and detached values", () => {
+    const element = document.createElement("div");
+    const attribute = document.createAttributeNS("urn:webscene:test", "data-state");
+    assert(attribute instanceof Attr && attribute instanceof Node, "Attr interface chain");
+    equal(attribute.namespaceURI, "urn:webscene:test", "detached namespace");
+    equal(attribute.ownerElement, null, "detached owner");
+    attribute.value = "ready";
+    equal(element.setAttributeNode(attribute), null, "initial setAttributeNode result");
+    equal(attribute.ownerElement, element, "attached owner");
+    equal(element.attributes.item(0), attribute, "NamedNodeMap wrapper identity");
+    equal(element.getAttribute("data-state"), "ready", "attached value");
+    equal(element.removeAttributeNode(attribute), attribute, "removeAttributeNode result");
+    equal(attribute.ownerElement, null, "removed owner");
+    equal(attribute.value, "ready", "removed value");
+  });
+
   test("SVG wrappers have Element but not HTMLElement brands", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     assert(svg instanceof SVGElement, "SVGElement alias did not match");

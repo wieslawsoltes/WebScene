@@ -279,31 +279,12 @@
             if (attribute.first == "id" || attribute.first == "class") continue;
             attributes.push_back(attribute);
         }
+        auto* self = current(info.GetIsolate());
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(attributes.size()));
         for (uint32_t index = 0; index < attributes.size(); ++index) {
-            auto attribute = v8::Object::New(info.GetIsolate());
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "name"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "localName"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "nodeName"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "value"),
-                js_dom_string(info.GetIsolate(), attributes[index].second)).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "nodeValue"),
-                js_dom_string(info.GetIsolate(), attributes[index].second)).Check();
-            result->Set(local_context, index, attribute).Check();
+            auto& state = self->attached_attr(*node, attributes[index].first);
+            result->Set(local_context, index, self->wrap_attr(state)).Check();
         }
         result->Set(
             local_context,
@@ -486,11 +467,11 @@
 
     static void get_is_connected(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
-        auto* root = node;
-        while (root != nullptr && root->parent != nullptr) root = root->parent;
         info.GetReturnValue().Set(v8::Boolean::New(
-            info.GetIsolate(), root != nullptr && root == &current(info.GetIsolate())->document.body()));
+            info.GetIsolate(),
+            node != nullptr && self->is_connected(*node)));
     }
 
     static void get_owner_svg_element(
@@ -1501,8 +1482,14 @@
         auto name = to_utf8(info.GetIsolate(), property);
         if (!node->xml_mode) name = lower_html_name(name);
         if (!node->xml_mode && name == "htmlfor") name = "for";
-        node->attributes[name] = to_utf8(info.GetIsolate(), value);
+        const auto previous = node->attributes.find(name);
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        node->attributes[name] = text;
         self->document.mark_dirty();
+        self->notify_custom_element_attribute(*node, name, old_value, text);
     }
 
     static void get_default_value(

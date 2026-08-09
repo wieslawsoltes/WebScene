@@ -74,6 +74,27 @@
       ]
     },
     {
+      "name": "Attr",
+      "template": "attr_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "Node",
+      "attributes": [
+        { "name": "namespaceURI", "getter": "get_attr_namespace_uri" },
+        { "name": "localName", "getter": "get_attr_name" },
+        { "name": "name", "getter": "get_attr_name" },
+        { "name": "value", "getter": "get_attr_value", "setter": "set_attr_value" },
+        { "name": "nodeName", "getter": "get_attr_name" },
+        { "name": "nodeType", "getter": "get_attr_node_type" },
+        { "name": "nodeValue", "getter": "get_attr_value", "setter": "set_attr_value" },
+        { "name": "textContent", "getter": "get_attr_value", "setter": "set_attr_value" },
+        { "name": "ownerDocument", "getter": "get_attr_owner_document" },
+        { "name": "ownerElement", "getter": "get_attr_owner_element" },
+        { "name": "specified", "getter": "get_attr_specified" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "CharacterData",
       "template": "character_data_template",
       "constructor": "illegal_dom_constructor",
@@ -173,8 +194,10 @@
         { "name": "getAttributeNS", "callback": "get_attribute_ns", "length": 2 },
         { "name": "setAttribute", "callback": "set_attribute", "length": 2 },
         { "name": "setAttributeNS", "callback": "set_attribute_ns", "length": 3 },
+        { "name": "setAttributeNode", "callback": "set_attribute_node", "length": 1 },
         { "name": "removeAttribute", "callback": "remove_attribute", "length": 1 },
         { "name": "removeAttributeNS", "callback": "remove_attribute_ns", "length": 2 },
+        { "name": "removeAttributeNode", "callback": "remove_attribute_node", "length": 1 },
         { "name": "toggleAttribute", "callback": "toggle_attribute", "length": 1 },
         { "name": "hasAttribute", "callback": "has_attribute", "length": 1 },
         { "name": "querySelector", "callback": "element_query_selector", "length": 1 },
@@ -220,6 +243,7 @@
         { "name": "cellPadding", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "enctype", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "htmlFor", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
+        { "name": "title", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "type", "getter": "get_element_type", "setter": "set_element_type" },
         { "name": "name", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "value", "getter": "get_form_value", "setter": "set_form_value" },

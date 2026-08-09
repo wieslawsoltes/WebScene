@@ -2749,6 +2749,8 @@
     {
         for (auto* current = &node; current != nullptr; current = current->parent) {
             if (current == &document.body()) return true;
+            if (current->parent == nullptr
+                && detached_document_roots.contains(current->id)) return true;
             for (const auto& [frame_id, provisional_body] : provisional_frame_bodies) {
                 if (current != provisional_body) continue;
                 const auto* frame = document.find_by_native_id(frame_id);

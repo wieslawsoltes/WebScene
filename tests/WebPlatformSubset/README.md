@@ -114,11 +114,12 @@ contract.
 
 ## 2026-08-09 coverage audit
 
-The pinned profile contains 110 required, 52 candidate, 6 harness-blocked, and 5
+The pinned profile contains 110 required, 53 candidate, 5 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
-documents and 222/299 candidate subtests. Focused standards fixes moved that lane
-to 47/52 documents and 239/301 subtests while the release gate remained 110/110
-documents and 434/434 subtests:
+documents and 222/299 candidate subtests. The first focused standards tranche moved
+that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
+53/53 documents and 304/304 subtests while the release gate remains 110/110 documents
+and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
   intervening non-element nodes, and the managed selector parser uses the most specific
@@ -129,33 +130,37 @@ documents and 434/434 subtests:
   declaring interface prototype while retaining native receiver-brand checks; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
-  instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity.
+  instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
+- a real `Attr` wrapper surface, mutation entry points, detached `Document` construction,
+  document cloning, initial iframe realms, and a bounded same-origin GET
+  `XMLHttpRequest` prerequisite close the selected Custom Elements lifecycle shard;
+- the HTML tree-construction contract now verifies foster-parented text immediately
+  before its table instead of assuming it precedes unrelated earlier body content; and
+- the pinned `check-layout-th.js` adapter now loads its pinned relative support sheet,
+  and empty bordered non-stretch flex items retain their intrinsic cross size through
+  dynamic `align-items` changes.
 
 The focused behavior is also covered by native runtime tests, managed selector tests,
 and the generated-binding freshness check. Candidate promotion is intentionally deferred
 until the same documents pass on every released RID.
 
-The remaining five candidate failures are kept visible and rank the next work:
-
-1. Custom Elements constructor timing, Attr mutation, cloning, alternate-document
-   realms, iframe documents, and XHR-backed document prerequisites account for four
-   documents and 61 failed assertions.
-2. The HTML tree builder still misses foster-parented table text ordering in one local
-   adoption-agency/table-construction assertion.
-3. Six relevant visual/check-layout documents remain harness-blocked; `check-layout-th.js`
-   support is the highest-value runner expansion because it unlocks upstream flex
-   relayout evidence without converting the test into a local contract.
+There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
+Promotion remains intentionally separate: the same unchanged bytes still need evidence
+from every released RID. Five self-verifying visual documents remain harness-blocked
+because they have neither testharness assertions nor a reftest reference; the dynamic
+flex check-layout document is no longer in that set.
 
 The Custom Elements discovery shard pins unchanged upstream registry, constructor,
 attribute-reaction, connection, and disconnection tests alongside two product-neutral
 local fixtures. The lifecycle fixture is assertion based; the rendering fixture compares
 lifecycle-created light DOM with an inert reference and can use the Chromium oracle.
-The recorded 2026-08-02 native discovery baseline is 40/118 upstream/local assertions
-with the registry reverse-lookup document and local lifecycle document passing. The
+The recorded 2026-08-02 native discovery baseline was 40/118 upstream/local assertions.
+The 2026-08-09 Inspector run passes all 118/118 selected lifecycle assertions: 4/4
+registry reverse lookup, 12/12 constructor, 13/13 attribute reactions, and 80/80
+connection/disconnection assertions plus the 9/9 local lifecycle contract. The
 light-DOM rendering reftest also passes natively and Chromium independently considers
-its test and reference identical. Remaining failures are retained as discovery data,
-not hidden by expectations: they cluster around Attr mutation APIs, clone upgrade,
-alternate document realms, and unrelated iframe/XHR harness prerequisites.
+its test and reference identical. The bounded XHR prerequisite is GET-only and exists
+to load same-origin XML/HTML lifecycle fixtures; it is not a general networking claim.
 
 ## Shadow DOM candidate milestone
 

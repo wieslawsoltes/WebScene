@@ -1,3 +1,11 @@
+    struct attr_state final {
+        uint32_t id{0};
+        std::string namespace_uri;
+        std::string name;
+        std::string value;
+        dom_node* owner{nullptr};
+    };
+
     struct timer_task final {
         uint32_t id;
         bool animation_frame;

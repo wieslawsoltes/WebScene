@@ -216,6 +216,7 @@ int main()
     test_wrapped_flex_resolves_each_line_independently(engine);
     test_zero_height_flex_item_grows_and_hit_tests_descendants(engine);
     test_empty_non_growing_flex_item_collapses_main_axis(engine);
+    test_empty_bordered_flex_items_keep_intrinsic_cross_size(engine);
     test_appending_child_invalidates_empty_selector(engine);
     test_inline_block_preserves_vertical_padding(engine);
     test_pointer_hit_targets_and_related_targets_are_elements(engine);

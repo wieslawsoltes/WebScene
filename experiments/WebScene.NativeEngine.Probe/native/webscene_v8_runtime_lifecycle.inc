@@ -100,6 +100,9 @@
         style_wrappers.clear();
         stylesheet_wrappers.clear();
         node_wrappers.clear();
+        attr_wrappers.clear();
+        attached_attributes.clear();
+        attr_states.clear();
         dom_implementation_object.Reset();
         document_object.Reset();
         style_template.Reset();
@@ -117,6 +120,7 @@
         comment_template.Reset();
         text_template.Reset();
         character_data_template.Reset();
+        attr_template.Reset();
         node_template.Reset();
         event_target_template.Reset();
 #endif

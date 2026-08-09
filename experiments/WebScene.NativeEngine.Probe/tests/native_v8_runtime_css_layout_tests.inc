@@ -1598,6 +1598,38 @@ void test_empty_non_growing_flex_item_collapses_main_axis(webscene_engine* engin
         "empty non-growing flex items expanded across the main axis: " + result);
 }
 
+void test_empty_bordered_flex_items_keep_intrinsic_cross_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .row { display:flex; height:100px; align-items:stretch; }
+              .item { border:5px solid green; width:50px; }
+              .start { align-self:flex-start; }
+            </style>
+            <div id="row" class="row">
+              <div id="item" class="item start"></div>
+            </div>`;
+          const row = document.getElementById('row');
+          const item = document.getElementById('item');
+          const before = [item.offsetWidth, item.offsetHeight, item.offsetTop];
+          row.style.alignItems = 'flex-end';
+          item.style.alignSelf = 'auto';
+          return {
+            before,
+            after: [item.offsetWidth, item.offsetHeight, item.offsetTop],
+            alignItems: getComputedStyle(row).alignItems,
+            alignSelf: getComputedStyle(item).alignSelf
+          };
+        })()
+    )JS", "native-empty-bordered-flex-cross-size.js");
+    require(
+        result == R"({"before":[60,10,0],"after":[60,10,90],"alignItems":"flex-end","alignSelf":"auto"})",
+        "empty bordered flex items lost their intrinsic cross size during dynamic alignment: "
+            + result);
+}
+
 void test_appending_child_invalidates_empty_selector(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

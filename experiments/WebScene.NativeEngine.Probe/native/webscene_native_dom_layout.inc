@@ -2423,7 +2423,11 @@ float native_document::intrinsic_size(
             const auto measured = horizontal && is_collapsible_whitespace_text(node)
                 ? measure_text_width(" ", node)
                 : 0;
-            return constrain(measured);
+            // Empty auto-sized boxes still contribute their padding and border
+            // to their intrinsic border-box size. This matters in particular
+            // for non-stretch flex items, whose empty content box may be zero
+            // while their visible border box is not.
+            return constrain(padding + measured);
         }
         const auto font_size = resolved_font_size(node);
         return constrain(padding + (horizontal

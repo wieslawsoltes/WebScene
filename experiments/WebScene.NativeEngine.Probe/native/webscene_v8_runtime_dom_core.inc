@@ -2014,7 +2014,52 @@
             js_string(self.isolate, "oninput"),
             v8::Null(self.isolate)).Check();
         self.set_document_address(local_context, detached, address);
+        v8::Local<v8::Value> constructor;
+        if (local_context->Global()->Get(
+                local_context, js_string(self.isolate, "Document"))
+                .ToLocal(&constructor)
+            && constructor->IsFunction()) {
+            v8::Local<v8::Value> prototype;
+            if (constructor.As<v8::Function>()->Get(
+                    local_context, js_string(self.isolate, "prototype"))
+                    .ToLocal(&prototype)
+                && prototype->IsObject()) {
+                detached->SetPrototype(local_context, prototype).Check();
+            }
+        }
         return detached;
+    }
+
+    v8::Local<v8::Object> create_empty_document(v8::Local<v8::Context> local_context)
+    {
+        auto& root = document.create_element("#document-root");
+        root.visible = false;
+        detached_document_roots.insert(root.id);
+        return wrap_detached_document(*this, root, local_context, "about:blank");
+    }
+
+    static void document_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Document': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr) {
+            info.GetReturnValue().Set(self->create_empty_document(
+                info.GetIsolate()->GetCurrentContext()));
+        }
+    }
+
+    static void clone_document(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr) {
+            info.GetReturnValue().Set(self->create_empty_document(
+                info.GetIsolate()->GetCurrentContext()));
+        }
     }
 
     static void create_xml_document(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2175,27 +2220,275 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
-    static void create_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    static attr_state* unwrap_attr(v8::Local<v8::Object> object)
+    {
+        if (object.IsEmpty() || object->InternalFieldCount() < 2) return nullptr;
+        const auto value = object->GetInternalField(1).As<v8::Value>();
+        return value->IsExternal()
+            ? static_cast<attr_state*>(value.As<v8::External>()->Value(
+                v8::kExternalPointerTypeTagDefault))
+            : nullptr;
+    }
+
+    static std::string attribute_attachment_key(const dom_node& owner, std::string_view name)
+    {
+        return std::to_string(owner.id) + ":" + std::string(name);
+    }
+
+    v8::Local<v8::Object> wrap_attr(attr_state& state)
+    {
+        const auto known = attr_wrappers.find(state.id);
+        if (known != attr_wrappers.end() && !known->second.IsEmpty()) {
+            return known->second.Get(isolate);
+        }
+        auto object = attr_template.Get(isolate)->InstanceTemplate()
+            ->NewInstance(isolate->GetCurrentContext()).ToLocalChecked();
+        object->SetAlignedPointerInInternalField(
+            0, nullptr, v8::kEmbedderDataTypeTagDefault);
+        object->SetInternalField(1, v8::External::New(
+            isolate, &state, v8::kExternalPointerTypeTagDefault));
+        attr_wrappers.emplace(state.id, v8::Global<v8::Object>(isolate, object));
+        return object;
+    }
+
+    attr_state& create_attr_state(
+        std::string name,
+        std::string namespace_uri = {},
+        dom_node* owner = nullptr,
+        std::string value = {})
+    {
+        auto state = std::make_unique<attr_state>();
+        state->id = next_attr_id++;
+        state->namespace_uri = std::move(namespace_uri);
+        state->name = std::move(name);
+        state->value = std::move(value);
+        state->owner = owner;
+        auto* result = state.get();
+        attr_states.emplace(result->id, std::move(state));
+        if (owner != nullptr) {
+            attached_attributes[attribute_attachment_key(*owner, result->name)] = result;
+        }
+        return *result;
+    }
+
+    attr_state& attached_attr(dom_node& owner, std::string_view name)
+    {
+        const auto key = attribute_attachment_key(owner, name);
+        const auto known = attached_attributes.find(key);
+        if (known != attached_attributes.end()) return *known->second;
+        const auto value = owner.attributes.find(name);
+        return create_attr_state(
+            std::string(name), {}, &owner,
+            value == owner.attributes.end() ? std::string{} : value->second);
+    }
+
+    void detach_attr(dom_node& owner, std::string_view name, std::string value)
+    {
+        const auto key = attribute_attachment_key(owner, name);
+        const auto known = attached_attributes.find(key);
+        if (known == attached_attributes.end()) return;
+        known->second->value = std::move(value);
+        known->second->owner = nullptr;
+        attached_attributes.erase(known);
+    }
+
+    static void create_attribute_with_namespace(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool namespaced)
     {
         auto* self = current(info.GetIsolate());
-        const auto local_context = info.GetIsolate()->GetCurrentContext();
-        auto name = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        if (self == nullptr) return;
+        const auto name_index = namespaced ? 1 : 0;
+        if (info.Length() <= name_index) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Attribute creation requires a name")));
+            return;
+        }
+        auto name = to_utf8(info.GetIsolate(), info[name_index]);
         auto* document_root = info.This()->InternalFieldCount() > 0
             ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
-                0,
-                v8::kEmbedderDataTypeTagDefault))
+                0, v8::kEmbedderDataTypeTagDefault))
             : nullptr;
-        if (document_root == nullptr || !document_root->xml_mode) name = lower_html_name(name);
-        auto attribute = v8::Object::New(info.GetIsolate());
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeType"), v8::Integer::New(info.GetIsolate(), 2)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "name"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "localName"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeName"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "value"), js_string(info.GetIsolate(), "")).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeValue"), js_string(info.GetIsolate(), "")).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "ownerDocument"), info.This()).Check();
-        self->record_feature("dom", "Document.createAttribute", "supported", {}, "dom-api");
-        info.GetReturnValue().Set(attribute);
+        if (!namespaced && (document_root == nullptr || !document_root->xml_mode)) {
+            name = lower_html_name(name);
+        }
+        const auto namespace_uri = namespaced && !info[0]->IsNullOrUndefined()
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        auto& state = self->create_attr_state(std::move(name), namespace_uri);
+        self->record_feature(
+            "dom",
+            namespaced ? "Document.createAttributeNS" : "Document.createAttribute",
+            "supported", {}, "dom-api");
+        info.GetReturnValue().Set(self->wrap_attr(state));
+    }
+
+    static void create_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        create_attribute_with_namespace(info, false);
+    }
+
+    static void create_attribute_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        create_attribute_with_namespace(info, true);
+    }
+
+    static void get_attr_name(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        if (state != nullptr) info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), state->name));
+    }
+
+    static void get_attr_namespace_uri(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        info.GetReturnValue().Set(state == nullptr || state->namespace_uri.empty()
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(js_dom_string(info.GetIsolate(), state->namespace_uri)));
+    }
+
+    static void get_attr_value(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        if (state == nullptr) return;
+        auto value = state->value;
+        if (state->owner != nullptr) {
+            const auto match = state->owner->attributes.find(state->name);
+            if (match != state->owner->attributes.end()) value = match->second;
+        }
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), value));
+    }
+
+    static void set_attr_value(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* state = unwrap_attr(info.Holder());
+        if (self == nullptr || state == nullptr) return;
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        if (state->owner == nullptr) {
+            state->value = text;
+            return;
+        }
+        const auto old_value = state->owner->attributes.contains(state->name)
+            ? std::optional<std::string>(state->owner->attributes.at(state->name))
+            : std::nullopt;
+        state->owner->attributes[state->name] = text;
+        if (state->name == "id") state->owner->id_attribute = text;
+        else if (state->name == "class") state->owner->class_name = text;
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *state->owner, state->name, old_value, text,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+    }
+
+    static void get_attr_owner_element(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto* state = unwrap_attr(info.Holder());
+        info.GetReturnValue().Set(state == nullptr || state->owner == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*state->owner)));
+    }
+
+    static void get_attr_node_type(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 2));
+    }
+
+    static void get_attr_owner_document(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        info.GetReturnValue().Set(self->document_object.Get(info.GetIsolate()));
+    }
+
+    static void get_attr_specified(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+    }
+
+    static void set_attribute_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* owner = unwrap_node(info.This());
+        auto* state = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_attr(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || owner == nullptr || state == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "setAttributeNode requires an Attr")));
+            return;
+        }
+        if (state->owner != nullptr && state->owner != owner) {
+            throw_dom_exception(info, "The attribute is already in use", "InUseAttributeError");
+            return;
+        }
+        attr_state* previous = nullptr;
+        if (owner->attributes.contains(state->name)) {
+            previous = &self->attached_attr(*owner, state->name);
+        }
+        const auto value = state->owner == nullptr
+            ? state->value
+            : owner->attributes.at(state->name);
+        const auto old_value = owner->attributes.contains(state->name)
+            ? std::optional<std::string>(owner->attributes.at(state->name))
+            : std::nullopt;
+        owner->attributes[state->name] = value;
+        if (state->name == "id") owner->id_attribute = value;
+        else if (state->name == "class") owner->class_name = value;
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *owner, state->name, old_value, value,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+        if (previous != nullptr && previous != state) {
+            previous->value = old_value.value_or(std::string{});
+            previous->owner = nullptr;
+        }
+        state->owner = owner;
+        self->attached_attributes[attribute_attachment_key(*owner, state->name)] = state;
+        info.GetReturnValue().Set(previous == nullptr || previous == state
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_attr(*previous)));
+    }
+
+    static void remove_attribute_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* owner = unwrap_node(info.This());
+        auto* state = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_attr(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || owner == nullptr || state == nullptr
+            || state->owner != owner || !owner->attributes.contains(state->name)) {
+            throw_dom_exception(info, "The attribute was not found", "NotFoundError");
+            return;
+        }
+        const auto old_value = owner->attributes.at(state->name);
+        owner->attributes.erase(state->name);
+        if (state->name == "id") owner->id_attribute.clear();
+        else if (state->name == "class") owner->class_name.clear();
+        state->value = old_value;
+        state->owner = nullptr;
+        self->attached_attributes.erase(attribute_attachment_key(*owner, state->name));
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *owner, state->name, old_value, std::nullopt,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+        info.GetReturnValue().Set(info[0]);
     }
 
     static void create_document_fragment(const v8::FunctionCallbackInfo<v8::Value>& info)

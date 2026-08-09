@@ -67,6 +67,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         RunnerOptions options,
         ViewportSettings viewport,
         string upstreamRoot,
+        string documentPath,
         string html)
     {
         _viewport = viewport;
@@ -103,7 +104,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 X = viewport.Width,
                 Y = viewport.Height
             });
-            LoadPreparedDocument(html, upstreamRoot);
+            LoadPreparedDocument(html, upstreamRoot, documentPath);
             _loaded = true;
             for (var index = 0; index < 4; index++) SettleFrame();
         }
@@ -260,7 +261,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         if (_engine != IntPtr.Zero) NativeApi.EngineDestroy(_engine);
     }
 
-    private void LoadPreparedDocument(string html, string upstreamRoot)
+    private void LoadPreparedDocument(string html, string upstreamRoot, string documentPath)
     {
         var scripts = ScriptRegex.Matches(html)
             .Select(match => new
@@ -300,8 +301,11 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
             : [];
         body = HtmlScriptSemantics.RemoveExecutableScriptsAndStyles(body, ScriptRegex, StyleRegex);
         var markup = styles + body;
+        var documentDirectory = Path.GetDirectoryName(documentPath)?.Replace('\\', '/') ?? string.Empty;
+        if (documentDirectory.Length > 0) documentDirectory += "/";
 
         Execute($$"""
+            globalThis.__webSceneDocumentBasePath = {{JsonSerializer.Serialize(documentDirectory)}};
             const webSceneViewportRoot = document.body;
             const webSceneDocumentElement = document.createElement('html');
             const webSceneHead = document.createElement('head');

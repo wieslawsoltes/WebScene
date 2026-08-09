@@ -366,11 +366,11 @@ internal sealed partial class WptSubsetRunner
 
     private IWptEngineEnvironment CreateEnvironment(string html, string documentPath)
     {
-        _ = documentPath;
         return new NativeWptEngineEnvironment(
             _options,
             _manifest.Viewport,
             _upstreamRoot,
+            documentPath,
             html);
     }
 
