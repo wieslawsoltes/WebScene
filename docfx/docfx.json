@@ -50,7 +50,8 @@
     },
     "template": [
       "default",
-      "modern"
+      "modern",
+      "templates/webscene"
     ],
     "markdownEngineName": "markdig",
     "noLangKeyword": false,
