@@ -1,0 +1,25 @@
+.navbar .navbar-brand {
+  flex: 0 0 auto;
+  width: 160px;
+  overflow: hidden;
+}
+
+.navbar .navbar-brand #logo {
+  display: block;
+  width: 160px;
+  height: 44px;
+  max-width: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+@media (max-width: 767.98px) {
+  .navbar .navbar-brand {
+    width: 132px;
+  }
+
+  .navbar .navbar-brand #logo {
+    width: 132px;
+    height: 36px;
+  }
+}

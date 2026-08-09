@@ -115,6 +115,22 @@ RID-specific runtime packages.
 See [the native engine design](docs/architecture/native-v8-scene-engine.md) and
 [backend status](docs/backends.md).
 
+## Documentation
+
+The DocFX documentation includes host setup, lifecycle, and .NET-to-JavaScript
+interop guides for both presenters:
+
+- [Use WebScene with Avalonia](docfx/articles/avalonia.md)
+- [Use WebScene with Uno Platform](docfx/articles/uno.md)
+- [.NET and JavaScript interop](docfx/articles/javascript-interop.md)
+- [Packages and deployment](docfx/articles/packages-and-deployment.md)
+- [Content and resource loading](docfx/articles/content-and-resources.md)
+- [Lifecycle and diagnostics](docfx/articles/lifecycle-and-diagnostics.md)
+- [Compatibility and security](docfx/articles/compatibility-and-security.md)
+- [Troubleshooting](docfx/articles/troubleshooting.md)
+
+Build the documentation site locally with `./build-docs.sh`.
+
 ## Packages
 
 The repository produces these .NET packages:
@@ -126,7 +142,8 @@ The repository produces these .NET packages:
 - `WebScene.JavaScript.Interop` and
   `WebScene.JavaScript.Interop.Generator` for typed host interop;
 - `WebScene.Sdk` for component manifests, assets, lifecycle, and host-bridge
-  contracts; and
+  contracts;
+- `WebScene.Sdk.Avalonia` for the reusable native `WebSceneComponentHost`; and
 - `WebScene` for the separate Avalonia HTML-inspired authoring layer.
 
 The native engine is supplied by one matching RID package:
@@ -135,9 +152,8 @@ The native engine is supplied by one matching RID package:
 - `WebScene.NativeEngine.Runtime.linux-x64`
 - `WebScene.NativeEngine.Runtime.win-x64`
 
-A reusable native `WebSceneComponentHost` package and application templates are not
-currently published. Their reintroduction requires a native implementation; there is no
-managed fallback.
+Application templates are not currently published. The component host is native-only;
+there is no managed fallback.
 
 See [the NuGet inventory](docs/nuget/README.md).
 
@@ -213,8 +229,8 @@ The priority order is:
 2. Harden the candidate Custom Elements and Shadow DOM slices against broader unchanged
    WPT and representative packaged components, promoting only behavior with complete
    cascade/layout/input/paint evidence.
-3. Publish a reusable native Avalonia component host with resource loading, lifecycle,
-   recovery, diagnostics, typed host calls, and multi-instance tests.
+3. Harden the reusable native Avalonia component host with product-scale recovery,
+   typed host-call, and multi-instance fixtures.
 4. Complete IME, clipboard, accessibility/automation, focus, and debugging contracts.
 5. Expand non-gating WPT discovery and promote valuable browser behavior into the
    bounded release profile.
@@ -230,6 +246,7 @@ not a general browser and not blanket website compatibility.
 | --- | --- |
 | `experiments/WebScene.NativeEngine.Probe` | Native V8/DOM/CSS/layout/scene engine and C ABI |
 | `src/WebScene.Backend.Avalonia` | Avalonia presenter and native scene integration |
+| `src/WebScene.Sdk.Avalonia` | Reusable native Avalonia component host |
 | `src/WebScene.Backend.Uno` | Uno presenter proof |
 | `src/WebScene.*` | Portable contracts, semantics, SDK, and typed interop |
 | `packaging/WebScene.NativeEngine.Runtime` | RID runtime packaging |

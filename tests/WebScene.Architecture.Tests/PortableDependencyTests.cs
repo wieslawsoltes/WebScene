@@ -118,18 +118,23 @@ public sealed class PortableDependencyTests
     }
 
     [Fact]
-    public void ManagedEngineProjectsAreAbsent()
+    public void ManagedEngineProjectsAreAbsentAndComponentHostIsNativeOnly()
     {
         Assert.False(File.Exists(Path.Combine(
             s_repositoryRoot,
             "src",
             "JavaScript.Avalonia.ClearScript",
             "JavaScript.Avalonia.ClearScript.csproj")));
-        Assert.False(File.Exists(Path.Combine(
+        var componentHostProject = Path.Combine(
             s_repositoryRoot,
             "src",
             "WebScene.Sdk.Avalonia",
-            "WebScene.Sdk.Avalonia.csproj")));
+            "WebScene.Sdk.Avalonia.csproj");
+        Assert.True(File.Exists(componentHostProject));
+        var componentHost = File.ReadAllText(componentHostProject);
+        Assert.Contains("WebScene.Sdk.csproj", componentHost, StringComparison.Ordinal);
+        Assert.Contains("WebScene.Backend.Avalonia.csproj", componentHost, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClearScript", componentHost, StringComparison.OrdinalIgnoreCase);
         var legacyAvaloniaDirectory = Path.Combine(s_repositoryRoot, "src", "JavaScript.Avalonia");
         Assert.True(
             !Directory.Exists(legacyAvaloniaDirectory)
@@ -145,7 +150,7 @@ public sealed class PortableDependencyTests
 
         var solution = File.ReadAllText(Path.Combine(s_repositoryRoot, "WebScene.sln"));
         Assert.DoesNotContain("ClearScript", solution, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("WebScene.Sdk.Avalonia", solution, StringComparison.Ordinal);
+        Assert.Contains("WebScene.Sdk.Avalonia", solution, StringComparison.Ordinal);
         Assert.DoesNotContain("src\\WebScene.JavaScript\\WebScene.JavaScript.csproj", solution, StringComparison.Ordinal);
     }
 

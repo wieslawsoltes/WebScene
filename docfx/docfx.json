@@ -1,0 +1,62 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": [
+            "src/WebScene.Backend.Abstractions/WebScene.Backend.Abstractions.csproj",
+            "src/WebScene.Backend.Avalonia/WebScene.Backend.Avalonia.csproj",
+            "src/WebScene.JavaScript.Interop/WebScene.JavaScript.Interop.csproj",
+            "src/WebScene.Diagnostics.Cdp/WebScene.Diagnostics.Cdp.csproj"
+          ],
+          "src": ".."
+        }
+      ],
+      "dest": "api",
+      "disableGitFeatures": false,
+      "disableDefaultFilter": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "api/**.yml",
+          "api/index.md"
+        ]
+      },
+      {
+        "files": [
+          "articles/**.md",
+          "articles/**/toc.yml",
+          "toc.yml",
+          "*.md"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "webscene-logo.jpg"
+        ],
+        "src": "../docs/assets",
+        "dest": "images"
+      }
+    ],
+    "dest": "../_site",
+    "globalMetadata": {
+      "_appTitle": "WebScene",
+      "_appLogoPath": "images/webscene-logo.jpg"
+    },
+    "template": [
+      "default",
+      "modern",
+      "templates/webscene"
+    ],
+    "markdownEngineName": "markdig",
+    "noLangKeyword": false,
+    "keepFileLink": false,
+    "cleanupCacheHistory": false,
+    "disableGitFeatures": false
+  }
+}

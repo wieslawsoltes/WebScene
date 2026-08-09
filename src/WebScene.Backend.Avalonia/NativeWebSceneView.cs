@@ -348,10 +348,26 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable,
     public Task LoadAsync(
         NativeWebSceneLoadOptions options,
         CancellationToken cancellationToken = default)
-        => LoadAsync(
+        => LoadCoreAsync(
             options,
             beforeNavigation: null,
             firstDocumentSceneTimeout: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Loads a document after allowing an asynchronous host hook to observe
+    /// the initialized native engine. Inspector hosts use this hook to enter
+    /// waiting-for-debugger mode before any document script is queued.
+    /// </summary>
+    public Task LoadAsync(
+        NativeWebSceneLoadOptions options,
+        Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
+        TimeSpan? firstDocumentSceneTimeout = null,
+        CancellationToken cancellationToken = default)
+        => LoadCoreAsync(
+            options,
+            beforeNavigation,
+            firstDocumentSceneTimeout,
             cancellationToken);
 
     /// <summary>
@@ -366,7 +382,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable,
         Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
         TimeSpan? firstDocumentSceneTimeout = null,
         CancellationToken cancellationToken = default)
-        => LoadAsync(
+        => LoadCoreAsync(
             new NativeWebSceneLoadOptions
             {
                 Source = source,
@@ -377,7 +393,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable,
             firstDocumentSceneTimeout,
             cancellationToken);
 
-    private async Task LoadAsync(
+    private async Task LoadCoreAsync(
         NativeWebSceneLoadOptions options,
         Func<NativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
         TimeSpan? firstDocumentSceneTimeout,
@@ -430,7 +446,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable,
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
                 .ConfigureAwait(false);
 
-            var resourceLoader = new AvaloniaResourceLoader();
+            var resourceLoader = options.ResourceLoader
+                                 ?? new AvaloniaResourceLoader();
             var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,

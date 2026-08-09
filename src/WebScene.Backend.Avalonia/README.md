@@ -19,9 +19,10 @@ Native scene publication uses a lock-free mailbox consumed on Avalonia's composi
 clock. Ordinary scene traffic does not enter the UI dispatcher; a coalesced
 UI-to-compositor wake remains only for first presentation and cooperative live resize.
 
-This is currently an advanced integration surface rather than a turnkey component
-host. See the repository's native showcase, Monaco, and TradingView samples for the
-supported composition pattern.
+Advanced integrations can use this package directly. Packaged Component Profile 1
+applications should use `WebScene.Sdk.Avalonia.WebSceneComponentHost`, which composes
+this view with package validation, isolated resources, host capabilities, lifecycle,
+recovery, and diagnostics.
 
 ## Document-start scripts and storage
 
