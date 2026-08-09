@@ -47,9 +47,6 @@ dlldata.c
 project.lock.json
 project.fragment.lock.json
 artifacts/
-_site/
-docfx/api/*.yml
-docfx/api/*.manifest
 **/Properties/launchSettings.json
 
 *_i.c

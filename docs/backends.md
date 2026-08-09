@@ -34,11 +34,9 @@ wrapper, scene surface, text shaping, composition, input forwarding, and shared
 Avalonia rendering services. The native showcase, Monaco, and TradingView samples are
 the current integration authorities.
 
-`WebScene.Sdk.Avalonia` publishes the native `WebSceneComponentHost` for packaged
-Component Profile 1 content. It owns package preflight, isolated declared-asset
-loading, capability bridge installation, mount/unmount/reload, recovery state, and
-diagnostics while exposing its underlying `NativeWebSceneView` for typed interop,
-performance sampling, and Inspector sessions.
+The package is usable by advanced consumers, but the repository does not yet publish a
+turnkey general `WebSceneComponentHost`. Resource/lifecycle/diagnostic orchestration
+is still demonstrated by reference applications.
 
 ### Uno
 
@@ -100,7 +98,6 @@ only after the Avalonia path has proved the complete contract.
 dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release
 dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj -c Release
 dotnet test tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj -c Release
-dotnet test tests/WebScene.Sdk.Avalonia.Tests/WebScene.Sdk.Avalonia.Tests.csproj -c Release
 dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release
 ```
 

@@ -1,5 +1,3 @@
-using WebScene.Core;
-
 namespace WebScene.Backends.Native;
 
 /// <summary>
@@ -21,10 +19,4 @@ public sealed record NativeWebSceneLoadOptions
     public string? CompilationCacheDirectory { get; init; }
 
     public IReadOnlyList<WebSceneDocumentScript> DocumentStartScripts { get; init; } = [];
-
-    /// <summary>
-    /// Gets the resource policy for this document. When omitted, the platform
-    /// backend's default resource loader is used.
-    /// </summary>
-    public IWebSceneResourceLoader? ResourceLoader { get; init; }
 }

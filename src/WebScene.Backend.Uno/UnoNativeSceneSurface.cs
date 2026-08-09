@@ -831,7 +831,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable,
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
                 options.CompilationCacheDirectory,
-                options.ResourceLoader ?? new UnoResourceLoader(),
+                new UnoResourceLoader(),
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify);
             if (engine == IntPtr.Zero)

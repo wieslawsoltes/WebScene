@@ -1,17 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using WebScene.Backends.Avalonia.Native;
-using WebScene.Sdk.Avalonia;
 
 if (typeof(NativeWebSceneView).Assembly.GetName().Name != "WebScene.Backend.Avalonia")
 {
     return Fail("The native Avalonia presenter did not come from WebScene.Backend.Avalonia.");
-}
-if (typeof(WebSceneComponentHost).Assembly.GetName().Name != "WebScene.Sdk.Avalonia"
-    || typeof(WebSceneComponentHost).GetMethod(
-        nameof(WebSceneComponentHost.MountAsync)) is null)
-{
-    return Fail("The reusable Avalonia component host package is missing its lifecycle API.");
 }
 
 var nativeFileName = OperatingSystem.IsWindows()
