@@ -15,11 +15,15 @@ npm test --prefix samples/components
 ```
 
 The Node suite type-checks and bundles every package, evaluates the bundles in isolated
-browser-shaped realms, checks meaningful output and scenario interactions, and verifies
-unmount cleanup and independent state.
+browser-shaped realms, checks meaningful output plus keyboard/pointer interactions, and
+verifies unmount cleanup and independent state. `compatibility-matrix.json` pins the
+exact bundle digest, toolchain, interaction oracle, and evidence lane for every catalog
+row; the test fails if the catalog and matrix drift.
 
-These tests validate assets and packaging; they do not prove native runtime
-compatibility. The former managed Avalonia catalog host was removed with the managed
-engine. Native product integration evidence lives in the `samples/Native*`
-applications, and a general component catalog should return only on the future native
-component host.
+The native runtime suite now executes the same 12 checked-in bundles with a neutral host
+stub. Every row must mount meaningful DOM, accept keyboard focus and events, perform its
+primary click/update, expose a laid-out `main` through the public DOM snapshot, and leave
+an empty body after unmount. The 2026-08-09 `osx-arm64` Inspector-flavor run passes all
+12 rows. This remains candidate evidence: `compatibility-matrix.json` records that a
+released-RID run is still required before promotion, and the bounded required profile is
+unchanged.

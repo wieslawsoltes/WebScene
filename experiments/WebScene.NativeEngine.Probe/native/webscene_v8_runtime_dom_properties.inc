@@ -109,6 +109,8 @@
             ? 3
             : node != nullptr && node->kind == dom_node_kind::comment
                 ? 8
+            : node != nullptr && node->kind == dom_node_kind::processing_instruction
+                ? 7
             : node != nullptr && node->kind == dom_node_kind::document_fragment
                 ? 11
             : node != nullptr && node->kind == dom_node_kind::document_type
@@ -117,6 +119,17 @@
         info.GetReturnValue().Set(v8::Integer::New(
             info.GetIsolate(),
             type));
+    }
+
+    static void get_processing_instruction_target(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node != nullptr) {
+            info.GetReturnValue().Set(js_dom_string(
+                info.GetIsolate(), node->namespace_prefix()));
+        }
     }
 
     static void get_native_node_id(

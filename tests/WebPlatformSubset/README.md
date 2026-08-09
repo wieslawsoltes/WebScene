@@ -116,8 +116,8 @@ contract.
 
 The pinned profile contains 110 required, 52 candidate, 6 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
-documents and 222/299 candidate subtests. Three focused standards fixes moved that lane
-to 44/52 documents and 228/299 subtests while the release gate remained 110/110
+documents and 222/299 candidate subtests. Focused standards fixes moved that lane
+to 47/52 documents and 239/301 subtests while the release gate remained 110/110
 documents and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -126,23 +126,23 @@ documents and 434/434 subtests:
 - inline unitless and percentage `line-height` values are resolved after the winning
   `font-size`, including later CSSOM font-size changes; and
 - generated Web IDL attributes now appear as enumerable, configurable accessors on the
-  declaring interface prototype while retaining native receiver-brand checks.
+  declaring interface prototype while retaining native receiver-brand checks; and
+- distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
+  `HTMLStyleElement` brands now back constructible text/comment nodes, processing
+  instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity.
 
 The focused behavior is also covered by native runtime tests, managed selector tests,
 and the generated-binding freshness check. Candidate promotion is intentionally deferred
 until the same documents pass on every released RID.
 
-The remaining eight candidate failures are kept visible and rank the next work:
+The remaining five candidate failures are kept visible and rank the next work:
 
 1. Custom Elements constructor timing, Attr mutation, cloning, alternate-document
    realms, iframe documents, and XHR-backed document prerequisites account for four
    documents and 61 failed assertions.
-2. Shadow DOM still needs the `Text` and processing-instruction surfaces, flattened
-   nested slots, and `ShadowRoot.styleSheets`; prototype placement itself is no longer
-   the blocker.
-3. The HTML tree builder still misses foster-parented table text ordering in one local
+2. The HTML tree builder still misses foster-parented table text ordering in one local
    adoption-agency/table-construction assertion.
-4. Six relevant visual/check-layout documents remain harness-blocked; `check-layout-th.js`
+3. Six relevant visual/check-layout documents remain harness-blocked; `check-layout-th.js`
    support is the highest-value runner expansion because it unlocks upstream flex
    relayout evidence without converting the test into a local contract.
 
@@ -178,24 +178,23 @@ The candidate claim covers:
   single-root composed event path; and
 - lifecycle-created shadow content and connected custom elements inside a shadow root.
 
-It does not yet claim nested/flattened or manual distribution, `slotchange`, functional
+It does not yet claim manual distribution, `slotchange`, functional
 `:host()`, `:host-context()`, `::slotted`, `::part`, declarative Shadow DOM,
-`adoptedStyleSheets`/`styleSheets`, complete `delegatesFocus`, complete nested-root and
+`adoptedStyleSheets`, complete `delegatesFocus`, complete nested-root and
 `relatedTarget` retargeting, cloning/adoption semantics, or the full Web IDL prototype
 shape. These remain visible discovery failures rather than being papered over.
 
-Recorded 2026-08-02 evidence is:
+Recorded 2026-08-09 evidence is:
 
 - the local primitive contract passes 9/9 assertions;
 - the native lifecycle-created rendering fixture exactly matches its inert reference,
   and Chromium independently passes the same test/reference pair;
-- unchanged pinned WPT reaches 2/3 assertions for
-  `Element-interface-shadowRoot-attribute.html`, 13/18 for
-  `HTMLSlotElement-interface.html`, and 8/12 for `ShadowRoot-interface.html`; and
-- the unchanged failures identify prototype placement, absent `Text`,
-  `createProcessingInstruction` and `StyleSheetList` surfaces, plus flattened nested
-  slots. They are candidate discovery data; the required 110-document gate is
-  unchanged.
+- unchanged pinned WPT passes 3/3 assertions for
+  `Element-interface-shadowRoot-attribute.html`, 18/18 for
+  `HTMLSlotElement-interface.html`, and 12/12 for `ShadowRoot-interface.html`; and
+- generated binding and native runtime regressions cover distinct character-data brands,
+  processing-instruction exclusion from slots, recursive flattening, and connected sheet
+  identity. This remains candidate evidence; the required 110-document gate is unchanged.
 
 The implementation is pay for what is used. `dom_node` remains 976 bytes before and
 after the milestone. `native_document` grows from 296 to 304 bytes for one nullable

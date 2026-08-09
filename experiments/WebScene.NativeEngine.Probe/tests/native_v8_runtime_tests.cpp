@@ -128,6 +128,7 @@ int main()
     test_compact_attribute_collection_preserves_map_semantics();
     test_dom_diagnostics_snapshot_preserves_authored_tree_and_box_model();
     test_react_component_dom_is_inspectable_and_refreshes_after_mutation();
+    test_component_catalog_mounts_interacts_inspects_and_unmounts();
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();

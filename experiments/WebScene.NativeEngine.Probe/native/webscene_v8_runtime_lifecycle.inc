@@ -98,6 +98,7 @@
         computed_style_wrappers.clear();
         class_list_wrappers.clear();
         style_wrappers.clear();
+        stylesheet_wrappers.clear();
         node_wrappers.clear();
         dom_implementation_object.Reset();
         document_object.Reset();
@@ -109,8 +110,13 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
         html_slot_element_template.Reset();
+        html_style_element_template.Reset();
         shadow_root_template.Reset();
         document_fragment_template.Reset();
+        processing_instruction_template.Reset();
+        comment_template.Reset();
+        text_template.Reset();
+        character_data_template.Reset();
         node_template.Reset();
         event_target_template.Reset();
 #endif

@@ -223,19 +223,67 @@
             : v8::Local<v8::Value>(self->wrap_node(*slot)));
     }
 
+    static bool assigned_nodes_flatten_requested(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.Length() == 0 || !info[0]->IsObject()) return false;
+        v8::Local<v8::Value> flatten;
+        return info[0].As<v8::Object>()->Get(
+                info.GetIsolate()->GetCurrentContext(),
+                js_string(info.GetIsolate(), "flatten"))
+                .ToLocal(&flatten)
+            && flatten->BooleanValue(info.GetIsolate());
+    }
+
+    static void append_flattened_slot_nodes(
+        native_document& document,
+        dom_node& slot,
+        std::vector<dom_node*>& result)
+    {
+        const auto* state = document.shadow_dom(slot);
+        const auto& candidates = state != nullptr && !state->assigned_nodes.empty()
+            ? state->assigned_nodes
+            : slot.children;
+        for (auto* candidate : candidates) {
+            if (candidate != nullptr
+                && candidate->kind == dom_node_kind::element
+                && candidate->tag == "slot") {
+                append_flattened_slot_nodes(document, *candidate, result);
+            } else if (candidate != nullptr) {
+                result.push_back(candidate);
+            }
+        }
+    }
+
+    static std::vector<dom_node*> slot_nodes_for_options(
+        native_document& document,
+        dom_node* slot,
+        bool flatten)
+    {
+        if (slot == nullptr || document.containing_shadow_root(*slot) == nullptr) return {};
+        const auto* state = document.shadow_dom(*slot);
+        if (!flatten) return state == nullptr
+            ? std::vector<dom_node*>{}
+            : state->assigned_nodes;
+        std::vector<dom_node*> result;
+        append_flattened_slot_nodes(document, *slot, result);
+        return result;
+    }
+
     static void slot_assigned_nodes(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
         self->refresh_all_shadow_distributions();
         auto* slot = unwrap_node(info.This());
-        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
-        const auto count = state == nullptr ? 0 : state->assigned_nodes.size();
+        const auto nodes = slot_nodes_for_options(
+            self->document, slot, assigned_nodes_flatten_requested(info));
+        const auto count = nodes.size();
         auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(count));
         auto local_context = info.GetIsolate()->GetCurrentContext();
         for (uint32_t index = 0; index < count; ++index) {
             result->Set(
                 local_context, index,
-                self->wrap_node(*state->assigned_nodes[index])).Check();
+                self->wrap_node(*nodes[index])).Check();
         }
         info.GetReturnValue().Set(result);
     }
@@ -245,13 +293,12 @@
         auto* self = current(info.GetIsolate());
         self->refresh_all_shadow_distributions();
         auto* slot = unwrap_node(info.This());
-        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
+        const auto nodes = slot_nodes_for_options(
+            self->document, slot, assigned_nodes_flatten_requested(info));
         std::vector<dom_node*> elements;
-        if (state != nullptr) {
-            for (auto* node : state->assigned_nodes) {
-                if (node != nullptr && node->kind == dom_node_kind::element) {
-                    elements.push_back(node);
-                }
+        for (auto* node : nodes) {
+            if (node != nullptr && node->kind == dom_node_kind::element) {
+                elements.push_back(node);
             }
         }
         auto result = v8::Array::New(
@@ -260,6 +307,66 @@
         for (uint32_t index = 0; index < elements.size(); ++index) {
             result->Set(
                 local_context, index, self->wrap_node(*elements[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
+    v8::Local<v8::Object> style_sheet_for(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        const auto known = stylesheet_wrappers.find(key);
+        if (known != stylesheet_wrappers.end() && !known->second.IsEmpty()) {
+            return known->second.Get(isolate);
+        }
+        const auto local_context = isolate->GetCurrentContext();
+        auto result = v8::Object::New(isolate);
+        result->Set(
+            local_context,
+            js_string(isolate, "ownerNode"),
+            wrap_node(node)).Check();
+        stylesheet_wrappers.emplace(key, v8::Global<v8::Object>(isolate, result));
+        return result;
+    }
+
+    static void get_style_sheet(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (self == nullptr || node == nullptr || !self->is_connected(*node)) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        info.GetReturnValue().Set(self->style_sheet_for(*node));
+    }
+
+    static void get_shadow_style_sheets(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.Holder());
+        std::vector<dom_node*> styles;
+        if (self != nullptr && root != nullptr && self->is_connected(*root)) {
+            const auto collect = [&](const auto& visit, dom_node& parent) -> void {
+                for (auto* child : parent.children) {
+                    if (child == nullptr) continue;
+                    if (child->kind == dom_node_kind::element && child->tag == "style") {
+                        styles.push_back(child);
+                    }
+                    visit(visit, *child);
+                }
+            };
+            collect(collect, *root);
+        }
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto result = v8::Array::New(
+            info.GetIsolate(), static_cast<int>(styles.size()));
+        for (uint32_t index = 0; index < styles.size(); ++index) {
+            result->Set(
+                local_context, index,
+                self->style_sheet_for(*styles[index])).Check();
         }
         info.GetReturnValue().Set(result);
     }
@@ -861,13 +968,21 @@
             ? (node.namespace_uri() == dom_node::html_namespace_uri
                 ? (node.tag == "slot"
                     ? html_slot_element_template.Get(isolate)
+                    : node.tag == "style"
+                        ? html_style_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
                 : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
                 ? (document.is_shadow_root(node)
                     ? shadow_root_template.Get(isolate)
                     : document_fragment_template.Get(isolate))
-                : node_template.Get(isolate);
+                : node.kind == dom_node_kind::text
+                    ? text_template.Get(isolate)
+                    : node.kind == dom_node_kind::comment
+                        ? comment_template.Get(isolate)
+                        : node.kind == dom_node_kind::processing_instruction
+                            ? processing_instruction_template.Get(isolate)
+                            : node_template.Get(isolate);
         auto object = selected_template->InstanceTemplate()
 #else
         auto object = element_template.Get(isolate)->InstanceTemplate()
@@ -1984,6 +2099,23 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
+    static void text_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Text': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        auto& node = self->document.create_element("#text");
+        node.text_content = info.Length() > 0
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
     static void create_comment(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -1996,6 +2128,50 @@
         node.xml_mode = document_root != nullptr && document_root->xml_mode;
         node.visible = false;
         node.text_content = info.Length() > 0 ? to_wtf8(info.GetIsolate(), info[0]) : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void comment_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Comment': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        auto& node = self->document.create_element("#comment");
+        node.text_content = info.Length() > 0
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_processing_instruction(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.Length() < 2) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Document.createProcessingInstruction requires 2 arguments")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        const auto target = to_wtf8(info.GetIsolate(), info[0]);
+        const auto data = to_wtf8(info.GetIsolate(), info[1]);
+        if (target.empty()) {
+            throw_dom_exception(info, "The target is not a valid XML name", "InvalidCharacterError");
+            return;
+        }
+        if (data.find("?>") != std::string::npos) {
+            throw_dom_exception(info, "The data contains an invalid processing-instruction terminator", "InvalidCharacterError");
+            return;
+        }
+        auto& node = self->document.create_element("#processing-instruction");
+        node.set_namespace({}, target);
+        node.text_content = data;
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 

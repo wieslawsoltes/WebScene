@@ -24,7 +24,6 @@
         { "name": "nodeType", "getter": "get_element_node_type" },
         { "name": "nodeValue", "getter": "get_text_content", "setter": "set_text_content" },
         { "name": "textContent", "getter": "get_text_content", "setter": "set_text_content" },
-        { "name": "data", "getter": "get_text_content", "setter": "set_text_content" },
         { "name": "isConnected", "getter": "get_is_connected" },
         { "name": "ownerDocument", "getter": "get_owner_document" },
         { "name": "parentNode", "getter": "get_parent_node" },
@@ -67,9 +66,52 @@
         { "name": "ELEMENT_NODE", "value": 1 },
         { "name": "ATTRIBUTE_NODE", "value": 2 },
         { "name": "TEXT_NODE", "value": 3 },
+        { "name": "PROCESSING_INSTRUCTION_NODE", "value": 7 },
+        { "name": "COMMENT_NODE", "value": 8 },
         { "name": "DOCUMENT_NODE", "value": 9 },
+        { "name": "DOCUMENT_TYPE_NODE", "value": 10 },
         { "name": "DOCUMENT_FRAGMENT_NODE", "value": 11 }
       ]
+    },
+    {
+      "name": "CharacterData",
+      "template": "character_data_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "Node",
+      "attributes": [
+        { "name": "data", "getter": "get_text_content", "setter": "set_text_content" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "Text",
+      "template": "text_template",
+      "constructor": "text_constructor",
+      "parent": "CharacterData",
+      "attributes": [],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "Comment",
+      "template": "comment_template",
+      "constructor": "comment_constructor",
+      "parent": "CharacterData",
+      "attributes": [],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "ProcessingInstruction",
+      "template": "processing_instruction_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "CharacterData",
+      "attributes": [
+        { "name": "target", "getter": "get_processing_instruction_target" }
+      ],
+      "methods": [],
+      "constants": []
     },
     {
       "name": "DocumentFragment",
@@ -97,7 +139,8 @@
         { "name": "mode", "getter": "get_shadow_mode" },
         { "name": "delegatesFocus", "getter": "get_shadow_delegates_focus" },
         { "name": "innerHTML", "getter": "get_inner_html", "setter": "set_inner_html" },
-        { "name": "activeElement", "getter": "get_active_element" }
+        { "name": "activeElement", "getter": "get_active_element" },
+        { "name": "styleSheets", "getter": "get_shadow_style_sheets" }
       ],
       "methods": [],
       "constants": []
@@ -228,6 +271,17 @@
         { "name": "assignedNodes", "callback": "slot_assigned_nodes", "length": 0 },
         { "name": "assignedElements", "callback": "slot_assigned_elements", "length": 0 }
       ],
+      "constants": []
+    },
+    {
+      "name": "HTMLStyleElement",
+      "template": "html_style_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [
+        { "name": "sheet", "getter": "get_style_sheet" }
+      ],
+      "methods": [],
       "constants": []
     }
   ],

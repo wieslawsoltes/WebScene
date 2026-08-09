@@ -656,6 +656,9 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "createComment"),
             v8::FunctionTemplate::New(isolate, create_comment));
         document_template->Set(
+            js_string(isolate, "createProcessingInstruction"),
+            v8::FunctionTemplate::New(isolate, create_processing_instruction));
+        document_template->Set(
             js_string(isolate, "createAttribute"),
             v8::FunctionTemplate::New(isolate, create_attribute));
         document_template->Set(
