@@ -89,41 +89,60 @@ static std::optional<uint32_t> generated_standalone_event_target_id(
     return value->Uint32Value(isolate->GetCurrentContext()).FromMaybe(0U);
 }
 
+static void generated_dom_prototype_attribute_get(
+    const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    auto symbol = info.Data().As<v8::Symbol>();
+    v8::Local<v8::Value> value;
+    if (info.This()->Get(info.GetIsolate()->GetCurrentContext(), symbol).ToLocal(&value)) {
+        info.GetReturnValue().Set(value);
+    }
+}
+
+static void generated_dom_prototype_attribute_set(
+    const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (info.Length() < 1) return;
+    auto symbol = info.Data().As<v8::Symbol>();
+    static_cast<void>(info.This()->Set(
+        info.GetIsolate()->GetCurrentContext(), symbol, info[0]));
+}
+
 static void generated_Node_nodeName_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_tag_name(property, info);
+    get_tag_name(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_nodeType_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_node_type(property, info);
+    get_element_node_type(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_nodeValue_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_text_content(property, info);
+    get_text_content(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_nodeValue_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -131,22 +150,22 @@ static void generated_Node_nodeValue_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_text_content(property, value, info);
+    set_text_content(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Node_textContent_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_text_content(property, info);
+    get_text_content(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_textContent_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -154,22 +173,22 @@ static void generated_Node_textContent_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_text_content(property, value, info);
+    set_text_content(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Node_data_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_text_content(property, info);
+    get_text_content(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_data_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -177,209 +196,209 @@ static void generated_Node_data_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_text_content(property, value, info);
+    set_text_content(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Node_isConnected_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_is_connected(property, info);
+    get_is_connected(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_ownerDocument_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_owner_document(property, info);
+    get_owner_document(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_parentNode_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_parent_node(property, info);
+    get_parent_node(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_parentElement_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_parent_node(property, info);
+    get_parent_node(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_childNodes_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_children(property, info);
+    get_children(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_firstChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_first_child(property, info);
+    get_first_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_lastChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_last_child(property, info);
+    get_last_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_previousSibling_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_previous_sibling(property, info);
+    get_previous_sibling(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_nextSibling_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_next_sibling(property, info);
+    get_next_sibling(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node_assignedSlot_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_assigned_slot(property, info);
+    get_assigned_slot(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Node___websceneNativeNodeId_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Node)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_native_node_id(property, info);
+    get_native_node_id(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_DocumentFragment_children_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::DocumentFragment)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_children(property, info);
+    get_children(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_DocumentFragment_firstElementChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::DocumentFragment)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_first_element_child(property, info);
+    get_first_element_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_DocumentFragment_lastElementChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::DocumentFragment)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_last_element_child(property, info);
+    get_last_element_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_ShadowRoot_host_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::ShadowRoot)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_shadow_host(property, info);
+    get_shadow_host(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_ShadowRoot_mode_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::ShadowRoot)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_shadow_mode(property, info);
+    get_shadow_mode(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_ShadowRoot_delegatesFocus_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::ShadowRoot)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_shadow_delegates_focus(property, info);
+    get_shadow_delegates_focus(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_ShadowRoot_innerHTML_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::ShadowRoot)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_inner_html(property, info);
+    get_inner_html(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_ShadowRoot_innerHTML_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -387,66 +406,66 @@ static void generated_ShadowRoot_innerHTML_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_inner_html(property, value, info);
+    set_inner_html(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_ShadowRoot_activeElement_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::ShadowRoot)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_active_element(property, info);
+    get_active_element(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_namespaceURI_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_namespace_uri(property, info);
+    get_namespace_uri(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_localName_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_local_name(property, info);
+    get_local_name(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_tagName_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_tag_name(property, info);
+    get_tag_name(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_id_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_id(property, info);
+    get_id(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_id_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -454,22 +473,22 @@ static void generated_Element_id_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_id(property, value, info);
+    set_id(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Element_className_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_class_name(property, info);
+    get_class_name(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_className_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -477,22 +496,22 @@ static void generated_Element_className_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_class_name(property, value, info);
+    set_class_name(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Element_slot_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_slot_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -500,99 +519,99 @@ static void generated_Element_slot_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Element_classList_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_class_list(property, info);
+    get_class_list(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_attributes_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_attributes(property, info);
+    get_attributes(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_children_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_children(property, info);
+    get_children(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_firstElementChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_first_element_child(property, info);
+    get_first_element_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_lastElementChild_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_last_element_child(property, info);
+    get_last_element_child(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_previousElementSibling_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_previous_element_sibling(property, info);
+    get_previous_element_sibling(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_nextElementSibling_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_next_element_sibling(property, info);
+    get_next_element_sibling(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_innerHTML_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_inner_html(property, info);
+    get_inner_html(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_innerHTML_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -600,66 +619,66 @@ static void generated_Element_innerHTML_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_inner_html(property, value, info);
+    set_inner_html(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_Element_ownerSVGElement_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_owner_svg_element(property, info);
+    get_owner_svg_element(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_Element_shadowRoot_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::Element)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_shadow_root(property, info);
+    get_shadow_root(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_style_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_style(property, info);
+    get_style(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_dataset_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_dataset(property, info);
+    get_dataset(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_innerText_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_inner_text(property, info);
+    get_inner_text(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_innerText_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -667,99 +686,99 @@ static void generated_HTMLElement_innerText_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_text_content(property, value, info);
+    set_text_content(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_content_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_template_content(property, info);
+    get_template_content(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_clientWidth_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_client_width(property, info);
+    get_client_width(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_clientHeight_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_client_height(property, info);
+    get_client_height(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_clientLeft_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_client_left(property, info);
+    get_client_left(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_clientTop_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_client_top(property, info);
+    get_client_top(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_scrollWidth_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_scroll_width(property, info);
+    get_scroll_width(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_scrollHeight_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_scroll_height(property, info);
+    get_scroll_height(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_scrollLeft_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_scroll_left(property, info);
+    get_scroll_left(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_scrollLeft_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -767,22 +786,22 @@ static void generated_HTMLElement_scrollLeft_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_scroll_left(property, value, info);
+    set_scroll_left(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_scrollTop_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_scroll_top(property, info);
+    get_scroll_top(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_scrollTop_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -790,77 +809,77 @@ static void generated_HTMLElement_scrollTop_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_scroll_top(property, value, info);
+    set_scroll_top(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_offsetWidth_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_offset_width(property, info);
+    get_offset_width(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_offsetHeight_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_client_height(property, info);
+    get_client_height(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_offsetLeft_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_offset_left(property, info);
+    get_offset_left(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_offsetTop_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_offset_top(property, info);
+    get_offset_top(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_offsetParent_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_offset_parent(property, info);
+    get_offset_parent(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_width_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_width(property, info);
+    get_element_width(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_width_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -868,22 +887,22 @@ static void generated_HTMLElement_width_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_element_width(property, value, info);
+    set_element_width(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_height_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_height(property, info);
+    get_element_height(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_height_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -891,22 +910,22 @@ static void generated_HTMLElement_height_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_element_height(property, value, info);
+    set_element_height(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_colSpan_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_table_cell_span(property, info);
+    get_table_cell_span(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_colSpan_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -914,22 +933,22 @@ static void generated_HTMLElement_colSpan_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_table_cell_span(property, value, info);
+    set_table_cell_span(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_rowSpan_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_table_cell_span(property, info);
+    get_table_cell_span(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_rowSpan_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -937,22 +956,22 @@ static void generated_HTMLElement_rowSpan_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_table_cell_span(property, value, info);
+    set_table_cell_span(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_cellSpacing_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_cellSpacing_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -960,22 +979,22 @@ static void generated_HTMLElement_cellSpacing_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_cellPadding_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_cellPadding_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -983,22 +1002,22 @@ static void generated_HTMLElement_cellPadding_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_enctype_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_enctype_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1006,22 +1025,22 @@ static void generated_HTMLElement_enctype_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_htmlFor_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_htmlFor_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1029,22 +1048,22 @@ static void generated_HTMLElement_htmlFor_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_type_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_type(property, info);
+    get_element_type(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_type_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1052,22 +1071,22 @@ static void generated_HTMLElement_type_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_element_type(property, value, info);
+    set_element_type(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_name_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_name_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1075,22 +1094,22 @@ static void generated_HTMLElement_name_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_value_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_form_value(property, info);
+    get_form_value(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_value_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1098,22 +1117,22 @@ static void generated_HTMLElement_value_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_form_value(property, value, info);
+    set_form_value(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_defaultValue_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_default_value(property, info);
+    get_default_value(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_defaultValue_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1121,22 +1140,22 @@ static void generated_HTMLElement_defaultValue_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_default_value(property, value, info);
+    set_default_value(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_maxLength_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_max_length(property, info);
+    get_max_length(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_maxLength_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1144,22 +1163,22 @@ static void generated_HTMLElement_maxLength_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_max_length(property, value, info);
+    set_max_length(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_readOnly_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_read_only(property, info);
+    get_read_only(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_readOnly_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1167,44 +1186,44 @@ static void generated_HTMLElement_readOnly_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_read_only(property, value, info);
+    set_read_only(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_options_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_select_options(property, info);
+    get_select_options(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_elements_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_form_elements(property, info);
+    get_form_elements(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selectedIndex_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_selected_index(property, info);
+    get_selected_index(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selectedIndex_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1212,22 +1231,22 @@ static void generated_HTMLElement_selectedIndex_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_selected_index(property, value, info);
+    set_selected_index(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_selectionStart_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_selection_start(property, info);
+    get_selection_start(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selectionStart_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1235,22 +1254,22 @@ static void generated_HTMLElement_selectionStart_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_selection_start(property, value, info);
+    set_selection_start(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_selectionEnd_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_selection_end(property, info);
+    get_selection_end(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selectionEnd_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1258,22 +1277,22 @@ static void generated_HTMLElement_selectionEnd_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_selection_end(property, value, info);
+    set_selection_end(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_selectionDirection_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_selection_direction(property, info);
+    get_selection_direction(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selectionDirection_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1281,22 +1300,22 @@ static void generated_HTMLElement_selectionDirection_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_selection_direction(property, value, info);
+    set_selection_direction(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_checked_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_checked(property, info);
+    get_checked(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_checked_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1304,22 +1323,22 @@ static void generated_HTMLElement_checked_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_checked(property, value, info);
+    set_checked(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_selected_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_selected(property, info);
+    get_selected(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_selected_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1327,22 +1346,22 @@ static void generated_HTMLElement_selected_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_selected(property, value, info);
+    set_selected(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_multiple_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_multiple(property, info);
+    get_multiple(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_multiple_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1350,22 +1369,22 @@ static void generated_HTMLElement_multiple_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_multiple(property, value, info);
+    set_multiple(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_disabled_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_disabled(property, info);
+    get_disabled(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_disabled_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1373,22 +1392,22 @@ static void generated_HTMLElement_disabled_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_disabled(property, value, info);
+    set_disabled(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_tabIndex_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_tab_index(property, info);
+    get_tab_index(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_tabIndex_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1396,22 +1415,22 @@ static void generated_HTMLElement_tabIndex_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_tab_index(property, value, info);
+    set_tab_index(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_src_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_url(property, info);
+    get_element_url(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_src_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1419,22 +1438,22 @@ static void generated_HTMLElement_src_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_element_src(property, value, info);
+    set_element_src(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_href_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_element_url(property, info);
+    get_element_url(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_href_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1442,22 +1461,22 @@ static void generated_HTMLElement_href_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_element_href(property, value, info);
+    set_element_href(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_hash_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_anchor_hash(property, info);
+    get_anchor_hash(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_hash_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1465,44 +1484,44 @@ static void generated_HTMLElement_hash_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_anchor_hash(property, value, info);
+    set_anchor_hash(info.Data().As<v8::Name>(), value, info);
 }
 
 static void generated_HTMLElement_contentWindow_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_content_window(property, info);
+    get_content_window(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLElement_contentDocument_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_content_document(property, info);
+    get_content_document(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLSlotElement_name_get(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::HTMLSlotElement)) {
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    get_reflected_string_attribute(property, info);
+    get_reflected_string_attribute(info.Data().As<v8::Name>(), info);
 }
 
 static void generated_HTMLSlotElement_name_set(
-    v8::Local<v8::Name> property,
+    v8::Local<v8::Name>,
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info)
 {
@@ -1510,7 +1529,7 @@ static void generated_HTMLSlotElement_name_set(
         throw_generated_illegal_invocation(info.GetIsolate());
         return;
     }
-    set_reflected_string_attribute(property, value, info);
+    set_reflected_string_attribute(info.Data().As<v8::Name>(), value, info);
 }
 
 void install_generated_dom_templates(v8::Local<v8::Context>)
@@ -1546,104 +1565,248 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_Node_template->SetInterfaceName(js_string(isolate, "Node"));
     generated_Node_template->Inherit(generated_EventTarget_template);
     generated_Node_template->InstanceTemplate()->SetInternalFieldCount(2);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "nodeName"),
-        generated_Node_nodeName_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "nodeType"),
-        generated_Node_nodeType_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "nodeValue"),
-        generated_Node_nodeValue_get,
-        generated_Node_nodeValue_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "textContent"),
-        generated_Node_textContent_get,
-        generated_Node_textContent_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "data"),
-        generated_Node_data_get,
-        generated_Node_data_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "isConnected"),
-        generated_Node_isConnected_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "ownerDocument"),
-        generated_Node_ownerDocument_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "parentNode"),
-        generated_Node_parentNode_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "parentElement"),
-        generated_Node_parentElement_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "childNodes"),
-        generated_Node_childNodes_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "firstChild"),
-        generated_Node_firstChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "lastChild"),
-        generated_Node_lastChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "previousSibling"),
-        generated_Node_previousSibling_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "nextSibling"),
-        generated_Node_nextSibling_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "assignedSlot"),
-        generated_Node_assignedSlot_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "__websceneNativeNodeId"),
-        generated_Node___websceneNativeNodeId_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        static_cast<v8::PropertyAttribute>(v8::PropertyAttribute::ReadOnly | v8::PropertyAttribute::DontEnum | v8::PropertyAttribute::DontDelete));
     auto generated_Node_signature =
         v8::Signature::New(isolate, generated_Node_template);
+    auto generated_Node_nodeName_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.nodeName"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_nodeName_symbol,
+        generated_Node_nodeName_get,
+        nullptr,
+        js_string(isolate, "nodeName"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "nodeName"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_nodeName_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_nodeType_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.nodeType"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_nodeType_symbol,
+        generated_Node_nodeType_get,
+        nullptr,
+        js_string(isolate, "nodeType"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "nodeType"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_nodeType_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_nodeValue_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.nodeValue"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_nodeValue_symbol,
+        generated_Node_nodeValue_get,
+        generated_Node_nodeValue_set,
+        js_string(isolate, "nodeValue"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "nodeValue"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_nodeValue_symbol,
+            generated_Node_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Node_nodeValue_symbol, generated_Node_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Node_textContent_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.textContent"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_textContent_symbol,
+        generated_Node_textContent_get,
+        generated_Node_textContent_set,
+        js_string(isolate, "textContent"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "textContent"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_textContent_symbol,
+            generated_Node_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Node_textContent_symbol, generated_Node_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Node_data_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.data"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_data_symbol,
+        generated_Node_data_get,
+        generated_Node_data_set,
+        js_string(isolate, "data"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "data"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_data_symbol,
+            generated_Node_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Node_data_symbol, generated_Node_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Node_isConnected_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.isConnected"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_isConnected_symbol,
+        generated_Node_isConnected_get,
+        nullptr,
+        js_string(isolate, "isConnected"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "isConnected"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_isConnected_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_ownerDocument_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.ownerDocument"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_ownerDocument_symbol,
+        generated_Node_ownerDocument_get,
+        nullptr,
+        js_string(isolate, "ownerDocument"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "ownerDocument"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_ownerDocument_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_parentNode_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.parentNode"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_parentNode_symbol,
+        generated_Node_parentNode_get,
+        nullptr,
+        js_string(isolate, "parentNode"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "parentNode"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_parentNode_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_parentElement_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.parentElement"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_parentElement_symbol,
+        generated_Node_parentElement_get,
+        nullptr,
+        js_string(isolate, "parentElement"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "parentElement"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_parentElement_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_childNodes_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.childNodes"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_childNodes_symbol,
+        generated_Node_childNodes_get,
+        nullptr,
+        js_string(isolate, "childNodes"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "childNodes"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_childNodes_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_firstChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.firstChild"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_firstChild_symbol,
+        generated_Node_firstChild_get,
+        nullptr,
+        js_string(isolate, "firstChild"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "firstChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_firstChild_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_lastChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.lastChild"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_lastChild_symbol,
+        generated_Node_lastChild_get,
+        nullptr,
+        js_string(isolate, "lastChild"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "lastChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_lastChild_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_previousSibling_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.previousSibling"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_previousSibling_symbol,
+        generated_Node_previousSibling_get,
+        nullptr,
+        js_string(isolate, "previousSibling"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "previousSibling"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_previousSibling_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_nextSibling_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.nextSibling"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_nextSibling_symbol,
+        generated_Node_nextSibling_get,
+        nullptr,
+        js_string(isolate, "nextSibling"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "nextSibling"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_nextSibling_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node_assignedSlot_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.assignedSlot"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node_assignedSlot_symbol,
+        generated_Node_assignedSlot_get,
+        nullptr,
+        js_string(isolate, "assignedSlot"),
+        v8::PropertyAttribute::None);
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "assignedSlot"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node_assignedSlot_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Node___websceneNativeNodeId_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Node.__websceneNativeNodeId"));
+    generated_Node_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Node___websceneNativeNodeId_symbol,
+        generated_Node___websceneNativeNodeId_get,
+        nullptr,
+        js_string(isolate, "__websceneNativeNodeId"),
+        static_cast<v8::PropertyAttribute>(v8::PropertyAttribute::ReadOnly | v8::PropertyAttribute::DontEnum | v8::PropertyAttribute::DontDelete));
+    generated_Node_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "__websceneNativeNodeId"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Node___websceneNativeNodeId_symbol,
+            generated_Node_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        static_cast<v8::PropertyAttribute>(v8::PropertyAttribute::ReadOnly | v8::PropertyAttribute::DontEnum | v8::PropertyAttribute::DontDelete));
     generated_Node_template->PrototypeTemplate()->Set(
         js_string(isolate, "appendChild"),
         v8::FunctionTemplate::New(
@@ -1795,26 +1958,53 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_DocumentFragment_template->SetInterfaceName(js_string(isolate, "DocumentFragment"));
     generated_DocumentFragment_template->Inherit(generated_Node_template);
     generated_DocumentFragment_template->InstanceTemplate()->SetInternalFieldCount(2);
-    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "children"),
-        generated_DocumentFragment_children_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "firstElementChild"),
-        generated_DocumentFragment_firstElementChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "lastElementChild"),
-        generated_DocumentFragment_lastElementChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
     auto generated_DocumentFragment_signature =
         v8::Signature::New(isolate, generated_DocumentFragment_template);
+    auto generated_DocumentFragment_children_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.DocumentFragment.children"));
+    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_DocumentFragment_children_symbol,
+        generated_DocumentFragment_children_get,
+        nullptr,
+        js_string(isolate, "children"),
+        v8::PropertyAttribute::None);
+    generated_DocumentFragment_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "children"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_DocumentFragment_children_symbol,
+            generated_DocumentFragment_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_DocumentFragment_firstElementChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.DocumentFragment.firstElementChild"));
+    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_DocumentFragment_firstElementChild_symbol,
+        generated_DocumentFragment_firstElementChild_get,
+        nullptr,
+        js_string(isolate, "firstElementChild"),
+        v8::PropertyAttribute::None);
+    generated_DocumentFragment_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "firstElementChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_DocumentFragment_firstElementChild_symbol,
+            generated_DocumentFragment_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_DocumentFragment_lastElementChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.DocumentFragment.lastElementChild"));
+    generated_DocumentFragment_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_DocumentFragment_lastElementChild_symbol,
+        generated_DocumentFragment_lastElementChild_get,
+        nullptr,
+        js_string(isolate, "lastElementChild"),
+        v8::PropertyAttribute::None);
+    generated_DocumentFragment_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "lastElementChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_DocumentFragment_lastElementChild_symbol,
+            generated_DocumentFragment_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
     generated_DocumentFragment_template->PrototypeTemplate()->Set(
         js_string(isolate, "querySelector"),
         v8::FunctionTemplate::New(
@@ -1834,35 +2024,82 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_ShadowRoot_template->SetInterfaceName(js_string(isolate, "ShadowRoot"));
     generated_ShadowRoot_template->Inherit(generated_DocumentFragment_template);
     generated_ShadowRoot_template->InstanceTemplate()->SetInternalFieldCount(2);
+    auto generated_ShadowRoot_signature =
+        v8::Signature::New(isolate, generated_ShadowRoot_template);
+    auto generated_ShadowRoot_host_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.ShadowRoot.host"));
     generated_ShadowRoot_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "host"),
+        generated_ShadowRoot_host_symbol,
         generated_ShadowRoot_host_get,
         nullptr,
-        v8::Local<v8::Value>(),
+        js_string(isolate, "host"),
         v8::PropertyAttribute::None);
+    generated_ShadowRoot_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "host"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_ShadowRoot_host_symbol,
+            generated_ShadowRoot_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_ShadowRoot_mode_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.ShadowRoot.mode"));
     generated_ShadowRoot_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "mode"),
+        generated_ShadowRoot_mode_symbol,
         generated_ShadowRoot_mode_get,
         nullptr,
-        v8::Local<v8::Value>(),
+        js_string(isolate, "mode"),
         v8::PropertyAttribute::None);
+    generated_ShadowRoot_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "mode"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_ShadowRoot_mode_symbol,
+            generated_ShadowRoot_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_ShadowRoot_delegatesFocus_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.ShadowRoot.delegatesFocus"));
     generated_ShadowRoot_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "delegatesFocus"),
+        generated_ShadowRoot_delegatesFocus_symbol,
         generated_ShadowRoot_delegatesFocus_get,
         nullptr,
-        v8::Local<v8::Value>(),
+        js_string(isolate, "delegatesFocus"),
         v8::PropertyAttribute::None);
+    generated_ShadowRoot_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "delegatesFocus"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_ShadowRoot_delegatesFocus_symbol,
+            generated_ShadowRoot_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_ShadowRoot_innerHTML_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.ShadowRoot.innerHTML"));
     generated_ShadowRoot_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "innerHTML"),
+        generated_ShadowRoot_innerHTML_symbol,
         generated_ShadowRoot_innerHTML_get,
         generated_ShadowRoot_innerHTML_set,
-        v8::Local<v8::Value>(),
+        js_string(isolate, "innerHTML"),
         v8::PropertyAttribute::None);
+    generated_ShadowRoot_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "innerHTML"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_ShadowRoot_innerHTML_symbol,
+            generated_ShadowRoot_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_ShadowRoot_innerHTML_symbol, generated_ShadowRoot_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_ShadowRoot_activeElement_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.ShadowRoot.activeElement"));
     generated_ShadowRoot_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "activeElement"),
+        generated_ShadowRoot_activeElement_symbol,
         generated_ShadowRoot_activeElement_get,
         nullptr,
-        v8::Local<v8::Value>(),
+        js_string(isolate, "activeElement"),
+        v8::PropertyAttribute::None);
+    generated_ShadowRoot_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "activeElement"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_ShadowRoot_activeElement_symbol,
+            generated_ShadowRoot_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
         v8::PropertyAttribute::None);
     shadow_root_template.Reset(isolate, generated_ShadowRoot_template);
 
@@ -1871,104 +2108,248 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_Element_template->SetInterfaceName(js_string(isolate, "Element"));
     generated_Element_template->Inherit(generated_Node_template);
     generated_Element_template->InstanceTemplate()->SetInternalFieldCount(2);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "namespaceURI"),
-        generated_Element_namespaceURI_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "localName"),
-        generated_Element_localName_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "tagName"),
-        generated_Element_tagName_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "id"),
-        generated_Element_id_get,
-        generated_Element_id_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "className"),
-        generated_Element_className_get,
-        generated_Element_className_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "slot"),
-        generated_Element_slot_get,
-        generated_Element_slot_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "classList"),
-        generated_Element_classList_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "attributes"),
-        generated_Element_attributes_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "children"),
-        generated_Element_children_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "firstElementChild"),
-        generated_Element_firstElementChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "lastElementChild"),
-        generated_Element_lastElementChild_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "previousElementSibling"),
-        generated_Element_previousElementSibling_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "nextElementSibling"),
-        generated_Element_nextElementSibling_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "innerHTML"),
-        generated_Element_innerHTML_get,
-        generated_Element_innerHTML_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "ownerSVGElement"),
-        generated_Element_ownerSVGElement_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "shadowRoot"),
-        generated_Element_shadowRoot_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
     auto generated_Element_signature =
         v8::Signature::New(isolate, generated_Element_template);
+    auto generated_Element_namespaceURI_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.namespaceURI"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_namespaceURI_symbol,
+        generated_Element_namespaceURI_get,
+        nullptr,
+        js_string(isolate, "namespaceURI"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "namespaceURI"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_namespaceURI_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_localName_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.localName"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_localName_symbol,
+        generated_Element_localName_get,
+        nullptr,
+        js_string(isolate, "localName"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "localName"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_localName_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_tagName_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.tagName"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_tagName_symbol,
+        generated_Element_tagName_get,
+        nullptr,
+        js_string(isolate, "tagName"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "tagName"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_tagName_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_id_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.id"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_id_symbol,
+        generated_Element_id_get,
+        generated_Element_id_set,
+        js_string(isolate, "id"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "id"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_id_symbol,
+            generated_Element_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Element_id_symbol, generated_Element_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Element_className_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.className"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_className_symbol,
+        generated_Element_className_get,
+        generated_Element_className_set,
+        js_string(isolate, "className"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "className"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_className_symbol,
+            generated_Element_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Element_className_symbol, generated_Element_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Element_slot_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.slot"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_slot_symbol,
+        generated_Element_slot_get,
+        generated_Element_slot_set,
+        js_string(isolate, "slot"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "slot"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_slot_symbol,
+            generated_Element_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Element_slot_symbol, generated_Element_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Element_classList_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.classList"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_classList_symbol,
+        generated_Element_classList_get,
+        nullptr,
+        js_string(isolate, "classList"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "classList"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_classList_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_attributes_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.attributes"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_attributes_symbol,
+        generated_Element_attributes_get,
+        nullptr,
+        js_string(isolate, "attributes"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "attributes"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_attributes_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_children_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.children"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_children_symbol,
+        generated_Element_children_get,
+        nullptr,
+        js_string(isolate, "children"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "children"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_children_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_firstElementChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.firstElementChild"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_firstElementChild_symbol,
+        generated_Element_firstElementChild_get,
+        nullptr,
+        js_string(isolate, "firstElementChild"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "firstElementChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_firstElementChild_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_lastElementChild_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.lastElementChild"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_lastElementChild_symbol,
+        generated_Element_lastElementChild_get,
+        nullptr,
+        js_string(isolate, "lastElementChild"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "lastElementChild"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_lastElementChild_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_previousElementSibling_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.previousElementSibling"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_previousElementSibling_symbol,
+        generated_Element_previousElementSibling_get,
+        nullptr,
+        js_string(isolate, "previousElementSibling"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "previousElementSibling"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_previousElementSibling_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_nextElementSibling_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.nextElementSibling"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_nextElementSibling_symbol,
+        generated_Element_nextElementSibling_get,
+        nullptr,
+        js_string(isolate, "nextElementSibling"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "nextElementSibling"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_nextElementSibling_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_innerHTML_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.innerHTML"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_innerHTML_symbol,
+        generated_Element_innerHTML_get,
+        generated_Element_innerHTML_set,
+        js_string(isolate, "innerHTML"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "innerHTML"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_innerHTML_symbol,
+            generated_Element_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_Element_innerHTML_symbol, generated_Element_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_Element_ownerSVGElement_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.ownerSVGElement"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_ownerSVGElement_symbol,
+        generated_Element_ownerSVGElement_get,
+        nullptr,
+        js_string(isolate, "ownerSVGElement"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "ownerSVGElement"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_ownerSVGElement_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_Element_shadowRoot_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.Element.shadowRoot"));
+    generated_Element_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_Element_shadowRoot_symbol,
+        generated_Element_shadowRoot_get,
+        nullptr,
+        js_string(isolate, "shadowRoot"),
+        v8::PropertyAttribute::None);
+    generated_Element_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "shadowRoot"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_Element_shadowRoot_symbol,
+            generated_Element_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
     generated_Element_template->PrototypeTemplate()->Set(
         js_string(isolate, "getAttribute"),
         v8::FunctionTemplate::New(
@@ -2078,290 +2459,713 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_HTMLElement_template->SetInterfaceName(js_string(isolate, "HTMLElement"));
     generated_HTMLElement_template->Inherit(generated_Element_template);
     generated_HTMLElement_template->InstanceTemplate()->SetInternalFieldCount(2);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "style"),
-        generated_HTMLElement_style_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "dataset"),
-        generated_HTMLElement_dataset_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "innerText"),
-        generated_HTMLElement_innerText_get,
-        generated_HTMLElement_innerText_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "content"),
-        generated_HTMLElement_content_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "clientWidth"),
-        generated_HTMLElement_clientWidth_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "clientHeight"),
-        generated_HTMLElement_clientHeight_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "clientLeft"),
-        generated_HTMLElement_clientLeft_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "clientTop"),
-        generated_HTMLElement_clientTop_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "scrollWidth"),
-        generated_HTMLElement_scrollWidth_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "scrollHeight"),
-        generated_HTMLElement_scrollHeight_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "scrollLeft"),
-        generated_HTMLElement_scrollLeft_get,
-        generated_HTMLElement_scrollLeft_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "scrollTop"),
-        generated_HTMLElement_scrollTop_get,
-        generated_HTMLElement_scrollTop_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "offsetWidth"),
-        generated_HTMLElement_offsetWidth_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "offsetHeight"),
-        generated_HTMLElement_offsetHeight_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "offsetLeft"),
-        generated_HTMLElement_offsetLeft_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "offsetTop"),
-        generated_HTMLElement_offsetTop_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "offsetParent"),
-        generated_HTMLElement_offsetParent_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "width"),
-        generated_HTMLElement_width_get,
-        generated_HTMLElement_width_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "height"),
-        generated_HTMLElement_height_get,
-        generated_HTMLElement_height_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "colSpan"),
-        generated_HTMLElement_colSpan_get,
-        generated_HTMLElement_colSpan_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "rowSpan"),
-        generated_HTMLElement_rowSpan_get,
-        generated_HTMLElement_rowSpan_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "cellSpacing"),
-        generated_HTMLElement_cellSpacing_get,
-        generated_HTMLElement_cellSpacing_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "cellPadding"),
-        generated_HTMLElement_cellPadding_get,
-        generated_HTMLElement_cellPadding_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "enctype"),
-        generated_HTMLElement_enctype_get,
-        generated_HTMLElement_enctype_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "htmlFor"),
-        generated_HTMLElement_htmlFor_get,
-        generated_HTMLElement_htmlFor_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "type"),
-        generated_HTMLElement_type_get,
-        generated_HTMLElement_type_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "name"),
-        generated_HTMLElement_name_get,
-        generated_HTMLElement_name_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "value"),
-        generated_HTMLElement_value_get,
-        generated_HTMLElement_value_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "defaultValue"),
-        generated_HTMLElement_defaultValue_get,
-        generated_HTMLElement_defaultValue_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "maxLength"),
-        generated_HTMLElement_maxLength_get,
-        generated_HTMLElement_maxLength_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "readOnly"),
-        generated_HTMLElement_readOnly_get,
-        generated_HTMLElement_readOnly_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "options"),
-        generated_HTMLElement_options_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "elements"),
-        generated_HTMLElement_elements_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "selectedIndex"),
-        generated_HTMLElement_selectedIndex_get,
-        generated_HTMLElement_selectedIndex_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "selectionStart"),
-        generated_HTMLElement_selectionStart_get,
-        generated_HTMLElement_selectionStart_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "selectionEnd"),
-        generated_HTMLElement_selectionEnd_get,
-        generated_HTMLElement_selectionEnd_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "selectionDirection"),
-        generated_HTMLElement_selectionDirection_get,
-        generated_HTMLElement_selectionDirection_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "checked"),
-        generated_HTMLElement_checked_get,
-        generated_HTMLElement_checked_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "selected"),
-        generated_HTMLElement_selected_get,
-        generated_HTMLElement_selected_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "multiple"),
-        generated_HTMLElement_multiple_get,
-        generated_HTMLElement_multiple_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "disabled"),
-        generated_HTMLElement_disabled_get,
-        generated_HTMLElement_disabled_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "tabIndex"),
-        generated_HTMLElement_tabIndex_get,
-        generated_HTMLElement_tabIndex_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "src"),
-        generated_HTMLElement_src_get,
-        generated_HTMLElement_src_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "href"),
-        generated_HTMLElement_href_get,
-        generated_HTMLElement_href_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "hash"),
-        generated_HTMLElement_hash_get,
-        generated_HTMLElement_hash_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "contentWindow"),
-        generated_HTMLElement_contentWindow_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
-    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "contentDocument"),
-        generated_HTMLElement_contentDocument_get,
-        nullptr,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
     auto generated_HTMLElement_signature =
         v8::Signature::New(isolate, generated_HTMLElement_template);
+    auto generated_HTMLElement_style_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.style"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_style_symbol,
+        generated_HTMLElement_style_get,
+        nullptr,
+        js_string(isolate, "style"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "style"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_style_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_dataset_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.dataset"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_dataset_symbol,
+        generated_HTMLElement_dataset_get,
+        nullptr,
+        js_string(isolate, "dataset"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "dataset"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_dataset_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_innerText_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.innerText"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_innerText_symbol,
+        generated_HTMLElement_innerText_get,
+        generated_HTMLElement_innerText_set,
+        js_string(isolate, "innerText"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "innerText"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_innerText_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_innerText_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_content_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.content"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_content_symbol,
+        generated_HTMLElement_content_get,
+        nullptr,
+        js_string(isolate, "content"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "content"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_content_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_clientWidth_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.clientWidth"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_clientWidth_symbol,
+        generated_HTMLElement_clientWidth_get,
+        nullptr,
+        js_string(isolate, "clientWidth"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "clientWidth"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_clientWidth_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_clientHeight_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.clientHeight"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_clientHeight_symbol,
+        generated_HTMLElement_clientHeight_get,
+        nullptr,
+        js_string(isolate, "clientHeight"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "clientHeight"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_clientHeight_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_clientLeft_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.clientLeft"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_clientLeft_symbol,
+        generated_HTMLElement_clientLeft_get,
+        nullptr,
+        js_string(isolate, "clientLeft"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "clientLeft"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_clientLeft_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_clientTop_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.clientTop"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_clientTop_symbol,
+        generated_HTMLElement_clientTop_get,
+        nullptr,
+        js_string(isolate, "clientTop"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "clientTop"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_clientTop_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_scrollWidth_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.scrollWidth"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_scrollWidth_symbol,
+        generated_HTMLElement_scrollWidth_get,
+        nullptr,
+        js_string(isolate, "scrollWidth"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "scrollWidth"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_scrollWidth_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_scrollHeight_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.scrollHeight"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_scrollHeight_symbol,
+        generated_HTMLElement_scrollHeight_get,
+        nullptr,
+        js_string(isolate, "scrollHeight"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "scrollHeight"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_scrollHeight_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_scrollLeft_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.scrollLeft"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_scrollLeft_symbol,
+        generated_HTMLElement_scrollLeft_get,
+        generated_HTMLElement_scrollLeft_set,
+        js_string(isolate, "scrollLeft"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "scrollLeft"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_scrollLeft_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_scrollLeft_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_scrollTop_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.scrollTop"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_scrollTop_symbol,
+        generated_HTMLElement_scrollTop_get,
+        generated_HTMLElement_scrollTop_set,
+        js_string(isolate, "scrollTop"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "scrollTop"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_scrollTop_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_scrollTop_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_offsetWidth_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.offsetWidth"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_offsetWidth_symbol,
+        generated_HTMLElement_offsetWidth_get,
+        nullptr,
+        js_string(isolate, "offsetWidth"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "offsetWidth"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_offsetWidth_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_offsetHeight_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.offsetHeight"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_offsetHeight_symbol,
+        generated_HTMLElement_offsetHeight_get,
+        nullptr,
+        js_string(isolate, "offsetHeight"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "offsetHeight"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_offsetHeight_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_offsetLeft_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.offsetLeft"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_offsetLeft_symbol,
+        generated_HTMLElement_offsetLeft_get,
+        nullptr,
+        js_string(isolate, "offsetLeft"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "offsetLeft"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_offsetLeft_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_offsetTop_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.offsetTop"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_offsetTop_symbol,
+        generated_HTMLElement_offsetTop_get,
+        nullptr,
+        js_string(isolate, "offsetTop"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "offsetTop"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_offsetTop_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_offsetParent_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.offsetParent"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_offsetParent_symbol,
+        generated_HTMLElement_offsetParent_get,
+        nullptr,
+        js_string(isolate, "offsetParent"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "offsetParent"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_offsetParent_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_width_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.width"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_width_symbol,
+        generated_HTMLElement_width_get,
+        generated_HTMLElement_width_set,
+        js_string(isolate, "width"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "width"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_width_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_width_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_height_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.height"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_height_symbol,
+        generated_HTMLElement_height_get,
+        generated_HTMLElement_height_set,
+        js_string(isolate, "height"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "height"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_height_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_height_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_colSpan_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.colSpan"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_colSpan_symbol,
+        generated_HTMLElement_colSpan_get,
+        generated_HTMLElement_colSpan_set,
+        js_string(isolate, "colSpan"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "colSpan"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_colSpan_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_colSpan_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_rowSpan_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.rowSpan"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_rowSpan_symbol,
+        generated_HTMLElement_rowSpan_get,
+        generated_HTMLElement_rowSpan_set,
+        js_string(isolate, "rowSpan"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "rowSpan"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_rowSpan_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_rowSpan_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_cellSpacing_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.cellSpacing"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_cellSpacing_symbol,
+        generated_HTMLElement_cellSpacing_get,
+        generated_HTMLElement_cellSpacing_set,
+        js_string(isolate, "cellSpacing"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "cellSpacing"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_cellSpacing_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_cellSpacing_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_cellPadding_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.cellPadding"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_cellPadding_symbol,
+        generated_HTMLElement_cellPadding_get,
+        generated_HTMLElement_cellPadding_set,
+        js_string(isolate, "cellPadding"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "cellPadding"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_cellPadding_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_cellPadding_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_enctype_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.enctype"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_enctype_symbol,
+        generated_HTMLElement_enctype_get,
+        generated_HTMLElement_enctype_set,
+        js_string(isolate, "enctype"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "enctype"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_enctype_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_enctype_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_htmlFor_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.htmlFor"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_htmlFor_symbol,
+        generated_HTMLElement_htmlFor_get,
+        generated_HTMLElement_htmlFor_set,
+        js_string(isolate, "htmlFor"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "htmlFor"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_htmlFor_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_htmlFor_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_type_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.type"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_type_symbol,
+        generated_HTMLElement_type_get,
+        generated_HTMLElement_type_set,
+        js_string(isolate, "type"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "type"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_type_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_type_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_name_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.name"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_name_symbol,
+        generated_HTMLElement_name_get,
+        generated_HTMLElement_name_set,
+        js_string(isolate, "name"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "name"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_name_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_name_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_value_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.value"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_value_symbol,
+        generated_HTMLElement_value_get,
+        generated_HTMLElement_value_set,
+        js_string(isolate, "value"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "value"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_value_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_value_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_defaultValue_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.defaultValue"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_defaultValue_symbol,
+        generated_HTMLElement_defaultValue_get,
+        generated_HTMLElement_defaultValue_set,
+        js_string(isolate, "defaultValue"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "defaultValue"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_defaultValue_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_defaultValue_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_maxLength_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.maxLength"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_maxLength_symbol,
+        generated_HTMLElement_maxLength_get,
+        generated_HTMLElement_maxLength_set,
+        js_string(isolate, "maxLength"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "maxLength"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_maxLength_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_maxLength_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_readOnly_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.readOnly"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_readOnly_symbol,
+        generated_HTMLElement_readOnly_get,
+        generated_HTMLElement_readOnly_set,
+        js_string(isolate, "readOnly"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "readOnly"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_readOnly_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_readOnly_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_options_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.options"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_options_symbol,
+        generated_HTMLElement_options_get,
+        nullptr,
+        js_string(isolate, "options"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "options"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_options_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_elements_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.elements"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_elements_symbol,
+        generated_HTMLElement_elements_get,
+        nullptr,
+        js_string(isolate, "elements"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "elements"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_elements_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_selectedIndex_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.selectedIndex"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_selectedIndex_symbol,
+        generated_HTMLElement_selectedIndex_get,
+        generated_HTMLElement_selectedIndex_set,
+        js_string(isolate, "selectedIndex"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "selectedIndex"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_selectedIndex_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_selectedIndex_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_selectionStart_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.selectionStart"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_selectionStart_symbol,
+        generated_HTMLElement_selectionStart_get,
+        generated_HTMLElement_selectionStart_set,
+        js_string(isolate, "selectionStart"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "selectionStart"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_selectionStart_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_selectionStart_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_selectionEnd_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.selectionEnd"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_selectionEnd_symbol,
+        generated_HTMLElement_selectionEnd_get,
+        generated_HTMLElement_selectionEnd_set,
+        js_string(isolate, "selectionEnd"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "selectionEnd"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_selectionEnd_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_selectionEnd_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_selectionDirection_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.selectionDirection"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_selectionDirection_symbol,
+        generated_HTMLElement_selectionDirection_get,
+        generated_HTMLElement_selectionDirection_set,
+        js_string(isolate, "selectionDirection"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "selectionDirection"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_selectionDirection_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_selectionDirection_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_checked_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.checked"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_checked_symbol,
+        generated_HTMLElement_checked_get,
+        generated_HTMLElement_checked_set,
+        js_string(isolate, "checked"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "checked"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_checked_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_checked_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_selected_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.selected"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_selected_symbol,
+        generated_HTMLElement_selected_get,
+        generated_HTMLElement_selected_set,
+        js_string(isolate, "selected"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "selected"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_selected_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_selected_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_multiple_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.multiple"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_multiple_symbol,
+        generated_HTMLElement_multiple_get,
+        generated_HTMLElement_multiple_set,
+        js_string(isolate, "multiple"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "multiple"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_multiple_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_multiple_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_disabled_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.disabled"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_disabled_symbol,
+        generated_HTMLElement_disabled_get,
+        generated_HTMLElement_disabled_set,
+        js_string(isolate, "disabled"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "disabled"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_disabled_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_disabled_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_tabIndex_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.tabIndex"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_tabIndex_symbol,
+        generated_HTMLElement_tabIndex_get,
+        generated_HTMLElement_tabIndex_set,
+        js_string(isolate, "tabIndex"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "tabIndex"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_tabIndex_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_tabIndex_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_src_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.src"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_src_symbol,
+        generated_HTMLElement_src_get,
+        generated_HTMLElement_src_set,
+        js_string(isolate, "src"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "src"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_src_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_src_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_href_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.href"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_href_symbol,
+        generated_HTMLElement_href_get,
+        generated_HTMLElement_href_set,
+        js_string(isolate, "href"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "href"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_href_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_href_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_hash_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.hash"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_hash_symbol,
+        generated_HTMLElement_hash_get,
+        generated_HTMLElement_hash_set,
+        js_string(isolate, "hash"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "hash"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_hash_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLElement_hash_symbol, generated_HTMLElement_signature, 1),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_contentWindow_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.contentWindow"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_contentWindow_symbol,
+        generated_HTMLElement_contentWindow_get,
+        nullptr,
+        js_string(isolate, "contentWindow"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "contentWindow"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_contentWindow_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
+    auto generated_HTMLElement_contentDocument_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLElement.contentDocument"));
+    generated_HTMLElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLElement_contentDocument_symbol,
+        generated_HTMLElement_contentDocument_get,
+        nullptr,
+        js_string(isolate, "contentDocument"),
+        v8::PropertyAttribute::None);
+    generated_HTMLElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "contentDocument"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLElement_contentDocument_symbol,
+            generated_HTMLElement_signature, 0),
+        v8::Local<v8::FunctionTemplate>(),
+        v8::PropertyAttribute::None);
     generated_HTMLElement_template->PrototypeTemplate()->Set(
         js_string(isolate, "scrollIntoView"),
         v8::FunctionTemplate::New(
@@ -2441,14 +3245,23 @@ void install_generated_dom_templates(v8::Local<v8::Context>)
     generated_HTMLSlotElement_template->SetInterfaceName(js_string(isolate, "HTMLSlotElement"));
     generated_HTMLSlotElement_template->Inherit(generated_HTMLElement_template);
     generated_HTMLSlotElement_template->InstanceTemplate()->SetInternalFieldCount(2);
-    generated_HTMLSlotElement_template->InstanceTemplate()->SetNativeDataProperty(
-        js_string(isolate, "name"),
-        generated_HTMLSlotElement_name_get,
-        generated_HTMLSlotElement_name_set,
-        v8::Local<v8::Value>(),
-        v8::PropertyAttribute::None);
     auto generated_HTMLSlotElement_signature =
         v8::Signature::New(isolate, generated_HTMLSlotElement_template);
+    auto generated_HTMLSlotElement_name_symbol = v8::Symbol::New(
+        isolate, js_string(isolate, "WebScene.HTMLSlotElement.name"));
+    generated_HTMLSlotElement_template->InstanceTemplate()->SetNativeDataProperty(
+        generated_HTMLSlotElement_name_symbol,
+        generated_HTMLSlotElement_name_get,
+        generated_HTMLSlotElement_name_set,
+        js_string(isolate, "name"),
+        v8::PropertyAttribute::None);
+    generated_HTMLSlotElement_template->PrototypeTemplate()->SetAccessorProperty(
+        js_string(isolate, "name"),
+        v8::FunctionTemplate::New(
+            isolate, generated_dom_prototype_attribute_get, generated_HTMLSlotElement_name_symbol,
+            generated_HTMLSlotElement_signature, 0),
+        v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, generated_HTMLSlotElement_name_symbol, generated_HTMLSlotElement_signature, 1),
+        v8::PropertyAttribute::None);
     generated_HTMLSlotElement_template->PrototypeTemplate()->Set(
         js_string(isolate, "assignedNodes"),
         v8::FunctionTemplate::New(

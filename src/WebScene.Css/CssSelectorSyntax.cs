@@ -499,8 +499,9 @@ public static class CssSelectorSyntaxParser
                         argument = ReadBalanced(text, ref index, '(', ')');
                     }
                     if (isElement && simple.Pseudos.Any(static pseudo => pseudo.IsElement)) return false;
-                    simple.Pseudos.Add(new CssPseudoSelectorSyntax(name, argument, isElement));
-                    specificity += isElement ? 1 : name == "where" ? 0 : 10;
+                    var pseudo = new CssPseudoSelectorSyntax(name, argument, isElement);
+                    simple.Pseudos.Add(pseudo);
+                    specificity += GetPseudoSpecificity(pseudo);
                     break;
                 default:
                     return false;
@@ -508,6 +509,29 @@ public static class CssSelectorSyntaxParser
         }
 
         return true;
+    }
+
+    private static int GetPseudoSpecificity(CssPseudoSelectorSyntax pseudo)
+    {
+        if (pseudo.IsElement)
+        {
+            return 1;
+        }
+        if (pseudo.Name == "where")
+        {
+            return 0;
+        }
+        if (pseudo.Name is not ("is" or "not" or "has"))
+        {
+            return 10;
+        }
+
+        var maximum = 0;
+        foreach (var argumentSelector in pseudo.GetArgumentSelectors())
+        {
+            maximum = Math.Max(maximum, argumentSelector.Specificity);
+        }
+        return maximum;
     }
 
     private static CssSimpleSelectorSyntax Clone(CssSimpleSelectorSyntax source, string? id)

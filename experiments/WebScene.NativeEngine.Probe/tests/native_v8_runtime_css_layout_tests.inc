@@ -870,6 +870,58 @@ void test_hover_specificity_preserves_visible_theme_icon(webscene_engine* engine
         "a later low-specificity rule hid or recolored the hovered child: " + result);
 }
 
+void test_complex_is_specificity_ignores_non_element_siblings(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .b.c + .d + .q.r + .s + #target {
+                font-size: 10px;
+                height: 10px;
+                width: 10px;
+              }
+              :is(.a, .b.c + .d, .q) + :is(* + .p, .q.r + .s, * + .t) + #target {
+                height: 20px;
+                width: 20px;
+              }
+              .b.c + .d + .q.r + .s + #target { width: 30px; }
+            </style>
+            <div class="b c"></div>
+            <div class="a d e"></div>
+            <div class="q r"></div>
+            <div class="p s t"></div>
+            <div id="target"></div>`;
+          const computed = getComputedStyle(document.getElementById('target'));
+          return [computed.width, computed.height, computed.fontSize];
+        })()
+    )JS", "native-complex-is-specificity.js");
+    require(
+        result == R"JSON(["30px","20px","10px"])JSON",
+        ":is() specificity or element-sibling matching regressed: " + result);
+}
+
+void test_inline_relative_line_height_uses_cascaded_font_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>div { font-size: 16px; }</style>
+            <div style="line-height: normal"></div>
+            <div style="line-height: 1"></div>
+            <div style="line-height: 10px"></div>
+            <div style="line-height: 10%"></div>`;
+          const elements = Array.from(document.querySelectorAll('div'));
+          const initial = elements.map(element => getComputedStyle(element).lineHeight);
+          elements[1].style.fontSize = '20px';
+          return { initial, updated: getComputedStyle(elements[1]).lineHeight };
+        })()
+    )JS", "native-inline-relative-line-height.js");
+    require(
+        result == R"JSON({"initial":["normal","16px","10px","1.6px"],"updated":"20px"})JSON",
+        "relative line-height did not follow the winning font-size: " + result);
+}
+
 void test_hover_invalidation_updates_functional_and_sibling_subjects(
     webscene_engine* engine)
 {

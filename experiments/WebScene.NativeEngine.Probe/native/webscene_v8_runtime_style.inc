@@ -632,6 +632,7 @@
             node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
+        self->recompute_inline_font_relative_metrics(*node);
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
@@ -1798,6 +1799,7 @@
             node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
+        self->recompute_inline_font_relative_metrics(*node);
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));

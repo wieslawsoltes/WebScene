@@ -1343,3 +1343,28 @@ void test_react_component_dom_is_inspectable_and_refreshes_after_mutation()
             + ", observed-revision=" + std::to_string(observed_revision)
             + ", text='" + observed_text + "')");
 }
+void test_generated_idl_attributes_are_prototype_accessors(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'id');
+          const element = document.createElement('div');
+          element.id = 'prototype-accessor';
+          let rejectedPlainReceiver = false;
+          try { descriptor.get.call({}); }
+          catch (error) { rejectedPlainReceiver = error instanceof TypeError; }
+          return {
+            getter: typeof descriptor.get,
+            setter: typeof descriptor.set,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+            own: Object.prototype.hasOwnProperty.call(element, 'id'),
+            value: element.getAttribute('id'),
+            rejectedPlainReceiver
+          };
+        })()
+    )JS", "native-generated-idl-prototype-accessors.js");
+    require(
+        result == R"JSON({"getter":"function","setter":"function","enumerable":true,"configurable":true,"own":false,"value":"prototype-accessor","rejectedPlainReceiver":true})JSON",
+        "generated IDL attributes did not retain Web IDL prototype shape: " + result);
+}

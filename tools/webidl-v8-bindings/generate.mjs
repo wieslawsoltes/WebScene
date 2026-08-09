@@ -122,23 +122,43 @@ line("    return value->Uint32Value(isolate->GetCurrentContext()).FromMaybe(0U);
 line("}");
 line();
 
+line("static void generated_dom_prototype_attribute_get(");
+line("    const v8::FunctionCallbackInfo<v8::Value>& info)");
+line("{");
+line("    auto symbol = info.Data().As<v8::Symbol>();");
+line("    v8::Local<v8::Value> value;");
+line("    if (info.This()->Get(info.GetIsolate()->GetCurrentContext(), symbol).ToLocal(&value)) {");
+line("        info.GetReturnValue().Set(value);");
+line("    }");
+line("}");
+line();
+line("static void generated_dom_prototype_attribute_set(");
+line("    const v8::FunctionCallbackInfo<v8::Value>& info)");
+line("{");
+line("    if (info.Length() < 1) return;");
+line("    auto symbol = info.Data().As<v8::Symbol>();");
+line("    static_cast<void>(info.This()->Set(");
+line("        info.GetIsolate()->GetCurrentContext(), symbol, info[0]));");
+line("}");
+line();
+
 for (const value of manifest.interfaces) {
   for (const attribute of value.attributes) {
     const prefix = `generated_${safe(value.name)}_${safe(attribute.name)}`;
     line(`static void ${prefix}_get(`);
-    line("    v8::Local<v8::Name> property,");
+    line("    v8::Local<v8::Name>,");
     line("    const v8::PropertyCallbackInfo<v8::Value>& info)");
     line("{");
     line(`    if (!generated_dom_receiver_is(info.GetIsolate(), info.Holder(), generated_dom_interface::${safe(value.name)})) {`);
     line("        throw_generated_illegal_invocation(info.GetIsolate());");
     line("        return;");
     line("    }");
-    line(`    ${attribute.getter}(property, info);`);
+    line(`    ${attribute.getter}(info.Data().As<v8::Name>(), info);`);
     line("}");
     line();
     if (attribute.setter) {
       line(`static void ${prefix}_set(`);
-      line("    v8::Local<v8::Name> property,");
+      line("    v8::Local<v8::Name>,");
       line("    v8::Local<v8::Value> value,");
       line("    const v8::PropertyCallbackInfo<void>& info)");
       line("{");
@@ -146,7 +166,7 @@ for (const value of manifest.interfaces) {
       line("        throw_generated_illegal_invocation(info.GetIsolate());");
       line("        return;");
       line("    }");
-      line(`    ${attribute.setter}(property, value, info);`);
+      line(`    ${attribute.setter}(info.Data().As<v8::Name>(), value, info);`);
       line("}");
       line();
     }
@@ -164,22 +184,34 @@ for (const value of manifest.interfaces) {
     line(`    ${local}->Inherit(generated_${safe(value.parent)}_template);`);
   }
   line(`    ${local}->InstanceTemplate()->SetInternalFieldCount(2);`);
+  if (value.attributes.length || value.methods.length) {
+    line(`    auto generated_${safe(value.name)}_signature =`);
+    line(`        v8::Signature::New(isolate, ${local});`);
+  }
   for (const attribute of value.attributes) {
     const prefix = `generated_${safe(value.name)}_${safe(attribute.name)}`;
     const setter = attribute.setter ? `${prefix}_set` : "nullptr";
+    const prototypeSetter = attribute.setter
+      ? `v8::FunctionTemplate::New(isolate, generated_dom_prototype_attribute_set, ${prefix}_symbol, generated_${safe(value.name)}_signature, 1)`
+      : "v8::Local<v8::FunctionTemplate>()";
     const propertyAttributes = attribute.attributes?.length
       ? `static_cast<v8::PropertyAttribute>(${attribute.attributes.map(name => `v8::PropertyAttribute::${name}`).join(" | ")})`
       : "v8::PropertyAttribute::None";
+    line(`    auto ${prefix}_symbol = v8::Symbol::New(`);
+    line(`        isolate, js_string(isolate, \"WebScene.${value.name}.${attribute.name}\"));`);
     line(`    ${local}->InstanceTemplate()->SetNativeDataProperty(`);
-    line(`        js_string(isolate, \"${attribute.name}\"),`);
+    line(`        ${prefix}_symbol,`);
     line(`        ${prefix}_get,`);
     line(`        ${setter},`);
-    line("        v8::Local<v8::Value>(),");
+    line(`        js_string(isolate, \"${attribute.name}\"),`);
     line(`        ${propertyAttributes});`);
-  }
-  if (value.methods.length) {
-    line(`    auto generated_${safe(value.name)}_signature =`);
-    line(`        v8::Signature::New(isolate, ${local});`);
+    line(`    ${local}->PrototypeTemplate()->SetAccessorProperty(`);
+    line(`        js_string(isolate, \"${attribute.name}\"),`);
+    line("        v8::FunctionTemplate::New(");
+    line(`            isolate, generated_dom_prototype_attribute_get, ${prefix}_symbol,`);
+    line(`            generated_${safe(value.name)}_signature, 0),`);
+    line(`        ${prototypeSetter},`);
+    line(`        ${propertyAttributes});`);
   }
   for (const method of value.methods) {
     line(`    ${local}->PrototypeTemplate()->Set(`);

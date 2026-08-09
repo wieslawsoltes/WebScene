@@ -112,6 +112,40 @@ Discovery results must not be merged into the release pass percentage or adverti
 full standards support. The bounded required profile remains the public compatibility
 contract.
 
+## 2026-08-09 coverage audit
+
+The pinned profile contains 110 required, 52 candidate, 6 harness-blocked, and 5
+excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
+documents and 222/299 candidate subtests. Three focused standards fixes moved that lane
+to 44/52 documents and 228/299 subtests while the release gate remained 110/110
+documents and 434/434 subtests:
+
+- complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
+  intervening non-element nodes, and the managed selector parser uses the most specific
+  functional-selector argument;
+- inline unitless and percentage `line-height` values are resolved after the winning
+  `font-size`, including later CSSOM font-size changes; and
+- generated Web IDL attributes now appear as enumerable, configurable accessors on the
+  declaring interface prototype while retaining native receiver-brand checks.
+
+The focused behavior is also covered by native runtime tests, managed selector tests,
+and the generated-binding freshness check. Candidate promotion is intentionally deferred
+until the same documents pass on every released RID.
+
+The remaining eight candidate failures are kept visible and rank the next work:
+
+1. Custom Elements constructor timing, Attr mutation, cloning, alternate-document
+   realms, iframe documents, and XHR-backed document prerequisites account for four
+   documents and 61 failed assertions.
+2. Shadow DOM still needs the `Text` and processing-instruction surfaces, flattened
+   nested slots, and `ShadowRoot.styleSheets`; prototype placement itself is no longer
+   the blocker.
+3. The HTML tree builder still misses foster-parented table text ordering in one local
+   adoption-agency/table-construction assertion.
+4. Six relevant visual/check-layout documents remain harness-blocked; `check-layout-th.js`
+   support is the highest-value runner expansion because it unlocks upstream flex
+   relayout evidence without converting the test into a local contract.
+
 The Custom Elements discovery shard pins unchanged upstream registry, constructor,
 attribute-reaction, connection, and disconnection tests alongside two product-neutral
 local fixtures. The lifecycle fixture is assertion based; the rendering fixture compares
