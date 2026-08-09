@@ -21,6 +21,8 @@ documents for contributors and evaluators.
 
 ## Interop and diagnostics
 
+- [Component Profile 1 SDK](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Sdk)
+- [Avalonia component host](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Sdk.Avalonia)
 - [Typed JavaScript interop generation](https://github.com/wieslawsoltes/WebScene/blob/main/docs/native-javascript-interop-source-generation.md)
 - [Generator package reference](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.JavaScript.Interop.Generator)
 - [V8 Inspector debugging](https://github.com/wieslawsoltes/WebScene/blob/main/docs/v8-inspector-debugging.md)
@@ -47,6 +49,8 @@ capacity claim.
 
 | Path | Purpose |
 | --- | --- |
+| [`src/WebScene.Sdk`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Sdk) | Component manifest, validation, lifecycle, diagnostics, and capability contracts |
+| [`src/WebScene.Sdk.Avalonia`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Sdk.Avalonia) | Recommended Avalonia component host |
 | [`src/WebScene.Backend.Avalonia`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Backend.Avalonia) | Reference presenter and native view |
 | [`src/WebScene.Backend.Uno`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.Backend.Uno) | Uno Skia presenter proof |
 | [`src/WebScene.JavaScript.Interop`](https://github.com/wieslawsoltes/WebScene/tree/main/src/WebScene.JavaScript.Interop) | Runtime-neutral interop contracts |

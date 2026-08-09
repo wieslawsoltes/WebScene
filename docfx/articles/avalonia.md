@@ -1,13 +1,18 @@
 # Use WebScene with Avalonia
 
-`WebScene.Backend.Avalonia` is the reference presenter. `NativeWebSceneView` is an
-Avalonia `ContentControl` that owns a native engine instance and presents its immutable
-scene updates with Skia.
+`WebSceneComponentHost` is the recommended Avalonia integration. It accepts a
+versioned component package, validates its manifest and assets, performs compatibility
+preflight, creates the native view, mounts the JavaScript lifecycle, and cleans it up
+with the Avalonia visual tree.
+
+For the complete package format and host-bridge contract, see
+[Package and host a component](component-host.md).
 
 ## 1. Add the packages
 
-Declare one of the supported RIDs and reference the Avalonia backend plus the matching
-native runtime. Keep every WebScene package on the same version.
+Declare one supported RID and reference the component host plus the matching native
+runtime. Replace `VERSION` with the same component-host-capable version for every
+WebScene package:
 
 ```xml
 <PropertyGroup>
@@ -19,155 +24,135 @@ native runtime. Keep every WebScene package on the same version.
 <ItemGroup>
   <PackageReference Include="Avalonia.Desktop" Version="11.3.4" />
   <PackageReference Include="Avalonia.Skia" Version="11.3.4" />
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.20" />
-  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="1.0.20" />
+  <PackageReference Include="WebScene.Sdk.Avalonia" Version="VERSION" />
+  <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64"
+                    Version="VERSION" />
 </ItemGroup>
 ```
 
-For Linux x64 or Windows x64, change both `RuntimeIdentifier` and the runtime package
-to `linux-x64` or `win-x64` respectively.
+Use `linux-x64` or `win-x64` in both the `RuntimeIdentifier` and runtime package
+for the other published desktop targets. The native component host is available on
+`main`; use a project reference to `src/WebScene.Sdk.Avalonia` until a package
+containing that implementation is published.
 
-See [Packages and deployment](packages-and-deployment.md) for framework-dependent
-deployment, single-file behavior, and native asset verification.
+## 2. Package the web-authored component
 
-## 2. Add the view in XAML
+Place `webscene-component.json` beside its declared assets:
+
+```text
+components/
+  StatusPanel/
+    webscene-component.json
+    dist/main.js
+```
+
+```json
+{
+  "schemaVersion": "1.0",
+  "id": "com.example.status-panel",
+  "displayName": "Status panel",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": ["dist/main.js"],
+  "capabilities": ["dom", "css.layout", "input.pointer"],
+  "lifecycle": {
+    "mountExport": "mount",
+    "unmountExport": "unmount"
+  }
+}
+```
+
+The JavaScript bundle must publish the configured `mount` and `unmount` functions
+on `globalThis`. Copy the whole package to output without flattening it:
+
+```xml
+<ItemGroup>
+  <Content Include="components/**"
+           CopyToOutputDirectory="PreserveNewest"
+           CopyToPublishDirectory="PreserveNewest" />
+</ItemGroup>
+```
+
+## 3. Add the host in XAML
 
 ```xml
 <Window
     x:Class="WebSceneDemo.MainWindow"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:webscene="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia">
-  <webscene:NativeWebSceneView x:Name="WebContent" />
+    xmlns:ws="using:WebScene.Sdk.Avalonia">
+  <ws:WebSceneComponentHost
+      x:Name="ComponentHost"
+      PackagePath="components/StatusPanel" />
 </Window>
 ```
 
-The view stretches with its parent and forwards focus, pointer, wheel, and keyboard
-input to the native document. It also follows the Avalonia light/dark theme variant.
-
-## 3. Load a document
-
-Load an absolute `file:`, `http:`, or `https:` URL after the window has opened. The
-runtime package copies the platform library beside the application, so resolve it from
-`AppContext.BaseDirectory`.
+`PackagePath` is relative to `AppContext.BaseDirectory`. With the default
+`AutoMount="True"`, no `Opened` handler, native-library resolver, or direct
+`LoadAsync` call is needed. The host mounts when attached and unmounts when detached.
+Dispose it when the owning window lifetime ends:
 
 ```csharp
-using System.Runtime.InteropServices;
-using Avalonia.Controls;
-using WebScene.Backends.Avalonia.Native;
-
-namespace WebSceneDemo;
-
-public sealed partial class MainWindow : Window
-{
-    public MainWindow()
-    {
-        InitializeComponent();
-        Opened += OnOpened;
-        Closed += OnClosed;
-    }
-
-    private async void OnOpened(object? sender, EventArgs e)
-    {
-        Opened -= OnOpened;
-
-        var document = new Uri(
-            Path.Combine(AppContext.BaseDirectory, "web", "index.html"));
-        var cache = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WebSceneDemo",
-            "V8Cache");
-
-        await WebContent.LoadAsync(
-            document.AbsoluteUri,
-            NativeLibraryPath(),
-            cache);
-    }
-
-    private async void OnClosed(object? sender, EventArgs e)
-    {
-        await WebContent.DisposeAsync();
-    }
-
-    private static string NativeLibraryPath()
-    {
-        var fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? "webscene_native_engine.dll"
-            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                ? "libwebscene_native_engine.dylib"
-                : "libwebscene_native_engine.so";
-        return Path.Combine(AppContext.BaseDirectory, fileName);
-    }
-}
+Closed += async (_, _) => await ComponentHost.DisposeAsync();
 ```
 
-Copy the document and its assets to the output directory:
+If the application needs to register host capabilities or startup hooks, set
+`AutoMount="False"`, configure the host, and call `MountAsync` after the control is
+attached, for example from `Window.Opened`. See
+[Grant application capabilities](component-host.md#grant-application-capabilities).
 
-```xml
-<ItemGroup>
-  <Content Include="web/**" CopyToOutputDirectory="PreserveNewest" />
-</ItemGroup>
-```
+## Interoperate and diagnose
 
-See [Content and resource loading](content-and-resources.md) before choosing between
-`file:`, Avalonia `avares:`, and remote HTTP(S) content.
-
-`LoadAsync` completes after navigation has constructed and published the first document
-scene. A new load unloads the current document first. Dispose the view when its owning
-window or view lifetime ends.
-
-## Install document-start scripts
-
-Use `NativeWebSceneLoadOptions` for a compatibility shim or a small application-owned
-bridge that must exist before authored JavaScript executes.
+The component host installs a capability-gated asynchronous bridge for component-to-.NET
+calls. For .NET-to-JavaScript generated bindings and diagnostic evaluation, use its
+underlying view:
 
 ```csharp
-using WebScene.Backends.Native;
-
-await WebContent.LoadAsync(new NativeWebSceneLoadOptions
-{
-    Source = document.AbsoluteUri,
-    NativeLibraryPath = NativeLibraryPath(),
-    CompilationCacheDirectory = cache,
-    DocumentStartScripts =
-    [
-        new WebSceneDocumentScript(
-            "globalThis.hostEnvironment = Object.freeze({ platform: 'desktop' });",
-            "host-environment.js",
-            AllFrames: false)
-    ]
-});
-```
-
-Scripts run in order after the document and location exist but before authored scripts.
-An exception fails the load. Set `AllFrames` to `true` only when the script should also
-run in subsequently created child frames.
-
-## Interoperate with JavaScript
-
-After `LoadAsync` completes, the view supports diagnostic evaluation and generated
-typed bindings:
-
-```csharp
-string result = await WebContent.EvaluateTextAsync(
+string result = await ComponentHost.View.EvaluateTextAsync(
     "({ title: document.title, readyState: document.readyState })");
 
-using var interop = WebContent.CreateJavaScriptInvoker();
+using var interop = ComponentHost.View.CreateJavaScriptInvoker();
 // Pass interop to a facade generated by WebScene.JavaScript.Interop.Generator.
 ```
 
-Generated bindings are the application interop path; `EvaluateTextAsync` is intended
-for small diagnostics and returns JSON-compatible text. See
-[.NET and JavaScript interop](javascript-interop.md).
+Use `ComponentHost.State`, `LastException`, `CompatibilityReport`,
+`Diagnostics`, and `DiagnosticReported` for component-level failures.
+`ComponentHost.View.RenderDiagnostics`, `CapturePerformanceSnapshot()`,
+`DrainConsoleMessages()`, and `OpenV8InspectorSession` expose lower-level runtime
+diagnostics.
 
-## Diagnostics
+## Advanced: host a document directly
 
-Use `RenderDiagnostics`, `CapturePerformanceSnapshot()`, `DrainConsoleMessages()`,
-`LastError`, and `FeatureUseReport` when diagnosing a loaded view. Raw V8 Inspector
-sessions are available through `OpenV8InspectorSession`; the optional
-`WebScene.Diagnostics.Cdp` package can expose them to Chrome DevTools.
+`WebScene.Backend.Avalonia.NativeWebSceneView` remains available for applications
+that deliberately need direct document navigation, custom resource loading, or
+backend-level experiments rather than a packaged component.
 
-The complete integration authority is the
+```xml
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:native="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia">
+  <native:NativeWebSceneView x:Name="WebContent" />
+</Window>
+```
+
+```csharp
+var document = new Uri(
+    Path.Combine(AppContext.BaseDirectory, "web", "index.html"));
+
+await WebContent.LoadAsync(
+    document.AbsoluteUri,
+    nativeLibraryPath,
+    compilationCacheDirectory,
+    cancellationToken);
+```
+
+Direct hosting means the application owns URL policy, native-library resolution,
+navigation cancellation, resource layout, interop disposal, unload, and view disposal.
+Choose it only when the component host's package model is not appropriate.
+
+The backend-level integration authority remains the
 [Avalonia native runtime showcase](https://github.com/wieslawsoltes/WebScene/tree/main/samples/NativeRuntimeShowcase.Avalonia).
-For shutdown, navigation, and failure-handling patterns, continue with
-[Lifecycle and diagnostics](lifecycle-and-diagnostics.md).
+Continue with [Lifecycle and diagnostics](lifecycle-and-diagnostics.md) and
+[Packages and deployment](packages-and-deployment.md).

@@ -1,14 +1,16 @@
 # Packages and deployment
 
-A WebScene application combines managed presenter packages with exactly one native
-runtime package. Keep every WebScene package on the same version and make the target
-runtime identifier explicit.
+A WebScene application combines a managed host with exactly one native runtime package.
+Keep every WebScene package on the same version and make the target runtime identifier
+explicit.
 
 ## Package roles
 
 | Package | Use it for |
 | --- | --- |
-| `WebScene.Backend.Avalonia` | Reference Avalonia presenter and native runtime wrapper |
+| `WebScene.Sdk` | Component manifest, package, compatibility, lifecycle, diagnostics, and host-bridge contracts |
+| `WebScene.Sdk.Avalonia` | Recommended Avalonia `WebSceneComponentHost`; brings in the SDK and reference presenter |
+| `WebScene.Backend.Avalonia` | Advanced direct Avalonia presenter and native runtime wrapper |
 | `WebScene.Backend.Uno` | Experimental Uno Skia presenter |
 | `WebScene.NativeEngine.Runtime.<RID>` | V8, ICU data, bootstrap snapshot, ABI metadata, and native licenses for one RID |
 | `WebScene.JavaScript.Interop` | Runtime-neutral typed interop contracts |
@@ -16,8 +18,9 @@ runtime identifier explicit.
 | `WebScene.Diagnostics.Cdp` | Optional Chrome discovery and WebSocket host for V8 Inspector |
 
 The portable `WebScene.Core`, `WebScene.Dom`, `WebScene.Css`, and
-`WebScene.Graphics` packages support backend and testing scenarios. A normal host
-application obtains their required runtime pieces transitively from its backend.
+`WebScene.Graphics` packages support backend and testing scenarios. A normal
+Avalonia application obtains these and `WebScene.Backend.Avalonia` transitively from
+`WebScene.Sdk.Avalonia`.
 
 `WebScene` is a separate HTML-inspired Avalonia authoring layer. It does not host the
 native V8 engine and should not be substituted for `WebScene.Backend.Avalonia` in these
@@ -31,7 +34,9 @@ guides.
 | Linux, x64 | `linux-x64` | `WebScene.NativeEngine.Runtime.linux-x64` |
 | Windows, x64 | `win-x64` | `WebScene.NativeEngine.Runtime.win-x64` |
 
-For example, an Avalonia application targeting Windows x64 uses:
+For example, a component-hosted Avalonia application targeting Windows x64 uses:
+Replace `VERSION` with a version that contains the native component host and use it
+for both references:
 
 ```xml
 <PropertyGroup>
@@ -42,8 +47,8 @@ For example, an Avalonia application targeting Windows x64 uses:
 </PropertyGroup>
 
 <ItemGroup>
-  <PackageReference Include="WebScene.Backend.Avalonia" Version="1.0.20" />
-  <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="1.0.20" />
+  <PackageReference Include="WebScene.Sdk.Avalonia" Version="VERSION" />
+  <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="VERSION" />
 </ItemGroup>
 ```
 
@@ -67,10 +72,14 @@ The package marks these files for build and publish output and excludes them fro
 single-file bundling. Even when the managed application uses single-file publishing,
 the native runtime and data files must remain beside the executable.
 
-Resolve the library from `AppContext.BaseDirectory` and pass the absolute path to
-`LoadAsync`. `NativeWebSceneRuntime.InspectLibrary(path)` can validate the file and ABI
-before creating a view; `PrewarmAsync(path)` additionally initializes the process-wide
-V8 platform.
+`WebSceneComponentHost` resolves the library from `AppContext.BaseDirectory`
+automatically. Set `NativeLibraryPath` or
+`WEBSCENE_NATIVE_ENGINE_LIBRARY` only when a development build stores it elsewhere.
+
+Direct view integrations resolve the path themselves and pass it to `LoadAsync`.
+`NativeWebSceneRuntime.InspectLibrary(path)` can validate the file and ABI before
+creating a view; `PrewarmAsync(path)` additionally initializes the process-wide V8
+platform.
 
 ```csharp
 var runtime = NativeWebSceneRuntime.InspectLibrary(nativeLibraryPath);
@@ -103,8 +112,9 @@ package. The target machine must also have the selected .NET runtime installed.
 
 ## Compilation cache
 
-`LoadAsync` accepts a compilation-cache directory. Use an application-specific,
-writable directory rather than the installation folder:
+`WebSceneComponentHost.CompilationCacheDirectory` and direct `LoadAsync` calls can
+select a compilation-cache directory. Use an application-specific, writable directory
+rather than the installation folder:
 
 ```csharp
 var cacheDirectory = Path.Combine(
@@ -122,8 +132,12 @@ cleared.
 
 ## Development from source
 
+When consuming `main` before a component-host package is published, use a project
+reference to `src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj`. Do not install
+an older package with a different component-host implementation.
+
 When consuming a locally built native engine instead of a runtime package, build the
-matching RID and pass its absolute library path explicitly:
+matching RID and set the host's `NativeLibraryPath` to the absolute output path:
 
 ```bash
 scripts/build-native-engine-runtime.sh --rid osx-arm64
@@ -133,10 +147,10 @@ scripts/build-native-engine-runtime.sh --rid osx-arm64
 ./scripts/build-native-engine-runtime.ps1 -Rid win-x64
 ```
 
-The `WEBSCENE_NATIVE_ENGINE_LIBRARY` convention is used by repository samples, but the
-public view API still receives the resolved path through `LoadAsync`. Prefer an explicit
-command-line or application configuration value during development so logs show which
-binary was loaded.
+The `WEBSCENE_NATIVE_ENGINE_LIBRARY` convention is used by repository samples and is
+also understood by `WebSceneComponentHost`. Prefer an explicit command-line or
+application configuration value during development so logs show which binary was
+loaded.
 
 Continue with [Troubleshooting](troubleshooting.md) for native load, RID, and ABI
 failures.

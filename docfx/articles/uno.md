@@ -4,6 +4,11 @@
 `UnoNativeWebSceneView` is a WinUI `ContentControl` backed by an
 `UnoNativeSceneSurface`.
 
+The reusable `WebSceneComponentHost` currently targets Avalonia only. Uno therefore
+uses the direct presenter API and owns document loading, native-library resolution,
+navigation, and disposal. Do not copy the Avalonia component-host XAML into an Uno
+project.
+
 > [!WARNING]
 > The Uno backend is a presenter proof, not a production-ready drop-in backend. It
 > requires Uno's Skia renderer and does not yet carry complete input, text, IME,
@@ -139,8 +144,10 @@ using var interop = _webContent.CreateJavaScriptInvoker();
 // Pass interop to a generated, strongly typed JavaScript facade.
 ```
 
-The same API manifest, policy, and generated facade can be placed in a framework-neutral
-class library and used by both host projects. See
+The same typed interop API manifest, policy, and generated facade can be placed in a
+framework-neutral class library and used by both host projects. The component host's
+`webscene.host.*` capability bridge and Component Profile 1 mount lifecycle are not
+yet installed automatically by the Uno presenter. See
 [.NET and JavaScript interop](javascript-interop.md).
 
 ## Diagnostics and current limitations

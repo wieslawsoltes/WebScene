@@ -1,35 +1,93 @@
 # Lifecycle and diagnostics
 
-Each `NativeWebSceneView` or `UnoNativeWebSceneView` owns one native engine context.
-Treat loading, interop handles, navigation, and disposal as one lifetime.
+Each `WebSceneComponentHost`, `NativeWebSceneView`, or `UnoNativeWebSceneView`
+owns one native engine context. Treat component lifecycle, interop handles, navigation,
+and disposal as one lifetime.
 
-## Lifecycle sequence
+## Recommended component-host lifecycle
 
 ```text
-create host view
+create WebSceneComponentHost
       |
       v
-attach to a sized visual tree
+configure capabilities and startup scripts
       |
       v
-LoadAsync(document, native library, cache)
+attach -> automatic MountAsync
       |
       v
-create interop proxies and use the document
-      |
-      +----> LoadAsync(new document) disposes the previous engine
+manifest + asset validation + compatibility preflight
       |
       v
-dispose proxies and invoker
+native load + bridge installation + JavaScript mount export
+      |
+      +----> ReloadAsync = UnmountAsync + MountAsync
       |
       v
-UnloadAsync or DisposeAsync the host view
+detach -> automatic UnmountAsync
+      |
+      v
+dispose the host at the end of its owner lifetime
 ```
 
-`LoadAsync` prewarms the process runtime, creates an engine, queues navigation, checks
-for immediate script errors, and waits for a document barrier. Avalonia additionally
-waits for the first native scene publication. A failed or canceled load tears down the
-partially created engine before rethrowing.
+`AutoMount` defaults to `true`. Visual-tree attachment starts mounting, and
+detachment unmounts the component. Use `AutoMount="False"` and call `MountAsync`
+when the application must register capabilities, document-start scripts, or an
+Inspector hook first.
+
+`MountAsync` opens and validates the package, runs compatibility preflight, loads the
+generated component document, installs the capability bridge, evaluates the entry
+point, invokes its mount export, and records the component instance as mounted. A
+failed or canceled mount cleans up the partial engine and moves the host to `Faulted`.
+
+The host exposes `Idle`, `Mounting`, `Mounted`, `Unmounting`, `Faulted`, and
+`Disposed` states. Observe `StateChanged`, `ComponentMounted`,
+`ComponentUnmounted`, `MountFailed`, and `DiagnosticReported` rather than
+inferring state from visual attachment.
+
+## Component reload and cancellation
+
+`ReloadAsync` unmounts the existing instance and mounts a fresh instance from
+`PackagePath`. Generated proxies, JavaScript object references, callback functions,
+and invokers belong to the old isolate and must be disposed before reload.
+
+Pass a cancellation token to explicit mount, unmount, or reload operations. The host
+serializes lifecycle transitions and cancels an in-progress mount when unmount begins.
+Host capabilities can be added or removed only while the host is `Idle` or
+`Faulted`.
+
+## Component shutdown
+
+Detachment unmounts the component but does not end the control's reusable lifetime.
+Dispose generated interop objects from the leaves inward, then dispose the component
+host when its owning window or application ends:
+
+```csharp
+private async Task ShutDownAsync()
+{
+    if (_editor is not null)
+    {
+        await _editor.DisposeAsync();
+        _editor = null;
+    }
+
+    _invoker?.Dispose();
+    _invoker = null;
+
+    await ComponentHost.DisposeAsync();
+}
+```
+
+The host disposes its underlying `NativeWebSceneView`; application code must not
+dispose `ComponentHost.View` separately.
+
+## Advanced direct-view lifecycle
+
+`NativeWebSceneView` and `UnoNativeWebSceneView` remain the low-level surfaces.
+`LoadAsync` prewarms the process runtime, creates an engine, queues navigation,
+checks for immediate script errors, and waits for a document barrier. Avalonia
+additionally waits for the first native scene publication. A failed or canceled load
+tears down the partially created engine before rethrowing.
 
 ## Attach before loading
 
@@ -45,7 +103,7 @@ Create and attach the view before loading so it has a real size and UI context.
 Do not start document work in a view constructor. Constructors should establish the
 visual tree; asynchronous loading belongs to the host lifecycle.
 
-## Navigation and cancellation
+### Navigation and cancellation
 
 Calling `LoadAsync` again unloads the current document before creating the replacement.
 Pass a cancellation token owned by the navigation or view activation:
@@ -71,12 +129,12 @@ Do not reuse JavaScript object references, generated proxy objects, callback fun
 or invokers after navigation. They belong to the previous isolate. Dispose them before
 starting the next load.
 
-## Shutdown
+### Shutdown
 
 Dispose interop objects from the leaves inward, then dispose the host view:
 
 ```csharp
-private async Task ShutDownAsync()
+private async Task ShutDownDirectViewAsync()
 {
     if (_editor is not null)
     {
@@ -104,8 +162,13 @@ the final operation.
 
 ## Diagnostic surfaces
 
-Both presenters expose native scene and engine information, though the exact public
-properties differ:
+Start with the component host's `LastException`, `CompatibilityReport`,
+`Diagnostics`, and `DiagnosticReported` event. These distinguish manifest,
+compatibility, capability, mount-export, and unmount-export failures before you inspect
+the engine.
+
+Use `ComponentHost.View` for native scene and engine information. Both presenters
+expose that information, though the exact public properties differ:
 
 | Need | Avalonia | Uno |
 | --- | --- | --- |
@@ -117,10 +180,10 @@ properties differ:
 | Console messages | `DrainConsoleMessages()` | Not currently exposed by the proof view |
 | Native last error and feature report | `LastError`, `FeatureUseReport` | Not currently exposed by the proof view |
 
-Sample scene health without resetting counters:
+Sample component scene health without resetting counters:
 
 ```csharp
-var diagnostics = WebContent.RenderDiagnostics;
+var diagnostics = ComponentHost.View.RenderDiagnostics;
 Console.WriteLine(
     $"rendered={diagnostics.RenderedSceneCount}, " +
     $"published={diagnostics.PublishedSceneCount}");
@@ -133,7 +196,7 @@ snapshot rather than resetting process state.
 Drain console messages on a timer or diagnostic command instead of once at shutdown:
 
 ```csharp
-foreach (var message in WebContent.DrainConsoleMessages())
+foreach (var message in ComponentHost.View.DrainConsoleMessages())
 {
     logger.LogInformation("WebScene console: {Message}", message);
 }

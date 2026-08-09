@@ -1,10 +1,69 @@
 # Content and resource loading
 
-WebScene loads an absolute document URL and resolves the document's scripts, styles,
-fonts, images, and other resources relative to that URL. Choose a content strategy that
-is deterministic, testable, and appropriate for trusted application-owned content.
+For Avalonia applications, package content for `WebSceneComponentHost`. The host
+validates the manifest, performs compatibility preflight, and serves only declared
+assets from an isolated per-instance virtual origin. Direct document URLs remain
+available for advanced Avalonia use and for the current Uno presenter proof.
 
-## Recommended packaged-content layout
+## Recommended component package
+
+```text
+components/
+  StatusPanel/
+    webscene-component.json
+    dist/
+      main.js
+      styles.css
+```
+
+```json
+{
+  "schemaVersion": "1.0",
+  "id": "com.example.status-panel",
+  "displayName": "Status panel",
+  "version": "1.0.0",
+  "profileVersion": "1.0",
+  "entryPoint": "dist/main.js",
+  "assets": [
+    "dist/main.js",
+    "dist/styles.css"
+  ],
+  "capabilities": [
+    "dom",
+    "css.layout"
+  ]
+}
+```
+
+```xml
+<ItemGroup>
+  <Content Include="components/**"
+           CopyToOutputDirectory="PreserveNewest"
+           CopyToPublishDirectory="PreserveNewest" />
+</ItemGroup>
+```
+
+```xml
+<ws:WebSceneComponentHost
+    PackagePath="components/StatusPanel" />
+```
+
+`PackagePath` is resolved against `AppContext.BaseDirectory`. The host creates a
+unique `https://<instance>.component.webscene.invalid/` origin for each mounted
+instance. A request succeeds only when it stays on that origin and its normalized
+relative path appears in the manifest's `assets` array.
+
+Component Profile 1 currently serves UTF-8 text assets. Declare the entry point and
+every script or stylesheet it loads. Binary assets, undeclared files, absolute external
+origins, `..` traversal, and malformed paths are rejected by the package loader.
+
+The entry point itself is evaluated after the empty component document and
+capability-gated host bridge are ready. It must publish the manifest's mount and
+unmount lifecycle exports on `globalThis`; it is not an HTML document.
+
+See [Package and host a component](component-host.md) for a complete package.
+
+## Advanced direct-document layout
 
 Keep the web bundle together and copy it without flattening its directory structure:
 
@@ -25,7 +84,8 @@ MyApp/
 </ItemGroup>
 ```
 
-Load `index.html` through an absolute file URI:
+When using `NativeWebSceneView` directly, load `index.html` through an absolute file
+URI:
 
 ```csharp
 var documentPath = Path.Combine(
@@ -45,9 +105,10 @@ Relative references such as `./app.js` and `./assets/logo.svg` then resolve agai
 document directory. Avoid building `file:` URLs by string concatenation; `Uri` handles
 platform separators and escaping.
 
-## Resource schemes by host
+## Direct-document resource schemes by host
 
-The current presenters do not expose identical resource loaders:
+The direct presenters do not expose identical resource loaders. These schemes do not
+change the component host's manifest-isolated resource policy:
 
 | Scheme | Avalonia | Uno Skia | Notes |
 | --- | --- | --- | --- |
@@ -60,7 +121,7 @@ Use `file:` when the same bundle must run unchanged in Avalonia and Uno. Avaloni
 applications can load an `avares:` resource, but external files are easier to inspect,
 update during development, and share with native/headless fixtures.
 
-## HTTP and HTTPS content
+## Direct HTTP and HTTPS content
 
 Both loaders follow relative URLs from an absolute HTTP(S) document and retain common
 cache metadata such as `ETag`, `Last-Modified`, `Cache-Control`, and `Expires`. An HTTP
@@ -75,7 +136,7 @@ For reproducible UI and offline behavior, prefer a versioned local bundle. If re
 content is necessary, pin the endpoint, define an application-level update policy, and
 test failure and stale-cache behavior.
 
-## Avalonia resources
+## Direct Avalonia resources
 
 The Avalonia loader understands `avares:` URLs:
 
@@ -98,8 +159,9 @@ hook to configure those helpers.
 
 ## Document-start scripts
 
-Use `NativeWebSceneLoadOptions.DocumentStartScripts` for small compatibility or host
-bootstrap scripts that must run before authored JavaScript:
+Set `WebSceneComponentHost.DocumentStartScripts` before mounting a component. When
+hosting a document directly, use
+`NativeWebSceneLoadOptions.DocumentStartScripts` for the same ordered startup hook:
 
 ```csharp
 var options = new NativeWebSceneLoadOptions

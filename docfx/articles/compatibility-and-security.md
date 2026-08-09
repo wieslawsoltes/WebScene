@@ -8,10 +8,10 @@ not a browser-conformance claim and not a sandbox for arbitrary content.
 | Area | Current position |
 | --- | --- |
 | Engine | One native V8/DOM/CSS/layout/Canvas/SVG engine; no managed fallback |
-| Avalonia | Reference presenter and current integration authority |
+| Avalonia | Recommended Component Profile 1 host plus the reference presenter |
 | Uno | Skia presenter proof; not a production support claim |
 | Runtime platforms | `osx-arm64`, `linux-x64`, and `win-x64` |
-| Content | Trusted, packaged, application-owned UI |
+| Content | Trusted, manifest-declared, packaged, application-owned UI |
 | General websites | Not supported as a product goal |
 | Browser security model | Not implemented |
 
@@ -85,14 +85,23 @@ sandboxed browser technology.
 
 ## Host capability design
 
-Expose the smallest host surface needed by the document. Prefer generated typed
-bindings and narrow callback adapters over a general command executor or unrestricted
-reflection bridge.
+For packaged Avalonia components, declare every required `host.*` capability in
+`webscene-component.json` and register only the matching application handlers.
+`WebSceneComponentHost` denies a request when either half is missing. This is an
+authorization boundary inside a trusted in-process application, not a renderer
+sandbox.
+
+Expose the smallest host surface needed by the component. Use the JSON capability
+bridge for coarse application services and generated typed bindings or narrow callback
+adapters for object or high-frequency interop. Avoid a general command executor or
+unrestricted reflection bridge.
 
 - Validate arguments again at the .NET boundary.
 - Keep filesystem, network, clipboard, and process-launch authority out of JavaScript
   unless the feature explicitly requires it.
 - Bind callbacks to the owning view lifetime and release them on navigation.
+- Register or remove component-host capabilities only while the host is idle or
+  faulted.
 - Never concatenate untrusted data into evaluated JavaScript or document-start source.
 - Record enough operation context to audit privileged host calls without logging
   secrets or document contents unnecessarily.
