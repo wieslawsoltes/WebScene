@@ -1,5 +1,6 @@
 using System.Text;
 using WebScene.Core;
+using WebScene.Sdk.NativeHost.Internal;
 using Xunit;
 
 namespace WebScene.Sdk.Avalonia.Tests;

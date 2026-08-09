@@ -731,7 +731,11 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             documentBarrierTimeout,
             cancellationToken);
 
-    private async Task LoadAsync(
+    /// <summary>
+    /// Loads a document with explicit resource policy and an optional startup hook
+    /// after engine creation but before navigation.
+    /// </summary>
+    public async Task LoadAsync(
         NativeWebSceneLoadOptions options,
         Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? beforeNavigation,
         TimeSpan? documentBarrierTimeout,
@@ -853,6 +857,20 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         {
             await UnloadCoreAsync();
             throw;
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    /// <summary>Unloads the current document while keeping the view reusable.</summary>
+    public async Task UnloadAsync()
+    {
+        await _lifecycleGate.WaitAsync();
+        try
+        {
+            await UnloadCoreAsync();
         }
         finally
         {

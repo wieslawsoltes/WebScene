@@ -29,8 +29,12 @@ on:
     - 'src/WebScene.Backend.Abstractions/**'
     - 'src/WebScene.Backend.Avalonia/**'
     - 'src/WebScene.Backend.Uno/**'
+    - 'src/WebScene.Sdk.Avalonia/**'
+    - 'src/WebScene.Sdk.NativeHost.Shared/**'
+    - 'src/WebScene.Sdk.Uno/**'
     - 'src/WebScene.Diagnostics.Cdp/**'
     - 'tests/WebScene.Runtime.PackageSmoke/**'
+    - 'tests/WebScene.Uno.PackageSmoke/**'
     - 'third-party/v8-patches/**'
 
 permissions:
@@ -423,11 +427,21 @@ jobs:
           -p:RuntimeIdentifier='${{ matrix.rid }}' \
           -p:WebScenePackageVersion='${{ needs.metadata.outputs.package-version }}' \
           --configfile tests/WebScene.Runtime.PackageSmoke/NuGet.config
+        dotnet restore tests/WebScene.Uno.PackageSmoke/WebScene.Uno.PackageSmoke.csproj \
+          -p:RuntimeIdentifier='${{ matrix.rid }}' \
+          -p:WebScenePackageVersion='${{ needs.metadata.outputs.package-version }}' \
+          --configfile tests/WebScene.Uno.PackageSmoke/NuGet.config
     - name: Build and run clean package consumer
       shell: bash
       run: |
         dotnet run \
           --project tests/WebScene.Runtime.PackageSmoke/WebScene.Runtime.PackageSmoke.csproj \
+          -c Release \
+          -r '${{ matrix.rid }}' \
+          --no-restore \
+          -p:WebScenePackageVersion='${{ needs.metadata.outputs.package-version }}'
+        dotnet run \
+          --project tests/WebScene.Uno.PackageSmoke/WebScene.Uno.PackageSmoke.csproj \
           -c Release \
           -r '${{ matrix.rid }}' \
           --no-restore \

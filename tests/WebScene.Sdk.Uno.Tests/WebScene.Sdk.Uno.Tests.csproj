@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WebScene.Sdk.Uno\WebScene.Sdk.Uno.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" VersionOverride="3.119.2" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" VersionOverride="3.119.2" />
+    <PackageReference Include="Svg.Skia" VersionOverride="5.1.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

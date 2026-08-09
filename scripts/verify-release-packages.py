@@ -25,6 +25,7 @@ PACKAGE_IDS = {
     "WebScene.JavaScript.Interop.Generator",
     "WebScene.Sdk",
     "WebScene.Sdk.Avalonia",
+    "WebScene.Sdk.Uno",
 }
 DEFAULT_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 NATIVE_V8_REVISIONS = {

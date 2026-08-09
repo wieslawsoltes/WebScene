@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using WebScene.JavaScript.Interop;
 
-namespace WebScene.Sdk.Avalonia;
+namespace WebScene.Sdk.NativeHost.Internal;
 
 internal sealed class NativeComponentBridgeSession : IAsyncDisposable
 {

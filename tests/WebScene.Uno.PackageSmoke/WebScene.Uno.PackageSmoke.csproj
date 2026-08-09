@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WebScene.Sdk.Uno"
+                      Version="$(WebScenePackageVersion)" />
+    <PackageReference Include="WebScene.NativeEngine.Runtime.$(RuntimeIdentifier)"
+                      Version="$(WebScenePackageVersion)" />
+  </ItemGroup>
+  <Target Name="ValidatePackageSmokeInputs" BeforeTargets="CollectPackageReferences">
+    <Error Condition="'$(WebScenePackageVersion)' == ''"
+           Text="Pass WebScenePackageVersion to restore the Uno package smoke." />
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="Pass a RuntimeIdentifier to restore the Uno package smoke." />
+  </Target>
+</Project>

@@ -46,6 +46,8 @@ jobs:
       run: dotnet test tests/WebScene.Sdk.Tests/WebScene.Sdk.Tests.csproj -c Release --no-build
     - name: Avalonia component host contracts
       run: dotnet test tests/WebScene.Sdk.Avalonia.Tests/WebScene.Sdk.Avalonia.Tests.csproj -c Release --no-build
+    - name: Uno component host contracts
+      run: dotnet test tests/WebScene.Sdk.Uno.Tests/WebScene.Sdk.Uno.Tests.csproj -c Release --no-build
     - name: TypeScript profile and bundler tooling
       run: |
         npm ci --prefix tooling/webscene

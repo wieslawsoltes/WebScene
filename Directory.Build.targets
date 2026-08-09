@@ -4,7 +4,7 @@
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';webscene;'))">$(PackageTags);webscene</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';web-ui;'))">$(PackageTags);web-ui</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';native-ui;'))">$(PackageTags);native-ui</PackageTags>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Adds the reusable native Avalonia component host with isolated package resources, lifecycle, capability bridge wiring, recovery, diagnostics, and release smoke coverage; also adds the native in-memory Web Storage compatibility subset, ordered fail-closed document-start scripts for Avalonia and Uno, IndexedDB-specific SDK diagnostics, four-engine startup coverage, and corrected external script-source accounting while retaining native ABI 3.</PackageReleaseNotes>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Adds reusable native Avalonia and Uno component hosts with shared isolated package resources, lifecycle, capability bridge wiring, recovery, diagnostics, and release coverage; also adds the native in-memory Web Storage compatibility subset, ordered fail-closed document-start scripts, IndexedDB-specific SDK diagnostics, four-engine startup coverage, and corrected external script-source accounting while retaining native ABI 3.</PackageReleaseNotes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>

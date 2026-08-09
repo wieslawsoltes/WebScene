@@ -21,6 +21,7 @@
     <_WebScenePackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene\WebScene.csproj" />
     <_WebScenePackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Sdk\WebScene.Sdk.csproj" />
     <_WebScenePackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Sdk.Avalonia\WebScene.Sdk.Avalonia.csproj" />
+    <_WebScenePackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.Sdk.Uno\WebScene.Sdk.Uno.csproj" />
     <_WebSceneNoSymbolsPackageProject Include="$(MSBuildThisFileDirectory)..\src\WebScene.JavaScript.Interop.Generator\WebScene.JavaScript.Interop.Generator.csproj" />
     <_WebSceneExpectedPackageId Include="WebScene" />
     <_WebSceneExpectedPackageId Include="WebScene.Backend.Abstractions" />
@@ -35,6 +36,7 @@
     <_WebSceneExpectedPackageId Include="WebScene.JavaScript.Interop.Generator" />
     <_WebSceneExpectedPackageId Include="WebScene.Sdk" />
     <_WebSceneExpectedPackageId Include="WebScene.Sdk.Avalonia" />
+    <_WebSceneExpectedPackageId Include="WebScene.Sdk.Uno" />
     <_WebSceneExpectedSymbolsPackageId Include="@(_WebSceneExpectedPackageId)"
                                      Exclude="WebScene.JavaScript.Interop.Generator" />
   </ItemGroup>
@@ -68,6 +70,6 @@
     <Error Condition="'@(_WebSceneMissingSymbolsPackage->Count())' != '0'"
            Text="Missing symbol packages at version $(WebScenePackageVersion): @(_WebSceneMissingSymbolsPackage)." />
     <Message Importance="high"
-             Text="Packed 13 WebScene packages at $(WebScenePackageVersion) to $(PackageOutputPath)." />
+             Text="Packed 14 WebScene packages at $(WebScenePackageVersion) to $(PackageOutputPath)." />
   </Target>
 </Project>
