@@ -192,6 +192,14 @@ void test_component_library_dom_discovery_primitives(webscene_engine* engine)
           nested.click();
           Event.prototype.preventDefault = original;
           const clone = root.cloneNode(true);
+          const input = document.createElement('input');
+          input.setAttribute('value', 'tester');
+          void input.value;
+          const clonedInput = input.cloneNode(true);
+          clonedInput.setAttribute('value', 'test');
+          const dirtyInput = input.cloneNode(true);
+          dirtyInput.value = 'dirty';
+          dirtyInput.setAttribute('value', 'new default');
           return {
             scope: Array.from(root.querySelectorAll(':scope .collapse .collapse'), node => node.id),
             escape: CSS.escape('0/my id'),
@@ -205,11 +213,13 @@ void test_component_library_dom_discovery_primitives(webscene_engine* engine)
             click: clickContract,
             prototypeCalls,
             same: root.isSameNode(root) && !root.isSameNode(clone),
-            equal: root.isEqualNode(clone)
+            equal: root.isEqualNode(clone),
+            clonedValueReflectsAttribute: clonedInput.value === 'test',
+            dirtyValueSurvivesAttribute: dirtyInput.value === 'dirty'
           };
         })()
     )JS", "native-component-library-dom-discovery-primitives.js");
-    const auto expected = R"({"scope":["nested-collapse"],"escape":"\\30 \\/my\\ id","escapedMatch":true,"surrogate":{"propertyRoundTrip":true,"attributeRoundTrip":true,"literalMatch":true,"escapedReplacement":true},"click":{"target":true,"delegate":true,"prevented":true,"prototype":true},"prototypeCalls":1,"same":true,"equal":true})";
+    const auto expected = R"({"scope":["nested-collapse"],"escape":"\\30 \\/my\\ id","escapedMatch":true,"surrogate":{"propertyRoundTrip":true,"attributeRoundTrip":true,"literalMatch":true,"escapedReplacement":true},"click":{"target":true,"delegate":true,"prevented":true,"prototype":true},"prototypeCalls":1,"same":true,"equal":true,"clonedValueReflectsAttribute":true,"dirtyValueSurvivesAttribute":true})";
     if (result != expected) {
         fail("component-library DOM discovery primitives regressed: " + result);
     }

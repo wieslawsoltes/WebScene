@@ -401,6 +401,18 @@
         node->attributes[name] = value;
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
+        else if (name == "value"
+            && (node->tag == "input" || node->tag == "textarea")) {
+            auto& control = node->mutable_form_control();
+            const auto previous_default = old_value.value_or(std::string{});
+            if (!control.value_initialized || control.value == previous_default) {
+                control.value = value;
+                control.value_initialized = true;
+                control.selection_start = value.size();
+                control.selection_end = value.size();
+                control.selection_direction = text_selection_direction::none;
+            }
+        }
         else if (name == "style") {
             node->clear_authored_style();
             node->style.clear_grid();

@@ -29,10 +29,10 @@ function parseArguments(values) {
 }
 
 function selectedEngines(value) {
-  if (value === "all") return ["chrome", "managed", "native"];
+  if (value === "all") return ["chrome", "native"];
   const engines = value.split(",").map(item => item.trim()).filter(Boolean);
-  if (!engines.length || engines.some(item => !["chrome", "managed", "native"].includes(item))) {
-    throw new Error("--engine must be all or a comma-separated subset of chrome,managed,native.");
+  if (!engines.length || engines.some(item => !["chrome", "native"].includes(item))) {
+    throw new Error("--engine must be all or a comma-separated subset of chrome,native.");
   }
   return [...new Set(engines)];
 }
@@ -62,27 +62,24 @@ async function verifyVersions(manifest) {
   }
 }
 
-function runWptEngine(engine, outputDirectory, nativeLibrary, timeoutSeconds) {
+function runNativeEngine(outputDirectory, nativeLibrary, timeoutSeconds) {
+  if (!nativeLibrary || !existsSync(nativeLibrary)) {
+    throw new Error("Native ecosystem evidence requires --native-library <existing path> or WEBSCENE_NATIVE_ENGINE_LIBRARY.");
+  }
   const args = [
     "run", "--project", runnerProject, "-c", "Release", "--no-restore", "--",
-    "--engine", engine,
     "--manifest", manifestPath,
     "--output", outputDirectory,
     "--selection", "candidate",
-    "--timeout-seconds", String(timeoutSeconds)
+    "--timeout-seconds", String(timeoutSeconds),
+    "--native-library", nativeLibrary
   ];
-  if (engine === "native") {
-    if (!nativeLibrary || !existsSync(nativeLibrary)) {
-      throw new Error("Native ecosystem evidence requires --native-library <existing path> or WEBSCENE_NATIVE_ENGINE_LIBRARY.");
-    }
-    args.push("--native-library", nativeLibrary);
-  }
   const result = spawnSync("dotnet", args, { cwd: repositoryRoot, encoding: "utf8" });
   process.stdout.write(result.stdout || "");
   process.stderr.write(result.stderr || "");
   // Candidate failures are evidence, not an infrastructure failure. The runner
   // returns nonzero only for required failures, so any nonzero here is fatal.
-  if (result.status !== 0) throw new Error(`${engine} consumer runner failed with exit code ${result.status}.`);
+  if (result.status !== 0) throw new Error(`Native consumer runner failed with exit code ${result.status}.`);
 }
 
 function chromeCandidates() {
@@ -314,7 +311,7 @@ for (const engine of engines) {
     artifacts.chrome = await runChrome(manifest, engineOutput, timeoutSeconds);
     continue;
   }
-  runWptEngine(engine, engineOutput, nativeLibrary, timeoutSeconds);
+  runNativeEngine(engineOutput, nativeLibrary, timeoutSeconds);
   artifacts[engine] = JSON.parse(await readFile(path.join(engineOutput, "results.json"), "utf8"));
 }
 

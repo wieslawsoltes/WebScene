@@ -505,6 +505,41 @@
     bool load_connected_resource(dom_node& node, v8::Local<v8::Object> wrapper)
     {
         auto local_context = isolate->GetCurrentContext();
+        const auto dispatch_resource_event = [&](const char* type) {
+            v8::Local<v8::Value> dispatcher;
+            if (!wrapper->Get(
+                    local_context,
+                    js_string(isolate, "dispatchEvent")).ToLocal(&dispatcher)
+                || !dispatcher->IsFunction()) {
+                return true;
+            }
+            auto event = create_event_instance(local_context);
+            event->Set(
+                local_context,
+                js_string(isolate, "type"),
+                js_string(isolate, type)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "bubbles"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "cancelable"),
+                v8::False(isolate)).Check();
+            v8::TryCatch try_catch(isolate);
+            v8::Local<v8::Value> arguments[]{event};
+            if (!dispatcher.As<v8::Function>()->Call(
+                    local_context,
+                    wrapper,
+                    1,
+                    arguments).IsEmpty()) {
+                return true;
+            }
+            frame_last_error_value = std::string("Connected resource ") + type
+                + " event failed: " + describe_exception(try_catch, local_context);
+            ++frame_script_error_count;
+            return false;
+        };
         if (node.tag == "link") {
             const auto href_iterator = node.attributes.find("href");
             if (href_iterator != node.attributes.end()) {
@@ -598,6 +633,33 @@
             }
             auto& image = node.mutable_replaced_image();
             if (!image.complete || image.source != source->second) {
+                const auto mark_broken_image = [&]() {
+                    image.source = source->second;
+                    image.resolved_source.clear();
+                    image.markup.clear();
+                    image.view_box.clear();
+                    image.natural_width = 0;
+                    image.natural_height = 0;
+                    image.complete = true;
+                    wrapper->Set(
+                        local_context,
+                        js_string(isolate, "complete"),
+                        v8::True(isolate)).Check();
+                    wrapper->Set(
+                        local_context,
+                        js_string(isolate, "currentSrc"),
+                        js_string(isolate, source->second.c_str())).Check();
+                    wrapper->Set(
+                        local_context,
+                        js_string(isolate, "naturalWidth"),
+                        v8::Integer::New(isolate, 0)).Check();
+                    wrapper->Set(
+                        local_context,
+                        js_string(isolate, "naturalHeight"),
+                        v8::Integer::New(isolate, 0)).Check();
+                    document.mark_dirty();
+                    return dispatch_resource_event("error");
+                };
                 std::string markup;
                 std::string resolved_source;
                 const auto& base =
@@ -608,17 +670,11 @@
                         WEBSCENE_RESOURCE_IMAGE,
                         markup,
                         resolved_source)) {
-                    frame_last_error_value =
-                        "Unable to load connected image: " + source->second;
-                    ++frame_script_error_count;
-                    return false;
+                    return mark_broken_image();
                 }
                 const auto view_box = svg_view_box(markup);
                 if (view_box.empty()) {
-                    frame_last_error_value =
-                        "Connected image is not a supported SVG: " + source->second;
-                    ++frame_script_error_count;
-                    return false;
+                    return mark_broken_image();
                 }
                 float view_x = 0;
                 float view_y = 0;
@@ -653,22 +709,5 @@
                 document.mark_dirty();
             }
         }
-
-        v8::Local<v8::Value> onload;
-        if (wrapper->Get(local_context, js_string(isolate, "onload")).ToLocal(&onload)
-            && onload->IsFunction()) {
-            auto callback = onload.As<v8::Function>();
-            v8::TryCatch try_catch(isolate);
-            auto event = v8::Object::New(isolate);
-            event->Set(local_context, js_string(isolate, "type"), js_string(isolate, "load")).Check();
-            event->Set(local_context, js_string(isolate, "target"), wrapper).Check();
-            v8::Local<v8::Value> arguments[] = {event};
-            if (callback->Call(local_context, wrapper, 1, arguments).IsEmpty()) {
-                frame_last_error_value = "Connected resource onload failed: "
-                    + describe_exception(try_catch, local_context);
-                ++frame_script_error_count;
-                return false;
-            }
-        }
-        return true;
+        return dispatch_resource_event("load");
     }

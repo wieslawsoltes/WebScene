@@ -16,8 +16,9 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current expanded evidence (2026-07-23): Chrome passes 18/18 consumer documents and
-450/450 selected assertions; managed and native also pass 18/18 and 450/450. Fifteen
+Current native evidence (2026-08-09): the native engine passes 18/18 consumer documents
+and 450/450 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at the same denominator. Fifteen
 documents execute 424 unchanged official-source cases: all 253
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
@@ -106,7 +107,7 @@ Every selected, harness-blocked, or excluded upstream file remains listed in
 reduced to an upstream WPT or a product-neutral WebScene contract before changing an
 engine primitive.
 
-Install the exact lock and run Chrome plus both WebScene adapters:
+Install the exact lock and run Chrome plus the native WebScene engine:
 
 ```sh
 cd tests/EcosystemCompatibility

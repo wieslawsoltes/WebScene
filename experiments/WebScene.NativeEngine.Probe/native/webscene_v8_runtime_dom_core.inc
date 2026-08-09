@@ -449,6 +449,7 @@
     void destroy_detached_frame_contexts(dom_node& root)
     {
         std::unordered_set<uint32_t> node_ids;
+        std::vector<v8::Local<v8::Context>> detached_contexts;
         visit_subtree(root, [&](const dom_node& node) {
             node_ids.insert(node.id);
         });
@@ -457,6 +458,7 @@
             if (found != actual_frame_contexts.end()
                 && !found->second.IsEmpty()) {
                 const auto local_context = found->second.Get(isolate);
+                detached_contexts.push_back(local_context);
                 cancel_detached_frame_context_tasks(local_context);
                 destroy_inspector_context(local_context);
                 if (!frame_context.IsEmpty()
@@ -474,7 +476,13 @@
         for (auto& [type, listeners] : frame_event_listeners) {
             static_cast<void>(type);
             std::erase_if(listeners, [&](const auto& listener) {
-                return node_ids.contains(listener.target);
+                const auto listener_context = listener.context.Get(isolate);
+                return std::any_of(
+                    detached_contexts.begin(),
+                    detached_contexts.end(),
+                    [&](const auto context) {
+                        return listener_context == context;
+                    });
             });
         }
     }

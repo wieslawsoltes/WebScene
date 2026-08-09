@@ -375,6 +375,24 @@ void test_cssom_serializes_resolved_numbers_without_trailing_zeroes(webscene_eng
     )JS", "native-cssom-specified-and-resolved-read.js");
     require(reflection == R"(["normal","10px","normal","10%","1.6px"])",
         "specified and resolved CSSOM values were conflated: " + reflection);
+    const auto authored_fallback = evaluate(engine, R"JS(
+        (() => {
+          const target = document.createElement('div');
+          target.style.fillOpacity = 1;
+          document.body.appendChild(target);
+          const computed = getComputedStyle(target);
+          return {
+            inline: target.style.fillOpacity,
+            computedName: computed.fillOpacity,
+            computedMethod: computed.getPropertyValue('fill-opacity')
+          };
+        })()
+    )JS", "native-cssom-authored-fallback.js");
+    require(
+        authored_fallback
+            == R"({"inline":"1","computedName":"1","computedMethod":"1"})",
+        "computed CSSOM lost an authored property outside the modeled layout set: "
+            + authored_fallback);
 }
 
 void test_cssom_serializes_inline_hex_colors(webscene_engine* engine)
