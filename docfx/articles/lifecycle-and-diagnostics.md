@@ -154,11 +154,11 @@ their page/window unload or application shutdown path. Guard an `async void` eve
 handler with `try`/`catch` and log shutdown failures; application logic should otherwise
 prefer `Task`-returning methods.
 
-Avalonia's `UnloadAsync` releases the current document while keeping the view reusable;
-a later `LoadAsync` can create a new document. The Uno proof does not currently expose
-a public reusable unload operation, although a second `LoadAsync` replaces its current
-document internally. On both hosts, `DisposeAsync` ends the view lifetime and should be
-the final operation.
+Both presenters expose `UnloadAsync` to release the current document while keeping the
+view reusable; a later `LoadAsync` creates a new document. `DisposeAsync` ends the view
+lifetime and should be the final operation. The framework-specific
+`WebSceneComponentHost` controls own this sequence automatically for component
+mount/unmount/reload.
 
 ## Diagnostic surfaces
 
@@ -177,8 +177,8 @@ expose that information, though the exact public properties differ:
 | Diagnostic JavaScript | `EvaluateTextAsync` | `EvaluateTextAsync` |
 | Raw V8 Inspector | `OpenV8InspectorSession` | `OpenV8InspectorSession` |
 | Wait for Inspector startup | `WaitForV8InspectorAvailableAsync` | `WaitForV8InspectorAvailableAsync` |
-| Console messages | `DrainConsoleMessages()` | Not currently exposed by the proof view |
-| Native last error and feature report | `LastError`, `FeatureUseReport` | Not currently exposed by the proof view |
+| Console messages | `DrainConsoleMessages()` | Not currently exposed by the Uno view |
+| Native last error and feature report | `LastError`, `FeatureUseReport` | Not currently exposed by the Uno view |
 
 Sample component scene health without resetting counters:
 

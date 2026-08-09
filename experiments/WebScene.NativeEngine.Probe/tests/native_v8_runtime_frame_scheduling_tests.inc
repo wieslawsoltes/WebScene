@@ -421,6 +421,22 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
 {
     webscene_engine_metrics before{};
     webscene_engine_get_metrics(engine, &before);
+    const auto detached_event = evaluate(engine, R"JS(
+        (() => {
+          const target = document.createElement('div');
+          document.body.appendChild(target);
+          let calls = 0;
+          target.addEventListener('closed.bs.alert', () => calls++);
+          target.dispatchEvent(new Event('closed.bs.alert'));
+          target.remove();
+          const dispatched = target.dispatchEvent(
+            new Event('closed.bs.alert', { bubbles: true, cancelable: true }));
+          return { calls, dispatched, connected: target.isConnected };
+        })()
+    )JS", "native-detached-custom-event.js");
+    require(
+        detached_event == R"({"calls":2,"dispatched":true,"connected":false})",
+        "a detached element stopped dispatching custom events: " + detached_event);
     execute(engine, R"JS(
         (() => {
           const retained = document.createElement('div');

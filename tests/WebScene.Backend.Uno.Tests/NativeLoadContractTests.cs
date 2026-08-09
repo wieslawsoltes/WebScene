@@ -34,6 +34,17 @@ public sealed class NativeLoadContractTests
         Assert.NotNull(typeof(UnoNativeWebSceneView).GetMethod(
             nameof(UnoNativeWebSceneView.LoadAsync),
             [typeof(NativeWebSceneLoadOptions), typeof(CancellationToken)]));
+        Assert.NotNull(typeof(UnoNativeWebSceneView).GetMethod(
+            nameof(UnoNativeWebSceneView.LoadAsync),
+            [
+                typeof(NativeWebSceneLoadOptions),
+                typeof(Func<UnoNativeWebSceneView, CancellationToken, ValueTask>),
+                typeof(TimeSpan?),
+                typeof(CancellationToken)
+            ]));
+        Assert.NotNull(typeof(UnoNativeWebSceneView).GetMethod(
+            nameof(UnoNativeWebSceneView.UnloadAsync),
+            Type.EmptyTypes));
     }
 
     [Fact]

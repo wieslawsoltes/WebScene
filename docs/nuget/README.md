@@ -11,7 +11,7 @@ fallback.
   semantics and contracts.
 - `WebScene.Backend.Abstractions` — presenter capabilities and manifests.
 - `WebScene.Backend.Avalonia` — the reference native scene presenter.
-- `WebScene.Backend.Uno` — the current Uno presenter proof.
+- `WebScene.Backend.Uno` — the supported Uno Skia desktop presenter.
 - `WebScene.Diagnostics.Cdp` — optional Chrome discovery and WebSocket hosting for
   raw native V8 Inspector sessions.
 - `WebScene.JavaScript.Interop` and
@@ -21,12 +21,14 @@ fallback.
   contracts.
 - `WebScene.Sdk.Avalonia` — reusable native Avalonia component host, isolated package
   resource policy, lifecycle, recovery, diagnostics, and capability bridge wiring.
+- `WebScene.Sdk.Uno` — the equivalent reusable native Uno component host with the
+  same package, lifecycle, isolation, diagnostics, and capability contracts.
 - `WebScene` — a separate HTML-inspired Avalonia authoring layer.
 
 `WebScene.JavaScript`, `JavaScript.Avalonia.ClearScript`,
 and `WebScene.Templates` are discontinued. The former managed JavaScript/DOM host is
-not shipped as source or as a package. `WebScene.Sdk.Avalonia` has returned as a
-native-only implementation; application templates remain future work.
+not shipped as source or as a package. `WebScene.Sdk.Avalonia` and `WebScene.Sdk.Uno`
+are native-only implementations; application templates remain future work.
 
 ## Native runtime packages
 

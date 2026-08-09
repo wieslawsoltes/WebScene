@@ -489,6 +489,34 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
         "SVG IMG element did not expose an asynchronous loaded state: "
             + image_state);
 
+    execute(engine, R"JS(
+        (() => {
+          const image = document.createElement('img');
+          image.id = 'native-broken-image';
+          globalThis.__nativeBrokenImageEvents = { errors: 0, loads: 0 };
+          image.addEventListener('error', () => __nativeBrokenImageEvents.errors++);
+          image.addEventListener('load', () => __nativeBrokenImageEvents.loads++);
+          image.src = 'missing.svg';
+          document.body.appendChild(image);
+        })()
+    )JS", "native-broken-img-setup.js");
+    const auto broken_image_state = evaluate(engine, R"JS((() => {
+      const image = document.querySelector('#native-broken-image');
+      return {
+        complete: image.complete,
+        currentSrc: image.currentSrc,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        errors: __nativeBrokenImageEvents.errors,
+        loads: __nativeBrokenImageEvents.loads
+      };
+    })())JS", "native-broken-img-state.js");
+    require(
+        broken_image_state
+            == R"({"complete":true,"currentSrc":"missing.svg","naturalWidth":0,"naturalHeight":0,"errors":1,"loads":0})",
+        "a failed IMG load aborted the document or exposed the wrong lifecycle: "
+            + broken_image_state);
+
     webscene_engine_request_scene_checkpoint(engine);
     auto found = false;
     for (auto attempt = 0; attempt < 100; ++attempt) {

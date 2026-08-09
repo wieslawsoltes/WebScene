@@ -4,6 +4,7 @@ using WebScene.Diagnostics.Cdp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NativeRuntimeShowcase.Interop;
+using WebScene.Sdk.Uno;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
@@ -13,6 +14,7 @@ public sealed partial class MainPage : Page
 {
     private readonly UnoNativeWebSceneView _terminal = new();
     private readonly UnoNativeWebSceneView _editor = new();
+    private readonly WebSceneComponentHost _component = new() { AutoMount = false };
     private readonly DispatcherTimer _diagnosticsTimer = new();
     private readonly IReadOnlyList<string> _arguments =
         Environment.GetCommandLineArgs();
@@ -37,6 +39,7 @@ public sealed partial class MainPage : Page
         _inspectorLaunch = WebSceneV8InspectorCommandLine.Resolve(_arguments);
         _customDocumentUri = ResolveDocumentArgument(_arguments);
         InitializeComponent();
+        ComponentContent.Content = _component;
         TerminalContent.Content = _terminal;
         EditorContent.Content = _editor;
         _diagnosticsTimer.Interval = TimeSpan.FromSeconds(1);
@@ -62,11 +65,16 @@ public sealed partial class MainPage : Page
                 await ShowEditorAsync();
                 return;
             }
-            await ShowTradingViewAsync();
+            if (_arguments.Contains("--tradingview", StringComparer.Ordinal))
+            {
+                await ShowTradingViewAsync();
+                return;
+            }
+            await ShowComponentAsync();
         }
         catch (Exception error)
         {
-            ShowFailure("Native TradingView startup failed", error);
+            ShowFailure("Native Uno startup failed", error);
         }
     }
 
@@ -82,8 +90,58 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private async void OnShowComponent(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            await ShowComponentAsync();
+        }
+        catch (Exception error)
+        {
+            ShowFailure("Native component startup failed", error);
+        }
+    }
+
+    private async Task ShowComponentAsync()
+    {
+        ComponentContent.Visibility = Visibility.Visible;
+        TerminalContent.Visibility = Visibility.Collapsed;
+        EditorContent.Visibility = Visibility.Collapsed;
+        await WaitForLayoutAsync(ComponentContent);
+        if (_component.State != WebSceneComponentHostState.Mounted)
+        {
+            _nativeLibraryPath ??=
+                ShowcasePaths.ResolveNativeLibraryPath(_arguments);
+            _component.PackagePath = Path.Combine(
+                AppContext.BaseDirectory,
+                "components",
+                "ComponentHost.Basic");
+            _component.NativeLibraryPath = _nativeLibraryPath;
+            _component.CompilationCacheDirectory =
+                ShowcasePaths.CacheDirectory("Uno", "component-host-basic");
+            _component.BeforeNavigationAsync = BeforeNavigationInspectorHook;
+            try
+            {
+                await _component.MountAsync();
+            }
+            catch
+            {
+                await ResetInspectorAfterFailedLoadAsync(_component.View);
+                throw;
+            }
+        }
+        await SelectInspectorTargetAsync(
+            _component.View,
+            "WebScene V8 · ComponentHost.Basic · Uno",
+            CancellationToken.None);
+        DocumentText.Text = _component.ComponentPackage?.Manifest.DisplayName
+            ?? "ComponentHost.Basic";
+        StatusText.Text = "Packaged React component mounted through WebScene.Sdk.Uno";
+    }
+
     private async Task ShowTradingViewAsync()
     {
+        ComponentContent.Visibility = Visibility.Collapsed;
         TerminalContent.Visibility = Visibility.Visible;
         EditorContent.Visibility = Visibility.Collapsed;
         await WaitForLayoutAsync(TerminalContent);
@@ -160,6 +218,7 @@ public sealed partial class MainPage : Page
 
     private async Task ShowEditorAsync()
     {
+        ComponentContent.Visibility = Visibility.Collapsed;
         TerminalContent.Visibility = Visibility.Collapsed;
         EditorContent.Visibility = Visibility.Visible;
         await WaitForLayoutAsync(EditorContent);
@@ -177,6 +236,7 @@ public sealed partial class MainPage : Page
 
     private async Task ShowCustomDocumentAsync(string documentUri)
     {
+        ComponentContent.Visibility = Visibility.Collapsed;
         TerminalContent.Visibility = Visibility.Collapsed;
         EditorContent.Visibility = Visibility.Visible;
         await WaitForLayoutAsync(EditorContent);
@@ -386,7 +446,9 @@ public sealed partial class MainPage : Page
             cancellationToken: cancellationToken);
         await SelectInspectorTargetAsync(
             view,
-            ReferenceEquals(view, _editor)
+            ReferenceEquals(view, _component.View)
+                ? "WebScene V8 · ComponentHost.Basic · Uno"
+                : ReferenceEquals(view, _editor)
                 ? _customDocumentUri is null
                     ? "WebScene V8 · Monaco · Uno"
                     : "WebScene V8 · Custom document · Uno"
@@ -510,5 +572,6 @@ public sealed partial class MainPage : Page
         }
         await _editor.DisposeAsync();
         await _terminal.DisposeAsync();
+        await _component.DisposeAsync();
     }
 }

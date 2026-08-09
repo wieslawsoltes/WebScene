@@ -122,8 +122,8 @@ When documenting or marketing an integration:
 
 - Describe the license as the repository's custom source-available license with a
   Restricted Party Clause, not unqualified MIT or OSI-approved open source.
-- Describe Uno as an experimental proof until its missing conformance and platform
-  gates are complete.
+- Scope Uno support to Skia desktop and the published native RIDs; do not imply support
+  for Uno browser, mobile, or non-Skia targets.
 - Describe candidate web-platform behavior as candidate coverage, not supported browser
   compatibility.
 - State the exact RID and WebScene version behind performance or compatibility claims.

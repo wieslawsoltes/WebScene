@@ -986,6 +986,13 @@
                 value = serialize_css_number(line_height) + "px";
             }
         }
+        if (computed && value.empty()
+            && inline_style_mask(canonical_css_property_name(name)) == 0U) {
+            const auto& authored_style = node->authored_style().declarations;
+            const auto authored = authored_style.find(
+                canonical_css_property_name(name));
+            if (authored != authored_style.end()) value = authored->second;
+        }
         // CSSStyleDeclaration.getPropertyValue() returns the empty string for
         // unsupported or unset declarations; it must never leak `undefined`.
         info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
@@ -1460,6 +1467,13 @@
             value = current != nullptr && current->style.pointer_events_none ? "none" : "auto";
         } else if (name == "cursor") {
             value = resolved_cursor(*node);
+        }
+        if (computed && value.empty()
+            && inline_style_mask(canonical_css_property_name(name)) == 0U) {
+            const auto& authored_style = node->authored_style().declarations;
+            const auto authored = authored_style.find(
+                canonical_css_property_name(name));
+            if (authored != authored_style.end()) value = authored->second;
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
     }

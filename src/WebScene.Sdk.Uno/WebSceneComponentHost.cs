@@ -1,15 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.VisualTree;
-using WebScene.Backends.Avalonia.Native;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using WebScene.Backends.Uno.Native;
 using WebScene.Backends.Native;
 using WebScene.JavaScript.Interop;
 using WebScene.Sdk.NativeHost.Internal;
 
-namespace WebScene.Sdk.Avalonia;
+namespace WebScene.Sdk.Uno;
 
 public enum WebSceneComponentHostState
 {
@@ -50,24 +49,38 @@ public sealed class WebSceneComponentCompatibilityException(
 }
 
 /// <summary>
-/// Reusable Avalonia control that validates, loads, mounts, and isolates one
+/// Reusable Uno Platform control that validates, loads, mounts, and isolates one
 /// packaged WebScene component in the native ABI 3 runtime.
 /// </summary>
-public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
+public sealed class WebSceneComponentHost : ContentControl, IAsyncDisposable
 {
-    public static readonly StyledProperty<string?> PackagePathProperty =
-        AvaloniaProperty.Register<WebSceneComponentHost, string?>(nameof(PackagePath));
+    public static readonly DependencyProperty PackagePathProperty =
+        DependencyProperty.Register(
+            nameof(PackagePath),
+            typeof(string),
+            typeof(WebSceneComponentHost),
+            new PropertyMetadata(null));
 
-    public static readonly StyledProperty<string?> NativeLibraryPathProperty =
-        AvaloniaProperty.Register<WebSceneComponentHost, string?>(nameof(NativeLibraryPath));
+    public static readonly DependencyProperty NativeLibraryPathProperty =
+        DependencyProperty.Register(
+            nameof(NativeLibraryPath),
+            typeof(string),
+            typeof(WebSceneComponentHost),
+            new PropertyMetadata(null));
 
-    public static readonly StyledProperty<string?> CompilationCacheDirectoryProperty =
-        AvaloniaProperty.Register<WebSceneComponentHost, string?>(nameof(CompilationCacheDirectory));
+    public static readonly DependencyProperty CompilationCacheDirectoryProperty =
+        DependencyProperty.Register(
+            nameof(CompilationCacheDirectory),
+            typeof(string),
+            typeof(WebSceneComponentHost),
+            new PropertyMetadata(null));
 
-    public static readonly StyledProperty<bool> AutoMountProperty =
-        AvaloniaProperty.Register<WebSceneComponentHost, bool>(
+    public static readonly DependencyProperty AutoMountProperty =
+        DependencyProperty.Register(
             nameof(AutoMount),
-            defaultValue: true);
+            typeof(bool),
+            typeof(WebSceneComponentHost),
+            new PropertyMetadata(true));
 
     private static readonly UTF8Encoding s_strictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
@@ -99,32 +112,36 @@ public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
 
     public WebSceneComponentHost()
     {
-        View = new NativeWebSceneView();
-        Child = View;
+        View = new UnoNativeWebSceneView();
+        HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        VerticalContentAlignment = VerticalAlignment.Stretch;
+        Content = View;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         _diagnosticSink = new ForwardingDiagnosticSink(this, _diagnostics);
     }
 
     public string? PackagePath
     {
-        get => GetValue(PackagePathProperty);
+        get => (string?)GetValue(PackagePathProperty);
         set => SetValue(PackagePathProperty, value);
     }
 
     public string? NativeLibraryPath
     {
-        get => GetValue(NativeLibraryPathProperty);
+        get => (string?)GetValue(NativeLibraryPathProperty);
         set => SetValue(NativeLibraryPathProperty, value);
     }
 
     public string? CompilationCacheDirectory
     {
-        get => GetValue(CompilationCacheDirectoryProperty);
+        get => (string?)GetValue(CompilationCacheDirectoryProperty);
         set => SetValue(CompilationCacheDirectoryProperty, value);
     }
 
     public bool AutoMount
     {
-        get => GetValue(AutoMountProperty);
+        get => (bool)GetValue(AutoMountProperty);
         set => SetValue(AutoMountProperty, value);
     }
 
@@ -132,9 +149,9 @@ public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
     public IReadOnlyList<WebSceneDocumentScript> DocumentStartScripts { get; set; } = [];
 
     /// <summary>Optional Inspector/startup hook run before document navigation.</summary>
-    public Func<NativeWebSceneView, CancellationToken, ValueTask>? BeforeNavigationAsync { get; set; }
+    public Func<UnoNativeWebSceneView, CancellationToken, ValueTask>? BeforeNavigationAsync { get; set; }
 
-    public NativeWebSceneView View { get; }
+    public UnoNativeWebSceneView View { get; }
 
     public WebSceneComponentHostState State => _state;
 
@@ -304,6 +321,8 @@ public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
             }
             finally
             {
+                Loaded -= OnLoaded;
+                Unloaded -= OnUnloaded;
                 await View.DisposeAsync();
                 _disposed = true;
                 SetState(WebSceneComponentHostState.Disposed);
@@ -336,18 +355,18 @@ public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
             packaged);
     }
 
-    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs args)
     {
-        base.OnAttachedToVisualTree(e);
-        if (AutoMount && _state is WebSceneComponentHostState.Idle or WebSceneComponentHostState.Faulted)
+        if (AutoMount
+            && _state is WebSceneComponentHostState.Idle
+                or WebSceneComponentHostState.Faulted)
         {
             _ = RunAutomaticMountAsync();
         }
     }
 
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs args)
     {
-        base.OnDetachedFromVisualTree(e);
         if (!_disposed && _state != WebSceneComponentHostState.Idle)
         {
             _ = RunAutomaticUnmountAsync();
@@ -403,7 +422,7 @@ public sealed class WebSceneComponentHost : Decorator, IAsyncDisposable
                 ResourceLoader = resources
             },
             BeforeNavigationAsync,
-            firstDocumentSceneTimeout: null,
+            documentBarrierTimeout: null,
             cancellationToken);
 
         var bridge = new WebSceneHostBridge(

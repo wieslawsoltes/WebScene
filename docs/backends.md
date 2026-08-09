@@ -42,10 +42,16 @@ performance sampling, and Inspector sessions.
 
 ### Uno
 
-`WebScene.Backend.Uno` and `samples/NativeRuntimeShowcase.Uno` prove the portable
-presenter contracts against a second framework. This is not yet a production support
-claim. It still needs full input, text, IME, accessibility, resource, lifecycle,
-packaging, and conformance gates.
+`WebScene.Backend.Uno` is a supported presenter for Uno Skia desktop applications on
+the published native RIDs. It owns the Uno control lifecycle, compositor-driven Skia
+surface, input forwarding, resource loading, and the same native ABI 3 runtime boundary
+as Avalonia.
+
+`WebScene.Sdk.Uno` publishes the Uno `WebSceneComponentHost` for the same packaged
+Component Profile 1 contract as Avalonia. Both hosts share isolated declared-asset
+loading and capability bridge wiring. `samples/NativeRuntimeShowcase.Uno` mounts the
+checked-in `ComponentHost.Basic` package by default and retains the Monaco and
+TradingView workload modes as integration evidence.
 
 ### Other presenters
 
@@ -101,6 +107,7 @@ dotnet test tests/WebScene.Core.Tests/WebScene.Core.Tests.csproj -c Release
 dotnet test tests/WebScene.Backend.Abstractions.Tests/WebScene.Backend.Abstractions.Tests.csproj -c Release
 dotnet test tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj -c Release
 dotnet test tests/WebScene.Sdk.Avalonia.Tests/WebScene.Sdk.Avalonia.Tests.csproj -c Release
+dotnet test tests/WebScene.Sdk.Uno.Tests/WebScene.Sdk.Uno.Tests.csproj -c Release
 dotnet test tests/WebScene.Architecture.Tests/WebScene.Architecture.Tests.csproj -c Release
 ```
 

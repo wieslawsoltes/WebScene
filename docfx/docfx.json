@@ -9,7 +9,10 @@
             "src/WebScene.Sdk/WebScene.Sdk.csproj",
             "src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj",
             "src/WebScene.JavaScript.Interop/WebScene.JavaScript.Interop.csproj",
-            "src/WebScene.Diagnostics.Cdp/WebScene.Diagnostics.Cdp.csproj"
+            "src/WebScene.Diagnostics.Cdp/WebScene.Diagnostics.Cdp.csproj",
+            "src/WebScene.Sdk/WebScene.Sdk.csproj",
+            "src/WebScene.Sdk.Avalonia/WebScene.Sdk.Avalonia.csproj",
+            "src/WebScene.Sdk.Uno/WebScene.Sdk.Uno.csproj"
           ],
           "src": ".."
         }

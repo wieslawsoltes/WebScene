@@ -1,7 +1,7 @@
 using System.Text;
 using WebScene.Core;
 
-namespace WebScene.Sdk.Avalonia;
+namespace WebScene.Sdk.NativeHost.Internal;
 
 /// <summary>
 /// Serves one immutable component package from an isolated virtual origin.
