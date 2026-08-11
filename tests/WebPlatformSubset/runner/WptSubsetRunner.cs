@@ -351,7 +351,17 @@ internal sealed partial class WptSubsetRunner
                     Message = observation.Message
                 };
             });
-            var checks = colorChecks.Concat(gapChecks).ToList();
+            var componentChecks = test.VisualComponentChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.InspectComponent(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "foreground component shape",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var checks = colorChecks.Concat(gapChecks).Concat(componentChecks).ToList();
             timer.Stop();
             var passed = checks.All(check => check.Status == "PASS");
             return new TestResult
@@ -373,7 +383,8 @@ internal sealed partial class WptSubsetRunner
                     artifactDirectory,
                     snapshot,
                     test.VisualChecks,
-                    test.VisualGapChecks)
+                    test.VisualGapChecks,
+                    test.VisualComponentChecks)
             };
         }
         catch (TimeoutException exception)
@@ -772,6 +783,30 @@ internal sealed partial class WptSubsetRunner
                     {
                         throw new InvalidDataException(
                             $"Visual test '{test.Path}' gap has invalid pixel bounds.");
+                    }
+                }
+                foreach (var check in test.VisualComponentChecks)
+                {
+                    if (check.X < 0 || check.Y < 0 || check.Width <= 0 || check.Height <= 0
+                        || check.X + check.Width > _manifest.Viewport.Width
+                        || check.Y + check.Height > _manifest.Viewport.Height
+                        || check.MaximumLuminance is < 0 or > 255
+                        || check.MinimumWidth is < 0 || check.MaximumWidth is < 0
+                        || check.MinimumHeight is < 0 || check.MaximumHeight is < 0
+                        || check.MinimumPixels is < 0
+                        || check.MinimumWidth > check.MaximumWidth
+                        || check.MinimumHeight > check.MaximumHeight
+                        || check.MinimumFillRatio is < 0 or > 1)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component shape has invalid bounds.");
+                    }
+                    if (!check.MinimumWidth.HasValue && !check.MaximumWidth.HasValue
+                        && !check.MinimumHeight.HasValue && !check.MaximumHeight.HasValue
+                        && !check.MinimumPixels.HasValue && !check.MinimumFillRatio.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component shape has no assertion.");
                     }
                 }
             }

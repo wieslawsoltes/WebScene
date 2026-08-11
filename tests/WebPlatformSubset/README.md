@@ -97,11 +97,11 @@ code.
   the independent Chromium self-comparison and cross-engine differential described
   above.
 - `visual` runs an unchanged self-verifying WPT against bounded, manifest-authored exact
-  color-count and optional spatial color-gap checks, always retains the native
-  screenshot, and applies the same checks independently in Chromium when
-  `--chromium-path` is supplied. Every visual entry must include both a failure-color
-  bound and a non-blank success condition appropriate to the upstream test's authored
-  pass statement.
+  color-count plus optional spatial color-gap and connected-component shape checks,
+  always retains the native screenshot, and applies the same checks independently in
+  Chromium when `--chromium-path` is supplied. Every visual entry must include both a
+  failure-color bound and a non-blank success condition appropriate to the upstream
+  test's authored pass statement.
 - `contract` runs a project-owned reduced behavior contract through the same native
   document and JavaScript boundary.
 
@@ -124,11 +124,11 @@ contract.
 
 ## 2026-08-09 coverage audit
 
-The pinned profile contains 110 required, 55 candidate, 3 harness-blocked, and 5
+The pinned profile contains 110 required, 56 candidate, 2 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-55/55 documents and 311/311 subtests while the release gate remains 110/110 documents
+56/56 documents and 313/313 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -146,6 +146,9 @@ and 434/434 subtests:
 - the unchanged visibility-layout WPT now requires hidden red paint suppression, visible
   orange/blue controls, and the bounded one-inch spatial gap left by the hidden box in
   both native and Chromium; and
+- the unchanged list-style shorthand WPT now requires a compact filled square marker on
+  a generic `display:list-item` box through independent native and Chromium connected-
+  component shape checks; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -190,11 +193,18 @@ for the 50-sample selector workload, and from 3.047 ms to 3.012 ms (-1.2%) for 5
 generated named-property samples. The original named-color fast-path order is preserved,
 and the slice adds no document or per-node state.
 
+The generic list-marker/shape-oracle slice was compared with its immediate clean parent
+(`ad13383`) in six balanced fresh-process runs. Median p50 moved from 0.736 ms to
+0.738 ms (+0.3%) for 1,000 lifecycle samples, from 32.506 ms to 32.258 ms (-0.8%)
+for the 50-sample selector workload, and from 2.965 ms to 2.983 ms (+0.6%) for 50
+generated named-property samples. The runtime path is restricted to generic
+`display:list-item` boxes and adds no document or per-node state.
+
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence
-from every released RID. Three self-verifying visual documents remain harness-blocked:
-two list-marker documents are not yet pinned locally, while the elliptical-radius case
-deliberately exceeds the currently claimed scalar corner projection. The pinned
+from every released RID. Two self-verifying visual documents remain harness-blocked:
+the remaining list-marker document is not yet pinned locally, while the elliptical-radius
+case deliberately exceeds the currently claimed scalar corner projection. The pinned
 visibility-layout and rounded-overflow documents and the dynamic flex check-layout
 document are no longer in that set.
 

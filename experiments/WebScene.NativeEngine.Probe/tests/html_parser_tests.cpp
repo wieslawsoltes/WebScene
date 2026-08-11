@@ -1,9 +1,11 @@
 #include "webscene_html_parser.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace webscene_native;
 
@@ -120,6 +122,42 @@ void diagnostic_comment_policy()
     require(count_kind(root, dom_node_kind::text) == 1, "adjacent text must be coalesced across a discarded comment");
 }
 
+void generic_outside_square_list_marker_reaches_scene()
+{
+    native_document document;
+    auto& item = document.create_element("div");
+    item.style.display = display_mode::list_item;
+    item.style.mutable_textual().list_style_type = "square";
+    item.style.mutable_textual().list_style_position = "outside";
+    auto& text = document.create_element("#text");
+    text.text_content = "Filler text";
+    require(
+        document.append_child(document.body(), item)
+            && document.append_child(item, text),
+        "generic list-item fixture must retain its text");
+    document.layout(200.0F, 100.0F);
+    require(
+        item.list_marker_layout.width > 0.0F
+            && item.list_marker_layout.height > 0.0F
+            && item.list_marker_layout.x < item.layout.x,
+        "generic outside list-item must retain marker geometry");
+
+    std::vector<webscene_scene_command> commands;
+    std::vector<webscene_scene_string> strings;
+    std::vector<char> string_bytes;
+    document.build_scene(commands, strings, string_bytes);
+    require(
+        std::any_of(commands.begin(), commands.end(), [&](const auto& command) {
+            return command.kind == 9U
+                && command.node_id == item.id
+                && std::abs(command.x - item.list_marker_layout.x) < 0.01F
+                && command.y > item.list_marker_layout.y
+                && std::abs(command.width - command.height) < 0.01F
+                && command.width >= 3.0F;
+        }),
+        "generic outside square marker must reach the scene as filled geometry");
+}
+
 } // namespace
 
 int main()
@@ -127,6 +165,7 @@ int main()
     document_tree_construction();
     context_fragments_and_templates();
     diagnostic_comment_policy();
+    generic_outside_square_list_marker_reaches_scene();
     std::cout << "html5ever tree-sink tests passed\n";
     return 0;
 }

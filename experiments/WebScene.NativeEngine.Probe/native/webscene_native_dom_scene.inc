@@ -679,11 +679,36 @@ void native_document::append_scene(
             0});
     }
     if (node.list_marker_layout.width > 0 || node.list_marker_layout.height > 0) {
-        node_style::pseudo_element marker{};
-        marker.generated = true;
-        marker.content = list_marker_text(node);
-        marker.layout = node.list_marker_layout;
-        append_pseudo(marker);
+        // Keep existing LI marker rasterization stable. A generic list-item's
+        // square is geometry so its correctness does not depend on font glyphs.
+        if (paint_self
+            && node.tag != "li"
+            && resolved_list_style(node, false) == "square") {
+            const auto font_size = resolved_font_size(node);
+            const auto line_height = resolved_line_height(node, font_size);
+            const auto marker_size = std::max(3.0F, std::round(font_size * 0.3125F));
+            commands.push_back(webscene_scene_command{
+                9U,
+                0U,
+                node.list_marker_layout.x,
+                node.list_marker_layout.y
+                    + std::max(0.0F, (line_height - marker_size) * 0.5F),
+                marker_size,
+                marker_size,
+                with_opacity(resolved_foreground(node)),
+                node.id,
+                0,
+                0,
+                0,
+                0,
+                0});
+        } else {
+            node_style::pseudo_element marker{};
+            marker.generated = true;
+            marker.content = list_marker_text(node);
+            marker.layout = node.list_marker_layout;
+            append_pseudo(marker);
+        }
     }
     const auto before_paints_after_content = node.style.before_pseudo().z_index > 0
         && node.style.before_pseudo().position != position_mode::normal;

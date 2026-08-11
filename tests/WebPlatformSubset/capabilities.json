@@ -190,9 +190,10 @@
     {
       "family": "list-formatting",
       "required": ["list-item marker paint", "ordered counters", "outside marker geometry", "inside marker first-line participation", "marker-before-block-child anonymous line"],
+      "candidate": ["list-style shorthand on generic list-item boxes", "filled square marker rasterization"],
       "productEvidence": ["R5 ReactDashboard list markers", "connected menu and disclosure rows"],
-      "coverage": ["css/css-lists/li-value-reversed-001.html", "css/css-lists/list-and-flex-001.html", "css/CSS2/lists/list-style-position-023.xht", "css/CSS2/lists/list-style-position-020.xht (nearest visual, harness-blocked)", "R5SampleListLayoutTests"],
-      "gap": "The native required lane passes li-value-reversed, list-and-flex, and the exact list-style-position-023 inside-marker reftest. The list-and-flex regression was not a flex defect: a preserved HTML comment was incorrectly reset to display:block during element recascade and shifted the document by one line. Non-element nodes now retain their non-rendering display semantics. Outside marker placement and the broader marker/counter surface remain outside this bounded slice. Evidence: TestResults/WptWhitespaceOracle-Final-20260802/results.json and artifacts/wpt-list-marker-v2/results.json."
+      "coverage": ["css/css-lists/li-value-reversed-001.html", "css/css-lists/list-and-flex-001.html", "css/CSS2/lists/list-style-position-023.xht", "css/CSS2/lists/list-style-001.xht", "css/CSS2/lists/list-style-position-020.xht (nearest visual, harness-blocked)", "generic_outside_square_list_marker_reaches_scene", "R5SampleListLayoutTests"],
+      "gap": "The native required lane passes li-value-reversed, list-and-flex, and the exact list-style-position-023 inside-marker reftest. Candidate coverage now adds the unchanged list-style shorthand WPT: a generic display:list-item box retains outside marker geometry and paints a filled square verified independently in native and Chromium. The list-and-flex regression was not a flex defect: a preserved HTML comment was incorrectly reset to display:block during element recascade and shifted the document by one line. Non-element nodes now retain their non-rendering display semantics. list-style-position-020 and the broader marker/counter surface remain outside this bounded slice. Evidence: TestResults/WptWhitespaceOracle-Final-20260802/results.json, artifacts/wpt-list-marker-v2/results.json, and TestResults/CompatibilityGoal/list-style-square-shape/results.json."
     },
     {
       "family": "flex-layout",

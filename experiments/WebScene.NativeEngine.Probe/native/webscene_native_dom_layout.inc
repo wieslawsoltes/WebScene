@@ -115,6 +115,19 @@ void native_document::layout_children(dom_node& parent)
             - border_left - border_right - padding_left - padding_right),
         std::max(0.0F, parent.layout.height
             - border_top - border_bottom - padding_top - padding_bottom)};
+    // HTML LI marker geometry retains its established path. Generic authored
+    // list-item boxes need an outside marker even though they have no LI tag.
+    if (!marker_text.empty() && !has_inside_marker && parent.tag != "li") {
+        auto marker = make_list_marker_layout_node(parent, marker_text);
+        const auto marker_width = measure_text_width(marker_text, marker);
+        const auto marker_font_size = resolved_font_size(marker);
+        const auto marker_line_height = resolved_line_height(marker, marker_font_size);
+        parent.list_marker_layout = {
+            content.x - marker_width,
+            content.y,
+            marker_width,
+            marker_line_height};
+    }
     parent.scroll_viewport_width = content.width;
     parent.scroll_viewport_height = content.height;
     parent.scroll_left = std::clamp(

@@ -30,6 +30,7 @@ internal sealed class ProfileTest
     public List<string> Evidence { get; init; } = [];
     public List<VisualColorCheck> VisualChecks { get; init; } = [];
     public List<VisualColorGapCheck> VisualGapChecks { get; init; } = [];
+    public List<VisualComponentCheck> VisualComponentChecks { get; init; } = [];
     public string? Reason { get; init; }
 }
 
@@ -48,6 +49,22 @@ internal sealed class VisualColorGapCheck
     public string Axis { get; init; } = "vertical";
     public int? MinimumPixels { get; init; }
     public int? MaximumPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualComponentCheck
+{
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int MaximumLuminance { get; init; } = 240;
+    public int? MinimumWidth { get; init; }
+    public int? MaximumWidth { get; init; }
+    public int? MinimumHeight { get; init; }
+    public int? MaximumHeight { get; init; }
+    public int? MinimumPixels { get; init; }
+    public double? MinimumFillRatio { get; init; }
     public string? Description { get; init; }
 }
 

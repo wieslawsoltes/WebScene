@@ -42,7 +42,7 @@ public sealed class ReleaseCompatibilityGateTests
         var candidate = profile.RootElement.GetProperty("candidate");
 
         Assert.True(
-            candidate.GetArrayLength() >= 55,
+            candidate.GetArrayLength() >= 56,
             $"The candidate compatibility denominator unexpectedly shrank to {candidate.GetArrayLength()} documents.");
     }
 
@@ -69,10 +69,24 @@ public sealed class ReleaseCompatibilityGateTests
                 checks.Any(check => check.TryGetProperty("maximumPixels", out var maximum)
                     && maximum.GetInt32() == 0),
                 $"Visual test '{path}' has no zero-tolerance failure-color check.");
+            var hasSuccessColor = checks.Any(check =>
+                check.TryGetProperty("minimumPixels", out var minimum)
+                && minimum.GetInt32() > 0);
+            var hasComponentShape = visualTest.TryGetProperty(
+                    "visualComponentChecks",
+                    out var componentChecks)
+                && componentChecks.EnumerateArray().Any(check =>
+                    check.TryGetProperty("minimumPixels", out var minimum)
+                    && minimum.GetInt32() > 0
+                    && check.TryGetProperty("minimumFillRatio", out var fillRatio)
+                    && fillRatio.GetDouble() >= 0.5
+                    && check.TryGetProperty("maximumWidth", out var maximumWidth)
+                    && maximumWidth.GetInt32() > 0
+                    && check.TryGetProperty("maximumHeight", out var maximumHeight)
+                    && maximumHeight.GetInt32() > 0);
             Assert.True(
-                checks.Any(check => check.TryGetProperty("minimumPixels", out var minimum)
-                    && minimum.GetInt32() > 0),
-                $"Visual test '{path}' has no non-blank success-color check.");
+                hasSuccessColor || hasComponentShape,
+                $"Visual test '{path}' has no non-blank success-color or bounded component-shape check.");
         }
 
         Assert.Contains(

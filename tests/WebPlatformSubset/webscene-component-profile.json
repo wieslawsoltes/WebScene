@@ -1182,6 +1182,36 @@
       "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
     },
     {
+      "path": "css/CSS2/lists/list-style-001.xht",
+      "type": "visual",
+      "capabilities": ["list-style-shorthand", "square-list-marker", "list-item-marker-paint", "self-verifying-visual-wpt"],
+      "evidence": ["r5-list-style-computed-values", "r5-list-marker-native-pixel", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the list marker fixture exposes no authored red failure pixels"
+        }
+      ],
+      "visualComponentChecks": [
+        {
+          "x": 20,
+          "y": 40,
+          "width": 30,
+          "height": 90,
+          "maximumLuminance": 240,
+          "minimumWidth": 3,
+          "maximumWidth": 10,
+          "minimumHeight": 3,
+          "maximumHeight": 10,
+          "minimumPixels": 9,
+          "minimumFillRatio": 0.65,
+          "description": "list-style square paints a compact filled marker before the principal block"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT requires list-style:square on a display:list-item box to paint a square marker. The bounded visual oracle rejects failure color and blank-render false passes while a marker-region shape check distinguishes the authored square from missing, circular, or text-only output."
+    },
+    {
       "path": "css/CSS2/visufx/visibility-layout-001.xht",
       "type": "visual",
       "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression", "self-verifying-visual-wpt"],
@@ -1236,13 +1266,6 @@
     }
   ],
   "harnessBlocked": [
-    {
-      "path": "css/CSS2/lists/list-style-001.xht",
-      "type": "visual",
-      "capabilities": ["list-style-shorthand", "square-list-marker", "list-item-marker-paint"],
-      "evidence": ["r5-list-style-computed-values", "r5-list-marker-native-pixel"],
-      "reason": "This pinned CSS2 visual case verifies that list-style:square produces a square marker, but it has neither rel=match nor testharness assertions. The subset runner cannot execute self-verifying visual tests unchanged, and the case does not exercise list-style-position:inside or first-line participation. Keep it harness-blocked and use the independent local marker-pixel gate for this base rule."
-    },
     {
       "path": "css/CSS2/lists/list-style-position-020.xht",
       "type": "visual",
