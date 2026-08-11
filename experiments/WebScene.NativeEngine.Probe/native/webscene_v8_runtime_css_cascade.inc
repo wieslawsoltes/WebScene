@@ -2212,6 +2212,21 @@
         }
     }
 
+    void recompute_inline_font_relative_metrics(dom_node& node)
+    {
+        const auto line_height = node.authored_style().declarations.find("line-height");
+        if ((node.style.inline_property_mask & inline_line_height) != 0U
+            && (node.style.important_property_mask & inline_line_height) == 0U
+            && line_height != node.authored_style().declarations.end()) {
+            const auto font_size = node.style.font_size >= 0
+                ? node.style.font_size : inherited_font_size(node);
+            node.style.line_height = resolved_declared_line_height(
+                node,
+                line_height->second,
+                font_size);
+        }
+    }
+
     void apply_css_rules(dom_node& node)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -2502,6 +2517,10 @@
                 apply_css_declaration(node, declaration);
             }
         }
+        // Inline relative line-height is authored at a higher origin, but its
+        // computed pixel value depends on the winning font-size. Re-resolve it
+        // only after stylesheet declarations have completed their cascade.
+        recompute_inline_font_relative_metrics(node);
         // Pseudo-elements inherit the originating element's completed
         // computed style. Apply them only after its custom and ordinary
         // declarations so `::before { background:var(--active-bg) }` resolves
@@ -2625,6 +2644,7 @@
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
+        recompute_inline_font_relative_metrics(node);
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
             if (pseudo_kind == 3) {
                 for (const auto& declaration : rule->declarations()) {
@@ -2729,6 +2749,8 @@
     {
         for (auto* current = &node; current != nullptr; current = current->parent) {
             if (current == &document.body()) return true;
+            if (current->parent == nullptr
+                && detached_document_roots.contains(current->id)) return true;
             for (const auto& [frame_id, provisional_body] : provisional_frame_bodies) {
                 if (current != provisional_body) continue;
                 const auto* frame = document.find_by_native_id(frame_id);

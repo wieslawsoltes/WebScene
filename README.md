@@ -38,15 +38,17 @@ arbitrary websites and arbitrary React applications are not supported.
 
 Autonomous Custom Elements now have a candidate compatibility slice: registry
 definition and lookup, parser and programmatic upgrade, `HTMLElement` subclass
-construction, observed-attribute reactions, and connected/disconnected callbacks.
+construction, Attr-backed observed-attribute reactions, cloning, detached-document and
+same-origin initial-frame connection transitions, and connected/disconnected callbacks.
 The first Shadow DOM slice adds native open/closed root ownership, `attachShadow()`,
-default and named slot distribution, scoped shadow styles, host-value inheritance, and
-one composed projection for layout, paint, hit testing, focus, and event paths. This is
-component-enabling candidate coverage, not a complete Web Components claim. Flattened
-or manual slots, `slotchange`, declarative Shadow DOM, `adoptedStyleSheets`, `::part`,
-`::slotted`, complete focus delegation and retargeting, customized built-ins, adopted
-callbacks across document realms, ES module graphs, and the complete custom-element
-reaction queue remain outside the supported profile.
+default, named, and recursively flattened slot distribution, connected
+`ShadowRoot.styleSheets`, scoped shadow styles, host-value inheritance, and one composed
+projection for layout, paint, hit testing, focus, and event paths. This is
+component-enabling candidate coverage, not a complete Web Components claim. Manual
+slots, `slotchange`, declarative Shadow DOM, `adoptedStyleSheets`, `::part`, `::slotted`,
+complete focus delegation and retargeting, customized built-ins, adopted callbacks,
+ES module graphs, and the complete custom-element reaction queue remain outside the
+supported profile.
 
 Current reference applications include:
 

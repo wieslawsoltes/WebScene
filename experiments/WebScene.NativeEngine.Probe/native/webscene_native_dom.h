@@ -1481,4 +1481,10 @@ private:
     std::vector<dom_node*> out_of_flow_geometry_dirty_roots_;
 };
 
+// Compatibility work must remain pay-for-use. Guard the 64-bit cold-path
+// footprint so new web-facing state cannot silently become a per-node or
+// per-document tax on every hosted component.
+static_assert(sizeof(void*) != 8 || sizeof(dom_node) == 976);
+static_assert(sizeof(void*) != 8 || sizeof(native_document) == 304);
+
 } // namespace webscene_native

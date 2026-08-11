@@ -21,6 +21,11 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;
+    v8::Global<v8::FunctionTemplate> attr_template;
+    v8::Global<v8::FunctionTemplate> character_data_template;
+    v8::Global<v8::FunctionTemplate> text_template;
+    v8::Global<v8::FunctionTemplate> comment_template;
+    v8::Global<v8::FunctionTemplate> processing_instruction_template;
     v8::Global<v8::FunctionTemplate> document_fragment_template;
     v8::Global<v8::FunctionTemplate> shadow_root_template;
 #endif
@@ -28,6 +33,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
     v8::Global<v8::FunctionTemplate> html_slot_element_template;
+    v8::Global<v8::FunctionTemplate> html_style_element_template;
     uint32_t next_standalone_event_target_id{0x80000000U};
 #endif
     v8::Global<v8::ObjectTemplate> style_template;
@@ -47,8 +53,13 @@
     std::unordered_map<uint64_t, pending_callback_promise>
         pending_callback_promises;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> node_wrappers;
+    uint32_t next_attr_id{1U};
+    std::unordered_map<uint32_t, std::unique_ptr<attr_state>> attr_states;
+    std::unordered_map<uint32_t, v8::Global<v8::Object>> attr_wrappers;
+    std::unordered_map<std::string, attr_state*> attached_attributes;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> class_list_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> style_wrappers;
+    std::unordered_map<uint64_t, v8::Global<v8::Object>> stylesheet_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> computed_style_wrappers;
     std::unordered_set<uint64_t> detached_document_roots;
     // Document.getElementById overwhelmingly targets unique IDs. Cache the

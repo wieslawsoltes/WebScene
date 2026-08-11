@@ -126,6 +126,7 @@ int main()
     test_document_clear_releases_and_reinitializes_node_pool();
     test_native_id_lookup_tracks_creation_erasure_and_clear();
     test_compact_attribute_collection_preserves_map_semantics();
+    test_component_catalog_mounts_interacts_and_unmounts();
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
@@ -199,6 +200,8 @@ int main()
     test_class_list_is_same_live_object(engine);
     test_visibility_inherits_for_computed_style_and_focus(engine);
     test_hover_specificity_preserves_visible_theme_icon(engine);
+    test_complex_is_specificity_ignores_non_element_siblings(engine);
+    test_inline_relative_line_height_uses_cascaded_font_size(engine);
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
@@ -211,6 +214,7 @@ int main()
     test_wrapped_flex_resolves_each_line_independently(engine);
     test_zero_height_flex_item_grows_and_hit_tests_descendants(engine);
     test_empty_non_growing_flex_item_collapses_main_axis(engine);
+    test_empty_bordered_flex_items_keep_intrinsic_cross_size(engine);
     test_appending_child_invalidates_empty_selector(engine);
     test_inline_block_preserves_vertical_padding(engine);
     test_pointer_hit_targets_and_related_targets_are_elements(engine);
@@ -254,6 +258,7 @@ int main()
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
+    test_generated_idl_attributes_are_prototype_accessors(engine);
     test_component_library_dom_discovery_primitives(engine);
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);

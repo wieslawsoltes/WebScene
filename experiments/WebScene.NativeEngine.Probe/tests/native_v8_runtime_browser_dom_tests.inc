@@ -1232,3 +1232,135 @@ void test_hidden_document_defers_presentation_work()
         "restored visibility did not publish the deferred document state");
     webscene_engine_destroy(engine);
 }
+void test_component_catalog_mounts_interacts_and_unmounts()
+{
+    struct component_case final {
+        std::string_view id;
+        std::string_view visible_text;
+        std::string_view button_text;
+        std::string_view expected_text;
+    };
+    static constexpr std::array cases{
+        component_case{"ComponentHost.Basic", "Basic component host", "Clicked 0 times", "Clicked 1 time"},
+        component_case{"Hybrid.ReactIslands", "Independent component root", "Island count: 0", "Island count: 1"},
+        component_case{"TypeScriptDesktop", "Desktop workspace", "Form", "Profile form"},
+        component_case{"ReactDashboard", "Operations overview", "Inspect chart", "Chart details"},
+        component_case{"PluginWorkbench", "Plugin workbench", "Load plugin", "Unload plugin"},
+        component_case{"MultiInstanceWorkstation", "Isolated chart instance", "Local count: 0", "Local count: 1"},
+        component_case{"WebToNativeMigration", "Existing React order panel", "#1048 · Contoso", "Legacy component note"},
+        component_case{"OfflineKiosk", "Station kiosk", "Print ticket", "K-5499"},
+        component_case{"HeadlessComponentTests", "Headless component tests", "Pointer events: 0", "Pointer events: 1"},
+        component_case{"HostBridge.Services", "Host bridge services", "Invoke service", "Completed"},
+        component_case{"AccessibilityGallery", "Accessibility gallery", "Save profile", "Profile saved successfully"},
+        component_case{"CanvasWorkbench.Advanced", "Interactive canvas workbench", "Add indicator", "Moving Average"}
+    };
+    const auto repository_root = std::filesystem::path(__FILE__)
+        .parent_path().parent_path().parent_path().parent_path();
+    const auto quote = [](std::string_view value) {
+        std::string result{"'"};
+        for (const auto character : value) {
+            if (character == '\\' || character == '\'') result.push_back('\\');
+            result.push_back(character);
+        }
+        result.push_back('\'');
+        return result;
+    };
+    for (const auto& fixture : cases) {
+        const auto bundle_path = repository_root / "samples/components"
+            / fixture.id / "dist/main.js";
+        std::ifstream stream(bundle_path, std::ios::binary);
+        require(stream.good(), "component catalog bundle was not found: " + std::string(fixture.id));
+        const std::string bundle{
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>()};
+        auto* engine = webscene_engine_create(64);
+        require(engine != nullptr, "component catalog engine creation failed");
+        const auto release_engine = std::unique_ptr<webscene_engine, decltype(&webscene_engine_destroy)>(
+            engine, webscene_engine_destroy);
+        execute_and_wait(engine, R"JS(
+          globalThis.webscene = {
+            profileVersion: '1.0',
+            host: new Proxy({}, { get: (_, capability) => ({
+              invoke(method, argumentsValue = {}) {
+                (globalThis.__componentInvocations ||= []).push({ capability, method, argumentsValue });
+                return Promise.resolve({ accepted: true });
+              }
+            }) })
+          };
+        )JS", "component-catalog-host.js");
+        execute_and_wait(engine, bundle, std::string(fixture.id) + "-bundle.js");
+        require(
+            evaluate(
+                engine,
+                "mount({instanceId:" + quote(fixture.id) + "}); true",
+                std::string(fixture.id) + "-mount.js") == "true",
+            "component catalog mount failed: " + std::string(fixture.id));
+        auto mounted = false;
+        for (auto attempt = 0; attempt < 500 && !mounted; ++attempt) {
+            mounted = evaluate(
+                engine,
+                "!!document.querySelector('main') && document.body.textContent.includes("
+                    + quote(fixture.visible_text) + ") && document.body.textContent.trim().length > 80",
+                std::string(fixture.id) + "-mounted.js") == "true";
+            if (!mounted) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(mounted, "component catalog visible mount failed: " + std::string(fixture.id));
+
+        const auto interaction = R"JS((() => {
+          const expected = )JS" + quote(fixture.button_text) + R"JS(;
+          const button = Array.from(document.querySelectorAll('button'))
+            .find(candidate => candidate.textContent.includes(expected));
+          if (!button) return false;
+          let keyObserved = false;
+          button.addEventListener('keydown', event => { keyObserved = event.key === 'Enter'; }, { once: true });
+          button.focus();
+          const keyEvent = new Event('keydown', { bubbles: true });
+          Object.defineProperty(keyEvent, 'key', { value: 'Enter' });
+          button.dispatchEvent(keyEvent);
+          if (document.activeElement !== button || !keyObserved) return false;
+          button.click();
+          return true;
+        })())JS";
+        require(
+            evaluate(engine, interaction, std::string(fixture.id) + "-interaction.js") == "true",
+            "component catalog keyboard/pointer interaction failed: " + std::string(fixture.id));
+        auto updated = false;
+        for (auto attempt = 0; attempt < 500 && !updated; ++attempt) {
+            updated = evaluate(
+                engine,
+                "document.body.textContent.includes(" + quote(fixture.expected_text) + ")",
+                std::string(fixture.id) + "-updated.js") == "true";
+            if (!updated) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(updated, "component catalog update failed: " + std::string(fixture.id));
+        require(
+            evaluate(engine, "unmount(); document.body.children.length === 0",
+                std::string(fixture.id) + "-unmount.js") == "true",
+            "component catalog unmount failed: " + std::string(fixture.id));
+    }
+}
+void test_generated_idl_attributes_are_prototype_accessors(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'id');
+          const element = document.createElement('div');
+          element.id = 'prototype-accessor';
+          let rejectedPlainReceiver = false;
+          try { descriptor.get.call({}); }
+          catch (error) { rejectedPlainReceiver = error instanceof TypeError; }
+          return {
+            getter: typeof descriptor.get,
+            setter: typeof descriptor.set,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+            own: Object.prototype.hasOwnProperty.call(element, 'id'),
+            value: element.getAttribute('id'),
+            rejectedPlainReceiver
+          };
+        })()
+    )JS", "native-generated-idl-prototype-accessors.js");
+    require(
+        result == R"JSON({"getter":"function","setter":"function","enumerable":true,"configurable":true,"own":false,"value":"prototype-accessor","rejectedPlainReceiver":true})JSON",
+        "generated IDL attributes did not retain Web IDL prototype shape: " + result);
+}

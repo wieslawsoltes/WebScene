@@ -549,6 +549,22 @@ struct v8_dom_runtime::implementation final {
         frame_document->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
+        frame_document->Set(
+            js_string(isolate, "createElement"),
+            v8::FunctionTemplate::New(isolate, create_element));
+        frame_document->Set(
+            js_string(isolate, "createElementNS"),
+            v8::FunctionTemplate::New(isolate, create_element_ns));
+        frame_document->Set(
+            js_string(isolate, "createTextNode"),
+            v8::FunctionTemplate::New(isolate, create_text_node));
+        frame_document->Set(
+            js_string(isolate, "createDocumentFragment"),
+            v8::FunctionTemplate::New(isolate, create_document_fragment));
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "body"), get_body);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "documentElement"), get_body);
         frame_document->SetNativeDataProperty(
             js_string(isolate, "activeElement"),
             get_provisional_frame_active_element);
@@ -656,11 +672,23 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "createComment"),
             v8::FunctionTemplate::New(isolate, create_comment));
         document_template->Set(
+            js_string(isolate, "createProcessingInstruction"),
+            v8::FunctionTemplate::New(isolate, create_processing_instruction));
+        document_template->Set(
             js_string(isolate, "createAttribute"),
             v8::FunctionTemplate::New(isolate, create_attribute));
         document_template->Set(
+            js_string(isolate, "createAttributeNS"),
+            v8::FunctionTemplate::New(isolate, create_attribute_ns));
+        document_template->Set(
             js_string(isolate, "createDocumentFragment"),
             v8::FunctionTemplate::New(isolate, create_document_fragment));
+        document_template->Set(
+            js_string(isolate, "appendChild"),
+            v8::FunctionTemplate::New(isolate, append_child));
+        document_template->Set(
+            js_string(isolate, "cloneNode"),
+            v8::FunctionTemplate::New(isolate, clone_document));
         document_template->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
@@ -933,7 +961,7 @@ struct v8_dom_runtime::implementation final {
         v8::Local<v8::Object> global,
         v8::Local<v8::Object> document_value)
     {
-        auto constructor_template = v8::FunctionTemplate::New(isolate);
+        auto constructor_template = v8::FunctionTemplate::New(isolate, document_constructor);
         constructor_template->SetClassName(js_string(isolate, "Document"));
         auto constructor = constructor_template->GetFunction(local_context).ToLocalChecked();
         global->Set(local_context, js_string(isolate, "Document"), constructor).Check();
@@ -1955,15 +1983,27 @@ struct v8_dom_runtime::implementation final {
               return element;
             }
             Object.setPrototypeOf(WebSceneHTMLElement, NativeHTMLElement);
-            Object.defineProperty(WebSceneHTMLElement, 'name', {
+            let HTMLElementConstructor;
+            HTMLElementConstructor = new Proxy(WebSceneHTMLElement, {
+              construct(target, args, newTarget) {
+                const current = constructionStack[constructionStack.length - 1];
+                const registered = current && current.definition.constructor === newTarget
+                  || constructorDefinitions.has(newTarget);
+                if (newTarget === HTMLElementConstructor || !registered) {
+                  throw new TypeError('Illegal constructor');
+                }
+                return Reflect.construct(target, args, newTarget);
+              }
+            });
+            Object.defineProperty(HTMLElementConstructor, 'name', {
               value: 'HTMLElement', configurable: true
             });
-            WebSceneHTMLElement.prototype = NativeHTMLElement.prototype;
-            Object.defineProperty(WebSceneHTMLElement.prototype, 'constructor', {
-              value: WebSceneHTMLElement, writable: true, configurable: true
+            HTMLElementConstructor.prototype = NativeHTMLElement.prototype;
+            Object.defineProperty(HTMLElementConstructor.prototype, 'constructor', {
+              value: HTMLElementConstructor, writable: true, configurable: true
             });
             Object.defineProperty(globalThis, 'HTMLElement', {
-              value: WebSceneHTMLElement, writable: true, configurable: true
+              value: HTMLElementConstructor, writable: true, configurable: true
             });
 
             const upgradeElement = (element, forcedDefinition = undefined) => {
@@ -2753,9 +2793,14 @@ struct v8_dom_runtime::implementation final {
 
             class WebSceneRequest {
               constructor(input, options = {}) {
-                this.url = String(
+                const rawUrl = String(
                   input && typeof input === 'object' && 'url' in input
                     ? input.url : input);
+                this.url = globalThis.__webSceneDocumentBasePath
+                    && !rawUrl.startsWith('/')
+                    && !/^[a-z][a-z0-9+.-]*:/i.test(rawUrl)
+                  ? globalThis.__webSceneDocumentBasePath + rawUrl
+                  : rawUrl;
                 this.method = String(options.method ?? input?.method ?? 'GET')
                   .toUpperCase();
                 this.headers = new WebSceneHeaders(
@@ -2783,6 +2828,62 @@ struct v8_dom_runtime::implementation final {
               });
             }
 
+            class WebSceneXMLHttpRequest {
+              constructor() {
+                this.readyState = 0;
+                this.status = 0;
+                this.statusText = '';
+                this.responseText = '';
+                this.responseXML = null;
+                this.response = null;
+                this.onload = null;
+                this.onerror = null;
+                this.onreadystatechange = null;
+                this._method = 'GET';
+                this._url = '';
+                this._mimeType = '';
+              }
+              open(method, url) {
+                this._method = String(method).toUpperCase();
+                this._url = String(url);
+                this.readyState = 1;
+                this.onreadystatechange?.(new Event('readystatechange'));
+              }
+              overrideMimeType(value) {
+                this._mimeType = String(value);
+              }
+              send() {
+                if (this._method !== 'GET') {
+                  throw new TypeError(`WebScene XMLHttpRequest does not support ${this._method}`);
+                }
+                queueMicrotask(() => {
+                  try {
+                    const requestUrl = globalThis.__webSceneDocumentBasePath
+                        && !this._url.startsWith('/')
+                        && !/^[a-z][a-z0-9+.-]*:/i.test(this._url)
+                      ? globalThis.__webSceneDocumentBasePath + this._url
+                      : this._url;
+                    const body = __webSceneFetchText(requestUrl);
+                    this.responseText = body;
+                    this.response = body;
+                    if (this._mimeType.includes('xml')) {
+                      this.responseXML = new DOMParser().parseFromString(body, 'text/xml');
+                    }
+                    this.status = 200;
+                    this.statusText = 'OK';
+                    this.readyState = 4;
+                    this.onreadystatechange?.(new Event('readystatechange'));
+                    this.onload?.(new Event('load'));
+                  } catch (error) {
+                    this.status = 0;
+                    this.readyState = 4;
+                    this.onreadystatechange?.(new Event('readystatechange'));
+                    this.onerror?.(new Event('error'));
+                  }
+                });
+              }
+            }
+
             Object.defineProperties(globalThis, {
               Headers: {
                 value: WebSceneHeaders, writable: true, configurable: true
@@ -2795,6 +2896,9 @@ struct v8_dom_runtime::implementation final {
               },
               fetch: {
                 value: webSceneFetch, writable: true, configurable: true
+              },
+              XMLHttpRequest: {
+                value: WebSceneXMLHttpRequest, writable: true, configurable: true
               }
             });
           })();

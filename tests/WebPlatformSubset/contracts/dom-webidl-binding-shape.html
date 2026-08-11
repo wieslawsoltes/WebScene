@@ -24,12 +24,17 @@
     assert(thrown instanceof TypeError, `${message}: ${thrown && thrown.constructor && thrown.constructor.name}`);
   }
 
-  test("the four interface constructors and prototypes are distinct", () => {
+  test("the DOM interface constructors and prototypes are distinct", () => {
     assert(EventTarget !== Node && Node !== Element && Element !== HTMLElement,
       "constructors were aliased");
     equal(Object.getPrototypeOf(Node.prototype), EventTarget.prototype, "Node prototype parent");
     equal(Object.getPrototypeOf(Element.prototype), Node.prototype, "Element prototype parent");
     equal(Object.getPrototypeOf(HTMLElement.prototype), Element.prototype, "HTMLElement prototype parent");
+    equal(Object.getPrototypeOf(CharacterData.prototype), Node.prototype, "CharacterData prototype parent");
+    equal(Object.getPrototypeOf(Text.prototype), CharacterData.prototype, "Text prototype parent");
+    equal(Object.getPrototypeOf(Comment.prototype), CharacterData.prototype, "Comment prototype parent");
+    equal(Object.getPrototypeOf(ProcessingInstruction.prototype), CharacterData.prototype,
+      "ProcessingInstruction prototype parent");
   });
 
   test("HTML elements implement the complete interface chain", () => {
@@ -44,10 +49,43 @@
   test("text wrappers have Node but not Element brands", () => {
     const text = document.createTextNode("text");
     assert(text instanceof Node, "text missing Node brand");
+    assert(text instanceof Text, "text missing Text brand");
+    assert(text instanceof CharacterData, "text missing CharacterData brand");
     assert(text instanceof EventTarget, "text missing EventTarget brand");
     assert(!(text instanceof Element), "text incorrectly has Element brand");
     assert(!(text instanceof HTMLElement), "text incorrectly has HTMLElement brand");
     assert(Node.prototype.isPrototypeOf(text), "text wrapper prototype chain");
+  });
+
+  test("character data constructors and processing instructions preserve brands", () => {
+    const text = new Text("text");
+    const comment = new Comment("comment");
+    const instruction = document.createProcessingInstruction("target", "data");
+    assert(text instanceof Text && text.data === "text" && text.nodeType === 3,
+      "Text constructor contract");
+    assert(comment instanceof Comment && comment.data === "comment" && comment.nodeType === 8,
+      "Comment constructor contract");
+    assert(instruction instanceof ProcessingInstruction && instruction instanceof CharacterData,
+      "ProcessingInstruction brand");
+    assert(instruction.target === "target" && instruction.data === "data" && instruction.nodeType === 7,
+      "ProcessingInstruction data contract");
+    throwsTypeError(() => new ProcessingInstruction(), "ProcessingInstruction constructor");
+  });
+
+  test("Attr wrappers preserve identity, namespace, ownership and detached values", () => {
+    const element = document.createElement("div");
+    const attribute = document.createAttributeNS("urn:webscene:test", "data-state");
+    assert(attribute instanceof Attr && attribute instanceof Node, "Attr interface chain");
+    equal(attribute.namespaceURI, "urn:webscene:test", "detached namespace");
+    equal(attribute.ownerElement, null, "detached owner");
+    attribute.value = "ready";
+    equal(element.setAttributeNode(attribute), null, "initial setAttributeNode result");
+    equal(attribute.ownerElement, element, "attached owner");
+    equal(element.attributes.item(0), attribute, "NamedNodeMap wrapper identity");
+    equal(element.getAttribute("data-state"), "ready", "attached value");
+    equal(element.removeAttributeNode(attribute), attribute, "removeAttributeNode result");
+    equal(attribute.ownerElement, null, "removed owner");
+    equal(attribute.value, "ready", "removed value");
   });
 
   test("SVG wrappers have Element but not HTMLElement brands", () => {
@@ -56,6 +94,19 @@
     assert(svg instanceof Element && svg instanceof Node, "SVG interface chain missing");
     assert(!(svg instanceof HTMLElement), "SVG incorrectly has HTMLElement brand");
     assert(Element.prototype.isPrototypeOf(svg), "SVG wrapper prototype chain");
+  });
+
+  test("style elements expose their specific brand and connected sheet identity", () => {
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = "<style>div { color: green }</style>";
+    const style = root.querySelector("style");
+    assert(style instanceof HTMLStyleElement, "style missing HTMLStyleElement brand");
+    equal(style.sheet, null, "detached style sheet");
+    document.body.appendChild(host);
+    assert(style.sheet && root.styleSheets[0] === style.sheet, "connected sheet identity");
+    host.remove();
+    equal(style.sheet, null, "disconnected style sheet");
   });
 
   test("operations live on their declared interface prototypes", () => {

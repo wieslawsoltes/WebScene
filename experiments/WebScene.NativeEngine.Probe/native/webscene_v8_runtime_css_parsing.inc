@@ -2398,7 +2398,7 @@
                 while (start <= argument.size()) {
                     auto end = argument.find(',', start);
                     if (end == std::string::npos) end = argument.size();
-                    if (css_compound_selector_matches(
+                    if (css_selector_matches(
                             node,
                             trim_css_view(argument.substr(start, end - start)),
                             scope_root)) {
@@ -2413,7 +2413,7 @@
                 while (start <= argument.size()) {
                     auto end = argument.find(',', start);
                     if (end == std::string::npos) end = argument.size();
-                    any = any || css_compound_selector_matches(
+                    any = any || css_selector_matches(
                         node,
                         trim_css_view(argument.substr(start, end - start)),
                         scope_root);
@@ -2596,17 +2596,25 @@
             compile_css_selector_list(key)).first->second;
     }
 
-    static const dom_node* previous_sibling(const dom_node& node)
+    static const dom_node* previous_element_sibling(const dom_node& node)
     {
         if (node.parent == nullptr) return nullptr;
         const auto position = std::find(
             node.parent->children.begin(),
             node.parent->children.end(),
             &node);
-        return position == node.parent->children.begin()
-                || position == node.parent->children.end()
-            ? nullptr
-            : *(position - 1);
+        if (position == node.parent->children.begin()
+            || position == node.parent->children.end()) {
+            return nullptr;
+        }
+        auto sibling = position;
+        while (sibling != node.parent->children.begin()) {
+            --sibling;
+            if (*sibling != nullptr && !(*sibling)->tag.starts_with('#')) {
+                return *sibling;
+            }
+        }
+        return nullptr;
     }
 
     bool css_selector_matches(
@@ -2624,12 +2632,12 @@
                 && css_selector_matches(*parent, split.left, scope_root);
         }
         if (split.combinator == '+') {
-            const auto* sibling = previous_sibling(node);
+            const auto* sibling = previous_element_sibling(node);
             return sibling != nullptr && css_selector_matches(*sibling, split.left, scope_root);
         }
         if (split.combinator == '~') {
-            for (auto* sibling = previous_sibling(node); sibling != nullptr;
-                sibling = previous_sibling(*sibling)) {
+            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
+                sibling = previous_element_sibling(*sibling)) {
                 if (css_selector_matches(*sibling, split.left, scope_root)) return true;
             }
             return false;
@@ -2669,7 +2677,7 @@
                     scope_root);
         }
         if (combinator == '+') {
-            const auto* sibling = previous_sibling(node);
+            const auto* sibling = previous_element_sibling(node);
             return sibling != nullptr
                 && compiled_css_selector_matches(
                     *sibling,
@@ -2678,8 +2686,8 @@
                     scope_root);
         }
         if (combinator == '~') {
-            for (auto* sibling = previous_sibling(node); sibling != nullptr;
-                sibling = previous_sibling(*sibling)) {
+            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
+                sibling = previous_element_sibling(*sibling)) {
                 if (compiled_css_selector_matches(
                         *sibling,
                         selector,

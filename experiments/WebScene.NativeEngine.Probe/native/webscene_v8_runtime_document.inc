@@ -486,6 +486,7 @@
             return;
         }
         const auto old_value = std::optional<std::string>(node->attributes.at(name));
+        self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
@@ -553,6 +554,7 @@
         const auto match = node->attributes.find(name);
         if (match == node->attributes.end()) return;
         const auto old_value = std::optional<std::string>(match->second);
+        self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();

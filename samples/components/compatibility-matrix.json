@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "profile": "candidate",
+  "productNeutral": true,
+  "pinnedToolchain": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "jsdom": "29.1.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  },
+  "coverage": ["mount", "dom", "keyboard", "pointer", "update", "unmount"],
+  "nativeEvidence": {
+    "recorded": "2026-08-11",
+    "configuration": "osx-arm64 current-source generated-WebIDL/html5ever/cssparser/Servo",
+    "releasedRidEvidence": false,
+    "promotion": "deferred"
+  },
+  "components": [
+    {
+      "id": "ComponentHost.Basic",
+      "bundleSha256": "5fdb42f0f2804977f81b3beee7be6043ed609c3d253831f53e26881aabfb747d",
+      "visibleText": "Basic component host",
+      "interaction": { "buttonText": "Clicked 0 times", "expectedText": "Clicked 1 time" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "Hybrid.ReactIslands",
+      "bundleSha256": "ba2d1ac55fa22dcd5a61f5d7eb81e4afba439c2791d7a785d92a7227189e1a88",
+      "visibleText": "Independent component root",
+      "interaction": { "buttonText": "Island count: 0", "expectedText": "Island count: 1", "hostMethod": "counterChanged" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "TypeScriptDesktop",
+      "bundleSha256": "1127343dd052d7db3531c5e6f1b036a5eeeea9b4f59de01fed13ebd651f698d4",
+      "visibleText": "Desktop workspace",
+      "interaction": { "buttonText": "Form", "expectedText": "Profile form" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "ReactDashboard",
+      "bundleSha256": "a990d7fdbadbf18dfcb38240fadf107a6a399292cd757908957a688b6a56fb91",
+      "visibleText": "Operations overview",
+      "interaction": { "buttonText": "Inspect chart", "expectedText": "Chart details" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "PluginWorkbench",
+      "bundleSha256": "6a364966fe7994a48967086c75df11702523aaca9cda4d80f0c76dcaa6e9c7f3",
+      "visibleText": "Plugin workbench",
+      "interaction": { "buttonText": "Load plugin", "expectedText": "Unload plugin", "hostMethod": "pluginLoaded" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "MultiInstanceWorkstation",
+      "bundleSha256": "a3b2729cc9db856abdd6f954d39e6e74170ccfd1d0190e1af569859ed8de2aed",
+      "visibleText": "Isolated chart instance",
+      "interaction": { "buttonText": "Local count: 0", "expectedText": "Local count: 1" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "WebToNativeMigration",
+      "bundleSha256": "a4ee551e297f5d087846ff9ccdee774d2a26fd8d14ad4f1036293ca339387cbc",
+      "visibleText": "Existing React order panel",
+      "interaction": { "buttonText": "#1048 · Contoso", "expectedText": "Legacy component note", "hostMethod": "selectionChanged" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "OfflineKiosk",
+      "bundleSha256": "8a5ab559eb64e521d4954dfb58148ac44d31ab857de51873ee1b7656ed248762",
+      "visibleText": "Station kiosk",
+      "interaction": { "buttonText": "Print ticket", "expectedText": "K-5499" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "HeadlessComponentTests",
+      "bundleSha256": "e8d0fe16455408bc4d9dc2dd314ddba456dc841e7b6979d38b4144d423c988d4",
+      "visibleText": "Headless component tests",
+      "interaction": { "buttonText": "Pointer events: 0", "expectedText": "Pointer events: 1" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "HostBridge.Services",
+      "bundleSha256": "877c329d79083a35861d45aec369a6e4aed49d7afb09693ce72f638c5bd95a54",
+      "visibleText": "Host bridge services",
+      "interaction": { "buttonText": "Invoke service", "expectedText": "Completed", "hostMethod": "execute" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "AccessibilityGallery",
+      "bundleSha256": "04527f042204b4a4f605292463cc9885dc5a2c21ec5606dd8a6acf44f586ef14",
+      "visibleText": "Accessibility gallery",
+      "interaction": { "buttonText": "Save profile", "expectedText": "Profile saved successfully" },
+      "jsdom": "pass",
+      "native": "pass"
+    },
+    {
+      "id": "CanvasWorkbench.Advanced",
+      "bundleSha256": "4cc175dc3beb1a77dd238693970381990f11abd079c8c8300c5014bf3987b563",
+      "visibleText": "Interactive canvas workbench",
+      "interaction": { "buttonText": "Add indicator", "expectedText": "Moving Average" },
+      "jsdom": "pass",
+      "native": "pass"
+    }
+  ]
+}

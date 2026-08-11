@@ -1136,7 +1136,7 @@
       "type": "contract",
       "capabilities": ["open-shadow-root", "default-and-named-slots", "shadow-style-scoping", "composed-event-path", "event-retargeting", "shadow-focus-retargeting", "shadow-custom-element-lifecycle"],
       "evidence": ["shadow-dom-native-side-table", "shadow-dom-product-neutral-contract"],
-      "reason": "Candidate production-shaped Shadow DOM slice. It requires cold native ownership, open identity plus closed-root concealment, logical DOM query boundaries, default/named distribution, scoped shadow CSS, composed layout geometry, event paths and outside retargeting, focus retargeting, and custom-element lifecycle through connected shadow descendants. slotchange/flattening, declarative Shadow DOM, adoptedStyleSheets, ::slotted/::part, and complete focus delegation remain outside this bounded milestone."
+      "reason": "Candidate production-shaped Shadow DOM slice. It requires cold native ownership, open identity plus closed-root concealment, logical DOM query boundaries, default/named and recursively flattened distribution, scoped shadow CSS, composed layout geometry, event paths and outside retargeting, focus retargeting, and custom-element lifecycle through connected shadow descendants. Manual distribution, slotchange, declarative Shadow DOM, adoptedStyleSheets, ::slotted/::part, and complete focus delegation remain outside this bounded milestone."
     },
     {
       "path": "contracts/shadow-dom-rendering.html",
@@ -1158,14 +1158,14 @@
       "type": "testharness",
       "capabilities": ["html-slot-element-interface", "slot-name-reflection", "dynamic-slot-assignment", "flattened-slot-assignment"],
       "evidence": ["unchanged-pinned-wpt-html-slot-element"],
-      "reason": "Unchanged upstream discovery coverage for the basic and nested slot surface. Default/named direct distribution and closed-root assignedSlot concealment are in scope; manual assignment, flattening and nested redistribution remain visible discovery gaps."
+      "reason": "Unchanged upstream coverage for default/named direct distribution, closed-root assignedSlot concealment, and recursive flattening through nested slots. Manual assignment and slotchange remain visible gaps."
     },
     {
       "path": "shadow-dom/ShadowRoot-interface.html",
       "type": "testharness",
       "capabilities": ["shadow-root-interface", "shadow-root-active-element", "shadow-root-inner-html", "shadow-root-style-sheets"],
       "evidence": ["unchanged-pinned-wpt-shadow-root-interface"],
-      "reason": "Unchanged upstream discovery coverage. Open/closed ownership, activeElement and innerHTML inform this milestone while StyleSheetList remains deferred and is expected to keep this candidate partially failing."
+      "reason": "Unchanged upstream coverage for open/closed ownership, activeElement, innerHTML, and stable connected ShadowRoot.styleSheets identity. adoptedStyleSheets and complete CSSStyleSheet mutation remain deferred."
     },
     {
       "path": "contracts/window-screen-primitives.html",
@@ -1173,6 +1173,13 @@
       "capabilities": ["window-screen", "screen-stable-identity", "screen-dimensions", "screen-color-depth", "iframe-screen-realm"],
       "evidence": ["hosted-page-analytics-screen-resolution-read", "native-screen-viewport-regression"],
       "reason": "Product-neutral reduction of the hosted-page startup failure discovered when a third-party analytics script read window.screen.width. It requires stable Screen identity, finite dimensions and depth metadata in both the top-level Window and a same-origin iframe. Keep candidate until the unchanged bytes pass Chrome and the native runner."
+    },
+    {
+      "path": "css/css-flexbox/relayout-align-items.html",
+      "type": "testharness",
+      "capabilities": ["flex-align-items", "dynamic-flex-relayout", "check-layout-testharness"],
+      "evidence": ["unchanged-pinned-wpt-check-layout-flex-relayout"],
+      "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
     }
   ],
   "harnessBlocked": [
@@ -1210,13 +1217,6 @@
       "capabilities": ["border-radius-shorthand", "corner-longhand-expansion", "elliptical-radius-values"],
       "evidence": ["volume-settings-footer-buttons", "rounded-dialog-controls"],
       "reason": "This is the nearest official WPT for the base shorthand rule: it checks one-value expansion and a three-value horizontal/two-value vertical ellipse. It is a self-overlaid visual test without rel=match, and WebScene's Avalonia projection still models only one scalar per corner, so elliptical vertical paint is not claimed. WPT does not currently combine this rule with the connected-component composition of var()-substitution plus additive calc(max()) used values; the native/portable raster spike covers that exact composition."
-    },
-    {
-      "path": "css/css-flexbox/relayout-align-items.html",
-      "type": "testharness",
-      "capabilities": ["flex-align-items", "dynamic-flex-relayout"],
-      "evidence": ["toolbar-vertical-alignment", "dialog-row-alignment"],
-      "reason": "Requires WPT check-layout-th.js support and flexbox support styles; add as the next adapter facility."
     }
   ],
   "excluded": [

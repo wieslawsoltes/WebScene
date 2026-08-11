@@ -112,16 +112,66 @@ Discovery results must not be merged into the release pass percentage or adverti
 full standards support. The bounded required profile remains the public compatibility
 contract.
 
+## 2026-08-09 coverage audit
+
+The pinned profile contains 110 required, 53 candidate, 5 harness-blocked, and 5
+excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
+documents and 222/299 candidate subtests. The first focused standards tranche moved
+that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
+53/53 documents and 304/304 subtests while the release gate remains 110/110 documents
+and 434/434 subtests:
+
+- complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
+  intervening non-element nodes, and the managed selector parser uses the most specific
+  functional-selector argument;
+- inline unitless and percentage `line-height` values are resolved after the winning
+  `font-size`, including later CSSOM font-size changes; and
+- generated Web IDL attributes now appear as enumerable, configurable accessors on the
+  declaring interface prototype while retaining native receiver-brand checks; and
+- distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
+  `HTMLStyleElement` brands now back constructible text/comment nodes, processing
+  instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
+- a real `Attr` wrapper surface, mutation entry points, detached `Document` construction,
+  document cloning, initial iframe realms, and a bounded same-origin GET
+  `XMLHttpRequest` prerequisite close the selected Custom Elements lifecycle shard;
+- the HTML tree-construction contract now verifies foster-parented text immediately
+  before its table instead of assuming it precedes unrelated earlier body content; and
+- the pinned `check-layout-th.js` adapter now loads its pinned relative support sheet,
+  and empty bordered non-stretch flex items retain their intrinsic cross size through
+  dynamic `align-items` changes.
+
+The focused behavior is also covered by native runtime tests, managed selector tests,
+and the generated-binding freshness check. Candidate promotion is intentionally deferred
+until the same documents pass on every released RID.
+
+A current-source `osx-arm64` comparison against the unchanged 110-document release-gate
+commit (`4e7e4d3`) used three alternating runs per variant. Median-of-medians moved from
+0.708 ms to 0.739 ms (+4.4%) for 500 lifecycle loads, from 34.001 ms to 34.139 ms
+(+0.4%) for the 30-sample light-DOM selector workload, and from 5.182 ms to 5.435 ms
+(+4.9%) for the 50-sample generated named-property workload. All remain inside the
+established 10% no-meaningful-regression envelope. A separate 20-process diagnostic
+found no statistically supported startup or steady-work timing regression and bounded
+the added generated interface-template footprint to 49,872 library bytes and 43,212 V8
+used-heap bytes per populated view. Compile-time guards now keep the 64-bit cold-path
+footprint fixed at a 976-byte `dom_node` and a 304-byte `native_document`.
+
+There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
+Promotion remains intentionally separate: the same unchanged bytes still need evidence
+from every released RID. Five self-verifying visual documents remain harness-blocked
+because they have neither testharness assertions nor a reftest reference; the dynamic
+flex check-layout document is no longer in that set.
+
 The Custom Elements discovery shard pins unchanged upstream registry, constructor,
 attribute-reaction, connection, and disconnection tests alongside two product-neutral
 local fixtures. The lifecycle fixture is assertion based; the rendering fixture compares
 lifecycle-created light DOM with an inert reference and can use the Chromium oracle.
-The recorded 2026-08-02 native discovery baseline is 40/118 upstream/local assertions
-with the registry reverse-lookup document and local lifecycle document passing. The
+The recorded 2026-08-02 native discovery baseline was 40/118 upstream/local assertions.
+The 2026-08-09 Inspector run passes all 118/118 selected lifecycle assertions: 4/4
+registry reverse lookup, 12/12 constructor, 13/13 attribute reactions, and 80/80
+connection/disconnection assertions plus the 9/9 local lifecycle contract. The
 light-DOM rendering reftest also passes natively and Chromium independently considers
-its test and reference identical. Remaining failures are retained as discovery data,
-not hidden by expectations: they cluster around Attr mutation APIs, clone upgrade,
-alternate document realms, and unrelated iframe/XHR harness prerequisites.
+its test and reference identical. The bounded XHR prerequisite is GET-only and exists
+to load same-origin XML/HTML lifecycle fixtures; it is not a general networking claim.
 
 ## Shadow DOM candidate milestone
 
@@ -144,24 +194,23 @@ The candidate claim covers:
   single-root composed event path; and
 - lifecycle-created shadow content and connected custom elements inside a shadow root.
 
-It does not yet claim nested/flattened or manual distribution, `slotchange`, functional
+It does not yet claim manual distribution, `slotchange`, functional
 `:host()`, `:host-context()`, `::slotted`, `::part`, declarative Shadow DOM,
-`adoptedStyleSheets`/`styleSheets`, complete `delegatesFocus`, complete nested-root and
+`adoptedStyleSheets`, complete `delegatesFocus`, complete nested-root and
 `relatedTarget` retargeting, cloning/adoption semantics, or the full Web IDL prototype
 shape. These remain visible discovery failures rather than being papered over.
 
-Recorded 2026-08-02 evidence is:
+Recorded 2026-08-09 evidence is:
 
 - the local primitive contract passes 9/9 assertions;
 - the native lifecycle-created rendering fixture exactly matches its inert reference,
   and Chromium independently passes the same test/reference pair;
-- unchanged pinned WPT reaches 2/3 assertions for
-  `Element-interface-shadowRoot-attribute.html`, 13/18 for
-  `HTMLSlotElement-interface.html`, and 8/12 for `ShadowRoot-interface.html`; and
-- the unchanged failures identify prototype placement, absent `Text`,
-  `createProcessingInstruction` and `StyleSheetList` surfaces, plus flattened nested
-  slots. They are candidate discovery data; the required 110-document gate is
-  unchanged.
+- unchanged pinned WPT passes 3/3 assertions for
+  `Element-interface-shadowRoot-attribute.html`, 18/18 for
+  `HTMLSlotElement-interface.html`, and 12/12 for `ShadowRoot-interface.html`; and
+- generated binding and native runtime regressions cover distinct character-data brands,
+  processing-instruction exclusion from slots, recursive flattening, and connected sheet
+  identity. This remains candidate evidence; the required 110-document gate is unchanged.
 
 The implementation is pay for what is used. `dom_node` remains 976 bytes before and
 after the milestone. `native_document` grows from 296 to 304 bytes for one nullable
