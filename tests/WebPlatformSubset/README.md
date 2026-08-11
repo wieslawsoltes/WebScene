@@ -161,6 +161,14 @@ from every released RID. Five self-verifying visual documents remain harness-blo
 because they have neither testharness assertions nor a reftest reference; the dynamic
 flex check-layout document is no longer in that set.
 
+The native-package workflow retains candidate discovery as non-release-gating, downloads
+the per-RID artifacts after all native jobs, and runs
+`scripts/verify-cross-rid-compatibility.py`. Its promotion summary rejects missing or
+duplicate RID artifacts, profile/revision/engine drift, denominator or path drift,
+inconsistent summaries, and any non-passing document or subtest. A green aggregate is
+therefore usable promotion evidence without weakening the existing required gate when a
+candidate failure is discovered on one platform.
+
 The Custom Elements discovery shard pins unchanged upstream registry, constructor,
 attribute-reaction, connection, and disconnection tests alongside two product-neutral
 local fixtures. The lifecycle fixture is assertion based; the rendering fixture compares

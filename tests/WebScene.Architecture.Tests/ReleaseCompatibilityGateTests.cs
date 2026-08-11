@@ -31,6 +31,22 @@ public sealed class ReleaseCompatibilityGateTests
     }
 
     [Fact]
+    public void CandidateProfileContainsTheEstablishedDiscoveryDenominator()
+    {
+        var profilePath = Path.Combine(
+            s_repositoryRoot,
+            "tests",
+            "WebPlatformSubset",
+            "webscene-component-profile.json");
+        using var profile = JsonDocument.Parse(File.ReadAllText(profilePath));
+        var candidate = profile.RootElement.GetProperty("candidate");
+
+        Assert.True(
+            candidate.GetArrayLength() >= 53,
+            $"The candidate compatibility denominator unexpectedly shrank to {candidate.GetArrayLength()} documents.");
+    }
+
+    [Fact]
     public void RuntimeWorkflowRunsForProfileChangesAndPublishesPerRidEvidence()
     {
         var workflow = File.ReadAllText(Path.Combine(
@@ -40,6 +56,10 @@ public sealed class ReleaseCompatibilityGateTests
             "native-runtime-packages.yml"));
 
         Assert.Contains("- 'tests/WebPlatformSubset/**'", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "- 'scripts/verify-cross-rid-compatibility.py'",
+            workflow,
+            StringComparison.Ordinal);
         Assert.Contains(
             "name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}",
             workflow,
@@ -54,6 +74,22 @@ public sealed class ReleaseCompatibilityGateTests
         Assert.Contains("continue-on-error: true", workflow, StringComparison.Ordinal);
         Assert.Contains(
             "path: artifacts/native-engine-runtime-build/**/wpt-candidate-results/**",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("candidate-evidence:", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "name: Verify cross-RID candidate evidence",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "scripts/verify-cross-rid-compatibility.py",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("--expected-rid osx-arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("--expected-rid linux-x64", workflow, StringComparison.Ordinal);
+        Assert.Contains("--expected-rid win-x64", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "name: compatibility-candidate-summary-${{ needs.metadata.outputs.package-version }}",
             workflow,
             StringComparison.Ordinal);
     }

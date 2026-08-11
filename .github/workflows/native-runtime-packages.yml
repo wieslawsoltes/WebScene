@@ -25,6 +25,7 @@ on:
     - 'scripts/build-native-engine-runtime-linux-container.sh'
     - 'scripts/build-native-engine-runtime.ps1'
     - 'scripts/pack-packages.sh'
+    - 'scripts/verify-cross-rid-compatibility.py'
     - 'scripts/verify-release-packages.py'
     - 'src/WebScene.Backend.Abstractions/**'
     - 'src/WebScene.Backend.Avalonia/**'
@@ -443,6 +444,39 @@ jobs:
           artifacts/nuget-packages/*.json
           artifacts/nuget-packages/packages.sha256
         if-no-files-found: error
+
+  candidate-evidence:
+    name: Verify cross-RID candidate evidence
+    needs: [metadata, native]
+    if: always() && needs.metadata.result == 'success'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download candidate compatibility evidence
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        pattern: compatibility-candidate-*
+        path: artifacts/candidate-compatibility
+    - name: Verify exact candidate profile across released RIDs
+      if: always()
+      run: |
+        python3 scripts/verify-cross-rid-compatibility.py \
+          --input-root artifacts/candidate-compatibility \
+          --profile tests/WebPlatformSubset/webscene-component-profile.json \
+          --selection candidate \
+          --expected-rid osx-arm64 \
+          --expected-rid linux-x64 \
+          --expected-rid win-x64 \
+          --output artifacts/candidate-compatibility/cross-rid-summary.json
+    - name: Upload cross-RID candidate summary
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-candidate-summary-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/candidate-compatibility/cross-rid-summary.json
+        if-no-files-found: warn
 
   consumer:
     name: Package consumer ${{ matrix.rid }}
