@@ -701,6 +701,7 @@
 
     void notify_custom_elements_subtree(dom_node& root, const char* phase)
     {
+        if (!custom_elements_active) return;
         auto local_context = isolate->GetCurrentContext();
         v8::Local<v8::Value> raw_callback;
         if (!local_context->Global()->Get(
@@ -742,6 +743,7 @@
         const std::optional<std::string>& new_value,
         const std::optional<std::string>& namespace_uri = std::nullopt)
     {
+        if (!custom_elements_active) return;
         auto local_context = isolate->GetCurrentContext();
         v8::Local<v8::Value> raw_callback;
         if (!local_context->Global()->Get(
@@ -1658,6 +1660,222 @@
                 : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
     }
 
+    static dom_node* html_collection_root(v8::Local<v8::Object> object)
+    {
+        return object->InternalFieldCount() < 1
+            ? nullptr
+            : static_cast<dom_node*>(object->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault));
+    }
+
+    std::vector<dom_node*> document_link_nodes(dom_node& root) const
+    {
+        return query_selector_nodes(root, "a[href], area[href]", true);
+    }
+
+    dom_node* document_link_named_item(dom_node& root, std::string_view name) const
+    {
+        if (name.empty()) return nullptr;
+        for (auto* node : document_link_nodes(root)) {
+            if (node == nullptr) continue;
+            if (node->id_attribute == name) return node;
+            const auto authored_name = node->attributes.find("name");
+            if (authored_name != node->attributes.end()
+                && authored_name->second == name) return node;
+        }
+        return nullptr;
+    }
+
+    static void html_collection_constructor(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.IsConstructCall()
+            && info.Length() == 1
+            && info[0]->IsExternal()) {
+            info.This()->SetAlignedPointerInInternalField(
+                0,
+                info[0].As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault),
+                v8::kEmbedderDataTypeTagDefault);
+            info.GetReturnValue().Set(info.This());
+            return;
+        }
+        info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+            js_string(info.GetIsolate(), "Illegal constructor")));
+    }
+
+    v8::Local<v8::FunctionTemplate> ensure_html_collection_template()
+    {
+        if (!html_collection_template.IsEmpty()) {
+            return html_collection_template.Get(isolate);
+        }
+        auto html_collection = v8::FunctionTemplate::New(
+            isolate,
+            html_collection_constructor);
+        html_collection->SetClassName(js_string(isolate, "HTMLCollection"));
+        html_collection->InstanceTemplate()->SetInternalFieldCount(1);
+        auto signature = v8::Signature::New(isolate, html_collection);
+        auto length_symbol = v8::Symbol::New(
+            isolate,
+            js_string(isolate, "WebScene.HTMLCollection.length"));
+        html_collection->InstanceTemplate()->SetNativeDataProperty(
+            length_symbol,
+            get_html_collection_length,
+            nullptr,
+            js_string(isolate, "length"),
+            v8::PropertyAttribute::None);
+        html_collection->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "length"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_length_get,
+                length_symbol,
+                signature,
+                0),
+            v8::Local<v8::FunctionTemplate>(),
+            v8::PropertyAttribute::None);
+        html_collection->InstanceTemplate()->SetHandler(
+            v8::IndexedPropertyHandlerConfiguration(html_collection_indexed_getter));
+        html_collection->InstanceTemplate()->SetHandler(
+            v8::NamedPropertyHandlerConfiguration(
+                html_collection_named_getter,
+                nullptr,
+                nullptr,
+                nullptr,
+                nullptr,
+                {},
+                v8::PropertyHandlerFlags::kNonMasking));
+        html_collection->PrototypeTemplate()->Set(
+            js_string(isolate, "item"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_item,
+                v8::Local<v8::Value>(),
+                signature,
+                1,
+                v8::ConstructorBehavior::kThrow));
+        html_collection->PrototypeTemplate()->Set(
+            js_string(isolate, "namedItem"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_named_item,
+                v8::Local<v8::Value>(),
+                signature,
+                1,
+                v8::ConstructorBehavior::kThrow));
+        html_collection->PrototypeTemplate()->Set(
+            v8::Symbol::GetToStringTag(isolate),
+            js_string(isolate, "HTMLCollection"),
+            static_cast<v8::PropertyAttribute>(
+                v8::PropertyAttribute::ReadOnly
+                | v8::PropertyAttribute::DontEnum));
+        html_collection_template.Reset(isolate, html_collection);
+        return html_collection;
+    }
+
+    static void get_html_collection_constructor(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        info.GetReturnValue().Set(self->ensure_html_collection_template()
+            ->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
+    }
+
+    static void get_html_collection_length(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return;
+        info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(
+            info.GetIsolate(),
+            static_cast<uint32_t>(self->document_link_nodes(*root).size())));
+    }
+
+    static void html_collection_length_get(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto symbol = info.Data().As<v8::Symbol>();
+        v8::Local<v8::Value> value;
+        if (info.This()->Get(
+                info.GetIsolate()->GetCurrentContext(),
+                symbol).ToLocal(&value)) {
+            info.GetReturnValue().Set(value);
+        }
+    }
+
+    static v8::Intercepted html_collection_indexed_getter(
+        uint32_t index,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return v8::Intercepted::kNo;
+        const auto links = self->document_link_nodes(*root);
+        if (index >= links.size()) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*links[index]));
+        return v8::Intercepted::kYes;
+    }
+
+    static v8::Intercepted html_collection_named_getter(
+        v8::Local<v8::Name> property,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        if (!property->IsString()) return v8::Intercepted::kNo;
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return v8::Intercepted::kNo;
+        const auto name = to_utf8(info.GetIsolate(), property.As<v8::Value>());
+        auto* match = self->document_link_named_item(*root, name);
+        if (match == nullptr) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*match));
+        return v8::Intercepted::kYes;
+    }
+
+    static dom_node* require_html_collection(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* root = html_collection_root(info.This());
+        if (root == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Illegal invocation")));
+        }
+        return root;
+    }
+
+    static void html_collection_item(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = require_html_collection(info);
+        if (self == nullptr || root == nullptr) return;
+        const auto index = info.Length() > 0
+            ? info[0]->Uint32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0U)
+            : 0U;
+        const auto links = self->document_link_nodes(*root);
+        info.GetReturnValue().Set(index < links.size()
+            ? v8::Local<v8::Value>(self->wrap_node(*links[index]))
+            : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
+    }
+
+    static void html_collection_named_item(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = require_html_collection(info);
+        if (self == nullptr || root == nullptr) return;
+        const auto name = info.Length() > 0
+            ? to_utf8(info.GetIsolate(), info[0])
+            : std::string{};
+        auto* match = self->document_link_named_item(*root, name);
+        info.GetReturnValue().Set(match == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
+    }
+
     static void get_body(
         v8::Local<v8::Name> property,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -1880,24 +2098,29 @@
             0,
             v8::kEmbedderDataTypeTagDefault));
         if (root == nullptr) root = &self->active_root();
-        std::vector<dom_node*> links;
-        for (auto* node : self->document.query_selector_all(*root, "a")) {
-            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
-        }
-        for (auto* node : self->document.query_selector_all(*root, "area")) {
-            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
-        }
-        auto collection = v8::Array::New(
-            info.GetIsolate(),
-            static_cast<int>(links.size()));
+        auto isolate = info.GetIsolate();
         auto local_context = info.GetIsolate()->GetCurrentContext();
-        for (uint32_t index = 0; index < links.size(); ++index) {
-            collection->Set(local_context, index, self->wrap_node(*links[index])).Check();
+        auto private_key = v8::Private::ForApi(
+            isolate,
+            js_string(isolate, "WebScene.Document.links"));
+        v8::Local<v8::Value> known;
+        if (info.Holder()->GetPrivate(local_context, private_key).ToLocal(&known)
+            && known->IsObject()) {
+            info.GetReturnValue().Set(known);
+            return;
         }
-        collection->Set(
-            local_context,
-            js_string(info.GetIsolate(), "item"),
-            v8::Function::New(local_context, collection_item).ToLocalChecked()).Check();
+        v8::Local<v8::Value> constructor_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "HTMLCollection")).ToLocal(&constructor_value)
+            || !constructor_value->IsFunction()) return;
+        v8::Local<v8::Value> arguments[]{v8::External::New(
+            isolate,
+            root,
+            v8::kExternalPointerTypeTagDefault)};
+        auto collection = constructor_value.As<v8::Function>()
+            ->NewInstance(local_context, 1, arguments).ToLocalChecked();
+        info.Holder()->SetPrivate(local_context, private_key, collection).Check();
         info.GetReturnValue().Set(collection);
     }
 

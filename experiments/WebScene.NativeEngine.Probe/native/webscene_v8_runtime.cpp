@@ -1900,6 +1900,7 @@ struct v8_dom_runtime::implementation final {
 
             const installCustomElementsPlatform = () => {
             if (globalThis.__webSceneCustomElementsNotifySubtree) return;
+            const activateCustomElements = globalThis.__webSceneActivateCustomElements;
             const NativeHTMLElement = globalThis.HTMLElement;
             const nativeCreateElement = document.createElement;
             const definitions = new Map();
@@ -1907,6 +1908,7 @@ struct v8_dom_runtime::implementation final {
             const pendingDefinitions = new Map();
             const elementStates = new WeakMap();
             const constructionStack = [];
+            let registryActive = false;
             const reservedNames = new Set([
               'annotation-xml', 'color-profile', 'font-face',
               'font-face-src', 'font-face-uri', 'font-face-format',
@@ -2138,6 +2140,10 @@ struct v8_dom_runtime::implementation final {
                 };
                 definitions.set(normalized, definition);
                 constructorDefinitions.set(constructor, definition);
+                if (!registryActive) {
+                  registryActive = true;
+                  activateCustomElements();
+                }
                 for (const element of document.querySelectorAll(normalized)) {
                   upgradeElement(element, definition);
                   connectElement(element);
@@ -2187,7 +2193,7 @@ struct v8_dom_runtime::implementation final {
                     'NotSupportedError');
                 }
                 const element = Reflect.apply(nativeCreateElement, this, args);
-                upgradeElement(element);
+                if (registryActive) upgradeElement(element);
                 return element;
               }, writable: true, configurable: true
             });
@@ -2235,8 +2241,20 @@ struct v8_dom_runtime::implementation final {
 
     void install_custom_elements_platform(v8::Local<v8::Context> local_context)
     {
+        auto global = local_context->Global();
+        global->DefineOwnProperty(
+            local_context,
+            js_string(isolate, "__webSceneActivateCustomElements"),
+            v8::Function::New(
+                local_context,
+                [](const v8::FunctionCallbackInfo<v8::Value>& info) {
+                    if (auto* self = current(info.GetIsolate()); self != nullptr) {
+                        self->custom_elements_active = true;
+                    }
+                }).ToLocalChecked(),
+            v8::PropertyAttribute::DontEnum).Check();
         v8::Local<v8::Value> raw_installer;
-        if (!local_context->Global()->Get(
+        if (!global->Get(
                 local_context,
                 js_string(isolate, "__webSceneInstallCustomElementsPlatform"))
                 .ToLocal(&raw_installer)
@@ -2247,9 +2265,12 @@ struct v8_dom_runtime::implementation final {
         v8::TryCatch try_catch(isolate);
         static_cast<void>(raw_installer.As<v8::Function>()->Call(
             local_context,
-            local_context->Global(),
+            global,
             0,
             nullptr));
+        global->Delete(
+            local_context,
+            js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
                 + describe_exception(try_catch, local_context);
@@ -2425,6 +2446,10 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
 #endif
+        global->SetLazyDataProperty(
+            local_context,
+            js_string(isolate, "HTMLCollection"),
+            get_html_collection_constructor).Check();
         install_document_constructor(
             local_context,
             global,

@@ -611,6 +611,55 @@ void test_contextual_fragment_exposes_parent_node_members(webscene_engine* engin
         "DocumentFragment ParentNode members or child identity regressed: " + result);
 }
 
+void test_custom_element_mutation_reactions_are_pay_for_use(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const originalSubtree = globalThis.__webSceneCustomElementsNotifySubtree;
+          const originalAttribute = globalThis.__webSceneCustomElementsNotifyAttribute;
+          let subtreeCalls = 0;
+          let attributeCalls = 0;
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifySubtree', {
+            value: () => { ++subtreeCalls; }, configurable: true
+          });
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifyAttribute', {
+            value: () => { ++attributeCalls; }, configurable: true
+          });
+
+          const cold = document.createElement('div');
+          cold.setAttribute('data-cold', 'yes');
+          document.body.appendChild(cold);
+          const beforeDefinition = [subtreeCalls, attributeCalls];
+
+          try { customElements.define('invalid', class extends HTMLElement {}); }
+          catch (_) {}
+          cold.setAttribute('data-invalid', 'still-cold');
+          document.body.appendChild(document.createElement('span'));
+          const afterInvalidDefinition = [subtreeCalls, attributeCalls];
+
+          class PayForUseElement extends HTMLElement {}
+          customElements.define('native-pay-for-use', PayForUseElement);
+          const hot = document.createElement('div');
+          hot.setAttribute('data-hot', 'yes');
+          document.body.appendChild(hot);
+          const afterValidDefinition = [subtreeCalls, attributeCalls];
+
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifySubtree', {
+            value: originalSubtree, configurable: true
+          });
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifyAttribute', {
+            value: originalAttribute, configurable: true
+          });
+          return { beforeDefinition, afterInvalidDefinition, afterValidDefinition };
+        })()
+    )JS", "native-custom-elements-pay-for-use.js");
+    require(
+        result == R"({"beforeDefinition":[0,0],"afterInvalidDefinition":[0,0],"afterValidDefinition":[1,1]})",
+        "custom-element mutation reactions were not gated by the first valid definition: "
+            + result);
+}
+
 void test_autonomous_custom_element_lifecycle(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

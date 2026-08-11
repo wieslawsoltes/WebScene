@@ -1364,3 +1364,66 @@ void test_generated_idl_attributes_are_prototype_accessors(webscene_engine* engi
         result == R"JSON({"getter":"function","setter":"function","enumerable":true,"configurable":true,"own":false,"value":"prototype-accessor","rejectedPlainReceiver":true})JSON",
         "generated IDL attributes did not retain Web IDL prototype shape: " + result);
 }
+
+void test_document_links_is_a_live_named_html_collection(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<a id="later" name="shared" href="/later"></a>';
+          const links = document.links;
+          const area = document.createElement('area');
+          area.id = 'earlier';
+          area.name = 'shared';
+          area.href = '/earlier';
+          document.body.prepend(area);
+          let illegalConstructor = false;
+          let illegalItemReceiver = false;
+          let illegalNamedItemReceiver = false;
+          let illegalLengthReceiver = false;
+          try { new HTMLCollection(); }
+          catch (error) { illegalConstructor = error instanceof TypeError; }
+          try { HTMLCollection.prototype.item.call({}, 0); }
+          catch (error) { illegalItemReceiver = error instanceof TypeError; }
+          try { HTMLCollection.prototype.namedItem.call({}, 'earlier'); }
+          catch (error) { illegalNamedItemReceiver = error instanceof TypeError; }
+          try {
+            Object.getOwnPropertyDescriptor(HTMLCollection.prototype, 'length').get.call({});
+          } catch (error) { illegalLengthReceiver = error instanceof TypeError; }
+          const beforeRemoval = {
+            sameObject: links === document.links,
+            brand: links instanceof HTMLCollection
+              && Object.prototype.toString.call(links) === '[object HTMLCollection]',
+            length: links.length,
+            first: links[0]?.id,
+            second: links.item(1)?.id,
+            id: links.namedItem('earlier')?.id,
+            nameFirst: links.namedItem('shared')?.id,
+            namedProperty: links.earlier?.id,
+            lengthOnPrototype: !Object.hasOwn(links, 'length')
+              && typeof Object.getOwnPropertyDescriptor(
+                HTMLCollection.prototype, 'length')?.get === 'function'
+          };
+          area.removeAttribute('href');
+          const afterHrefRemoval = [
+            links.length,
+            links[0]?.id,
+            links.namedItem('earlier'),
+            links.earlier
+          ];
+          area.setAttribute('href', '/earlier');
+          area.remove();
+          return {
+            beforeRemoval,
+            afterHrefRemoval,
+            afterDetach: [links.length, links[0]?.id],
+            illegalConstructor,
+            illegalItemReceiver,
+            illegalNamedItemReceiver,
+            illegalLengthReceiver
+          };
+        })()
+    )JS", "native-document-links-html-collection.js");
+    require(
+        result == R"JSON({"beforeRemoval":{"sameObject":true,"brand":true,"length":2,"first":"earlier","second":"later","id":"earlier","nameFirst":"earlier","namedProperty":"earlier","lengthOnPrototype":true},"afterHrefRemoval":[1,"later",null,null],"afterDetach":[1,"later"],"illegalConstructor":true,"illegalItemReceiver":true,"illegalNamedItemReceiver":true,"illegalLengthReceiver":true})JSON",
+        "Document.links did not retain live named HTMLCollection semantics: " + result);
+}

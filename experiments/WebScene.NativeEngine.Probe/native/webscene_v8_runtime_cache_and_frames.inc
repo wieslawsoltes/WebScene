@@ -1246,6 +1246,10 @@
         global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
 #endif
+        global->SetLazyDataProperty(
+            local_context,
+            js_string(isolate, "HTMLCollection"),
+            get_html_collection_constructor).Check();
         install_document_constructor(
             local_context,
             global,

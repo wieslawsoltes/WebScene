@@ -118,7 +118,7 @@ The pinned profile contains 110 required, 53 candidate, 5 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-53/53 documents and 304/304 subtests while the release gate remains 110/110 documents
+53/53 documents and 305/305 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -128,6 +128,8 @@ and 434/434 subtests:
   `font-size`, including later CSSOM font-size changes; and
 - generated Web IDL attributes now appear as enumerable, configurable accessors on the
   declaring interface prototype while retaining native receiver-brand checks; and
+- `Document.links` is now a stable, branded, live `HTMLCollection` with interleaved
+  `A`/`AREA` tree order plus indexed, `item()`, `namedItem()`, ID, and name lookup; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -145,11 +147,14 @@ and the generated-binding freshness check. Candidate promotion is intentionally 
 until the same documents pass on every released RID.
 
 A current-source `osx-arm64` comparison against the unchanged 110-document release-gate
-commit (`4e7e4d3`) used three alternating runs per variant. Median-of-medians moved from
-0.708 ms to 0.739 ms (+4.4%) for 500 lifecycle loads, from 34.001 ms to 34.139 ms
-(+0.4%) for the 30-sample light-DOM selector workload, and from 5.182 ms to 5.435 ms
-(+4.9%) for the 50-sample generated named-property workload. All remain inside the
-established 10% no-meaningful-regression envelope. A separate 20-process diagnostic
+commit (`4e7e4d3`) used eight fresh-process p50 results per variant in balanced
+control/candidate/candidate/control and candidate/control/control/candidate orders.
+Median p50 moved from 0.707 ms to 0.744 ms (+5.2%) for the 1,000-sample lifecycle
+workload and from 34.620 ms to 34.317 ms (-0.9%) for the 30-sample light-DOM selector
+workload. The 100-sample generated named-property workload was faster in every paired
+regime, with a 29.4% median paired improvement after cold custom-element mutation
+reactions became pay-for-use. All remain inside the established 10%
+no-meaningful-regression envelope. A separate 20-process diagnostic
 found no statistically supported startup or steady-work timing regression and bounded
 the added generated interface-template footprint to 49,872 library bytes and 43,212 V8
 used-heap bytes per populated view. Compile-time guards now keep the 64-bit cold-path

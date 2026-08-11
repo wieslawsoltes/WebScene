@@ -39,6 +39,7 @@
     v8::Global<v8::ObjectTemplate> style_template;
     v8::Global<v8::ObjectTemplate> frame_document_template;
     v8::Global<v8::ObjectTemplate> frame_window_template;
+    v8::Global<v8::FunctionTemplate> html_collection_template;
     v8::Global<v8::Object> dom_implementation_object;
     v8::Global<v8::Object> document_object;
     v8::Global<v8::ObjectTemplate> document_template;
@@ -116,6 +117,10 @@
     uint64_t next_host_request_id{0};
     std::vector<std::unique_ptr<resize_observer_state>> resize_observers;
     bool resize_observers_pending{false};
+    // DOM mutations stay on the native fast path until a realm registers its
+    // first custom element. Once activated, the flag remains enabled for this
+    // runtime so reactions in any outer or frame realm cannot be skipped.
+    bool custom_elements_active{false};
     std::vector<std::string> loaded_resource_names;
     uint32_t next_timer_id{1};
     uint32_t active_timer_id{0};

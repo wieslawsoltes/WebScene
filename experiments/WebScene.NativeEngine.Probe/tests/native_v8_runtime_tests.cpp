@@ -193,6 +193,7 @@ int main()
     test_insert_before_preserves_tree_identity_and_atomicity(engine);
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
     test_contextual_fragment_exposes_parent_node_members(engine);
+    test_custom_element_mutation_reactions_are_pay_for_use(engine);
     test_autonomous_custom_element_lifecycle(engine);
     test_shadow_dom_composed_runtime_geometry(engine);
     test_monaco_browser_primitives(engine);
@@ -259,6 +260,7 @@ int main()
     test_primary_click_mouse_event_detail(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
     test_generated_idl_attributes_are_prototype_accessors(engine);
+    test_document_links_is_a_live_named_html_collection(engine);
     test_component_library_dom_discovery_primitives(engine);
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
