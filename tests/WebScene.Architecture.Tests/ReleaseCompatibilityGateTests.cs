@@ -42,7 +42,7 @@ public sealed class ReleaseCompatibilityGateTests
         var candidate = profile.RootElement.GetProperty("candidate");
 
         Assert.True(
-            candidate.GetArrayLength() >= 56,
+            candidate.GetArrayLength() >= 57,
             $"The candidate compatibility denominator unexpectedly shrank to {candidate.GetArrayLength()} documents.");
     }
 
@@ -94,6 +94,14 @@ public sealed class ReleaseCompatibilityGateTests
             test => test.TryGetProperty("visualGapChecks", out var gapChecks)
                 && gapChecks.EnumerateArray().Any(check =>
                     check.TryGetProperty("minimumPixels", out var minimum)
+                    && minimum.GetInt32() > 0));
+        Assert.Contains(
+            visualTests,
+            test => test.TryGetProperty(
+                    "visualForegroundOffsetChecks",
+                    out var offsetChecks)
+                && offsetChecks.EnumerateArray().Any(check =>
+                    check.TryGetProperty("minimumOffsetPixels", out var minimum)
                     && minimum.GetInt32() > 0));
     }
 

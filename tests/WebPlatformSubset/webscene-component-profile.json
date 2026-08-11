@@ -1182,6 +1182,41 @@
       "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
     },
     {
+      "path": "css/CSS2/lists/list-style-position-020.xht",
+      "type": "visual",
+      "capabilities": ["inside-list-marker", "first-line-inline-participation", "continuation-line-wrap", "self-verifying-visual-wpt"],
+      "evidence": ["r5-inside-list-marker-first-line-reduction", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the inside-marker fixture exposes no authored red failure pixels"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 1000,
+          "description": "the authored blue principal block is visibly rendered"
+        }
+      ],
+      "visualForegroundOffsetChecks": [
+        {
+          "anchorColor": "#0000ff",
+          "firstTop": 2,
+          "firstHeight": 15,
+          "secondTop": 18,
+          "secondHeight": 18,
+          "horizontalInset": 2,
+          "maximumLuminance": 240,
+          "minimumComponentHeight": 6,
+          "minimumComponentPixels": 8,
+          "minimumOffsetPixels": 4,
+          "maximumOffsetPixels": 32,
+          "description": "the forced second line starts left of the first-line text and beneath the inside marker"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT requires an inside marker to participate in the first line while the forced continuation starts at the principal block edge. An anchor-relative component oracle independently requires that geometry in native and Chromium without depending on identical font metrics."
+    },
+    {
       "path": "css/CSS2/lists/list-style-001.xht",
       "type": "visual",
       "capabilities": ["list-style-shorthand", "square-list-marker", "list-item-marker-paint", "self-verifying-visual-wpt"],
@@ -1266,13 +1301,6 @@
     }
   ],
   "harnessBlocked": [
-    {
-      "path": "css/CSS2/lists/list-style-position-020.xht",
-      "type": "visual",
-      "capabilities": ["inside-list-marker", "first-line-inline-participation", "continuation-line-wrap"],
-      "evidence": ["r5-inside-list-marker-first-line-reduction"],
-      "reason": "This is the closest CSS2 visual statement of the exact rule: an inside marker participates on the first line while the following forced line starts at the principal block edge. It has no rel=match or assertions, so the current exact-match/testharness adapter cannot execute it unchanged; the runner-compatible nested-list reftest remains candidate and the minimal local reduction must carry the precise geometry claim."
-    },
     {
       "path": "css/css-backgrounds/border-radius-shorthand-001.htm",
       "type": "visual",

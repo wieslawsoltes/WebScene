@@ -97,7 +97,8 @@ code.
   the independent Chromium self-comparison and cross-engine differential described
   above.
 - `visual` runs an unchanged self-verifying WPT against bounded, manifest-authored exact
-  color-count plus optional spatial color-gap and connected-component shape checks,
+  color-count plus optional spatial color-gap, connected-component shape, and anchor-
+  relative foreground-offset checks,
   always retains the native screenshot, and applies the same checks independently in
   Chromium when `--chromium-path` is supplied. Every visual entry must include both a
   failure-color bound and a non-blank success condition appropriate to the upstream
@@ -124,11 +125,11 @@ contract.
 
 ## 2026-08-09 coverage audit
 
-The pinned profile contains 110 required, 56 candidate, 2 harness-blocked, and 5
+The pinned profile contains 110 required, 57 candidate, 1 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-56/56 documents and 313/313 subtests while the release gate remains 110/110 documents
+57/57 documents and 316/316 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -149,6 +150,9 @@ and 434/434 subtests:
 - the unchanged list-style shorthand WPT now requires a compact filled square marker on
   a generic `display:list-item` box through independent native and Chromium connected-
   component shape checks; and
+- the unchanged inside-marker position WPT now requires the marker and first text to
+  share an inline line, treats `<br>` as a forced line break, and independently measures
+  the continuation starting left beneath the marker in native and Chromium; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -200,13 +204,20 @@ for the 50-sample selector workload, and from 2.965 ms to 2.983 ms (+0.6%) for 5
 generated named-property samples. The runtime path is restricted to generic
 `display:list-item` boxes and adds no document or per-node state.
 
+The inside-marker/forced-break slice was compared with its immediate clean parent
+(`0462020`) in six balanced fresh-process runs. Median p50 moved from 0.737 ms to
+0.739 ms (+0.3%) for 1,000 lifecycle samples, from 32.422 ms to 32.254 ms (-0.5%)
+for the 50-sample selector workload, and from 3.058 ms to 3.048 ms (-0.3%) for 50
+generated named-property samples. The change adds no document or per-node state; the
+ordinary inline fast path only gains a tag comparison, while `<br>` takes the existing
+general inline-item path and advances one line offset.
+
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence
-from every released RID. Two self-verifying visual documents remain harness-blocked:
-the remaining list-marker document is not yet pinned locally, while the elliptical-radius
-case deliberately exceeds the currently claimed scalar corner projection. The pinned
-visibility-layout and rounded-overflow documents and the dynamic flex check-layout
-document are no longer in that set.
+from every released RID. One self-verifying visual document remains harness-blocked:
+the elliptical-radius case deliberately exceeds the currently claimed scalar corner
+projection. The pinned list-marker, visibility-layout, and rounded-overflow documents
+and the dynamic flex check-layout document are no longer in that set.
 
 The native-package workflow downloads and aggregates both required and candidate
 evidence after all native jobs. The required aggregate is blocking and the verified

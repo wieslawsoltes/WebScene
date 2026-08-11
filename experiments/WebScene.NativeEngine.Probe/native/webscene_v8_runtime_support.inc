@@ -472,10 +472,10 @@ display_mode default_display_for_tag(std::string_view tag)
     // Compact HTML UA defaults. Component libraries rely on phrasing elements (most
     // visibly the dialog submit-button span) remaining inline when no author
     // display declaration is present.
-    constexpr std::array<std::string_view, 25> inline_tags{
+    constexpr std::array<std::string_view, 26> inline_tags{
         "a", "abbr", "b", "cite", "code", "em", "i", "kbd", "label",
         "mark", "q", "s", "samp", "small", "span", "strong", "sub", "sup",
-        "svg", "time", "u", "var", "path", "use", "circle"};
+        "svg", "time", "u", "var", "path", "use", "circle", "br"};
     constexpr std::array<std::string_view, 6> inline_block_tags{
         "button", "img", "input", "rect", "select", "textarea"};
     if (std::find(inline_block_tags.begin(), inline_block_tags.end(), tag)

@@ -90,7 +90,8 @@ internal sealed class ChromiumReftestOracle
         WptRenderSnapshot nativeTest,
         IReadOnlyList<VisualColorCheck> checks,
         IReadOnlyList<VisualColorGapCheck> gapChecks,
-        IReadOnlyList<VisualComponentCheck> componentChecks)
+        IReadOnlyList<VisualComponentCheck> componentChecks,
+        IReadOnlyList<VisualForegroundOffsetCheck> foregroundOffsetChecks)
     {
         var chromiumTestPath = Path.Combine(artifactDirectory, "chromium-actual.png");
         try
@@ -117,9 +118,15 @@ internal sealed class ChromiumReftestOracle
                 Check = check,
                 Observation = VisualColorOracle.InspectComponent(chromiumTest, check)
             }).ToList();
+            var foregroundOffsetObservations = foregroundOffsetChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.MeasureForegroundOffset(chromiumTest, check)
+            }).ToList();
             var passed = observations.All(item => item.Passed)
                 && gapObservations.All(item => item.Observation.Passed)
-                && componentObservations.All(item => item.Observation.Passed);
+                && componentObservations.All(item => item.Observation.Passed)
+                && foregroundOffsetObservations.All(item => item.Observation.Passed);
             return new ChromiumOracleResult
             {
                 Status = passed ? "PASS" : "FAIL",
@@ -129,7 +136,8 @@ internal sealed class ChromiumReftestOracle
                         $"{item.Check.Color}: observed {item.Count}, expected "
                         + VisualColorOracle.DescribeBounds(item.Check) + ".")
                     .Concat(gapObservations.Select(item => item.Observation.Message))
-                    .Concat(componentObservations.Select(item => item.Observation.Message))),
+                    .Concat(componentObservations.Select(item => item.Observation.Message))
+                    .Concat(foregroundOffsetObservations.Select(item => item.Observation.Message))),
                 NativeToChromiumTest = ComparePixels(nativeTest, chromiumTest),
                 Artifacts = new Dictionary<string, string>
                 {

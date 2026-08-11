@@ -788,6 +788,9 @@ void native_document::layout_children(dom_node& parent)
                 if (!node.text_content.empty()) text_runs.push_back(&node);
                 return true;
             }
+            // BR is inline-level but forces a line break. The flattened text-run
+            // path has no sentinel for forced breaks, so retain it as an item.
+            if (node.tag == "br") return false;
             // Inline-block and inline-table descendants are atomic inline
             // boxes. Flattening their text into the surrounding line discards
             // their own padding, background, and border geometry.
@@ -1693,6 +1696,7 @@ void native_document::layout_children(dom_node& parent)
     size_t placed_in_wrapped_line = 0U;
     auto maximum_flow_right = content.x;
     auto maximum_flow_bottom = content.y;
+    auto inline_line_offset = 0.0F;
     auto float_band_y = content.y;
     auto float_band_height = 0.0F;
     auto left_float_edge = content.x;
@@ -1714,6 +1718,24 @@ void native_document::layout_children(dom_node& parent)
             && child->style.display != display_mode::none;
         if (!child->visible) {
             child->layout = {};
+            continue;
+        }
+
+        if (inline_flow && !flex_container && child->tag == "br") {
+            const auto font_size = resolved_font_size(*child);
+            const auto line_height = resolved_line_height(*child, font_size);
+            child->layout = {
+                content.x + cursor,
+                content.y + inline_line_offset,
+                0,
+                line_height};
+            child->scroll_content_width = 0;
+            child->scroll_content_height = 0;
+            maximum_flow_bottom = std::max(
+                maximum_flow_bottom,
+                child->layout.y + child->layout.height);
+            cursor = 0;
+            inline_line_offset += line_height;
             continue;
         }
 
@@ -1972,13 +1994,15 @@ void native_document::layout_children(dom_node& parent)
             }
             const auto alignment = child->style.align_self_specified
                 ? child->style.align_self : parent.style.align_items;
+            const auto line_offset = inline_flow && !flex_container
+                ? inline_line_offset : wrapped_cross_offset;
             const auto y = alignment == align_mode::center
-                ? content.y + wrapped_cross_offset + margin_top
+                ? content.y + line_offset + margin_top
                     + (available_line_cross_size - margin_top - margin_bottom - height) * 0.5F
                 : alignment == align_mode::end
-                    ? content.y + wrapped_cross_offset + available_line_cross_size
+                    ? content.y + line_offset + available_line_cross_size
                         - margin_bottom - height
-                    : content.y + wrapped_cross_offset + margin_top;
+                    : content.y + line_offset + margin_top;
             assigned = {
                 content.x + cursor + margin_left,
                 y,

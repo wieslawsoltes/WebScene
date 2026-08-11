@@ -158,6 +158,40 @@ void generic_outside_square_list_marker_reaches_scene()
         "generic outside square marker must reach the scene as filled geometry");
 }
 
+void generic_inside_marker_and_break_share_inline_flow()
+{
+    native_document document;
+    auto& item = document.create_element("span");
+    item.style.display = display_mode::list_item;
+    item.style.mutable_textual().list_style_position = "inside";
+    auto& first_text = document.create_element("#text");
+    first_text.text_content = "Filler Text Filler Text Filler Text";
+    auto& line_break = document.create_element("br");
+    line_break.style.display = display_mode::inline_flow;
+    auto& second_text = document.create_element("#text");
+    second_text.text_content = "Filler Text Filler Text Filler Text";
+    require(
+        document.append_child(document.body(), item)
+            && document.append_child(item, first_text)
+            && document.append_child(item, line_break)
+            && document.append_child(item, second_text),
+        "generic inside-list fixture must retain its inline children");
+
+    document.layout(400.0F, 100.0F);
+    require(
+        item.list_marker_layout.width > 0.0F
+            && std::abs(item.list_marker_layout.y - first_text.layout.y) < 0.01F,
+        "inside marker must share the first text line");
+    require(
+        line_break.layout.width == 0.0F
+            && second_text.layout.y >= first_text.layout.y + first_text.layout.height,
+        "BR must force the following text onto a new line");
+    require(
+        first_text.layout.x > second_text.layout.x
+            && std::abs(second_text.layout.x - item.layout.x) < 0.01F,
+        "text after BR must return to the principal block edge beneath the marker");
+}
+
 } // namespace
 
 int main()
@@ -166,6 +200,7 @@ int main()
     context_fragments_and_templates();
     diagnostic_comment_policy();
     generic_outside_square_list_marker_reaches_scene();
+    generic_inside_marker_and_break_share_inline_flow();
     std::cout << "html5ever tree-sink tests passed\n";
     return 0;
 }

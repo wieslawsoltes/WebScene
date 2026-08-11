@@ -361,7 +361,20 @@ internal sealed partial class WptSubsetRunner
                     Message = observation.Message
                 };
             });
-            var checks = colorChecks.Concat(gapChecks).Concat(componentChecks).ToList();
+            var foregroundOffsetChecks = test.VisualForegroundOffsetChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.MeasureForegroundOffset(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "foreground line offset",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var checks = colorChecks.Concat(gapChecks)
+                .Concat(componentChecks)
+                .Concat(foregroundOffsetChecks)
+                .ToList();
             timer.Stop();
             var passed = checks.All(check => check.Status == "PASS");
             return new TestResult
@@ -384,7 +397,8 @@ internal sealed partial class WptSubsetRunner
                     snapshot,
                     test.VisualChecks,
                     test.VisualGapChecks,
-                    test.VisualComponentChecks)
+                    test.VisualComponentChecks,
+                    test.VisualForegroundOffsetChecks)
             };
         }
         catch (TimeoutException exception)
@@ -807,6 +821,30 @@ internal sealed partial class WptSubsetRunner
                     {
                         throw new InvalidDataException(
                             $"Visual test '{test.Path}' component shape has no assertion.");
+                    }
+                }
+                foreach (var check in test.VisualForegroundOffsetChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.AnchorColor);
+                    if (check.FirstTop < 0 || check.FirstHeight <= 0
+                        || check.SecondTop < 0 || check.SecondHeight <= 0
+                        || check.FirstTop + check.FirstHeight > _manifest.Viewport.Height
+                        || check.SecondTop + check.SecondHeight > _manifest.Viewport.Height
+                        || check.HorizontalInset < 0
+                        || check.HorizontalInset * 2 >= _manifest.Viewport.Width
+                        || check.MaximumLuminance is < 0 or > 255
+                        || check.MinimumComponentHeight <= 0
+                        || check.MinimumComponentPixels <= 0
+                        || check.MinimumOffsetPixels > check.MaximumOffsetPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' foreground offset has invalid bounds.");
+                    }
+                    if (!check.MinimumOffsetPixels.HasValue
+                        && !check.MaximumOffsetPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' foreground offset has no assertion.");
                     }
                 }
             }
