@@ -436,7 +436,6 @@ dotnet run \
   --project "$repo_root/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj" \
   -c Release -- \
   --selection required \
-  --test contracts/responsive-release-list.html \
   --native-library "$package_native_path" \
   --native-cache-directory "$build_dir/code-cache" \
   --output "$build_dir/wpt-results"

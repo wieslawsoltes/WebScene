@@ -285,11 +285,10 @@ $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_n
     --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
     -c Release -- `
     --selection required `
-    --test contracts/responsive-release-list.html `
     --native-library $packageNativePath `
     --native-cache-directory (Join-Path $buildDir "code-cache") `
     --output (Join-Path $buildDir "wpt-results")
-if ($LASTEXITCODE -ne 0) { throw "Native package relocation smoke failed." }
+if ($LASTEXITCODE -ne 0) { throw "Required native compatibility profile failed." }
 
 $previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
 $env:WEBSCENE_NATIVE_ENGINE_PATH = $packageNativePath

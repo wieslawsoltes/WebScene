@@ -1,5 +1,6 @@
 #include "webscene_html_parser.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -52,7 +53,7 @@ void document_tree_construction()
     const auto result = parse_html_document(
         document,
         root,
-        "<!doctype html><!--marker--><title>x</title><p><b>one<i>two</b>three"
+        "<!doctype html><!--marker--><title>x</title><p><b>one<i>two</b>three</i></p>"
         "<table>outside<tr><td>cell</table><svg viewBox='0 0 1 1'><path/></svg>");
     require(static_cast<bool>(result), result.error.c_str());
     require(result.element_count >= 10, "expected html5ever-created elements");
@@ -65,6 +66,19 @@ void document_tree_construction()
     require(first(*html, "head") != nullptr, "document must contain an inferred head");
     auto* body = first(*html, "body");
     require(body != nullptr, "document must contain an inferred body");
+    auto* table = first(*body, "table");
+    require(table != nullptr, "document must contain the authored table");
+    const auto table_position = std::find(
+        body->children.begin(), body->children.end(), table);
+    require(
+        table_position != body->children.begin() && table_position != body->children.end(),
+        "foster-parented table text must precede the table");
+    const auto* fostered_text = *(table_position - 1);
+    require(
+        fostered_text != nullptr
+            && fostered_text->kind == dom_node_kind::text
+            && fostered_text->text_content == "outside",
+        "foster-parented table text must be immediately before the table");
     auto* svg = descendant(*body, "svg");
     require(svg != nullptr, "SVG subtree must be retained");
     require(svg->namespace_uri() == "http://www.w3.org/2000/svg", "SVG namespace must be explicit");

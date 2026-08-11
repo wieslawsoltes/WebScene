@@ -28,7 +28,11 @@
     equal(format.querySelectorAll("i").length, 2, "reconstructed formatting element count");
     equal(parsed.body.querySelectorAll("tbody").length, 1, "inferred tbody count");
     equal(parsed.body.querySelectorAll("td").length, 2, "inferred table cell count");
-    assert(parsed.body.textContent.startsWith("outside"), "foster-parented table text is not before the table");
+    const table = parsed.body.querySelector("#table");
+    equal(table.previousSibling.nodeType, Node.TEXT_NODE, "foster-parented table text node type");
+    equal(table.previousSibling.textContent, "outside", "foster-parented table text content");
+    assert(format.nextSibling === table.previousSibling,
+      "foster-parented table text is not between the preceding element and table");
   });
 
   test("comments, whitespace, and the complete named-entity table remain observable", () => {

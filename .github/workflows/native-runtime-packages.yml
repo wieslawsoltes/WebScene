@@ -33,6 +33,7 @@ on:
     - 'src/WebScene.Sdk.NativeHost.Shared/**'
     - 'src/WebScene.Sdk.Uno/**'
     - 'src/WebScene.Diagnostics.Cdp/**'
+    - 'tests/WebPlatformSubset/**'
     - 'tests/WebScene.Runtime.PackageSmoke/**'
     - 'tests/WebScene.Uno.PackageSmoke/**'
     - 'third-party/v8-patches/**'
@@ -294,6 +295,33 @@ jobs:
           -UpstreamV8 `
           -PartitionAlloc `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
+    - name: Run candidate compatibility discovery
+      continue-on-error: true
+      shell: bash
+      run: |
+        case '${{ matrix.rid }}' in
+          osx-arm64) native_name=libwebscene_native_engine.dylib ;;
+          linux-x64) native_name=libwebscene_native_engine.so ;;
+          win-x64) native_name=webscene_native_engine.dll ;;
+          *) echo "Unsupported discovery RID '${{ matrix.rid }}'." >&2; exit 1 ;;
+        esac
+        native_path="$(
+          find artifacts/native-engine-runtime-build \
+            -path "*/package-smoke/runtimes/${{ matrix.rid }}/native/$native_name" \
+            -print -quit
+        )"
+        if [[ -z "$native_path" ]]; then
+          echo "Unable to locate the packaged ${{ matrix.rid }} native runtime." >&2
+          exit 1
+        fi
+        build_dir="${native_path%%/package-smoke/runtimes/*}"
+        dotnet run \
+          --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
+          -c Release --no-build -- \
+          --selection candidate \
+          --native-library "$native_path" \
+          --native-cache-directory "$build_dir/code-cache" \
+          --output "$build_dir/wpt-candidate-results"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
       if: always() && steps.v8-cache.outputs.cache-hit != 'true'
@@ -346,6 +374,27 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ hashFiles('third-party/v8-patches/**') }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
+    - name: Upload required compatibility evidence
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-results/**
+        if-no-files-found: error
+    - name: Upload failed compatibility evidence
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-results/**
+        if-no-files-found: warn
+    - name: Upload candidate compatibility evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-candidate-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-candidate-results/**
+        if-no-files-found: warn
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:

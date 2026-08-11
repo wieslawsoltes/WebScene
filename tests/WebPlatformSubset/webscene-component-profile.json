@@ -910,8 +910,8 @@
       "path": "contracts/html5-tree-construction-primitives.html",
       "type": "contract",
       "capabilities": ["html5-tree-construction", "adoption-agency", "table-foster-parenting", "named-character-references", "comments", "whitespace-text", "foreign-content-namespaces", "template-contents"],
-      "evidence": ["html5ever-parser-spike"],
-      "reason": "Candidate denominator for the compile-time html5ever investigation. It deliberately remains non-gating until separate legacy and html5ever native artifacts have been compared against the adoption gates."
+      "evidence": ["html5ever-parser-spike", "chrome-authorized-foster-parent-structure"],
+      "reason": "Product-neutral HTML5 tree-construction coverage for adoption-agency reconstruction, table foster parenting, named entities, comments, foreign content, and template contents. Chrome and the native html5ever tree-sink test agree on the structural foster-parent invariant; keep candidate until the complete contract passes the packaged runtime on every released RID."
     },
     {
       "path": "contracts/monaco-editor-runtime-primitives.html",
