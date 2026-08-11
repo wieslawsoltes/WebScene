@@ -91,7 +91,9 @@ code.
 
 ## Test types
 
-- `testharness` runs the pinned WPT harness and records its assertions.
+- `testharness` runs the pinned WPT harness and records its assertions. HTML/XHTML
+  documents execute directly; window-targeted `.any.js` sources are wrapped in a
+  generated document without rewriting their pinned JavaScript bytes.
 - `reftest` settles and captures the native scene through the deterministic renderer,
   then compares document and reference pixels. With `--chromium-path`, it also records
   the independent Chromium self-comparison and cross-engine differential described
@@ -125,11 +127,11 @@ contract.
 
 ## 2026-08-11 coverage audit
 
-The pinned profile contains 110 required, 58 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 61 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-58/58 documents and 320/320 subtests while the release gate remains 110/110 documents
+61/61 documents and 340/340 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -157,6 +159,11 @@ and 434/434 subtests:
   and vertical corner radii through CSSOM, scene transport, Avalonia, and Uno, with
   component-relative edge checks that reject the former scalar projection in both
   native and Chromium; and
+- three unchanged window-targeted EventTarget option WPTs now execute through the
+  `.any.js` adapter and pass all 20 assertions for pre-invocation `once` removal,
+  duplicate identity, passive cancellation, and synchronous AbortSignal cleanup;
+  native element pointer and Window resize dispatch independently cover the same
+  listener state; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -225,6 +232,18 @@ named-property samples. A four-context/2,000-node scalar workload retains the fi
 storage. Elliptical declarations alone allocate the existing cold textual-style state
 and add one fixed-size companion command immediately before each affected rounded
 primitive; ordinary circular commands keep the existing representation.
+
+The EventTarget-options slice was compared with its exact clean parent (`d14139a`) in
+six balanced fresh-process runs. Median p50 moved from 0.746 ms to 0.748 ms (+0.3%)
+for 1,000 startup/lifecycle samples, from 33.481 ms to 33.401 ms (-0.2%) for the
+50-sample selector workload, and from 3.068 ms to 3.095 ms (+0.9%) for 50 generated
+named-property samples. A four-context/2,000-node workload that registers listeners
+retains the fixed 976-byte node and identical attributed node, attribute, pool,
+wrapper, and scene storage. Listener options exist only in cold registration records.
+Both isolated and shared-isolate lifecycle probes preserve context identity, hidden
+timers, release counts, and shared-slot reuse. Three balanced five-second idle runs
+move median normalized CPU from 0.4563% to 0.4546%, with no signalled wakes, timers,
+animation frames, or additional scene builds.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

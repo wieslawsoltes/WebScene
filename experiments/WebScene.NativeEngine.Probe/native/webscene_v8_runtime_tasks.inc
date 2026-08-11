@@ -593,11 +593,40 @@
             auto global = local_context->Global();
             auto event = create_window_event(local_context, "resize");
             v8::Local<v8::Value> arguments[] = {event};
-            for (auto& listener : resize_listeners) {
-                auto callback = listener.Get(isolate);
+            const auto listener_count = resize_listeners.size();
+            for (size_t index = 0; index < listener_count; ++index) {
+                auto& listener = resize_listeners[index];
+                auto callback = listener.callback.Get(isolate);
                 if (callback.IsEmpty()) continue;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(isolate);
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(isolate, "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(isolate)) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(isolate, "__websceneInPassiveListener"),
+                    v8::Boolean::New(isolate, passive)).Check();
                 v8::TryCatch try_catch(isolate);
-                if (callback->Call(local_context, global, 1, arguments).IsEmpty()) {
+                const auto callback_succeeded =
+                    !callback->Call(local_context, global, 1, arguments).IsEmpty();
+                event->Set(
+                    local_context,
+                    js_string(isolate, "__websceneInPassiveListener"),
+                    v8::False(isolate)).Check();
+                if (!callback_succeeded) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     report_inspector_exception(try_catch, local_context);
 #endif
@@ -605,6 +634,9 @@
                     return false;
                 }
             }
+            std::erase_if(
+                resize_listeners,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
             perform_microtask_checkpoint();
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -840,6 +872,13 @@
     static void event_prevent_default(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> passive;
+        if (info.This()->Get(
+                context,
+                js_string(info.GetIsolate(), "__websceneInPassiveListener")).ToLocal(&passive)
+            && passive->BooleanValue(info.GetIsolate())) {
+            return;
+        }
         v8::Local<v8::Value> cancelable;
         if (!info.This()->Get(
                 context,
@@ -849,6 +888,23 @@
             context,
             js_string(info.GetIsolate(), "defaultPrevented"),
             v8::True(info.GetIsolate())).Check();
+    }
+
+    static void event_return_value_get(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> prevented;
+        const auto default_prevented = info.This()->Get(
+                context,
+                js_string(info.GetIsolate(), "defaultPrevented")).ToLocal(&prevented)
+            && prevented->BooleanValue(info.GetIsolate());
+        info.GetReturnValue().Set(v8::Boolean::New(info.GetIsolate(), !default_prevented));
+    }
+
+    static void event_return_value_set(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.Length() == 0 || info[0]->BooleanValue(info.GetIsolate())) return;
+        event_prevent_default(info);
     }
 
     static void event_stop_propagation(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1187,12 +1243,38 @@
                     || listener.capture != capture) continue;
                 auto callback = listener.callback.Get(isolate);
                 if (callback.IsEmpty()) continue;
-                if (callback->Call(local_context, current_target, 1, arguments).IsEmpty()) return false;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(isolate);
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(isolate, "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(isolate)) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(isolate, "__websceneInPassiveListener"),
+                    v8::Boolean::New(isolate, passive)).Check();
+                const auto callback_succeeded =
+                    !callback->Call(local_context, current_target, 1, arguments).IsEmpty();
+                event->Set(
+                    local_context,
+                    js_string(isolate, "__websceneInPassiveListener"),
+                    v8::False(isolate)).Check();
+                if (!callback_succeeded) return false;
                 ++input_callback_invocation_count;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                 ++event_callback_target_counts[type][registered_target];
                 ++event_callback_index_counts[type][index];
-                if (listener.once) listener.callback.Reset();
                 if (std::getenv("WEBSCENE_PROBE_PROFILE_INPUT") != nullptr
                     && (std::string_view(type) == "pointerdown"
                         || std::string_view(type) == "mousedown"
@@ -1211,8 +1293,6 @@
                         << (immediate_propagation_stopped() ? 1 : 0)
                         << '\n';
                 }
-#else
-                if (listener.once) listener.callback.Reset();
 #endif
                 if (immediate_propagation_stopped()) break;
             }

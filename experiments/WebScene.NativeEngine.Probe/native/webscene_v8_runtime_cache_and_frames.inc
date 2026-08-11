@@ -1181,6 +1181,10 @@
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
             v8::FunctionTemplate::New(isolate, event_prevent_default));
+        event_template->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "returnValue"),
+            v8::FunctionTemplate::New(isolate, event_return_value_get),
+            v8::FunctionTemplate::New(isolate, event_return_value_set));
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "stopPropagation"),
             v8::FunctionTemplate::New(isolate, event_stop_propagation));

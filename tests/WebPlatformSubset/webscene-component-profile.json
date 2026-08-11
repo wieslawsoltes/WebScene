@@ -428,7 +428,7 @@
       "type": "contract",
       "capabilities": ["window-event-target", "window-add-event-listener", "window-remove-event-listener", "window-dispatch-event"],
       "evidence": ["bootstrap-5.3.8-popper-scroll-parent-cleanup"],
-      "reason": "Required after the native runner pass the exact listener registration, dispatch, removal, and post-removal lifecycle reduction and Bootstrap's selected Popper lifecycle passes in the Chrome/native matrix. Listener options, AbortSignal integration, passive semantics, and the complete EventTarget surface remain outside this bounded claim. Evidence: artifacts/ecosystem-consumers-matrix-v9-20260722/ecosystem-results.json and artifacts/web-platform-required-ecosystem-promoted-v1-20260722."
+      "reason": "Required after the native runner passes the exact listener registration, dispatch, removal, and post-removal lifecycle reduction and Bootstrap's selected Popper lifecycle passes in the Chrome/native matrix. Once, passive, and AbortSignal listener options are covered separately as candidates by unchanged upstream WPT and native input/resize authority; they do not silently enlarge this required claim. Evidence: artifacts/ecosystem-consumers-matrix-v9-20260722/ecosystem-results.json and artifacts/web-platform-required-ecosystem-promoted-v1-20260722."
     },
     {
       "path": "contracts/dom-attribute-domstring-coercion.html",
@@ -898,6 +898,27 @@
       "capabilities": ["webidl-interface-inheritance", "webidl-operation-brands", "webidl-descriptors", "dom-wrapper-identity"],
       "evidence": ["generated-webidl-to-v8-evaluation"],
       "reason": "Candidate decision fixture for the generated EventTarget to HTMLElement binding slice. It measures distinct constructors and prototype inheritance, HTML/text/SVG wrapper brands, operation placement and lengths, illegal invocation, constructor behavior, attribute descriptor placement, and wrapper identity."
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-once.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "event-listener-once", "nested-event-dispatch", "duplicate-listener-identity", "stop-immediate-propagation"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving that once listeners are removed before invocation, remain correct through nested dispatch, deduplicate by callback/type/capture, and interact correctly with stopImmediatePropagation."
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-passive.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "event-listener-passive", "passive-prevent-default", "passive-return-value", "listener-option-identity"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving passive option dictionary access, cancellation suppression through preventDefault and returnValue, isolation between listeners, and duplicate identity independent of passive state."
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-signal.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "abort-controller", "abort-signal-listener-removal", "nested-abort-dispatch", "signal-option-validation"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving synchronous AbortSignal listener removal before and during dispatch, composition with once/capture/manual removal, nested abort safety, already-aborted suppression, and null-signal validation."
     },
     {
       "path": "contracts/css-syntax-parser-recovery.html",

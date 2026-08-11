@@ -88,6 +88,103 @@ void test_primary_click_mouse_event_detail(webscene_engine* engine)
     }
 }
 
+void test_event_listener_options_reach_native_input_and_resize(webscene_engine* engine)
+{
+    resize(engine, 320, 200, 880U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const target = document.createElement('div');
+          target.id = 'listener-options-target';
+          target.style.position = 'fixed';
+          target.style.left = '0';
+          target.style.top = '0';
+          target.style.width = '100px';
+          target.style.height = '100px';
+          target.style.background = 'black';
+          target.style.zIndex = '999999';
+          document.body.appendChild(target);
+          globalThis.__listenerOptions = {
+            passiveDefaultPrevented: null,
+            abortedMouseup: 0,
+            onceClicks: 0,
+            onceResizes: 0,
+            abortedResizes: 0,
+            abortEvents: 0,
+            abortReasonStable: false,
+            abortThrowStable: false
+          };
+          target.addEventListener('mousedown', event => {
+            event.preventDefault();
+            __listenerOptions.passiveDefaultPrevented = event.defaultPrevented;
+          }, { passive: true });
+          const inputController = new AbortController();
+          target.addEventListener('mouseup', () => __listenerOptions.abortedMouseup++, {
+            signal: inputController.signal
+          });
+          inputController.abort();
+          const click = () => __listenerOptions.onceClicks++;
+          target.addEventListener('click', click, { once: true });
+          target.addEventListener('click', click);
+          addEventListener('resize', () => __listenerOptions.onceResizes++, { once: true });
+          const resizeController = new AbortController();
+          addEventListener('resize', () => __listenerOptions.abortedResizes++, {
+            signal: resizeController.signal
+          });
+          resizeController.abort();
+          const semanticsController = new AbortController();
+          const semanticsReason = { source: 'listener-options-test' };
+          semanticsController.signal.onabort = () => __listenerOptions.abortEvents++;
+          semanticsController.abort(semanticsReason);
+          semanticsController.abort({ source: 'ignored-second-abort' });
+          __listenerOptions.abortReasonStable =
+            semanticsController.signal.reason === semanticsReason;
+          try {
+            semanticsController.signal.throwIfAborted();
+          } catch (error) {
+            __listenerOptions.abortThrowStable = error === semanticsReason;
+          }
+        })()
+    )JS", "native-event-listener-options-setup.js");
+    require(
+        evaluate(
+            engine,
+            "document.getElementById('listener-options-target')?.offsetWidth",
+            "native-event-listener-options-ready.js") == "100",
+        "native listener-option target did not complete layout");
+
+    auto consumed = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 881U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 882U, false);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 883U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 884U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 4U,
+        "native listener-option pointer inputs were not consumed");
+    consumed = consumed_input_count(engine);
+    resize(engine, 321, 201, 885U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 1U,
+        "first listener-option resize was not consumed");
+    consumed = consumed_input_count(engine);
+    resize(engine, 322, 202, 886U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 1U,
+        "second listener-option resize was not consumed");
+
+    const auto result = evaluate(
+        engine,
+        "globalThis.__listenerOptions",
+        "native-event-listener-options-result.js");
+    if (result != R"({"passiveDefaultPrevented":false,"abortedMouseup":0,"onceClicks":1,"onceResizes":1,"abortedResizes":0,"abortEvents":1,"abortReasonStable":true,"abortThrowStable":true})") {
+        fail("listener options diverged across native input or resize dispatch: " + result);
+    }
+}
+
 void test_native_mouseup_honors_immediate_propagation_stop(webscene_engine* engine)
 {
     execute(engine, R"JS(

@@ -114,15 +114,23 @@ int main()
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
-        if (std::string_view(filter) != "elliptical-corner-radii") {
-            fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
+        const auto selected = std::string_view(filter);
+        if (selected == "elliptical-corner-radii") {
+            test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_elliptical_corner_radii_reach_cssom(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
         }
-        test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
-        auto* focused_engine = webscene_engine_create(0);
-        require(focused_engine != nullptr, "focused engine creation failed");
-        test_elliptical_corner_radii_reach_cssom(focused_engine);
-        webscene_engine_destroy(focused_engine);
-        return 0;
+        if (selected == "event-listener-options") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_event_listener_options_reach_native_input_and_resize(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
     }
     test_binary_reverse_callback_is_leased_and_completed();
     test_generated_binary_cross_context_promise();
@@ -274,6 +282,7 @@ int main()
     test_document_position(engine);
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
+    test_event_listener_options_reach_native_input_and_resize(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
     test_generated_idl_attributes_are_prototype_accessors(engine);
     test_document_links_is_a_live_named_html_collection(engine);

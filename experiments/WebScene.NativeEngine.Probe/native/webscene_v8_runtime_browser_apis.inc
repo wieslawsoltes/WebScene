@@ -329,45 +329,70 @@
             decision.semantic_slice = "an event type and listener are required";
             return;
         }
-        if (!info[1]->IsFunction()) {
-            decision.classification = "unsupported";
-            decision.semantic_slice = "EventListener objects with handleEvent are not implemented";
-            return;
-        }
         const auto type = to_utf8(info.GetIsolate(), info[0]);
+        auto local_context = info.GetIsolate()->GetCurrentContext();
         bool use_capture = false;
         bool use_once = false;
+        bool use_passive = false;
+        v8::Local<v8::Object> use_signal;
         if (info.Length() > 2) {
             if (info[2]->IsBoolean()) {
                 use_capture = info[2]->BooleanValue(info.GetIsolate());
             } else if (info[2]->IsObject()) {
+                auto options = info[2].As<v8::Object>();
                 v8::Local<v8::Value> capture;
-                if (info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
+                if (options->Get(
+                        local_context,
                         js_string(info.GetIsolate(), "capture")).ToLocal(&capture)) {
                     use_capture = capture->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
                 }
                 v8::Local<v8::Value> once;
-                if (info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
+                if (options->Get(
+                        local_context,
                         js_string(info.GetIsolate(), "once")).ToLocal(&once)) {
                     use_once = once->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
                 }
                 v8::Local<v8::Value> passive;
-                const auto passive_requested = info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
-                        js_string(info.GetIsolate(), "passive")).ToLocal(&passive)
-                    && passive->BooleanValue(info.GetIsolate());
+                if (options->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "passive")).ToLocal(&passive)) {
+                    use_passive = passive->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
+                }
                 v8::Local<v8::Value> signal;
-                const auto signal_requested = info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
-                        js_string(info.GetIsolate(), "signal")).ToLocal(&signal)
-                    && !signal->IsNullOrUndefined();
-                if (passive_requested || signal_requested) {
-                    decision.classification = "partially-supported";
-                    decision.semantic_slice = "capture and once; passive enforcement and AbortSignal removal are not implemented";
+                if (!options->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "signal")).ToLocal(&signal)) {
+                    return;
+                }
+                if (!signal->IsUndefined()) {
+                    if (!signal->IsObject() || signal->IsNull()) {
+                        info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                            js_string(info.GetIsolate(),
+                                "Failed to execute 'addEventListener': signal is not an AbortSignal")));
+                        return;
+                    }
+                    use_signal = signal.As<v8::Object>();
+                    v8::Local<v8::Value> aborted;
+                    if (!use_signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)) {
+                        return;
+                    }
+                    if (aborted->BooleanValue(info.GetIsolate())) return;
                 }
             }
+        }
+        if (info[1]->IsNullOrUndefined()) return;
+        if (!info[1]->IsFunction()) {
+            decision.classification = "unsupported";
+            decision.semantic_slice = "EventListener objects with handleEvent are not implemented";
+            return;
         }
         self->record_feature(
             "event",
@@ -401,23 +426,61 @@
                 target_node_id = standalone_target_id.value_or(0U);
             }
 #endif
+            auto& registrations = self->frame_event_listeners[type];
+            const auto requested = info[1].As<v8::Function>();
+            for (const auto& registration : registrations) {
+                auto callback = registration.callback.Get(info.GetIsolate());
+                if (!callback.IsEmpty()
+                    && registration.target == target_node_id
+                    && registration.context.Get(info.GetIsolate()) == local_context
+                    && registration.capture == use_capture
+                    && callback->StrictEquals(requested)) {
+                    return;
+                }
+            }
             auto name = to_utf8(info.GetIsolate(), info[1].As<v8::Function>()->GetName());
             if (name.empty()) name = "<anonymous>";
-            self->frame_event_listeners[type].push_back(
-                event_listener_registration{
-                    v8::Global<v8::Function>(
-                        info.GetIsolate(),
-                        info[1].As<v8::Function>()),
-                    v8::Global<v8::Context>(
-                        info.GetIsolate(),
-                        info.GetIsolate()->GetCurrentContext()),
-                    std::move(name),
-                    self->current_input_sequence,
-                    target_node_id,
-                    use_capture,
-                    use_once});
+            event_listener_registration registration{
+                v8::Global<v8::Function>(info.GetIsolate(), requested),
+                v8::Global<v8::Context>(info.GetIsolate(), local_context),
+                std::move(name),
+                self->current_input_sequence,
+                target_node_id,
+                use_capture,
+                use_once,
+                use_passive,
+                {}};
+            if (!use_signal.IsEmpty()) {
+                registration.signal.Reset(info.GetIsolate(), use_signal);
+            }
+            registrations.push_back(std::move(registration));
         } else if (type == "resize") {
-            self->resize_listeners.emplace_back(info.GetIsolate(), info[1].As<v8::Function>());
+            const auto requested = info[1].As<v8::Function>();
+            for (const auto& registration : self->resize_listeners) {
+                auto callback = registration.callback.Get(info.GetIsolate());
+                if (!callback.IsEmpty()
+                    && registration.context.Get(info.GetIsolate()) == local_context
+                    && registration.capture == use_capture
+                    && callback->StrictEquals(requested)) {
+                    return;
+                }
+            }
+            auto name = to_utf8(info.GetIsolate(), requested->GetName());
+            if (name.empty()) name = "<anonymous>";
+            event_listener_registration registration{
+                v8::Global<v8::Function>(info.GetIsolate(), requested),
+                v8::Global<v8::Context>(info.GetIsolate(), local_context),
+                std::move(name),
+                self->current_input_sequence,
+                0U,
+                use_capture,
+                use_once,
+                use_passive,
+                {}};
+            if (!use_signal.IsEmpty()) {
+                registration.signal.Reset(info.GetIsolate(), use_signal);
+            }
+            self->resize_listeners.push_back(std::move(registration));
         }
     }
 
@@ -489,16 +552,22 @@
                 // Do not erase while an event may be iterating the vector. The
                 // dispatch tail compacts this tombstone.
                 registration.callback.Reset();
+                registration.signal.Reset();
                 break;
             }
             return;
         }
         if (type != "resize") return;
-        for (auto iterator = self->resize_listeners.begin(); iterator != self->resize_listeners.end(); ++iterator) {
-            auto callback = iterator->Get(info.GetIsolate());
-            if (callback.IsEmpty() || !callback->StrictEquals(requested)) continue;
-            iterator->Reset();
-            self->resize_listeners.erase(iterator);
+        for (auto& registration : self->resize_listeners) {
+            auto callback = registration.callback.Get(info.GetIsolate());
+            if (registration.context.Get(info.GetIsolate()) != info.GetIsolate()->GetCurrentContext()
+                || registration.capture != requested_capture
+                || callback.IsEmpty()
+                || !callback->StrictEquals(requested)) {
+                continue;
+            }
+            registration.callback.Reset();
+            registration.signal.Reset();
             break;
         }
     }
@@ -783,17 +852,137 @@
         info.GetReturnValue().Set(observer);
     }
 
+    static void abort_signal_throw_if_aborted(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> aborted;
+        if (!info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+            || !aborted->BooleanValue(info.GetIsolate())) {
+            return;
+        }
+        v8::Local<v8::Value> reason;
+        if (info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "reason")).ToLocal(&reason)) {
+            info.GetIsolate()->ThrowException(reason);
+        }
+    }
+
+    static void abort_controller_abort(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || !info.Data()->IsObject()) return;
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto signal = info.Data().As<v8::Object>();
+        v8::Local<v8::Value> aborted;
+        if (!signal->Get(
+                local_context,
+                js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+            || aborted->BooleanValue(info.GetIsolate())) {
+            return;
+        }
+
+        const auto default_reason = info.Length() == 0 || info[0]->IsUndefined();
+        auto reason = default_reason
+            ? v8::Exception::Error(
+                js_string(info.GetIsolate(), "This operation was aborted"))
+            : info[0];
+        if (default_reason && reason->IsObject()) {
+            reason.As<v8::Object>()->Set(
+                local_context,
+                js_string(info.GetIsolate(), "name"),
+                js_string(info.GetIsolate(), "AbortError")).Check();
+        }
+        signal->Set(
+            local_context,
+            js_string(info.GetIsolate(), "aborted"),
+            v8::True(info.GetIsolate())).Check();
+        signal->Set(
+            local_context,
+            js_string(info.GetIsolate(), "reason"),
+            reason).Check();
+
+        const auto remove_aborted = [&](auto& registrations) {
+            for (auto& registration : registrations) {
+                if (registration.signal.IsEmpty()) continue;
+                auto registered_signal = registration.signal.Get(info.GetIsolate());
+                if (!registered_signal->StrictEquals(signal)) continue;
+                registration.callback.Reset();
+                registration.signal.Reset();
+            }
+        };
+        for (auto& [type, registrations] : self->frame_event_listeners) {
+            static_cast<void>(type);
+            remove_aborted(registrations);
+        }
+        remove_aborted(self->resize_listeners);
+
+        auto event = self->create_event_instance(local_context);
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "type"),
+            js_string(info.GetIsolate(), "abort")).Check();
+        v8::Local<v8::Value> dispatcher;
+        if (signal->Get(
+                local_context,
+                js_string(info.GetIsolate(), "dispatchEvent")).ToLocal(&dispatcher)
+            && dispatcher->IsFunction()) {
+            v8::Local<v8::Value> arguments[] = {event};
+            static_cast<void>(dispatcher.As<v8::Function>()->Call(
+                local_context, signal, 1, arguments));
+        }
+    }
+
     static void abort_controller_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'AbortController': Please use the 'new' operator")));
+            return;
+        }
+        self->record_feature(
+            "web-api",
+            "AbortController.constructor",
+            "partially-supported",
+            "abort state, reason, listener delivery, and EventTarget listener cleanup; static AbortSignal composition helpers are not implemented",
+            "web-api-binding");
         auto isolate = info.GetIsolate();
         auto local_context = isolate->GetCurrentContext();
-        auto controller = info.IsConstructCall() ? info.This() : v8::Object::New(isolate);
-        auto signal = v8::Object::New(isolate);
+        auto controller = info.This();
+        v8::Local<v8::Value> event_target_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "EventTarget")).ToLocal(&event_target_value)
+            || !event_target_value->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "AbortController requires EventTarget")));
+            return;
+        }
+        auto signal = event_target_value.As<v8::Function>()->NewInstance(
+            local_context, 0, nullptr).ToLocalChecked();
         signal->Set(local_context, js_string(isolate, "aborted"), v8::False(isolate)).Check();
-        signal->Set(local_context, js_string(isolate, "addEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        signal->Set(local_context, js_string(isolate, "removeEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        signal->Set(local_context, js_string(isolate, "reason"), v8::Undefined(isolate)).Check();
+        signal->Set(local_context, js_string(isolate, "onabort"), v8::Null(isolate)).Check();
+        signal->Set(
+            local_context,
+            js_string(isolate, "throwIfAborted"),
+            v8::Function::New(
+                local_context,
+                abort_signal_throw_if_aborted).ToLocalChecked()).Check();
         controller->Set(local_context, js_string(isolate, "signal"), signal).Check();
-        controller->Set(local_context, js_string(isolate, "abort"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        controller->Set(
+            local_context,
+            js_string(isolate, "abort"),
+            v8::Function::New(
+                local_context,
+                abort_controller_abort,
+                signal).ToLocalChecked()).Check();
         info.GetReturnValue().Set(controller);
     }
 
@@ -1072,8 +1261,32 @@
                     || listener.capture != capture) continue;
                 auto callback = listener.callback.Get(info.GetIsolate());
                 if (callback.IsEmpty()) continue;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(info.GetIsolate());
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(info.GetIsolate())) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::Boolean::New(info.GetIsolate(), passive)).Check();
                 invoke_callback(callback, current_target);
-                if (listener.once) listener.callback.Reset();
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::False(info.GetIsolate())).Check();
                 if (immediate_propagation_stopped()) break;
             }
             return true;

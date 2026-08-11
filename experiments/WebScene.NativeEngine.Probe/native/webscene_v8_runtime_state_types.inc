@@ -206,6 +206,8 @@
         uint32_t target{0};
         bool capture{false};
         bool once{false};
+        bool passive{false};
+        v8::Global<v8::Object> signal;
     };
 
     enum class process_compilation_state : uint8_t {

@@ -2347,6 +2347,10 @@ struct v8_dom_runtime::implementation final {
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
             v8::FunctionTemplate::New(isolate, event_prevent_default));
+        event_template->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "returnValue"),
+            v8::FunctionTemplate::New(isolate, event_return_value_get),
+            v8::FunctionTemplate::New(isolate, event_return_value_set));
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "stopPropagation"),
             v8::FunctionTemplate::New(isolate, event_stop_propagation));
@@ -2415,6 +2419,11 @@ struct v8_dom_runtime::implementation final {
             dom_parser_template->GetFunction(local_context).ToLocalChecked()).Check();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         install_generated_dom_constructors(local_context, global);
+        global->Set(
+            local_context,
+            js_string(isolate, "AbortController"),
+            v8::FunctionTemplate::New(isolate, abort_controller_constructor)
+                ->GetFunction(local_context).ToLocalChecked()).Check();
 #else
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(

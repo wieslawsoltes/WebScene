@@ -101,7 +101,7 @@
         event_callback_index_counts;
     std::string last_mousemove_ancestry;
 #endif
-    std::vector<v8::Global<v8::Function>> resize_listeners;
+    std::vector<event_listener_registration> resize_listeners;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
     native_websocket_transport websocket_transport;

@@ -165,7 +165,9 @@ internal sealed partial class WptSubsetRunner
             var source = File.ReadAllText(sourcePath);
             var html = string.Equals(test.Type, "contract", StringComparison.OrdinalIgnoreCase)
                 ? source
-                : PrepareTestHarnessDocument(source, test.Path);
+                : test.Path.EndsWith(".any.js", StringComparison.OrdinalIgnoreCase)
+                    ? PrepareWindowAnyTestHarnessDocument(source, test.Path)
+                    : PrepareTestHarnessDocument(source, test.Path);
             var state = RunHarnessDocument(html, test.Path);
             timer.Stop();
 
@@ -548,6 +550,21 @@ internal sealed partial class WptSubsetRunner
         }
 
         return replaced;
+    }
+
+    private string PrepareWindowAnyTestHarnessDocument(string source, string path)
+    {
+        if (source.Contains("</script", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Window .any.js test '{path}' cannot be safely inlined by the bounded adapter.");
+        }
+
+        return "<!doctype html><meta charset=\"utf-8\">"
+            + "<script>" + HarnessPreamble + "</script>"
+            + "<script>" + _testHarness + "</script>"
+            + "<script>" + HarnessReporter + "</script>"
+            + "<script>" + source + "</script>";
     }
 
     private string ResolvePinnedRelativeClassicScripts(string html, string documentPath)
