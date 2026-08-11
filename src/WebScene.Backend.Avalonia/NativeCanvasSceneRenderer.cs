@@ -262,8 +262,9 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var textShapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
         try
         {
-            foreach (ref readonly var command in commands)
+            for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
             {
+                ref readonly var command = ref commands[commandIndex];
                 switch (command.Kind)
                 {
                     case 30:
@@ -298,7 +299,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     case 17 when !foreground:
                     case 18 when foreground:
                         NativeSceneDrawOperation.RectCommandCount++;
-                        DrawDomShadow(canvas, command);
+                        DrawDomShadow(
+                            canvas,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 1 when !foreground:
                         NativeSceneDrawOperation.RectCommandCount++;
@@ -330,7 +334,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
                         fill.Color = Rgba(command.Rgba);
-                        DrawDomRoundedRect(canvas, command, fill);
+                        DrawDomRoundedRect(
+                            canvas,
+                            command,
+                            fill,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 8 when !foreground:
                         NativeSceneDrawOperation.RectCommandCount++;
@@ -341,7 +349,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                             command.StrokeWidth > 0
                                 ? command.StrokeWidth
                                 : (command.Flags & 0xffff) / 100f);
-                        DrawDomRoundedBorder(canvas, command, stroke);
+                        DrawDomRoundedBorder(
+                            canvas,
+                            command,
+                            stroke,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 9 when foreground:
                         NativeSceneDrawOperation.RectCommandCount++;
@@ -353,7 +365,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
                         fill.Color = Rgba(command.Rgba);
-                        DrawDomRoundedRect(canvas, command, fill);
+                        DrawDomRoundedRect(
+                            canvas,
+                            command,
+                            fill,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 11 when foreground:
                         NativeSceneDrawOperation.RectCommandCount++;
@@ -364,7 +380,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                             command.StrokeWidth > 0
                                 ? command.StrokeWidth
                                 : (command.Flags & 0xffff) / 100f);
-                        DrawDomRoundedBorder(canvas, command, stroke);
+                        DrawDomRoundedBorder(
+                            canvas,
+                            command,
+                            stroke,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 14 when foreground:
                         NativeSceneDrawOperation.LineCommandCount++;
@@ -375,7 +395,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         break;
                     case 12:
                         canvas.Save();
-                        ClipDomRoundedRect(canvas, command);
+                        ClipDomRoundedRect(
+                            canvas,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 13:
                         canvas.Restore();
@@ -393,43 +416,90 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return recorder.EndRecording();
     }
 
-    private static void DrawDomRoundedRect(
-        SKCanvas canvas,
-        in SceneCommand command,
-        SKPaint paint)
+    internal readonly record struct DomCornerRadii(
+        SKPoint TopLeft,
+        SKPoint TopRight,
+        SKPoint BottomRight,
+        SKPoint BottomLeft)
     {
+        public bool Any => TopLeft.X > 0 || TopLeft.Y > 0
+            || TopRight.X > 0 || TopRight.Y > 0
+            || BottomRight.X > 0 || BottomRight.Y > 0
+            || BottomLeft.X > 0 || BottomLeft.Y > 0;
+
+        public bool IsUniformCircle
+            => Math.Abs(TopLeft.X - TopLeft.Y) < 0.001f
+                && Math.Abs(TopLeft.X - TopRight.X) < 0.001f
+                && Math.Abs(TopLeft.X - TopRight.Y) < 0.001f
+                && Math.Abs(TopLeft.X - BottomRight.X) < 0.001f
+                && Math.Abs(TopLeft.X - BottomRight.Y) < 0.001f
+                && Math.Abs(TopLeft.X - BottomLeft.X) < 0.001f
+                && Math.Abs(TopLeft.X - BottomLeft.Y) < 0.001f;
+    }
+
+    internal static DomCornerRadii ResolveDomCornerRadii(
+        ReadOnlySpan<SceneCommand> commands,
+        int commandIndex)
+    {
+        ref readonly var command = ref commands[commandIndex];
         var topLeft = command.RadiusTopLeft;
         var topRight = command.RadiusTopRight;
         var bottomRight = command.RadiusBottomRight;
         var bottomLeft = command.RadiusBottomLeft;
-        if (topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
+        var hasEllipseMetadata = commandIndex > 0
+            && commands[commandIndex - 1].Kind == 32
+            && commands[commandIndex - 1].NodeId == command.NodeId
+            && commands[commandIndex - 1].X == command.X
+            && commands[commandIndex - 1].Y == command.Y
+            && commands[commandIndex - 1].Width == command.Width
+            && commands[commandIndex - 1].Height == command.Height;
+        if (!hasEllipseMetadata
+            && topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
         {
             var legacyRadius = (command.Flags >> 16) / 100f;
             topLeft = topRight = bottomRight = bottomLeft = legacyRadius;
         }
+        var verticalTopLeft = hasEllipseMetadata
+            ? commands[commandIndex - 1].RadiusTopLeft : topLeft;
+        var verticalTopRight = hasEllipseMetadata
+            ? commands[commandIndex - 1].RadiusTopRight : topRight;
+        var verticalBottomRight = hasEllipseMetadata
+            ? commands[commandIndex - 1].RadiusBottomRight : bottomRight;
+        var verticalBottomLeft = hasEllipseMetadata
+            ? commands[commandIndex - 1].RadiusBottomLeft : bottomLeft;
+        return new DomCornerRadii(
+            new(topLeft, verticalTopLeft),
+            new(topRight, verticalTopRight),
+            new(bottomRight, verticalBottomRight),
+            new(bottomLeft, verticalBottomLeft));
+    }
 
-        if (Math.Abs(topLeft - topRight) < 0.001f
-            && Math.Abs(topLeft - bottomRight) < 0.001f
-            && Math.Abs(topLeft - bottomLeft) < 0.001f)
+    private static void DrawDomRoundedRect(
+        SKCanvas canvas,
+        in SceneCommand command,
+        SKPaint paint,
+        in DomCornerRadii radii)
+    {
+        if (radii.IsUniformCircle)
         {
             canvas.DrawRoundRect(
                 command.X,
                 command.Y,
                 command.Width,
                 command.Height,
-                topLeft,
-                topLeft,
+                radii.TopLeft.X,
+                radii.TopLeft.Y,
                 paint);
             return;
         }
 
         using var rounded = new SKRoundRect();
-        var radii = new SKPoint[4]
+        var cornerPoints = new SKPoint[4]
         {
-            new(topLeft, topLeft),
-            new(topRight, topRight),
-            new(bottomRight, bottomRight),
-            new(bottomLeft, bottomLeft)
+            radii.TopLeft,
+            radii.TopRight,
+            radii.BottomRight,
+            radii.BottomLeft
         };
         rounded.SetRectRadii(
             new SKRect(
@@ -437,7 +507,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 command.Y,
                 command.X + command.Width,
                 command.Y + command.Height),
-            radii);
+            cornerPoints);
         canvas.DrawRoundRect(rounded, paint);
     }
 
@@ -454,18 +524,19 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private static void DrawDomRoundedBorder(
         SKCanvas canvas,
         in SceneCommand command,
-        SKPaint paint)
+        SKPaint paint,
+        in DomCornerRadii radii)
     {
         var sides = command.Flags & DomBorderSideMask;
         if (sides == 0)
         {
-            DrawDomRoundedRect(canvas, command, paint);
+            DrawDomRoundedRect(canvas, command, paint, radii);
             return;
         }
 
         if ((command.Flags & DomBorderColorPartition) == 0)
         {
-            DrawDomRoundedBorderSides(canvas, command, paint, sides);
+            DrawDomRoundedBorderSides(canvas, command, paint, sides, radii);
             return;
         }
 
@@ -477,6 +548,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var centerX = (outerLeft + outerRight) * 0.5f;
         var centerY = (outerTop + outerBottom) * 0.5f;
         var roundedCommand = command;
+        var cornerRadii = radii;
 
         DrawSide(DomBorderTop, outerLeft, outerTop, outerRight, outerTop);
         DrawSide(DomBorderRight, outerRight, outerTop, outerRight, outerBottom);
@@ -493,7 +565,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             wedge.Close();
             canvas.Save();
             canvas.ClipPath(wedge, SKClipOperation.Intersect, antialias: true);
-            DrawDomRoundedRect(canvas, roundedCommand, paint);
+            DrawDomRoundedRect(canvas, roundedCommand, paint, cornerRadii);
             canvas.Restore();
         }
     }
@@ -502,54 +574,53 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         SKCanvas canvas,
         in SceneCommand command,
         SKPaint paint,
-        uint sides)
+        uint sides,
+        in DomCornerRadii radii)
     {
         var left = command.X;
         var top = command.Y;
         var right = command.X + command.Width;
         var bottom = command.Y + command.Height;
-        var topLeft = command.RadiusTopLeft;
-        var topRight = command.RadiusTopRight;
-        var bottomRight = command.RadiusBottomRight;
-        var bottomLeft = command.RadiusBottomLeft;
         const float arcHandle = 0.55228475f;
         using var path = new SKPath();
 
         if ((sides & DomBorderTop) != 0)
         {
-            path.MoveTo(left + topLeft, top);
-            path.LineTo(right - topRight, top);
+            path.MoveTo(left + radii.TopLeft.X, top);
+            path.LineTo(right - radii.TopRight.X, top);
         }
         if ((sides & DomBorderRight) != 0)
         {
-            path.MoveTo(right, top + topRight);
-            path.LineTo(right, bottom - bottomRight);
+            path.MoveTo(right, top + radii.TopRight.Y);
+            path.LineTo(right, bottom - radii.BottomRight.Y);
         }
         if ((sides & DomBorderBottom) != 0)
         {
-            path.MoveTo(right - bottomRight, bottom);
-            path.LineTo(left + bottomLeft, bottom);
+            path.MoveTo(right - radii.BottomRight.X, bottom);
+            path.LineTo(left + radii.BottomLeft.X, bottom);
         }
         if ((sides & DomBorderLeft) != 0)
         {
-            path.MoveTo(left, bottom - bottomLeft);
-            path.LineTo(left, top + topLeft);
+            path.MoveTo(left, bottom - radii.BottomLeft.Y);
+            path.LineTo(left, top + radii.TopLeft.Y);
         }
 
-        AppendCorner(DomBorderTop, DomBorderLeft, topLeft,
-            left + topLeft, top, left, top + topLeft, true, true);
-        AppendCorner(DomBorderTop, DomBorderRight, topRight,
-            right - topRight, top, right, top + topRight, false, true);
-        AppendCorner(DomBorderRight, DomBorderBottom, bottomRight,
-            right, bottom - bottomRight, right - bottomRight, bottom, false, false);
-        AppendCorner(DomBorderBottom, DomBorderLeft, bottomLeft,
-            left + bottomLeft, bottom, left, bottom - bottomLeft, true, false);
+        AppendCorner(DomBorderTop, DomBorderLeft, radii.TopLeft,
+            left + radii.TopLeft.X, top, left, top + radii.TopLeft.Y, true, true);
+        AppendCorner(DomBorderTop, DomBorderRight, radii.TopRight,
+            right - radii.TopRight.X, top, right, top + radii.TopRight.Y, false, true);
+        AppendCorner(DomBorderRight, DomBorderBottom, radii.BottomRight,
+            right, bottom - radii.BottomRight.Y,
+            right - radii.BottomRight.X, bottom, false, false);
+        AppendCorner(DomBorderBottom, DomBorderLeft, radii.BottomLeft,
+            left + radii.BottomLeft.X, bottom,
+            left, bottom - radii.BottomLeft.Y, true, false);
         canvas.DrawPath(path, paint);
 
         void AppendCorner(
             uint firstSide,
             uint secondSide,
-            float radius,
+            SKPoint radius,
             float startX,
             float startY,
             float endX,
@@ -557,26 +628,28 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             bool leftCorner,
             bool topCorner)
         {
-            if ((sides & (firstSide | secondSide)) != (firstSide | secondSide) || radius <= 0) return;
+            if ((sides & (firstSide | secondSide)) != (firstSide | secondSide)
+                || radius.X <= 0 || radius.Y <= 0) return;
             path.MoveTo(startX, startY);
-            var control = radius * arcHandle;
+            var controlX = radius.X * arcHandle;
+            var controlY = radius.Y * arcHandle;
             if (topCorner && leftCorner)
-                path.CubicTo(startX - control, startY, endX, endY - control, endX, endY);
+                path.CubicTo(startX - controlX, startY, endX, endY - controlY, endX, endY);
             else if (topCorner)
-                path.CubicTo(startX + control, startY, endX, endY - control, endX, endY);
+                path.CubicTo(startX + controlX, startY, endX, endY - controlY, endX, endY);
             else if (leftCorner)
-                path.CubicTo(startX - control, startY, endX, endY + control, endX, endY);
+                path.CubicTo(startX - controlX, startY, endX, endY + controlY, endX, endY);
             else
-                path.CubicTo(startX, startY + control, endX + control, endY, endX, endY);
+                path.CubicTo(startX, startY + controlY, endX + controlX, endY, endX, endY);
         }
     }
 
-    private static void ClipDomRoundedRect(SKCanvas canvas, in SceneCommand command)
+    private static void ClipDomRoundedRect(
+        SKCanvas canvas,
+        in SceneCommand command,
+        in DomCornerRadii radii)
     {
-        if (command.RadiusTopLeft <= 0
-            && command.RadiusTopRight <= 0
-            && command.RadiusBottomRight <= 0
-            && command.RadiusBottomLeft <= 0)
+        if (!radii.Any)
         {
             canvas.ClipRect(
                 new SKRect(
@@ -597,10 +670,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 command.X + command.Width,
                 command.Y + command.Height),
             [
-                new(command.RadiusTopLeft, command.RadiusTopLeft),
-                new(command.RadiusTopRight, command.RadiusTopRight),
-                new(command.RadiusBottomRight, command.RadiusBottomRight),
-                new(command.RadiusBottomLeft, command.RadiusBottomLeft)
+                radii.TopLeft,
+                radii.TopRight,
+                radii.BottomRight,
+                radii.BottomLeft
             ]);
         canvas.ClipRoundRect(rounded, SKClipOperation.Intersect, antialias: true);
     }
@@ -698,7 +771,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         canvas.Restore();
     }
 
-    private static void DrawDomShadow(SKCanvas canvas, in SceneCommand command)
+    private static void DrawDomShadow(
+        SKCanvas canvas,
+        in SceneCommand command,
+        in DomCornerRadii radii)
     {
         using var blur = command.StrokeWidth > 0
             ? SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.1f, command.StrokeWidth * 0.5f))
@@ -710,7 +786,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             Color = Rgba(command.Rgba),
             MaskFilter = blur
         };
-        DrawDomRoundedRect(canvas, command, paint);
+        DrawDomRoundedRect(canvas, command, paint, radii);
     }
 
     private static void DrawDomSvgPath(

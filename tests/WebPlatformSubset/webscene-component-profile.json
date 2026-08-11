@@ -1298,17 +1298,54 @@
         }
       ],
       "reason": "Unchanged pinned WPT self-overlays a green reference over red clipped content and explicitly passes when no red remains. The bounded visual oracle rejects any exact authored red failure pixels and requires a substantial exact green success surface so a blank or missing render cannot pass."
-    }
-  ],
-  "harnessBlocked": [
+    },
     {
       "path": "css/css-backgrounds/border-radius-shorthand-001.htm",
       "type": "visual",
-      "capabilities": ["border-radius-shorthand", "corner-longhand-expansion", "elliptical-radius-values"],
-      "evidence": ["volume-settings-footer-buttons", "rounded-dialog-controls"],
-      "reason": "This is the nearest official WPT for the base shorthand rule: it checks one-value expansion and a three-value horizontal/two-value vertical ellipse. It is a self-overlaid visual test without rel=match, and WebScene's Avalonia projection still models only one scalar per corner, so elliptical vertical paint is not claimed. WPT does not currently combine this rule with the connected-component composition of var()-substitution plus additive calc(max()) used values; the native/portable raster spike covers that exact composition."
+      "capabilities": ["border-radius-shorthand", "corner-longhand-expansion", "elliptical-radius-values", "self-verifying-visual-wpt"],
+      "evidence": ["volume-settings-footer-buttons", "rounded-dialog-controls", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the shorthand overlays expose no authored red failure pixels"
+        },
+        {
+          "color": "#000000",
+          "minimumPixels": 3000,
+          "description": "both authored black rounded borders are visibly rendered"
+        }
+      ],
+      "visualComponentColorRegionChecks": [
+        {
+          "color": "#000000",
+          "componentIndex": 1,
+          "minimumAnchorWidth": 200,
+          "minimumAnchorHeight": 200,
+          "x": 218,
+          "y": 18,
+          "width": 2,
+          "height": 18,
+          "maximumPixels": 15,
+          "description": "the second border's tall top-right ellipse does not reach the scalar-radius edge region"
+        },
+        {
+          "color": "#000000",
+          "componentIndex": 1,
+          "minimumAnchorWidth": 200,
+          "minimumAnchorHeight": 200,
+          "x": 218,
+          "y": 180,
+          "width": 2,
+          "height": 26,
+          "minimumPixels": 40,
+          "description": "the second border's flat bottom-right ellipse reaches its component-relative edge region"
+        }
+      ],
+      "reason": "Unchanged pinned CSS Backgrounds WPT for scalar shorthand expansion and three-value horizontal/two-value vertical elliptical radii. Exact failure/success colors reject blank or exposed-reference renders, while component-relative edge regions independently distinguish the authored ellipse from the former scalar projection in both native and Chromium captures."
     }
   ],
+  "harnessBlocked": [],
   "excluded": [
     {
       "area": "print-and-paged-media",

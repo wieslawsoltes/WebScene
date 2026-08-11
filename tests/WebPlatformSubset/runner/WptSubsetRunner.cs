@@ -371,9 +371,20 @@ internal sealed partial class WptSubsetRunner
                     Message = observation.Message
                 };
             });
+            var componentColorRegionChecks = test.VisualComponentColorRegionChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.InspectComponentColorRegion(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "component-relative color region",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
             var checks = colorChecks.Concat(gapChecks)
                 .Concat(componentChecks)
                 .Concat(foregroundOffsetChecks)
+                .Concat(componentColorRegionChecks)
                 .ToList();
             timer.Stop();
             var passed = checks.All(check => check.Status == "PASS");
@@ -398,7 +409,8 @@ internal sealed partial class WptSubsetRunner
                     test.VisualChecks,
                     test.VisualGapChecks,
                     test.VisualComponentChecks,
-                    test.VisualForegroundOffsetChecks)
+                    test.VisualForegroundOffsetChecks,
+                    test.VisualComponentColorRegionChecks)
             };
         }
         catch (TimeoutException exception)
@@ -845,6 +857,30 @@ internal sealed partial class WptSubsetRunner
                     {
                         throw new InvalidDataException(
                             $"Visual test '{test.Path}' foreground offset has no assertion.");
+                    }
+                }
+                foreach (var check in test.VisualComponentColorRegionChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.Color);
+                    if (check.ComponentIndex < 0
+                        || check.MinimumAnchorWidth <= 0
+                        || check.MinimumAnchorHeight <= 0
+                        || check.MinimumAnchorWidth > _manifest.Viewport.Width
+                        || check.MinimumAnchorHeight > _manifest.Viewport.Height
+                        || check.X < 0 || check.Y < 0
+                        || check.Width <= 0 || check.Height <= 0
+                        || check.X + check.Width > _manifest.Viewport.Width
+                        || check.Y + check.Height > _manifest.Viewport.Height
+                        || check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component-relative color region has invalid bounds.");
+                    }
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component-relative color region has no assertion.");
                     }
                 }
             }

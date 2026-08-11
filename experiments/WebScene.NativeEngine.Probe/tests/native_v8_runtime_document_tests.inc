@@ -118,6 +118,86 @@ void test_textual_style_state_is_cold_and_copy_on_write()
         "authored textual CSS state was not attributed as cold storage");
 }
 
+void test_elliptical_scene_metadata_is_cold_and_scalar_compatible()
+{
+    using webscene_native::css_length;
+    using webscene_native::length_unit;
+    using webscene_native::native_document;
+
+    native_document document;
+    auto& root = document.body();
+    root.visible = true;
+    root.layout = {0, 0, 400, 180};
+
+    auto& ellipse = document.create_element("div");
+    ellipse.visible = true;
+    ellipse.layout = {10, 10, 100, 80};
+    ellipse.style.background_rgba = 0x010203FFU;
+    ellipse.style.border_top_left_radius = css_length{20, length_unit::pixels};
+    ellipse.style.border_top_right_radius = css_length{30, length_unit::pixels};
+    ellipse.style.border_bottom_right_radius = css_length{40, length_unit::pixels};
+    ellipse.style.border_bottom_left_radius = css_length{10, length_unit::pixels};
+    ellipse.style.set_vertical_corner_radii(
+        css_length{10, length_unit::pixels},
+        css_length{15, length_unit::pixels},
+        css_length{20, length_unit::pixels},
+        css_length{5, length_unit::pixels});
+
+    auto& scalar = document.create_element("div");
+    scalar.visible = true;
+    scalar.layout = {130, 10, 100, 80};
+    scalar.style.background_rgba = 0x040506FFU;
+    scalar.style.border_top_left_radius = css_length{12, length_unit::pixels};
+    scalar.style.border_top_right_radius = css_length{12, length_unit::pixels};
+    scalar.style.border_bottom_right_radius = css_length{12, length_unit::pixels};
+    scalar.style.border_bottom_left_radius = css_length{12, length_unit::pixels};
+
+    require(
+        document.append_child(root, ellipse) && document.append_child(root, scalar),
+        "elliptical scene fixture could not append its nodes");
+    const auto metrics = document.read_allocation_metrics();
+    require(
+        metrics.textual_style_data_count == 1U,
+        "scalar border-radius allocated cold elliptical style state");
+
+    std::vector<webscene_scene_command> commands;
+    std::vector<webscene_scene_string> strings;
+    std::vector<char> string_bytes;
+    document.build_scene(commands, strings, string_bytes);
+
+    auto observed_ellipse = false;
+    auto observed_scalar = false;
+    auto scalar_metadata = false;
+    for (size_t index = 0; index < commands.size(); ++index) {
+        const auto& command = commands[index];
+        if (command.kind == 32U && command.node_id == scalar.id) {
+            scalar_metadata = true;
+        }
+        if (command.kind != 7U) continue;
+        if (command.node_id == ellipse.id && index > 0U) {
+            const auto& metadata = commands[index - 1U];
+            observed_ellipse = metadata.kind == 32U
+                && metadata.node_id == ellipse.id
+                && std::abs(command.radius_top_left - 20.0F) < 0.01F
+                && std::abs(command.radius_top_right - 30.0F) < 0.01F
+                && std::abs(command.radius_bottom_right - 40.0F) < 0.01F
+                && std::abs(command.radius_bottom_left - 10.0F) < 0.01F
+                && std::abs(metadata.radius_top_left - 10.0F) < 0.01F
+                && std::abs(metadata.radius_top_right - 15.0F) < 0.01F
+                && std::abs(metadata.radius_bottom_right - 20.0F) < 0.01F
+                && std::abs(metadata.radius_bottom_left - 5.0F) < 0.01F;
+        } else if (command.node_id == scalar.id) {
+            observed_scalar = std::abs(command.radius_top_left - 12.0F) < 0.01F
+                && std::abs(command.radius_top_right - 12.0F) < 0.01F
+                && std::abs(command.radius_bottom_right - 12.0F) < 0.01F
+                && std::abs(command.radius_bottom_left - 12.0F) < 0.01F;
+        }
+    }
+    require(observed_ellipse, "elliptical radii did not reach companion scene metadata");
+    require(observed_scalar, "scalar rounded scene command changed shape");
+    require(!scalar_metadata, "scalar border-radius paid for elliptical scene metadata");
+}
+
 void test_table_and_form_state_are_cold_for_ordinary_nodes()
 {
     webscene_native::native_document document;

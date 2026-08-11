@@ -59,63 +59,162 @@
         return result;
     }
 
-    static bool apply_corner_radius_declaration(
+    static bool apply_corner_radius_values(
         std::string_view name,
         const std::string& value,
         css_length& top_left,
         css_length& top_right,
         css_length& bottom_right,
-        css_length& bottom_left)
+        css_length& bottom_left,
+        css_length& top_left_y,
+        css_length& top_right_y,
+        css_length& bottom_right_y,
+        css_length& bottom_left_y)
     {
-        const auto assign = [&](css_length& target) {
-            target = native_document::parse_length(value);
-        };
-        if (name == "border-top-left-radius" || name == "border-start-start-radius") {
-            assign(top_left);
-            return true;
-        }
-        if (name == "border-top-right-radius" || name == "border-start-end-radius") {
-            assign(top_right);
-            return true;
-        }
-        if (name == "border-bottom-right-radius" || name == "border-end-end-radius") {
-            assign(bottom_right);
-            return true;
-        }
-        if (name == "border-bottom-left-radius" || name == "border-end-start-radius") {
-            assign(bottom_left);
-            return true;
-        }
-        if (name != "border-radius") return false;
-
-        std::vector<css_length> radii;
+        std::vector<css_length> horizontal;
+        std::vector<css_length> vertical;
+        auto* target = &horizontal;
         size_t token_start = std::string::npos;
         int parenthesis_depth = 0;
+        size_t slash_count = 0U;
         for (size_t index = 0; index <= value.size(); ++index) {
             const auto character = index < value.size() ? value[index] : ' ';
             if (character == '(') ++parenthesis_depth;
             else if (character == ')' && parenthesis_depth > 0) --parenthesis_depth;
+            const auto slash = parenthesis_depth == 0 && character == '/';
             const auto separator = parenthesis_depth == 0
-                && (std::isspace(static_cast<unsigned char>(character)) || character == '/');
+                && (std::isspace(static_cast<unsigned char>(character)) || slash);
             if (!separator && token_start == std::string::npos) token_start = index;
             if (separator && token_start != std::string::npos) {
-                radii.push_back(native_document::parse_length(
+                target->push_back(native_document::parse_length(
                     value.substr(token_start, index - token_start)));
                 token_start = std::string::npos;
-                if (radii.size() == 4U) break;
             }
-            // Elliptical vertical radii follow the top-level slash. The scene
-            // ABI currently carries one radius per corner, so retain the
-            // horizontal radii instead of accidentally tokenizing the calc()
-            // expression at its internal whitespace.
-            if (character == '/' && parenthesis_depth == 0) break;
+            if (slash) {
+                ++slash_count;
+                target = &vertical;
+            }
         }
-        if (radii.empty()) return true;
-        top_left = radii[0];
-        top_right = radii.size() > 1U ? radii[1] : radii[0];
-        bottom_right = radii.size() > 2U ? radii[2] : radii[0];
-        bottom_left = radii.size() > 3U ? radii[3]
-            : radii.size() > 1U ? radii[1] : radii[0];
+
+        const auto assign = [&](css_length& horizontal_radius,
+                                css_length& vertical_radius) {
+            if (horizontal.empty() || horizontal.size() > 2U
+                || slash_count != 0U || !vertical.empty()) return;
+            horizontal_radius = horizontal[0];
+            vertical_radius = horizontal.size() > 1U ? horizontal[1] : horizontal[0];
+        };
+        if (name == "border-top-left-radius" || name == "border-start-start-radius") {
+            assign(top_left, top_left_y);
+            return true;
+        }
+        if (name == "border-top-right-radius" || name == "border-start-end-radius") {
+            assign(top_right, top_right_y);
+            return true;
+        }
+        if (name == "border-bottom-right-radius" || name == "border-end-end-radius") {
+            assign(bottom_right, bottom_right_y);
+            return true;
+        }
+        if (name == "border-bottom-left-radius" || name == "border-end-start-radius") {
+            assign(bottom_left, bottom_left_y);
+            return true;
+        }
+        if (name != "border-radius") return false;
+        if (horizontal.empty() || horizontal.size() > 4U || vertical.size() > 4U
+            || slash_count > 1U || (slash_count == 1U && vertical.empty())) return true;
+        const auto expand = [](const std::vector<css_length>& values,
+                               css_length& first,
+                               css_length& second,
+                               css_length& third,
+                               css_length& fourth) {
+            first = values[0];
+            second = values.size() > 1U ? values[1] : values[0];
+            third = values.size() > 2U ? values[2] : values[0];
+            fourth = values.size() > 3U ? values[3]
+                : values.size() > 1U ? values[1] : values[0];
+        };
+        expand(horizontal, top_left, top_right, bottom_right, bottom_left);
+        if (vertical.empty()) {
+            top_left_y = top_left;
+            top_right_y = top_right;
+            bottom_right_y = bottom_right;
+            bottom_left_y = bottom_left;
+        } else {
+            expand(vertical, top_left_y, top_right_y, bottom_right_y, bottom_left_y);
+        }
+        return true;
+    }
+
+    static bool apply_corner_radius_declaration(
+        std::string_view name,
+        const std::string& value,
+        node_style& style)
+    {
+        auto top_left_y = style.border_top_left_radius_y();
+        auto top_right_y = style.border_top_right_radius_y();
+        auto bottom_right_y = style.border_bottom_right_radius_y();
+        auto bottom_left_y = style.border_bottom_left_radius_y();
+        if (!apply_corner_radius_values(
+                name,
+                value,
+                style.border_top_left_radius,
+                style.border_top_right_radius,
+                style.border_bottom_right_radius,
+                style.border_bottom_left_radius,
+                top_left_y,
+                top_right_y,
+                bottom_right_y,
+                bottom_left_y)) {
+            return false;
+        }
+        style.set_vertical_corner_radii(
+            top_left_y,
+            top_right_y,
+            bottom_right_y,
+            bottom_left_y);
+        return true;
+    }
+
+    static bool apply_corner_radius_declaration(
+        std::string_view name,
+        const std::string& value,
+        node_style::pseudo_element& pseudo)
+    {
+        auto top_left_y = pseudo.elliptical_border_radius
+            ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius;
+        auto top_right_y = pseudo.elliptical_border_radius
+            ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius;
+        auto bottom_right_y = pseudo.elliptical_border_radius
+            ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius;
+        auto bottom_left_y = pseudo.elliptical_border_radius
+            ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius;
+        if (!apply_corner_radius_values(
+                name,
+                value,
+                pseudo.border_top_left_radius,
+                pseudo.border_top_right_radius,
+                pseudo.border_bottom_right_radius,
+                pseudo.border_bottom_left_radius,
+                top_left_y,
+                top_right_y,
+                bottom_right_y,
+                bottom_left_y)) {
+            return false;
+        }
+        pseudo.border_top_left_radius_y = top_left_y;
+        pseudo.border_top_right_radius_y = top_right_y;
+        pseudo.border_bottom_right_radius_y = bottom_right_y;
+        pseudo.border_bottom_left_radius_y = bottom_left_y;
+        const auto differs = [](css_length first, css_length second) {
+            return first.value != second.value
+                || first.unit != second.unit
+                || first.pixel_offset != second.pixel_offset;
+        };
+        pseudo.elliptical_border_radius =
+            differs(top_left_y, pseudo.border_top_left_radius)
+            || differs(top_right_y, pseudo.border_top_right_radius)
+            || differs(bottom_right_y, pseudo.border_bottom_right_radius)
+            || differs(bottom_left_y, pseudo.border_bottom_left_radius);
         return true;
     }
 
@@ -301,10 +400,7 @@
         } else if (apply_corner_radius_declaration(
             name,
             value,
-            pseudo.border_top_left_radius,
-            pseudo.border_top_right_radius,
-            pseudo.border_bottom_right_radius,
-            pseudo.border_bottom_left_radius)) {
+            pseudo)) {
         } else if (name == "background" || name == "background-color") {
             pseudo.background_current_color = value == "currentcolor" || value == "currentColor";
             pseudo.background_rgba = pseudo.background_current_color
@@ -1267,6 +1363,11 @@
                 reset.border_top_right_radius = previous.border_top_right_radius;
                 reset.border_bottom_right_radius = previous.border_bottom_right_radius;
                 reset.border_bottom_left_radius = previous.border_bottom_left_radius;
+                reset.set_vertical_corner_radii(
+                    previous.border_top_left_radius_y(),
+                    previous.border_top_right_radius_y(),
+                    previous.border_bottom_right_radius_y(),
+                    previous.border_bottom_left_radius_y());
             }
             if (is_inline(inline_box_shadow)) {
                 reset.box_shadow_offset_x = previous.box_shadow_offset_x;
@@ -1500,10 +1601,7 @@
                 apply_corner_radius_declaration(
                     name,
                     value,
-                    node.style.border_top_left_radius,
-                    node.style.border_top_right_radius,
-                    node.style.border_bottom_right_radius,
-                    node.style.border_bottom_left_radius);
+                    node.style);
             }
             return;
         } else if (name == "transform") {
@@ -2310,6 +2408,7 @@
             node.style.border_top_right_radius = {};
             node.style.border_bottom_right_radius = {};
             node.style.border_bottom_left_radius = {};
+            node.style.clear_vertical_corner_radii();
         }
         if ((node.style.inline_property_mask & inline_transform) == 0U) {
             node.style.transform_translate_x = {};

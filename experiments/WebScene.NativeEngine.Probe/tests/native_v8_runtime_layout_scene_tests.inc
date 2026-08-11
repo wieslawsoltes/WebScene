@@ -238,6 +238,62 @@ void test_rounded_overflow_visual_fixture_geometry(webscene_engine* engine)
         "rounded overflow WPT geometry diverged: " + geometry);
 }
 
+void test_elliptical_corner_radii_reach_cssom(webscene_engine* engine)
+{
+    require(
+        evaluate(engine, "true", "native-elliptical-radius-startup.js") == "true",
+        "elliptical radius fixture runtime did not start");
+    resize(engine, 400, 180, 45U);
+    wait_for_consumed_inputs(
+        engine,
+        1U,
+        "elliptical radius fixture resize was not consumed");
+    const auto cssom = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            .radius-probe {
+              position:absolute; top:10px; width:100px; height:80px; font-size:10px;
+            }
+            #longhand {
+              left:10px; background:rgb(1,2,3);
+              border-top-left-radius:20px 10px;
+              border-top-right-radius:30px 15px;
+              border-bottom-right-radius:40px 20px;
+              border-bottom-left-radius:10px 5px;
+            }
+            #shorthand {
+              left:130px; background:rgb(4,5,6);
+              border-radius:2em 3em 4em 1em / 1em 1.5em 2em .5em;
+            }
+            #scalar {
+              left:250px; background:rgb(7,8,9); border-radius:12px;
+            }
+          </style>
+          <div id="longhand" class="radius-probe"></div>
+          <div id="shorthand" class="radius-probe"></div>
+          <div id="scalar" class="radius-probe"></div>`;
+          const serialize = element => {
+            const style = getComputedStyle(element);
+            return {
+              all: style.borderRadius,
+              tl: style.borderTopLeftRadius,
+              tr: style.borderTopRightRadius,
+              br: style.borderBottomRightRadius,
+              bl: style.borderBottomLeftRadius
+            };
+          };
+          return {
+            longhand: serialize(document.querySelector('#longhand')),
+            shorthand: serialize(document.querySelector('#shorthand')),
+            scalar: serialize(document.querySelector('#scalar'))
+          };
+        })()
+    )JS", "native-elliptical-radius-cssom.js");
+    require(
+        cssom == R"({"longhand":{"all":"20px 30px 40px 10px / 10px 15px 20px 5px","tl":"20px 10px","tr":"30px 15px","br":"40px 20px","bl":"10px 5px"},"shorthand":{"all":"20px 30px 40px 10px / 10px 15px 20px 5px","tl":"20px 10px","tr":"30px 15px","br":"40px 20px","bl":"10px 5px"},"scalar":{"all":"12px","tl":"12px","tr":"12px","br":"12px","bl":"12px"}})",
+        "elliptical border-radius CSSOM serialization diverged: " + cssom);
+}
+
 void test_row_flex_vertical_scroll_extent_remains_bounded(webscene_engine* engine)
 {
     resize(engine, 400, 200, 43U);

@@ -112,6 +112,18 @@ int main()
         "ordinary V8 runtime unexpectedly advertised Inspector support");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
+        filter != nullptr) {
+        if (std::string_view(filter) != "elliptical-corner-radii") {
+            fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
+        }
+        test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
+        auto* focused_engine = webscene_engine_create(0);
+        require(focused_engine != nullptr, "focused engine creation failed");
+        test_elliptical_corner_radii_reach_cssom(focused_engine);
+        webscene_engine_destroy(focused_engine);
+        return 0;
+    }
     test_binary_reverse_callback_is_leased_and_completed();
     test_generated_binary_cross_context_promise();
     test_shared_isolate_reuses_destroyed_context_slot();
@@ -121,6 +133,7 @@ int main()
     test_hidden_document_defers_presentation_work();
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();
+    test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
     test_shadow_dom_state_is_document_cold_and_pay_for_use();
     test_document_clear_releases_and_reinitializes_node_pool();
@@ -239,6 +252,7 @@ int main()
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
     test_rounded_overflow_visual_fixture_geometry(engine);
+    test_elliptical_corner_radii_reach_cssom(engine);
     test_row_flex_vertical_scroll_extent_remains_bounded(engine);
     test_toolbar_scroll_chevrons_use_single_rotation(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);

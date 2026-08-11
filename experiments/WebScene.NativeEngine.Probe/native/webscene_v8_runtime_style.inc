@@ -138,6 +138,7 @@
             node.style.border_top_right_radius = {};
             node.style.border_bottom_right_radius = {};
             node.style.border_bottom_left_radius = {};
+            node.style.clear_vertical_corner_radii();
             node.style.inline_property_mask &= ~inline_border_radius;
         } else if (name == "transform") {
             node.style.transform_translate_x = {};
@@ -513,10 +514,7 @@
             apply_corner_radius_declaration(
                 name,
                 value,
-                node->style.border_top_left_radius,
-                node->style.border_top_right_radius,
-                node->style.border_bottom_right_radius,
-                node->style.border_bottom_left_radius);
+                node->style);
             node->style.inline_property_mask |= inline_border_radius;
         } else if (name == "transform") {
             native_document::parse_transform_translate(
@@ -1101,6 +1099,29 @@
             return length.unit == length_unit::automatic
                 ? std::string{"0px"} : format_computed_length(length, 0);
         };
+        const auto format_corner_radius = [&](const css_length& horizontal,
+                                              const css_length& vertical) {
+            const auto horizontal_value = format_computed_length(
+                horizontal, node->layout.width);
+            const auto vertical_value = format_computed_length(
+                vertical, node->layout.height);
+            return horizontal_value == vertical_value
+                ? horizontal_value
+                : horizontal_value + " " + vertical_value;
+        };
+        const auto compress_corner_axis = [](const std::array<std::string, 4>& values) {
+            if (values[0] == values[1] && values[0] == values[2]
+                && values[0] == values[3]) {
+                return values[0];
+            }
+            if (values[0] == values[2] && values[1] == values[3]) {
+                return values[0] + " " + values[1];
+            }
+            if (values[1] == values[3]) {
+                return values[0] + " " + values[1] + " " + values[2];
+            }
+            return values[0] + " " + values[1] + " " + values[2] + " " + values[3];
+        };
         const auto resolve_transform_origin = [](css_length length, float available) {
             return length.unit == length_unit::percent
                 ? available * length.value / 100.0F + length.pixel_offset
@@ -1242,13 +1263,21 @@
         } else if (name == "borderLeftColor") {
             value = serialize_color(node->style.border_left_rgba);
         } else if (name == "borderTopLeftRadius") {
-            value = format_length(node->style.border_top_left_radius);
+            value = format_corner_radius(
+                node->style.border_top_left_radius,
+                node->style.border_top_left_radius_y());
         } else if (name == "borderTopRightRadius") {
-            value = format_length(node->style.border_top_right_radius);
+            value = format_corner_radius(
+                node->style.border_top_right_radius,
+                node->style.border_top_right_radius_y());
         } else if (name == "borderBottomRightRadius") {
-            value = format_length(node->style.border_bottom_right_radius);
+            value = format_corner_radius(
+                node->style.border_bottom_right_radius,
+                node->style.border_bottom_right_radius_y());
         } else if (name == "borderBottomLeftRadius") {
-            value = format_length(node->style.border_bottom_left_radius);
+            value = format_corner_radius(
+                node->style.border_bottom_left_radius,
+                node->style.border_bottom_left_radius_y());
         } else if (name == "gridArea") {
             value = node->style.grid().area_value;
         } else if (name == "gridRow") {
@@ -1270,7 +1299,18 @@
         } else if (name == "boxSizing") {
             value = node->style.border_box ? "border-box" : "content-box";
         } else if (name == "borderRadius") {
-            value = serialize_css_number(node->style.border_top_left_radius.value) + "px";
+            const std::array<std::string, 4> horizontal{
+                format_computed_length(node->style.border_top_left_radius, node->layout.width),
+                format_computed_length(node->style.border_top_right_radius, node->layout.width),
+                format_computed_length(node->style.border_bottom_right_radius, node->layout.width),
+                format_computed_length(node->style.border_bottom_left_radius, node->layout.width)};
+            const std::array<std::string, 4> vertical{
+                format_computed_length(node->style.border_top_left_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_top_right_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_bottom_right_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_bottom_left_radius_y(), node->layout.height)};
+            value = compress_corner_axis(horizontal);
+            if (horizontal != vertical) value += " / " + compress_corner_axis(vertical);
         } else if (name == "boxShadow") {
             if (!node->style.box_shadow_present) {
                 value = "none";
@@ -1668,10 +1708,7 @@
             apply_corner_radius_declaration(
                 "border-radius",
                 value,
-                node->style.border_top_left_radius,
-                node->style.border_top_right_radius,
-                node->style.border_bottom_right_radius,
-            node->style.border_bottom_left_radius);
+                node->style);
             node->style.inline_property_mask |= inline_border_radius;
         } else if (name == "boxShadow") {
             auto complete = true;

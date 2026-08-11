@@ -251,22 +251,82 @@ void native_document::append_scene(
         float top_right;
         float bottom_right;
         float bottom_left;
+        float top_left_y;
+        float top_right_y;
+        float bottom_right_y;
+        float bottom_left_y;
 
         bool any() const noexcept
         {
-            return top_left > 0 || top_right > 0 || bottom_right > 0 || bottom_left > 0;
+            return top_left > 0 || top_right > 0 || bottom_right > 0 || bottom_left > 0
+                || top_left_y > 0 || top_right_y > 0
+                || bottom_right_y > 0 || bottom_left_y > 0;
+        }
+
+        bool elliptical() const noexcept
+        {
+            return std::abs(top_left - top_left_y) > 0.01F
+                || std::abs(top_right - top_right_y) > 0.01F
+                || std::abs(bottom_right - bottom_right_y) > 0.01F
+                || std::abs(bottom_left - bottom_left_y) > 0.01F;
         }
     };
     const auto resolve_radii = [&](css_length top_left, css_length top_right,
                                    css_length bottom_right, css_length bottom_left,
+                                   css_length top_left_y, css_length top_right_y,
+                                   css_length bottom_right_y, css_length bottom_left_y,
                                    float width, float height) {
-        const auto limit = std::max(0.0F, std::min(width, height) * 0.5F);
-        const auto reference = std::min(width, height);
-        return resolved_radii{
-            std::clamp(resolve_length(node, top_left, reference, 0), 0.0F, limit),
-            std::clamp(resolve_length(node, top_right, reference, 0), 0.0F, limit),
-            std::clamp(resolve_length(node, bottom_right, reference, 0), 0.0F, limit),
-            std::clamp(resolve_length(node, bottom_left, reference, 0), 0.0F, limit)};
+        resolved_radii result{
+            std::max(0.0F, resolve_length(node, top_left, width, 0)),
+            std::max(0.0F, resolve_length(node, top_right, width, 0)),
+            std::max(0.0F, resolve_length(node, bottom_right, width, 0)),
+            std::max(0.0F, resolve_length(node, bottom_left, width, 0)),
+            std::max(0.0F, resolve_length(node, top_left_y, height, 0)),
+            std::max(0.0F, resolve_length(node, top_right_y, height, 0)),
+            std::max(0.0F, resolve_length(node, bottom_right_y, height, 0)),
+            std::max(0.0F, resolve_length(node, bottom_left_y, height, 0))};
+        auto scale = 1.0F;
+        const auto constrain = [&](float available, float sum) {
+            if (sum > available && sum > 0) scale = std::min(scale, available / sum);
+        };
+        constrain(width, result.top_left + result.top_right);
+        constrain(width, result.bottom_left + result.bottom_right);
+        constrain(height, result.top_left_y + result.bottom_left_y);
+        constrain(height, result.top_right_y + result.bottom_right_y);
+        if (scale < 1.0F) {
+            result.top_left *= scale;
+            result.top_right *= scale;
+            result.bottom_right *= scale;
+            result.bottom_left *= scale;
+            result.top_left_y *= scale;
+            result.top_right_y *= scale;
+            result.bottom_right_y *= scale;
+            result.bottom_left_y *= scale;
+        }
+        return result;
+    };
+    const auto append_ellipse_metadata = [&](const resolved_radii& radii,
+                                             float x, float y,
+                                             float width, float height) {
+        if (!radii.elliptical()) return;
+        // Kind 32 is an ABI-preserving companion for the immediately following
+        // rounded command. Geometry is duplicated for damage tracking; the four
+        // existing radius fields carry vertical radii. Older presenters ignore
+        // this command and retain their established circular fallback.
+        commands.push_back(webscene_scene_command{
+            32U,
+            0U,
+            x,
+            y,
+            width,
+            height,
+            0U,
+            node.id,
+            radii.top_left_y,
+            radii.top_right_y,
+            radii.bottom_right_y,
+            radii.bottom_left_y,
+            0});
     };
     const auto append_pseudo = [&](const node_style::pseudo_element& pseudo) {
         if (!paint_self || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
@@ -302,8 +362,17 @@ void native_document::append_scene(
                 pseudo.border_top_right_radius,
                 pseudo.border_bottom_right_radius,
                 pseudo.border_bottom_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
                 width,
                 height);
+            append_ellipse_metadata(radii, x, y, width, height);
             commands.push_back(webscene_scene_command{
                 radii.any()
                     ? pseudo_paints_in_foreground ? 10U : 7U
@@ -344,6 +413,10 @@ void native_document::append_scene(
         node.style.border_top_right_radius,
         node.style.border_bottom_right_radius,
         node.style.border_bottom_left_radius,
+        node.style.border_top_left_radius_y(),
+        node.style.border_top_right_radius_y(),
+        node.style.border_bottom_right_radius_y(),
+        node.style.border_bottom_left_radius_y(),
         node.layout.width,
         node.layout.height);
     const auto pack_round_rect = [](float packed_radius, float stroke_width) {
@@ -361,19 +434,32 @@ void native_document::append_scene(
         const auto shadow_width = node.layout.width + spread * 2.0F;
         const auto shadow_height = node.layout.height + spread * 2.0F;
         if (shadow_width > 0 && shadow_height > 0) {
-            commands.push_back(webscene_scene_command{
-                paint_box_in_foreground ? 18U : 17U,
-                0U,
-                node.layout.x + node.style.box_shadow_offset_x - spread,
-                node.layout.y + node.style.box_shadow_offset_y - spread,
-                shadow_width,
-                shadow_height,
-                with_opacity(node.style.box_shadow_rgba),
-                node.id,
+            const auto shadow_radii = resolved_radii{
                 std::max(0.0F, radii.top_left + spread),
                 std::max(0.0F, radii.top_right + spread),
                 std::max(0.0F, radii.bottom_right + spread),
                 std::max(0.0F, radii.bottom_left + spread),
+                std::max(0.0F, radii.top_left_y + spread),
+                std::max(0.0F, radii.top_right_y + spread),
+                std::max(0.0F, radii.bottom_right_y + spread),
+                std::max(0.0F, radii.bottom_left_y + spread)};
+            const auto shadow_x = node.layout.x + node.style.box_shadow_offset_x - spread;
+            const auto shadow_y = node.layout.y + node.style.box_shadow_offset_y - spread;
+            append_ellipse_metadata(
+                shadow_radii, shadow_x, shadow_y, shadow_width, shadow_height);
+            commands.push_back(webscene_scene_command{
+                paint_box_in_foreground ? 18U : 17U,
+                0U,
+                shadow_x,
+                shadow_y,
+                shadow_width,
+                shadow_height,
+                with_opacity(node.style.box_shadow_rgba),
+                node.id,
+                shadow_radii.top_left,
+                shadow_radii.top_right,
+                shadow_radii.bottom_right,
+                shadow_radii.bottom_left,
                 node.style.box_shadow_blur_radius});
         }
     }
@@ -381,6 +467,12 @@ void native_document::append_scene(
         && (node.style.background_rgba & 0xFFU) != 0U
         && node.layout.width > 0
         && node.layout.height > 0) {
+        append_ellipse_metadata(
+            radii,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height);
         commands.push_back(webscene_scene_command{
             radii.any()
                 ? paint_box_in_foreground ? 10U : 7U
@@ -563,21 +655,38 @@ void native_document::append_scene(
             const auto partition_colors = all_sides && !uniform_color;
             const auto append_rounded_border = [&](uint32_t color, uint32_t side_flags) {
                 if ((color & 0xFFU) == 0U || side_flags == 0U) return;
+                const auto border_x = node.layout.x + left_inset;
+                const auto border_y = node.layout.y + top_inset;
+                const auto border_width = std::max(
+                    0.0F, node.layout.width - left_inset - right_inset);
+                const auto border_height = std::max(
+                    0.0F, node.layout.height - top_inset - bottom_inset);
+                const auto border_radii = resolved_radii{
+                    std::max(0.0F, radii.top_left - left_inset),
+                    std::max(0.0F, radii.top_right - right_inset),
+                    std::max(0.0F, radii.bottom_right - right_inset),
+                    std::max(0.0F, radii.bottom_left - left_inset),
+                    std::max(0.0F, radii.top_left_y - top_inset),
+                    std::max(0.0F, radii.top_right_y - top_inset),
+                    std::max(0.0F, radii.bottom_right_y - bottom_inset),
+                    std::max(0.0F, radii.bottom_left_y - bottom_inset)};
+                append_ellipse_metadata(
+                    border_radii, border_x, border_y, border_width, border_height);
                 commands.push_back(webscene_scene_command{
                     paint_box_in_foreground ? 11U : 8U,
                     pack_round_rect(0, rounded_stroke_width)
                         | (partition_colors ? border_color_partition_flag : 0U)
                         | (all_sides && uniform_width && uniform_color ? 0U : side_flags),
-                    node.layout.x + left_inset,
-                    node.layout.y + top_inset,
-                    std::max(0.0F, node.layout.width - left_inset - right_inset),
-                    std::max(0.0F, node.layout.height - top_inset - bottom_inset),
+                    border_x,
+                    border_y,
+                    border_width,
+                    border_height,
                     with_opacity(color),
                     node.id,
-                    std::max(0.0F, radii.top_left - std::max(top_inset, left_inset)),
-                    std::max(0.0F, radii.top_right - std::max(top_inset, right_inset)),
-                    std::max(0.0F, radii.bottom_right - std::max(bottom_inset, right_inset)),
-                    std::max(0.0F, radii.bottom_left - std::max(bottom_inset, left_inset)),
+                    border_radii.top_left,
+                    border_radii.top_right,
+                    border_radii.bottom_right,
+                    border_radii.bottom_left,
                     rounded_stroke_width});
             };
             const std::array<uint32_t, 4> colors{
@@ -663,6 +772,12 @@ void native_document::append_scene(
         // Kinds 12/13 bracket the element's pseudo/content/descendant paint.
         // The box background and border intentionally remain outside its own
         // overflow clip, matching CSS background/border painting semantics.
+        append_ellipse_metadata(
+            radii,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height);
         commands.push_back(webscene_scene_command{
             12U,
             0U,

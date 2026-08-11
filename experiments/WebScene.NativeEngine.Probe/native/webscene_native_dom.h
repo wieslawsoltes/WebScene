@@ -352,6 +352,10 @@ struct node_style final {
         css_length border_top_right_radius{};
         css_length border_bottom_right_radius{};
         css_length border_bottom_left_radius{};
+        css_length border_top_left_radius_y{};
+        css_length border_top_right_radius_y{};
+        css_length border_bottom_right_radius_y{};
+        css_length border_bottom_left_radius_y{};
         layout_rect layout{};
         display_mode display{display_mode::inline_flow};
         position_mode position{position_mode::normal};
@@ -368,6 +372,7 @@ struct node_style final {
         bool display_none{false};
         bool visibility_hidden{false};
         bool align_self_specified{false};
+        bool elliptical_border_radius{false};
     };
 
     struct pseudo_element_pair final {
@@ -510,6 +515,14 @@ struct node_style final {
         std::string svg_stroke;
         std::string list_style_position;
         std::string list_style_type;
+        // Vertical corner radii are cold: circular radii use the four hot
+        // horizontal values above. Elliptical declarations pay for this state
+        // through the already-indirected extended style block.
+        css_length border_top_left_radius_y{};
+        css_length border_top_right_radius_y{};
+        css_length border_bottom_right_radius_y{};
+        css_length border_bottom_left_radius_y{};
+        bool elliptical_border_radius{false};
     };
 
     const textual_style_data& textual() const noexcept
@@ -551,6 +564,70 @@ struct node_style final {
     const textual_style_data* textual_data_identity() const noexcept
     {
         return textual_state.get();
+    }
+
+    css_length border_top_left_radius_y() const noexcept
+    {
+        return textual_state != nullptr && textual_state->elliptical_border_radius
+            ? textual_state->border_top_left_radius_y
+            : border_top_left_radius;
+    }
+
+    css_length border_top_right_radius_y() const noexcept
+    {
+        return textual_state != nullptr && textual_state->elliptical_border_radius
+            ? textual_state->border_top_right_radius_y
+            : border_top_right_radius;
+    }
+
+    css_length border_bottom_right_radius_y() const noexcept
+    {
+        return textual_state != nullptr && textual_state->elliptical_border_radius
+            ? textual_state->border_bottom_right_radius_y
+            : border_bottom_right_radius;
+    }
+
+    css_length border_bottom_left_radius_y() const noexcept
+    {
+        return textual_state != nullptr && textual_state->elliptical_border_radius
+            ? textual_state->border_bottom_left_radius_y
+            : border_bottom_left_radius;
+    }
+
+    void set_vertical_corner_radii(
+        css_length top_left,
+        css_length top_right,
+        css_length bottom_right,
+        css_length bottom_left)
+    {
+        const auto equal = [](css_length first, css_length second) {
+            return first.value == second.value
+                && first.unit == second.unit
+                && first.pixel_offset == second.pixel_offset;
+        };
+        const auto elliptical = !equal(top_left, border_top_left_radius)
+            || !equal(top_right, border_top_right_radius)
+            || !equal(bottom_right, border_bottom_right_radius)
+            || !equal(bottom_left, border_bottom_left_radius);
+        if (!elliptical) {
+            if (auto* data = mutable_textual_if_present(); data != nullptr) {
+                data->elliptical_border_radius = false;
+            }
+            return;
+        }
+        auto& data = mutable_textual();
+        data.border_top_left_radius_y = top_left;
+        data.border_top_right_radius_y = top_right;
+        data.border_bottom_right_radius_y = bottom_right;
+        data.border_bottom_left_radius_y = bottom_left;
+        data.elliptical_border_radius = true;
+    }
+
+    void clear_vertical_corner_radii()
+    {
+        if (auto* data = mutable_textual_if_present(); data != nullptr) {
+            data->elliptical_border_radius = false;
+        }
     }
     uint64_t inline_property_mask{0};
     uint64_t important_property_mask{0};

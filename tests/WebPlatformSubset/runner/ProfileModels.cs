@@ -32,6 +32,7 @@ internal sealed class ProfileTest
     public List<VisualColorGapCheck> VisualGapChecks { get; init; } = [];
     public List<VisualComponentCheck> VisualComponentChecks { get; init; } = [];
     public List<VisualForegroundOffsetCheck> VisualForegroundOffsetChecks { get; init; } = [];
+    public List<VisualComponentColorRegionCheck> VisualComponentColorRegionChecks { get; init; } = [];
     public string? Reason { get; init; }
 }
 
@@ -82,6 +83,21 @@ internal sealed class VisualForegroundOffsetCheck
     public int MinimumComponentPixels { get; init; } = 1;
     public int? MinimumOffsetPixels { get; init; }
     public int? MaximumOffsetPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualComponentColorRegionCheck
+{
+    public required string Color { get; init; }
+    public int ComponentIndex { get; init; }
+    public int MinimumAnchorWidth { get; init; } = 1;
+    public int MinimumAnchorHeight { get; init; } = 1;
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int? MinimumPixels { get; init; }
+    public int? MaximumPixels { get; init; }
     public string? Description { get; init; }
 }
 

@@ -26,6 +26,13 @@ internal static class VisualColorOracle
         PixelBounds? SecondBounds,
         string Message);
 
+    internal readonly record struct ComponentColorRegionObservation(
+        bool Passed,
+        long? Pixels,
+        PixelBounds? AnchorBounds,
+        PixelBounds? RegionBounds,
+        string Message);
+
     internal static (byte Red, byte Green, byte Blue) Parse(string value)
     {
         if (value.Length != 7 || value[0] != '#'
@@ -366,6 +373,118 @@ internal static class VisualColorOracle
         return leftmost;
     }
 
+    internal static ComponentColorRegionObservation InspectComponentColorRegion(
+        WptRenderSnapshot snapshot,
+        VisualComponentColorRegionCheck check)
+    {
+        var (red, green, blue) = Parse(check.Color);
+        var width = snapshot.PixelSize.Width;
+        var height = snapshot.PixelSize.Height;
+        var visited = new bool[checked(width * height)];
+        var anchors = new List<PixelBounds>();
+
+        bool IsColor(int x, int y)
+        {
+            var offset = checked((y * width + x) * 4);
+            return snapshot.Pixels[offset] == blue
+                && snapshot.Pixels[offset + 1] == green
+                && snapshot.Pixels[offset + 2] == red
+                && snapshot.Pixels[offset + 3] != 0;
+        }
+
+        for (var y = 0; y < height; ++y)
+        {
+            for (var x = 0; x < width; ++x)
+            {
+                var start = y * width + x;
+                if (visited[start] || !IsColor(x, y))
+                {
+                    visited[start] = true;
+                    continue;
+                }
+                var queue = new Queue<int>();
+                queue.Enqueue(start);
+                visited[start] = true;
+                var left = x;
+                var right = x;
+                var top = y;
+                var bottom = y;
+                while (queue.TryDequeue(out var current))
+                {
+                    var currentX = current % width;
+                    var currentY = current / width;
+                    left = Math.Min(left, currentX);
+                    right = Math.Max(right, currentX);
+                    top = Math.Min(top, currentY);
+                    bottom = Math.Max(bottom, currentY);
+                    foreach (var (offsetX, offsetY) in ComponentDirections)
+                    {
+                        var nextX = currentX + offsetX;
+                        var nextY = currentY + offsetY;
+                        if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height)
+                        {
+                            continue;
+                        }
+                        var next = nextY * width + nextX;
+                        if (visited[next]) continue;
+                        visited[next] = true;
+                        if (IsColor(nextX, nextY)) queue.Enqueue(next);
+                    }
+                }
+                var bounds = new PixelBounds(left, top, right, bottom);
+                if (right - left + 1 >= check.MinimumAnchorWidth
+                    && bottom - top + 1 >= check.MinimumAnchorHeight)
+                {
+                    anchors.Add(bounds);
+                }
+            }
+        }
+
+        anchors.Sort((first, second) =>
+        {
+            var horizontal = first.Left.CompareTo(second.Left);
+            return horizontal != 0 ? horizontal : first.Top.CompareTo(second.Top);
+        });
+        if (check.ComponentIndex >= anchors.Count)
+        {
+            return new ComponentColorRegionObservation(
+                false,
+                null,
+                null,
+                null,
+                $"Found {anchors.Count} qualifying {check.Color} components; "
+                + $"component index {check.ComponentIndex} is unavailable.");
+        }
+
+        var anchor = anchors[check.ComponentIndex];
+        var regionLeft = Math.Clamp(anchor.Left + check.X, 0, width);
+        var regionTop = Math.Clamp(anchor.Top + check.Y, 0, height);
+        var regionRight = Math.Clamp(regionLeft + check.Width, regionLeft, width);
+        var regionBottom = Math.Clamp(regionTop + check.Height, regionTop, height);
+        long pixels = 0;
+        for (var y = regionTop; y < regionBottom; ++y)
+        {
+            for (var x = regionLeft; x < regionRight; ++x)
+            {
+                if (IsColor(x, y)) ++pixels;
+            }
+        }
+        var passed = (!check.MinimumPixels.HasValue || pixels >= check.MinimumPixels.Value)
+            && (!check.MaximumPixels.HasValue || pixels <= check.MaximumPixels.Value);
+        var region = new PixelBounds(
+            regionLeft,
+            regionTop,
+            Math.Max(regionLeft, regionRight - 1),
+            Math.Max(regionTop, regionBottom - 1));
+        return new ComponentColorRegionObservation(
+            passed,
+            pixels,
+            anchor,
+            region,
+            $"Observed {pixels} exact {check.Color} pixels in component {check.ComponentIndex} "
+            + $"anchor {anchor}, relative region {region}; expected {DescribeBounds(check)}.");
+    }
+
     internal static bool Passes(VisualColorCheck check, long count)
         => (!check.MinimumPixels.HasValue || count >= check.MinimumPixels.Value)
            && (!check.MaximumPixels.HasValue || count <= check.MaximumPixels.Value);
@@ -390,4 +509,11 @@ internal static class VisualColorOracle
             : check.MinimumOffsetPixels.HasValue
                 ? $"at least {check.MinimumOffsetPixels.Value}px"
                 : $"at most {check.MaximumOffsetPixels!.Value}px";
+
+    internal static string DescribeBounds(VisualComponentColorRegionCheck check)
+        => check.MinimumPixels.HasValue && check.MaximumPixels.HasValue
+            ? $"between {check.MinimumPixels.Value} and {check.MaximumPixels.Value}"
+            : check.MinimumPixels.HasValue
+                ? $"at least {check.MinimumPixels.Value}"
+                : $"at most {check.MaximumPixels!.Value}";
 }
