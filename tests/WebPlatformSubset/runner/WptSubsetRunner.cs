@@ -85,9 +85,12 @@ internal sealed partial class WptSubsetRunner
         foreach (var test in tests)
         {
             Console.Write($"RUN  {test.Path} ... ");
-            var result = string.Equals(test.Type, "reftest", StringComparison.OrdinalIgnoreCase)
-                ? RunReftest(test)
-                : RunTestHarness(test);
+            var result = test.Type switch
+            {
+                "reftest" => RunReftest(test),
+                "visual" => RunVisualTest(test),
+                _ => RunTestHarness(test)
+            };
             results.Add(result);
             Console.WriteLine($"{result.Status} ({result.Duration.TotalMilliseconds:F0} ms)");
             foreach (var failedSubtest in result.Subtests.Where(item => item.Status != "PASS"))
@@ -290,6 +293,68 @@ internal sealed partial class WptSubsetRunner
                     ["reference"] = referencePath,
                     ["diff"] = diffPath
                 }
+            };
+        }
+        catch (TimeoutException exception)
+        {
+            timer.Stop();
+            return Failure(test, "TIMEOUT", timer.Elapsed, exception.Message);
+        }
+        catch (Exception exception)
+        {
+            timer.Stop();
+            return Failure(test, "HARNESS-ERROR", timer.Elapsed, exception.ToString());
+        }
+    }
+
+    private TestResult RunVisualTest(ProfileTest test)
+    {
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            var snapshot = RenderDocument(
+                File.ReadAllText(TestDocumentPath(test.Path)),
+                test.Path);
+            var artifactDirectory = Path.Combine(
+                _options.OutputDirectory,
+                SanitizeArtifactName(test.Path));
+            Directory.CreateDirectory(artifactDirectory);
+            var actualPath = Path.Combine(artifactDirectory, "actual.png");
+            SavePixels(snapshot, actualPath);
+
+            var checks = test.VisualChecks.Select(check =>
+            {
+                var count = VisualColorOracle.Count(snapshot, check.Color);
+                var passed = VisualColorOracle.Passes(check, count);
+                var bounds = VisualColorOracle.DescribeBounds(check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? $"{check.Color} pixel count is {bounds}",
+                    Status = passed ? "PASS" : "FAIL",
+                    Message = $"Observed {count} exact opaque-or-visible {check.Color} pixels; expected {bounds}."
+                };
+            }).ToList();
+            timer.Stop();
+            var passed = checks.All(check => check.Status == "PASS");
+            return new TestResult
+            {
+                Path = test.Path,
+                Type = test.Type,
+                Status = passed ? "PASS" : "FAIL",
+                Duration = timer.Elapsed,
+                Message = passed
+                    ? "The self-verifying visual color oracle passed."
+                    : "The self-verifying visual color oracle failed.",
+                Subtests = checks,
+                Artifacts = new Dictionary<string, string>
+                {
+                    ["actual"] = actualPath
+                },
+                ChromiumOracle = _chromiumOracle?.InspectVisual(
+                    TestDocumentPath(test.Path),
+                    artifactDirectory,
+                    snapshot,
+                    test.VisualChecks)
             };
         }
         catch (TimeoutException exception)
@@ -638,7 +703,7 @@ internal sealed partial class WptSubsetRunner
             {
                 throw new FileNotFoundException($"Conformance document '{test.Path}' is missing.");
             }
-            if (test.Type is not ("testharness" or "reftest" or "contract"))
+            if (test.Type is not ("testharness" or "reftest" or "contract" or "visual"))
             {
                 throw new InvalidDataException($"Unknown test type '{test.Type}' for '{test.Path}'.");
             }
@@ -646,6 +711,29 @@ internal sealed partial class WptSubsetRunner
                 (string.IsNullOrWhiteSpace(test.Reference) || !File.Exists(TestDocumentPath(test.Reference))))
             {
                 throw new FileNotFoundException($"Reference for '{test.Path}' is missing.");
+            }
+            if (test.Type == "visual")
+            {
+                if (test.VisualChecks.Count == 0)
+                {
+                    throw new InvalidDataException(
+                        $"Visual test '{test.Path}' has no color checks.");
+                }
+                foreach (var check in test.VisualChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.Color);
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' color '{check.Color}' has no pixel bound.");
+                    }
+                    if (check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' color '{check.Color}' has invalid pixel bounds.");
+                    }
+                }
             }
         }
     }

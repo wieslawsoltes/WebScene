@@ -1180,6 +1180,25 @@
       "capabilities": ["flex-align-items", "dynamic-flex-relayout", "check-layout-testharness"],
       "evidence": ["unchanged-pinned-wpt-check-layout-flex-relayout"],
       "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
+    },
+    {
+      "path": "css/css-backgrounds/border-radius-overflow-hidden.html",
+      "type": "visual",
+      "capabilities": ["rounded-overflow-clipping", "border-radius", "descendant-paint-clipping", "self-verifying-visual-wpt"],
+      "evidence": ["chart-hover-market-status-marker", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "rounded overflow clipping exposes no authored red failure pixels"
+        },
+        {
+          "color": "#008000",
+          "minimumPixels": 5000,
+          "description": "rounded overflow clipping retains the authored green success surface"
+        }
+      ],
+      "reason": "Unchanged pinned WPT self-overlays a green reference over red clipped content and explicitly passes when no red remains. The bounded visual oracle rejects any exact authored red failure pixels and requires a substantial exact green success surface so a blank or missing render cannot pass."
     }
   ],
   "harnessBlocked": [
@@ -1203,13 +1222,6 @@
       "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression"],
       "evidence": ["side-hide-options-measuring-menu", "synchronous-popup-placement"],
       "reason": "This is the nearest official WPT and exactly asserts the base rule that visibility:hidden suppresses paint without removing layout boxes. It is a self-verifying visual test without rel=match, and it does not compose inherited hidden visibility with generated ::before content. Keep it harness-blocked; the product-neutral native/portable regression covers that exact composition and synchronous geometry read."
-    },
-    {
-      "path": "css/css-backgrounds/border-radius-overflow-hidden.html",
-      "type": "visual",
-      "capabilities": ["rounded-overflow-clipping", "border-radius", "descendant-paint-clipping"],
-      "evidence": ["chart-hover-market-status-marker"],
-      "reason": "This exact upstream coverage is a self-overlaid visual test without rel=match or testharness assertions. The product-neutral pixel spike now covers the primitive; promote after the subset runner can evaluate self-verifying visual tests."
     },
     {
       "path": "css/css-backgrounds/border-radius-shorthand-001.htm",

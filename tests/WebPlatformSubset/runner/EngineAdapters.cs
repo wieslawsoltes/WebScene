@@ -586,6 +586,15 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             {
                 canvas.Restore();
             }
+            else if (command.Kind == 12)
+            {
+                canvas.Save();
+                PushRoundedClip(canvas, command);
+            }
+            else if (command.Kind == 13)
+            {
+                canvas.Restore();
+            }
             else if (command.Kind is 1 or 7 or 17)
             {
                 if (command.Kind == 17) DrawShadow(canvas, command);
@@ -617,6 +626,13 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                     PushRotationTransform(canvas, command);
                     break;
                 case 20:
+                    canvas.Restore();
+                    break;
+                case 12:
+                    canvas.Save();
+                    PushRoundedClip(canvas, command);
+                    break;
+                case 13:
                     canvas.Restore();
                     break;
                 case 18:
@@ -673,6 +689,45 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                 new(command.RadiusBottomLeft, command.RadiusBottomLeft)
             ]);
         canvas.DrawRoundRect(rounded, paint);
+    }
+
+    private static void PushRoundedClip(
+        SKCanvas canvas,
+        in NativeSceneCommand command)
+    {
+        if (command.RadiusTopLeft <= 0
+            && command.RadiusTopRight <= 0
+            && command.RadiusBottomRight <= 0
+            && command.RadiusBottomLeft <= 0)
+        {
+            canvas.ClipRect(
+                new SKRect(
+                    command.X,
+                    command.Y,
+                    command.X + command.Width,
+                    command.Y + command.Height),
+                SKClipOperation.Intersect,
+                antialias: false);
+            return;
+        }
+
+        using var rounded = new SKRoundRect();
+        rounded.SetRectRadii(
+            new SKRect(
+                command.X,
+                command.Y,
+                command.X + command.Width,
+                command.Y + command.Height),
+            [
+                new(command.RadiusTopLeft, command.RadiusTopLeft),
+                new(command.RadiusTopRight, command.RadiusTopRight),
+                new(command.RadiusBottomRight, command.RadiusBottomRight),
+                new(command.RadiusBottomLeft, command.RadiusBottomLeft)
+            ]);
+        canvas.ClipRoundRect(
+            rounded,
+            SKClipOperation.Intersect,
+            antialias: true);
     }
 
     private static void PushScaleTransform(

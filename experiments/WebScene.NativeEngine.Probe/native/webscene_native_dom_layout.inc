@@ -823,7 +823,7 @@ void native_document::layout_children(dom_node& parent)
                 content.x,
                 content.y,
                 0,
-                resolved_line_height(parent, resolved_font_size(parent))};
+                0};
             const auto start_new_line = [&] {
                 cursor_x = 0;
                 cursor_y += current_line_height > 0
@@ -856,7 +856,6 @@ void native_document::layout_children(dom_node& parent)
             };
             for (size_t run_index = 0; run_index < text_runs.size(); ++run_index) {
                 auto* run = text_runs[run_index];
-                const auto font_size = resolved_font_size(*run);
                 const auto allow_wrap = resolved_white_space_wraps(*run);
                 const auto transformed_text = resolved_text_transform(*run, run->text_content);
                 std::string word;
@@ -903,9 +902,7 @@ void native_document::layout_children(dom_node& parent)
                     content.x + cursor_x,
                     content.y + cursor_y,
                     0,
-                    current_line_height > 0
-                        ? current_line_height
-                        : resolved_line_height(*run, font_size)};
+                    current_line_height};
             }
 
             std::function<bool(dom_node&, layout_rect&)> update_inline_box =
@@ -982,9 +979,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto static_x = inline_static_position ? anchor.x : content.x;
                 const auto static_y = inline_static_position
                     ? anchor.y
-                    : anchor.y + std::max(
-                        anchor.height,
-                        resolved_line_height(parent, resolved_font_size(parent)));
+                    : anchor.y + anchor.height;
                 layout_rect assigned{};
                 assigned.width = is_specified(child.style.width)
                     ? outer_authored_size(child, true, containing.width)

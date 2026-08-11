@@ -42,8 +42,38 @@ public sealed class ReleaseCompatibilityGateTests
         var candidate = profile.RootElement.GetProperty("candidate");
 
         Assert.True(
-            candidate.GetArrayLength() >= 53,
+            candidate.GetArrayLength() >= 54,
             $"The candidate compatibility denominator unexpectedly shrank to {candidate.GetArrayLength()} documents.");
+    }
+
+    [Fact]
+    public void CandidateVisualTestsRejectFailurePixelsAndBlankRenders()
+    {
+        var profilePath = Path.Combine(
+            s_repositoryRoot,
+            "tests",
+            "WebPlatformSubset",
+            "webscene-component-profile.json");
+        using var profile = JsonDocument.Parse(File.ReadAllText(profilePath));
+        var visualTests = profile.RootElement.GetProperty("candidate")
+            .EnumerateArray()
+            .Where(test => test.GetProperty("type").GetString() == "visual")
+            .ToList();
+
+        Assert.NotEmpty(visualTests);
+        foreach (var visualTest in visualTests)
+        {
+            var path = visualTest.GetProperty("path").GetString();
+            var checks = visualTest.GetProperty("visualChecks").EnumerateArray().ToList();
+            Assert.True(
+                checks.Any(check => check.TryGetProperty("maximumPixels", out var maximum)
+                    && maximum.GetInt32() == 0),
+                $"Visual test '{path}' has no zero-tolerance failure-color check.");
+            Assert.True(
+                checks.Any(check => check.TryGetProperty("minimumPixels", out var minimum)
+                    && minimum.GetInt32() > 0),
+                $"Visual test '{path}' has no non-blank success-color check.");
+        }
     }
 
     [Fact]

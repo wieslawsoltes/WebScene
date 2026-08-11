@@ -196,6 +196,48 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_rounded_overflow_visual_fixture_geometry(webscene_engine* engine)
+{
+    resize(engine, 800, 600, 43U);
+    const auto geometry = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<p>instructions</p><div class="container">
+            <div class="test"><div class="contents"></div></div>
+            <div class="ref"></div>
+          </div>`;
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            div { position:absolute }
+            .ref,.test { border-radius:30px }
+            .ref { width:104px;height:104px;left:-2px;top:-2px;background:green }
+            .test,.contents { width:100px;height:100px;background:red }
+            .test { overflow:hidden }
+          `;
+          document.head.appendChild(style);
+          const container = document.querySelector('.container').getBoundingClientRect();
+          const test = document.querySelector('.test').getBoundingClientRect();
+          const contents = document.querySelector('.contents').getBoundingClientRect();
+          const reference = document.querySelector('.ref').getBoundingClientRect();
+          return [
+            test.left - container.left,
+            test.top - container.top,
+            contents.left - test.left,
+            contents.top - test.top,
+            reference.left - test.left,
+            reference.top - test.top,
+            test.width,
+            test.height,
+            reference.width,
+            reference.height
+          ];
+        })()
+    )JS", "native-rounded-overflow-visual-geometry.js");
+    require(
+        geometry == R"([0,0,0,0,-2,-2,100,100,104,104])",
+        "rounded overflow WPT geometry diverged: " + geometry);
+}
+
 void test_row_flex_vertical_scroll_extent_remains_bounded(webscene_engine* engine)
 {
     resize(engine, 400, 200, 43U);

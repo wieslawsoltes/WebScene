@@ -62,7 +62,8 @@ Use `--test <substring>` for a focused document,
 `--timeout-seconds <seconds>` to alter the per-document timeout, and
 `--native-cache-directory <path>` to isolate V8 cache evidence.
 
-Static reftests can also collect an independent Chromium differential:
+Static reftests and self-verifying visual tests can also collect an independent
+Chromium differential or color-oracle result:
 
 ```bash
 dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
@@ -92,6 +93,11 @@ non-zero exit code.
   then compares document and reference pixels. With `--chromium-path`, it also records
   the independent Chromium self-comparison and cross-engine differential described
   above.
+- `visual` runs an unchanged self-verifying WPT against bounded, manifest-authored exact
+  color-count checks, always retains the native screenshot, and applies the same checks
+  independently in Chromium when `--chromium-path` is supplied. Every visual entry must
+  include both a failure-color bound and a non-blank success condition appropriate to
+  the upstream test's authored pass statement.
 - `contract` runs a project-owned reduced behavior contract through the same native
   document and JavaScript boundary.
 
@@ -114,11 +120,11 @@ contract.
 
 ## 2026-08-09 coverage audit
 
-The pinned profile contains 110 required, 53 candidate, 5 harness-blocked, and 5
+The pinned profile contains 110 required, 54 candidate, 4 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-53/53 documents and 305/305 subtests while the release gate remains 110/110 documents
+54/54 documents and 307/307 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -130,6 +136,9 @@ and 434/434 subtests:
   declaring interface prototype while retaining native receiver-brand checks; and
 - `Document.links` is now a stable, branded, live `HTMLCollection` with interleaved
   `A`/`AREA` tree order plus indexed, `item()`, `namedItem()`, ID, and name lookup; and
+- the unchanged self-verifying rounded-overflow WPT now executes through a bounded
+  red/green visual oracle in both native and Chromium, after removing a phantom inline
+  line box from absolute auto-inset static positioning; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -160,11 +169,19 @@ the added generated interface-template footprint to 49,872 library bytes and 43,
 used-heap bytes per populated view. Compile-time guards now keep the 64-bit cold-path
 footprint fixed at a 976-byte `dom_node` and a 304-byte `native_document`.
 
+The subsequent self-verifying visual-WPT/static-position slice was also compared with
+its immediate clean parent (`f062650`) in alternating fresh processes. Median p50 moved
+from 1.993 ms to 2.012 ms (+1.0%) for 1,000 lifecycle samples, from 34.400 ms to
+34.814 ms (+1.2%) for the 50-sample selector workload, and from 3.292 ms to 3.178 ms
+(-3.5%) for 100 generated named-property samples. A four-context/2,000-node memory
+probe still reports the fixed 976-byte node and no new per-node state.
+
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence
-from every released RID. Five self-verifying visual documents remain harness-blocked
-because they have neither testharness assertions nor a reftest reference; the dynamic
-flex check-layout document is no longer in that set.
+from every released RID. Four self-verifying visual documents remain harness-blocked:
+three are not yet pinned locally, while the elliptical-radius case deliberately exceeds
+the currently claimed scalar corner projection. The pinned rounded-overflow document and
+the dynamic flex check-layout document are no longer in that set.
 
 The native-package workflow retains candidate discovery as non-release-gating, downloads
 the per-RID artifacts after all native jobs, and runs
