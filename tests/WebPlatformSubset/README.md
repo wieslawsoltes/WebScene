@@ -82,9 +82,12 @@ presenter stack need not be pixel-identical. A Chromium test/reference mismatch 
 warning that the selected reftest or local browser environment is not a trustworthy
 oracle.
 
-Result JSON records the profile, pinned WPT revision, native ABI/library hash, selection,
-document status, assertions, diagnostics, and artifacts. A required failure produces a
-non-zero exit code.
+Result JSON records the profile, a line-ending-normalized SHA-256 of the exact manifest,
+the pinned WPT revision, native ABI/library hash, selection, document status, assertions,
+diagnostics, and artifacts. The cross-RID verifier requires every artifact to carry the
+hash of the checked-in manifest, so changes to test type, bounds, or metadata cannot be
+mistaken for evidence from the same profile. A required failure produces a non-zero exit
+code.
 
 ## Test types
 
@@ -183,12 +186,13 @@ three are not yet pinned locally, while the elliptical-radius case deliberately 
 the currently claimed scalar corner projection. The pinned rounded-overflow document and
 the dynamic flex check-layout document are no longer in that set.
 
-The native-package workflow retains candidate discovery as non-release-gating, downloads
-the per-RID artifacts after all native jobs, and runs
-`scripts/verify-cross-rid-compatibility.py`. Its promotion summary rejects missing or
-duplicate RID artifacts, profile/revision/engine drift, denominator or path drift,
-inconsistent summaries, and any non-passing document or subtest. A green aggregate is
-therefore usable promotion evidence without weakening the existing required gate when a
+The native-package workflow downloads and aggregates both required and candidate
+evidence after all native jobs. The required aggregate is blocking and the verified
+release package set depends on it; candidate discovery remains non-release-gating.
+`scripts/verify-cross-rid-compatibility.py` rejects missing or duplicate RID artifacts,
+manifest-hash/profile/revision/engine drift, denominator or path drift, inconsistent
+summaries, and any non-passing document or subtest. A green candidate aggregate is
+therefore usable promotion evidence without weakening the required release gate when a
 candidate failure is discovered on one platform.
 
 The Custom Elements discovery shard pins unchanged upstream registry, constructor,

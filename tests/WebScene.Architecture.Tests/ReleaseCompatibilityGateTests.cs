@@ -91,7 +91,11 @@ public sealed class ReleaseCompatibilityGateTests
             workflow,
             StringComparison.Ordinal);
         Assert.Contains(
-            "name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}",
+            "- 'scripts/tests/test_verify_cross_rid_compatibility.py'",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "name: compatibility-required-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}",
             workflow,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -107,10 +111,25 @@ public sealed class ReleaseCompatibilityGateTests
             workflow,
             StringComparison.Ordinal);
         Assert.Contains("candidate-evidence:", workflow, StringComparison.Ordinal);
+        Assert.Contains("required-evidence:", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "name: Verify cross-RID required evidence",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("--selection required", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "name: compatibility-required-summary-${{ needs.metadata.outputs.package-version }}",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "needs: [metadata, packages, native, required-evidence]",
+            workflow,
+            StringComparison.Ordinal);
         Assert.Contains(
             "name: Verify cross-RID candidate evidence",
             workflow,
             StringComparison.Ordinal);
+        Assert.Contains("name: Test cross-RID evidence verifier", workflow, StringComparison.Ordinal);
         Assert.Contains(
             "scripts/verify-cross-rid-compatibility.py",
             workflow,
@@ -122,6 +141,13 @@ public sealed class ReleaseCompatibilityGateTests
             "name: compatibility-candidate-summary-${{ needs.metadata.outputs.package-version }}",
             workflow,
             StringComparison.Ordinal);
+
+        var verifier = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            "scripts",
+            "verify-cross-rid-compatibility.py"));
+        Assert.Contains("webscene-wpt-subset-result-v3", verifier, StringComparison.Ordinal);
+        Assert.Contains("profileSha256", verifier, StringComparison.Ordinal);
     }
 
     private static void AssertBuilderRunsCompleteRequiredProfile(string fileName)

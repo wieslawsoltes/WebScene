@@ -18,7 +18,7 @@ namespace WebScene.WebPlatformSubset.Runner;
 
 internal sealed partial class WptSubsetRunner
 {
-    private const string ArtifactSchema = "webscene-wpt-subset-result-v2";
+    private const string ArtifactSchema = "webscene-wpt-subset-result-v3";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -30,6 +30,7 @@ internal sealed partial class WptSubsetRunner
     private readonly string _standardsSubsetRoot;
     private readonly string _upstreamRoot;
     private readonly ProfileManifest _manifest;
+    private readonly string _manifestSha256;
     private readonly string _testHarness;
     private readonly string _checkLayoutHarness;
     private readonly HashSet<string> _pinnedUpstreamFiles;
@@ -50,10 +51,14 @@ internal sealed partial class WptSubsetRunner
             "WebPlatformSubset");
         _upstreamRoot = Path.Combine(_standardsSubsetRoot, "upstream");
         _pinnedUpstreamFiles = ReadPinnedUpstreamFiles();
+        var manifestText = File.ReadAllText(options.ManifestPath);
         _manifest = JsonSerializer.Deserialize<ProfileManifest>(
-                        File.ReadAllText(options.ManifestPath),
+                        manifestText,
                         JsonOptions)
                     ?? throw new InvalidDataException("The profile manifest is empty.");
+        _manifestSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                manifestText.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))))
+            .ToLowerInvariant();
         _testHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "testharness.js"));
         _checkLayoutHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "check-layout-th.js"));
         _chromiumOracle = string.IsNullOrWhiteSpace(options.ChromiumPath)
@@ -113,6 +118,7 @@ internal sealed partial class WptSubsetRunner
         {
             Schema = ArtifactSchema,
             Profile = _manifest.Profile,
+            ProfileSha256 = _manifestSha256,
             WptRevision = _manifest.WptRevision,
             Runtime = _manifest.Runtime,
             Engine = "native",

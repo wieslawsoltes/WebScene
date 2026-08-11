@@ -50,6 +50,7 @@ internal sealed class RunArtifact
 {
     public required string Schema { get; init; }
     public required string Profile { get; init; }
+    public required string ProfileSha256 { get; init; }
     public required string WptRevision { get; init; }
     public required string Runtime { get; init; }
     public required string Engine { get; init; }

@@ -26,6 +26,7 @@ on:
     - 'scripts/build-native-engine-runtime.ps1'
     - 'scripts/pack-packages.sh'
     - 'scripts/verify-cross-rid-compatibility.py'
+    - 'scripts/tests/test_verify_cross_rid_compatibility.py'
     - 'scripts/verify-release-packages.py'
     - 'src/WebScene.Backend.Abstractions/**'
     - 'src/WebScene.Backend.Avalonia/**'
@@ -50,6 +51,10 @@ jobs:
       publish: ${{ steps.version.outputs.publish }}
     steps:
     - uses: actions/checkout@v4
+    - name: Test cross-RID evidence verifier
+      run: |
+        python3 -m unittest \
+          scripts/tests/test_verify_cross_rid_compatibility.py
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
@@ -379,14 +384,14 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        name: compatibility-required-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
         path: artifacts/native-engine-runtime-build/**/wpt-results/**
         if-no-files-found: error
     - name: Upload failed compatibility evidence
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: compatibility-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        name: compatibility-required-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
         path: artifacts/native-engine-runtime-build/**/wpt-results/**
         if-no-files-found: warn
     - name: Upload candidate compatibility evidence
@@ -403,9 +408,37 @@ jobs:
         path: artifacts/nuget-packages/*.nupkg
         if-no-files-found: error
 
+  required-evidence:
+    name: Verify cross-RID required evidence
+    needs: [metadata, native]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download required compatibility evidence
+      uses: actions/download-artifact@v4
+      with:
+        pattern: compatibility-required-*
+        path: artifacts/required-compatibility
+    - name: Verify exact required profile across released RIDs
+      run: |
+        python3 scripts/verify-cross-rid-compatibility.py \
+          --input-root artifacts/required-compatibility \
+          --profile tests/WebPlatformSubset/webscene-component-profile.json \
+          --selection required \
+          --expected-rid osx-arm64 \
+          --expected-rid linux-x64 \
+          --expected-rid win-x64 \
+          --output artifacts/required-compatibility/cross-rid-summary.json
+    - name: Upload cross-RID required summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-required-summary-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/required-compatibility/cross-rid-summary.json
+        if-no-files-found: error
+
   package-set:
     name: Verify release package set
-    needs: [metadata, packages, native]
+    needs: [metadata, packages, native, required-evidence]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

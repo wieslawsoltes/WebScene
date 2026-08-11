@@ -4,19 +4,27 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
+import re
 import sys
 from typing import Any
 
 
-RESULT_SCHEMA = "webscene-wpt-subset-result-v2"
-REPORT_SCHEMA = "webscene-cross-rid-compatibility-evidence-v1"
+RESULT_SCHEMA = "webscene-wpt-subset-result-v3"
+REPORT_SCHEMA = "webscene-cross-rid-compatibility-evidence-v2"
 
 
 def read_json(path: pathlib.Path) -> Any:
     with path.open(encoding="utf-8") as stream:
         return json.load(stream)
+
+
+def normalized_text_sha256(path: pathlib.Path) -> str:
+    text = path.read_text(encoding="utf-8-sig")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def duplicate_values(values: list[str]) -> list[str]:
@@ -34,6 +42,7 @@ def summarize_result(
     path: pathlib.Path,
     input_root: pathlib.Path,
     profile_name: str,
+    profile_sha256: str,
     wpt_revision: str,
     selection: str,
     expected_paths: list[str],
@@ -52,6 +61,7 @@ def summarize_result(
     expected_identity = {
         "schema": RESULT_SCHEMA,
         "profile": profile_name,
+        "profileSha256": profile_sha256,
         "wptRevision": wpt_revision,
         "runtime": "v8",
         "engine": "native",
@@ -64,9 +74,9 @@ def summarize_result(
                 f"{property_name} is {actual!r}; expected {expected!r}")
 
     native_identity = artifact.get("nativeEngineIdentity")
-    if not isinstance(native_identity, str) or not native_identity.startswith(
-        "abi=3;sha256="
-    ):
+    if not isinstance(native_identity, str) or re.fullmatch(
+        r"abi=3;sha256=[0-9a-f]{64}", native_identity
+    ) is None:
         issues.append("nativeEngineIdentity does not identify an ABI 3 packaged binary")
 
     results = artifact.get("results")
@@ -149,6 +159,7 @@ def summarize_result(
     return {
         "rid": rid,
         "resultPath": relative_path,
+        "profileSha256": artifact.get("profileSha256"),
         "nativeEngineIdentity": native_identity,
         "summary": derived_summary,
         "expectedDocumentCount": len(expected_paths),
@@ -172,6 +183,7 @@ def main() -> int:
 
     profile = read_json(args.profile)
     profile_name = profile.get("profile")
+    profile_sha256 = normalized_text_sha256(args.profile)
     wpt_revision = profile.get("wptRevision")
     selected = profile.get(args.selection)
     if not isinstance(profile_name, str) or not isinstance(wpt_revision, str):
@@ -203,7 +215,8 @@ def main() -> int:
             if any(part.startswith(prefix) for part in path.parts)
         ]
         if not matches:
-            global_issues.append(f"{rid}: candidate evidence artifact is missing")
+            global_issues.append(
+                f"{rid}: {args.selection} evidence artifact is missing")
             rid_reports.append(
                 {
                     "rid": rid,
@@ -230,6 +243,7 @@ def main() -> int:
                 matches[0],
                 args.input_root,
                 profile_name,
+                profile_sha256,
                 wpt_revision,
                 args.selection,
                 expected_paths,
@@ -259,6 +273,7 @@ def main() -> int:
     report = {
         "schema": REPORT_SCHEMA,
         "profile": profile_name,
+        "profileSha256": profile_sha256,
         "wptRevision": wpt_revision,
         "selection": args.selection,
         "expectedRids": expected_rids,
