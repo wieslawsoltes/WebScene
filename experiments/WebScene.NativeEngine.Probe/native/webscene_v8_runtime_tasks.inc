@@ -621,7 +621,13 @@
                     v8::Boolean::New(isolate, passive)).Check();
                 v8::TryCatch try_catch(isolate);
                 const auto callback_succeeded =
-                    !callback->Call(local_context, global, 1, arguments).IsEmpty();
+                    !call_event_listener(
+                        isolate,
+                        local_context,
+                        callback,
+                        global,
+                        1,
+                        arguments).IsEmpty();
                 event->Set(
                     local_context,
                     js_string(isolate, "__websceneInPassiveListener"),
@@ -706,15 +712,50 @@
                 auto event = create_window_event(local_frame_context, "resize");
                 v8::Local<v8::Value> arguments[] = {event};
                 ++input_event_dispatch_count;
-                for (auto& listener : listeners->second) {
+                auto frame_global = local_frame_context->Global();
+                const auto listener_count = listeners->second.size();
+                for (size_t index = 0; index < listener_count; ++index) {
+                    auto& listener = listeners->second[index];
+                    if (listener.target != 0U
+                        || listener.context.Get(isolate) != local_frame_context) {
+                        continue;
+                    }
                     auto callback = listener.callback.Get(isolate);
                     if (callback.IsEmpty()) continue;
+                    if (!listener.signal.IsEmpty()) {
+                        auto signal = listener.signal.Get(isolate);
+                        v8::Local<v8::Value> aborted;
+                        if (signal->Get(
+                                local_frame_context,
+                                js_string(isolate, "aborted")).ToLocal(&aborted)
+                            && aborted->BooleanValue(isolate)) {
+                            listener.callback.Reset();
+                            listener.signal.Reset();
+                            continue;
+                        }
+                    }
+                    const auto passive = listener.passive;
+                    if (listener.once) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                    }
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::Boolean::New(isolate, passive)).Check();
                     v8::TryCatch try_catch(isolate);
-                    if (callback->Call(
+                    const auto callback_succeeded = !call_event_listener(
+                            isolate,
                             local_frame_context,
-                            local_frame_context->Global(),
+                            callback,
+                            frame_global,
                             1,
-                            arguments).IsEmpty()) {
+                            arguments).IsEmpty();
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::False(isolate)).Check();
+                    if (!callback_succeeded) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                         report_inspector_exception(
                             try_catch,
@@ -728,6 +769,9 @@
                     }
                     ++input_callback_invocation_count;
                 }
+                std::erase_if(
+                    listeners->second,
+                    [](const auto& listener) { return listener.callback.IsEmpty(); });
             }
             perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -1265,7 +1309,13 @@
                     js_string(isolate, "__websceneInPassiveListener"),
                     v8::Boolean::New(isolate, passive)).Check();
                 const auto callback_succeeded =
-                    !callback->Call(local_context, current_target, 1, arguments).IsEmpty();
+                    !call_event_listener(
+                        isolate,
+                        local_context,
+                        callback,
+                        current_target,
+                        1,
+                        arguments).IsEmpty();
                 event->Set(
                     local_context,
                     js_string(isolate, "__websceneInPassiveListener"),

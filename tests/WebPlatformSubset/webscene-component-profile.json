@@ -921,6 +921,20 @@
       "reason": "Unchanged window-targeted WPT proving synchronous AbortSignal listener removal before and during dispatch, composition with once/capture/manual removal, nested abort safety, already-aborted suppression, and null-signal validation."
     },
     {
+      "path": "dom/events/EventTarget-add-listener-platform-object.html",
+      "type": "testharness",
+      "capabilities": ["event-listener-object", "autonomous-custom-element-listener", "programmatic-click-dispatch"],
+      "evidence": ["unchanged-upstream-eventlistener-object-wpt"],
+      "reason": "Unchanged WPT proving that an autonomous custom element can register itself as a click listener and receive activation through its prototype handleEvent method."
+    },
+    {
+      "path": "dom/events/EventTarget-this-of-listener.html",
+      "type": "testharness",
+      "capabilities": ["event-listener-object", "event-listener-this-binding", "dynamic-handle-event-lookup", "function-listener-precedence"],
+      "evidence": ["unchanged-upstream-eventlistener-object-wpt"],
+      "reason": "Unchanged WPT proving function currentTarget this-binding, object-listener identity, per-dispatch handleEvent lookup, late handleEvent definition, and function precedence across supported Element, Text, DocumentFragment, Comment, and ProcessingInstruction targets."
+    },
+    {
       "path": "contracts/css-syntax-parser-recovery.html",
       "type": "contract",
       "capabilities": ["css-syntax-component-values", "declaration-recovery", "ascii-case-insensitive-property-names", "important-token-parsing", "dynamic-style-reparse"],

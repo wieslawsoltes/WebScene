@@ -316,6 +316,45 @@
         }
     }
 
+    static v8::MaybeLocal<v8::Value> call_event_listener(
+        v8::Isolate* isolate,
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Value> listener,
+        v8::Local<v8::Object> current_target,
+        int argument_count,
+        v8::Local<v8::Value> arguments[])
+    {
+        if (listener->IsFunction()) {
+            return listener.As<v8::Function>()->Call(
+                local_context,
+                current_target,
+                argument_count,
+                arguments);
+        }
+        if (!listener->IsObject()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "EventListener is not an object")));
+            return {};
+        }
+        auto listener_object = listener.As<v8::Object>();
+        v8::Local<v8::Value> handle_event;
+        if (!listener_object->Get(
+                local_context,
+                js_string(isolate, "handleEvent")).ToLocal(&handle_event)) {
+            return {};
+        }
+        if (!handle_event->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "EventListener.handleEvent is not callable")));
+            return {};
+        }
+        return handle_event.As<v8::Function>()->Call(
+            local_context,
+            listener_object,
+            argument_count,
+            arguments);
+    }
+
     static void add_event_listener(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -389,9 +428,9 @@
             }
         }
         if (info[1]->IsNullOrUndefined()) return;
-        if (!info[1]->IsFunction()) {
+        if (!info[1]->IsObject()) {
             decision.classification = "unsupported";
-            decision.semantic_slice = "EventListener objects with handleEvent are not implemented";
+            decision.semantic_slice = "an EventListener must be a function or object";
             return;
         }
         self->record_feature(
@@ -427,7 +466,7 @@
             }
 #endif
             auto& registrations = self->frame_event_listeners[type];
-            const auto requested = info[1].As<v8::Function>();
+            const auto requested = info[1];
             for (const auto& registration : registrations) {
                 auto callback = registration.callback.Get(info.GetIsolate());
                 if (!callback.IsEmpty()
@@ -438,10 +477,12 @@
                     return;
                 }
             }
-            auto name = to_utf8(info.GetIsolate(), info[1].As<v8::Function>()->GetName());
+            auto name = requested->IsFunction()
+                ? to_utf8(info.GetIsolate(), requested.As<v8::Function>()->GetName())
+                : std::string("<object listener>");
             if (name.empty()) name = "<anonymous>";
             event_listener_registration registration{
-                v8::Global<v8::Function>(info.GetIsolate(), requested),
+                v8::Global<v8::Value>(info.GetIsolate(), requested),
                 v8::Global<v8::Context>(info.GetIsolate(), local_context),
                 std::move(name),
                 self->current_input_sequence,
@@ -455,7 +496,7 @@
             }
             registrations.push_back(std::move(registration));
         } else if (type == "resize") {
-            const auto requested = info[1].As<v8::Function>();
+            const auto requested = info[1];
             for (const auto& registration : self->resize_listeners) {
                 auto callback = registration.callback.Get(info.GetIsolate());
                 if (!callback.IsEmpty()
@@ -465,10 +506,12 @@
                     return;
                 }
             }
-            auto name = to_utf8(info.GetIsolate(), requested->GetName());
+            auto name = requested->IsFunction()
+                ? to_utf8(info.GetIsolate(), requested.As<v8::Function>()->GetName())
+                : std::string("<object listener>");
             if (name.empty()) name = "<anonymous>";
             event_listener_registration registration{
-                v8::Global<v8::Function>(info.GetIsolate(), requested),
+                v8::Global<v8::Value>(info.GetIsolate(), requested),
                 v8::Global<v8::Context>(info.GetIsolate(), local_context),
                 std::move(name),
                 self->current_input_sequence,
@@ -490,13 +533,14 @@
         self->record_feature(
             "dom",
             "method:EventTarget.removeEventListener",
-            info.Length() >= 2 && info[1]->IsFunction() ? "supported" : "invalid-authoring",
-            info.Length() >= 2 && info[1]->IsFunction()
-                ? std::string{} : "an event type and function listener are required",
+            info.Length() >= 2 && (info[1]->IsObject() || info[1]->IsNullOrUndefined())
+                ? "supported" : "invalid-authoring",
+            info.Length() >= 2 && (info[1]->IsObject() || info[1]->IsNullOrUndefined())
+                ? std::string{} : "an event type and object listener are required",
             "dom-binding");
-        if (info.Length() < 2 || !info[1]->IsFunction()) return;
+        if (info.Length() < 2 || info[1]->IsNullOrUndefined() || !info[1]->IsObject()) return;
         const auto type = to_utf8(info.GetIsolate(), info[0]);
-        const auto requested = info[1].As<v8::Function>();
+        const auto requested = info[1];
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         const auto standalone_target_id = generated_standalone_event_target_id(
             info.GetIsolate(), info.This());
@@ -1219,11 +1263,13 @@
         const auto listeners = self->frame_event_listeners.find(type);
         v8::Local<v8::Value> arguments[] = {event};
         const auto invoke_callback = [&](
-            v8::Local<v8::Function> callback,
+            v8::Local<v8::Value> callback,
             v8::Local<v8::Object> current_target) {
             v8::TryCatch try_catch(info.GetIsolate());
-            if (!callback->Call(
+            if (!call_event_listener(
+                    info.GetIsolate(),
                     local_context,
+                    callback,
                     current_target,
                     1,
                     arguments).IsEmpty()) {

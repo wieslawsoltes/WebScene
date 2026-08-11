@@ -92,6 +92,8 @@
     "dom/events/AddEventListenerOptions-passive.any.js": "521c3c08a44b4aaab640dc5fdd0140afed0b9d3f5c290327aeed8824f4482e3c",
     "dom/events/AddEventListenerOptions-signal.any.js": "26d439086c069f05f930ee3a3fda181e0034b489a89a7031696106cbdd97bc4c",
     "dom/events/Event-dispatch-order.html": "eab3c16fe04011aab013c4454f80bd56b7117e4d6e01c3b182dd18a2386b0bbf",
+    "dom/events/EventTarget-add-listener-platform-object.html": "154c5d4765e20ed038833b12a3edacecfbd118343d1f6f2d5f7b3daa7a2b6efe",
+    "dom/events/EventTarget-this-of-listener.html": "e972d5d702242bb7219dd91476bdd9fe6aecb21c372ce88317d314b2364da086",
     "dom/nodes/ParentNode-querySelector-escapes.html": "fa1e02eec0cc18cd335c07e25a8ee83dc14e091fcfd93e99bdfc8c774001d915",
     "dom/nodes/ParentNode-querySelector-scope.html": "c4e9845879103662af728a7165ee303c1cb53ffbef9ec32d04a28084ce7773bc",
     "html/semantics/selectors/pseudo-classes/checked.html": "45ce033a21137c34bf0efa6b3be594cc59e84ec55ff022fa54904c4ac8cbe704",

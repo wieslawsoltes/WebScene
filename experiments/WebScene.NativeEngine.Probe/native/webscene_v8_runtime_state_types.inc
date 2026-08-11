@@ -199,7 +199,7 @@
     };
 
     struct event_listener_registration final {
-        v8::Global<v8::Function> callback;
+        v8::Global<v8::Value> callback;
         v8::Global<v8::Context> context;
         std::string name;
         uint64_t registration_sequence{0};

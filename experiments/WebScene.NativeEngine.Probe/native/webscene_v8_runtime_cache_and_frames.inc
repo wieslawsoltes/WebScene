@@ -1945,7 +1945,7 @@
                 "supported",
                 {},
                 "event-dispatch");
-            auto event = v8::Object::New(isolate);
+            auto event = create_event_instance(local_frame_context);
             event->Set(
                 local_frame_context,
                 js_string(isolate, "type"),
@@ -1961,6 +1961,9 @@
             v8::Local<v8::Value> arguments[] = {event};
             const auto listeners = frame_event_listeners.find(type);
             if (listeners != frame_event_listeners.end()) {
+                const auto target_id = is_document_object(target)
+                    ? std::numeric_limits<uint32_t>::max()
+                    : 0U;
                 auto* listener_list = &listeners->second;
                 // Listener callbacks can register more listeners. Snapshot the
                 // initial length, as EventTarget dispatch does, and reacquire
@@ -1968,21 +1971,53 @@
                 const auto listener_count = listener_list->size();
                 for (size_t index = 0; index < listener_count; ++index) {
                     auto& listener = (*listener_list)[index];
-                    if (listener.context.Get(isolate) != local_frame_context) continue;
+                    if (listener.context.Get(isolate) != local_frame_context
+                        || listener.target != target_id) continue;
                     auto callback = listener.callback.Get(isolate);
                     if (callback.IsEmpty()) continue;
+                    if (!listener.signal.IsEmpty()) {
+                        auto signal = listener.signal.Get(isolate);
+                        v8::Local<v8::Value> aborted;
+                        if (signal->Get(
+                                local_frame_context,
+                                js_string(isolate, "aborted")).ToLocal(&aborted)
+                            && aborted->BooleanValue(isolate)) {
+                            listener.callback.Reset();
+                            listener.signal.Reset();
+                            continue;
+                        }
+                    }
+                    const auto passive = listener.passive;
+                    if (listener.once) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                    }
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::Boolean::New(isolate, passive)).Check();
                     v8::TryCatch try_catch(isolate);
-                    if (callback->Call(
+                    const auto callback_succeeded = !call_event_listener(
+                            isolate,
                             local_frame_context,
+                            callback,
                             target,
                             1,
-                            arguments).IsEmpty()) {
+                            arguments).IsEmpty();
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::False(isolate)).Check();
+                    if (!callback_succeeded) {
                         frame_last_error_value = std::string("Iframe ") + type
                             + " dispatch failed: " + describe_exception(try_catch, local_frame_context);
                         ++frame_script_error_count;
                         return false;
                     }
                 }
+                std::erase_if(
+                    *listener_list,
+                    [](const auto& listener) { return listener.callback.IsEmpty(); });
             }
             perform_microtask_checkpoint();
             return true;

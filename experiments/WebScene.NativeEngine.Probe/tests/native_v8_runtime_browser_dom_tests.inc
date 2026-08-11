@@ -113,7 +113,11 @@ void test_event_listener_options_reach_native_input_and_resize(webscene_engine* 
             abortedResizes: 0,
             abortEvents: 0,
             abortReasonStable: false,
-            abortThrowStable: false
+            abortThrowStable: false,
+            objectMouseups: 0,
+            objectResizes: 0,
+            removedObjectCalls: 0,
+            objectThisStable: true
           };
           target.addEventListener('mousedown', event => {
             event.preventDefault();
@@ -124,10 +128,37 @@ void test_event_listener_options_reach_native_input_and_resize(webscene_engine* 
             signal: inputController.signal
           });
           inputController.abort();
+          const inputObjectListener = {
+            handleEvent() {
+              throw new Error('stale object listener method');
+            }
+          };
+          target.addEventListener('mouseup', inputObjectListener, { once: true });
+          target.addEventListener('mouseup', inputObjectListener);
+          inputObjectListener.handleEvent = function(event) {
+            __listenerOptions.objectMouseups++;
+            __listenerOptions.objectThisStable &&=
+              this === inputObjectListener && event.currentTarget === target;
+          };
+          const removedObjectListener = {
+            handleEvent() {
+              __listenerOptions.removedObjectCalls++;
+            }
+          };
+          target.addEventListener('click', removedObjectListener);
+          target.removeEventListener('click', removedObjectListener);
           const click = () => __listenerOptions.onceClicks++;
           target.addEventListener('click', click, { once: true });
           target.addEventListener('click', click);
           addEventListener('resize', () => __listenerOptions.onceResizes++, { once: true });
+          const resizeObjectListener = {
+            handleEvent(event) {
+              __listenerOptions.objectResizes++;
+              __listenerOptions.objectThisStable &&=
+                this === resizeObjectListener && event.currentTarget === window;
+            }
+          };
+          addEventListener('resize', resizeObjectListener, { once: true });
           const resizeController = new AbortController();
           addEventListener('resize', () => __listenerOptions.abortedResizes++, {
             signal: resizeController.signal
@@ -180,7 +211,7 @@ void test_event_listener_options_reach_native_input_and_resize(webscene_engine* 
         engine,
         "globalThis.__listenerOptions",
         "native-event-listener-options-result.js");
-    if (result != R"({"passiveDefaultPrevented":false,"abortedMouseup":0,"onceClicks":1,"onceResizes":1,"abortedResizes":0,"abortEvents":1,"abortReasonStable":true,"abortThrowStable":true})") {
+    if (result != R"({"passiveDefaultPrevented":false,"abortedMouseup":0,"onceClicks":1,"onceResizes":1,"abortedResizes":0,"abortEvents":1,"abortReasonStable":true,"abortThrowStable":true,"objectMouseups":1,"objectResizes":1,"removedObjectCalls":0,"objectThisStable":true})") {
         fail("listener options diverged across native input or resize dispatch: " + result);
     }
 }

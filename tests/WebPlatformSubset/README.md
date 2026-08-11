@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-11 coverage audit
 
-The pinned profile contains 110 required, 61 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 63 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-61/61 documents and 340/340 subtests while the release gate remains 110/110 documents
+63/63 documents and 347/347 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -163,7 +163,12 @@ and 434/434 subtests:
   `.any.js` adapter and pass all 20 assertions for pre-invocation `once` removal,
   duplicate identity, passive cancellation, and synchronous AbortSignal cleanup;
   native element pointer and Window resize dispatch independently cover the same
-  listener state; and
+  listener state;
+- two unchanged EventListener-object WPTs pass all 7 assertions for function and
+  object `this` binding, identity, removal, per-dispatch `handleEvent` lookup, late
+  method definition, function precedence, and custom-element self-registration;
+  native pointer and Window resize authority independently exercises object listeners;
+  and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -244,6 +249,18 @@ Both isolated and shared-isolate lifecycle probes preserve context identity, hid
 timers, release counts, and shared-slot reuse. Three balanced five-second idle runs
 move median normalized CPU from 0.4563% to 0.4546%, with no signalled wakes, timers,
 animation frames, or additional scene builds.
+
+The EventListener-object slice was compared with its exact clean parent (`03e481c`)
+in six balanced fresh-process runs. Median p50 moved from 0.744 ms to 0.745 ms
+(+0.1%) for 1,000 startup/lifecycle samples, from 34.123 ms to 34.602 ms (+1.4%)
+for the 50-sample selector workload, and from 3.244 ms to 3.258 ms (+0.4%) for 50
+generated named-property samples. The listener-heavy four-context/2,000-node probe
+retains the fixed 976-byte node and identical attributed node, attribute, pool,
+wrapper, and scene storage. The callback persistent handle changes type but not size
+inside the existing cold registration record. Both isolated and shared-isolate
+lifecycle probes pass. Five balanced five-second idle runs record no signalled wakes,
+timers, animation frames, or extra scene builds; median normalized CPU moves from
+0.4785% to 0.5260% (+0.0474 percentage points) in the measurement-noise floor.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence
