@@ -1182,6 +1182,40 @@
       "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
     },
     {
+      "path": "css/CSS2/visufx/visibility-layout-001.xht",
+      "type": "visual",
+      "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression", "self-verifying-visual-wpt"],
+      "evidence": ["side-hide-options-measuring-menu", "synchronous-popup-placement", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "visibility hidden exposes no authored red failure pixels"
+        },
+        {
+          "color": "#ffa500",
+          "minimumPixels": 5000,
+          "description": "the authored orange control box is visibly rendered"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 5000,
+          "description": "the authored blue control box is visibly rendered"
+        }
+      ],
+      "visualGapChecks": [
+        {
+          "firstColor": "#ffa500",
+          "secondColor": "#0000ff",
+          "axis": "vertical",
+          "minimumPixels": 90,
+          "maximumPixels": 102,
+          "description": "the hidden one-inch box retains its vertical layout space"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT explicitly passes when the hidden red box paints nothing while retaining one inch of layout space between visible orange and blue controls. Exact failure/success colors prevent hidden paint and blank-render false passes; the bounded spatial color oracle proves the controls remain separated by the hidden box."
+    },
+    {
       "path": "css/css-backgrounds/border-radius-overflow-hidden.html",
       "type": "visual",
       "capabilities": ["rounded-overflow-clipping", "border-radius", "descendant-paint-clipping", "self-verifying-visual-wpt"],
@@ -1215,13 +1249,6 @@
       "capabilities": ["inside-list-marker", "first-line-inline-participation", "continuation-line-wrap"],
       "evidence": ["r5-inside-list-marker-first-line-reduction"],
       "reason": "This is the closest CSS2 visual statement of the exact rule: an inside marker participates on the first line while the following forced line starts at the principal block edge. It has no rel=match or assertions, so the current exact-match/testharness adapter cannot execute it unchanged; the runner-compatible nested-list reftest remains candidate and the minimal local reduction must carry the precise geometry claim."
-    },
-    {
-      "path": "css/CSS2/visufx/visibility-layout-001.xht",
-      "type": "visual",
-      "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression"],
-      "evidence": ["side-hide-options-measuring-menu", "synchronous-popup-placement"],
-      "reason": "This is the nearest official WPT and exactly asserts the base rule that visibility:hidden suppresses paint without removing layout boxes. It is a self-verifying visual test without rel=match, and it does not compose inherited hidden visibility with generated ::before content. Keep it harness-blocked; the product-neutral native/portable regression covers that exact composition and synchronous geometry read."
     },
     {
       "path": "css/css-backgrounds/border-radius-shorthand-001.htm",

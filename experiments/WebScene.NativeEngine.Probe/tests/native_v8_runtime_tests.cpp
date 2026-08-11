@@ -199,6 +199,7 @@ int main()
     test_monaco_browser_primitives(engine);
     test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);
+    test_bounded_css_named_color_palette();
     test_visibility_inherits_for_computed_style_and_focus(engine);
     test_hover_specificity_preserves_visible_theme_icon(engine);
     test_complex_is_specificity_ignores_non_element_siblings(engine);

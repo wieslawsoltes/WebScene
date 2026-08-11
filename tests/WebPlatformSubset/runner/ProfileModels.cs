@@ -29,12 +29,23 @@ internal sealed class ProfileTest
     public List<string> Capabilities { get; init; } = [];
     public List<string> Evidence { get; init; } = [];
     public List<VisualColorCheck> VisualChecks { get; init; } = [];
+    public List<VisualColorGapCheck> VisualGapChecks { get; init; } = [];
     public string? Reason { get; init; }
 }
 
 internal sealed class VisualColorCheck
 {
     public required string Color { get; init; }
+    public int? MinimumPixels { get; init; }
+    public int? MaximumPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualColorGapCheck
+{
+    public required string FirstColor { get; init; }
+    public required string SecondColor { get; init; }
+    public string Axis { get; init; } = "vertical";
     public int? MinimumPixels { get; init; }
     public int? MaximumPixels { get; init; }
     public string? Description { get; init; }

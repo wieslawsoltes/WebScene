@@ -2456,3 +2456,21 @@ void test_class_list_is_same_live_object(webscene_engine* engine)
         "Element.classList did not preserve same-object identity and live method shadowing: "
             + result);
 }
+
+void test_bounded_css_named_color_palette()
+{
+    require(webscene_native::native_document::parse_color("silver") == 0xC0C0C0FFU,
+        "CSS silver did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("maroon") == 0x800000FFU,
+        "CSS maroon did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("purple") == 0x800080FFU,
+        "CSS purple did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("olive") == 0x808000FFU,
+        "CSS olive did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("navy") == 0x000080FFU,
+        "CSS navy did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("teal") == 0x008080FFU,
+        "CSS teal did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("orange") == 0xFFA500FFU,
+        "CSS orange did not resolve to its standard RGBA value");
+}

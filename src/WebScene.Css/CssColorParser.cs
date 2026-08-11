@@ -49,14 +49,14 @@ public static class CssColorParser
 
     /// <summary>
     /// Parses CSS hex colors, the supported comma-separated rgb()/rgba() forms,
-    /// and the CSS gray/grey named-color aliases.
+    /// and the bounded CSS named colors used by the component profile.
     /// </summary>
     public static bool TryParseColor(string? value, out WebSceneColor color)
     {
         var normalized = value?.Trim() ?? string.Empty;
         return TryParseHexColor(normalized, out color)
                || TryParseFunctionalColor(normalized, out color)
-               || TryParseGrayNamedColor(normalized, out color);
+               || TryParseNamedColor(normalized, out color);
     }
 
     /// <summary>Parses the comma-separated rgb()/rgba() forms used by the supported component profile.</summary>
@@ -142,15 +142,36 @@ public static class CssColorParser
         return true;
     }
 
-    private static bool TryParseGrayNamedColor(string value, out WebSceneColor color)
+    private static bool TryParseNamedColor(string value, out WebSceneColor color)
     {
-        // CSS defines both spellings as exact aliases. Avalonia's color
-        // converter accepts the American names on supported platforms but
-        // rejects the British spellings, which otherwise leaves inherited
-        // text foregrounds at the native black default.
+        if (value.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+        {
+            color = new WebSceneColor(0, 0, 0, 0);
+            return true;
+        }
+
+        // Keep the CSS basic palette, orange, and gray/grey aliases independent
+        // of platform color converters so Avalonia and Uno resolve identical
+        // component colors.
         var rgb = value.ToLowerInvariant() switch
         {
+            "black" => 0x000000,
+            "silver" => 0xc0c0c0,
             "gray" or "grey" => 0x808080,
+            "white" => 0xffffff,
+            "maroon" => 0x800000,
+            "red" => 0xff0000,
+            "purple" => 0x800080,
+            "fuchsia" or "magenta" => 0xff00ff,
+            "green" => 0x008000,
+            "lime" => 0x00ff00,
+            "olive" => 0x808000,
+            "yellow" => 0xffff00,
+            "navy" => 0x000080,
+            "blue" => 0x0000ff,
+            "teal" => 0x008080,
+            "aqua" or "cyan" => 0x00ffff,
+            "orange" => 0xffa500,
             "darkgray" or "darkgrey" => 0xa9a9a9,
             "dimgray" or "dimgrey" => 0x696969,
             "lightgray" or "lightgrey" => 0xd3d3d3,

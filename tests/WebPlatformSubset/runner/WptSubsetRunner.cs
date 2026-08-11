@@ -328,7 +328,7 @@ internal sealed partial class WptSubsetRunner
             var actualPath = Path.Combine(artifactDirectory, "actual.png");
             SavePixels(snapshot, actualPath);
 
-            var checks = test.VisualChecks.Select(check =>
+            var colorChecks = test.VisualChecks.Select(check =>
             {
                 var count = VisualColorOracle.Count(snapshot, check.Color);
                 var passed = VisualColorOracle.Passes(check, count);
@@ -340,6 +340,18 @@ internal sealed partial class WptSubsetRunner
                     Message = $"Observed {count} exact opaque-or-visible {check.Color} pixels; expected {bounds}."
                 };
             }).ToList();
+            var gapChecks = test.VisualGapChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.MeasureGap(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description
+                        ?? $"{check.FirstColor} to {check.SecondColor} {check.Axis} gap",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var checks = colorChecks.Concat(gapChecks).ToList();
             timer.Stop();
             var passed = checks.All(check => check.Status == "PASS");
             return new TestResult
@@ -360,7 +372,8 @@ internal sealed partial class WptSubsetRunner
                     TestDocumentPath(test.Path),
                     artifactDirectory,
                     snapshot,
-                    test.VisualChecks)
+                    test.VisualChecks,
+                    test.VisualGapChecks)
             };
         }
         catch (TimeoutException exception)
@@ -738,6 +751,27 @@ internal sealed partial class WptSubsetRunner
                     {
                         throw new InvalidDataException(
                             $"Visual test '{test.Path}' color '{check.Color}' has invalid pixel bounds.");
+                    }
+                }
+                foreach (var check in test.VisualGapChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.FirstColor);
+                    _ = VisualColorOracle.Parse(check.SecondColor);
+                    if (check.Axis is not ("horizontal" or "vertical"))
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' has invalid gap axis '{check.Axis}'.");
+                    }
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' gap has no pixel bound.");
+                    }
+                    if (check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' gap has invalid pixel bounds.");
                     }
                 }
             }

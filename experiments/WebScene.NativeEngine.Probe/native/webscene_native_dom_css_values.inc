@@ -192,6 +192,13 @@ uint32_t native_document::parse_color(const std::string& value)
     if (value == "cyan" || value == "aqua") return 0x00FFFFFFU;
     if (value == "magenta" || value == "fuchsia") return 0xFF00FFFFU;
     if (value == "gray" || value == "grey") return 0x808080FFU;
+    if (value == "silver") return 0xC0C0C0FFU;
+    if (value == "maroon") return 0x800000FFU;
+    if (value == "purple") return 0x800080FFU;
+    if (value == "olive") return 0x808000FFU;
+    if (value == "navy") return 0x000080FFU;
+    if (value == "teal") return 0x008080FFU;
+    if (value == "orange") return 0xFFA500FFU;
     if (value.starts_with("rgb(")) {
         int red = 0;
         int green = 0;

@@ -88,7 +88,8 @@ internal sealed class ChromiumReftestOracle
         string testPath,
         string artifactDirectory,
         WptRenderSnapshot nativeTest,
-        IReadOnlyList<VisualColorCheck> checks)
+        IReadOnlyList<VisualColorCheck> checks,
+        IReadOnlyList<VisualColorGapCheck> gapChecks)
     {
         var chromiumTestPath = Path.Combine(artifactDirectory, "chromium-actual.png");
         try
@@ -105,7 +106,13 @@ internal sealed class ChromiumReftestOracle
                     Passed = VisualColorOracle.Passes(check, count)
                 };
             }).ToList();
-            var passed = observations.All(item => item.Passed);
+            var gapObservations = gapChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.MeasureGap(chromiumTest, check)
+            }).ToList();
+            var passed = observations.All(item => item.Passed)
+                && gapObservations.All(item => item.Observation.Passed);
             return new ChromiumOracleResult
             {
                 Status = passed ? "PASS" : "FAIL",
@@ -113,7 +120,8 @@ internal sealed class ChromiumReftestOracle
                     " ",
                     observations.Select(item =>
                         $"{item.Check.Color}: observed {item.Count}, expected "
-                        + VisualColorOracle.DescribeBounds(item.Check) + ".")),
+                        + VisualColorOracle.DescribeBounds(item.Check) + ".")
+                    .Concat(gapObservations.Select(item => item.Observation.Message))),
                 NativeToChromiumTest = ComparePixels(nativeTest, chromiumTest),
                 Artifacts = new Dictionary<string, string>
                 {
