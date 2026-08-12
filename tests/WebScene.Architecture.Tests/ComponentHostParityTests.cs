@@ -77,10 +77,10 @@ public sealed class ComponentHostParityTests
 
     private static string Normalize(string source)
         => source
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace("firstDocumentSceneTimeout", "documentBarrierTimeout", StringComparison.Ordinal)
             .Replace("                Loaded -= OnLoaded;\n", string.Empty, StringComparison.Ordinal)
-            .Replace("                Unloaded -= OnUnloaded;\n", string.Empty, StringComparison.Ordinal)
-            .Replace("\r\n", "\n", StringComparison.Ordinal);
+            .Replace("                Unloaded -= OnUnloaded;\n", string.Empty, StringComparison.Ordinal);
 
     private static string Extract(string source, string start, string end)
     {
