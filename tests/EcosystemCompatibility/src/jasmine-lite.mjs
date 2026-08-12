@@ -301,11 +301,6 @@ async function invokeTest(body, name) {
     });
   try {
     await Promise.race([execution, timeout]);
-    // Jasmine advances between specs through its asynchronous queue runner.
-    // Give already-queued component cleanup callbacks the same task boundary
-    // before restoring spies and starting the next spec; otherwise a pending
-    // transition fallback can be observed by a spy installed by the next test.
-    await new Promise(resolve => setTimeout(resolve, specTaskDrainMilliseconds));
     if (state.errors.length > errorStart) {
       throw new Error(`Jasmine-compatible test raised an asynchronous error: ${state.errors[errorStart]}`);
     }
@@ -352,6 +347,21 @@ async function executeSuite(suite, ancestors) {
             status: "FAIL",
             message: String(error?.message || error),
             stack: error?.stack ? String(error.stack) : null
+          });
+        }
+        // Jasmine runs afterEach before advancing its asynchronous queue. Give
+        // already-queued component cleanup callbacks a task boundary only after
+        // fixture cleanup, but before restoring spies and starting the next spec.
+        // This prevents pending transition fallbacks from contaminating the next
+        // test without allowing a resolved test's old fixture to restart first.
+        const cleanupErrorStart = state.errors.length;
+        await new Promise(resolve => setTimeout(resolve, specTaskDrainMilliseconds));
+        if (state.errors.length > cleanupErrorStart) {
+          state.results.push({
+            name: `${name} queued cleanup`,
+            status: "FAIL",
+            message: String(state.errors[cleanupErrorStart]),
+            stack: null
           });
         }
         restoreSpies();

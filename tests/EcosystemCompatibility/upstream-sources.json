@@ -84,6 +84,11 @@
           "path": "upstream/bootstrap/js/tests/unit/jquery.spec.js",
           "cases": 2,
           "sha256": "f91cc9d12596d52bc9f9920d9835d6af8606ce25c987a5b4dcb46994eea4c342"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/popover.spec.js",
+          "cases": 31,
+          "sha256": "3347bc027908c2ddb9af304d8fb9253661b1d72ee61b90233b85c60ed3740031"
         }
       ],
       "supportFiles": [
@@ -105,7 +110,6 @@
         }
       ],
       "harnessBlocked": [
-        "popover.spec.js",
         "tooltip.spec.js"
       ],
       "excluded": []
