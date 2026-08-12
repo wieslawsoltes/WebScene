@@ -197,6 +197,21 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/data.js",
+          "cases": 39,
+          "sha256": "ed2abeb7ab33cc6c6ccb34ec8695d1c400deb26a8317033b1ee640028192331e",
+          "inFileHarnessBlocked": [
+            {
+              "name": ".removeData should not throw exceptions. (trac-10080)",
+              "reason": "Requires jQuery's preloaded iframe fixture and a second navigation that dispatches unload."
+            },
+            {
+              "name": "enumerate data attrs on body (trac-14894)",
+              "reason": "Requires jQuery's separately served data/dataAttrs.html fixture and a child browsing context."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/deferred.js",
           "cases": 28,
           "sha256": "c1aa93f428a366bc1759c7f5b5eb71efc13bbdce3062196fefca3986de6cfcde"
@@ -271,7 +286,6 @@
         "animation.js",
         "basic.js",
         "core.js",
-        "data.js",
         "deprecated.js",
         "effects.js",
         "event.js",

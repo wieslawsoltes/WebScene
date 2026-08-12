@@ -75,6 +75,13 @@ const cases = [
     title: "jQuery upstream Deferred suite",
     css: ""
   },
+  ...Array.from({ length: 3 }, (_, index) => ({
+    id: `jquery-data-upstream-${index + 1}`,
+    entry: "src/jquery-data-upstream.mjs",
+    title: `jQuery upstream data suite ${index + 1}/3`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:3};</script>`,
+    css: ""
+  })),
   {
     id: "jquery-queue-upstream",
     entry: "src/jquery-queue-upstream.mjs",
