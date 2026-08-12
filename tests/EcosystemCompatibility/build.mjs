@@ -70,6 +70,12 @@ const cases = [
     css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
   })),
   {
+    id: "jquery-queue-upstream",
+    entry: "src/jquery-queue-upstream.mjs",
+    title: "jQuery upstream queue suite",
+    css: ""
+  },
+  {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
     title: "Bootstrap component composition",

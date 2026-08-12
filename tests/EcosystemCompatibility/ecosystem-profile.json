@@ -137,6 +137,13 @@
       "reason": "Runs shard 4/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/jquery-queue-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "named-queues", "queue-ordering", "dequeue-callbacks", "delay-timers", "queue-promises", "queue-clearing", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-queue-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs the unchanged browser-local queue.js cases with the effects-only branches retaining their upstream skip policy; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/bootstrap-components.html",
       "type": "contract",
       "capabilities": ["tabs", "collapse", "dropdown", "popper-placement", "modal", "tooltip", "popover", "offcanvas", "scrollspy", "intersection-observer", "bounded-scroll", "carousel", "transition-lifecycle", "custom-events", "aria-state"],
@@ -253,7 +260,7 @@
   "excluded": [
     {
       "area": "remaining upstream internal framework suites",
-      "reason": "All fourteen unmodified Bootstrap source suites and four unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
+      "reason": "All fourteen unmodified Bootstrap source suites and seven unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
     }
   ],
   "consumers": [
@@ -262,11 +269,11 @@
       "package": "jquery",
       "version": "4.0.0",
       "stage": "discovery",
-      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html"],
-      "selected": 274,
-      "runnable": 274,
+      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html", "contracts/jquery-queue-upstream.html"],
+      "selected": 287,
+      "runnable": 287,
       "excluded": ["Ajax transport and server fixtures", "animation timing", "legacy-browser compatibility branches"],
-      "harnessBlocked": ["18 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case, five css.js cases, three traversing.js cases, and one dimensions.js case require a mock server, Shadow DOM, browser zoom, separately served resource fixtures, or child browsing contexts."],
+      "harnessBlocked": ["17 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case, five css.js cases, three traversing.js cases, and one dimensions.js case require a mock server, Shadow DOM, browser zoom, separately served resource fixtures, or child browsing contexts."],
       "upstreamSuite": {
         "repository": "https://github.com/jquery/jquery.git",
         "tag": "4.0.0",
@@ -274,10 +281,10 @@
         "root": "test/unit",
         "discoveredFiles": 24,
         "staticRegistrations": 847,
-        "selectedFiles": ["attributes.js", "callbacks.js", "css.js", "dimensions.js", "serialize.js", "traversing.js"],
-        "selectedCases": 266,
-        "runnableCases": 266,
-        "harnessBlockedFiles": 18,
+        "selectedFiles": ["attributes.js", "callbacks.js", "css.js", "dimensions.js", "queue.js", "serialize.js", "traversing.js"],
+        "selectedCases": 279,
+        "runnableCases": 279,
+        "harnessBlockedFiles": 17,
         "inFileHarnessBlockedCases": 10
       }
     },

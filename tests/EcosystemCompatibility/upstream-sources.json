@@ -208,6 +208,21 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/queue.js",
+          "cases": 13,
+          "sha256": "5c904a833b859cb1da64ff82f837663b024327fb130dbe62d0bbfe6342ebd3b4",
+          "inFileUpstreamSkipped": [
+            {
+              "name": "delay() can be stopped",
+              "reason": "The unchanged source skips this case when the effects module is not selected."
+            },
+            {
+              "name": "queue stop hooks",
+              "reason": "The unchanged source skips this case when the effects module is not selected."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/serialize.js",
           "cases": 4,
           "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
@@ -259,7 +274,6 @@
         "exports.js",
         "manipulation.js",
         "offset.js",
-        "queue.js",
         "ready.js",
         "selector.js",
         "support.js",
