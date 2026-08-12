@@ -361,6 +361,43 @@
         return true;
     }
 
+    void enqueue_programmatic_scroll_event(dom_node& target)
+    {
+        auto local_context = isolate->GetCurrentContext();
+        const auto already_pending = std::any_of(
+            pending_programmatic_scroll_events.begin(),
+            pending_programmatic_scroll_events.end(),
+            [&](const auto& event) {
+                return event.target_id == target.id
+                    && event.context.Get(isolate) == local_context;
+            });
+        if (already_pending) return;
+        pending_programmatic_scroll_events.push_back(
+            pending_programmatic_scroll_event{
+                target.id,
+                v8::Global<v8::Context>(isolate, local_context),
+                current_input_sequence});
+    }
+
+    bool drain_programmatic_scroll_event_task()
+    {
+        if (pending_programmatic_scroll_events.empty()) return true;
+        auto task = std::move(pending_programmatic_scroll_events.front());
+        pending_programmatic_scroll_events.erase(
+            pending_programmatic_scroll_events.begin());
+        auto task_context = task.context.Get(isolate);
+        auto* target = document.find_by_native_id(task.target_id);
+        if (target == nullptr || task_context.IsEmpty()) return true;
+        v8::Context::Scope task_context_scope(task_context);
+        webscene_input_event input{};
+        input.sequence = task.input_sequence;
+        v8::TryCatch try_catch(isolate);
+        if (dispatch_input_event_type(input, "scroll", *target)) return true;
+        last_error = "Programmatic scroll dispatch failed: "
+            + describe_exception(try_catch, task_context);
+        return false;
+    }
+
     bool drain_tasks()
     {
         collect_detached_dom_if_requested();
@@ -373,6 +410,9 @@
         }
         if (!pending_window_messages.empty()) {
             return drain_window_message_task();
+        }
+        if (!pending_programmatic_scroll_events.empty()) {
+            return drain_programmatic_scroll_event_task();
         }
         if (!pending_frame_hydrations.empty()) {
             auto* frame = pending_frame_hydrations.front();

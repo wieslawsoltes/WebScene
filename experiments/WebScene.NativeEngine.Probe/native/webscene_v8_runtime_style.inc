@@ -754,6 +754,11 @@
             } else if (name == "z-index") {
                 value = node->style.z_index_auto
                     ? "auto" : std::to_string(node->style.z_index);
+            } else if (name == "position") {
+                value = node->style.position == position_mode::absolute ? "absolute"
+                    : node->style.position == position_mode::fixed ? "fixed"
+                    : node->style.position == position_mode::relative ? "relative"
+                    : "static";
             } else if (name == "float") {
                 value = node->style.floating == float_mode::left ? "left"
                     : node->style.floating == float_mode::right ? "right" : "none";

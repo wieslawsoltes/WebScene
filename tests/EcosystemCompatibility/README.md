@@ -16,10 +16,10 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 21/21 consumer
-documents and 626/626 selected assertions. Historical three-engine evidence from 2026-07-23 had
-Chrome, the former managed adapter, and native at its then-current denominator. Eighteen
-documents execute 600 unchanged official-source cases: all 429
+Current Chrome and native evidence (2026-08-12): both engines pass 22/22 consumer
+documents and 666/666 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at its then-current denominator. Nineteen
+documents execute 640 unchanged official-source cases: all 469
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, and 55 selected browser-local cases from its unmodified `css.js`.
@@ -86,13 +86,13 @@ and both adapters passed both it and all 6/6 assertions in the unchanged pinned 
 The generic WPT adapter also gained BODY `onload` startup support so future
 check-layout documents can run unchanged.
 
-Ten documents now execute all 429 cases from Bootstrap 5.3.8's unmodified
+Eleven documents now execute all 469 cases from Bootstrap 5.3.8's unmodified
 `alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `carousel.spec.js`, `collapse.spec.js`,
-`dropdown.spec.js`, `modal.spec.js`, `offcanvas.spec.js`, `tab.spec.js`, and
+`dropdown.spec.js`, `modal.spec.js`, `offcanvas.spec.js`, `scrollspy.spec.js`, `tab.spec.js`, and
 `toast.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects ten Bootstrap files and three jQuery files, leaving 4,
+tags and commits. It selects eleven Bootstrap files and three jQuery files, leaving 3,
 21, and 128 files respectively classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
@@ -129,6 +129,17 @@ the bounded legacy `Document.createEvent("Event")` path returns a real `Event`, 
 `Event.initEvent()` initializes and reinitializes its type, bubbling, cancelability,
 propagation, and cancellation state. Unsupported legacy interface names fail with
 `NotSupportedError`; no Carousel-specific runtime path was added.
+
+The adjacent ScrollSpy tranche adds all 40 unchanged assertions for target discovery,
+forward and backward bounded scrolling, hidden-section filtering, active navigation,
+smooth scrolling, Unicode fragments, data APIs, lifecycle, and jQuery dispatch. Four
+Chrome-authorized product-neutral reductions close the native divergences: bare fragment
+URLs expose an empty anchor `hash`; the standard `hidden` attribute suppresses and
+dynamically restores layout; programmatic offset changes queue and coalesce one scroll
+event while retaining immediate geometry and unchanged-offset idempotence; and
+`CSSStyleDeclaration.getPropertyValue("position")` exposes the connected scroller's
+computed position so child-relative offsets are not mixed with document-relative ones.
+No ScrollSpy-specific runtime path was added.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

@@ -820,6 +820,34 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-anchor-empty-fragment-reflection.html",
+      "type": "contract",
+      "capabilities": ["anchor-empty-fragment-reflection", "relative-url-fragment-reflection"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-empty-target-reduction"],
+      "reason": "Product-neutral reduction of target discovery: an anchor whose URL ends in a bare fragment delimiter must expose an empty hash, while a named fragment retains its leading delimiter."
+    },
+    {
+      "path": "contracts/html-hidden-attribute-layout.html",
+      "type": "contract",
+      "capabilities": ["html-hidden-attribute", "box-suppression", "dynamic-hidden-layout-restoration"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-hidden-section-reduction"],
+      "reason": "Product-neutral reduction of observable-section discovery: the HTML hidden attribute suppresses layout boxes and flow contribution, and dynamic removal/restoration updates geometry synchronously."
+    },
+    {
+      "path": "contracts/programmatic-scroll-event-task.html",
+      "type": "contract",
+      "capabilities": ["programmatic-scroll-event-task", "scroll-event-coalescing", "late-listener-observation", "unchanged-offset-idempotence"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-scroll-task-reduction"],
+      "reason": "Product-neutral reduction of browser scroll ordering: offset writes update geometry immediately while one scroll event is queued per target, listeners registered before that task observe it, and an unchanged offset queues no additional event."
+    },
+    {
+      "path": "contracts/overflow-percentage-child-scroll-range.html",
+      "type": "contract",
+      "capabilities": ["percentage-height-flow-children", "logical-flow-offsets", "complete-scroll-overflow-extent", "final-child-scroll-alignment"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-backward-scroll-reduction"],
+      "reason": "Product-neutral reduction of bounded overflow navigation: consecutive percentage-height flow children resolve against a definite viewport, all contribute to scrollHeight, and the final child can align at the viewport boundary."
+    },
+    {
       "path": "contracts/document-create-event-init.html",
       "type": "contract",
       "capabilities": ["document-create-event", "event-init-event", "event-identity", "cancelable-dispatch", "event-reinitialization"],

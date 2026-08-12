@@ -99,11 +99,12 @@ function matchesEqual(actual, expected) {
     && expectedKeys.every(key => Object.hasOwn(actual, key) && matchesEqual(actual[key], expected[key]));
 }
 
-function expectation(actual, negated = false) {
+function expectation(actual, negated = false, context = "") {
   const verify = (condition, message) => {
     if (negated ? condition : !condition) {
-      lastExpectationFailure = message;
-      throw new Error(message);
+      const contextualMessage = context ? `${context}: ${message}` : message;
+      lastExpectationFailure = contextualMessage;
+      throw new Error(contextualMessage);
     }
   };
   const matchers = {
@@ -135,6 +136,12 @@ function expectation(actual, negated = false) {
     toBeInstanceOf(constructor) {
       verify(actual instanceof constructor,
         `expected ${describeValue(actual)} ${negated ? "not " : ""}to be an instance of ${constructor?.name}`);
+    },
+    toBeCloseTo(expected, precision = 2) {
+      const tolerance = Math.pow(10, -precision) / 2;
+      verify(typeof actual === "number" && typeof expected === "number"
+          && Math.abs(actual - expected) < tolerance,
+        `expected ${describeValue(actual)} ${negated ? "not " : ""}to be close to ${describeValue(expected)}`);
     },
     toHaveClass(className) {
       verify(Boolean(actual?.classList?.contains(className)),
@@ -187,8 +194,9 @@ function expectation(actual, negated = false) {
     }
   };
   Object.defineProperty(matchers, "not", {
-    get: () => expectation(actual, !negated)
+    get: () => expectation(actual, !negated, context)
   });
+  matchers.withContext = message => expectation(actual, negated, String(message));
   return matchers;
 }
 
@@ -224,6 +232,35 @@ globalThis.spyOn = (owner, propertyName) => {
   const spy = createSpyFunction(original);
   owner[propertyName] = spy;
   activeSpies.push(() => { owner[propertyName] = original; });
+  return spy;
+};
+
+globalThis.spyOnProperty = (owner, propertyName, accessType = "get") => {
+  if (accessType !== "get" && accessType !== "set") {
+    throw new Error(`Unsupported property access type '${accessType}'`);
+  }
+  const ownDescriptor = Object.getOwnPropertyDescriptor(owner, propertyName);
+  let descriptor = ownDescriptor;
+  let prototype = Object.getPrototypeOf(owner);
+  while (!descriptor && prototype) {
+    descriptor = Object.getOwnPropertyDescriptor(prototype, propertyName);
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  const original = descriptor?.[accessType];
+  if (typeof original !== "function") {
+    throw new Error(`'${propertyName}' has no ${accessType} accessor`);
+  }
+  const spy = createSpyFunction(original);
+  Object.defineProperty(owner, propertyName, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: accessType === "get" ? spy : descriptor.get,
+    set: accessType === "set" ? spy : descriptor.set
+  });
+  activeSpies.push(() => {
+    if (ownDescriptor) Object.defineProperty(owner, propertyName, ownDescriptor);
+    else delete owner[propertyName];
+  });
   return spy;
 };
 

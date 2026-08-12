@@ -125,13 +125,13 @@ Discovery results must not be merged into the release pass percentage or adverti
 full standards support. The bounded required profile remains the public compatibility
 contract.
 
-## 2026-08-11 coverage audit
+## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 66 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 70 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-66/66 documents and 355/355 subtests while the release gate remains 110/110 documents
+70/70 documents and 370/370 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -177,6 +177,11 @@ and 434/434 subtests:
   whose `initEvent()` method initializes and resets dispatch flags; a neutral four-
   assertion reduction plus focused native coverage closes Bootstrap Carousel's exact
   gesture-simulator prerequisite without a framework-specific path; and
+- bare-fragment anchor reflection, dynamic HTML `hidden` layout, queued/coalesced
+  programmatic scroll events, percentage-height overflow ranges, and computed
+  `position` lookup now pass 15/15 neutral assertions in Chrome and native; together
+  they close all 40 unchanged Bootstrap ScrollSpy cases without a framework-specific
+  engine branch; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -312,6 +317,23 @@ with zero signalled wakes, no Inspector registry, identical 480-byte blank scene
 the same 800 timer and 240 animation-frame callbacks completed by each variant. Median
 prewarm time moved from 1.484 ms to 1.477 ms (-0.5%); the release library grows by
 16,752 bytes.
+
+The unchanged upstream Bootstrap ScrollSpy slice and product-neutral anchor, hidden,
+computed-style, overflow-range, and scroll-task fixes were compared with their exact
+clean parent (`8794c1b`) in six balanced fresh-process runs. CPU frequency changed
+substantially during the lifecycle run, but median p50 remained within the established
+envelope at 1.404 ms versus 1.434 ms (+2.2%) for 1,000 startup/lifecycle samples.
+Median p50 moved from 31.690 ms to 31.854 ms (+0.5%) for the 30-sample selector
+workload and from 2.922 ms to 2.905 ms (-0.6%) for 50 generated named-property
+samples. A four-context/2,000-node probe retains the fixed 976-byte node and
+byte-identical attributed node, attribute, pool, wrapper, and scene storage; median
+populated V8 used heap increased by a bounded 12,264 bytes per context. Both isolated
+and shared-isolate lifecycle probes pass, including context release and shared-slot
+reuse. Five alternating five-second idle runs move median normalized CPU from 0.2655%
+to 0.2470%, with zero signalled wakes, no Inspector registry, identical 480-byte blank
+scenes, and the same 800 timer and 240 animation-frame callbacks completed by each
+variant. Median prewarm time moved from 1.485 ms to 1.497 ms (+0.8%); the release
+library grows by 80 bytes.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

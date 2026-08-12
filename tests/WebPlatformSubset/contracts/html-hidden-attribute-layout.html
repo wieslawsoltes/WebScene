@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>The hidden attribute suppresses and restores layout boxes</title>
+<style>
+  body { margin: 0; }
+  #hidden-section { height: 40px; }
+  #following { height: 10px; }
+</style>
+<body>
+<div id="hidden-section" hidden>hidden section</div>
+<div id="following">following section</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const section = document.getElementById("hidden-section");
+  const following = document.getElementById("following");
+  const initialFollowingTop = following.offsetTop;
+  record(
+    "the hidden attribute suppresses element boxes",
+    section.getClientRects().length === 0 && section.offsetHeight === 0,
+    `hidden geometry was rects=${section.getClientRects().length}, height=${section.offsetHeight}`
+  );
+
+  section.removeAttribute("hidden");
+  record(
+    "removing hidden restores the element's authored size and flow contribution",
+    section.getClientRects().length === 1 && section.offsetHeight === 40
+      && following.offsetTop === initialFollowingTop + 40,
+    `restored geometry was rects=${section.getClientRects().length}, height=${section.offsetHeight}, followingTop=${following.offsetTop}`
+  );
+
+  section.setAttribute("hidden", "");
+  record(
+    "restoring hidden suppresses the box again",
+    section.getClientRects().length === 0 && section.offsetHeight === 0
+      && following.offsetTop === initialFollowingTop,
+    `rehidden geometry was rects=${section.getClientRects().length}, height=${section.offsetHeight}, followingTop=${following.offsetTop}`
+  );
+
+  state.diagnostics = [JSON.stringify({
+    initialFollowingTop,
+    finalFollowingTop: following.offsetTop,
+    finalRects: section.getClientRects().length
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

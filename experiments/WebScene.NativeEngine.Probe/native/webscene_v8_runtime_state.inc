@@ -104,6 +104,8 @@
     std::vector<event_listener_registration> resize_listeners;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
+    std::vector<pending_programmatic_scroll_event>
+        pending_programmatic_scroll_events;
     native_websocket_transport websocket_transport;
     std::unordered_map<uint64_t, websocket_binding> websocket_bindings;
     std::vector<connected_resource_task> connected_resources;

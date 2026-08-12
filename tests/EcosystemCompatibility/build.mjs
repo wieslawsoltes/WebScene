@@ -125,6 +125,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-scrollspy-upstream",
+    entry: "src/bootstrap-scrollspy-upstream.mjs",
+    title: "Bootstrap upstream ScrollSpy suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 

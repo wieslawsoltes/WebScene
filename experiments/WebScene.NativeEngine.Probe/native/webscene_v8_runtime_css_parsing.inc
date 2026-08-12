@@ -493,7 +493,8 @@
 
     bool attribute_requires_recascade(std::string_view name) const
     {
-        if (name == "id" || name == "class" || name == "style" || name == "type") return true;
+        if (name == "id" || name == "class" || name == "style"
+            || name == "type" || name == "hidden") return true;
         return css_attribute_dependencies.contains(std::string(name));
     }
 

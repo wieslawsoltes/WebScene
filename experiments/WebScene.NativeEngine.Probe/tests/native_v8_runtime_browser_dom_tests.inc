@@ -1671,3 +1671,91 @@ void test_document_links_is_a_live_named_html_collection(webscene_engine* engine
         result == R"JSON({"beforeRemoval":{"sameObject":true,"brand":true,"length":2,"first":"earlier","second":"later","id":"earlier","nameFirst":"earlier","namedProperty":"earlier","lengthOnPrototype":true},"afterHrefRemoval":[1,"later",null,null],"afterDetach":[1,"later"],"illegalConstructor":true,"illegalItemReceiver":true,"illegalNamedItemReceiver":true,"illegalLengthReceiver":true})JSON",
         "Document.links did not retain live named HTMLCollection semantics: " + result);
 }
+
+void test_scrollspy_product_neutral_primitives(webscene_engine* engine)
+{
+    const auto immediate = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div style="height:84px"></div>
+            <div id="scrollspy-scroller" style="position:relative;height:100px;overflow:auto">
+              <div style="position:relative;height:100%">one</div>
+              <div style="position:relative;height:100%">two</div>
+              <div style="position:relative;height:100%">three</div>
+              <div style="position:relative;height:100%">four</div>
+              <div style="position:relative;height:100%">five</div>
+            </div>
+            <div id="hidden-section" style="height:40px" hidden></div>
+            <div id="following-section" style="height:10px"></div>
+            <a id="bare-fragment" href="#"></a>
+            <a id="relative-bare-fragment" href="relative#"></a>
+            <a id="named-fragment" href="#section"></a>`;
+          const scroller = document.getElementById('scrollspy-scroller');
+          const hidden = document.getElementById('hidden-section');
+          const following = document.getElementById('following-section');
+          const hiddenFollowingTop = following.offsetTop;
+          const hiddenInitial = hidden.offsetHeight === 0
+            && hidden.getClientRects().length === 0;
+          hidden.removeAttribute('hidden');
+          const hiddenRestored = hidden.offsetHeight === 40
+            && following.offsetTop === hiddenFollowingTop + 40;
+          hidden.setAttribute('hidden', '');
+          const hiddenReapplied = hidden.offsetHeight === 0
+            && following.offsetTop === hiddenFollowingTop;
+          globalThis.__programmaticScrollEarly = 0;
+          globalThis.__programmaticScrollLate = 0;
+          scroller.addEventListener('scroll', () => __programmaticScrollEarly++);
+          scroller.scrollTop = 20;
+          scroller.scrollTop = 40;
+          scroller.addEventListener('scroll', () => __programmaticScrollLate++);
+          return {
+            position: getComputedStyle(scroller).getPropertyValue('position'),
+            fragments: [
+              document.getElementById('bare-fragment').hash,
+              document.getElementById('relative-bare-fragment').hash,
+              document.getElementById('named-fragment').hash
+            ],
+            hidden: [hiddenInitial, hiddenRestored, hiddenReapplied],
+            range: [scroller.clientHeight, scroller.scrollHeight],
+            offsets: Array.from(scroller.children, child => child.offsetTop),
+            immediate: [scroller.scrollTop, __programmaticScrollEarly, __programmaticScrollLate]
+          };
+        })()
+    )JS", "native-scrollspy-neutral-primitives.js");
+    require(
+        immediate == R"JSON({"position":"relative","fragments":["","","#section"],"hidden":[true,true,true],"range":[100,500],"offsets":[0,100,200,300,400],"immediate":[40,0,0]})JSON",
+        "ScrollSpy neutral primitives were inconsistent before the queued scroll task: "
+            + immediate);
+
+    auto eventual = std::string{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        eventual = evaluate(engine, R"JS(
+            ({
+              scrollTop: document.getElementById('scrollspy-scroller').scrollTop,
+              early: __programmaticScrollEarly,
+              late: __programmaticScrollLate
+            })
+        )JS", "native-scrollspy-queued-scroll-result.js");
+        if (eventual == R"JSON({"scrollTop":40,"early":1,"late":1})JSON") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        eventual == R"JSON({"scrollTop":40,"early":1,"late":1})JSON",
+        "programmatic scroll writes did not coalesce into one queued event: " + eventual);
+
+    const auto unchanged = evaluate(engine, R"JS(
+        (() => {
+          const scroller = document.getElementById('scrollspy-scroller');
+          scroller.scrollTop = 40;
+          return [__programmaticScrollEarly, __programmaticScrollLate];
+        })()
+    )JS", "native-scrollspy-unchanged-scroll.js");
+    require(
+        unchanged == "[1,1]",
+        "an unchanged programmatic offset synchronously altered event counts: " + unchanged);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    require(
+        evaluate(engine, "[__programmaticScrollEarly, __programmaticScrollLate]",
+            "native-scrollspy-unchanged-scroll-result.js") == "[1,1]",
+        "an unchanged programmatic offset queued an additional scroll event");
+}

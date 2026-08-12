@@ -26,6 +26,12 @@
         std::string source_origin;
     };
 
+    struct pending_programmatic_scroll_event final {
+        uint32_t target_id;
+        v8::Global<v8::Context> context;
+        uint64_t input_sequence;
+    };
+
     struct websocket_binding final {
         v8::Global<v8::Context> context;
         v8::Global<v8::Function> callback;

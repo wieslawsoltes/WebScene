@@ -1050,17 +1050,7 @@
         if (std::abs(next - node->scroll_left) <= 0.01F) return;
         node->scroll_left = next;
         self->document.mark_dirty();
-        webscene_input_event input{};
-        input.sequence = self->current_input_sequence;
-        v8::TryCatch try_catch(info.GetIsolate());
-        if (!self->dispatch_input_event_type(input, "scroll", *node)) {
-            const auto error = self->describe_exception(
-                try_catch,
-                info.GetIsolate()->GetCurrentContext());
-            self->last_error = "Programmatic scrollLeft dispatch failed: " + error;
-            info.GetIsolate()->ThrowException(v8::Exception::Error(
-                js_string(info.GetIsolate(), self->last_error.c_str())));
-        }
+        self->enqueue_programmatic_scroll_event(*node);
     }
 
     static void set_scroll_top(
@@ -1086,17 +1076,7 @@
         if (std::abs(next - node->scroll_top) <= 0.01F) return;
         node->scroll_top = next;
         self->document.mark_dirty();
-        webscene_input_event input{};
-        input.sequence = self->current_input_sequence;
-        v8::TryCatch try_catch(info.GetIsolate());
-        if (!self->dispatch_input_event_type(input, "scroll", *node)) {
-            const auto error = self->describe_exception(
-                try_catch,
-                info.GetIsolate()->GetCurrentContext());
-            self->last_error = "Programmatic scrollTop dispatch failed: " + error;
-            info.GetIsolate()->ThrowException(v8::Exception::Error(
-                js_string(info.GetIsolate(), self->last_error.c_str())));
-        }
+        self->enqueue_programmatic_scroll_event(*node);
     }
 
     static void element_scroll_into_view(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2154,6 +2134,7 @@
         }
         const auto fragment = iterator->second.find('#');
         const auto value = fragment == std::string::npos
+                || fragment + 1U == iterator->second.size()
             ? std::string{}
             : iterator->second.substr(fragment);
         info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));

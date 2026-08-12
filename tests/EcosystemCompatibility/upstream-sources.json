@@ -74,6 +74,11 @@
           "path": "upstream/bootstrap/js/tests/unit/carousel.spec.js",
           "cases": 66,
           "sha256": "ffaafb6b4ec0455466df8bc2cfbb4e6f0a43b322651cd54cd0b1a9ff953a5c7e"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/scrollspy.spec.js",
+          "cases": 40,
+          "sha256": "b398af154217a37dca1dc14548f101a8abb6fd532f6d04321244cac43f6bf726"
         }
       ],
       "supportFiles": [
@@ -97,7 +102,6 @@
       "harnessBlocked": [
         "jquery.spec.js",
         "popover.spec.js",
-        "scrollspy.spec.js",
         "tooltip.spec.js"
       ],
       "excluded": []

@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Anchor empty fragments reflect an empty hash</title>
+<body>
+<a id="empty" href="#">empty</a>
+<a id="path-empty" href="relative-path#">path empty</a>
+<a id="named" href="#section">named</a>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const empty = document.getElementById("empty");
+  const pathEmpty = document.getElementById("path-empty");
+  const named = document.getElementById("named");
+  record(
+    "a fragment delimiter without a fragment reflects an empty hash",
+    empty.hash === "",
+    `empty hash was ${JSON.stringify(empty.hash)}`
+  );
+  record(
+    "an empty fragment after a relative path reflects an empty hash",
+    pathEmpty.hash === "",
+    `path hash was ${JSON.stringify(pathEmpty.hash)}`
+  );
+  record(
+    "a non-empty fragment retains its leading delimiter",
+    named.hash === "#section",
+    `named hash was ${JSON.stringify(named.hash)}`
+  );
+
+  state.diagnostics = [JSON.stringify({
+    empty: empty.hash,
+    pathEmpty: pathEmpty.hash,
+    named: named.hash
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

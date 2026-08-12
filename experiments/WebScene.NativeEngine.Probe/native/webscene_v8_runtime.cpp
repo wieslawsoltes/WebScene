@@ -3610,6 +3610,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
     return impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
+        || !impl_->pending_programmatic_scroll_events.empty()
         || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()
         || impl_->resize_observers_pending
