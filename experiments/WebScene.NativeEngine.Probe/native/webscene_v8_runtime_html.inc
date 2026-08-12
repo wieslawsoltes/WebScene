@@ -398,16 +398,19 @@
                     node.style.inline_property_mask |= inline_property_mask;
                     detect_css_compositions(node);
                 }
-                if (node.tag == "input" || node.tag == "textarea") {
+                if (node.tag == "input") {
                     const auto value = node.attributes.find("value");
                     if (value != node.attributes.end()) {
                         auto& form = node.mutable_form_control();
                         form.value = value->second;
                         form.value_initialized = true;
+                        form.dirty_value = false;
                         form.selection_start = form.value.size();
                         form.selection_end = form.value.size();
                         form.selection_direction = text_selection_direction::none;
                     }
+                } else if (node.tag == "textarea") {
+                    reset_textarea_value(node);
                 }
                 if (node.tag == "iframe") {
                     const auto source = node.attributes.find("src");
@@ -636,11 +639,12 @@
                     node.attributes[stored_name] = value;
                 }
             }
-            if (name == "input" || name == "textarea") {
+            if (name == "input") {
                 const auto value = node.attributes.find("value");
                 if (value != node.attributes.end()) {
                     node.mutable_form_control().value = value->second;
                     node.mutable_form_control().value_initialized = true;
+                    node.mutable_form_control().dirty_value = false;
                     node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
                     node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
                     node.mutable_form_control().selection_direction = text_selection_direction::none;
@@ -713,7 +717,9 @@
 #endif
         if (!self->blur_active_descendant_before_replacing_children(*output)) return;
         self->detach_all_children(*output);
+        output->text_content.clear();
         if (!html.empty()) self->parse_inner_html(*output, html, parent);
+        else synchronize_textarea_value_from_children(*output);
     }
 
     static void get_content_window(

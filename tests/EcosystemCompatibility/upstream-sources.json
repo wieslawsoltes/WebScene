@@ -195,6 +195,11 @@
               "reason": "Requires jQuery's separately served css/cssComputeStyleTests.html iframe fixture and child browsing context."
             }
           ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/serialize.js",
+          "cases": 4,
+          "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
         }
       ],
       "supportFiles": [
@@ -228,7 +233,6 @@
         "queue.js",
         "ready.js",
         "selector.js",
-        "serialize.js",
         "support.js",
         "traversing.js",
         "tween.js",

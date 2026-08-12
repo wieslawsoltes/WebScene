@@ -880,6 +880,7 @@ struct dom_node final {
         bool checkedness_initialized{false};
         bool checkedness{false};
         bool value_initialized{false};
+        bool dirty_value{false};
         bool input_focused{false};
         bool caret_visible{false};
     };
@@ -1562,6 +1563,9 @@ private:
 // footprint so new web-facing state cannot silently become a per-node or
 // per-document tax on every hosted component.
 static_assert(sizeof(void*) != 8 || sizeof(dom_node) == 976);
+static_assert(
+    sizeof(void*) != 8 || sizeof(dom_node::form_control_data) == 56,
+    "textarea dirty-value tracking must stay inside the existing cold form-control record");
 static_assert(sizeof(void*) != 8 || sizeof(native_document) == 304);
 
 } // namespace webscene_native

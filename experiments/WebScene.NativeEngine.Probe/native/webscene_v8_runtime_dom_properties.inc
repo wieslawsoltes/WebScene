@@ -151,6 +151,46 @@
         for (const auto* child : node.children) append_node_text(*child, value);
     }
 
+    static std::string normalize_textarea_newlines(std::string_view value)
+    {
+        std::string normalized;
+        normalized.reserve(value.size());
+        for (size_t index = 0; index < value.size(); ++index) {
+            if (value[index] == '\r') {
+                if (index + 1U < value.size() && value[index + 1U] == '\n') ++index;
+                normalized.push_back('\n');
+            } else {
+                normalized.push_back(value[index]);
+            }
+        }
+        return normalized;
+    }
+
+    static std::string textarea_default_value(const dom_node& node)
+    {
+        std::string value;
+        append_node_text(node, value);
+        return value;
+    }
+
+    static void reset_textarea_value(dom_node& node)
+    {
+        auto& control = node.mutable_form_control();
+        control.value = normalize_textarea_newlines(textarea_default_value(node));
+        control.value_initialized = true;
+        control.dirty_value = false;
+        control.selection_start = control.value.size();
+        control.selection_end = control.value.size();
+        control.selection_direction = text_selection_direction::none;
+    }
+
+    static void synchronize_textarea_value_from_children(dom_node& node)
+    {
+        if (node.tag == "textarea" && !node.form_control().dirty_value) {
+            reset_textarea_value(node);
+        }
+    }
+
     static void get_text_content(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -222,9 +262,24 @@
             if (!self->blur_active_descendant_before_replacing_children(*node)) return;
             self->detach_all_children(*node);
         }
-        node->text_content = raw_value->IsNullOrUndefined()
+        const auto text = raw_value->IsNullOrUndefined()
             ? std::string{}
             : to_wtf8(info.GetIsolate(), raw_value);
+        if (node->tag == "textarea") {
+            node->text_content.clear();
+            if (!text.empty()) {
+                auto& text_node = self->document.create_node(
+                    dom_node_kind::text, "#text");
+                text_node.text_content = text;
+                self->document.append_child(*node, text_node);
+            }
+            synchronize_textarea_value_from_children(*node);
+        } else {
+            node->text_content = text;
+            if (node->kind == dom_node_kind::text && node->parent != nullptr) {
+                synchronize_textarea_value_from_children(*node->parent);
+            }
+        }
         self->activate_connected_stylesheet(*node);
         self->document.mark_dirty();
     }
@@ -1478,6 +1533,11 @@
     {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || (node->tag != "input" && node->tag != "textarea")) return;
+        if (node->tag == "textarea") {
+            info.GetReturnValue().Set(js_dom_string(
+                info.GetIsolate(), textarea_default_value(*node)));
+            return;
+        }
         const auto authored = node->attributes.find("value");
         info.GetReturnValue().Set(js_dom_string(
             info.GetIsolate(),
@@ -1492,7 +1552,21 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || (node->tag != "input" && node->tag != "textarea")) return;
-        node->attributes["value"] = to_wtf8(info.GetIsolate(), value);
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        if (node->tag == "textarea") {
+            if (!self->blur_active_descendant_before_replacing_children(*node)) return;
+            self->detach_all_children(*node);
+            node->text_content.clear();
+            if (!text.empty()) {
+                auto& text_node = self->document.create_node(
+                    dom_node_kind::text, "#text");
+                text_node.text_content = text;
+                self->document.append_child(*node, text_node);
+            }
+            synchronize_textarea_value_from_children(*node);
+        } else {
+            node->attributes["value"] = text;
+        }
         self->document.mark_dirty();
     }
 
@@ -1751,14 +1825,18 @@
             }
         }
         if (!node->mutable_form_control().value_initialized) {
-            const auto value = node->attributes.find("value");
-            if (value != node->attributes.end()) {
-                node->mutable_form_control().value = value->second;
+            if (node->tag == "textarea") {
+                reset_textarea_value(*node);
+            } else {
+                const auto value = node->attributes.find("value");
+                if (value != node->attributes.end()) {
+                    node->mutable_form_control().value = value->second;
+                }
+                node->mutable_form_control().value_initialized = true;
+                node->mutable_form_control().selection_start = node->mutable_form_control().value.size();
+                node->mutable_form_control().selection_end = node->mutable_form_control().value.size();
+                node->mutable_form_control().selection_direction = text_selection_direction::none;
             }
-            node->mutable_form_control().value_initialized = true;
-            node->mutable_form_control().selection_start = node->mutable_form_control().value.size();
-            node->mutable_form_control().selection_end = node->mutable_form_control().value.size();
-            node->mutable_form_control().selection_direction = text_selection_direction::none;
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), node->mutable_form_control().value.c_str()));
     }
@@ -1834,6 +1912,9 @@
             ? std::string{}
             : to_utf8(info.GetIsolate(), value);
         node->mutable_form_control().value_initialized = true;
+        if (node->tag == "textarea") {
+            node->mutable_form_control().dirty_value = true;
+        }
         node->mutable_form_control().selection_start = std::min(node->mutable_form_control().selection_start, node->mutable_form_control().value.size());
         node->mutable_form_control().selection_end = std::min(node->mutable_form_control().selection_end, node->mutable_form_control().value.size());
         if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
@@ -2037,11 +2118,16 @@
                 node.mutable_form_control().selectedness = false;
             }
             if (node.tag == "input" || node.tag == "textarea") {
-                const auto authored = node.attributes.find("value");
-                node.mutable_form_control().value = authored == node.attributes.end()
-                    ? std::string{}
-                    : authored->second;
-                node.mutable_form_control().value_initialized = true;
+                if (node.tag == "textarea") {
+                    reset_textarea_value(node);
+                } else {
+                    const auto authored = node.attributes.find("value");
+                    node.mutable_form_control().value = authored == node.attributes.end()
+                        ? std::string{}
+                        : authored->second;
+                    node.mutable_form_control().value_initialized = true;
+                    node.mutable_form_control().dirty_value = false;
+                }
                 if (node.tag == "input") {
                     node.mutable_form_control().checkedness_initialized = false;
                     node.mutable_form_control().checkedness = false;

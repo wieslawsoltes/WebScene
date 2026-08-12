@@ -1783,12 +1783,16 @@
     void ensure_form_value(dom_node& node)
     {
         if (node.mutable_form_control().value_initialized) return;
-        const auto value = node.attributes.find("value");
-        node.mutable_form_control().value = value == node.attributes.end() ? std::string{} : value->second;
-        node.mutable_form_control().value_initialized = true;
-        node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
-        node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
-        node.mutable_form_control().selection_direction = text_selection_direction::none;
+        if (node.tag == "textarea") {
+            reset_textarea_value(node);
+        } else {
+            const auto value = node.attributes.find("value");
+            node.mutable_form_control().value = value == node.attributes.end() ? std::string{} : value->second;
+            node.mutable_form_control().value_initialized = true;
+            node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
+            node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
+            node.mutable_form_control().selection_direction = text_selection_direction::none;
+        }
     }
 
     static size_t previous_utf8_boundary(const std::string& value, size_t index)
@@ -1832,6 +1836,7 @@
                 std::max(target->mutable_form_control().selection_start, target->mutable_form_control().selection_end),
                 target->mutable_form_control().value.size());
             target->mutable_form_control().value.replace(start, end - start, text);
+            target->mutable_form_control().dirty_value = true;
             target->mutable_form_control().selection_start = start + text.size();
             target->mutable_form_control().selection_end = target->mutable_form_control().selection_start;
             target->mutable_form_control().selection_direction = text_selection_direction::none;
@@ -1954,6 +1959,7 @@
                 } else {
                     target->mutable_form_control().value.erase(start, end - start);
                 }
+                target->mutable_form_control().dirty_value = true;
                 target->mutable_form_control().selection_start =
                     target->mutable_form_control().selection_end = start;
                 target->mutable_form_control().selection_direction = text_selection_direction::none;

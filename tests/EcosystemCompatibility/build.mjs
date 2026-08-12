@@ -50,6 +50,12 @@ const cases = [
     css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
   })),
   {
+    id: "jquery-serialize-upstream",
+    entry: "src/jquery-serialize-upstream.mjs",
+    title: "jQuery upstream serialize suite",
+    css: ""
+  },
+  {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
     title: "Bootstrap component composition",

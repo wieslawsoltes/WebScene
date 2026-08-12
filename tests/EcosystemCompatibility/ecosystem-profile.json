@@ -74,6 +74,13 @@
       "reason": "Runs shard 4/4 of the same unchanged 55-case CSS source; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/jquery-serialize-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "parameter-encoding", "nested-data-serialization", "form-control-serialization", "successful-controls", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-serialize-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "All 4 cases from jQuery's unmodified serialize.js execute against its complete official fixture through the bounded QUnit-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/bootstrap-components.html",
       "type": "contract",
       "capabilities": ["tabs", "collapse", "dropdown", "popper-placement", "modal", "tooltip", "popover", "offcanvas", "scrollspy", "intersection-observer", "bounded-scroll", "carousel", "transition-lifecycle", "custom-events", "aria-state"],
@@ -190,7 +197,7 @@
   "excluded": [
     {
       "area": "remaining upstream internal framework suites",
-      "reason": "All fourteen unmodified Bootstrap source suites and three unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
+      "reason": "All fourteen unmodified Bootstrap source suites and four unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
     }
   ],
   "consumers": [
@@ -199,11 +206,11 @@
       "package": "jquery",
       "version": "4.0.0",
       "stage": "discovery",
-      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html"],
-      "selected": 179,
-      "runnable": 179,
+      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html"],
+      "selected": 183,
+      "runnable": 183,
       "excluded": ["Ajax transport and server fixtures", "animation timing", "legacy-browser compatibility branches"],
-      "harnessBlocked": ["21 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case and five css.js cases require a mock server, Shadow DOM, browser zoom, separately served iframe fixtures, or child browsing contexts."],
+      "harnessBlocked": ["20 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case and five css.js cases require a mock server, Shadow DOM, browser zoom, separately served iframe fixtures, or child browsing contexts."],
       "upstreamSuite": {
         "repository": "https://github.com/jquery/jquery.git",
         "tag": "4.0.0",
@@ -211,10 +218,10 @@
         "root": "test/unit",
         "discoveredFiles": 24,
         "staticRegistrations": 847,
-        "selectedFiles": ["attributes.js", "callbacks.js", "css.js"],
-        "selectedCases": 171,
-        "runnableCases": 171,
-        "harnessBlockedFiles": 21,
+        "selectedFiles": ["attributes.js", "callbacks.js", "css.js", "serialize.js"],
+        "selectedCases": 175,
+        "runnableCases": 175,
+        "harnessBlockedFiles": 20,
         "inFileHarnessBlockedCases": 6
       }
     },

@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 71 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 72 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-71/71 documents and 373/373 subtests while the release gate remains 110/110 documents
+72/72 documents and 381/381 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -186,6 +186,11 @@ and 434/434 subtests:
   rect instead of inheriting the container cross size; three Chrome-authorized neutral
   assertions close all 89 unchanged Bootstrap Tooltip cases without changing the
   existing flex-container path; and
+- textarea child text now supplies `defaultValue` and the initial current value, a
+  programmatic or user edit sets the dirty-value state, later child/default changes
+  preserve dirty current state, and form reset restores the newline-normalized default;
+  eight Chrome-authorized neutral assertions close all 4 unchanged jQuery serialization
+  cases without a framework-specific path; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -354,6 +359,23 @@ inside the established envelope at 254.371 ms versus 261.557 ms (+2.8%). Median
 prewarm time moved from 1.489 ms to 1.474 ms (-1.0%); the release library grows by 80
 bytes with identical Mach-O segment sizes. The existing flex-container path remains
 unchanged, and the fix adds no document or per-node state.
+
+The unchanged upstream jQuery serialization slice and product-neutral textarea value-
+lifecycle fix were compared with their exact clean parent (`212ae92`) in six balanced
+fresh-process runs. Median p50 moved from 0.731 ms to 0.734 ms (+0.3%) for 1,000
+startup/lifecycle samples, from 31.842 ms to 31.786 ms (-0.2%) for the 50-sample
+selector workload, and from 2.894 ms to 2.926 ms (+1.1%) for 50 generated named-
+property samples. A four-context/2,000-node probe retains the fixed 976-byte node and
+byte-identical attributed DOM, attribute, pool, wrapper, and scene storage. Both
+isolated and shared-isolate lifecycle probes pass. Five balanced five-second idle runs
+move median normalized CPU from 0.24717% to 0.24724% (+0.00007 percentage points),
+with zero signalled wakes, no Inspector registry, identical 480-byte blank scenes, and
+the same 800 timer and 240 animation-frame callbacks completed by each variant. The
+representative workload
+median moved from 279.264 ms to 246.263 ms (-11.8%), and median prewarm time from
+1.474 ms to 1.521 ms (+3.2%). The release library grows by 64 bytes with identical
+Mach-O segment sizes. The textarea dirty bit occupies existing padding in the 56-byte
+cold form-control record and adds no ordinary document or per-node state.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

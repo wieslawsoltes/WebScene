@@ -401,8 +401,7 @@
         node->attributes[name] = value;
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
-        else if (name == "value"
-            && (node->tag == "input" || node->tag == "textarea")) {
+        else if (name == "value" && node->tag == "input") {
             auto& control = node->mutable_form_control();
             const auto previous_default = old_value.value_or(std::string{});
             if (!control.value_initialized || control.value == previous_default) {

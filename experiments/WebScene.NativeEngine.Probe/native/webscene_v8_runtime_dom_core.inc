@@ -798,6 +798,7 @@
         for (auto* child : children) {
             if (child != nullptr) weaken_detached_subtree_wrappers(*child);
         }
+        synchronize_textarea_value_from_children(parent);
         if (stylesheets_changed) recascade_after_stylesheet_change();
     }
 
@@ -3490,6 +3491,7 @@
                 self->enqueue_iframe_hydration_if_needed(*fragment_child);
                 self->notify_custom_elements_subtree(*fragment_child, "connected");
             }
+            synchronize_textarea_value_from_children(*parent);
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
             return;
@@ -3502,7 +3504,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         if (!self->document.append_child(*parent, *child)) {
@@ -3523,6 +3527,7 @@
             info.GetIsolate()->GetCurrentContext());
         self->enqueue_iframe_hydration_if_needed(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -3577,7 +3582,9 @@
                 if (self->is_connected(*candidate)) {
                     self->notify_custom_elements_subtree(*candidate, "disconnected");
                 }
-                std::erase(candidate->parent->children, candidate);
+                auto* old_parent = candidate->parent;
+                std::erase(old_parent->children, candidate);
+                synchronize_textarea_value_from_children(*old_parent);
                 candidate->parent = nullptr;
             }
             candidate->visible = true;
@@ -3596,6 +3603,7 @@
         }
         self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*parent);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3620,6 +3628,7 @@
         std::erase(parent->children, child);
         child->parent = nullptr;
         self->weaken_detached_subtree_wrappers(*child);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[0]);
     }
@@ -3652,7 +3661,9 @@
             if (self->is_connected(*replacement)) {
                 self->notify_custom_elements_subtree(*replacement, "disconnected");
             }
-            std::erase(replacement->parent->children, replacement);
+            auto* old_parent = replacement->parent;
+            std::erase(old_parent->children, replacement);
+            synchronize_textarea_value_from_children(*old_parent);
             replacement->parent = nullptr;
         }
         const auto iterator = std::find(parent->children.begin(), parent->children.end(), previous);
@@ -3675,6 +3686,7 @@
             info.GetIsolate()->GetCurrentContext());
         self->enqueue_iframe_hydration_if_needed(*replacement);
         self->notify_custom_elements_subtree(*replacement, "connected");
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[1]);
     }
@@ -3702,7 +3714,9 @@
                 if (self->is_connected(*child)) {
                     self->notify_custom_elements_subtree(*child, "disconnected");
                 }
-                std::erase(child->parent->children, child);
+                auto* old_parent = child->parent;
+                std::erase(old_parent->children, child);
+                synchronize_textarea_value_from_children(*old_parent);
                 child->parent = nullptr;
             }
             self->document.append_child(*parent, *child);
@@ -3710,6 +3724,7 @@
         self->recascade_connected_subtree(*parent);
         self->activate_connected_stylesheet(*parent);
         self->notify_custom_elements_subtree(*parent, "connected");
+        synchronize_textarea_value_from_children(*parent);
     }
 
     static void remove_element(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -3717,6 +3732,7 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.This());
         if (node == nullptr || node->parent == nullptr) return;
+        auto* parent = node->parent;
         if (!self->blur_active_element_before_detach(*node)) return;
         if (self->is_connected(*node)) {
             self->notify_custom_elements_subtree(*node, "disconnected");
@@ -3726,6 +3742,7 @@
         node->parent = nullptr;
         node->visible = false;
         self->weaken_detached_subtree_wrappers(*node);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3789,7 +3806,9 @@
                     self->notify_custom_elements_subtree(
                         *replacement, "disconnected");
                 }
-                std::erase(replacement->parent->children, replacement);
+                auto* old_parent = replacement->parent;
+                std::erase(old_parent->children, replacement);
+                synchronize_textarea_value_from_children(*old_parent);
                 replacement->parent = nullptr;
             }
             flattened.push_back(replacement);
@@ -3825,6 +3844,7 @@
             self->enqueue_iframe_hydration_if_needed(*replacement);
             self->notify_custom_elements_subtree(*replacement, "connected");
         }
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3880,6 +3900,7 @@
             self->enqueue_iframe_hydration_if_needed(*child);
             self->notify_custom_elements_subtree(*child, "connected");
         }
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3921,6 +3942,7 @@
             if (old != old_parent->children.end()) {
                 const auto old_index = static_cast<size_t>(old - old_parent->children.begin());
                 old_parent->children.erase(old);
+                synchronize_textarea_value_from_children(*old_parent);
                 if (old_parent == parent && old_index < index) --index;
             }
             child->parent = nullptr;
@@ -3932,6 +3954,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[1]);
     }
 
@@ -3950,7 +3973,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         child->parent = parent;
@@ -3959,6 +3984,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -3981,7 +4007,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         const auto position = std::find(parent->children.begin(), parent->children.end(), reference);
@@ -3992,6 +4020,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
     }
 
     static void insert_before_self(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -4055,6 +4084,7 @@
                 self->notify_custom_elements_subtree(
                     *fragment_child, "connected");
             }
+            synchronize_textarea_value_from_children(*parent);
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
             return;
@@ -4095,7 +4125,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         if (before == nullptr) {
@@ -4103,6 +4135,7 @@
                 self->recascade_connected_subtree(*child);
                 self->activate_connected_stylesheet(*child);
                 self->notify_custom_elements_subtree(*child, "connected");
+                synchronize_textarea_value_from_children(*parent);
                 info.GetReturnValue().Set(info[0]);
             }
             return;
@@ -4117,5 +4150,6 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }

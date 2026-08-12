@@ -152,6 +152,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "textarea-value-lifecycle") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_textarea_child_text_value_lifecycle(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
     }
     test_binary_reverse_callback_is_leased_and_completed();
@@ -303,6 +310,7 @@ int main()
     test_adjacent_inline_runs_share_wrapped_lines(engine);
     test_inline_flex_preserves_padding_and_line_box(engine);
     test_document_position(engine);
+    test_textarea_child_text_value_lifecycle(engine);
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
     test_event_listener_options_reach_native_input_and_resize(engine);

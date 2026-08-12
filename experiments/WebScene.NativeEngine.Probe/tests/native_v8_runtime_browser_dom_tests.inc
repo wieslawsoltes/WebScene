@@ -1,3 +1,50 @@
+void test_textarea_child_text_value_lifecycle(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <form id="textarea-form">
+              <textarea id="parsed" name="message" value="ignored">?\nZ</textarea>
+            </form>`;
+          const form = document.getElementById('textarea-form');
+          const parsed = document.getElementById('parsed');
+          const initial = [
+            parsed.textContent,
+            parsed.defaultValue,
+            parsed.value,
+            parsed.getAttribute('value')
+          ];
+          parsed.value = 'dirty';
+          parsed.defaultValue = 'replacement\r\ndefault';
+          const dirty = [
+            parsed.textContent,
+            parsed.defaultValue,
+            parsed.firstChild?.data,
+            parsed.innerHTML,
+            parsed.value
+          ];
+          form.reset();
+          const reset = parsed.value;
+          parsed.textContent = 'clean update';
+          const clean = [parsed.defaultValue, parsed.value];
+          const dynamic = document.createElement('textarea');
+          document.body.appendChild(dynamic);
+          void dynamic.value;
+          const child = document.createTextNode('appended');
+          dynamic.appendChild(child);
+          child.data = 'updated';
+          const appended = [dynamic.defaultValue, dynamic.value];
+          document.body.appendChild(child);
+          const removed = [dynamic.defaultValue, dynamic.value];
+          return { initial, dirty, reset, clean, appended, removed };
+        })()
+    )JS", "native-textarea-child-text-value-lifecycle.js");
+    const auto expected = R"JSON({"initial":["?\nZ","?\nZ","?\nZ","ignored"],"dirty":["replacement\r\ndefault","replacement\r\ndefault","replacement\r\ndefault","replacement\r\ndefault","dirty"],"reset":"replacement\ndefault","clean":["clean update","clean update"],"appended":["updated","updated"],"removed":["",""]})JSON";
+    require(
+        result == expected,
+        "textarea child-text/default/current/reset lifecycle diverged: " + result);
+}
+
 void test_secondary_click(webscene_engine* engine)
 {
     execute(engine, R"JS(

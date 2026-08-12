@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/html-textarea-default-value-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["textarea-child-text-default", "textarea-dirty-value", "textarea-defaultValue", "textarea-newline-normalization", "textarea-form-reset"],
+      "evidence": ["jquery-4.0.0-serialize-form-reduction", "html-textarea-value-lifecycle"],
+      "reason": "Chrome-authorized product-neutral reduction of form serialization prerequisites: textarea child text supplies the default and initial current value, dirty current values remain isolated from default changes, and reset restores the newline-normalized child-text default."
+    },
+    {
       "path": "contracts/empty-inline-element-geometry.html",
       "type": "contract",
       "capabilities": ["empty-inline-box-geometry", "non-stretched-inline-cross-size", "offscreen-positioned-container"],
