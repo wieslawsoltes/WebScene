@@ -193,6 +193,8 @@ async function executeTest(module, test) {
   }
   const context = {};
   const assertion = createAssert(name);
+  const registeredAssertions = QUnit.assert;
+  QUnit.assert = assertion.assert;
   try {
     for (const item of lineage) await item.hooks.beforeEach?.call(context, assertion.assert);
     await test.body.call(context, assertion.assert);
@@ -218,6 +220,7 @@ async function executeTest(module, test) {
         });
       }
     }
+    QUnit.assert = registeredAssertions;
   }
 }
 

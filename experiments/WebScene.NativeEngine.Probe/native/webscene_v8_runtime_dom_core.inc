@@ -1163,6 +1163,65 @@
                     || type == "text/ecmascript";
                 if (!executable) return;
             }
+            if (!is_connected(node)
+                || node.script_state == script_execution_state::already_started) {
+                return;
+            }
+            // The already-started flag is set before evaluation, matching the
+            // browser's one-shot lifecycle even when execution reports an
+            // error or script code synchronously reparents its own element.
+            node.script_state = script_execution_state::already_started;
+            const auto source_iterator = node.attributes.find("src");
+            if (source_iterator == node.attributes.end()
+                || source_iterator->second.empty()) {
+                std::string source;
+                append_node_text(node, source);
+                if (!source.empty()) {
+                    const auto name = (in_frame_context()
+                            ? frame_base_address
+                            : document_base_address)
+                        + "#dynamic-inline-script-" + std::to_string(node.id);
+                    v8::Local<v8::Value> document_value;
+                    v8::Local<v8::Value> previous_current_script;
+                    auto restore_current_script = false;
+                    auto document_object_value = resource_context->Global()->Get(
+                        resource_context,
+                        js_string(isolate, "document"));
+                    if (document_object_value.ToLocal(&document_value)
+                        && document_value->IsObject()) {
+                        restore_current_script = document_value.As<v8::Object>()->Get(
+                            resource_context,
+                            js_string(isolate, "currentScript")).ToLocal(
+                                &previous_current_script);
+                        document_value.As<v8::Object>()->Set(
+                            resource_context,
+                            js_string(isolate, "currentScript"),
+                            wrapper).Check();
+                    }
+                    std::string error;
+                    const auto executed = execute_in_context(
+                        resource_context,
+                        source,
+                        name,
+                        error,
+                        false);
+                    if (!document_value.IsEmpty() && document_value->IsObject()) {
+                        document_value.As<v8::Object>()->Set(
+                            resource_context,
+                            js_string(isolate, "currentScript"),
+                            restore_current_script
+                                ? previous_current_script
+                                : v8::Null(isolate)).Check();
+                    }
+                    if (!executed) {
+                        frame_last_error_value = "Connected inline script failed: " + error;
+                        ++frame_script_error_count;
+                        return;
+                    }
+                    ++frame_script_execution_count;
+                }
+                return;
+            }
         }
         if (node.tag == "img") {
             const auto source = node.attributes.find("src");
@@ -2754,6 +2813,7 @@
         clone.id_attribute = original.id_attribute;
         clone.class_name = original.class_name;
         clone.text_content = original.text_content;
+        clone.script_state = original.script_state;
         clone.xml_mode = original.xml_mode;
         if (original.has_form_control()) {
             clone.mutable_form_control() = original.form_control();
@@ -3706,39 +3766,66 @@
             info.GetReturnValue().Set(info[1]);
             return;
         }
-        if (insertion_would_create_cycle(parent, replacement)) {
+        std::vector<dom_node*> replacements;
+        if (replacement->tag == "#document-fragment") {
+            replacements = replacement->children;
+        } else {
+            replacements.push_back(replacement);
+        }
+        if (std::any_of(
+                replacements.begin(),
+                replacements.end(),
+                [parent](const auto* candidate) {
+                    return insertion_would_create_cycle(parent, candidate);
+                })) {
             throw_hierarchy_request(info.GetIsolate(), "replaceChild");
             return;
         }
-        if (replacement->parent != nullptr) {
-            if (self->is_connected(*replacement)) {
-                self->notify_custom_elements_subtree(*replacement, "disconnected");
+        if (!self->blur_active_element_before_detach(*previous)) return;
+        for (auto* candidate : replacements) {
+            if (candidate == nullptr || candidate == previous) continue;
+            if (candidate->parent != nullptr) {
+                if (self->is_connected(*candidate)) {
+                    self->notify_custom_elements_subtree(*candidate, "disconnected");
+                }
+                auto* old_parent = candidate->parent;
+                std::erase(old_parent->children, candidate);
+                synchronize_textarea_value_from_children(*old_parent);
+                candidate->parent = nullptr;
             }
-            auto* old_parent = replacement->parent;
-            std::erase(old_parent->children, replacement);
-            synchronize_textarea_value_from_children(*old_parent);
-            replacement->parent = nullptr;
+        }
+        if (replacement->tag == "#document-fragment") {
+            replacement->children.clear();
         }
         const auto iterator = std::find(parent->children.begin(), parent->children.end(), previous);
         if (iterator == parent->children.end()) return;
-        if (!self->blur_active_element_before_detach(*previous)) return;
         if (self->is_connected(*previous)) {
             self->notify_custom_elements_subtree(*previous, "disconnected");
         }
         self->deactivate_connected_stylesheets(*previous, false);
-        *iterator = replacement;
-        replacement->parent = parent;
-        replacement->visible = true;
+        const auto insertion_index = static_cast<size_t>(
+            iterator - parent->children.begin());
+        parent->children.erase(iterator);
         previous->parent = nullptr;
         self->weaken_detached_subtree_wrappers(*previous);
-        self->recascade_connected_subtree(*replacement);
-        self->activate_connected_stylesheet(*replacement);
-        self->enqueue_connected_resource_if_needed(
-            *replacement,
-            info[0].As<v8::Object>(),
-            info.GetIsolate()->GetCurrentContext());
-        self->enqueue_iframe_hydration_if_needed(*replacement);
-        self->notify_custom_elements_subtree(*replacement, "connected");
+        auto next_index = insertion_index;
+        for (auto* candidate : replacements) {
+            if (candidate == nullptr || candidate == previous) continue;
+            candidate->parent = parent;
+            candidate->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(next_index++),
+                candidate);
+            self->recascade_connected_subtree(*candidate);
+            self->activate_connected_stylesheet(*candidate);
+            self->enqueue_connected_resource_if_needed(
+                *candidate,
+                self->wrap_node(*candidate),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*candidate);
+            self->notify_custom_elements_subtree(*candidate, "connected");
+        }
         synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[1]);

@@ -304,6 +304,11 @@
               "reason": "Requires jQuery's separately served frame.html fixture and child browsing context."
             }
           ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/wrap.js",
+          "cases": 16,
+          "sha256": "3bfab9c675776f12f71a4e2a44a95e2c5ab7ebd3e20e2fa1f8a201d3be93a12f"
         }
       ],
       "supportFiles": [
@@ -331,8 +336,7 @@
         "offset.js",
         "selector.js",
         "support.js",
-        "tween.js",
-        "wrap.js"
+        "tween.js"
       ],
       "excluded": []
     },

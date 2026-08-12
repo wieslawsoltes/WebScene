@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 75 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 76 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-75/75 documents and 399/399 subtests while the release gate remains 110/110 documents
+76/76 documents and 402/402 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -140,6 +140,9 @@ and 434/434 subtests:
 - a timer exception reaches an explicitly installed `window.onerror` callback with its
   Error and source location, then later tasks continue; the pre-existing unhandled-error
   failure path is covered independently and remains fail-closed;
+- `replaceChild()` now splices `DocumentFragment` children without losing identity or
+  order, while programmatic inline scripts execute synchronously exactly once and
+  `innerHTML`-created scripts remain inert when moved;
 - inline unitless and percentage `line-height` values are resolved after the winning
   `font-size`, including later CSSOM font-size changes; and
 - generated Web IDL attributes now appear as enumerable, configurable accessors on the
@@ -435,6 +438,16 @@ the additional work begins only after a timer callback throws and `window.onerro
 callable. No document, node, timer, or scene state was added, and the release library
 grows by 304 bytes. All measured medians remain within the established 10%
 no-meaningful-regression envelope.
+
+The unchanged upstream jQuery wrapping slice and product-neutral fragment/script fix
+were compared with their exact clean parent (`8036dfe`) in six balanced fresh-process
+runs. Median-of-medians p50 moved from 0.732 ms to 0.736 ms (+0.5%) for 1,000
+startup/lifecycle samples, from 31.945 ms to 31.955 ms (+0.03%) for the 30-sample
+selector workload, and from 2.960 ms to 2.925 ms (-1.2%) for 50 generated named-
+property samples. Script execution history occupies existing tail padding, so the
+compile-time 976-byte `dom_node` invariant is unchanged; ordinary nodes allocate no
+additional state. The optimized Inspector library grows by 272 bytes. All measured
+medians remain within the established 10% no-meaningful-regression envelope.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

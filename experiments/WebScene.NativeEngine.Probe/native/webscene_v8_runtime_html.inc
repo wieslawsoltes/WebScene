@@ -389,6 +389,13 @@
                     record_html_attribute_feature(name, "html5ever");
                 }
                 apply_css_rules(node);
+                if (node.tag == "script") {
+                    // Scripts created by fragment parsing are inert, and the
+                    // document parser executes its authored scripts through
+                    // the navigation pipeline. In either case, reconnecting
+                    // the resulting DOM node must never execute it again.
+                    node.script_state = script_execution_state::already_started;
+                }
                 if (const auto style = node.attributes.find("style");
                     style != node.attributes.end()) {
                     uint64_t inline_property_mask = 0U;
@@ -616,6 +623,9 @@
                 {},
                 "html-element");
             auto& node = document.create_element(name);
+            if (name == "script") {
+                node.script_state = script_execution_state::already_started;
+            }
             const auto svg = name == "svg"
                 || stack.back()->tag == "svg"
                 || stack.back()->attributes.contains("namespace");

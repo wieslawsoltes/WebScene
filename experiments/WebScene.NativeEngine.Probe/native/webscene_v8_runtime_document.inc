@@ -675,6 +675,7 @@
                 {},
                 "html-element");
             auto& element = document.create_element("script");
+            element.script_state = script_execution_state::already_started;
             if (!script.source.empty()) {
                 record_html_attribute_feature("src", "html-parser");
                 element.attributes["src"] = script.source;

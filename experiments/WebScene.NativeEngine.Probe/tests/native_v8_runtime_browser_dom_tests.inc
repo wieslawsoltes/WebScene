@@ -1,3 +1,63 @@
+void test_fragment_replacement_and_inline_script_lifecycle(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const host = document.createElement('div');
+          document.body.appendChild(host);
+          const wrapper = document.createElement('section');
+          const children = ['a', 'b', 'c', 'd'].map(value => {
+            const child = document.createElement('span');
+            child.textContent = value;
+            wrapper.appendChild(child);
+            return child;
+          });
+          host.appendChild(wrapper);
+          const fragment = document.createDocumentFragment();
+          children.forEach(child => fragment.appendChild(child));
+          const returned = host.replaceChild(fragment, wrapper);
+          const fragmentResult = [
+            returned === wrapper,
+            wrapper.parentNode === null,
+            fragment.childNodes.length,
+            host.childNodes.length,
+            children.every((child, index) => host.childNodes[index] === child),
+            children.every(child => child.parentNode === host)
+          ];
+
+          globalThis.__nativeDynamicScriptRuns = 0;
+          const outerScript = document.currentScript;
+          const script = document.createElement('script');
+          globalThis.__nativeDynamicScript = script;
+          script.textContent = 'globalThis.__nativeDynamicScriptRuns += 1;'
+            + 'globalThis.__nativeDynamicCurrentScript = '
+            + 'document.currentScript === globalThis.__nativeDynamicScript;';
+          host.appendChild(script);
+          const firstRun = globalThis.__nativeDynamicScriptRuns;
+          const currentScriptLifecycle = [
+            globalThis.__nativeDynamicCurrentScript,
+            document.currentScript === outerScript
+          ];
+          const scriptWrapper = document.createElement('b');
+          scriptWrapper.appendChild(script);
+          host.appendChild(scriptWrapper);
+
+          globalThis.__nativeInertScriptRuns = 0;
+          const parsed = document.createElement('div');
+          parsed.innerHTML = '<script>globalThis.__nativeInertScriptRuns += 1;<\/script>';
+          host.appendChild(parsed.firstChild);
+          return {
+            fragment: fragmentResult,
+            scripts: [firstRun, globalThis.__nativeDynamicScriptRuns,
+              globalThis.__nativeInertScriptRuns],
+            currentScript: currentScriptLifecycle
+          };
+        })()
+    )JS", "native-fragment-replacement-script-lifecycle.js");
+    require(
+        result == R"JSON({"fragment":[true,true,0,4,true,true],"scripts":[1,1,0],"currentScript":[true,true]})JSON",
+        "fragment replacement or inline script lifecycle diverged: " + result);
+}
+
 void test_dom_box_dimensions_primitives(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

@@ -107,6 +107,12 @@ const cases = [
     css: ""
   },
   {
+    id: "jquery-wrap-upstream",
+    entry: "src/jquery-wrap-upstream.mjs",
+    title: "jQuery upstream wrapping suite",
+    css: ""
+  },
+  {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
     title: "Bootstrap component composition",

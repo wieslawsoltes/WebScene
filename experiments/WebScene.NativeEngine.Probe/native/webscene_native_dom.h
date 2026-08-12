@@ -869,6 +869,11 @@ enum class dom_node_kind : uint8_t {
     internal
 };
 
+enum class script_execution_state : uint8_t {
+    ready,
+    already_started
+};
+
 struct dom_node final {
     static constexpr std::string_view html_namespace_uri =
         "http://www.w3.org/1999/xhtml";
@@ -1259,6 +1264,10 @@ struct dom_node final {
     float scroll_content_height{0};
     float scroll_viewport_width{0};
     float scroll_viewport_height{0};
+    // Script execution history is intrinsic DOM state. Keeping the byte in
+    // existing tail padding preserves the fixed dom_node footprint while
+    // preventing a connected script from executing again after a reparent.
+    script_execution_state script_state{script_execution_state::ready};
     bool visible{true};
 };
 

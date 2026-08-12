@@ -16,11 +16,11 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 42/42 consumer
-documents and 988/988 selected results. Historical three-engine evidence from 2026-07-23 had
+Current Chrome and native evidence (2026-08-12): both engines pass 43/43 consumer
+documents and 1004/1004 selected results. Historical three-engine evidence from 2026-07-23 had
 Chrome, the former managed adapter, and native at its then-current denominator. Twenty-seven
-documents previously executed 828 unchanged official-source cases. The current 39
-official-source documents report 962 selected case results: all 591
+documents previously executed 828 unchanged official-source cases. The current 40
+official-source documents report 978 selected case results: all 591
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, all 13 browser-local cross-module cases from its unmodified
 `basic.js`, 65 selected browser-local cases from its unmodified
@@ -30,7 +30,8 @@ unmodified `traversing.js` and 29 browser-local cases from its unmodified
 `dimensions.js`, 13 registered results from its unmodified `queue.js`, and all 28
 registrations from its unmodified `deferred.js`, plus 39 browser-local cases from its
 unmodified `data.js`, 7 registrations from its unmodified `deprecated.js`, and all 5
-browser-local registrations from its unmodified `ready.js`.
+browser-local registrations from its unmodified `ready.js`, plus all 16 registrations
+from its unmodified `wrap.js`.
 The remaining 26 assertions are the three owned composition fixtures.
 
 The four new CSS shards preserve the exact upstream `css.js`, official fixture markup,
@@ -100,8 +101,8 @@ Fourteen documents now execute all 591 cases from Bootstrap 5.3.8's unmodified
 `scrollspy.spec.js`, `tab.spec.js`, `toast.spec.js`, and `tooltip.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects all fourteen Bootstrap files and twelve jQuery files, leaving
-no Bootstrap files, 12 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
+tags and commits. It selects all fourteen Bootstrap files and thirteen jQuery files, leaving
+no Bootstrap files, 11 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
 `artifacts/ecosystem-consumers-managed-jquery-css-v3-disconnected-20260723/`, and
@@ -257,6 +258,18 @@ intentional upstream callback errors to the generic evidence harness. The native
 reduced to `window-timer-error-lifecycle.html`: an installed `window.onerror` receives
 a timer exception and source location while later tasks continue. The path remains
 fail-closed when no handler exists, and no persistent runtime state was added.
+
+The adjacent jQuery wrapping tranche adds all 16 registrations from the unchanged
+`wrap.js` for `wrap`, `wrapAll`, `wrapInner`, `unwrap`, mixed text/comment nodes,
+event preservation, and one-shot script movement. Its two native divergences reduced
+to the product-neutral `dom-fragment-replacement-script-lifecycle.html` contract:
+`replaceChild()` splices a `DocumentFragment` with identity and order intact, a
+programmatically created inline script executes synchronously on its first connected
+insertion with browser-shaped `document.currentScript`, restores the previous script,
+does not execute again when moved, and an `innerHTML`-created script stays inert. Chrome
+and native pass the neutral 3/3 contract and the complete unchanged
+suite. The script-history byte fits in existing `dom_node` tail padding, retaining the
+fixed 976-byte node; no jQuery-specific runtime path was added.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

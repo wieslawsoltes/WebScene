@@ -1082,6 +1082,13 @@
       "reason": "Product-neutral reduction for browser-style asynchronous error reporting. A timer exception reaches an installed Window.onerror callback with its Error and source location, then a later timer still runs. The pre-existing fail-closed behavior remains unchanged when no handler is installed; keep candidate until every released native RID passes."
     },
     {
+      "path": "contracts/dom-fragment-replacement-script-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["replace-child-document-fragment", "fragment-child-splicing", "programmatic-inline-script", "synchronous-script-connection", "script-one-shot-lifecycle", "document-current-script", "innerhtml-script-inertness"],
+      "evidence": ["jquery-4.0.0-wrap-reduction"],
+      "reason": "Product-neutral reduction for DOM mutation and script lifecycle primitives used by component libraries. Replacing a child with a DocumentFragment must splice the fragment's children with identity and order intact; a programmatically created inline script executes synchronously on its first connected insertion and never on a later move; an innerHTML-created script remains inert when moved. Keep candidate until every released native RID passes."
+    },
+    {
       "path": "contracts/observed-keyboard-focus-input-primitives.html",
       "type": "testharness",
       "capabilities": ["printable-webdriver-input", "keydown-keyup-order", "beforeinput-input-order", "input-event-fields", "text-control-value-mutation", "focus-focusin-order", "blur-focusout-order", "tab-focus-transfer"],
