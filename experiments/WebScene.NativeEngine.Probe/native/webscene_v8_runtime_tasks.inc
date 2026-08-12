@@ -127,17 +127,64 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
+            const auto callback_error = describe_exception(try_catch, task_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, task_context);
-            inspector_async_task_finished(task.id);
-            if (task.repeating) inspector_async_task_canceled(task.id);
 #endif
-            active_timer_id = 0;
-            last_error = std::string(task.animation_frame
-                    ? "requestAnimationFrame task failed: "
-                    : "timer task failed: ")
-                + describe_exception(try_catch, task_context);
-            return false;
+            auto exception = try_catch.Exception();
+            auto message = try_catch.Message();
+            v8::Local<v8::Value> onerror;
+            const auto has_onerror = task_context->Global()->Get(
+                    task_context,
+                    js_string(isolate, "onerror")).ToLocal(&onerror)
+                && onerror->IsFunction();
+            if (!has_onerror) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                inspector_async_task_finished(task.id);
+                if (task.repeating) inspector_async_task_canceled(task.id);
+#endif
+                active_timer_id = 0;
+                last_error = std::string(task.animation_frame
+                        ? "requestAnimationFrame task failed: "
+                        : "timer task failed: ")
+                    + callback_error;
+                return false;
+            }
+
+            auto source = std::string{};
+            auto line = 0;
+            auto column = 0;
+            if (!message.IsEmpty()) {
+                auto resource_name = message->GetScriptOrigin().ResourceName();
+                if (!resource_name.IsEmpty() && !resource_name->IsUndefined()) {
+                    source = to_utf8(isolate, resource_name);
+                }
+                line = message->GetLineNumber(task_context).FromMaybe(0);
+                column = message->GetStartColumn(task_context).FromMaybe(-1) + 1;
+            }
+            std::array<v8::Local<v8::Value>, 5U> error_arguments{
+                js_string(isolate, callback_error.c_str()),
+                js_string(isolate, source.c_str()),
+                v8::Integer::New(isolate, line),
+                v8::Integer::New(isolate, column),
+                exception.IsEmpty() ? v8::Undefined(isolate) : exception};
+            try_catch.Reset();
+            v8::TryCatch onerror_try_catch(isolate);
+            if (onerror.As<v8::Function>()->Call(
+                    task_context,
+                    task_context->Global(),
+                    static_cast<int>(error_arguments.size()),
+                    error_arguments.data()).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                report_inspector_exception(onerror_try_catch, task_context);
+                inspector_async_task_finished(task.id);
+                if (task.repeating) inspector_async_task_canceled(task.id);
+#endif
+                active_timer_id = 0;
+                last_error = "Window.onerror handler failed: "
+                    + describe_exception(onerror_try_catch, task_context);
+                return false;
+            }
         }
         perform_microtask_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)

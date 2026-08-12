@@ -127,16 +127,19 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 74 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 75 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-74/74 documents and 398/398 subtests while the release gate remains 110/110 documents
+75/75 documents and 399/399 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
   intervening non-element nodes, and the managed selector parser uses the most specific
   functional-selector argument;
+- a timer exception reaches an explicitly installed `window.onerror` callback with its
+  Error and source location, then later tasks continue; the pre-existing unhandled-error
+  failure path is covered independently and remains fail-closed;
 - inline unitless and percentage `line-height` values are resolved after the winning
   `font-size`, including later CSSOM font-size changes; and
 - generated Web IDL attributes now appear as enumerable, configurable accessors on the
@@ -421,6 +424,17 @@ completed by each variant. The representative workload median moved from 74.535 
 context creation from 0.0116 ms to 0.0103 ms (-11.3%), and first scene from 0.8305 ms
 to 0.8180 ms (-1.5%). The release library grows by 16,784 bytes. No measured timing
 regression exceeds the established 10% no-meaningful-regression envelope.
+
+The unchanged upstream jQuery readiness slice and product-neutral timer-error fix were
+compared with their exact clean parent (`c9f6a4a`) in six balanced fresh-process runs.
+Median-of-medians p50 moved from 0.734 ms to 0.736 ms (+0.2%) for 1,000
+startup/lifecycle samples, from 61.265 ms to 63.580 ms (+3.8%) for the 30-sample
+selector workload under substantial shared-machine load, and from 3.084 ms to 3.117 ms
+(+1.1%) for 50 generated named-property samples. The success path adds no new branch:
+the additional work begins only after a timer callback throws and `window.onerror` is
+callable. No document, node, timer, or scene state was added, and the release library
+grows by 304 bytes. All measured medians remain within the established 10%
+no-meaningful-regression envelope.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

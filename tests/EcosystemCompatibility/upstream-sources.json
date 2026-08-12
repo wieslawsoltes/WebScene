@@ -271,6 +271,17 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/ready.js",
+          "cases": 5,
+          "sha256": "c30e53c5f9b154a708a645bb75c474b919fd57a3df48e7c575330e35af8b22a6",
+          "inFileHarnessBlocked": [
+            {
+              "name": "holdReady test needs to be a standalone test since it deals with DOM ready",
+              "reason": "Requires jQuery's separately served readywait.html iframe and its delayed release script."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/serialize.js",
           "cases": 4,
           "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
@@ -318,7 +329,6 @@
         "exports.js",
         "manipulation.js",
         "offset.js",
-        "ready.js",
         "selector.js",
         "support.js",
         "tween.js",

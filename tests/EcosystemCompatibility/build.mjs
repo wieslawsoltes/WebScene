@@ -101,6 +101,12 @@ const cases = [
     css: ""
   },
   {
+    id: "jquery-ready-upstream",
+    entry: "src/jquery-ready-upstream.mjs",
+    title: "jQuery upstream DOM ready suite",
+    css: ""
+  },
+  {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
     title: "Bootstrap component composition",

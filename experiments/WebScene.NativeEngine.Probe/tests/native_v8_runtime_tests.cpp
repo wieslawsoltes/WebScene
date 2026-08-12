@@ -203,6 +203,7 @@ int main()
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
+    test_timer_error_handler_preserves_later_tasks();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();

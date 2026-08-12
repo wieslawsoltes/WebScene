@@ -1075,6 +1075,13 @@
       "reason": "Product-neutral lifecycle reduction for document and scroll events observed in complex hosted components. It requires interactive/complete readiness ordering and a real overflow scrollTop mutation that publishes exactly one targeted scroll event."
     },
     {
+      "path": "contracts/window-timer-error-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["window-onerror", "timer-exception-reporting", "error-source-location", "task-queue-continuation"],
+      "evidence": ["jquery-4.0.0-ready-error-isolation-reduction"],
+      "reason": "Product-neutral reduction for browser-style asynchronous error reporting. A timer exception reaches an installed Window.onerror callback with its Error and source location, then a later timer still runs. The pre-existing fail-closed behavior remains unchanged when no handler is installed; keep candidate until every released native RID passes."
+    },
+    {
       "path": "contracts/observed-keyboard-focus-input-primitives.html",
       "type": "testharness",
       "capabilities": ["printable-webdriver-input", "keydown-keyup-order", "beforeinput-input-order", "input-event-fields", "text-control-value-mutation", "focus-focusin-order", "blur-focusout-order", "tab-focus-transfer"],
