@@ -81,6 +81,8 @@ internal sealed class VisualForegroundOffsetCheck
     public int MaximumLuminance { get; init; } = 240;
     public int MinimumComponentHeight { get; init; } = 1;
     public int MinimumComponentPixels { get; init; } = 1;
+    public int FirstComponentIndex { get; init; }
+    public int SecondComponentIndex { get; init; }
     public int? MinimumOffsetPixels { get; init; }
     public int? MaximumOffsetPixels { get; init; }
     public string? Description { get; init; }

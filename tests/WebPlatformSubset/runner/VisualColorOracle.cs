@@ -260,8 +260,16 @@ internal static class VisualColorOracle
             anchor.Value.Top + check.SecondTop,
             anchor.Value.Right - check.HorizontalInset,
             anchor.Value.Top + check.SecondTop + check.SecondHeight - 1);
-        var first = FindLeftmostForegroundComponent(snapshot, firstRegion, check);
-        var second = FindLeftmostForegroundComponent(snapshot, secondRegion, check);
+        var first = FindForegroundComponent(
+            snapshot,
+            firstRegion,
+            check,
+            check.FirstComponentIndex);
+        var second = FindForegroundComponent(
+            snapshot,
+            secondRegion,
+            check,
+            check.SecondComponentIndex);
         if (first is null || second is null)
         {
             return new ForegroundOffsetObservation(
@@ -288,10 +296,11 @@ internal static class VisualColorOracle
             + $"expected {DescribeBounds(check)}.");
     }
 
-    private static PixelBounds? FindLeftmostForegroundComponent(
+    private static PixelBounds? FindForegroundComponent(
         WptRenderSnapshot snapshot,
         PixelBounds requestedRegion,
-        VisualForegroundOffsetCheck check)
+        VisualForegroundOffsetCheck check,
+        int componentIndex)
     {
         var left = Math.Clamp(requestedRegion.Left, 0, snapshot.PixelSize.Width);
         var top = Math.Clamp(requestedRegion.Top, 0, snapshot.PixelSize.Height);
@@ -300,7 +309,7 @@ internal static class VisualColorOracle
         var width = right - left;
         var height = bottom - top;
         var visited = new bool[checked(width * height)];
-        PixelBounds? leftmost = null;
+        var components = new List<PixelBounds>();
 
         bool IsForeground(int x, int y)
         {
@@ -367,10 +376,14 @@ internal static class VisualColorOracle
                     top + componentTop,
                     left + componentRight,
                     top + componentBottom);
-                if (leftmost is null || bounds.Left < leftmost.Value.Left) leftmost = bounds;
+                components.Add(bounds);
             }
         }
-        return leftmost;
+        if (componentIndex < 0 || componentIndex >= components.Count) return null;
+        return components
+            .OrderBy(bounds => bounds.Left)
+            .ThenBy(bounds => bounds.Top)
+            .ElementAt(componentIndex);
     }
 
     internal static ComponentColorRegionObservation InspectComponentColorRegion(

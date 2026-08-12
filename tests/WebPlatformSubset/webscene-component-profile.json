@@ -1356,12 +1356,13 @@
           "maximumLuminance": 240,
           "minimumComponentHeight": 6,
           "minimumComponentPixels": 8,
+          "firstComponentIndex": 1,
           "minimumOffsetPixels": 4,
           "maximumOffsetPixels": 32,
           "description": "the forced second line starts left of the first-line text and beneath the inside marker"
         }
       ],
-      "reason": "Unchanged pinned CSS2 WPT requires an inside marker to participate in the first line while the forced continuation starts at the principal block edge. An anchor-relative component oracle independently requires that geometry in native and Chromium without depending on identical font metrics."
+      "reason": "Unchanged pinned CSS2 WPT requires an inside marker to participate in the first line while the forced continuation starts at the principal block edge. An anchor-relative component oracle skips the marker component and compares the first text glyph on each line, independently requiring that geometry in native and Chromium without depending on identical font metrics."
     },
     {
       "path": "css/CSS2/lists/list-style-001.xht",
