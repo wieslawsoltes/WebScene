@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dynamic transition styles and synthetic clicks preserve browser task semantics</title>
+<body>
+<div id="fixture"></div>
+<button id="target" type="button">activate</button>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, error) {
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? String(error && error.message || error) : null,
+      stack: error && error.stack ? String(error.stack) : null
+    });
+  }
+
+  const fixture = document.getElementById("fixture");
+  fixture.innerHTML = '<div id="animated" style="transition-duration: 50ms;"></div>';
+  const animated = document.getElementById("animated");
+  const transitionDuration = getComputedStyle(animated).transitionDuration;
+  record(
+    "innerHTML preserves transition-duration in computed style",
+    transitionDuration === "0.05s"
+      ? null
+      : new Error("expected 0.05s, got " + JSON.stringify(transitionDuration))
+  );
+
+  const order = [];
+  const target = document.getElementById("target");
+  target.addEventListener("click", () => {
+    order.push("listener");
+    setTimeout(() => order.push("timer"), 0);
+  });
+  target.click();
+  order.push("after-click");
+  const synchronousOrder = order.slice();
+
+  setTimeout(() => {
+    const expectedSynchronous = ["listener", "after-click"];
+    const expectedFinal = ["listener", "after-click", "timer"];
+    const orderError = JSON.stringify(synchronousOrder) !== JSON.stringify(expectedSynchronous)
+        || JSON.stringify(order) !== JSON.stringify(expectedFinal)
+      ? new Error("click/timer order differed: synchronous="
+          + JSON.stringify(synchronousOrder) + ", final=" + JSON.stringify(order))
+      : null;
+    record("HTMLElement.click preserves run-to-completion before timers", orderError);
+    state.diagnostics = [JSON.stringify({ transitionDuration, synchronousOrder, finalOrder: order })];
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  }, 20);
+</script>

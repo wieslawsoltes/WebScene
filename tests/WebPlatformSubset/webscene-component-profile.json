@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dynamic-transition-style-task-order.html",
+      "type": "contract",
+      "capabilities": ["innerhtml-style-attribute", "transition-duration-computed-style", "synthetic-click", "javascript-run-to-completion", "timer-task-order"],
+      "evidence": ["bootstrap-v5.3.8-modal-static-backdrop-reduction"],
+      "reason": "Product-neutral reduction of a modal consumer divergence: dynamically parsed transition-duration must reach computed style in seconds, and a timer queued by a synthetic click listener must not run before the click caller's next statement."
+    },
+    {
       "path": "contracts/html-single-select-layout.html",
       "type": "contract",
       "capabilities": ["collapsed-single-select-layout", "selected-option-paint", "option-box-suppression", "programmatic-select-state"],

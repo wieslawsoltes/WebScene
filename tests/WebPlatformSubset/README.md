@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-11 coverage audit
 
-The pinned profile contains 110 required, 63 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 64 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-63/63 documents and 347/347 subtests while the release gate remains 110/110 documents
+64/64 documents and 349/349 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -261,6 +261,18 @@ inside the existing cold registration record. Both isolated and shared-isolate
 lifecycle probes pass. Five balanced five-second idle runs record no signalled wakes,
 timers, animation frames, or extra scene builds; median normalized CPU moves from
 0.4785% to 0.5260% (+0.0474 percentage points) in the measurement-noise floor.
+
+The unchanged upstream Bootstrap Modal slice and dynamic-transition fix were compared
+with their exact clean parent (`ea01e97`) in six balanced fresh-process runs. Median
+p50 moved from 0.767 ms to 0.750 ms (-2.2%) for 1,000 startup/lifecycle samples, from
+32.107 ms to 31.933 ms (-0.5%) for the 50-sample selector workload, and from 2.866 ms
+to 2.973 ms (+3.7%) for 50 generated named-property samples. A four-context/2,000-node
+probe retains the fixed 976-byte node and identical attributed node, attribute, pool,
+wrapper, and scene storage. Both isolated and shared-isolate lifecycle probes pass.
+Five alternating five-second idle runs move median normalized CPU from 0.3274% to
+0.2919%, with zero signalled wakes, no Inspector registry, identical 480-byte blank
+scenes, and the same 800 timer and 240 animation-frame callbacks completed by each
+variant.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

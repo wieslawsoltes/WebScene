@@ -223,6 +223,11 @@
             || name == "grid-column-end") {
             return inline_grid;
         }
+        if (name == "transition") return inline_transition;
+        if (name == "transition-property") return inline_transition_property;
+        if (name == "transition-duration") return inline_transition_duration;
+        if (name == "transition-delay") return inline_transition_delay;
+        if (name == "transition-timing-function") return inline_transition_timing;
         if (name == "background" || name == "background-color") return inline_background;
         if (name == "overflow" || name == "overflow-x" || name == "overflow-y") return inline_overflow;
         if (name == "visibility") return inline_visibility;

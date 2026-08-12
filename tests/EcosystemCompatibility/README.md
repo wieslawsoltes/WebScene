@@ -16,10 +16,10 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current native evidence (2026-08-09): the native engine passes 18/18 consumer documents
-and 450/450 selected assertions. Historical three-engine evidence from 2026-07-23 had
-Chrome, the former managed adapter, and native at the same denominator. Fifteen
-documents execute 424 unchanged official-source cases: all 253
+Current Chrome and native evidence (2026-08-12): both engines pass 19/19 consumer
+documents and 510/510 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at the same denominator. Sixteen
+documents execute 484 unchanged official-source cases: all 313
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, and 55 selected browser-local cases from its unmodified `css.js`.
@@ -56,7 +56,7 @@ suppressed geometry beneath `display:none` and preserve numeric z-index CSSOM va
 through connection, stylesheet recascade, negative mutation, and removal. Direct
 Chrome and both adapters pass all seven assertions. Correct z-index then exposed and
 fixed retained-canvas host grouping without introducing application-specific runtime
-behavior. Native consequently passes all 450/450 selected assertions. The computed
+behavior. Native consequently passed all 450/450 assertions at that checkpoint. The computed
 CSSStyleDeclaration named-property reduction then closes the managed
 unsupported-property return assertion by distinguishing method fallback from supported
 IDL aliases. The detached computed-style reduction then makes snapshot reuse sensitive
@@ -71,7 +71,7 @@ Chrome-authorized font-relative box reduction resolves that final assertion with
 jQuery-specific behavior: opposing percentage insets remain independent, dynamic
 percent-to-em replacement and four-value `inset` follow inherited font-size mutation,
 and width, min-height, padding, gap, and flex-basis expose consistent pixel values.
-Chrome, managed, and native consequently pass the complete 450/450 denominator.
+Chrome, managed, and native consequently passed the complete 450/450 denominator.
 Evidence:
 `artifacts/ecosystem-consumers-font-relative-box-final-v1-20260723/` and
 `artifacts/web-platform-required-font-relative-promoted-v1-20260723/`.
@@ -86,12 +86,12 @@ and both adapters passed both it and all 6/6 assertions in the unchanged pinned 
 The generic WPT adapter also gained BODY `onload` startup support so future
 check-layout documents can run unchanged.
 
-Seven documents execute all 253 cases from Bootstrap 5.3.8's unmodified
+Eight documents now execute all 313 cases from Bootstrap 5.3.8's unmodified
 `alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `collapse.spec.js`,
-`dropdown.spec.js`, `tab.spec.js`, and `toast.spec.js` with their unmodified fixture
+`dropdown.spec.js`, `modal.spec.js`, `tab.spec.js`, and `toast.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects seven Bootstrap files and three jQuery files, leaving 7,
+tags and commits. It selects eight Bootstrap files and three jQuery files, leaving 6,
 21, and 128 files respectively classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
@@ -101,6 +101,14 @@ evidence is
 `artifacts/ecosystem-consumers-font-relative-box-final-v1-20260723/ecosystem-results.json`;
 the matching Chrome, managed, and native per-engine results are retained beneath that
 evidence directory.
+
+The modal tranche adds 60 unchanged assertions for visibility, focus trapping,
+backdrop and keyboard policy, scroll locking, resize, data APIs, transition lifecycle,
+ARIA state, and instance disposal. Its one native divergence reduced to the neutral
+`dynamic-transition-style-task-order.html` contract: `innerHTML`-parsed transition
+longhands survive recascade and computed time values serialize in seconds, while a
+synthetic click retains ordinary timer task ordering. The engine fix preserves inline
+origin and per-longhand `!important` precedence without adding hot DOM-node storage.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

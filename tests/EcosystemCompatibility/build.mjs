@@ -104,6 +104,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-modal-upstream",
+    entry: "src/bootstrap-modal-upstream.mjs",
+    title: "Bootstrap upstream modal suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 

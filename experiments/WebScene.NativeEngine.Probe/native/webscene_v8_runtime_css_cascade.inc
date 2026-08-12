@@ -932,6 +932,18 @@
         }
     }
 
+    static std::string serialize_computed_time_list(const std::string& value)
+    {
+        const auto times = split_css_component_list(value, ',');
+        std::string result;
+        for (const auto& time : times) {
+            if (!result.empty()) result += ", ";
+            result += serialize_css_number(
+                static_cast<double>(parse_css_time_ms(time)) / 1000.0) + "s";
+        }
+        return result.empty() ? std::string{"0s"} : result;
+    }
+
     static void configure_style_transitions(node_style& style)
     {
         if (!style.has_animation_data()) return;
@@ -2615,6 +2627,27 @@
                 if (declaration.name.starts_with("--")) continue;
                 apply_css_declaration(node, declaration);
             }
+        }
+        // Inline transition declarations are stored separately from the hot
+        // style object. Recascade clears cold animation state before applying
+        // stylesheet rules, so restore the inline origin afterward while
+        // retaining per-longhand !important precedence.
+        constexpr std::array transition_properties{
+            "transition",
+            "transition-property",
+            "transition-duration",
+            "transition-delay",
+            "transition-timing-function"
+        };
+        for (const auto* property : transition_properties) {
+            const auto authored = node.authored_style().declarations.find(property);
+            if (authored == node.authored_style().declarations.end()) continue;
+            const auto inline_important =
+                node.authored_style().important_declarations.contains(property);
+            const auto property_mask = inline_style_mask(property);
+            if (!inline_important
+                && (node.style.important_property_mask & property_mask) != 0U) continue;
+            apply_css_declaration(node, {property, authored->second, inline_important});
         }
         // Inline relative line-height is authored at a higher origin, but its
         // computed pixel value depends on the winning font-size. Re-resolve it

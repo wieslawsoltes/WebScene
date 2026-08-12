@@ -39,7 +39,7 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
         })()
     )JS", "paint-transition-metadata.js");
     require(
-        metadata == R"(["opacity, color","100ms, 200ms","20ms, 0ms","linear, linear"])" ,
+        metadata == R"(["opacity, color","0.1s, 0.2s","0.02s, 0s","linear, linear"])" ,
         "computed transition metadata was not observable: " + metadata);
 
     animation_frame_and_wait(engine, 50.0, 7012U);
@@ -103,6 +103,44 @@ void test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(
             && completed.find("transitionend:opacity") != std::string::npos
             && completed.find("transitionend:color") != std::string::npos,
         "opacity/color transitions did not publish their final state: " + completed);
+}
+
+void test_inline_transition_longhands_survive_dynamic_parse_and_recascade(
+    webscene_engine* engine)
+{
+    const auto value = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .transition-probe {
+                transition-duration: 2s;
+                transition-delay: 30ms !important;
+              }
+            </style>
+            <div id="transition-probe" class="transition-probe"
+              style="transition-duration: 50ms; transition-delay: 10ms;"></div>`;
+          const probe = document.getElementById('transition-probe');
+          const before = getComputedStyle(probe);
+          const result = [
+            probe.style.transitionDuration,
+            probe.style.transitionDelay,
+            before.transitionDuration,
+            before.transitionDelay
+          ];
+          probe.classList.add('unmatched-state');
+          const recascaded = getComputedStyle(probe);
+          result.push(recascaded.transitionDuration, recascaded.transitionDelay);
+          probe.style.removeProperty('transition-duration');
+          result.push(
+            probe.style.transitionDuration,
+            getComputedStyle(probe).transitionDuration
+          );
+          return result;
+        })()
+    )JS", "native-inline-transition-recascade.js");
+    require(
+        value == R"JSON(["50ms","10ms","0.05s","0.03s","0.05s","0.03s","","2s"])JSON",
+        "inline transition longhands were lost or mis-cascaded: " + value);
 }
 
 void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(

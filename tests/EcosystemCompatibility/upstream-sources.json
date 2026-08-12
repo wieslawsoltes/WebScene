@@ -59,6 +59,11 @@
           "path": "upstream/bootstrap/js/tests/unit/dropdown.spec.js",
           "cases": 87,
           "sha256": "49fc59fdc685ae4d63f91c0e8548db6ccdca85ea30f31d183013358d16044b32"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/modal.spec.js",
+          "cases": 60,
+          "sha256": "51ceb04f5605b68385647811b16eb68620d39c8e5a33853443c8293449d145fe"
         }
       ],
       "supportFiles": [
@@ -74,7 +79,6 @@
       "harnessBlocked": [
         "carousel.spec.js",
         "jquery.spec.js",
-        "modal.spec.js",
         "offcanvas.spec.js",
         "popover.spec.js",
         "scrollspy.spec.js",

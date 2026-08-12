@@ -65,7 +65,7 @@
       initialStyle.transitionTimingFunction
     ];
     const expectedMetadata = [
-      "opacity, color", "120ms, 160ms", "16ms, 0ms", "linear, linear"
+      "opacity, color", "0.12s, 0.16s", "0.016s, 0s", "linear, linear"
     ];
     if (JSON.stringify(metadata) !== JSON.stringify(expectedMetadata)) {
       throw new Error("computed transition longhands differ: " + JSON.stringify(metadata));

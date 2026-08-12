@@ -313,7 +313,13 @@ enum inline_style_property : uint64_t {
     inline_float = 1ULL << 45U,
     inline_border = 1ULL << 46U,
     inline_flex_basis = 1ULL << 47U,
-    inline_grid = 1ULL << 48U
+    inline_grid = 1ULL << 48U,
+    inline_transition_property = 1ULL << 49U,
+    inline_transition_duration = 1ULL << 50U,
+    inline_transition_delay = 1ULL << 51U,
+    inline_transition_timing = 1ULL << 52U,
+    inline_transition = inline_transition_property | inline_transition_duration
+        | inline_transition_delay | inline_transition_timing
 };
 
 std::once_flag v8_initialize_once;

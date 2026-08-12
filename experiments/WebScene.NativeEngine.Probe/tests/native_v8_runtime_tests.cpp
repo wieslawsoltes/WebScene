@@ -339,6 +339,7 @@ int main()
     engine = webscene_engine_create(64);
     require(engine != nullptr, "transition regression engine creation failed");
     test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(engine);
+    test_inline_transition_longhands_survive_dynamic_parse_and_recascade(engine);
     test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(engine);
     test_rotation_keyframes_use_host_clock_and_wrap_continuously(engine);
     webscene_engine_destroy(engine);
