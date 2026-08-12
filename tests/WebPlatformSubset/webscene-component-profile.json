@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/empty-inline-element-geometry.html",
+      "type": "contract",
+      "capabilities": ["empty-inline-box-geometry", "non-stretched-inline-cross-size", "offscreen-positioned-container"],
+      "evidence": ["bootstrap-v5.3.8-tooltip-popper-placement-reduction"],
+      "reason": "Chrome-authorized product-neutral reduction of overlay placement input: an empty inline reference contributes no cross-size instead of stretching to a tall containing block."
+    },
+    {
       "path": "contracts/dom-anchor-empty-fragment-reflection.html",
       "type": "contract",
       "capabilities": ["anchor-empty-fragment-reflection", "relative-url-fragment-reflection"],

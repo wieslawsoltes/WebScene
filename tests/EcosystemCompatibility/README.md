@@ -16,10 +16,10 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 24/24 consumer
-documents and 699/699 selected assertions. Historical three-engine evidence from 2026-07-23 had
-Chrome, the former managed adapter, and native at its then-current denominator. Twenty-one
-documents execute 673 unchanged official-source cases: all 502
+Current Chrome and native evidence (2026-08-12): both engines pass 25/25 consumer
+documents and 788/788 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at its then-current denominator. Twenty-two
+documents execute 762 unchanged official-source cases: all 591
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, and 55 selected browser-local cases from its unmodified `css.js`.
@@ -86,15 +86,14 @@ and both adapters passed both it and all 6/6 assertions in the unchanged pinned 
 The generic WPT adapter also gained BODY `onload` startup support so future
 check-layout documents can run unchanged.
 
-Thirteen documents now execute all 502 cases from Bootstrap 5.3.8's unmodified
+Fourteen documents now execute all 591 cases from Bootstrap 5.3.8's unmodified
 `alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `carousel.spec.js`, `collapse.spec.js`,
 `dropdown.spec.js`, `jquery.spec.js`, `modal.spec.js`, `offcanvas.spec.js`, `popover.spec.js`,
-`scrollspy.spec.js`, `tab.spec.js`, and
-`toast.spec.js` with their unmodified fixture
+`scrollspy.spec.js`, `tab.spec.js`, `toast.spec.js`, and `tooltip.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects thirteen Bootstrap files and three jQuery files, leaving 1,
-21, and 128 files respectively classified as harness-blocked. Vendored selected bytes,
+tags and commits. It selects all fourteen Bootstrap files and three jQuery files, leaving
+no Bootstrap files, 21 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
 `artifacts/ecosystem-consumers-managed-jquery-css-v3-disconnected-20260723/`, and
@@ -159,6 +158,16 @@ Jasmine's actual boundary before the drain, while spies remain installed until q
 cleanup finishes. Chrome and native pass the full lane after the change; no Popover-
 specific or production runtime path was added, and pixel parity remains outside this
 functional claim.
+
+The Tooltip tranche adds all 89 unchanged assertions for constructor/configuration,
+Popper modifiers and placement, delegated click/focus/hover state, delayed transitions,
+mobile workarounds, content replacement and sanitization, accessibility labeling,
+custom classes, disposal, instance APIs, and the jQuery bridge. Its native placement
+divergence reduced to an empty inline reference inside a tall positioned container:
+the generic horizontal layout path stretched every zero-intrinsic-height child to the
+container cross size, even outside Flexbox. Empty inline boxes now retain zero cross-
+size like Chrome, while the existing flex-container path is unchanged. No Tooltip-
+specific runtime path or pixel-parity claim was added.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

@@ -1975,11 +1975,11 @@ void native_document::layout_children(dom_node& parent)
             // column basis inside a 31px-tall row).
             auto height = definite_authored_height
                 ? outer_authored_size(*child, false, content.height)
-                : (flex_container
-                        && (child->style.align_self_specified
+                : flex_container
+                    && ((child->style.align_self_specified
                             ? child->style.align_self
-                            : parent.style.align_items) == align_mode::stretch)
-                    || intrinsic_height <= 0
+                            : parent.style.align_items) == align_mode::stretch
+                        || intrinsic_height <= 0)
                     ? std::max(0.0F, available_line_cross_size - margin_top - margin_bottom)
                     : std::min(
                         std::max(0.0F, available_line_cross_size - margin_top - margin_bottom),

@@ -89,6 +89,11 @@
           "path": "upstream/bootstrap/js/tests/unit/popover.spec.js",
           "cases": 31,
           "sha256": "3347bc027908c2ddb9af304d8fb9253661b1d72ee61b90233b85c60ed3740031"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/tooltip.spec.js",
+          "cases": 89,
+          "sha256": "129ef3c39c702f7f2883174926f6479a4851b4624d2f1aafdf5d2347cff54e82"
         }
       ],
       "supportFiles": [
@@ -109,9 +114,7 @@
           "sha256": "45041de253b840bd7dce1fd06a07b430aca47b9a3e8c7d6610afeff5ec813da5"
         }
       ],
-      "harnessBlocked": [
-        "tooltip.spec.js"
-      ],
+      "harnessBlocked": [],
       "excluded": []
     },
     {

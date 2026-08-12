@@ -971,6 +971,27 @@ void test_inline_relative_line_height_uses_cascaded_font_size(webscene_engine* e
         "relative line-height did not follow the winning font-size: " + result);
 }
 
+void test_empty_inline_element_does_not_stretch_cross_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div id="fixture" style="position:absolute;top:-10000px;left:-10000px;width:10000px;height:10000px">
+              <a id="empty" href="#" title="empty"></a>
+            </div>`;
+          const fixture = document.getElementById('fixture').getBoundingClientRect();
+          const empty = document.getElementById('empty').getBoundingClientRect();
+          return {
+            fixture: [fixture.x, fixture.y, fixture.width, fixture.height],
+            empty: [empty.x, empty.y, empty.width, empty.height]
+          };
+        })()
+    )JS", "native-empty-inline-element-geometry.js");
+    require(
+        result == R"JSON({"fixture":[-10000,-10000,10000,10000],"empty":[-10000,-10000,0,0]})JSON",
+        "an empty inline element stretched to its containing block: " + result);
+}
+
 void test_hover_invalidation_updates_functional_and_sibling_subjects(
     webscene_engine* engine)
 {

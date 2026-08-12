@@ -188,6 +188,13 @@ function expectation(actual, negated = false, context = "") {
       verify(matched,
         `expected ${describeValue(actual)} ${negated ? "not " : ""}to match ${describeValue(expected)}`);
     },
+    toContain(expected) {
+      const matched = typeof actual === "string"
+        ? actual.includes(String(expected))
+        : Array.isArray(actual) && actual.some(value => matchesEqual(value, expected));
+      verify(matched,
+        `expected ${describeValue(actual)} ${negated ? "not " : ""}to contain ${describeValue(expected)}`);
+    },
     nothing() {
       // Jasmine's explicit no-op assertion documents that reaching this
       // callback is itself the expectation.
@@ -220,6 +227,11 @@ function createSpyFunction(original = null) {
     },
     returnValue: value => {
       spyImplementation = () => value;
+      return spy;
+    },
+    callFake: implementation => {
+      if (typeof implementation !== "function") throw new Error("callFake requires a function");
+      spyImplementation = implementation;
       return spy;
     }
   };

@@ -146,6 +146,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-tooltip-upstream",
+    entry: "src/bootstrap-tooltip-upstream.mjs",
+    title: "Bootstrap upstream Tooltip suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 

@@ -145,6 +145,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "empty-inline-geometry") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_empty_inline_element_does_not_stretch_cross_size(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
     }
     test_binary_reverse_callback_is_leased_and_completed();
@@ -240,6 +247,7 @@ int main()
     test_hover_specificity_preserves_visible_theme_icon(engine);
     test_complex_is_specificity_ignores_non_element_siblings(engine);
     test_inline_relative_line_height_uses_cascaded_font_size(engine);
+    test_empty_inline_element_does_not_stretch_cross_size(engine);
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
