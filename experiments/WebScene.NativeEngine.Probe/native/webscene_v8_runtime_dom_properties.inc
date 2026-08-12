@@ -2189,6 +2189,37 @@
         if (node == nullptr) return;
         const auto name = to_utf8(info.GetIsolate(), property);
         const auto iterator = node->attributes.find(name);
+        const auto url_reflected = (name == "href"
+                && (node->tag == "a" || node->tag == "area" || node->tag == "link"))
+            || (name == "src"
+                && (node->tag == "audio" || node->tag == "embed"
+                    || node->tag == "iframe" || node->tag == "img"
+                    || node->tag == "input" || node->tag == "script"
+                    || node->tag == "source" || node->tag == "track"
+                    || node->tag == "video"));
+        if (iterator != node->attributes.end() && url_reflected) {
+            auto* self = current(info.GetIsolate());
+            auto base = self->in_frame_context()
+                ? self->frame_base_address : self->document_base_address;
+            if (base.empty()) {
+                auto local_context = info.GetIsolate()->GetCurrentContext();
+                v8::Local<v8::Value> location;
+                v8::Local<v8::Value> href;
+                if (local_context->Global()->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "location")).ToLocal(&location)
+                    && location->IsObject()
+                    && location.As<v8::Object>()->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "href")).ToLocal(&href)
+                    && !href->IsNullOrUndefined()) {
+                    base = to_utf8(info.GetIsolate(), href);
+                }
+            }
+            const auto resolved = resolve_resource_url(iterator->second, base);
+            info.GetReturnValue().Set(js_string(info.GetIsolate(), resolved.c_str()));
+            return;
+        }
         info.GetReturnValue().Set(js_string(
             info.GetIsolate(),
             iterator == node->attributes.end() ? "" : iterator->second.c_str()));

@@ -154,6 +154,17 @@
       "staticRegistrations": 847,
       "selected": [
         {
+          "path": "upstream/jquery/test/unit/basic.js",
+          "cases": 13,
+          "sha256": "ced50b918c2095befec031a396f623bdcbbd69dc2f16b48bfc860f6346167c70",
+          "inFileHarnessBlocked": [
+            {
+              "name": "ajax",
+              "reason": "Requires jQuery's PHP mock server for GET, POST, and HTML load responses."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/callbacks.js",
           "cases": 51,
           "sha256": "8b32a1fc476fb9376bf95abf8e65b56c0204c344c139d345cbca76cf525c2cb6"
@@ -284,7 +295,6 @@
       "harnessBlocked": [
         "ajax.js",
         "animation.js",
-        "basic.js",
         "core.js",
         "deprecated.js",
         "effects.js",

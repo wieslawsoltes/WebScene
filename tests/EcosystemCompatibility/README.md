@@ -16,13 +16,14 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 39/39 consumer
-documents and 963/963 selected results. Historical three-engine evidence from 2026-07-23 had
+Current Chrome and native evidence (2026-08-12): both engines pass 40/40 consumer
+documents and 976/976 selected results. Historical three-engine evidence from 2026-07-23 had
 Chrome, the former managed adapter, and native at its then-current denominator. Twenty-seven
-documents previously executed 828 unchanged official-source cases. The current 36
-official-source documents report 937 selected case results: all 591
+documents previously executed 828 unchanged official-source cases. The current 37
+official-source documents report 950 selected case results: all 591
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
-unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
+unmodified `callbacks.js`, all 13 browser-local cross-module cases from its unmodified
+`basic.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, 55 selected browser-local cases from its unmodified `css.js`, and all
 4 cases from its unmodified `serialize.js`, plus 62 browser-local cases from its
 unmodified `traversing.js` and 29 browser-local cases from its unmodified
@@ -98,8 +99,8 @@ Fourteen documents now execute all 591 cases from Bootstrap 5.3.8's unmodified
 `scrollspy.spec.js`, `tab.spec.js`, `toast.spec.js`, and `tooltip.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects all fourteen Bootstrap files and nine jQuery files, leaving
-no Bootstrap files, 15 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
+tags and commits. It selects all fourteen Bootstrap files and ten jQuery files, leaving
+no Bootstrap files, 14 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
 `artifacts/ecosystem-consumers-managed-jquery-css-v3-disconnected-20260723/`, and
@@ -229,6 +230,15 @@ interoperability, expando cleanup, and node-type eligibility. Three shards bound
 retained-runtime cost; Chrome and native pass all 39 cases. The preloaded-iframe unload
 case and separately served data-attribute document remain explicitly harness-blocked.
 No production runtime change was required.
+
+The adjacent jQuery basic integration tranche adds all 13 browser-local cases from the
+unchanged `basic.js` across attributes, CSS, data, dimensions, events, manipulation,
+offsets, selectors, serialization, and wrapping. Its Ajax case remains explicitly
+harness-blocked because it requires jQuery's PHP mock server. One native divergence
+reduced to the existing anchor-reflection contract: URL-valued `href` and `src` IDL
+reads resolve authored fragments against the document URL while `getAttribute()`
+retains the original fragment. The production fix applies generically to URL-bearing
+HTML elements; Chrome and native pass the neutral reduction and all 13 upstream cases.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

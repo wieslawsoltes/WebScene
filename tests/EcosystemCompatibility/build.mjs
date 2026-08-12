@@ -35,6 +35,12 @@ const cases = [
     title: "jQuery upstream callbacks suite",
     css: ""
   },
+  {
+    id: "jquery-basic-upstream",
+    entry: "src/jquery-basic-upstream.mjs",
+    title: "jQuery upstream basic integration suite",
+    css: ""
+  },
   ...Array.from({ length: 3 }, (_, index) => ({
     id: `jquery-attributes-upstream-${index + 1}`,
     entry: "src/jquery-attributes-upstream.mjs",

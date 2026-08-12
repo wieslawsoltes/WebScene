@@ -503,9 +503,9 @@
     {
       "path": "contracts/dom-anchor-hash-reflection.html",
       "type": "contract",
-      "capabilities": ["anchor-hash-getter", "anchor-hash-setter", "href-fragment-attribute-reflection"],
+      "capabilities": ["anchor-hash-getter", "anchor-hash-setter", "href-fragment-attribute-reflection", "anchor-href-document-resolution", "script-src-document-resolution"],
       "evidence": ["bootstrap-scrollspy-target-discovery-reduction"],
-      "reason": "Required after Chrome and native pass the bounded fragment-anchor getter/setter reduction and Bootstrap ScrollSpy target discovery passes in the Chrome/native consumer matrix. The contract permits each certified document loader's base-URL serialization while requiring fragment replacement and removal; full HTMLHyperlinkElementUtils URL parsing is not claimed. Evidence: artifacts/web-platform-candidate-ecosystem-v14-chrome-contracts-v2-20260722, artifacts/web-platform-candidate-ecosystem-v14-three-contracts-v2-20260722, and artifacts/ecosystem-consumers-matrix-v14-offset-fixed-20260722."
+      "reason": "Required after Chrome and native pass the bounded fragment-anchor getter/setter reduction and Bootstrap ScrollSpy target discovery passes in the Chrome/native consumer matrix. Fragment-only anchor href and inert script src IDL reads resolve against the owning document URL while getAttribute retains authored bytes; fragment replacement and removal remain reflected. Full HTMLHyperlinkElementUtils URL parsing is not claimed. Evidence: artifacts/web-platform-candidate-ecosystem-v14-chrome-contracts-v2-20260722, artifacts/web-platform-candidate-ecosystem-v14-three-contracts-v2-20260722, artifacts/ecosystem-consumers-matrix-v14-offset-fixed-20260722, and the unchanged jQuery 4.0.0 basic and attributes suites."
     },
     {
       "path": "css/cssom/escape.html",
