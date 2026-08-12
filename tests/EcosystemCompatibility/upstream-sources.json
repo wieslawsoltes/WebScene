@@ -79,6 +79,11 @@
           "path": "upstream/bootstrap/js/tests/unit/scrollspy.spec.js",
           "cases": 40,
           "sha256": "b398af154217a37dca1dc14548f101a8abb6fd532f6d04321244cac43f6bf726"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/jquery.spec.js",
+          "cases": 2,
+          "sha256": "f91cc9d12596d52bc9f9920d9835d6af8606ce25c987a5b4dcb46994eea4c342"
         }
       ],
       "supportFiles": [
@@ -100,7 +105,6 @@
         }
       ],
       "harnessBlocked": [
-        "jquery.spec.js",
         "popover.spec.js",
         "tooltip.spec.js"
       ],

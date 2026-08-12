@@ -132,6 +132,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-jquery-upstream",
+    entry: "src/bootstrap-jquery-upstream.mjs",
+    title: "Bootstrap upstream jQuery integration suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 
