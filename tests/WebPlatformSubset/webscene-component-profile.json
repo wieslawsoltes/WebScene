@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-traversal-cloning-primitives.html",
+      "type": "contract",
+      "capabilities": ["selector-has-descendant", "attribute-empty-substring-selector", "document-element-parentage", "document-import-node", "disconnected-document-position"],
+      "evidence": ["jquery-4.0.0-traversing-reduction", "dom-traversal-cloning-primitives"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery traversal prerequisites: bounded descendant :has(), empty substring attribute matching, document-root ancestry, detached deep/shallow import, and disconnected position flags."
+    },
+    {
       "path": "contracts/html-textarea-default-value-lifecycle.html",
       "type": "contract",
       "capabilities": ["textarea-child-text-default", "textarea-dirty-value", "textarea-defaultValue", "textarea-newline-normalization", "textarea-form-reset"],

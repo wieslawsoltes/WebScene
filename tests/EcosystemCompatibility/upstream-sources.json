@@ -200,6 +200,25 @@
           "path": "upstream/jquery/test/unit/serialize.js",
           "cases": 4,
           "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
+        },
+        {
+          "path": "upstream/jquery/test/unit/traversing.js",
+          "cases": 62,
+          "sha256": "1b7fbb4ac877a45726183c8661ab3ca345e5cbd3789b8d5220525ff1fa5d7211",
+          "inFileHarnessBlocked": [
+            {
+              "name": "contents()",
+              "reason": "Requires jQuery's separately loaded data/iframe.html fixture and a child browsing context."
+            },
+            {
+              "name": "contents() for <object />",
+              "reason": "Requires jQuery's separately served SVG object fixture and nested resource document."
+            },
+            {
+              "name": "contents() for <frame />",
+              "reason": "Requires jQuery's separately served frame.html fixture and child browsing context."
+            }
+          ]
         }
       ],
       "supportFiles": [
@@ -234,7 +253,6 @@
         "ready.js",
         "selector.js",
         "support.js",
-        "traversing.js",
         "tween.js",
         "wrap.js"
       ],

@@ -55,6 +55,13 @@ const cases = [
     title: "jQuery upstream serialize suite",
     css: ""
   },
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-traversing-upstream-${index + 1}`,
+    entry: "src/jquery-traversing-upstream.mjs",
+    title: `jQuery upstream traversing suite ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: ""
+  })),
   {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",

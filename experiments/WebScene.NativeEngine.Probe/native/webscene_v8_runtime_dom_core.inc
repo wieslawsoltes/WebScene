@@ -2742,6 +2742,43 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
+    static dom_node& clone_dom_subtree(
+        implementation& self,
+        const dom_node& original,
+        bool deep)
+    {
+        auto& clone = self.document.create_node(original.kind, original.tag);
+        clone.set_namespace(
+            original.namespace_uri(),
+            original.namespace_prefix());
+        clone.id_attribute = original.id_attribute;
+        clone.class_name = original.class_name;
+        clone.text_content = original.text_content;
+        clone.xml_mode = original.xml_mode;
+        if (original.has_form_control()) {
+            clone.mutable_form_control() = original.form_control();
+        }
+        clone.attributes = original.attributes;
+        clone.style = original.style;
+        clone.visible = true;
+        if (deep) {
+            for (const auto* child : original.children) {
+                if (child == nullptr) continue;
+                auto& child_clone = clone_dom_subtree(self, *child, true);
+                self.document.append_child(clone, child_clone);
+            }
+            if (original.template_contents != nullptr) {
+                auto& clone_contents = self.document.parser_template_contents(clone);
+                for (const auto* child : original.template_contents->children) {
+                    if (child == nullptr) continue;
+                    auto& child_clone = clone_dom_subtree(self, *child, true);
+                    self.document.append_child(clone_contents, child_clone);
+                }
+            }
+        }
+        return clone;
+    }
+
     static void clone_node(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2752,40 +2789,25 @@
             return;
         }
         const auto deep = info.Length() > 0 && info[0]->BooleanValue(info.GetIsolate());
-        const auto clone_subtree = [&](const auto& recurse, const dom_node& original) -> dom_node& {
-            auto& clone = self->document.create_node(original.kind, original.tag);
-            clone.set_namespace(
-                original.namespace_uri(),
-                original.namespace_prefix());
-            clone.id_attribute = original.id_attribute;
-            clone.class_name = original.class_name;
-            clone.text_content = original.text_content;
-            clone.xml_mode = original.xml_mode;
-            if (original.has_form_control()) {
-                clone.mutable_form_control() = original.form_control();
-            }
-            clone.attributes = original.attributes;
-            clone.style = original.style;
-            clone.visible = true;
-            if (deep) {
-                for (const auto* child : original.children) {
-                    if (child == nullptr) continue;
-                    auto& child_clone = recurse(recurse, *child);
-                    self->document.append_child(clone, child_clone);
-                }
-                if (original.template_contents != nullptr) {
-                    auto& clone_contents = self->document.parser_template_contents(clone);
-                    for (const auto* child : original.template_contents->children) {
-                        if (child == nullptr) continue;
-                        auto& child_clone = recurse(recurse, *child);
-                        self->document.append_child(clone_contents, child_clone);
-                    }
-                }
-            }
-            return clone;
-        };
-        auto& clone = clone_subtree(clone_subtree, *source);
+        auto& clone = clone_dom_subtree(*self, *source, deep);
         self->notify_custom_elements_subtree(clone, "connected");
+        info.GetReturnValue().Set(self->wrap_node(clone));
+    }
+
+    static void document_import_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* source = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || source == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "importNode requires a native DOM node")));
+            return;
+        }
+        const auto deep = info.Length() > 1
+            && info[1]->BooleanValue(info.GetIsolate());
+        auto& clone = clone_dom_subtree(*self, *source, deep);
         info.GetReturnValue().Set(self->wrap_node(clone));
     }
 
@@ -3034,6 +3056,34 @@
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
         for (auto* node = candidate; root != nullptr && node != nullptr;
+            node = self->document.dom_parent(*node)) {
+            if (node == root) {
+                info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+    }
+
+    static void document_contains(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || info.Length() < 1 || !info[0]->IsObject()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        if (info[0].As<v8::Object>()->StrictEquals(info.This())) {
+            info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+            return;
+        }
+        auto* candidate = unwrap_node(info[0].As<v8::Object>());
+        auto* root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        if (root == nullptr) root = &self->active_root();
+        for (auto* node = candidate; node != nullptr;
             node = self->document.dom_parent(*node)) {
             if (node == root) {
                 info.GetReturnValue().Set(v8::True(info.GetIsolate()));

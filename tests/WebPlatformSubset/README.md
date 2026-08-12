@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 72 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 73 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-72/72 documents and 381/381 subtests while the release gate remains 110/110 documents
+73/73 documents and 392/392 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -191,6 +191,10 @@ and 434/434 subtests:
   preserve dirty current state, and form reset restores the newline-normalized default;
   eight Chrome-authorized neutral assertions close all 4 unchanged jQuery serialization
   cases without a framework-specific path; and
+- bounded descendant `:has()`, empty substring attribute selectors, browser-shaped
+  document-root ancestry and containment, deep/shallow `Document.importNode()`, and
+  disconnected position constants now pass 11/11 neutral Chrome/native assertions and
+  close 62 unchanged browser-local jQuery traversal cases; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -376,6 +380,22 @@ median moved from 279.264 ms to 246.263 ms (-11.8%), and median prewarm time fro
 1.474 ms to 1.521 ms (+3.2%). The release library grows by 64 bytes with identical
 Mach-O segment sizes. The textarea dirty bit occupies existing padding in the 56-byte
 cold form-control record and adds no ordinary document or per-node state.
+
+The unchanged upstream jQuery traversal slice and product-neutral DOM traversal/
+cloning fixes were compared with their exact clean parent (`f158f8b`) in six balanced
+fresh-process runs. Median p50 moved from 0.737 ms to 0.744 ms (+1.0%) for 1,000
+startup/lifecycle samples, from 31.969 ms to 32.441 ms (+1.5%) for the 50-sample
+selector workload, and from 3.072 ms to 3.043 ms (-1.0%) for 50 generated named-
+property samples. A four-context/2,000-node probe retains the fixed 976-byte node and
+byte-identical attributed DOM, attribute, pool, wrapper, and scene storage; incremental
+working set per context moved from 22,827,008 to 23,064,576 bytes (+1.0%). Both isolated
+and shared-isolate lifecycle probes pass, including hidden timers, context release, and
+shared-slot reuse. Five balanced five-second idle runs move median normalized CPU from
+0.2557% to 0.2559% (+0.0002 percentage points), with zero signalled wakes, no Inspector
+registry/state, identical 480-byte blank scenes, and the same 800 timer and 240 animation-
+frame callbacks completed by each variant. The representative workload median remains
+inside the established envelope at 289.449 ms versus 299.951 ms (+3.6%). The release
+library grows by 64 bytes and the changes add no document or per-node state.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

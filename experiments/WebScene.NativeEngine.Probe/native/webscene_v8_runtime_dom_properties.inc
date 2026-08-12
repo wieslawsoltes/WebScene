@@ -394,6 +394,22 @@
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto* node = unwrap_node(info.Holder());
         const auto parent_element = to_utf8(info.GetIsolate(), property) == "parentElement";
+        const auto active_document_element = node != nullptr && node->tag == "html"
+            && (node == &self->active_root() || node->parent == &self->active_root());
+        if (active_document_element) {
+            if (parent_element) {
+                info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+                return;
+            }
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            v8::Local<v8::Value> document_value;
+            if (local_context->Global()->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "document")).ToLocal(&document_value)) {
+                info.GetReturnValue().Set(document_value);
+            }
+            return;
+        }
         info.GetReturnValue().Set(node == nullptr || node->parent == nullptr
                 || self->document.is_shadow_root(*node)
                 || (parent_element && node->parent->kind != dom_node_kind::element)

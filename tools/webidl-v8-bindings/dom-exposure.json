@@ -63,6 +63,12 @@
         { "name": "getClientRects", "callback": "get_client_rects", "length": 0 }
       ],
       "constants": [
+        { "name": "DOCUMENT_POSITION_DISCONNECTED", "value": 1 },
+        { "name": "DOCUMENT_POSITION_PRECEDING", "value": 2 },
+        { "name": "DOCUMENT_POSITION_FOLLOWING", "value": 4 },
+        { "name": "DOCUMENT_POSITION_CONTAINS", "value": 8 },
+        { "name": "DOCUMENT_POSITION_CONTAINED_BY", "value": 16 },
+        { "name": "DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC", "value": 32 },
         { "name": "ELEMENT_NODE", "value": 1 },
         { "name": "ATTRIBUTE_NODE", "value": 2 },
         { "name": "TEXT_NODE", "value": 3 },

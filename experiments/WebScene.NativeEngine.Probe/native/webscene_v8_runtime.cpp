@@ -315,6 +315,24 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "DOCUMENT_FRAGMENT_NODE"),
             v8::Integer::New(isolate, 11));
         element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_DISCONNECTED"),
+            v8::Integer::New(isolate, 1));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_PRECEDING"),
+            v8::Integer::New(isolate, 2));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_FOLLOWING"),
+            v8::Integer::New(isolate, 4));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINS"),
+            v8::Integer::New(isolate, 8));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINED_BY"),
+            v8::Integer::New(isolate, 16));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC"),
+            v8::Integer::New(isolate, 32));
+        element->PrototypeTemplate()->Set(
             js_string(isolate, "appendChild"),
             v8::FunctionTemplate::New(isolate, append_child));
         element->PrototypeTemplate()->Set(
@@ -695,6 +713,12 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "cloneNode"),
             v8::FunctionTemplate::New(isolate, clone_document));
+        document_template->Set(
+            js_string(isolate, "importNode"),
+            v8::FunctionTemplate::New(isolate, document_import_node));
+        document_template->Set(
+            js_string(isolate, "contains"),
+            v8::FunctionTemplate::New(isolate, document_contains));
         document_template->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
@@ -2451,6 +2475,30 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "DOCUMENT_FRAGMENT_NODE"),
             v8::Integer::New(isolate, 11)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_DISCONNECTED"),
+            v8::Integer::New(isolate, 1)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_PRECEDING"),
+            v8::Integer::New(isolate, 2)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_FOLLOWING"),
+            v8::Integer::New(isolate, 4)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINS"),
+            v8::Integer::New(isolate, 8)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINED_BY"),
+            v8::Integer::New(isolate, 16)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC"),
+            v8::Integer::New(isolate, 32)).Check();
         global->Set(local_context, js_string(isolate, "Node"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Element"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLElement"), element_constructor).Check();

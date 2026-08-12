@@ -1,0 +1,115 @@
+<!doctype html>
+<html id="html">
+<meta charset="utf-8">
+<title>DOM traversal, selector, and importNode primitives</title>
+<body id="body">
+<div id="fixture"><section id="subject" test="value"><p><span></span></p><em></em></section></div>
+<template id="template"><article data-source="template"><strong>copied</strong></article></template>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const subject = document.getElementById("subject");
+  record(
+    ":has() matches an element with a selected descendant",
+    subject.matches(":has(p)") && subject.matches(":has(p):has(em)"),
+    `single=${subject.matches(":has(p)")}, chained=${subject.matches(":has(p):has(em)")}`
+  );
+  record(
+    ":has() participates in descendant queries",
+    document.querySelectorAll("section:has(strong), section:has(span)").length === 1,
+    `count=${document.querySelectorAll("section:has(strong), section:has(span)").length}`
+  );
+  record(
+    "empty substring attribute selectors do not match",
+    !subject.matches("[test^='']")
+      && !subject.matches("[test$='']")
+      && !subject.matches("[test*='']"),
+    `starts=${subject.matches("[test^='']")}, ends=${subject.matches("[test$='']")}, contains=${subject.matches("[test*='']")}`
+  );
+  record(
+    "the document element has the Document as parentNode",
+    document.documentElement.parentNode === document,
+    `parent=${document.documentElement.parentNode?.nodeName}`
+  );
+  record(
+    "the document element has no parentElement",
+    document.documentElement.parentElement === null,
+    `parent=${document.documentElement.parentElement?.localName}`
+  );
+  record(
+    "body ancestry stops at the document element",
+    document.body.parentElement === document.documentElement
+      && document.body.parentElement.parentElement === null,
+    `bodyParent=${document.body.parentElement?.localName}, htmlParent=${document.documentElement.parentElement?.localName}`
+  );
+
+  const source = document.getElementById("template").content.firstElementChild;
+  const deep = document.importNode(source, true);
+  const shallow = document.importNode(source, false);
+  record(
+    "Document.importNode returns a distinct detached copy",
+    deep !== source && deep.parentNode === null && deep.ownerDocument === document,
+    `same=${deep === source}, parent=${deep.parentNode}, owner=${deep.ownerDocument === document}`
+  );
+  record(
+    "deep import preserves attributes and descendants",
+    deep.getAttribute("data-source") === "template"
+      && deep.firstElementChild?.localName === "strong"
+      && deep.textContent === "copied",
+    `attribute=${deep.getAttribute("data-source")}, child=${deep.firstElementChild?.localName}, text=${JSON.stringify(deep.textContent)}`
+  );
+  record(
+    "shallow import preserves attributes without descendants",
+    shallow.getAttribute("data-source") === "template"
+      && shallow.childNodes.length === 0,
+    `attribute=${shallow.getAttribute("data-source")}, children=${shallow.childNodes.length}`
+  );
+
+  const detached = document.createElement("div");
+  const position = detached.compareDocumentPosition(subject);
+  record(
+    "disconnected document positions carry stable DOM flags",
+    (position & Node.DOCUMENT_POSITION_DISCONNECTED) !== 0
+      && (position & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC) !== 0
+      && (((position & Node.DOCUMENT_POSITION_PRECEDING) !== 0)
+        !== ((position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0)),
+    `position=${position}`
+  );
+  record(
+    "the document element contains connected descendants but not detached nodes",
+    document.documentElement.contains(subject)
+      && !document.documentElement.contains(detached)
+      && document.contains(subject)
+      && !document.contains(detached),
+    `elementConnected=${document.documentElement.contains(subject)}, elementDetached=${document.documentElement.contains(detached)}, documentConnected=${document.contains(subject)}, documentDetached=${document.contains(detached)}`
+  );
+
+  state.diagnostics = [JSON.stringify({
+    rootChain: [subject, subject.parentNode, document.body, document.documentElement]
+      .map(node => ({ name: node?.nodeName, id: node?.id, type: node?.nodeType })),
+    position
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>
+</body>
+</html>

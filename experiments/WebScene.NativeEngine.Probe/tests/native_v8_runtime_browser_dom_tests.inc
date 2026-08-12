@@ -1,3 +1,46 @@
+void test_dom_traversal_cloning_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <section id="subject" test="value"><p><span></span></p><em></em></section>
+            <template id="template"><article data-source="template"><strong>copied</strong></article></template>`;
+          const subject = document.getElementById('subject');
+          const source = document.getElementById('template').content.firstElementChild;
+          const deep = document.importNode(source, true);
+          const shallow = document.importNode(source, false);
+          const detached = document.createElement('div');
+          const position = detached.compareDocumentPosition(subject);
+          return {
+            has: [subject.matches(':has(p)'), subject.matches(':has(p):has(em)')],
+            empty: [
+              subject.matches("[test^='']"),
+              subject.matches("[test$='']"),
+              subject.matches("[test*='']")
+            ],
+            imported: [
+              deep !== source,
+              deep.parentNode === null,
+              deep.getAttribute('data-source'),
+              deep.firstElementChild?.localName,
+              deep.textContent,
+              shallow.childNodes.length
+            ],
+            contains: [document.contains(subject), document.contains(detached)],
+            position: [
+              position,
+              Node.DOCUMENT_POSITION_DISCONNECTED,
+              Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC
+            ]
+          };
+        })()
+    )JS", "native-dom-traversal-cloning-primitives.js");
+    const auto expected = R"JSON({"has":[true,true],"empty":[false,false,false],"imported":[true,true,"template","strong","copied",0],"contains":[true,false],"position":[35,1,32]})JSON";
+    require(
+        result == expected,
+        "DOM traversal/cloning primitives diverged: " + result);
+}
+
 void test_textarea_child_text_value_lifecycle(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

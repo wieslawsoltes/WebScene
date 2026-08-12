@@ -2071,6 +2071,10 @@
         }
         const auto& actual = attribute->second;
         if (attribute_operator == "=") return actual == wanted;
+        if (wanted.empty() && (attribute_operator == "^="
+            || attribute_operator == "$=" || attribute_operator == "*=")) {
+            return false;
+        }
         if (attribute_operator == "^=") return actual.starts_with(wanted);
         if (attribute_operator == "$=") return actual.ends_with(wanted);
         if (attribute_operator == "*=") return actual.find(wanted) != std::string::npos;
@@ -2189,6 +2193,10 @@
                     }
                     const auto& actual = attribute->second;
                     if (attribute_operator == "=" && actual != wanted) return false;
+                    if (wanted.empty() && (attribute_operator == "^="
+                        || attribute_operator == "$=" || attribute_operator == "*=")) {
+                        return false;
+                    }
                     if (attribute_operator == "^=" && !actual.starts_with(wanted)) return false;
                     if (attribute_operator == "$=" && !actual.ends_with(wanted)) return false;
                     if (attribute_operator == "*=" && actual.find(wanted) == std::string::npos) return false;
@@ -2419,6 +2427,34 @@
                         trim_css_view(argument.substr(start, end - start)),
                         scope_root);
                     if (end == argument.size()) break;
+                    start = end + 1U;
+                }
+                if (!any) return false;
+            } else if (name == "has") {
+                bool any = false;
+                size_t start = 0;
+                while (start <= argument.size()) {
+                    auto end = argument.find(',', start);
+                    if (end == std::string::npos) end = argument.size();
+                    const auto relative = trim_css_view(
+                        argument.substr(start, end - start));
+                    if (!relative.empty()) {
+                        if (relative.front() == '>') {
+                            const auto child_selector = trim_css_view(relative.substr(1U));
+                            any = !child_selector.empty() && std::any_of(
+                                node.children.begin(),
+                                node.children.end(),
+                                [&](const auto* child) {
+                                    return is_element(child)
+                                        && css_selector_matches(
+                                            *child, child_selector, &node);
+                                });
+                        } else if (relative.front() != '+' && relative.front() != '~') {
+                            any = query_selector_node(
+                                const_cast<dom_node&>(node), relative, false) != nullptr;
+                        }
+                    }
+                    if (any || end == argument.size()) break;
                     start = end + 1U;
                 }
                 if (!any) return false;
