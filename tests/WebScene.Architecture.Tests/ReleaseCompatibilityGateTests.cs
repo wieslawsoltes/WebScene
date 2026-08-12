@@ -42,8 +42,15 @@ public sealed class ReleaseCompatibilityGateTests
         var candidate = profile.RootElement.GetProperty("candidate");
 
         Assert.True(
-            candidate.GetArrayLength() >= 63,
+            candidate.GetArrayLength() >= 79,
             $"The candidate compatibility denominator unexpectedly shrank to {candidate.GetArrayLength()} documents.");
+
+        Assert.Contains(
+            candidate.EnumerateArray(),
+            test => string.Equals(
+                test.GetProperty("path").GetString(),
+                "contracts/dom-library-core-primitives.html",
+                StringComparison.Ordinal));
 
         Assert.Empty(profile.RootElement.GetProperty("harnessBlocked").EnumerateArray());
         Assert.Equal(

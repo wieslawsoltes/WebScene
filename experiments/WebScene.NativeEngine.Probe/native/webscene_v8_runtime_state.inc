@@ -84,6 +84,7 @@
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_documents;
     std::unordered_map<uint32_t, dom_node*> provisional_frame_bodies;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_windows;
+    std::unordered_map<uint32_t, std::pair<float, float>> frame_window_scroll_offsets;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_windows;
     std::unordered_map<uint32_t, v8::Global<v8::Context>> actual_frame_contexts;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_documents;

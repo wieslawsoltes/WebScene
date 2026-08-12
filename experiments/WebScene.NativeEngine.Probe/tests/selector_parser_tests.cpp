@@ -69,6 +69,10 @@ void require_validation()
         "unknown pseudo-class rejected");
     require(!parse_selector_syntax("[data-value=]").operator bool(),
         "missing attribute value rejected");
+    require(!parse_selector_syntax(":lang(c++)").operator bool(),
+        "invalid language identifier rejected");
+    require(static_cast<bool>(parse_selector_syntax(":lang(ara\\b)")),
+        "escaped language identifier accepted");
     require(static_cast<bool>(parse_selector_syntax("div:is(.valid, :unknown-state)")),
         "forgiving :is list retains valid selector");
 }

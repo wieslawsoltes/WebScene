@@ -250,6 +250,7 @@
         { "name": "enctype", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "htmlFor", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "title", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
+        { "name": "lang", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "type", "getter": "get_element_type", "setter": "set_element_type" },
         { "name": "name", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "value", "getter": "get_form_value", "setter": "set_form_value" },

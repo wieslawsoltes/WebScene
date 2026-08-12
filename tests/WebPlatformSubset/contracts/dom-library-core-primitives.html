@@ -114,6 +114,61 @@ test("XML parsing preserves CDATA and reports malformed structure", () => {
   assert(/line\s+1/i.test(error.textContent) && /column/i.test(error.textContent), `parsererror location '${error?.textContent}'`);
 });
 
+test("selector attribute syntax preserves quoted delimiters and HTML name folding", () => {
+  const host = document.createElement("section");
+  host.innerHTML = "<input id='selector-brackets' name='types[]' TITLE='folded' xml:test='colon'>";
+  document.body.appendChild(host);
+  equal(host.querySelectorAll("input[name='types[]']").length, 1, "quoted closing bracket");
+  equal(host.querySelectorAll("input[name$='[]']").length, 1, "attribute suffix closing bracket");
+  equal(host.querySelectorAll("INPUT[TITLE][xml\\:test]").length, 1, "HTML selector name folding and escape");
+  host.remove();
+});
+
+test("structural selectors support forward, reverse, and type-relative positions", () => {
+  const host = document.createElement("section");
+  host.innerHTML = "<i id='nth-a'></i><b></b><i id='nth-b'></i><i id='nth-c'></i>";
+  document.body.appendChild(host);
+  equal(host.querySelector("i:nth-child(3)")?.id, "nth-b", "nth-child");
+  equal(host.querySelector("i:nth-last-child(1)")?.id, "nth-c", "nth-last-child");
+  equal(host.querySelector("i:nth-of-type(2)")?.id, "nth-b", "nth-of-type");
+  equal(host.querySelector("i:nth-last-of-type(2)")?.id, "nth-b", "nth-last-of-type");
+  host.remove();
+});
+
+test("form state, language, target, and input type use browser-facing semantics", () => {
+  const host = document.createElement("section");
+  host.lang = "en-US";
+  host.innerHTML = "<fieldset disabled><legend><input id='legend-control'></legend><input id='disabled-control'></fieldset><input id='folded-type' type='TEXT'><a id='selector-target'></a>";
+  document.body.appendChild(host);
+  equal(host.lang, "en-US", "lang reflection");
+  assert(host.matches(":lang(en)"), "inherited language match");
+  assert(!host.querySelector("#legend-control").matches(":disabled"), "first legend exception");
+  assert(host.querySelector("#disabled-control").matches(":disabled"), "disabled fieldset ancestry");
+  equal(host.querySelector("#folded-type").type, "text", "input type normalization");
+  const previousHash = location.hash;
+  location.hash = "selector-target";
+  assert(host.querySelector("#selector-target").matches(":target"), "target match");
+  location.hash = previousHash;
+  host.remove();
+});
+
+test("XML document boundaries remain document-scoped", () => {
+  const parsed = new DOMParser().parseFromString("<soap:Envelope xmlns:soap='urn:test'><soap:Body/></soap:Envelope>", "application/xml");
+  const root = parsed.documentElement;
+  assert(parsed.firstChild === root && parsed.lastChild === root, "document boundary children");
+  assert(root.ownerDocument === parsed, "XML root ownerDocument");
+});
+
+test("Document ordering keeps connected nodes ahead of disconnected nodes", () => {
+  const connected = document.createElement("section");
+  const disconnected = document.createElement("section");
+  document.body.appendChild(connected);
+  assert(document.compareDocumentPosition(connected) & Node.DOCUMENT_POSITION_CONTAINED_BY, "document contains connected element");
+  assert(connected.compareDocumentPosition(document) & Node.DOCUMENT_POSITION_CONTAINS, "connected element document relation");
+  assert(connected.compareDocumentPosition(disconnected) & Node.DOCUMENT_POSITION_DISCONNECTED, "disconnected relation");
+  connected.remove();
+});
+
 const iframe = document.createElement("iframe");
 document.body.appendChild(iframe);
 test("initial iframe exposes an HTML document and stable realm identity", () => {
@@ -123,6 +178,21 @@ test("initial iframe exposes an HTML document and stable realm identity", () => 
   assert(frameDocument.body?.nodeName === "BODY", "initial body");
   assert(frameDocument.defaultView === iframe.contentWindow, "initial defaultView identity");
   assert(iframe.contentWindow.frameElement === iframe, "initial frameElement identity");
+});
+
+test("initial iframe document supports document queries, matching, and independent scroll", () => {
+  const frameDocument = iframe.contentDocument;
+  frameDocument.open();
+  frameDocument.write("<!doctype html><html><body><main id='frame-main'><p id='frame-probe'>probe</p><div style='width:1000px;height:1000px'></div></main></body></html>");
+  frameDocument.close();
+  const probe = frameDocument.getElementById("frame-probe");
+  equal(frameDocument.querySelectorAll("p").length, 1, "frame querySelectorAll");
+  equal(frameDocument.getElementsByTagName("p").length, 1, "frame getElementsByTagName");
+  assert(probe.ownerDocument === frameDocument, "frame ownerDocument identity");
+  assert(probe.matches(":root > body > #frame-main > #frame-probe"), "frame-rooted matches");
+  iframe.contentWindow.scrollTo(500, 200);
+  equal(iframe.contentWindow.pageXOffset, 500, "frame horizontal scroll");
+  equal(iframe.contentWindow.pageYOffset, 200, "frame vertical scroll");
 });
 
 let frameCallbackObserved = false;

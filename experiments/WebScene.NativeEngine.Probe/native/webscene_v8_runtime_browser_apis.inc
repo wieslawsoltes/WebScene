@@ -1713,6 +1713,22 @@
         info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), height));
     }
 
+    static dom_node* frame_owner_for_window(
+        implementation& self,
+        v8::Local<v8::Object> holder)
+    {
+        if (auto* node = unwrap_node(holder); node != nullptr && node->tag == "iframe") {
+            return node;
+        }
+        for (const auto& [id, persistent] : self.actual_frame_windows) {
+            if (!persistent.IsEmpty() && persistent.Get(self.isolate)->StrictEquals(holder)) {
+                auto* node = self.document.find_by_native_id(id);
+                return node != nullptr && node->tag == "iframe" ? node : nullptr;
+            }
+        }
+        return nullptr;
+    }
+
     static void get_window_scroll_x(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -1720,9 +1736,14 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry));
-        info.GetReturnValue().Set(v8::Number::New(
-            info.GetIsolate(),
-            self->active_root().scroll_left));
+        const auto* frame = frame_owner_for_window(*self, info.Holder());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),
+            known == self->frame_window_scroll_offsets.end()
+                ? self->active_root().scroll_left
+                : known->second.first));
     }
 
     static void get_window_scroll_y(
@@ -1732,9 +1753,14 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry));
-        info.GetReturnValue().Set(v8::Number::New(
-            info.GetIsolate(),
-            self->active_root().scroll_top));
+        const auto* frame = frame_owner_for_window(*self, info.Holder());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),
+            known == self->frame_window_scroll_offsets.end()
+                ? self->active_root().scroll_top
+                : known->second.second));
     }
 
     static void window_scroll_to(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1745,8 +1771,14 @@
         self->ensure_layout();
 
         auto& root = self->active_root();
-        auto left = static_cast<double>(root.scroll_left);
-        auto top = static_cast<double>(root.scroll_top);
+        auto* frame = frame_owner_for_window(*self, info.This());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        auto left = static_cast<double>(known == self->frame_window_scroll_offsets.end()
+            ? root.scroll_left : known->second.first);
+        auto top = static_cast<double>(known == self->frame_window_scroll_offsets.end()
+            ? root.scroll_top : known->second.second);
         const auto local_context = info.GetIsolate()->GetCurrentContext();
         if (info.Length() > 0 && info[0]->IsObject()) {
             const auto options = info[0].As<v8::Object>();
@@ -1771,6 +1803,13 @@
         }
         if (!std::isfinite(left)) left = 0.0;
         if (!std::isfinite(top)) top = 0.0;
+
+        if (frame != nullptr) {
+            self->frame_window_scroll_offsets[frame->id] = {
+                std::max(0.0F, static_cast<float>(left)),
+                std::max(0.0F, static_cast<float>(top))};
+            return;
+        }
 
         const auto maximum_left = std::max(
             0.0F,

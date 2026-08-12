@@ -53,6 +53,34 @@
       "reason": "Runs the unchanged 30,000-element core.js registration in its own document so its intentionally large retained-runtime cost cannot delay unrelated asynchronous cases."
     },
     {
+      "path": "contracts/jquery-selector-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/4 of the 56 browser-local, current-browser-aligned cases from jQuery's unchanged selector.js. Three separately served iframe registrations and one form-navigation/reload case remain explicitly harness-blocked. One pinned :disabled expectation is excluded because the current HTML Standard and Chrome 151 include option/optgroup descendants of a disabled select; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/4 of the same unchanged 56-case selector selection; sharding bounds retained-runtime cost without rewriting selected cases."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/4 of the same unchanged 56-case selector selection; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-4.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 4/4 of the same unchanged 56-case selector selection; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/jquery-attributes-upstream-1.html",
       "type": "contract",
       "capabilities": ["official-upstream-suite", "attribute-reflection", "property-reflection", "boolean-attributes", "form-values", "select-option-state", "class-token-mutation", "svg-class-mutation", "xml-attributes", "fixture-reset"],
@@ -344,7 +372,7 @@
   "excluded": [
     {
       "area": "remaining upstream internal framework suites",
-      "reason": "All fourteen unmodified Bootstrap source suites and fifteen unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
+      "reason": "All fourteen unmodified Bootstrap source suites and sixteen unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
     }
   ],
   "consumers": [
@@ -353,11 +381,11 @@
       "package": "jquery",
       "version": "4.0.0",
       "stage": "discovery",
-      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-basic-upstream.html", "contracts/jquery-core-upstream-1.html", "contracts/jquery-core-upstream-2.html", "contracts/jquery-core-upstream-massive-html.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html", "contracts/jquery-queue-upstream.html", "contracts/jquery-ready-upstream.html", "contracts/jquery-wrap-upstream.html", "contracts/jquery-offset-upstream.html", "contracts/jquery-deferred-upstream.html", "contracts/jquery-deprecated-upstream.html", "contracts/jquery-data-upstream-1.html", "contracts/jquery-data-upstream-2.html", "contracts/jquery-data-upstream-3.html"],
-      "selected": 462,
-      "runnable": 462,
+      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-basic-upstream.html", "contracts/jquery-core-upstream-1.html", "contracts/jquery-core-upstream-2.html", "contracts/jquery-core-upstream-massive-html.html", "contracts/jquery-selector-upstream-1.html", "contracts/jquery-selector-upstream-2.html", "contracts/jquery-selector-upstream-3.html", "contracts/jquery-selector-upstream-4.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html", "contracts/jquery-queue-upstream.html", "contracts/jquery-ready-upstream.html", "contracts/jquery-wrap-upstream.html", "contracts/jquery-offset-upstream.html", "contracts/jquery-deferred-upstream.html", "contracts/jquery-deprecated-upstream.html", "contracts/jquery-data-upstream-1.html", "contracts/jquery-data-upstream-2.html", "contracts/jquery-data-upstream-3.html"],
+      "selected": 518,
+      "runnable": 518,
       "excluded": ["Ajax transport and server fixtures", "animation timing", "legacy-browser compatibility branches"],
-      "harnessBlocked": ["9 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One basic.js case, one attributes.js case, six core.js cases, five css.js cases, two data.js cases, one deprecated.js case, one ready.js case, three traversing.js cases, one dimensions.js case, and 24 named offset.js iframe registrations require a mock server, Shadow DOM, browser zoom, separately served resource fixtures, or child browsing contexts."],
+      "harnessBlocked": ["8 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One basic.js case, one attributes.js case, six core.js cases, four selector.js cases, five css.js cases, two data.js cases, one deprecated.js case, one ready.js case, three traversing.js cases, one dimensions.js case, and 24 named offset.js iframe registrations require a mock server, browser zoom, separately served resource fixtures, navigation/reload, or child browsing contexts. One selector.js :disabled expectation is excluded as pinned upstream-version drift against the current HTML Standard and Chrome 151."],
       "upstreamSuite": {
         "repository": "https://github.com/jquery/jquery.git",
         "tag": "4.0.0",
@@ -365,11 +393,11 @@
         "root": "test/unit",
         "discoveredFiles": 24,
         "staticRegistrations": 847,
-        "selectedFiles": ["attributes.js", "basic.js", "callbacks.js", "core.js", "css.js", "data.js", "deferred.js", "deprecated.js", "dimensions.js", "offset.js", "queue.js", "ready.js", "serialize.js", "traversing.js", "wrap.js"],
-        "selectedCases": 454,
-        "runnableCases": 454,
-        "harnessBlockedFiles": 9,
-        "inFileHarnessBlockedCases": 45
+        "selectedFiles": ["attributes.js", "basic.js", "callbacks.js", "core.js", "css.js", "data.js", "deferred.js", "deprecated.js", "dimensions.js", "offset.js", "queue.js", "ready.js", "selector.js", "serialize.js", "traversing.js", "wrap.js"],
+        "selectedCases": 510,
+        "runnableCases": 510,
+        "harnessBlockedFiles": 8,
+        "inFileHarnessBlockedCases": 49
       }
     },
     {

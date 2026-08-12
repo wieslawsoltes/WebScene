@@ -949,6 +949,7 @@
         for (const auto id : node_ids) {
             frame_documents.erase(id);
             frame_windows.erase(id);
+            frame_window_scroll_offsets.erase(id);
             actual_frame_windows.erase(id);
             if (const auto found = actual_frame_contexts.find(id);
                 found != actual_frame_contexts.end()
@@ -2070,6 +2071,57 @@
             }
         }
         info.GetReturnValue().Set(self->wrap_node(*root));
+    }
+
+    static dom_node* document_element_node(implementation& self, v8::Local<v8::Object> holder)
+    {
+        auto* root = static_cast<dom_node*>(holder->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self.active_root();
+        if (root->tag == "html") return root;
+        if (root->tag == "body") {
+            const auto html = std::find_if(
+                root->children.begin(), root->children.end(), [](const auto* child) {
+                    return child != nullptr && child->tag == "html";
+                });
+            return html == root->children.end() ? root : *html;
+        }
+        if (root->tag == "#document-root") {
+            const auto element = std::find_if(
+                root->children.begin(), root->children.end(), [](const auto* child) {
+                    return child != nullptr && !child->tag.starts_with('#');
+                });
+            return element == root->children.end() ? nullptr : *element;
+        }
+        return root;
+    }
+
+    static void get_document_boundary_child(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* element = document_element_node(*self, info.Holder());
+        info.GetReturnValue().Set(element == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*element)));
+    }
+
+    static void get_document_child_nodes(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* element = document_element_node(*self, info.Holder());
+        auto result = v8::Array::New(info.GetIsolate(), element == nullptr ? 0 : 1);
+        if (element != nullptr) {
+            result->Set(
+                info.GetIsolate()->GetCurrentContext(),
+                0,
+                self->wrap_node(*element)).Check();
+        }
+        info.GetReturnValue().Set(result);
     }
 
     static void get_document_implementation(
@@ -3275,10 +3327,33 @@
     static void element_compare_document_position(
         const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
         auto* reference = unwrap_node(info.This());
         auto* other = info.Length() > 0 && info[0]->IsObject()
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
+        const auto main_document = self->document_object.Get(info.GetIsolate());
+        const auto reference_is_document = !main_document.IsEmpty()
+            && info.This()->StrictEquals(main_document);
+        const auto other_is_document = !main_document.IsEmpty()
+            && info.Length() > 0
+            && info[0]->StrictEquals(main_document);
+        if (reference_is_document != other_is_document) {
+            auto* candidate = reference_is_document ? other : reference;
+            auto connected = false;
+            for (auto* ancestor = candidate; ancestor != nullptr;
+                ancestor = self->document.dom_parent(*ancestor)) {
+                if (ancestor == &self->active_root()) {
+                    connected = true;
+                    break;
+                }
+            }
+            if (connected) {
+                info.GetReturnValue().Set(v8::Integer::New(
+                    info.GetIsolate(), reference_is_document ? 4 | 16 : 2 | 8));
+                return;
+            }
+        }
         if (reference == other && reference != nullptr) {
             info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 0));
             return;
@@ -3288,7 +3363,6 @@
             return;
         }
 
-        auto* self = current(info.GetIsolate());
         const auto build_path = [self](dom_node* node) {
             std::vector<dom_node*> path;
             for (; node != nullptr; node = self->document.dom_parent(*node)) {

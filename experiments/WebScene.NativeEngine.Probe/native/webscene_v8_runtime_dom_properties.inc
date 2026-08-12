@@ -736,15 +736,26 @@
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto isolate = info.GetIsolate();
         auto* node = unwrap_node(info.Holder());
-        auto* root = node;
-        while (root != nullptr && root->parent != nullptr) root = root->parent;
-        if (root != nullptr && self->detached_document_roots.contains(root->id)) {
-            info.GetReturnValue().Set(wrap_detached_document(
-                *self,
-                *root,
-                isolate->GetCurrentContext(),
-                "about:blank"));
-            return;
+        for (auto* ancestor = node; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (self->detached_document_roots.contains(ancestor->id)) {
+                info.GetReturnValue().Set(wrap_detached_document(
+                    *self,
+                    *ancestor,
+                    isolate->GetCurrentContext(),
+                    "about:blank"));
+                return;
+            }
+            if (ancestor->tag == "html" && ancestor->parent != nullptr
+                && ancestor->parent->tag == "iframe") {
+                auto* frame = ancestor->parent;
+                const auto actual = self->actual_frame_documents.find(frame->id);
+                if (actual != self->actual_frame_documents.end()) {
+                    info.GetReturnValue().Set(actual->second.Get(isolate));
+                } else {
+                    info.GetReturnValue().Set(self->frame_document(*frame));
+                }
+                return;
+            }
         }
         v8::Local<v8::Value> document_value;
         if (isolate->GetCurrentContext()->Global()->Get(
@@ -1525,7 +1536,9 @@
         if (node == nullptr) return;
         const auto iterator = node->attributes.find("type");
         const auto value = iterator != node->attributes.end()
-            ? iterator->second
+            ? (node->tag == "input" || node->tag == "button"
+                ? lower_html_name(iterator->second)
+                : iterator->second)
             : node->tag == "input" ? std::string("text")
             : node->tag == "button" ? std::string("submit")
             : node->tag == "select" && node->attributes.contains("multiple")

@@ -1467,6 +1467,39 @@ mod selector_syntax {
                     SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.into()),
                 ));
             }
+            if name == "lang" {
+                let unquoted = argument
+                    .strip_prefix('"')
+                    .and_then(|value| value.strip_suffix('"'))
+                    .or_else(|| {
+                        argument
+                            .strip_prefix('\'')
+                            .and_then(|value| value.strip_suffix('\''))
+                    })
+                    .unwrap_or(&argument);
+                let mut escaped = false;
+                let valid = !unquoted.is_empty()
+                    && unquoted.chars().all(|character| {
+                        if escaped {
+                            escaped = false;
+                            return character != '\n' && character != '\r' && character != '\u{c}';
+                        }
+                        if character == '\\' {
+                            escaped = true;
+                            return true;
+                        }
+                        character.is_alphanumeric()
+                            || character == '-'
+                            || character == '_'
+                            || character == '*'
+                    })
+                    && !escaped;
+                if !valid {
+                    return Err(parser.new_custom_error(
+                        SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name.into()),
+                    ));
+                }
+            }
             Ok(WebScenePseudoClass::Functional(name, argument))
         }
 

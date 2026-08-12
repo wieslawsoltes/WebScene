@@ -55,6 +55,13 @@ const cases = [
     preamble: `<script>globalThis.__webSceneQUnitOnlyNames=["jQuery('massive html trac-7990')"];</script>`,
     css: ""
   },
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-selector-upstream-${index + 1}`,
+    entry: "src/jquery-selector-upstream.mjs",
+    title: `jQuery upstream selector suite shard ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: ""
+  })),
   ...Array.from({ length: 3 }, (_, index) => ({
     id: `jquery-attributes-upstream-${index + 1}`,
     entry: "src/jquery-attributes-upstream.mjs",

@@ -186,6 +186,28 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/selector.js",
+          "cases": 56,
+          "sha256": "ef1964f22d833f473b84cf98b66d4e671dee7e9f36c75ad3ac08a476066e757d",
+          "inFileHarnessBlocked": [
+            {
+              "name": "separately served selector iframe fixtures",
+              "cases": 3,
+              "reason": "Requires jQuery's HTML5 attribute, mixed-window sort, and multiple-jQuery cache iframe documents."
+            },
+            {
+              "name": "Iframe dispatch should not affect jQuery (trac-13936)",
+              "reason": "Requires form submission to navigate and reload the fixture iframe before a second load event."
+            }
+          ],
+          "inFileUpstreamSkipped": [
+            {
+              "name": "pseudo - :(dis|en)abled, optgroup and option",
+              "reason": "The pinned jQuery 4.0.0 source expects four matches, but the current HTML Standard defines option and optgroup descendants of a disabled select as actually disabled and Chrome 151 returns six. The unchanged stale expectation is not used as WebScene authority."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/attributes.js",
           "cases": 65,
           "sha256": "6aa2b9d730bd32032c4ca9881d574eb2d87bbc1b0a6f79326870e52d3f59aacc",
@@ -360,7 +382,6 @@
         "event.js",
         "exports.js",
         "manipulation.js",
-        "selector.js",
         "support.js",
         "tween.js"
       ],

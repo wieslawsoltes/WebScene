@@ -263,6 +263,8 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "enctype"), get_reflected_string_attribute, set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "htmlFor"), get_reflected_string_attribute, set_reflected_string_attribute);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "lang"), get_reflected_string_attribute, set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "type"), get_element_type, set_element_type);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "name"), get_reflected_string_attribute, set_reflected_string_attribute);
@@ -572,6 +574,18 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
         frame_document->Set(
+            js_string(isolate, "getElementsByTagName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_tag_name));
+        frame_document->Set(
+            js_string(isolate, "getElementsByClassName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_class_name));
+        frame_document->Set(
+            js_string(isolate, "getElementsByName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_name));
+        frame_document->Set(
+            js_string(isolate, "compareDocumentPosition"),
+            v8::FunctionTemplate::New(isolate, element_compare_document_position));
+        frame_document->Set(
             js_string(isolate, "createElement"),
             v8::FunctionTemplate::New(isolate, create_element));
         frame_document->Set(
@@ -592,6 +606,16 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "head"), get_body);
         frame_document->SetNativeDataProperty(
             js_string(isolate, "documentElement"), get_body);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "nodeType"), get_document_node_type);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "nodeName"), get_document_node_name);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "firstChild"), get_document_boundary_child);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "lastChild"), get_document_boundary_child);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "childNodes"), get_document_child_nodes);
         frame_document->SetNativeDataProperty(
             js_string(isolate, "activeElement"),
             get_provisional_frame_active_element);
@@ -665,6 +689,12 @@ struct v8_dom_runtime::implementation final {
             get_scrolling_element);
         document_template->SetNativeDataProperty(js_string(isolate, "nodeType"), get_document_node_type);
         document_template->SetNativeDataProperty(js_string(isolate, "nodeName"), get_document_node_name);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "firstChild"), get_document_boundary_child);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "lastChild"), get_document_boundary_child);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "childNodes"), get_document_child_nodes);
         document_template->SetNativeDataProperty(js_string(isolate, "defaultView"), get_default_view);
         document_template->SetNativeDataProperty(js_string(isolate, "location"), get_document_location);
         document_template->SetNativeDataProperty(
@@ -732,6 +762,9 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "contains"),
             v8::FunctionTemplate::New(isolate, document_contains));
+        document_template->Set(
+            js_string(isolate, "compareDocumentPosition"),
+            v8::FunctionTemplate::New(isolate, element_compare_document_position));
         document_template->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));

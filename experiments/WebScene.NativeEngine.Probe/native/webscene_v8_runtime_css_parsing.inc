@@ -2060,7 +2060,11 @@
                 attribute_operator = condition.substr(equal, 1U);
             }
         }
-        const auto name = trim_css(std::string_view(condition).substr(0, name_end));
+        const auto raw_name = trim_css(std::string_view(condition).substr(0, name_end));
+        size_t name_cursor = 0U;
+        auto name = read_css_identifier(raw_name, name_cursor);
+        if (name.empty() || name_cursor != raw_name.size()) return false;
+        if (!node.xml_mode) name = lower_html_name(name);
         const auto attribute = node.attributes.find(name);
         if (attribute == node.attributes.end()) return false;
         if (equal == std::string::npos) return true;
@@ -2091,6 +2095,112 @@
         return true;
     }
 
+    static size_t find_css_attribute_close(
+        std::string_view selector,
+        size_t cursor)
+    {
+        char quote = 0;
+        for (; cursor < selector.size(); ++cursor) {
+            const auto character = selector[cursor];
+            if (character == '\\') {
+                cursor = skip_css_escape_sequence(selector, cursor) - 1U;
+                continue;
+            }
+            if (quote != 0) {
+                if (character == quote) quote = 0;
+                continue;
+            }
+            if (character == '\'' || character == '"') {
+                quote = character;
+            } else if (character == ']') {
+                return cursor;
+            }
+        }
+        return std::string_view::npos;
+    }
+
+    static bool css_nth_expression_matches(
+        std::string_view argument,
+        int one_based_position)
+    {
+        auto expression = lower_html_name(trim_css(argument));
+        std::erase_if(expression, [](unsigned char character) {
+            return std::isspace(character);
+        });
+        auto coefficient = 0;
+        auto offset = 0;
+        const auto parse_integer = [](std::string_view value, int& result) {
+            if (value.empty()) return false;
+            if (value.front() == '+') value.remove_prefix(1U);
+            if (value.empty()) return false;
+            const auto parsed = std::from_chars(
+                value.data(), value.data() + value.size(), result);
+            return parsed.ec == std::errc{}
+                && parsed.ptr == value.data() + value.size();
+        };
+        if (expression == "odd") {
+            coefficient = 2;
+            offset = 1;
+        } else if (expression == "even") {
+            coefficient = 2;
+        } else if (const auto n = expression.find('n'); n != std::string::npos) {
+            const auto coefficient_text = std::string_view(expression).substr(0, n);
+            if (coefficient_text.empty() || coefficient_text == "+") {
+                coefficient = 1;
+            } else if (coefficient_text == "-") {
+                coefficient = -1;
+            } else if (!parse_integer(coefficient_text, coefficient)) {
+                return false;
+            }
+            const auto offset_text = std::string_view(expression).substr(n + 1U);
+            if (!offset_text.empty() && !parse_integer(offset_text, offset)) return false;
+        } else if (!parse_integer(expression, offset)) {
+            return false;
+        }
+        if (coefficient == 0) return one_based_position == offset;
+        const auto difference = one_based_position - offset;
+        return !((coefficient > 0 && difference < 0)
+            || (coefficient < 0 && difference > 0))
+            && difference % coefficient == 0;
+    }
+
+    bool is_actually_disabled(const dom_node& node) const
+    {
+        if (node.attributes.contains("disabled")) return true;
+        if (node.tag == "option") {
+            for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
+                ancestor = document.dom_parent(*ancestor)) {
+                if ((ancestor->tag == "optgroup" || ancestor->tag == "select")
+                    && ancestor->attributes.contains("disabled")) return true;
+                if (ancestor->tag == "select") break;
+            }
+        }
+        if (node.tag != "button" && node.tag != "input"
+            && node.tag != "select" && node.tag != "textarea") return false;
+        for (auto* fieldset = document.dom_parent(node); fieldset != nullptr;
+            fieldset = document.dom_parent(*fieldset)) {
+            if (fieldset->tag != "fieldset"
+                || !fieldset->attributes.contains("disabled")) continue;
+            const dom_node* first_legend = nullptr;
+            for (const auto* child : fieldset->children) {
+                if (child != nullptr && child->tag == "legend") {
+                    first_legend = child;
+                    break;
+                }
+            }
+            auto inside_first_legend = false;
+            for (auto* ancestor = &node; ancestor != fieldset;
+                ancestor = document.dom_parent(*ancestor)) {
+                if (ancestor == first_legend) {
+                    inside_first_legend = true;
+                    break;
+                }
+            }
+            if (!inside_first_legend) return true;
+        }
+        return false;
+    }
+
     bool css_compound_selector_matches(
         const dom_node& node,
         std::string_view selector,
@@ -2104,7 +2214,8 @@
         // root participate as both tags.  A frame document is parented beneath
         // its owning iframe in the unified native tree.
         const auto explicit_document_element = node.tag == "html"
-            && node.parent == &document.body();
+            && node.parent != nullptr
+            && (node.parent == &document.body() || node.parent->tag == "iframe");
         const auto has_explicit_document_element = node.tag == "body"
             && std::any_of(node.children.begin(), node.children.end(), [](const auto* child) {
                 return child != nullptr && child->tag == "html";
@@ -2151,7 +2262,8 @@
             ++cursor;
         } else if (std::isalpha(static_cast<unsigned char>(selector[cursor]))
             || selector[cursor] == '\\') {
-            const auto wanted_tag = read_css_identifier(selector, cursor);
+            auto wanted_tag = read_css_identifier(selector, cursor);
+            if (!node.xml_mode) wanted_tag = lower_html_name(wanted_tag);
             if (wanted_tag != node.tag
                 && !(wanted_tag == "html" && is_document_root && node.tag == "body")) return false;
         }
@@ -2165,55 +2277,10 @@
                     return false;
                 }
             } else if (marker == '[') {
-                const auto close = selector.find(']', cursor);
+                const auto close = find_css_attribute_close(selector, cursor);
                 if (close == std::string::npos) return false;
-                const auto condition = selector.substr(cursor, close - cursor);
-                const auto equal = condition.find('=');
-                auto name_end = equal;
-                auto attribute_operator = std::string_view{};
-                if (equal != std::string::npos) {
-                    if (equal > 0U && (condition[equal - 1U] == '~'
-                        || condition[equal - 1U] == '|'
-                        || condition[equal - 1U] == '^'
-                        || condition[equal - 1U] == '$'
-                        || condition[equal - 1U] == '*')) {
-                        name_end = equal - 1U;
-                        attribute_operator = condition.substr(equal - 1U, 2U);
-                    } else {
-                        attribute_operator = condition.substr(equal, 1U);
-                    }
-                }
-                const auto name = trim_css(std::string_view(condition).substr(0, name_end));
-                const auto attribute = node.attributes.find(name);
-                if (attribute == node.attributes.end()) return false;
-                if (equal != std::string::npos) {
-                    auto wanted = trim_css(std::string_view(condition).substr(equal + 1U));
-                    if (wanted.size() >= 2U && (wanted.front() == '\'' || wanted.front() == '"')) {
-                        wanted = wanted.substr(1U, wanted.size() - 2U);
-                    }
-                    const auto& actual = attribute->second;
-                    if (attribute_operator == "=" && actual != wanted) return false;
-                    if (wanted.empty() && (attribute_operator == "^="
-                        || attribute_operator == "$=" || attribute_operator == "*=")) {
-                        return false;
-                    }
-                    if (attribute_operator == "^=" && !actual.starts_with(wanted)) return false;
-                    if (attribute_operator == "$=" && !actual.ends_with(wanted)) return false;
-                    if (attribute_operator == "*=" && actual.find(wanted) == std::string::npos) return false;
-                    if (attribute_operator == "|="
-                        && actual != wanted && !actual.starts_with(wanted + "-")) return false;
-                    if (attribute_operator == "~=") {
-                        std::istringstream words(actual);
-                        auto found = false;
-                        for (std::string word; words >> word;) {
-                            if (word == wanted) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) return false;
-                    }
-                }
+                if (!css_attribute_selector_matches(
+                        node, selector.substr(cursor, close - cursor))) return false;
                 cursor = close + 1U;
             } else {
                 break;
@@ -2255,7 +2322,7 @@
                 continue;
             }
             if (pseudo_suffix[cursor] == '[') {
-                const auto close = pseudo_suffix.find(']', cursor + 1U);
+                const auto close = find_css_attribute_close(pseudo_suffix, cursor + 1U);
                 if (close == std::string::npos
                     || !css_attribute_selector_matches(
                         node,
@@ -2303,52 +2370,23 @@
                     || position + 1 != values.end()) return false;
             } else if (name == "only-child") {
                 if (node.parent == nullptr || siblings().size() != 1U) return false;
-            } else if (name == "nth-child") {
-                const auto& values = siblings();
+            } else if (name == "nth-child" || name == "nth-last-child"
+                || name == "nth-of-type" || name == "nth-last-of-type") {
+                if (node.parent == nullptr) return false;
+                auto values = siblings();
+                if (name == "nth-of-type" || name == "nth-last-of-type") {
+                    std::erase_if(values, [&](const auto* sibling) {
+                        return sibling->tag != node.tag;
+                    });
+                }
                 const auto position = std::find(values.begin(), values.end(), &node);
-                if (node.parent == nullptr || position == values.end()) return false;
-                auto expression = lower_html_name(trim_css(argument));
-                std::erase_if(expression, [](unsigned char character) {
-                    return std::isspace(character);
-                });
-                auto coefficient = 0;
-                auto offset = 0;
-                const auto parse_integer = [](std::string_view value, int& result) {
-                    if (value.empty()) return false;
-                    const auto parsed = std::from_chars(
-                        value.data(), value.data() + value.size(), result);
-                    return parsed.ec == std::errc{}
-                        && parsed.ptr == value.data() + value.size();
-                };
-                if (expression == "odd") {
-                    coefficient = 2;
-                    offset = 1;
-                } else if (expression == "even") {
-                    coefficient = 2;
-                } else if (const auto n = expression.find('n'); n != std::string::npos) {
-                    const auto coefficient_text = std::string_view(expression).substr(0, n);
-                    if (coefficient_text.empty() || coefficient_text == "+") {
-                        coefficient = 1;
-                    } else if (coefficient_text == "-") {
-                        coefficient = -1;
-                    } else if (!parse_integer(coefficient_text, coefficient)) {
-                        return false;
-                    }
-                    const auto offset_text = std::string_view(expression).substr(n + 1U);
-                    if (!offset_text.empty() && !parse_integer(offset_text, offset)) return false;
-                } else if (!parse_integer(expression, offset)) {
-                    return false;
-                }
-                const auto one_based_position = static_cast<int>(
-                    std::distance(values.begin(), position) + 1);
-                if (coefficient == 0) {
-                    if (one_based_position != offset) return false;
-                } else {
-                    const auto difference = one_based_position - offset;
-                    if ((coefficient > 0 && difference < 0)
-                        || (coefficient < 0 && difference > 0)
-                        || difference % coefficient != 0) return false;
-                }
+                if (position == values.end()) return false;
+                const auto from_end = name == "nth-last-child"
+                    || name == "nth-last-of-type";
+                const auto one_based_position = static_cast<int>(from_end
+                    ? std::distance(position, values.end())
+                    : std::distance(values.begin(), position) + 1);
+                if (!css_nth_expression_matches(argument, one_based_position)) return false;
             } else if (name == "first-of-type" || name == "last-of-type"
                 || name == "only-of-type") {
                 if (node.parent == nullptr) return false;
@@ -2368,9 +2406,59 @@
                     [](unsigned char character) { return !std::isspace(character); });
                 if (!node.children.empty() || has_text) return false;
             } else if (name == "enabled") {
-                if (!form_control || node.attributes.contains("disabled")) return false;
+                if (!form_control || is_actually_disabled(node)) return false;
             } else if (name == "disabled") {
-                if (!form_control || !node.attributes.contains("disabled")) return false;
+                if (!form_control || !is_actually_disabled(node)) return false;
+            } else if (name == "valid") {
+                if (!form_control || node.tag == "fieldset" || node.tag == "optgroup"
+                    || node.tag == "option") return false;
+                if (node.attributes.contains("required")) {
+                    const auto value = node.attributes.find("value");
+                    if (value == node.attributes.end() || value->second.empty()) return false;
+                }
+            } else if (name == "invalid") {
+                if (!form_control || !node.attributes.contains("required")) return false;
+                const auto value = node.attributes.find("value");
+                if (value != node.attributes.end() && !value->second.empty()) return false;
+            } else if (name == "lang") {
+                auto wanted = lower_html_name(trim_css(argument));
+                if (wanted.size() >= 2U
+                    && (wanted.front() == '\'' || wanted.front() == '"')
+                    && wanted.back() == wanted.front()) {
+                    wanted = wanted.substr(1U, wanted.size() - 2U);
+                } else {
+                    size_t language_cursor = 0U;
+                    auto decoded = read_css_identifier(wanted, language_cursor);
+                    if (decoded.empty() || language_cursor != wanted.size()) return false;
+                    wanted = lower_html_name(decoded);
+                }
+                auto matched = false;
+                for (auto* language_node = &node; language_node != nullptr;
+                    language_node = document.dom_parent(*language_node)) {
+                    auto language = language_node->attributes.find("lang");
+                    if (language == language_node->attributes.end()) {
+                        language = language_node->attributes.find("xml:lang");
+                    }
+                    if (language == language_node->attributes.end()) continue;
+                    const auto actual = lower_html_name(language->second);
+                    matched = actual == wanted || actual.starts_with(wanted + "-");
+                    break;
+                }
+                if (!matched) return false;
+            } else if (name == "target") {
+                const auto local_context = isolate->GetCurrentContext();
+                v8::Local<v8::Value> location_value;
+                v8::Local<v8::Value> hash_value;
+                if (!local_context->Global()->Get(
+                        local_context, js_string(isolate, "location")).ToLocal(&location_value)
+                    || !location_value->IsObject()
+                    || !location_value.As<v8::Object>()->Get(
+                        local_context, js_string(isolate, "hash")).ToLocal(&hash_value)) {
+                    return false;
+                }
+                auto hash = to_utf8(isolate, hash_value);
+                if (!hash.empty() && hash.front() == '#') hash.erase(0U, 1U);
+                if (hash.empty() || node.id_attribute != hash) return false;
             } else if (name == "checked") {
                 const auto input_type = node.attributes.find("type");
                 const auto checkable_input = node.tag == "input"
@@ -2381,9 +2469,7 @@
                         ? node.form_control().checkedness
                         : node.attributes.contains("checked"));
                 const auto selected_option = node.tag == "option"
-                    && (node.form_control().selectedness_initialized
-                        ? node.form_control().selectedness
-                        : node.attributes.contains("selected"));
+                    && option_is_selected(const_cast<dom_node&>(node));
                 if (!checked_input
                     && !selected_option) return false;
             } else if (name == "hover") {

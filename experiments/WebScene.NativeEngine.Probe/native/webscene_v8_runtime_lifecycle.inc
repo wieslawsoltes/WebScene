@@ -82,6 +82,7 @@
         resize_observers.clear();
         frame_documents.clear();
         frame_windows.clear();
+        frame_window_scroll_offsets.clear();
         frame_load_listeners.clear();
         frame_event_listeners.clear();
         actual_frame_windows.clear();
