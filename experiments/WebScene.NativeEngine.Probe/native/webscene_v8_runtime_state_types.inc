@@ -184,6 +184,50 @@
         bool has_emitted_paint_state{false};
     };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+    enum class webgpu_handle_kind : uint8_t {
+        adapter,
+        device,
+        queue,
+        buffer,
+        texture,
+        texture_view,
+        sampler,
+        bind_group_layout,
+        bind_group,
+        pipeline_layout,
+        shader_module,
+        render_pipeline,
+        command_encoder,
+        render_pass_encoder,
+        command_buffer
+    };
+
+    struct webgpu_handle_state final {
+        implementation* owner{nullptr};
+        webgpu_handle_kind kind{webgpu_handle_kind::adapter};
+        void* handle{nullptr};
+        WGPUDevice device{nullptr};
+        std::vector<v8::Global<v8::ArrayBuffer>> mapped_ranges;
+        v8::Global<v8::Promise::Resolver> lost_resolver;
+        bool released{false};
+        bool ended{false};
+        bool loss_resolved{false};
+    };
+
+    struct webgpu_canvas_state final {
+        dom_node* node{nullptr};
+        webscene_gpu_canvas* canvas{nullptr};
+        WGPUDevice device{nullptr};
+        uint64_t usage{0U};
+        uint32_t format{WEBSCENE_GPU_PIXEL_FORMAT_BGRA8_UNORM};
+        uint32_t alpha_mode{WEBSCENE_GPU_ALPHA_MODE_PREMULTIPLIED};
+        bool configured{false};
+        bool acquired{false};
+        webscene_gpu_external_texture latest{};
+    };
+#endif
+
     struct compilation_cache_entry final {
         v8::Global<v8::UnboundScript> script;
         std::array<uint8_t, 32> key_digest{};

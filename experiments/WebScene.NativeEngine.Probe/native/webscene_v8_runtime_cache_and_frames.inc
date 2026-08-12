@@ -1306,6 +1306,9 @@
         set_context_location(local_context, global, frame_href);
 
         install_navigator(isolate, local_context, global);
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+        install_webgpu(isolate, local_context, global);
+#endif
 
         auto console = v8::Object::New(isolate);
         console->Set(local_context, js_string(isolate, "log"),

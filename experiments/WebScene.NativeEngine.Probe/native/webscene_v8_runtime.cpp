@@ -1,6 +1,7 @@
 #include "webscene_v8_runtime.h"
 
 #include "webscene_native_dom.h"
+#include "webscene_gpu_provider_loader.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
@@ -18,6 +19,9 @@
 #include <v8-inspector.h>
 #endif
 #include <v8-profiler.h>
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+#include <webgpu/webgpu.h>
+#endif
 
 #if defined(WEBSCENE_V8_PARTITION_ALLOC)
 #include "partition_alloc/buildflags.h"
@@ -2495,6 +2499,9 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "location"), location).Check();
 
         install_navigator(isolate, local_context, global);
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+        install_webgpu(isolate, local_context, global);
+#endif
 
         auto console = v8::Object::New(isolate);
         console->Set(local_context, js_string(isolate, "log"),
@@ -3044,6 +3051,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_dom_core.inc"
 #include "webscene_v8_runtime_dom_properties.inc"
 #include "webscene_v8_runtime_canvas.inc"
+#include "webscene_v8_runtime_webgpu.inc"
 #include "webscene_v8_runtime_document.inc"
 #include "webscene_v8_runtime_css_parsing.inc"
 #include "webscene_v8_runtime_css_cascade.inc"
@@ -3134,7 +3142,8 @@ v8_dom_runtime::v8_dom_runtime(
     resource_loader load_resource,
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
-    interop_callback_sink_v3 interop_callback_sink)
+    interop_callback_sink_v3 interop_callback_sink,
+    std::shared_ptr<gpu_provider_library> gpu_provider)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -3142,7 +3151,8 @@ v8_dom_runtime::v8_dom_runtime(
         std::move(load_resource),
           std::move(host_request_available),
           std::move(interop_callback_available),
-          std::move(interop_callback_sink)))
+          std::move(interop_callback_sink),
+          std::move(gpu_provider)))
 {
 }
 
@@ -3151,6 +3161,13 @@ v8_dom_runtime::~v8_dom_runtime() = default;
 bool v8_dom_runtime::initialize()
 {
     return impl_->initialize();
+}
+
+void v8_dom_runtime::append_external_textures(
+    std::vector<webscene_external_texture>& textures,
+    std::vector<std::shared_ptr<void>>& owners)
+{
+    impl_->append_external_textures(textures, owners);
 }
 
 bool v8_dom_runtime::execute(const std::string& source, const std::string& document_name)

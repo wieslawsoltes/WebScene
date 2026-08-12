@@ -88,7 +88,8 @@
                     webscene_native::interop_callback_request_data_v3&&
                         callback) {
                 return enqueue_callback_v3(std::move(callback));
-            });
+            },
+            gpu_provider_);
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
         if (!runtime_->initialize()) {

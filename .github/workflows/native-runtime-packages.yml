@@ -20,8 +20,11 @@ on:
     paths:
     - '.github/workflows/native-runtime-packages.yml'
     - 'experiments/WebScene.NativeEngine.Probe/**'
+    - 'experiments/WebScene.NativeGpu.Provider/**'
     - 'packaging/WebScene.NativeEngine.Runtime/**'
+    - 'packaging/WebScene.NativeGpu.Runtime/**'
     - 'scripts/build-native-engine-runtime.sh'
+    - 'scripts/build-native-gpu-runtime.sh'
     - 'scripts/build-native-engine-runtime-linux-container.sh'
     - 'scripts/build-native-engine-runtime.ps1'
     - 'scripts/pack-packages.sh'
@@ -33,9 +36,13 @@ on:
     - 'src/WebScene.Sdk.NativeHost.Shared/**'
     - 'src/WebScene.Sdk.Uno/**'
     - 'src/WebScene.Diagnostics.Cdp/**'
+    - 'tests/WebPlatformSubset/**'
+    - 'tests/WebGpuCts/**'
+    - 'tests/EcosystemCompatibility/**'
     - 'tests/WebScene.Runtime.PackageSmoke/**'
     - 'tests/WebScene.Uno.PackageSmoke/**'
     - 'third-party/v8-patches/**'
+    - 'third-party/dawn.version.json'
 
 permissions:
   contents: read
@@ -234,6 +241,10 @@ jobs:
       if: matrix.rid == 'osx-arm64'
       shell: bash
       run: |
+        scripts/build-native-gpu-runtime.sh \
+          --rid '${{ matrix.rid }}' \
+          --package-version '${{ needs.metadata.outputs.package-version }}' \
+          --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
         v8_root=
         restored_v8="$GITHUB_WORKSPACE/artifacts/native-engine-v8/${{ matrix.rid }}/v8"
         if [[ '${{ steps.restored-v8-sdk.outputs.ready }}' == 'true' ]]; then
@@ -246,6 +257,7 @@ jobs:
           --v8-revision '${{ matrix.v8_revision }}' \
           --upstream-v8 \
           --partition-alloc \
+          --webgpu \
           --output "$GITHUB_WORKSPACE/artifacts/nuget-packages"
     - name: Build, pack, and test Linux runtime
       if: matrix.rid == 'linux-x64'

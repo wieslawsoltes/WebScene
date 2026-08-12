@@ -214,6 +214,8 @@ public static unsafe partial class NativeWebSceneApi
     public static IntPtr EngineCreate(
         uint simulatedChartCommandCount,
         string? compilationCacheDirectory,
+        string? gpuProviderPath,
+        WebSceneBackendCapabilities requiredCapabilities,
         IWebSceneResourceLoader resourceLoader,
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable = null,
@@ -225,6 +227,9 @@ public static unsafe partial class NativeWebSceneApi
         var directoryBytes = string.IsNullOrWhiteSpace(compilationCacheDirectory)
             ? []
             : Encoding.UTF8.GetBytes(compilationCacheDirectory);
+        var gpuProviderPathBytes = string.IsNullOrWhiteSpace(gpuProviderPath)
+            ? []
+            : Encoding.UTF8.GetBytes(gpuProviderPath);
         var bridgeHandle = GCHandle.Alloc(
             new ResourceBridge(
                 resourceLoader,
@@ -235,6 +240,7 @@ public static unsafe partial class NativeWebSceneApi
         try
         {
             fixed (byte* directory = directoryBytes)
+            fixed (byte* gpuProvider = gpuProviderPathBytes)
             {
                 var options = new EngineOptions
                 {
@@ -265,7 +271,12 @@ public static unsafe partial class NativeWebSceneApi
                         : AnimationFrameRequestedAddress,
                     AnimationFrameRequestedUserData = animationFrameRequested is null
                         ? IntPtr.Zero
-                        : GCHandle.ToIntPtr(bridgeHandle)
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    GpuProviderPath = gpuProviderPathBytes.Length == 0
+                        ? IntPtr.Zero
+                        : (IntPtr)gpuProvider,
+                    GpuProviderPathLength = (nuint)gpuProviderPathBytes.Length,
+                    RequiredCapabilities = (ulong)requiredCapabilities
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -283,6 +294,10 @@ public static unsafe partial class NativeWebSceneApi
             }
         }
     }
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_get_capabilities")]
+    internal static extern WebSceneBackendCapabilities EngineGetCapabilities(
+        IntPtr engine);
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_destroy")]
     private static extern void EngineDestroyNative(IntPtr engine);
@@ -416,6 +431,33 @@ public static unsafe partial class NativeWebSceneApi
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Source);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.NativeLibraryPath);
+        if (!string.IsNullOrWhiteSpace(options.NativeGpuLibraryPath))
+        {
+            _ = Path.GetFullPath(options.NativeGpuLibraryPath);
+        }
+        const WebSceneBackendCapabilities knownCapabilities =
+            WebSceneBackendCapabilities.DomProjection
+            | WebSceneBackendCapabilities.CssLayout
+            | WebSceneBackendCapabilities.Canvas2D
+            | WebSceneBackendCapabilities.Svg
+            | WebSceneBackendCapabilities.Images
+            | WebSceneBackendCapabilities.PointerInput
+            | WebSceneBackendCapabilities.KeyboardInput
+            | WebSceneBackendCapabilities.TextInput
+            | WebSceneBackendCapabilities.Focus
+            | WebSceneBackendCapabilities.Clipboard
+            | WebSceneBackendCapabilities.Accessibility
+            | WebSceneBackendCapabilities.DragDrop
+            | WebSceneBackendCapabilities.InputMethodEditor
+            | WebSceneBackendCapabilities.WebGl1
+            | WebSceneBackendCapabilities.WebGpu
+            | WebSceneBackendCapabilities.WebGl2;
+        if ((options.RequiredCapabilities & ~knownCapabilities) != 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "RequiredCapabilities contains an unknown capability bit.");
+        }
         if (!Uri.TryCreate(options.Source, UriKind.Absolute, out _))
         {
             throw new ArgumentException(

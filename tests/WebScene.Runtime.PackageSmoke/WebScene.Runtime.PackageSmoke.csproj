@@ -14,6 +14,9 @@
                       Version="$(WebScenePackageVersion)" />
     <PackageReference Include="WebScene.NativeEngine.Runtime.$(RuntimeIdentifier)"
                       Version="$(WebScenePackageVersion)" />
+    <PackageReference Include="WebScene.NativeGpu.Runtime.osx-arm64"
+                      Version="$(WebScenePackageVersion)"
+                      Condition="'$(RuntimeIdentifier)' == 'osx-arm64'" />
   </ItemGroup>
   <Target Name="ValidatePackageSmokeInputs" BeforeTargets="CollectPackageReferences">
     <Error Condition="'$(WebScenePackageVersion)' == ''"

@@ -1219,9 +1219,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 try
                 {
                     var view = (NativeSceneView*)scene;
-                    if (view != null
-                        && view->StructSize == sizeof(NativeSceneView)
-                        && view->AbiVersion == 2)
+                    if (NativeSceneViewContract.HasSupportedHeader(view))
                     {
                         lock (_rendererGate)
                         {

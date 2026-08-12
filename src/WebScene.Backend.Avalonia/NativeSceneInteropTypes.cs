@@ -180,6 +180,46 @@ internal unsafe struct NativeSceneView
     public uint StringCount;
     public uint StringByteCount;
     public uint Reserved;
+    public NativeExternalTexture* ExternalTextures;
+    public uint ExternalTextureCount;
+    public uint ReservedV3;
+}
+
+internal static unsafe class NativeSceneViewContract
+{
+    private const uint Abi2Size = 136;
+    private const uint Abi3 = 3;
+
+    public static bool HasSupportedHeader(NativeSceneView* view)
+        => view != null
+            && ((view->AbiVersion == 2 && view->StructSize == Abi2Size)
+                || (view->AbiVersion == Abi3
+                    && view->StructSize >= sizeof(NativeSceneView)));
+
+    public static bool HasValidExternalTextures(NativeSceneView* view)
+        => view->AbiVersion < Abi3
+            || view->ExternalTextureCount == 0
+            || view->ExternalTextures != null;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeExternalTexture
+{
+    public uint NodeId;
+    public uint Flags;
+    public float X;
+    public float Y;
+    public float Width;
+    public float Height;
+    public uint PixelWidth;
+    public uint PixelHeight;
+    public uint PixelFormat;
+    public uint HandleKind;
+    public ulong Generation;
+    public nuint SharedHandle;
+    public nuint TextureHandle;
+    public nuint SynchronizationHandle;
+    public ulong ReadyValue;
 }
 
 public enum NativeInteropValueKind : uint
@@ -623,6 +663,10 @@ internal struct EngineOptions
     public IntPtr InteropCallbackAvailableUserData;
     public IntPtr AnimationFrameRequestedCallback;
     public IntPtr AnimationFrameRequestedUserData;
+    public IntPtr GpuProviderPath;
+    public nuint GpuProviderPathLength;
+    public ulong RequiredCapabilities;
+    public ulong ReservedV3;
 }
 
 [Flags]

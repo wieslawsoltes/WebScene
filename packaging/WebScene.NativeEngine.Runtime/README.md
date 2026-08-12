@@ -20,8 +20,9 @@ symbols unless `WEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON` is selected explicitly.
 Runtime packages compile with `WEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF`; feature
 inventories, diagnostic snapshots, native profiling state, and their hot-path
 counters are not shipped. Production packages do include the patched V8 Inspector
-capability; the stable `webscene_engine_get_build_features` ABI reports only the
-V8 Inspector bit for these package binaries.
+capability. The stable `webscene_engine_get_build_features` ABI reports the V8
+Inspector bit on every package binary and additionally reports the GPU-provider
+ABI and WebGPU-binding bits on the `osx-arm64` WebGPU build.
 The library locates ICU data relative to its own module, so the package remains
 relocatable.
 Browser-facing `WebSocket` support is implemented inside the native runtime
@@ -30,10 +31,17 @@ network stack.
 Applications must target the same `RuntimeIdentifier`; mixing runtime packages and
 RIDs is rejected during the build.
 
+WebGPU payloads are intentionally not part of this package. On supported
+RIDs, add the matching `WebScene.NativeGpu.Runtime.<rid>` package; it places the
+ABI 2 GPU provider beside this engine for fail-closed runtime discovery. The
+current GPU slice is Metal-only on `osx-arm64`; no WebGL or ANGLE payload is
+included.
+
 Install the package matching the application's deployment RID:
 
 ```xml
 <PackageReference Include="WebScene.NativeEngine.Runtime.osx-arm64" Version="VERSION" />
+<PackageReference Include="WebScene.NativeGpu.Runtime.osx-arm64" Version="VERSION" />
 <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.linux-x64" Version="VERSION" /> -->
 <!-- <PackageReference Include="WebScene.NativeEngine.Runtime.win-x64" Version="VERSION" /> -->
 ```

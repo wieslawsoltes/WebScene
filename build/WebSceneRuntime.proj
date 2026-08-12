@@ -6,6 +6,12 @@
     <PackageOutputPath Condition="'$(PackageOutputPath)' == ''">$(RepositoryRoot)artifacts\runtime-packages\</PackageOutputPath>
     <WebScenePackageVersion Condition="'$(WebScenePackageVersion)' == '' and '$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</WebScenePackageVersion>
     <WebScenePackageVersion Condition="'$(WebScenePackageVersion)' == ''">$(VersionPrefix)</WebScenePackageVersion>
+    <WebSceneRuntimePackageCount Condition="'$(WebSceneNativeGpuPath)' == ''">7</WebSceneRuntimePackageCount>
+    <WebSceneRuntimePackageCount Condition="'$(WebSceneNativeGpuPath)' != ''">8</WebSceneRuntimePackageCount>
+    <WebSceneRuntimeHasGpuSidecar Condition="'$(WebSceneNativeGpuPath)' == ''">false</WebSceneRuntimeHasGpuSidecar>
+    <WebSceneRuntimeHasGpuSidecar Condition="'$(WebSceneNativeGpuPath)' != ''">true</WebSceneRuntimeHasGpuSidecar>
+    <WebSceneNativeEngineWebGpu Condition="'$(WebSceneNativeEngineWebGpu)' == ''">false</WebSceneNativeEngineWebGpu>
+    <WebSceneNativeGpuDawnRevision Condition="'$(WebSceneNativeGpuDawnRevision)' == ''">710c33013c53ab2700d332c25ff51430251a8cc4</WebSceneNativeGpuDawnRevision>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +28,12 @@
            Text="PackWebSceneRuntime requires WebSceneNativeEngineRid." />
     <Error Condition="'$(WebSceneNativeEnginePath)' == '' or !Exists('$(WebSceneNativeEnginePath)')"
            Text="PackWebSceneRuntime requires an existing WebSceneNativeEnginePath." />
+    <Error Condition="'$(WebSceneNativeGpuPath)' != '' and !Exists('$(WebSceneNativeGpuPath)')"
+           Text="WebSceneNativeGpuPath was supplied but does not exist." />
+    <Error Condition="'$(WebSceneNativeGpuPath)' != '' and '$(WebSceneNativeEngineRid)' != 'osx-arm64'"
+           Text="The optional GPU sidecar currently supports only osx-arm64." />
+    <Error Condition="'$(WebSceneNativeGpuPath)' != '' and '$(WebSceneNativeEngineWebGpu)' != 'true'"
+           Text="A GPU sidecar package requires WebSceneNativeEngineWebGpu=true for the matching engine binary." />
   </Target>
 
   <Target Name="PackWebSceneRuntime" DependsOnTargets="ValidateWebSceneRuntimeInputs">
@@ -32,12 +44,16 @@
              Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion)" />
     <MSBuild Projects="$(RepositoryRoot)packaging\WebScene.NativeEngine.Runtime\WebScene.NativeEngine.Runtime.csproj"
              Targets="Pack"
-             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);WebSceneNativeEngineRid=$(WebSceneNativeEngineRid);WebSceneNativeEnginePath=$(WebSceneNativeEnginePath)" />
+             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);WebSceneNativeEngineRid=$(WebSceneNativeEngineRid);WebSceneNativeEnginePath=$(WebSceneNativeEnginePath);WebSceneNativeEngineWebGpu=$(WebSceneNativeEngineWebGpu)" />
+    <MSBuild Projects="$(RepositoryRoot)packaging\WebScene.NativeGpu.Runtime\WebScene.NativeGpu.Runtime.csproj"
+             Targets="Pack"
+             Condition="'$(WebSceneNativeGpuPath)' != ''"
+             Properties="Configuration=$(Configuration);PackageOutputPath=$(PackageOutputPath);PackageVersion=$(WebScenePackageVersion);WebSceneNativeGpuRid=$(WebSceneNativeEngineRid);WebSceneNativeGpuPath=$(WebSceneNativeGpuPath);WebSceneNativeGpuDawnRevision=$(WebSceneNativeGpuDawnRevision);WebSceneNativeGpuDawnLicensePath=$(WebSceneNativeGpuDawnLicensePath);WebSceneNativeGpuAbseilLicensePath=$(WebSceneNativeGpuAbseilLicensePath);WebSceneNativeGpuWebGpuHeadersLicensePath=$(WebSceneNativeGpuWebGpuHeadersLicensePath)" />
     <ItemGroup>
       <_WebSceneProductPackage Include="$(PackageOutputPath)*.$(WebScenePackageVersion).nupkg" />
     </ItemGroup>
-    <Error Condition="'@(_WebSceneProductPackage->Count())' != '7'"
-           Text="Expected 7 WebScene runtime packages at version $(WebScenePackageVersion), found @(_WebSceneProductPackage->Count())." />
+    <Error Condition="'@(_WebSceneProductPackage->Count())' != '$(WebSceneRuntimePackageCount)'"
+           Text="Expected $(WebSceneRuntimePackageCount) WebScene runtime packages at version $(WebScenePackageVersion), found @(_WebSceneProductPackage->Count())." />
     <GetFileHash Files="@(_WebSceneProductPackage)" Algorithm="SHA256">
       <Output TaskParameter="Items" ItemName="_WebSceneProductPackageHash" />
     </GetFileHash>
@@ -45,7 +61,7 @@
                       Lines="@(_WebSceneProductPackageHash->'%(FileHash)  %(Filename)%(Extension)')"
                       Overwrite="true" />
     <WriteLinesToFile File="$(PackageOutputPath)webscene-runtime.json"
-                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(WebScenePackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;,&quot;packageCount&quot;:7,&quot;checksums&quot;:&quot;packages.sha256&quot;}"
+                      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(WebScenePackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;,&quot;packageCount&quot;:$(WebSceneRuntimePackageCount),&quot;gpuSidecar&quot;:$(WebSceneRuntimeHasGpuSidecar),&quot;checksums&quot;:&quot;packages.sha256&quot;}"
                       Overwrite="true" />
     <Message Importance="high"
              Text="Packed generic WebScene runtime $(WebScenePackageVersion) for $(WebSceneNativeEngineRid) to $(PackageOutputPath)." />

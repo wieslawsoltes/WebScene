@@ -18,6 +18,20 @@ public sealed record NativeWebSceneLoadOptions
 
     public required string NativeLibraryPath { get; init; }
 
+    /// <summary>
+    /// Gets an optional path to the RID-specific native GPU provider. When
+    /// omitted, the runtime probes for the provider beside the native engine.
+    /// A missing or incompatible provider never enables a software fallback.
+    /// </summary>
+    public string? NativeGpuLibraryPath { get; init; }
+
+    /// <summary>
+    /// Gets the capabilities that must be resolved before document startup.
+    /// Missing capabilities fail the load before authored JavaScript runs.
+    /// </summary>
+    public WebSceneBackendCapabilities RequiredCapabilities { get; init; }
+        = WebSceneBackendCapabilities.None;
+
     public string? CompilationCacheDirectory { get; init; }
 
     public IReadOnlyList<WebSceneDocumentScript> DocumentStartScripts { get; init; } = [];

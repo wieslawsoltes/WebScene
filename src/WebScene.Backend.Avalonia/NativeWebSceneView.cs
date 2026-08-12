@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using WebScene.Backends.Native;
+using WebScene.Core;
 using WebScene.JavaScript.Interop;
 
 namespace WebScene.Backends.Avalonia.Native;
@@ -23,6 +24,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
     private CancellationTokenSource? _navigationCancellation;
+    private long _capabilitiesBits =
+        (long)NativeWebSceneRuntime.BaselineCapabilities;
+    private NativeWebSceneGpuRuntimeInfo? _gpuRuntimeInfo;
 
     public NativeWebSceneView()
         : this(useCompositionVisual: true)
@@ -39,6 +43,13 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     public string? Source { get; private set; }
 
     public INativeWebSceneRenderDiagnostics RenderDiagnostics => _surface;
+
+    public WebSceneBackendCapabilities Capabilities
+        => (WebSceneBackendCapabilities)(ulong)Interlocked.Read(
+            ref _capabilitiesBits);
+
+    public NativeWebSceneGpuRuntimeInfo? GpuRuntimeInfo
+        => Volatile.Read(ref _gpuRuntimeInfo);
 
     public string LastError
         => _engine == IntPtr.Zero
@@ -393,6 +404,38 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                         unloadToken);
             }
             var navigationToken = _navigationCancellation.Token;
+            var nativeRuntimeInfo = NativeWebSceneRuntime.InspectLibrary(
+                options.NativeLibraryPath);
+            var gpuProviderPath = NativeWebSceneGpuRuntime.ResolveLibraryPath(
+                options.NativeLibraryPath,
+                options.NativeGpuLibraryPath);
+            var gpuRuntimeInfo = gpuProviderPath is null
+                ? null
+                : NativeWebSceneGpuRuntime.InspectLibrary(gpuProviderPath);
+            var compiledGpuCapabilities = WebSceneBackendCapabilities.None;
+            if ((nativeRuntimeInfo.BuildFeatures
+                    & NativeWebSceneBuildFeatures.WebGpuBindings) != 0)
+            {
+                compiledGpuCapabilities |= WebSceneBackendCapabilities.WebGpu;
+            }
+            if ((nativeRuntimeInfo.BuildFeatures
+                    & NativeWebSceneBuildFeatures.WebGlBindings) != 0)
+            {
+                compiledGpuCapabilities |= WebSceneBackendCapabilities.WebGl1
+                    | WebSceneBackendCapabilities.WebGl2;
+            }
+            var effectiveGpuCapabilities =
+                (gpuRuntimeInfo?.Capabilities ?? WebSceneBackendCapabilities.None)
+                & compiledGpuCapabilities;
+            var availableCapabilities = NativeWebSceneRuntime.BaselineCapabilities
+                | effectiveGpuCapabilities;
+            if ((availableCapabilities & options.RequiredCapabilities)
+                != options.RequiredCapabilities)
+            {
+                throw new WebSceneBackendCapabilityException(
+                    options.RequiredCapabilities,
+                    availableCapabilities);
+            }
             await NativeWebSceneRuntime
                 .PrewarmAsync(options.NativeLibraryPath, navigationToken)
                 .ConfigureAwait(false);
@@ -403,6 +446,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
                 options.CompilationCacheDirectory,
+                gpuProviderPath,
+                options.RequiredCapabilities,
                 resourceLoader,
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify,
@@ -414,6 +459,32 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            WebSceneBackendCapabilities nativeGpuCapabilities;
+            try
+            {
+                nativeGpuCapabilities = gpuRuntimeInfo is null
+                    ? WebSceneBackendCapabilities.None
+                    : NativeWebSceneApi.EngineGetCapabilities(engine)
+                        & NativeWebSceneGpuRuntime.GpuCapabilities;
+            }
+            catch (EntryPointNotFoundException error)
+            {
+                throw new InvalidOperationException(
+                    "The configured GPU provider requires a newer WebScene native " +
+                    "engine with GPU capability negotiation support.",
+                    error);
+            }
+            if (nativeGpuCapabilities
+                != effectiveGpuCapabilities)
+            {
+                throw new InvalidOperationException(
+                    "The GPU capabilities reported by the engine do not match " +
+                    "the inspected GPU provider.");
+            }
+            Interlocked.Exchange(
+                ref _capabilitiesBits,
+                (long)(ulong)availableCapabilities);
+            Volatile.Write(ref _gpuRuntimeInfo, gpuRuntimeInfo);
             Volatile.Write(
                 ref _contextId,
                 Interlocked.Increment(ref s_nextContextId));
@@ -617,6 +688,10 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         _navigationCancellation?.Dispose();
         _navigationCancellation = null;
         Source = null;
+        Interlocked.Exchange(
+            ref _capabilitiesBits,
+            (long)(ulong)NativeWebSceneRuntime.BaselineCapabilities);
+        Volatile.Write(ref _gpuRuntimeInfo, null);
 
         var engine = _engine;
         var interop = Interlocked.Exchange(ref _interop, null);

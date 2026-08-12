@@ -40,6 +40,33 @@ public sealed class BackendManifestTests
     }
 
     [Fact]
+    public void BrowserGpuCapabilitiesResolveAsDistinctSingleBits()
+    {
+        var manifest = CreateManifest() with
+        {
+            Capabilities = ["WebGl1", "WebGl2", "WebGpu"]
+        };
+
+        Assert.Equal(
+            WebSceneBackendCapabilities.WebGl1
+            | WebSceneBackendCapabilities.WebGl2
+            | WebSceneBackendCapabilities.WebGpu,
+            WebSceneBackendManifestSerializer.ResolveCapabilities(manifest));
+    }
+
+    [Fact]
+    public void LegacyOpenGlCapabilityResolvesToWebGl1()
+    {
+        var manifest = CreateManifest() with { Capabilities = ["OpenGl"] };
+
+#pragma warning disable CS0618
+        Assert.Equal(
+            WebSceneBackendCapabilities.WebGl1,
+            WebSceneBackendManifestSerializer.ResolveCapabilities(manifest));
+#pragma warning restore CS0618
+    }
+
+    [Fact]
     public void InvalidSchemaUnknownAndDuplicateCapabilitiesFailBeforeStartup()
     {
         var exception = Assert.Throws<InvalidDataException>(() => WebSceneBackendManifestSerializer.Parse("""

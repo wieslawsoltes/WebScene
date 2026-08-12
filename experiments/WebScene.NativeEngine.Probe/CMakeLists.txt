@@ -27,14 +27,22 @@ if(MSVC)
 endif()
 
 add_library(webscene_native_engine SHARED
+    native/webscene_gpu_provider_loader.cpp
     native/webscene_native_engine.cpp
     native/webscene_native_dom.cpp)
 
 target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
+if(CMAKE_DL_LIBS)
+    target_link_libraries(webscene_native_engine PRIVATE ${CMAKE_DL_LIBS})
+endif()
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU
+    "Compile the Dawn WebGPU V8 bindings and zero-copy canvas bridge" OFF)
+set(WEBSCENE_DAWN_INCLUDE_DIR "" CACHE PATH
+    "Directory containing the pinned Dawn webgpu/webgpu.h header")
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
     "Compile V8 Inspector state, hooks, queues, and worker dispatch into the runtime"
     "${WEBSCENE_NATIVE_ENGINE_ENABLE_V8}")
@@ -60,6 +68,12 @@ option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
     "Build the V8-free selected CSS syntax parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
     "Build the native V8 DOM binding lifecycle benchmark" OFF)
+set(WEBSCENE_GPU_PROVIDER_TEST_LIBRARY "" CACHE FILEPATH
+    "Optional ABI-compatible GPU provider used by the native WebGPU triangle test")
+set(WEBSCENE_THREE_WEBGPU_TEST_SCRIPT "" CACHE FILEPATH
+    "Optional pinned Three.js IIFE bundle appended to the native WebGPU smoke test")
+set(WEBSCENE_WEBGPU_CTS_TEST_SCRIPT "" CACHE FILEPATH
+    "Optional curated WebGPU CTS adaptation appended to the native WebGPU smoke test")
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "html5ever" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
@@ -81,6 +95,22 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
     message(FATAL_ERROR
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR requires "
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8")
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU)
+    if(NOT WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+        message(FATAL_ERROR
+            "WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU requires V8")
+    endif()
+    if(NOT EXISTS "${WEBSCENE_DAWN_INCLUDE_DIR}/webgpu/webgpu.h")
+        message(FATAL_ERROR
+            "WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU requires the pinned Dawn include directory")
+    endif()
+    target_include_directories(webscene_native_engine SYSTEM PRIVATE
+        "${WEBSCENE_DAWN_INCLUDE_DIR}")
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_WEBGPU=1)
+    message(STATUS "WebScene native engine: WebGPU bindings enabled")
 endif()
 
 if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
@@ -389,6 +419,7 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             "${CMAKE_CURRENT_BINARY_DIR}/webscene_v8_bootstrap.js")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_v8_runtime.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_v8_runtime_webgpu.inc"
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/v8-snapshot/extract_bootstraps.py")
         execute_process(
             COMMAND "${Python3_EXECUTABLE}"
@@ -404,6 +435,13 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         file(SHA256
             "${CMAKE_CURRENT_SOURCE_DIR}/native/generated/webscene_dom_bindings.inc"
             WEBSCENE_V8_BINDING_CATALOG_SHA256)
+        if(WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU)
+            file(SHA256
+                "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_v8_runtime_webgpu.inc"
+                WEBSCENE_V8_WEBGPU_BINDINGS_SHA256)
+        else()
+            set(WEBSCENE_V8_WEBGPU_BINDINGS_SHA256 "disabled")
+        endif()
         file(SHA256 "${WEBSCENE_V8_ROOT}/include/v8-version.h"
             WEBSCENE_V8_VERSION_HEADER_SHA256)
         string(JOIN "," WEBSCENE_V8_SNAPSHOT_FINGERPRINT
@@ -414,7 +452,8 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             "direct_handle=${WEBSCENE_V8_DIRECT_HANDLE}"
             "optimize_for_size=${WEBSCENE_V8_OPTIMIZE_FOR_SIZE_DEFAULT}"
             "bootstrap=${WEBSCENE_V8_BOOTSTRAP_SOURCE_SHA256}"
-            "bindings=${WEBSCENE_V8_BINDING_CATALOG_SHA256}")
+            "bindings=${WEBSCENE_V8_BINDING_CATALOG_SHA256}"
+            "webgpu=${WEBSCENE_V8_WEBGPU_BINDINGS_SHA256}")
         string(REPLACE ";" "," WEBSCENE_V8_SNAPSHOT_FINGERPRINT
             "${WEBSCENE_V8_SNAPSHOT_FINGERPRINT}")
 
@@ -508,6 +547,31 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         set_tests_properties(webscene_native_engine_tests PROPERTIES
             ENVIRONMENT
                 "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1;WEBSCENE_INTEROP_STRESS=1")
+        if(WEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU)
+            add_executable(webscene_native_webgpu_triangle_tests
+                tests/native_webgpu_triangle_tests.cpp)
+            target_compile_features(webscene_native_webgpu_triangle_tests PRIVATE cxx_std_20)
+            target_link_libraries(webscene_native_webgpu_triangle_tests PRIVATE
+                webscene_native_engine)
+            if(EXISTS "${WEBSCENE_GPU_PROVIDER_TEST_LIBRARY}")
+                add_test(NAME webscene_native_webgpu_triangle_tests
+                    COMMAND webscene_native_webgpu_triangle_tests
+                        "${WEBSCENE_GPU_PROVIDER_TEST_LIBRARY}")
+                if(EXISTS "${WEBSCENE_THREE_WEBGPU_TEST_SCRIPT}")
+                    add_test(NAME webscene_native_webgpu_three_tests
+                        COMMAND webscene_native_webgpu_triangle_tests
+                            "${WEBSCENE_GPU_PROVIDER_TEST_LIBRARY}"
+                            "${WEBSCENE_THREE_WEBGPU_TEST_SCRIPT}")
+                    if(EXISTS "${WEBSCENE_WEBGPU_CTS_TEST_SCRIPT}")
+                        add_test(NAME webscene_native_webgpu_cts_tests
+                            COMMAND webscene_native_webgpu_triangle_tests
+                                "${WEBSCENE_GPU_PROVIDER_TEST_LIBRARY}"
+                                "${WEBSCENE_THREE_WEBGPU_TEST_SCRIPT}"
+                                "${WEBSCENE_WEBGPU_CTS_TEST_SCRIPT}")
+                    endif()
+                endif()
+            endif()
+        endif()
     endif()
     if(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK)
         add_executable(webscene_dom_binding_benchmark
@@ -518,6 +582,24 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")
+endif()
+
+if(BUILD_TESTING)
+    add_library(webscene_mock_gpu_provider SHARED
+        tests/mock_gpu_provider.cpp)
+    target_compile_features(webscene_mock_gpu_provider PRIVATE cxx_std_20)
+    target_include_directories(webscene_mock_gpu_provider PRIVATE native)
+
+    add_executable(webscene_gpu_provider_contract_tests
+        tests/gpu_provider_contract_tests.cpp)
+    target_compile_features(webscene_gpu_provider_contract_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_gpu_provider_contract_tests PRIVATE native)
+    target_link_libraries(webscene_gpu_provider_contract_tests PRIVATE
+        webscene_native_engine)
+    add_test(
+        NAME webscene_gpu_provider_contract_tests
+        COMMAND webscene_gpu_provider_contract_tests
+            $<TARGET_FILE:webscene_mock_gpu_provider>)
 endif()
 
 if(MSVC)

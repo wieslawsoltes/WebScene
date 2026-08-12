@@ -131,6 +131,22 @@ for (const item of cases) {
   files[`contracts/${item.id}.html`] = createHash("sha256").update(html).digest("hex");
 }
 
+const threeWebGpuResult = await build({
+  entryPoints: [path.join(root, "src/three-webgpu.mjs")],
+  bundle: true,
+  write: false,
+  format: "iife",
+  platform: "browser",
+  target: ["es2022"],
+  logLevel: "silent",
+  sourcemap: false,
+  legalComments: "none"
+});
+const threeWebGpuScript = threeWebGpuResult.outputFiles[0].text;
+await writeFile(path.join(outputRoot, "three-webgpu.js"), threeWebGpuScript);
+files["contracts/three-webgpu.js"] = createHash("sha256")
+  .update(threeWebGpuScript).digest("hex");
+
 const lockBytes = await readFile(path.join(root, "package-lock.json"));
 const upstreamSourceManifestBytes = await readFile(path.join(root, "upstream-sources.json"));
 const upstreamSourceManifest = JSON.parse(upstreamSourceManifestBytes);

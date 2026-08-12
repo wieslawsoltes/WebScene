@@ -1,0 +1,10 @@
+{
+  "repository": "https://dawn.googlesource.com/dawn",
+  "revision": "710c33013c53ab2700d332c25ff51430251a8cc4",
+  "webGpuHeadersRevision": "01addc4ba8a2915a061b7095a6768b512071ab96",
+  "minimumMacOsVersion": "12.0",
+  "requiredFeatures": [
+    "SharedTextureMemoryIOSurface",
+    "SharedFenceMTLSharedEvent"
+  ]
+}

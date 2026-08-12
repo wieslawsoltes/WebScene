@@ -123,6 +123,38 @@ stable `fillStyle`, composite mode, or shadow state.
 
 ## Host contract
 
+GPU implementations live in an optional sidecar and implement
+`native/webscene_gpu_provider.h`. The engine loads that ABI through
+`webscene_gpu_provider_loader.cpp`; it never links Dawn/Tint into the baseline
+runtime. Provider capability bits are accepted only after ABI validation and a
+provider instance is created, and become browser capabilities only when the
+matching engine binding build feature is present. Scene ABI 3 appends external-texture records for
+IOSurface/Metal presentation while retaining ABI 2 read compatibility in the
+managed presenters.
+
+`webscene_gpu_provider_contract_tests` builds a test-only provider and verifies
+successful WebGPU negotiation, rejection of unsupported capabilities, and
+failure when a required provider is absent.
+
+Build the current `osx-arm64` Dawn/Metal vertical slice in dependency order:
+
+```sh
+scripts/build-native-gpu-runtime.sh --rid osx-arm64
+scripts/build-native-engine-runtime.sh --rid osx-arm64 --webgpu
+```
+
+`--webgpu` requires the pinned Dawn headers and ABI 2 provider produced by the
+first command. The engine then compiles `navigator.gpu`, core adapter/device/
+queue/resource/command bindings, and `canvas.getContext("webgpu")`; CTest runs a
+real WGSL triangle through the IOSurface export path, a bundled Three.js r184
+`WebGPURenderer` box scene, and the exact-revision CTS `clear` and
+`fullscreen_quad` rendering cases recorded in `tests/WebGpuCts/subset.json`.
+The Three.js bundle is generated reproducibly from the locked ecosystem-test
+dependencies and is not checked in. A provider-only build does
+not advertise browser WebGPU support, and an engine binding build without an
+operational provider does not expose `navigator.gpu`. The implementation has no
+software, CPU-readback, WebGL, or ANGLE fallback.
+
 - `webscene_engine_prewarm` pays the process-wide V8 initialization cost early.
 - `webscene_engine_get_build_features` identifies whether the loaded binary
   includes certification-only evidence and profiling hooks.

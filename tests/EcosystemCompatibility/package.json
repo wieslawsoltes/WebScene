@@ -10,7 +10,8 @@
     "bootstrap": "5.3.8",
     "jquery": "4.0.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "three": "0.184.0"
   },
   "devDependencies": {
     "esbuild": "0.28.1"

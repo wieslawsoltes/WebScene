@@ -159,6 +159,13 @@
                 all_canvas_commands,
                 all_canvas_strings,
                 all_canvas_string_bytes);
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+            if (runtime_ != nullptr) {
+                runtime_->append_external_textures(
+                    next->external_textures,
+                    next->external_texture_owners);
+            }
+#endif
 
             uint64_t dom_hash = 1469598103934665603ULL;
             for (const auto& command : next->commands) {
