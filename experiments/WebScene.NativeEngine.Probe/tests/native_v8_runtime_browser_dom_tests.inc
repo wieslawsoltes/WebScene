@@ -266,6 +266,72 @@ void test_synthetic_window_resize_dispatch_uses_outer_listener_registry(
         "synthetic Window resize bypassed outer listener dispatch: " + result);
 }
 
+void test_document_create_event_and_init_event(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const event = document.createEvent('Event');
+          const before = [
+            event instanceof Event,
+            event.type,
+            event.bubbles,
+            event.cancelable
+          ];
+          event.initEvent('legacy-activate', true, true);
+          const target = document.createElement('button');
+          document.body.appendChild(target);
+          let observed = null;
+          target.addEventListener('legacy-activate', received => {
+            observed = {
+              identity: received === event,
+              target: received.target === target,
+              currentTarget: received.currentTarget === target
+            };
+            received.preventDefault();
+          });
+          const dispatchResult = target.dispatchEvent(event);
+          const canceled = event.defaultPrevented;
+          event.initEvent('reinitialized', false, false);
+          let unsupported = null;
+          try {
+            document.createEvent('UnknownEvent');
+          } catch (error) {
+            unsupported = [error instanceof DOMException, error.name];
+          }
+          let missingCreateArgument = false;
+          let missingInitArgument = false;
+          try {
+            document.createEvent();
+          } catch (error) {
+            missingCreateArgument = error instanceof TypeError;
+          }
+          try {
+            document.createEvent('Event').initEvent();
+          } catch (error) {
+            missingInitArgument = error instanceof TypeError;
+          }
+          return {
+            before,
+            observed,
+            dispatchResult,
+            canceled,
+            reinitialized: [
+              event.type,
+              event.bubbles,
+              event.cancelable,
+              event.defaultPrevented
+            ],
+            unsupported,
+            missingCreateArgument,
+            missingInitArgument
+          };
+        })()
+    )JS", "native-document-create-event.js");
+    require(
+        result == R"({"before":[true,"",false,false],"observed":{"identity":true,"target":true,"currentTarget":true},"dispatchResult":false,"canceled":true,"reinitialized":["reinitialized",false,false,false],"unsupported":[true,"NotSupportedError"],"missingCreateArgument":true,"missingInitArgument":true})",
+        "Document.createEvent or Event.initEvent diverged from the bounded contract: " + result);
+}
+
 void test_native_mouseup_honors_immediate_propagation_stop(webscene_engine* engine)
 {
     execute(engine, R"JS(

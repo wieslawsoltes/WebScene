@@ -69,6 +69,11 @@
           "path": "upstream/bootstrap/js/tests/unit/offcanvas.spec.js",
           "cases": 50,
           "sha256": "8a19cc6750ff07e2ae21e94993a71c2e43a979208a47b0aeb6f87b9d4de7be88"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/carousel.spec.js",
+          "cases": 66,
+          "sha256": "ffaafb6b4ec0455466df8bc2cfbb4e6f0a43b322651cd54cd0b1a9ff953a5c7e"
         }
       ],
       "supportFiles": [
@@ -79,10 +84,17 @@
         {
           "path": "upstream/bootstrap/LICENSE",
           "sha256": "4620c84ad5ce8602ff65640ed6b7c8b78ebb9e036584f0ebc1ccc88206a4bb51"
+        },
+        {
+          "path": "node_modules/hammer-simulator/index.js",
+          "sha256": "1f201d88203b954953019351a53a1d6bbb2491bd7c4584d48731f835cb61500e"
+        },
+        {
+          "path": "node_modules/hammer-simulator/LICENSE",
+          "sha256": "45041de253b840bd7dce1fd06a07b430aca47b9a3e8c7d6610afeff5ec813da5"
         }
       ],
       "harnessBlocked": [
-        "carousel.spec.js",
         "jquery.spec.js",
         "popover.spec.js",
         "scrollspy.spec.js",

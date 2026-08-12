@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/document-create-event-init.html",
+      "type": "contract",
+      "capabilities": ["document-create-event", "event-init-event", "event-identity", "cancelable-dispatch", "event-reinitialization"],
+      "evidence": ["bootstrap-v5.3.8-carousel-hammer-simulator-reduction"],
+      "reason": "Product-neutral reduction of an official gesture-simulator prerequisite: document.createEvent('Event') must return an Event whose legacy initEvent method sets type, bubbling, and cancelability and resets cancellation when reinitialized."
+    },
+    {
       "path": "contracts/responsive-overlay-resize-dispatch.html",
       "type": "contract",
       "capabilities": ["compound-attribute-selectors", "window-resize-event", "synthetic-dispatch", "computed-position-after-inline-removal"],

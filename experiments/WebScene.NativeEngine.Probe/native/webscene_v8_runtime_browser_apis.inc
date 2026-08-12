@@ -720,6 +720,107 @@
         info.GetReturnValue().Set(event);
     }
 
+    static void document_create_event(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (info.Length() < 1) {
+            self->record_feature(
+                "dom",
+                "method:Document.createEvent",
+                "invalid-authoring",
+                "an event interface name is required",
+                "dom-binding");
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Document.createEvent requires an interface name")));
+            return;
+        }
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::String> interface_value;
+        if (!info[0]->ToString(local_context).ToLocal(&interface_value)) return;
+        const auto interface_name = to_utf8(info.GetIsolate(), interface_value);
+        const auto supported = interface_name == "Event";
+        self->record_feature(
+            "dom",
+            "method:Document.createEvent",
+            supported ? "supported" : "unsupported",
+            supported ? std::string{} : "only the bounded Event interface is supported",
+            "dom-binding");
+        if (!supported) {
+            throw_dom_exception(
+                info,
+                "The requested event interface is not supported",
+                "NotSupportedError");
+            return;
+        }
+        v8::Local<v8::Value> constructor_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "Event")).ToLocal(&constructor_value)
+            || !constructor_value->IsFunction()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Event constructor is unavailable")));
+            return;
+        }
+        v8::Local<v8::Value> arguments[] = {js_string(info.GetIsolate(), "")};
+        v8::Local<v8::Object> event;
+        if (!constructor_value.As<v8::Function>()->NewInstance(
+                local_context,
+                1,
+                arguments).ToLocal(&event)) return;
+        info.GetReturnValue().Set(event);
+    }
+
+    static void event_init_event(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (info.Length() < 1) {
+            self->record_feature(
+                "dom",
+                "method:Event.initEvent",
+                "invalid-authoring",
+                "an event type is required",
+                "dom-binding");
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Event.initEvent requires an event type")));
+            return;
+        }
+        self->record_feature(
+            "dom",
+            "method:Event.initEvent",
+            "supported",
+            {},
+            "dom-binding");
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto event = info.This();
+        v8::Local<v8::String> type;
+        if (!info[0]->ToString(local_context).ToLocal(&type)) return;
+        event->Set(local_context, js_string(info.GetIsolate(), "type"), type).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "bubbles"),
+            v8::Boolean::New(
+                info.GetIsolate(),
+                info.Length() > 1 && info[1]->BooleanValue(info.GetIsolate()))).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "cancelable"),
+            v8::Boolean::New(
+                info.GetIsolate(),
+                info.Length() > 2 && info[2]->BooleanValue(info.GetIsolate()))).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "defaultPrevented"),
+            v8::False(info.GetIsolate())).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "__webscenePropagationStopped"),
+            v8::False(info.GetIsolate())).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "__websceneImmediatePropagationStopped"),
+            v8::False(info.GetIsolate())).Check();
+    }
+
     static void mouse_event_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto event = info.IsConstructCall() ? info.This() : v8::Object::New(info.GetIsolate());

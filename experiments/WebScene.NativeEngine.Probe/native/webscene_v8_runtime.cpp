@@ -561,6 +561,9 @@ struct v8_dom_runtime::implementation final {
         frame_document->Set(
             js_string(isolate, "createDocumentFragment"),
             v8::FunctionTemplate::New(isolate, create_document_fragment));
+        frame_document->Set(
+            js_string(isolate, "createEvent"),
+            v8::FunctionTemplate::New(isolate, document_create_event));
         frame_document->SetNativeDataProperty(
             js_string(isolate, "body"), get_body);
         frame_document->SetNativeDataProperty(
@@ -683,6 +686,9 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "createDocumentFragment"),
             v8::FunctionTemplate::New(isolate, create_document_fragment));
+        document_template->Set(
+            js_string(isolate, "createEvent"),
+            v8::FunctionTemplate::New(isolate, document_create_event));
         document_template->Set(
             js_string(isolate, "appendChild"),
             v8::FunctionTemplate::New(isolate, append_child));
@@ -2347,6 +2353,9 @@ struct v8_dom_runtime::implementation final {
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
             v8::FunctionTemplate::New(isolate, event_prevent_default));
+        event_template->PrototypeTemplate()->Set(
+            js_string(isolate, "initEvent"),
+            v8::FunctionTemplate::New(isolate, event_init_event));
         event_template->PrototypeTemplate()->SetAccessorProperty(
             js_string(isolate, "returnValue"),
             v8::FunctionTemplate::New(isolate, event_return_value_get),

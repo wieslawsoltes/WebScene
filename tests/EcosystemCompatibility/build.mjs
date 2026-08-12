@@ -118,6 +118,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-carousel-upstream",
+    entry: "src/bootstrap-carousel-upstream.mjs",
+    title: "Bootstrap upstream carousel suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 

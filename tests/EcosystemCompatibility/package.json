@@ -13,6 +13,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "hammer-simulator": "0.0.1"
   }
 }

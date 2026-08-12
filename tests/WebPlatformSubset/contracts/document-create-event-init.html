@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Document createEvent produces an initializable Event</title>
+<body>
+<button id="target" type="button">target</button>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, error) {
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? String(error && error.message || error) : null,
+      stack: error && error.stack ? String(error.stack) : null
+    });
+  }
+
+  const event = document.createEvent("Event");
+  record(
+    "createEvent returns an uninitialized Event instance",
+    event instanceof Event && event.type === ""
+        && event.bubbles === false && event.cancelable === false
+      ? null
+      : new Error("initial Event state differed")
+  );
+
+  event.initEvent("legacy-activate", true, true);
+  record(
+    "initEvent sets type, bubbling, and cancelability",
+    event.type === "legacy-activate" && event.bubbles === true
+        && event.cancelable === true && event.defaultPrevented === false
+      ? null
+      : new Error("initialized Event state differed")
+  );
+
+  const target = document.getElementById("target");
+  let observed = null;
+  target.addEventListener("legacy-activate", received => {
+    observed = {
+      identity: received === event,
+      target: received.target === target,
+      currentTarget: received.currentTarget === target
+    };
+    received.preventDefault();
+  });
+  const dispatchResult = target.dispatchEvent(event);
+  record(
+    "initialized Event dispatch preserves identity and cancellation",
+    observed && observed.identity && observed.target && observed.currentTarget
+        && dispatchResult === false && event.defaultPrevented === true
+      ? null
+      : new Error("dispatch state differed: " + JSON.stringify({ observed, dispatchResult }))
+  );
+
+  event.initEvent("reinitialized", false, false);
+  record(
+    "initEvent can reinitialize a completed Event",
+    event.type === "reinitialized" && event.bubbles === false
+        && event.cancelable === false && event.defaultPrevented === false
+      ? null
+      : new Error("reinitialized Event state differed")
+  );
+
+  state.diagnostics = [JSON.stringify({
+    constructor: event.constructor && event.constructor.name,
+    dispatchResult,
+    observed,
+    finalType: event.type
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-11 coverage audit
 
-The pinned profile contains 110 required, 65 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 66 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-65/65 documents and 351/351 subtests while the release gate remains 110/110 documents
+66/66 documents and 355/355 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -173,6 +173,10 @@ and 434/434 subtests:
   resize input, while a neutral responsive-overlay reduction independently verifies
   compound substring selectors and non-fixed computed position after style removal;
   and
+- legacy `Document.createEvent("Event")` now returns an identity-preserving `Event`
+  whose `initEvent()` method initializes and resets dispatch flags; a neutral four-
+  assertion reduction plus focused native coverage closes Bootstrap Carousel's exact
+  gesture-simulator prerequisite without a framework-specific path; and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
   instructions, flattened slot queries, and connected `ShadowRoot.styleSheets` identity;
@@ -291,6 +295,23 @@ with zero signalled wakes, no Inspector registry, identical 480-byte blank scene
 the same 800 timer and 240 animation-frame callbacks completed by each variant. The
 per-spec task drain exists only in the ecosystem test harness and does not ship in a
 host or runtime artifact.
+
+The unchanged upstream Bootstrap Carousel slice and bounded legacy-Event fix were
+compared with their exact clean parent (`9261e70`) in six balanced fresh-process runs.
+The machine changed frequency substantially during the run, but balanced median p50
+moved only from 2.361 ms to 2.371 ms (+0.4%) for 1,000 startup/lifecycle samples, from
+33.054 ms to 33.102 ms (+0.1%) for the 50-sample selector workload, and from 2.889 ms
+to 2.896 ms (+0.3%) for 50 generated named-property samples. A four-context/2,000-node
+probe retains the fixed 976-byte node and byte-identical attributed node, attribute,
+pool, wrapper, and scene storage. The two new method templates add no document or node
+state; median populated V8 used heap increased by a bounded 44,136 bytes per context
+while total incremental process working set per context was 163,840 bytes lower. Both
+isolated and shared-isolate lifecycle probes pass. Five alternating five-second idle
+runs move median normalized CPU from 0.2469% to 0.2527% (+0.0059 percentage points),
+with zero signalled wakes, no Inspector registry, identical 480-byte blank scenes, and
+the same 800 timer and 240 animation-frame callbacks completed by each variant. Median
+prewarm time moved from 1.484 ms to 1.477 ms (-0.5%); the release library grows by
+16,752 bytes.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

@@ -131,6 +131,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "document-create-event") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_document_create_event_and_init_event(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
     }
     test_binary_reverse_callback_is_leased_and_completed();
@@ -285,6 +292,7 @@ int main()
     test_primary_click_mouse_event_detail(engine);
     test_event_listener_options_reach_native_input_and_resize(engine);
     test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
+    test_document_create_event_and_init_event(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
     test_generated_idl_attributes_are_prototype_accessors(engine);
     test_document_links_is_a_live_named_html_collection(engine);
