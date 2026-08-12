@@ -228,6 +228,23 @@
           "sha256": "c1aa93f428a366bc1759c7f5b5eb71efc13bbdce3062196fefca3986de6cfcde"
         },
         {
+          "path": "upstream/jquery/test/unit/deprecated.js",
+          "cases": 7,
+          "sha256": "4e46a2927165c33107b0f418e7f43b10352c1e6b9306cd97b3e92d31e28ea649",
+          "inFileHarnessBlocked": [
+            {
+              "name": "Ajax events aliases (with context)",
+              "reason": "Requires jQuery's PHP mock server for success and error responses."
+            }
+          ],
+          "inFileUpstreamSkipped": [
+            {
+              "name": "jQuery.expr[ \":\" ], jQuery.expr.filters",
+              "reason": "The unchanged source skips this compatibility alias when the full jQuery selector-policy suite is not selected."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/dimensions.js",
           "cases": 29,
           "sha256": "21d0e311f926af72ee72cbc43192c4d9917b2728d7d36a030f7c184ae6c57ebc",
@@ -296,7 +313,6 @@
         "ajax.js",
         "animation.js",
         "core.js",
-        "deprecated.js",
         "effects.js",
         "event.js",
         "exports.js",

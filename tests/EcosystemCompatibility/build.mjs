@@ -81,6 +81,12 @@ const cases = [
     title: "jQuery upstream Deferred suite",
     css: ""
   },
+  {
+    id: "jquery-deprecated-upstream",
+    entry: "src/jquery-deprecated-upstream.mjs",
+    title: "jQuery upstream deprecated APIs suite",
+    css: ""
+  },
   ...Array.from({ length: 3 }, (_, index) => ({
     id: `jquery-data-upstream-${index + 1}`,
     entry: "src/jquery-data-upstream.mjs",
