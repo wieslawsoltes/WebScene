@@ -70,6 +70,12 @@ const cases = [
     css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
   })),
   {
+    id: "jquery-deferred-upstream",
+    entry: "src/jquery-deferred-upstream.mjs",
+    title: "jQuery upstream Deferred suite",
+    css: ""
+  },
+  {
     id: "jquery-queue-upstream",
     entry: "src/jquery-queue-upstream.mjs",
     title: "jQuery upstream queue suite",

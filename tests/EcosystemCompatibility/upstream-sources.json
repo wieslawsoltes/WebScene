@@ -197,6 +197,11 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/deferred.js",
+          "cases": 28,
+          "sha256": "c1aa93f428a366bc1759c7f5b5eb71efc13bbdce3062196fefca3986de6cfcde"
+        },
+        {
           "path": "upstream/jquery/test/unit/dimensions.js",
           "cases": 29,
           "sha256": "21d0e311f926af72ee72cbc43192c4d9917b2728d7d36a030f7c184ae6c57ebc",
@@ -267,7 +272,6 @@
         "basic.js",
         "core.js",
         "data.js",
-        "deferred.js",
         "deprecated.js",
         "effects.js",
         "event.js",

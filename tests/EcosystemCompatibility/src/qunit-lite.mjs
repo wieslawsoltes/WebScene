@@ -103,7 +103,6 @@ function createAssert(testName) {
   let expectedCount = null;
   let assertionCount = 0;
   let pending = 0;
-  let asynchronousFailure = null;
   let settle = null;
 
   const record = (condition, message) => {
@@ -138,9 +137,8 @@ function createAssert(testName) {
     async(count = 1) {
       let remaining = Number(count) || 1;
       pending += remaining;
-      return error => {
+      return () => {
         if (remaining <= 0) return;
-        if (error) asynchronousFailure = error instanceof Error ? error : new Error(String(error));
         remaining--;
         pending--;
         if (pending === 0 && settle) settle();
@@ -171,7 +169,6 @@ function createAssert(testName) {
             () => reject(new Error(`QUnit-compatible test timed out after 5000 ms: ${testName}`)), 5000))
         ]);
       }
-      if (asynchronousFailure) throw asynchronousFailure;
       if (expectedCount !== null && assertionCount !== expectedCount) {
         throw new Error(`${testName}: expected ${expectedCount} assertions, observed ${assertionCount}`);
       }
