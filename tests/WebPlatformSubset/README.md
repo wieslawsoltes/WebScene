@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 76 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 78 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-76/76 documents and 402/402 subtests while the release gate remains 110/110 documents
+78/78 documents and 407/407 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -143,6 +143,8 @@ and 434/434 subtests:
 - `replaceChild()` now splices `DocumentFragment` children without losing identity or
   order, while programmatic inline scripts execute synchronously exactly once and
   `innerHTML`-created scripts remain inert when moved;
+- numeric and dictionary Window scrolling now operates over parsed two-axis document
+  overflow, while disconnected elements expose no rendered client rectangles;
 - inline unitless and percentage `line-height` values are resolved after the winning
   `font-size`, including later CSSOM font-size changes; and
 - generated Web IDL attributes now appear as enumerable, configurable accessors on the

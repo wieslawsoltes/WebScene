@@ -1737,6 +1737,59 @@
             self->active_root().scroll_top));
     }
 
+    static void window_scroll_to(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry));
+        self->ensure_layout();
+
+        auto& root = self->active_root();
+        auto left = static_cast<double>(root.scroll_left);
+        auto top = static_cast<double>(root.scroll_top);
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        if (info.Length() > 0 && info[0]->IsObject()) {
+            const auto options = info[0].As<v8::Object>();
+            const auto read_axis = [&](const char* name, double current_value) {
+                v8::Local<v8::Value> value;
+                if (!options->Get(local_context, js_string(info.GetIsolate(), name))
+                        .ToLocal(&value)
+                    || value->IsUndefined()) {
+                    return current_value;
+                }
+                return value->NumberValue(local_context).FromMaybe(0.0);
+            };
+            left = read_axis("left", left);
+            top = read_axis("top", top);
+        } else {
+            left = info.Length() > 0
+                ? info[0]->NumberValue(local_context).FromMaybe(0.0)
+                : 0.0;
+            top = info.Length() > 1
+                ? info[1]->NumberValue(local_context).FromMaybe(0.0)
+                : 0.0;
+        }
+        if (!std::isfinite(left)) left = 0.0;
+        if (!std::isfinite(top)) top = 0.0;
+
+        const auto maximum_left = std::max(
+            0.0F,
+            root.scroll_content_width - root.scroll_viewport_width);
+        const auto maximum_top = std::max(
+            0.0F,
+            root.scroll_content_height - root.scroll_viewport_height);
+        const auto next_left = std::clamp(static_cast<float>(left), 0.0F, maximum_left);
+        const auto next_top = std::clamp(static_cast<float>(top), 0.0F, maximum_top);
+        if (std::abs(next_left - root.scroll_left) <= 0.01F
+            && std::abs(next_top - root.scroll_top) <= 0.01F) {
+            return;
+        }
+        root.scroll_left = next_left;
+        root.scroll_top = next_top;
+        self->document.mark_dirty();
+        self->enqueue_programmatic_scroll_event(root);
+    }
+
     static void get_device_pixel_ratio(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)

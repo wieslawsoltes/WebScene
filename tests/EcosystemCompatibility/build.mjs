@@ -113,6 +113,12 @@ const cases = [
     css: ""
   },
   {
+    id: "jquery-offset-upstream",
+    entry: "src/jquery-offset-upstream.mjs",
+    title: "jQuery upstream offset suite",
+    css: ""
+  },
+  {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
     title: "Bootstrap component composition",

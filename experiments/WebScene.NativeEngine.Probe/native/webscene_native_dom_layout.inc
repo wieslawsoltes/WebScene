@@ -2250,13 +2250,14 @@ void native_document::layout_children(dom_node& parent)
         positioned.y -= parent.scroll_top;
         layout_child(*child, parent.layout, positioned);
         // The retained native viewport owns scrolling while a loaded document
-        // exposes an HTML element beneath it.  The HTML border box remains
-        // viewport-sized, but its BODY can establish a larger scrollable
-        // overflow area.  Propagate that root overflow to the viewport owner;
-        // otherwise document.scrollingElement reports a permanently bounded
-        // 0px range even though the document content is much taller.
-        const auto propagates_document_overflow = &parent == body_
-            && child->tag == "html";
+        // exposes HTML and BODY structural boxes beneath it. Those boxes remain
+        // viewport-sized, but descendants can establish a larger scrollable
+        // overflow area. Propagate that overflow through both root boundaries;
+        // otherwise wide descendants stop at BODY while tall content only
+        // appears to work because an auto-height BODY expands vertically.
+        const auto propagates_document_overflow =
+            (&parent == body_ && child->tag == "html")
+            || (parent.tag == "html" && child->tag == "body");
         const auto flow_width = propagates_document_overflow
             ? std::max(child->layout.width, child->scroll_content_width)
             : child->layout.width;

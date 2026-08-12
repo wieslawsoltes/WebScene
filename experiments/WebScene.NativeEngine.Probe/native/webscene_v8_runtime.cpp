@@ -608,6 +608,12 @@ struct v8_dom_runtime::implementation final {
         frame_window->Set(
             js_string(isolate, "focus"),
             v8::FunctionTemplate::New(isolate, window_focus));
+        frame_window->Set(
+            js_string(isolate, "scrollTo"),
+            v8::FunctionTemplate::New(isolate, window_scroll_to));
+        frame_window->Set(
+            js_string(isolate, "scroll"),
+            v8::FunctionTemplate::New(isolate, window_scroll_to));
         frame_window->SetNativeDataProperty(
             js_string(isolate, "frameElement"),
             get_provisional_frame_element);
@@ -3018,6 +3024,17 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "focus"),
             v8::Function::New(local_context, window_focus).ToLocalChecked()).Check();
+        auto scroll_to = v8::Function::New(
+            local_context,
+            window_scroll_to).ToLocalChecked();
+        global->Set(
+            local_context,
+            js_string(isolate, "scrollTo"),
+            scroll_to).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "scroll"),
+            scroll_to).Check();
     }
 
     void install_host_bridge(v8::Local<v8::Context> local_context)

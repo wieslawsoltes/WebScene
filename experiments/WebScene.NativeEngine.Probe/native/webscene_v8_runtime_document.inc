@@ -305,7 +305,7 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
-        const auto has_no_box = [self](const dom_node* candidate) {
+        const auto has_no_box = !self->is_connected(*node) || [self](const dom_node* candidate) {
             for (auto* current = candidate; current != nullptr;
                  current = self->document.composed_parent(*current)) {
                 if (current->style.display == display_mode::none) return true;
@@ -345,6 +345,10 @@
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
+        if (!self->is_connected(*node)) {
+            info.GetReturnValue().Set(v8::Array::New(info.GetIsolate()));
+            return;
+        }
         for (auto* current = node; current != nullptr;
              current = self->document.composed_parent(*current)) {
             if (current->style.display != display_mode::none) continue;

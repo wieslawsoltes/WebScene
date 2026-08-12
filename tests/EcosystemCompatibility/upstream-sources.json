@@ -256,6 +256,18 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/offset.js",
+          "cases": 10,
+          "sha256": "edc0347c467f5be2dbc4d1cc9a6f384424a2b6437f8392fd1433a11fee1a7334",
+          "inFileHarnessBlocked": [
+            {
+              "name": "separately served offset geometry fixtures",
+              "cases": 24,
+              "reason": "Requires jQuery's absolute, relative, static, fixed, table, scroll, body, and combinatorial boxes iframe documents."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/queue.js",
           "cases": 13,
           "sha256": "5c904a833b859cb1da64ff82f837663b024327fb130dbe62d0bbfe6342ebd3b4",
@@ -333,7 +345,6 @@
         "event.js",
         "exports.js",
         "manipulation.js",
-        "offset.js",
         "selector.js",
         "support.js",
         "tween.js"

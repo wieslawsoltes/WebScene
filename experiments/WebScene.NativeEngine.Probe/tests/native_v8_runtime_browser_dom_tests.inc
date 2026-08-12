@@ -87,6 +87,9 @@ void test_dom_box_dimensions_primitives(webscene_engine* engine)
           const authored = document.createElement('div');
           authored.id = 'authored';
           authored.style.cssText = 'padding:2px;border:3px solid';
+          const disconnected = document.createElement('div');
+          disconnected.style.cssText = 'width:40px;height:30px';
+          const disconnectedRect = disconnected.getBoundingClientRect();
           document.body.appendChild(authored);
           single.style.width = '300px';
           a.style.width = '200px';
@@ -106,6 +109,14 @@ void test_dom_box_dimensions_primitives(webscene_engine* engine)
               getComputedStyle(authored).paddingLeft,
               getComputedStyle(authored).borderLeftWidth
             ],
+            disconnected: [
+              disconnected.isConnected,
+              disconnected.getClientRects().length,
+              disconnectedRect.x,
+              disconnectedRect.y,
+              disconnectedRect.width,
+              disconnectedRect.height
+            ],
             columns: [width('single'), width('double')],
             row: width('row'),
             headers: [width('h1'), width('h2'), width('h3')],
@@ -113,7 +124,7 @@ void test_dom_box_dimensions_primitives(webscene_engine* engine)
           };
         })()
     )JS", "native-dom-box-dimensions-primitives.js");
-    const auto expected = R"JSON({"clone":["100px","2px","2px","3px"],"authoredEdges":["2px","3px","9px","7px"],"columns":[300,600],"row":42,"headers":[200,200,200],"heights":[30,6]})JSON";
+    const auto expected = R"JSON({"clone":["100px","2px","2px","3px"],"authoredEdges":["2px","3px","9px","7px"],"disconnected":[false,0,0,0,0,0],"columns":[300,600],"row":42,"headers":[200,200,200],"heights":[30,6]})JSON";
     require(
         result == expected,
         "DOM box dimension primitives diverged: " + result);
@@ -1969,4 +1980,35 @@ void test_scrollspy_product_neutral_primitives(webscene_engine* engine)
         evaluate(engine, "[__programmaticScrollEarly, __programmaticScrollLate]",
             "native-scrollspy-unchanged-scroll-result.js") == "[1,1]",
         "an unchanged programmatic offset queued an additional scroll event");
+}
+
+void test_window_scroll_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<div style="width:1800px;height:1600px"></div>';
+          const methods = [typeof scrollTo, typeof scroll, scrollTo === scroll];
+          scrollTo(120, 140);
+          const numeric = [scrollX, scrollY, pageXOffset, pageYOffset];
+          scrollTo({ top: 210 });
+          const topOnly = [scrollX, scrollY];
+          scroll({ left: 170 });
+          const leftOnly = [scrollX, scrollY];
+          scrollTo(-20, 100000);
+          const maximumY = document.documentElement.scrollHeight - innerHeight;
+          const clamped = [scrollX, scrollY === maximumY, maximumY > 210];
+          scrollTo(0, 0);
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameMethods = [
+            typeof frame.contentWindow.scrollTo,
+            typeof frame.contentWindow.scroll
+          ];
+          frame.remove();
+          return { methods, numeric, topOnly, leftOnly, clamped, frameMethods };
+        })()
+    )JS", "native-window-scroll-primitives.js");
+    require(
+        result == R"JSON({"methods":["function","function",true],"numeric":[120,140,120,140],"topOnly":[120,210],"leftOnly":[170,210],"clamped":[0,true,true],"frameMethods":["function","function"]})JSON",
+        "Window scrolling primitives were inconsistent: " + result);
 }
