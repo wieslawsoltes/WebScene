@@ -17,8 +17,18 @@ public enum WebSceneBackendCapabilities : ulong
     Accessibility = 1UL << 10,
     DragDrop = 1UL << 11,
     InputMethodEditor = 1UL << 12,
-    OpenGl = 1UL << 13,
-    WebGpu = 1UL << 14
+    /// <summary>Browser WebGL 1 canvas contexts are available.</summary>
+    WebGl1 = 1UL << 13,
+
+    /// <summary>Browser WebGPU and GPU canvas contexts are available.</summary>
+    WebGpu = 1UL << 14,
+
+    /// <summary>Browser WebGL 2 canvas contexts are available.</summary>
+    WebGl2 = 1UL << 15,
+
+    /// <summary>Compatibility alias for the pre-WebGL capability name.</summary>
+    [Obsolete("Use WebGl1. OpenGl described the implementation rather than the browser API.")]
+    OpenGl = WebGl1
 }
 
 public enum WebSceneBackendState

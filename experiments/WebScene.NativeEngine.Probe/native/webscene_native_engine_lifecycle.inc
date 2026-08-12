@@ -15,7 +15,9 @@
         void* interop_callback_available_user_data = nullptr,
         webscene_animation_frame_requested_callback
             animation_frame_requested_callback = nullptr,
-        void* animation_frame_requested_user_data = nullptr)
+        void* animation_frame_requested_user_data = nullptr,
+        std::string gpu_provider_path = {},
+        uint64_t required_capabilities = 0U)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -33,6 +35,9 @@
         , animation_frame_requested_callback_(animation_frame_requested_callback)
         , animation_frame_requested_user_data_(animation_frame_requested_user_data)
         , document_(text_measure_callback, text_measure_user_data)
+        , gpu_provider_(load_gpu_provider(
+              gpu_provider_path,
+              required_capabilities))
         , worker_([this](std::stop_token token) { run(token); })
     {
     }
@@ -45,6 +50,13 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         delete inspector_state_.exchange(nullptr, std::memory_order_acq_rel);
 #endif
+    }
+
+    uint64_t capabilities() const noexcept
+    {
+        return gpu_provider_ != nullptr
+            ? gpu_provider_->capabilities() & compiled_gpu_capability_mask
+            : 0U;
     }
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)

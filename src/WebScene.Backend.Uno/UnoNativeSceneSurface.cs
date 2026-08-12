@@ -782,10 +782,19 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
             {
                 throw new ArgumentOutOfRangeException(nameof(documentBarrierTimeout));
             }
+            if ((options.RequiredCapabilities
+                    & NativeWebSceneGpuRuntime.GpuCapabilities) != 0)
+            {
+                throw new WebSceneBackendCapabilityException(
+                    options.RequiredCapabilities,
+                    NativeWebSceneRuntime.BaselineCapabilities);
+            }
             var callbackSignal = new JavaScriptCallbackSignal();
             var engine = NativeWebSceneApi.EngineCreate(
                 0,
                 options.CompilationCacheDirectory,
+                null,
+                WebSceneBackendCapabilities.None,
                 options.ResourceLoader ?? new UnoResourceLoader(),
                 _surface.OnNativeScenePublished,
                 interopCallbackAvailable: callbackSignal.Notify);

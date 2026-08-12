@@ -33,7 +33,8 @@
         "enum": [
           "DomProjection", "CssLayout", "Canvas2D", "Svg", "Images",
           "PointerInput", "KeyboardInput", "TextInput", "Focus", "Clipboard",
-          "Accessibility", "DragDrop", "InputMethodEditor", "OpenGl", "WebGpu"
+          "Accessibility", "DragDrop", "InputMethodEditor",
+          "WebGl1", "WebGl2", "WebGpu", "OpenGl"
         ]
       }
     },

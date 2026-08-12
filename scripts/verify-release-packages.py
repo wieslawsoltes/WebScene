@@ -33,6 +33,8 @@ NATIVE_V8_REVISIONS = {
     "linux-x64": "15.3.10",
     "win-x64": "15.3.10",
 }
+GPU_RUNTIME_RIDS = {"osx-arm64"}
+GPU_DAWN_REVISION = "710c33013c53ab2700d332c25ff51430251a8cc4"
 PARTITION_ALLOC_NATIVE_RIDS = {"osx-arm64", "linux-x64", "win-x64"}
 REPOSITORY_URL = "https://github.com/wieslawsoltes/WebScene"
 REQUIRED_PACKAGE_TAGS = {"webscene", "web-ui", "native-ui"}
@@ -184,6 +186,7 @@ def validate_native_runtime(
         "v8Inspector": True,
         "denseLink": True,
         "thinLto": False,
+        "webGpu": runtime_identifier in GPU_RUNTIME_RIDS,
         "certificationTelemetry": False,
     }
     for name, value in expected.items():
@@ -191,6 +194,52 @@ def validate_native_runtime(
             raise RuntimeError(
                 f"{package}: native manifest {name} is "
                 f"{manifest.get(name)!r}, expected {value!r}"
+            )
+
+
+def validate_gpu_runtime(
+    package: pathlib.Path,
+    runtime_identifier: str,
+    version: str,
+) -> None:
+    manifest_name = (
+        f"runtimes/{runtime_identifier}/native/webscene-native-gpu-runtime.json"
+    )
+    with zipfile.ZipFile(package) as archive:
+        for license_name in (
+            "licenses/Dawn-LICENSE.txt",
+            "licenses/Abseil-LICENSE.txt",
+            "licenses/WebGPU-Headers-LICENSE.txt",
+        ):
+            if license_name not in archive.namelist():
+                raise RuntimeError(f"{package}: missing {license_name}")
+        if manifest_name not in archive.namelist():
+            raise RuntimeError(f"{package}: missing {manifest_name}")
+        manifest = json.loads(archive.read(manifest_name))
+        expected = {
+            "schemaVersion": 1,
+            "packageVersion": version,
+            "runtimeIdentifier": runtime_identifier,
+            "configuration": "Release",
+            "fileName": "libwebscene_native_gpu.dylib",
+            "abiVersion": 2,
+            "dawnRevision": GPU_DAWN_REVISION,
+            "providerCapabilities": ["WebGpu"],
+            "zeroCopyRequired": True,
+        }
+        for name, value in expected.items():
+            if manifest.get(name) != value:
+                raise RuntimeError(
+                    f"{package}: GPU manifest {name} is "
+                    f"{manifest.get(name)!r}, expected {value!r}"
+                )
+        asset_name = f"runtimes/{runtime_identifier}/native/{manifest['fileName']}"
+        if asset_name not in archive.namelist():
+            raise RuntimeError(f"{package}: missing {asset_name}")
+        actual_hash = hashlib.sha256(archive.read(asset_name)).hexdigest()
+        if actual_hash.lower() != manifest.get("sha256", "").lower():
+            raise RuntimeError(
+                f"{package}: {asset_name} hash does not match its manifest"
             )
 
 
@@ -207,6 +256,10 @@ def main() -> int:
     expected_ids = set(PACKAGE_IDS)
     if not args.packages_only:
         expected_ids.update(f"WebScene.NativeEngine.Runtime.{rid}" for rid in native_rids)
+        expected_ids.update(
+            f"WebScene.NativeGpu.Runtime.{rid}"
+            for rid in native_rids & GPU_RUNTIME_RIDS
+        )
 
     packages: dict[str, pathlib.Path] = {}
     dependencies: dict[str, list[tuple[str, str]]] = {}
@@ -238,6 +291,12 @@ def main() -> int:
             package_id = f"WebScene.NativeEngine.Runtime.{runtime_identifier}"
             validate_native_runtime(
                 packages[package_id],
+                runtime_identifier,
+                args.version,
+            )
+        for runtime_identifier in sorted(native_rids & GPU_RUNTIME_RIDS):
+            validate_gpu_runtime(
+                packages[f"WebScene.NativeGpu.Runtime.{runtime_identifier}"],
                 runtime_identifier,
                 args.version,
             )

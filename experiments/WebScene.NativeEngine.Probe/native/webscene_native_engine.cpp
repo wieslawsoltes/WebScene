@@ -1,5 +1,6 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
+#include "webscene_gpu_provider_loader.h"
 #include "webscene_v8_runtime.h"
 
 #include <algorithm>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -46,7 +48,8 @@ static_assert(sizeof(webscene_canvas_layer) == 64);
 static_assert(sizeof(webscene_canvas_command) == 80);
 static_assert(sizeof(webscene_scene_string) == 8);
 static_assert(sizeof(webscene_damage_rect) == 16);
-static_assert(sizeof(webscene_scene_view) == 136);
+static_assert(sizeof(webscene_external_texture) == 80);
+static_assert(sizeof(webscene_scene_view) == 152);
 static_assert(sizeof(webscene_interop_value_v3) == 24);
 static_assert(sizeof(webscene_interop_edge_v3) == 16);
 static_assert(sizeof(webscene_interop_evaluate_request_v3) == 48);
@@ -133,6 +136,8 @@ struct scene final {
     std::vector<webscene_scene_string> canvas_strings;
     std::vector<char> canvas_string_bytes;
     std::vector<webscene_damage_rect> damage_rects;
+    std::vector<webscene_external_texture> external_textures;
+    std::vector<std::shared_ptr<void>> external_texture_owners;
     std::unordered_map<uint32_t, canvas_layer_version> full_layer_versions;
     uint64_t dom_hash{0};
     uint64_t published_timestamp_nanoseconds{0};
@@ -147,6 +152,7 @@ uint64_t retained_scene_bytes(const scene& value)
         + value.canvas_strings.capacity() * sizeof(webscene_scene_string)
         + value.canvas_string_bytes.capacity() * sizeof(char)
         + value.damage_rects.capacity() * sizeof(webscene_damage_rect)
+        + value.external_textures.capacity() * sizeof(webscene_external_texture)
         + value.full_layer_versions.size()
             * (sizeof(uint32_t) + sizeof(canvas_layer_version) + sizeof(void*) * 2U);
 }
@@ -247,6 +253,46 @@ struct inspector_pump_work final {
 #include "webscene_native_engine_scene_utils.inc"
 } // namespace
 
+namespace {
+
+constexpr uint64_t gpu_capability_mask =
+    WEBSCENE_GPU_CAPABILITY_WEBGL1
+    | WEBSCENE_GPU_CAPABILITY_WEBGPU
+    | WEBSCENE_GPU_CAPABILITY_WEBGL2;
+
+// Provider discovery alone is not a browser API. Binding slices enable these
+// bits only after their V8 object model and external-texture presentation path
+// are compiled into the engine.
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+constexpr uint64_t compiled_gpu_capability_mask = WEBSCENE_GPU_CAPABILITY_WEBGPU;
+#else
+constexpr uint64_t compiled_gpu_capability_mask = 0U;
+#endif
+
+std::shared_ptr<webscene_native::gpu_provider_library> load_gpu_provider(
+    const std::string& path,
+    uint64_t required_capabilities)
+{
+    const auto required_gpu_capabilities =
+        required_capabilities & gpu_capability_mask;
+    if ((required_gpu_capabilities & ~compiled_gpu_capability_mask) != 0U) {
+        throw std::runtime_error(
+            "GPU capabilities were required but their browser bindings are not compiled");
+    }
+    if (path.empty()) {
+        if (required_gpu_capabilities != 0U) {
+            throw std::runtime_error(
+                "GPU capabilities were required but no GPU provider was configured");
+        }
+        return {};
+    }
+    auto loaded = webscene_native::gpu_provider_library::load(
+        path, required_gpu_capabilities);
+    return std::shared_ptr<webscene_native::gpu_provider_library>(loaded.release());
+}
+
+} // namespace
+
 struct webscene_engine final {
 #include "webscene_native_engine_lifecycle.inc"
 #include "webscene_native_engine_interop_api.inc"
@@ -300,6 +346,7 @@ private:
     std::atomic<engine_inspector_state*> inspector_state_{nullptr};
 #endif
 #endif
+    std::shared_ptr<webscene_native::gpu_provider_library> gpu_provider_;
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
     std::shared_ptr<interop_result_pool_v3> interop_result_pool_{
@@ -576,7 +623,7 @@ struct webscene_scene_lease final {
     {
         view = webscene_scene_view{
             static_cast<uint32_t>(sizeof(webscene_scene_view)),
-            2U,
+            3U,
             value->header,
             value->commands.data(),
             value->canvas_layers.data(),
@@ -588,6 +635,9 @@ struct webscene_scene_lease final {
             static_cast<uint32_t>(value->canvas_commands.size()),
             static_cast<uint32_t>(value->canvas_strings.size()),
             static_cast<uint32_t>(value->canvas_string_bytes.size()),
+            0U,
+            value->external_textures.data(),
+            static_cast<uint32_t>(value->external_textures.size()),
             0U};
     }
 
@@ -648,14 +698,22 @@ uint32_t webscene_engine_get_abi_version(void)
     return 3U;
 }
 
+uint64_t webscene_engine_get_capabilities(const webscene_engine* engine)
+{
+    return engine != nullptr ? engine->capabilities() : 0U;
+}
+
 uint32_t webscene_engine_get_build_features(void)
 {
-    uint32_t features = 0U;
+    uint32_t features = WEBSCENE_ENGINE_BUILD_FEATURE_GPU_PROVIDER_ABI;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     features |= WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION;
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     features |= WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+    features |= WEBSCENE_ENGINE_BUILD_FEATURE_WEBGPU_BINDINGS;
 #endif
     return features;
 }
@@ -719,8 +777,22 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 animation_frame_requested_callback);
         const auto has_interop_callback_available_callback =
             options->struct_size >= interop_callback_available_options_size;
+        constexpr auto animation_frame_requested_options_size =
+            offsetof(webscene_engine_options, gpu_provider_path);
         const auto has_animation_frame_requested_callback =
-            options->struct_size >= sizeof(webscene_engine_options);
+            options->struct_size >= animation_frame_requested_options_size;
+        constexpr auto gpu_provider_options_size =
+            offsetof(webscene_engine_options, reserved_v3);
+        const auto has_gpu_provider_options =
+            options->struct_size >= gpu_provider_options_size;
+        std::string gpu_provider_path;
+        if (has_gpu_provider_options
+            && options->gpu_provider_path != nullptr
+            && options->gpu_provider_path_length != 0U) {
+            gpu_provider_path.assign(
+                options->gpu_provider_path,
+                options->gpu_provider_path_length);
+        }
         return new webscene_engine(
             options->simulated_chart_command_count,
             std::move(cache_directory),
@@ -747,7 +819,9 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_animation_frame_requested_callback
                 ? options->animation_frame_requested_user_data
-                : nullptr);
+                : nullptr,
+            std::move(gpu_provider_path),
+            has_gpu_provider_options ? options->required_capabilities : 0U);
     } catch (...) {
         return nullptr;
     }

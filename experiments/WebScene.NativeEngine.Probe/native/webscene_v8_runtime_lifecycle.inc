@@ -6,8 +6,10 @@
         std::function<void()> host_request_available_value,
         std::function<void()> interop_callback_available_value,
         v8_dom_runtime::interop_callback_sink_v3
-            interop_callback_sink_value)
+            interop_callback_sink_value,
+        std::shared_ptr<gpu_provider_library> gpu_provider_value)
         : document(document_value)
+        , gpu_provider(std::move(gpu_provider_value))
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
@@ -89,6 +91,10 @@
         provisional_frame_bodies.clear();
         canvas_contexts.clear();
         canvas_states.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+        release_webgpu_runtime();
+#endif
+        canvas_context_modes.clear();
         for (auto& [key, entry] : compilation_cache) {
             static_cast<void>(key);
             entry.script.Reset();

@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <WebSceneNativeGpuPackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</WebSceneNativeGpuPackageRoot>
+    <WebSceneNativeGpuPackageAsset>$(WebSceneNativeGpuPackageRoot)runtimes\$(WebSceneNativeGpuPackagedRid)\native\libwebscene_native_gpu.dylib</WebSceneNativeGpuPackageAsset>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WebSceneNativeGpuPackagedRid)' != ''">
+    <Content Include="$(WebSceneNativeGpuPackageAsset)"
+             Link="libwebscene_native_gpu.dylib"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

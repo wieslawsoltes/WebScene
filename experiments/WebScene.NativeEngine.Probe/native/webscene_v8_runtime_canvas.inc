@@ -1935,6 +1935,22 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+        if (requested == "webgpu") {
+            const auto key = self->wrapper_key(*node);
+            const auto mode = self->canvas_context_modes.find(key);
+            if (mode != self->canvas_context_modes.end() && mode->second != "webgpu") {
+                info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+                return;
+            }
+            self->canvas_context_modes[key] = "webgpu";
+            self->record_feature(
+                "canvas", "HTMLCanvasElement.getContext:webgpu", "supported", {},
+                "native-binding");
+            self->create_webgpu_canvas_context(info, *node);
+            return;
+        }
+#endif
         if (requested != "2d") {
             self->record_feature(
                 "canvas",
@@ -1945,6 +1961,14 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
+        const auto existing_mode = self->canvas_context_modes.find(
+            self->wrapper_key(*node));
+        if (existing_mode != self->canvas_context_modes.end()
+            && existing_mode->second != "2d") {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        self->canvas_context_modes[self->wrapper_key(*node)] = "2d";
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.getContext:2d",

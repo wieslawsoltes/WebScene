@@ -18,9 +18,13 @@ thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
+webgpu=false
+dawn_include_dir=
+gpu_provider_test_library=
+three_webgpu_test_script=
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc] [--webgpu --dawn-include-dir DIR --gpu-provider-test-library FILE --three-webgpu-test-script FILE]" >&2
 }
 
 while (($# > 0)); do
@@ -41,6 +45,10 @@ while (($# > 0)); do
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
     --partition-alloc) partition_alloc=true; shift ;;
+    --webgpu) webgpu=true; shift ;;
+    --dawn-include-dir) dawn_include_dir="${2:-}"; shift 2 ;;
+    --gpu-provider-test-library) gpu_provider_test_library="${2:-}"; shift 2 ;;
+    --three-webgpu-test-script) three_webgpu_test_script="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -117,6 +125,31 @@ fi
 if [[ "$(uname -s)" != "$expected_kernel" || "$(uname -m)" != "$expected_machine" ]]; then
   echo "RID '$rid' must be built natively on $expected_kernel/$expected_machine; current host is $(uname -s)/$(uname -m)." >&2
   exit 1
+fi
+if [[ "$webgpu" == true ]]; then
+  if [[ "$rid" != osx-arm64 ]]; then
+    echo "The WebGPU vertical slice currently supports only osx-arm64." >&2
+    exit 1
+  fi
+  dawn_include_dir="${dawn_include_dir:-$repo_root/artifacts/native-gpu-dawn/osx-arm64/install/include}"
+  gpu_provider_test_library="${gpu_provider_test_library:-$repo_root/artifacts/native-gpu-provider-build/osx-arm64/libwebscene_native_gpu.dylib}"
+  if [[ ! -f "$dawn_include_dir/webgpu/webgpu.h" ]]; then
+    echo "Pinned Dawn headers were not found below '$dawn_include_dir'. Build the GPU runtime first." >&2
+    exit 1
+  fi
+  if [[ ! -f "$gpu_provider_test_library" ]]; then
+    echo "The WebGPU provider test library was not found at '$gpu_provider_test_library'. Build the GPU runtime first." >&2
+    exit 1
+  fi
+  if [[ -z "$three_webgpu_test_script" ]]; then
+    npm ci --prefix "$repo_root/tests/EcosystemCompatibility" --ignore-scripts
+    npm run build --prefix "$repo_root/tests/EcosystemCompatibility"
+    three_webgpu_test_script="$repo_root/tests/EcosystemCompatibility/contracts/three-webgpu.js"
+  fi
+  if [[ ! -f "$three_webgpu_test_script" ]]; then
+    echo "The pinned Three.js WebGPU test bundle was not found at '$three_webgpu_test_script'." >&2
+    exit 1
+  fi
 fi
 
 if [[ -z "$v8_root" ]]; then
@@ -305,6 +338,15 @@ cmake_args=(
   -DWEBSCENE_V8_ROOT="$v8_root"
   -DWEBSCENE_V8_OUTPUT_ROOT="$v8_output_root"
 )
+if [[ "$webgpu" == true ]]; then
+  cmake_args+=(
+    -DWEBSCENE_NATIVE_ENGINE_ENABLE_WEBGPU=ON
+    -DWEBSCENE_DAWN_INCLUDE_DIR="$dawn_include_dir"
+    -DWEBSCENE_GPU_PROVIDER_TEST_LIBRARY="$gpu_provider_test_library"
+    -DWEBSCENE_THREE_WEBGPU_TEST_SCRIPT="$three_webgpu_test_script"
+    -DWEBSCENE_WEBGPU_CTS_TEST_SCRIPT="$repo_root/tests/WebGpuCts/curated-operation-rendering-basic.js"
+  )
+fi
 if [[ "$thin_lto" == true ]]; then
   v8_llvm_bin="$v8_root/third_party/llvm-build/Release+Asserts/bin"
   for llvm_tool in clang clang++ llvm-ar lld; do
@@ -402,6 +444,7 @@ pack_args=(
   "-p:WebSceneNativeEngineV8Inspector=true"
   "-p:WebSceneNativeEngineDenseLink=true"
   "-p:WebSceneNativeEngineThinLto=$thin_lto"
+  "-p:WebSceneNativeEngineWebGpu=$webgpu"
   "-p:WebSceneNativeEngineV8Revision=$v8_revision"
   "-p:WebSceneNativeEngineHtmlParser=$html_parser"
   "-p:WebSceneNativeEngineCssParser=$css_parser"

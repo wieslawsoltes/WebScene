@@ -315,6 +315,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private SceneHeader _pendingRenderHeader;
     private long _pendingDiffApplyTicks;
     private long _pendingDiffCanvasCommandCount;
+    private IntPtr _externalTextureScene;
     private long _appliedDiffs;
     private long _changedLayers;
     private long _damageRectangles;
@@ -450,6 +451,12 @@ internal sealed unsafe class NativeSceneCompositionHandler
         _animationFrameScheduled = false;
         _uiWakeGate.Complete();
         _renderer.Reset();
+        var externalTextureScene = _externalTextureScene;
+        _externalTextureScene = IntPtr.Zero;
+        if (externalTextureScene != IntPtr.Zero)
+        {
+            NativeWebSceneApi.SceneRelease(externalTextureScene);
+        }
         _appliedRevision = 0;
         _viewportWidth = 0;
         _viewportHeight = 0;
@@ -550,6 +557,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             return false;
         }
         var accepted = false;
+        var releaseScene = true;
         try
         {
             var view = (NativeSceneView*)scene;
@@ -579,6 +587,20 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 _viewportHeight = header.ViewportHeight;
                 damage = EvaluateDamage(view, viewportChanged);
                 NativeWebSceneApi.SceneAcknowledge(scene);
+                var previousExternalTextureScene = _externalTextureScene;
+                if (view->ExternalTextureCount != 0)
+                {
+                    _externalTextureScene = scene;
+                    releaseScene = false;
+                }
+                else
+                {
+                    _externalTextureScene = IntPtr.Zero;
+                }
+                if (previousExternalTextureScene != IntPtr.Zero)
+                {
+                    NativeWebSceneApi.SceneRelease(previousExternalTextureScene);
+                }
                 _appliedRevision = header.Revision;
                 _appliedDiffs++;
                 Interlocked.Increment(ref AppliedDiffCount);
@@ -595,7 +617,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
         finally
         {
-            NativeWebSceneApi.SceneRelease(scene);
+            if (releaseScene)
+            {
+                NativeWebSceneApi.SceneRelease(scene);
+            }
         }
         return accepted;
     }
@@ -625,6 +650,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
             damageBufferValid,
             viewportChanged,
             new Size(effective.X, effective.Y));
+        if (view->ExternalTextureCount != 0 && !damage.RequiresRender)
+        {
+            damage = new NativeSceneDamage(
+                RequiresRender: effective.X > 0 && effective.Y > 0,
+                IsFull: true,
+                new Rect(0, 0, effective.X, effective.Y),
+                RectangleCount: 1,
+                SummedArea: Math.Max(0, effective.X) * Math.Max(0, effective.Y));
+        }
 
         _damageRectangles += damage.RectangleCount;
         _damageEvaluations++;
@@ -730,6 +764,19 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 _viewportWidth,
                 _viewportHeight,
                 null);
+            var externalTextureScene = _externalTextureScene;
+            if (externalTextureScene != IntPtr.Zero)
+            {
+                var externalView = (NativeSceneView*)externalTextureScene;
+                if (NativeSceneViewContract.HasValidExternalTextures(externalView))
+                {
+                    NativeExternalTextureRenderer.Draw(
+                        canvas,
+                        lease.GrContext,
+                        externalView->ExternalTextures,
+                        externalView->ExternalTextureCount);
+                }
+            }
             retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
         }
         finally
@@ -827,14 +874,13 @@ internal sealed unsafe class NativeSceneCompositionHandler
             || _publicationMailbox.PendingCount > 0;
 
     private static bool ValidateView(NativeSceneView* view)
-        => view != null
-            && view->StructSize == sizeof(NativeSceneView)
-            && view->AbiVersion == 2
+        => NativeSceneViewContract.HasSupportedHeader(view)
             && (view->Header.CommandCount == 0 || view->Commands != null)
             && (view->Header.CanvasLayerCount == 0
                 || (view->CanvasLayers != null && view->CanvasCommands != null))
             && (view->StringCount == 0
-                || (view->Strings != null && view->StringBytes != null));
+                || (view->Strings != null && view->StringBytes != null))
+            && NativeSceneViewContract.HasValidExternalTextures(view);
 
 }
 
@@ -885,6 +931,7 @@ internal sealed unsafe class NativeFrozenSceneState
     private float _viewportWidth;
     private float _viewportHeight;
     private int _referenceCount = 1;
+    private bool _sceneApplied;
 
     internal NativeFrozenSceneState(IntPtr checkpointScene)
     {
@@ -934,21 +981,20 @@ internal sealed unsafe class NativeFrozenSceneState
         }
     }
 
-    internal void Render(SKCanvas canvas, Rect bounds)
+    internal void Render(SKCanvas canvas, GRContext? context, Rect bounds)
     {
         lock (_gate)
         {
             var scene = Volatile.Read(ref _checkpointScene);
-            if (scene != IntPtr.Zero)
+            if (scene != IntPtr.Zero && !_sceneApplied)
             {
                 var view = (NativeSceneView*)scene;
                 if (ValidateView(view) && _renderer.ApplyDiff(view))
                 {
                     _viewportWidth = view->Header.ViewportWidth;
                     _viewportHeight = view->Header.ViewportHeight;
+                    _sceneApplied = true;
                 }
-                NativeWebSceneApi.SceneRelease(scene);
-                _checkpointScene = IntPtr.Zero;
             }
             if (_viewportWidth <= 0 || _viewportHeight <= 0)
             {
@@ -975,6 +1021,15 @@ internal sealed unsafe class NativeFrozenSceneState
                     _viewportWidth,
                     _viewportHeight,
                     null);
+                if (scene != IntPtr.Zero)
+                {
+                    var view = (NativeSceneView*)scene;
+                    NativeExternalTextureRenderer.Draw(
+                        canvas,
+                        context,
+                        view->ExternalTextures,
+                        view->ExternalTextureCount);
+                }
             }
             finally
             {
@@ -996,14 +1051,13 @@ internal sealed unsafe class NativeFrozenSceneState
     }
 
     private static bool ValidateView(NativeSceneView* view)
-        => view != null
-            && view->StructSize == sizeof(NativeSceneView)
-            && view->AbiVersion == 2
+        => NativeSceneViewContract.HasSupportedHeader(view)
             && (view->Header.CommandCount == 0 || view->Commands != null)
             && (view->Header.CanvasLayerCount == 0
                 || (view->CanvasLayers != null && view->CanvasCommands != null))
             && (view->StringCount == 0
-                || (view->Strings != null && view->StringBytes != null));
+                || (view->Strings != null && view->StringBytes != null))
+            && NativeSceneViewContract.HasValidExternalTextures(view);
 }
 
 internal sealed class NativeFrozenSceneDrawOperation :
@@ -1036,7 +1090,7 @@ internal sealed class NativeFrozenSceneDrawOperation :
             return;
         }
         using var lease = feature.Lease();
-        state.Render(lease.SkCanvas, Bounds);
+        state.Render(lease.SkCanvas, lease.GrContext, Bounds);
     }
 
     public void Dispose()
@@ -1098,9 +1152,7 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
         {
             var scene = _scene;
             var view = (NativeSceneView*)scene;
-            if (view == null
-                || view->StructSize != sizeof(NativeSceneView)
-                || view->AbiVersion != 2)
+            if (!NativeSceneViewContract.HasSupportedHeader(view))
             {
                 return;
             }
@@ -1112,7 +1164,8 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
                         || view->CanvasCommands == null))
                 || (view->StringCount != 0
                     && (view->Strings == null
-                        || view->StringBytes == null)))
+                        || view->StringBytes == null))
+                || !NativeSceneViewContract.HasValidExternalTextures(view))
             {
                 return;
             }
@@ -1159,6 +1212,11 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
                     header.ViewportWidth,
                     header.ViewportHeight,
                     null);
+                NativeExternalTextureRenderer.Draw(
+                    canvas,
+                    lease.GrContext,
+                    view->ExternalTextures,
+                    view->ExternalTextureCount);
                 RecordRendered(header);
                 _renderObserver.RecordRendered(header);
             }

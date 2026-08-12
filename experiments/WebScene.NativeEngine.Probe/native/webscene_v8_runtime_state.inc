@@ -1,4 +1,5 @@
     native_document& document;
+    std::shared_ptr<gpu_provider_library> gpu_provider;
     std::function<v8_dom_runtime::viewport_metrics()> viewport_provider;
     resource_loader load_resource_callback;
     static constexpr size_t maximum_resource_prefetches = 16U;
@@ -65,6 +66,13 @@
     std::vector<std::pair<std::string, std::string>> document_cookies;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> canvas_contexts;
     std::unordered_map<uint64_t, std::unique_ptr<canvas_state>> canvas_states;
+    std::unordered_map<uint64_t, std::string> canvas_context_modes;
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+    std::unordered_map<uint64_t, v8::Global<v8::Object>> webgpu_canvas_contexts;
+    std::unordered_map<uint64_t, std::unique_ptr<webgpu_canvas_state>>
+        webgpu_canvas_states;
+    std::vector<std::unique_ptr<webgpu_handle_state>> webgpu_handles;
+#endif
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_documents;
     std::unordered_map<uint32_t, dom_node*> provisional_frame_bodies;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_windows;

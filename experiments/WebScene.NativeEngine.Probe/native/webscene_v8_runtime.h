@@ -13,6 +13,7 @@
 namespace webscene_native {
 
 class native_document;
+class gpu_provider_library;
 
 struct document_start_script final {
     std::string source;
@@ -202,13 +203,17 @@ public:
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
-        interop_callback_sink_v3 interop_callback_sink = {});
+        interop_callback_sink_v3 interop_callback_sink = {},
+        std::shared_ptr<gpu_provider_library> gpu_provider = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
     v8_dom_runtime& operator=(const v8_dom_runtime&) = delete;
 
     bool initialize();
+    void append_external_textures(
+        std::vector<webscene_external_texture>& textures,
+        std::vector<std::shared_ptr<void>>& owners);
     bool execute(const std::string& source, const std::string& document_name);
     bool load_url(
         const std::string& url,

@@ -1317,6 +1317,9 @@
     static void reset_canvas_backing_store(implementation& self, dom_node& node)
     {
         if (node.tag != "canvas") return;
+#if defined(WEBSCENE_NATIVE_ENGINE_WEBGPU)
+        self.resize_webgpu_canvas(node);
+#endif
         auto& canvas = node.mutable_canvas();
         canvas.rects.clear();
         canvas.lines.clear();

@@ -49,6 +49,11 @@ try
             return Fail($"The native runtime manifest must declare {name}={expected}.");
         }
     }
+    if (!manifest.RootElement.TryGetProperty("webGpu", out var webGpuProperty)
+        || webGpuProperty.GetBoolean() != OperatingSystem.IsMacOS())
+    {
+        return Fail("The native runtime manifest has an incorrect WebGPU build declaration.");
+    }
     foreach (var snapshotFile in new[]
              {
                  "webscene_bootstrap_snapshot.bin",
@@ -114,11 +119,54 @@ try
         buildFeaturesExport);
     var buildFeatures = getBuildFeatures();
     const uint inspectorBuildFeature = 1U << 1;
-    if (buildFeatures != inspectorBuildFeature)
+    const uint gpuProviderAbiBuildFeature = 1U << 2;
+    const uint webGpuBindingsBuildFeature = 1U << 3;
+    var expectedBuildFeatures = OperatingSystem.IsMacOS()
+        ? inspectorBuildFeature | gpuProviderAbiBuildFeature | webGpuBindingsBuildFeature
+        : inspectorBuildFeature;
+    if (buildFeatures != expectedBuildFeatures)
     {
         return Fail(
             $"The packaged native runtime has build features 0x{buildFeatures:X}; " +
-            $"expected Inspector-only feature 0x{inspectorBuildFeature:X}.");
+            $"expected 0x{expectedBuildFeatures:X}.");
+    }
+    if (OperatingSystem.IsMacOS())
+    {
+        var gpuPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "libwebscene_native_gpu.dylib");
+        var gpuManifestPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "webscene-native-gpu-runtime.json");
+        if (!File.Exists(gpuPath) || !File.Exists(gpuManifestPath))
+        {
+            return Fail("The macOS package consumer is missing the WebGPU sidecar assets.");
+        }
+        using var gpuManifest = JsonDocument.Parse(File.ReadAllText(gpuManifestPath));
+        if (!gpuManifest.RootElement.TryGetProperty("abiVersion", out var gpuAbiProperty)
+            || gpuAbiProperty.GetUInt32() != 2
+            || !gpuManifest.RootElement.TryGetProperty("dawnRevision", out var dawnProperty)
+            || dawnProperty.GetString() != "710c33013c53ab2700d332c25ff51430251a8cc4")
+        {
+            return Fail("The WebGPU sidecar manifest does not identify ABI 2 and the pinned Dawn revision.");
+        }
+        var gpuLibrary = NativeLibrary.Load(gpuPath);
+        try
+        {
+            var gpuAbiExport = NativeLibrary.GetExport(
+                gpuLibrary,
+                "webscene_gpu_provider_get_abi_version");
+            var getGpuAbi = Marshal.GetDelegateForFunctionPointer<GetAbiVersion>(
+                gpuAbiExport);
+            if (getGpuAbi() != 2)
+            {
+                return Fail("The WebGPU sidecar did not export provider ABI 2.");
+            }
+        }
+        finally
+        {
+            NativeLibrary.Free(gpuLibrary);
+        }
     }
     Console.WriteLine(
         $"WebScene package smoke: pass; presenter={typeof(NativeWebSceneView).Assembly.GetName().Name}; " +

@@ -430,6 +430,24 @@ typedef struct webscene_damage_rect {
     float height;
 } webscene_damage_rect;
 
+typedef struct webscene_external_texture {
+    uint32_t node_id;
+    uint32_t flags;
+    float x;
+    float y;
+    float width;
+    float height;
+    uint32_t pixel_width;
+    uint32_t pixel_height;
+    uint32_t pixel_format;
+    uint32_t handle_kind;
+    uint64_t generation;
+    uintptr_t shared_handle;
+    uintptr_t texture_handle;
+    uintptr_t synchronization_handle;
+    uint64_t ready_value;
+} webscene_external_texture;
+
 /*
  * The acquired pointer is the immutable scene. Every pointer below remains
  * valid until webscene_scene_release is called. A renderer can construct spans
@@ -450,6 +468,9 @@ struct webscene_scene_view {
     uint32_t string_count;
     uint32_t string_byte_count;
     uint32_t reserved;
+    const webscene_external_texture* external_textures;
+    uint32_t external_texture_count;
+    uint32_t reserved_v3;
 };
 
 typedef enum webscene_resource_kind {
@@ -559,6 +580,10 @@ typedef struct webscene_engine_options {
     void* interop_callback_available_user_data;
     webscene_animation_frame_requested_callback animation_frame_requested_callback;
     void* animation_frame_requested_user_data;
+    const char* gpu_provider_path;
+    size_t gpu_provider_path_length;
+    uint64_t required_capabilities;
+    uint64_t reserved_v3;
 } webscene_engine_options;
 
 enum {
@@ -844,8 +869,13 @@ typedef struct webscene_engine_memory_metrics {
  */
 #define WEBSCENE_ENGINE_BUILD_FEATURE_CERTIFICATION (1U << 0U)
 #define WEBSCENE_ENGINE_BUILD_FEATURE_V8_INSPECTOR (1U << 1U)
+#define WEBSCENE_ENGINE_BUILD_FEATURE_GPU_PROVIDER_ABI (1U << 2U)
+#define WEBSCENE_ENGINE_BUILD_FEATURE_WEBGPU_BINDINGS (1U << 3U)
+#define WEBSCENE_ENGINE_BUILD_FEATURE_WEBGL_BINDINGS (1U << 4U)
 
 WEBSCENE_API uint32_t webscene_engine_get_abi_version(void);
+WEBSCENE_API uint64_t webscene_engine_get_capabilities(
+    const webscene_engine* engine);
 /*
  * Reports compile-time features of the loaded native binary. Certification
  * telemetry/profiling and V8 Inspector hooks/state are absent unless their

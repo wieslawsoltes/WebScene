@@ -1,0 +1,95 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackageId Condition="'$(WebSceneNativeGpuRid)' != ''">WebScene.NativeGpu.Runtime.$(WebSceneNativeGpuRid)</PackageId>
+    <PackageId Condition="'$(PackageId)' == ''">WebScene.NativeGpu.Runtime.Template</PackageId>
+    <Title>WebScene Native GPU Runtime for $(WebSceneNativeGpuRid)</Title>
+    <Description>Optional Dawn/Tint GPU provider and zero-copy platform texture bridge for WebScene.</Description>
+    <PackageTags>webscene;webgpu;dawn;tint;metal;native;runtime</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/wieslawsoltes/WebScene</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <WebSceneNativeGpuAbiVersion>2</WebSceneNativeGpuAbiVersion>
+    <WebSceneNativeGpuDawnRevision Condition="'$(WebSceneNativeGpuDawnRevision)' == ''">710c33013c53ab2700d332c25ff51430251a8cc4</WebSceneNativeGpuDawnRevision>
+    <WebSceneNativeGpuSupportedRids>osx-arm64</WebSceneNativeGpuSupportedRids>
+    <WebSceneNativeGpuExpectedFileName>libwebscene_native_gpu.dylib</WebSceneNativeGpuExpectedFileName>
+    <WebSceneNativeGpuActualFileName Condition="'$(WebSceneNativeGpuPath)' != ''">$([System.IO.Path]::GetFileName('$(WebSceneNativeGpuPath)'))</WebSceneNativeGpuActualFileName>
+    <WebSceneNativeGpuManifest>$(MSBuildProjectDirectory)\obj\$(Configuration)\webscene-native-gpu-runtime.json</WebSceneNativeGpuManifest>
+    <WebSceneNativeGpuProps>$(MSBuildProjectDirectory)\obj\$(Configuration)\WebScene.NativeGpu.Runtime.props</WebSceneNativeGpuProps>
+    <WebSceneNativeGpuLicensePackageDir>$(MSBuildProjectDirectory)\obj\$(Configuration)\licenses</WebSceneNativeGpuLicensePackageDir>
+    <WebSceneNativeGpuDawnLicensePackagePath>$(WebSceneNativeGpuLicensePackageDir)\Dawn-LICENSE.txt</WebSceneNativeGpuDawnLicensePackagePath>
+    <WebSceneNativeGpuAbseilLicensePackagePath>$(WebSceneNativeGpuLicensePackageDir)\Abseil-LICENSE.txt</WebSceneNativeGpuAbseilLicensePackagePath>
+    <WebSceneNativeGpuWebGpuHeadersLicensePackagePath>$(WebSceneNativeGpuLicensePackageDir)\WebGPU-Headers-LICENSE.txt</WebSceneNativeGpuWebGpuHeadersLicensePackagePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="WebScene.NativeGpu.Runtime.targets"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).targets" />
+    <None Include="$(WebSceneNativeGpuProps)"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).props" />
+    <None Include="$(WebSceneNativeGpuPath)"
+          Pack="true"
+          PackagePath="runtimes\$(WebSceneNativeGpuRid)\native\$(WebSceneNativeGpuExpectedFileName)"
+          Condition="'$(WebSceneNativeGpuPath)' != ''" />
+    <None Include="$(WebSceneNativeGpuManifest)"
+          Pack="true"
+          PackagePath="runtimes\$(WebSceneNativeGpuRid)\native\webscene-native-gpu-runtime.json" />
+    <None Include="$(WebSceneNativeGpuDawnLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses" />
+    <None Include="$(WebSceneNativeGpuAbseilLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses" />
+    <None Include="$(WebSceneNativeGpuWebGpuHeadersLicensePackagePath)"
+          Pack="true"
+          PackagePath="licenses" />
+  </ItemGroup>
+
+  <Target Name="ValidateWebSceneNativeGpuPackage" BeforeTargets="GenerateNuspec">
+    <Error Condition="'$(WebSceneNativeGpuRid)' == '' or '$(WebSceneNativeGpuPath)' == ''"
+           Text="Packing the GPU sidecar requires WebSceneNativeGpuRid and WebSceneNativeGpuPath." />
+    <Error Condition="!$([System.String]::Copy(';$(WebSceneNativeGpuSupportedRids);').Contains(';$(WebSceneNativeGpuRid);'))"
+           Text="WebScene GPU sidecar currently supports only osx-arm64." />
+    <Error Condition="!Exists('$(WebSceneNativeGpuPath)')"
+           Text="The configured WebScene GPU provider does not exist: $(WebSceneNativeGpuPath)" />
+    <Error Condition="'$(WebSceneNativeGpuActualFileName)' != '$(WebSceneNativeGpuExpectedFileName)'"
+           Text="The GPU provider must be named $(WebSceneNativeGpuExpectedFileName)." />
+    <Error Condition="'$(WebSceneNativeGpuDawnRevision)' == '' or $([System.String]::Copy('$(WebSceneNativeGpuDawnRevision)').Length) != 40"
+           Text="WebSceneNativeGpuDawnRevision must be an exact 40-character Dawn commit hash." />
+    <Error Condition="!Exists('$(WebSceneNativeGpuDawnLicensePath)') or !Exists('$(WebSceneNativeGpuAbseilLicensePath)') or !Exists('$(WebSceneNativeGpuWebGpuHeadersLicensePath)')"
+           Text="Packing the statically linked GPU sidecar requires Dawn, Abseil, and WebGPU-Headers license files." />
+  </Target>
+
+  <Target Name="PrepareWebSceneNativeGpuPackage"
+          BeforeTargets="GenerateNuspec"
+          DependsOnTargets="ValidateWebSceneNativeGpuPackage">
+    <MakeDir Directories="$(WebSceneNativeGpuLicensePackageDir)" />
+    <Copy SourceFiles="$(WebSceneNativeGpuDawnLicensePath)"
+          DestinationFiles="$(WebSceneNativeGpuDawnLicensePackagePath)" />
+    <Copy SourceFiles="$(WebSceneNativeGpuAbseilLicensePath)"
+          DestinationFiles="$(WebSceneNativeGpuAbseilLicensePackagePath)" />
+    <Copy SourceFiles="$(WebSceneNativeGpuWebGpuHeadersLicensePath)"
+          DestinationFiles="$(WebSceneNativeGpuWebGpuHeadersLicensePackagePath)" />
+    <GetFileHash Files="$(WebSceneNativeGpuPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_WebSceneNativeGpuHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <WebSceneNativeGpuHash>@(_WebSceneNativeGpuHash->'%(FileHash)')</WebSceneNativeGpuHash>
+    </PropertyGroup>
+    <WriteLinesToFile
+      File="$(WebSceneNativeGpuManifest)"
+      Overwrite="true"
+      Lines="{&quot;schemaVersion&quot;:1,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeGpuRid)&quot;,&quot;configuration&quot;:&quot;$(Configuration)&quot;,&quot;fileName&quot;:&quot;$(WebSceneNativeGpuExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(WebSceneNativeGpuHash)&quot;,&quot;abiVersion&quot;:$(WebSceneNativeGpuAbiVersion),&quot;dawnRevision&quot;:&quot;$(WebSceneNativeGpuDawnRevision)&quot;,&quot;providerCapabilities&quot;:[&quot;WebGpu&quot;],&quot;zeroCopyRequired&quot;:true}" />
+    <WriteLinesToFile
+      File="$(WebSceneNativeGpuProps)"
+      Overwrite="true"
+      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;WebSceneNativeGpuPackagedRid&gt;$(WebSceneNativeGpuRid)&lt;/WebSceneNativeGpuPackagedRid&gt;&lt;WebSceneNativeGpuPackagedAbi&gt;$(WebSceneNativeGpuAbiVersion)&lt;/WebSceneNativeGpuPackagedAbi&gt;&lt;WebSceneNativeGpuDawnRevision&gt;$(WebSceneNativeGpuDawnRevision)&lt;/WebSceneNativeGpuDawnRevision&gt;&lt;WebSceneNativeGpuZeroCopyRequired&gt;true&lt;/WebSceneNativeGpuZeroCopyRequired&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;" />
+  </Target>
+</Project>
