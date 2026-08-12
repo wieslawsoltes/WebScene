@@ -413,19 +413,66 @@ void native_document::layout_children(dom_node& parent)
             }
         }
 
+        std::vector<float> authored_column_widths;
+        const auto collect_column_widths = [&](const auto& self,
+                                               const dom_node& node) -> void {
+            for (const auto* child : composed_children(node)) {
+                if (child->style.display == display_mode::table_column_group) {
+                    self(self, *child);
+                    continue;
+                }
+                if (child->style.display != display_mode::table_column) continue;
+                const auto span_value = child->attributes.find("span");
+                const auto span = span_value == child->attributes.end()
+                    ? size_t{1}
+                    : std::max<size_t>(
+                        1,
+                        static_cast<size_t>(parse_number(span_value->second, 1)));
+                const auto width = is_specified(child->style.width)
+                    ? resolve_length(*child, child->style.width, content.width, 0)
+                    : 0.0F;
+                authored_column_widths.insert(
+                    authored_column_widths.end(), span, width);
+            }
+        };
+        collect_column_widths(collect_column_widths, parent);
+        column_count = std::max(column_count, authored_column_widths.size());
+        const auto border_collapsed = parent.style.table().border_collapsed;
+        const auto column_spacing = border_collapsed ? 0.0F : std::max(
+            0.0F,
+            resolve_length(
+                parent,
+                parent.style.table().border_spacing_horizontal,
+                content.width,
+                2.0F));
+        const auto row_spacing = border_collapsed ? 0.0F : std::max(
+            0.0F,
+            resolve_length(
+                parent,
+                parent.style.table().border_spacing_vertical,
+                content.height,
+                2.0F));
+        const auto track_available_width = std::max(
+            0.0F,
+            content.width - column_spacing * static_cast<float>(column_count + 1U));
         std::vector<float> columns(column_count, 0.0F);
+        std::copy(
+            authored_column_widths.begin(),
+            authored_column_widths.end(),
+            columns.begin());
         std::vector<bool> fixed_columns(column_count, false);
         std::vector<bool> percentage_columns(column_count, false);
         std::vector<bool> specified_columns(column_count, false);
         for (const auto& row : rows) {
             for (const auto& placement : row.cells) {
-                auto cell_width = intrinsic_size(*placement.cell, true, content.width);
+                auto cell_width = intrinsic_size(
+                    *placement.cell, true, track_available_width);
                 if (parent.style.table_layout_fixed
                     && is_specified(placement.cell->style.width)) {
                     cell_width = resolve_length(
                         *placement.cell,
                         placement.cell->style.width,
-                        content.width,
+                        track_available_width,
                         cell_width);
                     for (size_t track = placement.column;
                         track < std::min(column_count, placement.column + placement.column_span);
@@ -454,8 +501,8 @@ void native_document::layout_children(dom_node& parent)
             }
         }
         const auto intrinsic_width = std::accumulate(columns.begin(), columns.end(), 0.0F);
-        if (!columns.empty() && content.width > intrinsic_width) {
-            const auto excess = content.width - intrinsic_width;
+        if (!columns.empty() && track_available_width > intrinsic_width) {
+            const auto excess = track_available_width - intrinsic_width;
             if (parent.style.table_layout_fixed) {
                 std::vector<size_t> distribution_columns;
                 for (size_t column = 0; column < columns.size(); ++column) {
@@ -488,11 +535,15 @@ void native_document::layout_children(dom_node& parent)
             } else if (intrinsic_width > 0) {
                 for (auto& column : columns) column += excess * column / intrinsic_width;
             } else {
-                const auto share = content.width / static_cast<float>(columns.size());
+                const auto share = track_available_width
+                    / static_cast<float>(columns.size());
                 std::fill(columns.begin(), columns.end(), share);
             }
         }
-        parent.mutable_table_layout().column_widths = columns;
+        auto& parent_table = parent.mutable_table_layout();
+        parent_table.column_widths = columns;
+        parent_table.column_spacing = column_spacing;
+        parent_table.row_spacing = row_spacing;
 
         for (auto& row : rows) {
             auto height = is_specified(row.row->style.height)
@@ -531,11 +582,12 @@ void native_document::layout_children(dom_node& parent)
                 const auto row_end = std::min(rows.size(), row_index + placement.row_span);
                 for (size_t span_row = row_index; span_row < row_end; ++span_row) {
                     cell_table.cell_height += rows[span_row].row->table_layout().row_height;
+                    if (span_row + 1U < row_end) cell_table.cell_height += row_spacing;
                 }
             }
         }
 
-        auto cursor_y = content.y;
+        auto cursor_y = content.y + (rows.empty() ? 0.0F : row_spacing);
         for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible || is_table_track(child->style.display)) {
@@ -552,19 +604,78 @@ void native_document::layout_children(dom_node& parent)
             if (child->style.display == display_mode::table_row) {
                 height = child->table_layout().row_height;
             } else if (is_table_row_group(child->style.display)) {
+                auto row_count = size_t{0};
                 for (const auto& row : rows) {
                     if (composed_parent(*row.row) == child) {
                         height += row.row->table_layout().row_height;
+                        ++row_count;
                     }
+                }
+                if (row_count > 1U) {
+                    height += row_spacing * static_cast<float>(row_count - 1U);
                 }
             } else {
                 height = intrinsic_size(*child, false, content.height);
             }
-            child->mutable_table_layout().column_widths = columns;
+            auto& child_table = child->mutable_table_layout();
+            child_table.column_widths = columns;
+            child_table.column_spacing = column_spacing;
+            child_table.row_spacing = row_spacing;
             layout_child(*child, parent.layout, {content.x, cursor_y, content.width, height});
-            cursor_y += child->layout.height;
+            cursor_y += child->layout.height + row_spacing;
         }
-        parent.scroll_content_width = std::max(content.width, intrinsic_width);
+        std::vector<float> column_offsets(
+            columns.size() + 1U,
+            content.x + (columns.empty() ? 0.0F : column_spacing));
+        for (size_t column = 0; column < columns.size(); ++column) {
+            column_offsets[column + 1U] = column_offsets[column]
+                + columns[column] + column_spacing;
+        }
+        size_t column_cursor = 0;
+        const auto table_track_height = std::max(0.0F, cursor_y - content.y);
+        const auto layout_column_tracks = [&](const auto& self,
+                                              dom_node& track_parent) -> void {
+            for (auto* track : composed_children(track_parent)) {
+                if (track->style.display == display_mode::table_column_group) {
+                    const auto start = column_cursor;
+                    self(self, *track);
+                    const auto end = std::min(column_cursor, columns.size());
+                    track->layout = {
+                        column_offsets[std::min(start, columns.size())],
+                        content.y,
+                        column_offsets[end]
+                            - column_offsets[std::min(start, columns.size())]
+                            - (end > start ? column_spacing : 0.0F),
+                        table_track_height};
+                    track->visible = false;
+                    continue;
+                }
+                if (track->style.display != display_mode::table_column) continue;
+                const auto span_value = track->attributes.find("span");
+                const auto span = span_value == track->attributes.end()
+                    ? size_t{1}
+                    : std::max<size_t>(
+                        1,
+                        static_cast<size_t>(parse_number(span_value->second, 1)));
+                const auto start = std::min(column_cursor, columns.size());
+                const auto end = std::min(columns.size(), column_cursor + span);
+                track->layout = {
+                    column_offsets[start],
+                    content.y,
+                    column_offsets[end] - column_offsets[start]
+                        - (end > start ? column_spacing : 0.0F),
+                    table_track_height};
+                track->visible = false;
+                track->scroll_content_width = track->layout.width;
+                track->scroll_content_height = track->layout.height;
+                column_cursor += span;
+            }
+        };
+        layout_column_tracks(layout_column_tracks, parent);
+        const auto spaced_intrinsic_width = intrinsic_width
+            + (columns.empty() ? 0.0F
+                : column_spacing * static_cast<float>(columns.size() + 1U));
+        parent.scroll_content_width = std::max(content.width, spaced_intrinsic_width);
         parent.scroll_content_height = std::max(content.height, cursor_y - content.y);
         return;
     }
@@ -633,6 +744,7 @@ void native_document::layout_children(dom_node& parent)
 
     if (is_table_row_group(parent.style.display)) {
         auto cursor_y = content.y;
+        auto placed_rows = size_t{0};
         for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible) {
@@ -640,13 +752,18 @@ void native_document::layout_children(dom_node& parent)
                 continue;
             }
             if (child->style.display != display_mode::table_row) continue;
-            child->mutable_table_layout().column_widths = parent.table_layout().column_widths;
+            if (placed_rows > 0U) cursor_y += parent.table_layout().row_spacing;
+            auto& child_table = child->mutable_table_layout();
+            child_table.column_widths = parent.table_layout().column_widths;
+            child_table.column_spacing = parent.table_layout().column_spacing;
+            child_table.row_spacing = parent.table_layout().row_spacing;
             layout_child(*child, parent.layout, {
                 content.x,
                 cursor_y,
                 content.width,
                 child->table_layout().row_height});
             cursor_y += child->layout.height;
+            ++placed_rows;
         }
         parent.scroll_content_width = content.width;
         parent.scroll_content_height = std::max(content.height, cursor_y - content.y);
@@ -655,9 +772,14 @@ void native_document::layout_children(dom_node& parent)
 
     if (parent.style.display == display_mode::table_row) {
         const auto& parent_table = parent.table_layout();
-        std::vector<float> offsets(parent_table.column_widths.size() + 1, content.x);
+        std::vector<float> offsets(
+            parent_table.column_widths.size() + 1,
+            content.x + (parent_table.column_widths.empty()
+                ? 0.0F : parent_table.column_spacing));
         for (size_t column = 0; column < parent_table.column_widths.size(); ++column) {
-            offsets[column + 1] = offsets[column] + parent_table.column_widths[column];
+            offsets[column + 1] = offsets[column]
+                + parent_table.column_widths[column]
+                + parent_table.column_spacing;
         }
         for (auto* child : composed_children(parent)) {
             child->visible = parent.visible && child->style.display != display_mode::none;
@@ -674,7 +796,9 @@ void native_document::layout_children(dom_node& parent)
             layout_child(*child, parent.layout, {
                 offsets[child_table.column_index],
                 content.y,
-                offsets[end] - offsets[child_table.column_index],
+                offsets[end] - offsets[child_table.column_index]
+                    - (end > child_table.column_index
+                        ? parent_table.column_spacing : 0.0F),
                 child_table.cell_height > 0 ? child_table.cell_height : content.height});
             if (parent.style.align_items == align_mode::center && !composed_children(*child).empty()) {
                 auto content_top = std::numeric_limits<float>::max();
@@ -723,7 +847,8 @@ void native_document::layout_children(dom_node& parent)
         if (parent.table_layout().column_widths.empty()) {
             parent.layout.height = improper_height;
         }
-        parent.scroll_content_width = offsets.empty() ? content.width : offsets.back() - content.x;
+        parent.scroll_content_width = offsets.empty() ? content.width
+            : offsets.back() - content.x;
         parent.scroll_content_width = std::max(
             parent.scroll_content_width,
             improper_x - content.x);
@@ -738,8 +863,8 @@ void native_document::layout_children(dom_node& parent)
         auto size = intrinsic_keyword
             ? intrinsic_size(node, horizontal_axis, available)
             : resolve_length(node, authored, available, 0);
-        if (!node.style.border_box && !intrinsic_keyword) {
-            size += horizontal_axis
+        if (!intrinsic_keyword) {
+            const auto box_edges = horizontal_axis
                 ? resolve_length(node, node.style.padding_left, available, 0)
                     + resolve_length(node, node.style.padding_right, available, 0)
                     + resolve_length(node, node.style.border_left_width, available, 0)
@@ -748,6 +873,8 @@ void native_document::layout_children(dom_node& parent)
                     + resolve_length(node, node.style.padding_bottom, available, 0)
                     + resolve_length(node, node.style.border_top_width, available, 0)
                     + resolve_length(node, node.style.border_bottom_width, available, 0);
+            if (node.style.border_box) size = std::max(size, box_edges);
+            else size += box_edges;
         }
         return size;
     };
@@ -2052,6 +2179,10 @@ void native_document::layout_children(dom_node& parent)
             const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             auto width = is_specified(child->style.width)
                 ? outer_authored_size(*child, true, content.width)
+                : !flex_container && is_table_container(child->style.display)
+                    ? std::min(
+                        std::max(0.0F, content.width - margin_left - margin_right),
+                        intrinsic_width)
                 : flex_container && alignment != align_mode::stretch
                     ? std::min(
                         std::max(0.0F, content.width - margin_left - margin_right),
@@ -2277,6 +2408,7 @@ float native_document::intrinsic_size(
             + resolve_length(node, node.style.padding_bottom, available, 0)
             + resolve_length(node, node.style.border_top_width, available, 0)
             + resolve_length(node, node.style.border_bottom_width, available, 0);
+    const auto authored = horizontal ? node.style.width : node.style.height;
     const auto constrain = [&](float size) {
         const auto& minimum = horizontal ? node.style.min_width : node.style.min_height;
         const auto& maximum = horizontal ? node.style.max_width : node.style.max_height;
@@ -2291,19 +2423,26 @@ float native_document::intrinsic_size(
                 size,
                 resolve_length(node, minimum, available, 0) + box_adjustment);
         }
+        if (!horizontal && node.style.display == display_mode::table_cell
+            && is_specified(authored)) {
+            size = std::max(
+                size,
+                resolve_length(node, authored, available, 0)
+                    + (node.style.border_box ? 0.0F : padding));
+        }
         return std::max(0.0F, size);
     };
-    const auto authored = horizontal ? node.style.width : node.style.height;
     // A percentage size is indefinite while shrink-to-fitting an auto-sized
     // ancestor. Resolving it against the viewport makes fixed popups with
     // descendants such as `width: 100%` or `height: 100%` measure as the whole
     // viewport. Use the descendant content contribution in that case; once the
     // ancestor has a definite box, layout_children resolves the percentage.
-    if (authored.unit == length_unit::pixels
+    if (!(node.style.display == display_mode::table_cell && !horizontal)
+        && (authored.unit == length_unit::pixels
         || authored.unit == length_unit::em
         || authored.unit == length_unit::rem
         || authored.unit == length_unit::viewport_width
-        || authored.unit == length_unit::viewport_height) {
+        || authored.unit == length_unit::viewport_height)) {
         return constrain(resolve_length(node, authored, available, 0)
             + (node.style.border_box ? 0.0F : padding));
     }
@@ -2311,6 +2450,31 @@ float native_document::intrinsic_size(
             && has_table_row_descendant(*this, node))
         || is_table_row_group(node.style.display)
         || node.style.display == display_mode::table_row) {
+        std::vector<float> authored_column_widths;
+        if (is_table_container(node.style.display)) {
+            const auto collect_column_widths = [&](const auto& self,
+                                                   const dom_node& current) -> void {
+                for (const auto* child : composed_children(current)) {
+                    if (child->style.display == display_mode::table_column_group) {
+                        self(self, *child);
+                        continue;
+                    }
+                    if (child->style.display != display_mode::table_column) continue;
+                    auto span_value = child->attributes.find("span");
+                    const auto span = span_value == child->attributes.end()
+                        ? size_t{1}
+                        : std::max<size_t>(
+                            1,
+                            static_cast<size_t>(parse_number(span_value->second, 1)));
+                    const auto width = is_specified(child->style.width)
+                        ? resolve_length(*child, child->style.width, available, 0)
+                        : 0.0F;
+                    authored_column_widths.insert(
+                        authored_column_widths.end(), span, width);
+                }
+            };
+            collect_column_widths(collect_column_widths, node);
+        }
         std::vector<const dom_node*> rows;
         std::function<void(const dom_node&)> collect_rows = [&](const dom_node& current) {
             for (const auto* child : composed_children(current)) {
@@ -2333,7 +2497,12 @@ float native_document::intrinsic_size(
                 }
                 count = std::max(count, row_count);
             }
+            count = std::max(count, authored_column_widths.size());
             std::vector<float> columns(count, 0.0F);
+            std::copy(
+                authored_column_widths.begin(),
+                authored_column_widths.end(),
+                columns.begin());
             for (const auto* row : rows) {
                 size_t column = 0;
                 for (const auto* cell : composed_children(*row)) {
@@ -2352,8 +2521,22 @@ float native_document::intrinsic_size(
                     column += span;
                 }
             }
+            auto table_spacing = 0.0F;
+            if (is_table_container(node.style.display)
+                && !columns.empty()
+                && !node.style.table().border_collapsed) {
+                table_spacing = std::max(
+                    0.0F,
+                    resolve_length(
+                        node,
+                        node.style.table().border_spacing_horizontal,
+                        available,
+                        2.0F))
+                    * static_cast<float>(columns.size() + 1U);
+            }
             return constrain(
-                std::accumulate(columns.begin(), columns.end(), 0.0F) + padding);
+                std::accumulate(columns.begin(), columns.end(), 0.0F)
+                    + table_spacing + padding);
         }
         auto height = 0.0F;
         for (const auto* row : rows) {
@@ -2365,6 +2548,18 @@ float native_document::intrinsic_size(
                 }
             }
             height += row_height;
+        }
+        if (is_table_container(node.style.display)
+            && !rows.empty()
+            && !node.style.table().border_collapsed) {
+            height += std::max(
+                0.0F,
+                resolve_length(
+                    node,
+                    node.style.table().border_spacing_vertical,
+                    available,
+                    2.0F))
+                * static_cast<float>(rows.size() + 1U);
         }
         return constrain(height + padding);
     }

@@ -563,7 +563,7 @@ void test_semantic_table_auto_layout_and_intrinsic_cell_content(webscene_engine*
           document.body.style.width = '800px';
           const style = document.createElement('style');
           style.textContent = `
-            table { width: 800px; white-space: nowrap; }
+            table { width: 800px; white-space: nowrap; border-spacing: 0; }
             th, td { padding: 10px; }
             .content { display: inline-block; width: max-content; }
           `;
@@ -701,6 +701,7 @@ void test_implicit_grid_contains_scrollable_table(webscene_engine* engine)
           scroller.style.overflow = 'auto';
           const table = document.createElement('table');
           table.style.width = '100%';
+          table.style.borderSpacing = '0';
           const body = document.createElement('tbody');
           for (let index = 0; index < 40; index++) {
             const row = document.createElement('tr');

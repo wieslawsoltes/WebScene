@@ -2760,6 +2760,9 @@
         }
         clone.attributes = original.attributes;
         clone.style = original.style;
+        if (original.has_authored_style()) {
+            clone.mutable_authored_style() = original.authored_style();
+        }
         clone.visible = true;
         if (deep) {
             for (const auto* child : original.children) {

@@ -415,6 +415,7 @@
         else if (name == "style") {
             node->clear_authored_style();
             node->style.clear_grid();
+            node->style.clear_table();
             node->style.inline_property_mask = 0U;
             node->style.important_property_mask = 0U;
             uint64_t inline_property_mask = 0U;

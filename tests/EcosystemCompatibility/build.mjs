@@ -62,6 +62,13 @@ const cases = [
     preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
     css: ""
   })),
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-dimensions-upstream-${index + 1}`,
+    entry: "src/jquery-dimensions-upstream.mjs",
+    title: `jQuery upstream dimensions suite ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
+  })),
   {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",

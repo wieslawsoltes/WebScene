@@ -318,6 +318,7 @@ enum inline_style_property : uint64_t {
     inline_transition_duration = 1ULL << 50U,
     inline_transition_delay = 1ULL << 51U,
     inline_transition_timing = 1ULL << 52U,
+    inline_table_border_model = 1ULL << 53U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };

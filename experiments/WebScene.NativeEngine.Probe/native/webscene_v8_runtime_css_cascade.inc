@@ -1353,6 +1353,9 @@
                 reset.row_gap = previous.row_gap;
                 reset.column_gap = previous.column_gap;
             }
+            if (is_inline(inline_table_border_model)) {
+                reset.mutable_table() = previous.table();
+            }
             if (is_inline(inline_flex_direction)) {
                 reset.direction = previous.direction;
                 reset.flex_reverse = previous.flex_reverse;
@@ -1950,6 +1953,28 @@
         } else if (name == "column-gap" && !is_inline(inline_gap)) {
             node.style.column_gap = value == "normal" ? css_length{}
                 : native_document::parse_length(value);
+        } else if (name == "border-spacing"
+            && !is_inline(inline_table_border_model)) {
+            std::istringstream stream(value);
+            std::string horizontal;
+            std::string vertical;
+            stream >> horizontal >> vertical;
+            if (horizontal.empty()) {
+                decision.classification = "invalid-authoring";
+            } else {
+                auto& table = node.style.mutable_table();
+                table.border_spacing_horizontal = native_document::parse_length(horizontal);
+                table.border_spacing_vertical = native_document::parse_length(
+                    vertical.empty() ? horizontal : vertical);
+            }
+        } else if (name == "border-collapse"
+            && !is_inline(inline_table_border_model)) {
+            if (value == "collapse" || value == "separate") {
+                node.style.mutable_table().border_collapsed = value == "collapse";
+            } else {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "collapse and separate keywords";
+            }
         } else if (name == "display" && !is_inline(inline_display)) {
             node.style.display = parse_display_mode(value);
         } else if (name == "table-layout") {
@@ -2453,6 +2478,9 @@
         if ((node.style.inline_property_mask & inline_gap) == 0U) {
             node.style.row_gap = {};
             node.style.column_gap = {};
+        }
+        if ((node.style.inline_property_mask & inline_table_border_model) == 0U) {
+            node.style.clear_table();
         }
         if ((node.style.inline_property_mask & inline_flex_wrap) == 0U) node.style.flex_wrap = false;
         if ((node.style.inline_property_mask & inline_flex_grow) == 0U) node.style.flex_grow = 0;

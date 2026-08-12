@@ -500,6 +500,12 @@ struct node_style final {
     // Collapsing both to integer zero made CSSOM unable to distinguish an
     // unspecified/root-inherited z-index from an authored `z-index: 0`.
     bool z_index_auto{true};
+    struct table_style_data final {
+        css_length border_spacing_horizontal{2, length_unit::pixels};
+        css_length border_spacing_vertical{2, length_unit::pixels};
+        bool border_collapsed{false};
+    };
+
     struct textual_style_data final {
         std::string font_family;
         std::string text_align;
@@ -523,7 +529,24 @@ struct node_style final {
         css_length border_bottom_right_radius_y{};
         css_length border_bottom_left_radius_y{};
         bool elliptical_border_radius{false};
+        table_style_data table;
     };
+
+    const table_style_data& table() const noexcept
+    {
+        static const table_style_data defaults;
+        return textual_state == nullptr ? defaults : textual_state->table;
+    }
+
+    table_style_data& mutable_table()
+    {
+        return mutable_textual().table;
+    }
+
+    void clear_table()
+    {
+        if (textual_state != nullptr) mutable_textual().table = {};
+    }
 
     const textual_style_data& textual() const noexcept
     {
@@ -867,6 +890,8 @@ struct dom_node final {
         size_t row_span{1};
         float row_height{0};
         float cell_height{0};
+        float column_spacing{0};
+        float row_spacing{0};
     };
 
     struct form_control_data final {

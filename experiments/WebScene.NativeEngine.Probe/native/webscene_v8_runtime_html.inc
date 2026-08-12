@@ -254,6 +254,10 @@
         if (name == "justify-content") return inline_justify_content;
         if (name == "gap" || name == "row-gap" || name == "column-gap"
             || name == "rowGap" || name == "columnGap") return inline_gap;
+        if (name == "border-spacing" || name == "borderSpacing"
+            || name == "border-collapse" || name == "borderCollapse") {
+            return inline_table_border_model;
+        }
         if (name == "box-sizing") return inline_box_sizing;
         if (name == "box-shadow" || name == "boxShadow") return inline_box_shadow;
         if (canonical_name == "border"

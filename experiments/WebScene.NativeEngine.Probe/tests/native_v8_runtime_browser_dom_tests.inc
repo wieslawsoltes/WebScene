@@ -1,3 +1,64 @@
+void test_dom_box_dimensions_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .border-box, .border-box * { box-sizing: border-box; }
+              table { border-spacing: 0; }
+              td { margin: 0; padding: 0; border: 0; }
+              #authored { padding:9px !important; border:7px solid !important; }
+            </style>
+            <table id="tracks"><col id="single"><col id="double" span="2"><tbody><tr>
+              <td></td><td id="a">a</td><td id="b">b</td>
+            </tr></tbody></table>
+            <table><tbody><tr id="row"><td style="width:42px;height:42px"></td></tr></tbody></table>
+            <table class="border-box"><thead>
+              <tr><th id="h1" style="width:200px;padding:5px"></th></tr>
+              <tr><th id="h2" style="width:190px;padding:5px"></th></tr>
+              <tr><th id="h3" style="width:180px;padding:5px"></th></tr>
+            </thead></table>
+            <table class="border-box"><tbody><tr><td id="cell"
+              style="height:20px;padding:5px;border:1px solid;line-height:18px">text</td></tr></tbody></table>
+            <textarea id="textarea" style="height:0;padding:2px;border:1px solid;box-sizing:border-box"></textarea>`;
+          const original = document.createElement('div');
+          original.style.cssText = 'width:100px;height:80px;padding:2px;border:3px solid;margin:4px';
+          const clone = original.cloneNode(true);
+          const authored = document.createElement('div');
+          authored.id = 'authored';
+          authored.style.cssText = 'padding:2px;border:3px solid';
+          document.body.appendChild(authored);
+          single.style.width = '300px';
+          a.style.width = '200px';
+          b.style.width = '400px';
+          const width = id => document.getElementById(id).getBoundingClientRect().width;
+          const height = id => document.getElementById(id).getBoundingClientRect().height;
+          return {
+            clone: [
+              clone.style.getPropertyValue('width'),
+              clone.style.getPropertyValue('padding'),
+              clone.style.paddingLeft,
+              clone.style.borderLeftWidth
+            ],
+            authoredEdges: [
+              authored.style.paddingLeft,
+              authored.style.borderLeftWidth,
+              getComputedStyle(authored).paddingLeft,
+              getComputedStyle(authored).borderLeftWidth
+            ],
+            columns: [width('single'), width('double')],
+            row: width('row'),
+            headers: [width('h1'), width('h2'), width('h3')],
+            heights: [height('cell'), height('textarea')]
+          };
+        })()
+    )JS", "native-dom-box-dimensions-primitives.js");
+    const auto expected = R"JSON({"clone":["100px","2px","2px","3px"],"authoredEdges":["2px","3px","9px","7px"],"columns":[300,600],"row":42,"headers":[200,200,200],"heights":[30,6]})JSON";
+    require(
+        result == expected,
+        "DOM box dimension primitives diverged: " + result);
+}
+
 void test_dom_traversal_cloning_primitives(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

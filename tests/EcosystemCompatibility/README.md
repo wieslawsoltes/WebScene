@@ -7,8 +7,8 @@ a framework pass into a standards claim.
 The first bounded profile contains:
 
 - jQuery 4.0.0: selectors/traversal, DOM mutation and deep cloning,
-  attributes/properties, CSSOM, delegated events, single/multiple-value forms, and
-  Deferred callbacks;
+  attributes/properties, CSSOM and box dimensions, delegated events,
+  single/multiple-value forms, and Deferred callbacks;
 - Bootstrap 5.3.8: tabs, collapse, dropdown/Popper placement, modal lifecycle,
   tooltip, popover, offcanvas, ScrollSpy, carousel transitions, custom events,
   classes, and ARIA state;
@@ -16,15 +16,17 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 30/30 consumer
-documents and 854/854 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Current Chrome and native evidence (2026-08-12): both engines pass 34/34 consumer
+documents and 883/883 selected assertions. Historical three-engine evidence from 2026-07-23 had
 Chrome, the former managed adapter, and native at its then-current denominator. Twenty-seven
-documents execute 828 unchanged official-source cases: all 591
+documents previously executed 828 unchanged official-source cases. The current 31
+official-source documents execute 857 cases: all 591
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, 55 selected browser-local cases from its unmodified `css.js`, and all
 4 cases from its unmodified `serialize.js`, plus 62 browser-local cases from its
-unmodified `traversing.js`.
+unmodified `traversing.js` and 29 browser-local cases from its unmodified
+`dimensions.js`.
 The remaining 26 assertions are the three owned composition fixtures.
 
 The four new CSS shards preserve the exact upstream `css.js`, official fixture markup,
@@ -94,8 +96,8 @@ Fourteen documents now execute all 591 cases from Bootstrap 5.3.8's unmodified
 `scrollspy.spec.js`, `tab.spec.js`, `toast.spec.js`, and `tooltip.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects all fourteen Bootstrap files and five jQuery files, leaving
-no Bootstrap files, 19 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
+tags and commits. It selects all fourteen Bootstrap files and six jQuery files, leaving
+no Bootstrap files, 18 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
 `artifacts/ecosystem-consumers-managed-jquery-css-v3-disconnected-20260723/`, and
@@ -191,6 +193,19 @@ native divergences reduced to an independent 11-assertion Chrome/native contract
 bounded descendant `:has()`, empty substring attribute selectors, browser-shaped
 document-root ancestry and containment, deep/shallow `Document.importNode()`, and
 disconnected-document-position constants. No jQuery-specific runtime path was added.
+
+The adjacent jQuery dimensions tranche adds 29 unchanged browser-local `dimensions.js`
+cases for width/height setters, inner and outer box dimensions, content-box and
+border-box sizing, hidden and disconnected elements, inline/SVG/table geometry,
+scroll containers, and coordinate mutation. The separately served
+`window vs. large document` iframe case remains explicitly harness-blocked. Five
+native divergences reduced to a six-assertion Chrome/native contract covering detached
+authored-style cloning, shorthand longhand CSSOM under an overriding important rule,
+resolved `COL` geometry, automatic table-row shrink-to-fit, shared table tracks,
+table-cell minimum height, and zero-content border-box controls. The table path now
+honors authored column tracks and the standard separated-border spacing model,
+including `border-spacing`, `border-collapse`, and CSSOM mutation, through cold
+table-only state. No jQuery-specific runtime path was added.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

@@ -197,6 +197,17 @@
           ]
         },
         {
+          "path": "upstream/jquery/test/unit/dimensions.js",
+          "cases": 29,
+          "sha256": "21d0e311f926af72ee72cbc43192c4d9917b2728d7d36a030f7c184ae6c57ebc",
+          "inFileHarnessBlocked": [
+            {
+              "name": "window vs. large document",
+              "reason": "Requires jQuery's separately served dimensions/documentLarge.html fixture and a child browsing context."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/serialize.js",
           "cases": 4,
           "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
@@ -243,7 +254,6 @@
         "data.js",
         "deferred.js",
         "deprecated.js",
-        "dimensions.js",
         "effects.js",
         "event.js",
         "exports.js",

@@ -109,6 +109,34 @@
       "reason": "Runs shard 4/4 of the unchanged browser-local traversing.js cases; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/jquery-dimensions-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-4.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 4/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/bootstrap-components.html",
       "type": "contract",
       "capabilities": ["tabs", "collapse", "dropdown", "popper-placement", "modal", "tooltip", "popover", "offcanvas", "scrollspy", "intersection-observer", "bounded-scroll", "carousel", "transition-lifecycle", "custom-events", "aria-state"],
@@ -234,11 +262,11 @@
       "package": "jquery",
       "version": "4.0.0",
       "stage": "discovery",
-      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html"],
-      "selected": 245,
-      "runnable": 245,
+      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html"],
+      "selected": 274,
+      "runnable": 274,
       "excluded": ["Ajax transport and server fixtures", "animation timing", "legacy-browser compatibility branches"],
-      "harnessBlocked": ["19 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case, five css.js cases, and three traversing.js cases require a mock server, Shadow DOM, browser zoom, separately served resource fixtures, or child browsing contexts."],
+      "harnessBlocked": ["18 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case, five css.js cases, three traversing.js cases, and one dimensions.js case require a mock server, Shadow DOM, browser zoom, separately served resource fixtures, or child browsing contexts."],
       "upstreamSuite": {
         "repository": "https://github.com/jquery/jquery.git",
         "tag": "4.0.0",
@@ -246,11 +274,11 @@
         "root": "test/unit",
         "discoveredFiles": 24,
         "staticRegistrations": 847,
-        "selectedFiles": ["attributes.js", "callbacks.js", "css.js", "serialize.js", "traversing.js"],
-        "selectedCases": 237,
-        "runnableCases": 237,
-        "harnessBlockedFiles": 19,
-        "inFileHarnessBlockedCases": 9
+        "selectedFiles": ["attributes.js", "callbacks.js", "css.js", "dimensions.js", "serialize.js", "traversing.js"],
+        "selectedCases": 266,
+        "runnableCases": 266,
+        "harnessBlockedFiles": 18,
+        "inFileHarnessBlockedCases": 10
       }
     },
     {

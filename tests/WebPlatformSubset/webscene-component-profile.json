@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-box-dimensions-primitives.html",
+      "type": "contract",
+      "capabilities": ["clone-authored-style", "table-column-track-geometry", "table-row-track-geometry", "automatic-table-track-sizing", "border-box-control-minimum"],
+      "evidence": ["jquery-4.0.0-dimensions-reduction", "dom-box-dimensions-primitives"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery dimension prerequisites: cloned authored box declarations, resolved COL/span geometry, automatic table row/track sizing, and zero-content border-box control geometry."
+    },
+    {
       "path": "contracts/dom-traversal-cloning-primitives.html",
       "type": "contract",
       "capabilities": ["selector-has-descendant", "attribute-empty-substring-selector", "document-element-parentage", "document-import-node", "disconnected-document-position"],
