@@ -216,6 +216,56 @@ void test_event_listener_options_reach_native_input_and_resize(webscene_engine* 
     }
 }
 
+void test_synthetic_window_resize_dispatch_uses_outer_listener_registry(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const state = {
+            calls: 0,
+            captureCalls: 0,
+            passiveCalls: 0,
+            passiveDefaultPrevented: true,
+            abortedCalls: 0,
+            removedCalls: 0,
+            target: true,
+            currentTarget: true,
+            objectThis: true
+          };
+          const listener = {
+            handleEvent(event) {
+              state.calls++;
+              state.target &&= event.target === window;
+              state.currentTarget &&= event.currentTarget === window;
+              state.objectThis &&= this === listener;
+            }
+          };
+          const capture = () => state.captureCalls++;
+          const removed = () => state.removedCalls++;
+          const controller = new AbortController();
+          window.addEventListener('resize', capture, true);
+          window.addEventListener('resize', listener, { once: true });
+          window.addEventListener('resize', event => {
+            state.passiveCalls++;
+            event.preventDefault();
+            state.passiveDefaultPrevented &&= event.defaultPrevented;
+          }, { passive: true, once: true });
+          window.addEventListener('resize', () => state.abortedCalls++, {
+            signal: controller.signal
+          });
+          controller.abort();
+          window.addEventListener('resize', removed);
+          window.removeEventListener('resize', removed);
+          const first = window.dispatchEvent(new Event('resize', { cancelable: true }));
+          const second = window.dispatchEvent(new Event('resize'));
+          return { ...state, first, second };
+        })()
+    )JS", "native-synthetic-window-resize.js");
+    require(
+        result == R"({"calls":1,"captureCalls":2,"passiveCalls":1,"passiveDefaultPrevented":false,"abortedCalls":0,"removedCalls":0,"target":true,"currentTarget":true,"objectThis":true,"first":true,"second":true})",
+        "synthetic Window resize bypassed outer listener dispatch: " + result);
+}
+
 void test_native_mouseup_honors_immediate_propagation_stop(webscene_engine* engine)
 {
     execute(engine, R"JS(

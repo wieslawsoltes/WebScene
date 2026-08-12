@@ -16,10 +16,10 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current Chrome and native evidence (2026-08-12): both engines pass 19/19 consumer
-documents and 510/510 selected assertions. Historical three-engine evidence from 2026-07-23 had
-Chrome, the former managed adapter, and native at the same denominator. Sixteen
-documents execute 484 unchanged official-source cases: all 313
+Current Chrome and native evidence (2026-08-12): both engines pass 20/20 consumer
+documents and 560/560 selected assertions. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at the same denominator. Seventeen
+documents execute 534 unchanged official-source cases: all 363
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
 unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
 `attributes.js`, and 55 selected browser-local cases from its unmodified `css.js`.
@@ -86,12 +86,13 @@ and both adapters passed both it and all 6/6 assertions in the unchanged pinned 
 The generic WPT adapter also gained BODY `onload` startup support so future
 check-layout documents can run unchanged.
 
-Eight documents now execute all 313 cases from Bootstrap 5.3.8's unmodified
+Nine documents now execute all 363 cases from Bootstrap 5.3.8's unmodified
 `alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `collapse.spec.js`,
-`dropdown.spec.js`, `modal.spec.js`, `tab.spec.js`, and `toast.spec.js` with their unmodified fixture
+`dropdown.spec.js`, `modal.spec.js`, `offcanvas.spec.js`, `tab.spec.js`, and
+`toast.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects eight Bootstrap files and three jQuery files, leaving 6,
+tags and commits. It selects nine Bootstrap files and three jQuery files, leaving 5,
 21, and 128 files respectively classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
@@ -109,6 +110,15 @@ ARIA state, and instance disposal. Its one native divergence reduced to the neut
 longhands survive recascade and computed time values serialize in seconds, while a
 synthetic click retains ordinary timer task ordering. The engine fix preserves inline
 origin and per-longhand `!important` precedence without adding hot DOM-node storage.
+
+The adjacent offcanvas tranche adds 50 unchanged assertions for configuration,
+responsive resize dismissal, focus trapping, backdrop and keyboard policy, scroll
+locking, transitions, data APIs, ARIA state, jQuery dispatch, and disposal. A generic
+Jasmine task boundary prevents already-queued transition cleanup from contaminating the
+next spec's spies. Its one native divergence reduced to
+`responsive-overlay-resize-dispatch.html`: JavaScript synthetic resize dispatch now
+uses the same outer-Window listener registry as host resize input, including once,
+passive, AbortSignal, capture, and object-listener semantics.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

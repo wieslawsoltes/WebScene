@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-11 coverage audit
 
-The pinned profile contains 110 required, 64 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 65 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-64/64 documents and 349/349 subtests while the release gate remains 110/110 documents
+65/65 documents and 351/351 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -168,6 +168,10 @@ and 434/434 subtests:
   object `this` binding, identity, removal, per-dispatch `handleEvent` lookup, late
   method definition, function precedence, and custom-element self-registration;
   native pointer and Window resize authority independently exercises object listeners;
+  and
+- synthetic outer-Window resize dispatch now uses the same listener registry as host
+  resize input, while a neutral responsive-overlay reduction independently verifies
+  compound substring selectors and non-fixed computed position after style removal;
   and
 - distinct `CharacterData`, `Text`, `Comment`, `ProcessingInstruction`, and
   `HTMLStyleElement` brands now back constructible text/comment nodes, processing
@@ -273,6 +277,20 @@ Five alternating five-second idle runs move median normalized CPU from 0.3274% t
 0.2919%, with zero signalled wakes, no Inspector registry, identical 480-byte blank
 scenes, and the same 800 timer and 240 animation-frame callbacks completed by each
 variant.
+
+The unchanged upstream Bootstrap Offcanvas slice and synthetic-Window-resize fix were
+compared with their exact clean parent (`808dd0d`) in six balanced fresh-process runs.
+Median p50 moved from 0.750 ms to 0.755 ms (+0.7%) for 1,000 startup/lifecycle samples,
+from 33.042 ms to 33.279 ms (+0.7%) for the 50-sample selector workload, and from
+3.173 ms to 3.137 ms (-1.1%) for 50 generated named-property samples. A four-context/
+2,000-node probe retains the fixed 976-byte node and byte-identical attributed node,
+attribute, pool, wrapper, and scene storage. Both isolated and shared-isolate lifecycle
+probes pass, including hidden timers, context release, and shared-slot reuse. Five
+alternating five-second idle runs move median normalized CPU from 0.2304% to 0.2279%,
+with zero signalled wakes, no Inspector registry, identical 480-byte blank scenes, and
+the same 800 timer and 240 animation-frame callbacks completed by each variant. The
+per-spec task drain exists only in the ecosystem test harness and does not ship in a
+host or runtime artifact.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

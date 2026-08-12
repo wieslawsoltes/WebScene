@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/responsive-overlay-resize-dispatch.html",
+      "type": "contract",
+      "capabilities": ["compound-attribute-selectors", "window-resize-event", "synthetic-dispatch", "computed-position-after-inline-removal"],
+      "evidence": ["bootstrap-v5.3.8-offcanvas-responsive-resize-reduction"],
+      "reason": "Product-neutral reduction of responsive overlay handling: a compound substring-attribute selector must find the open overlay, and a synthetic Window resize listener must synchronously observe its non-fixed computed position after inline style removal."
+    },
+    {
       "path": "contracts/dynamic-transition-style-task-order.html",
       "type": "contract",
       "capabilities": ["innerhtml-style-attribute", "transition-duration-computed-style", "synthetic-click", "javascript-run-to-completion", "timer-task-order"],

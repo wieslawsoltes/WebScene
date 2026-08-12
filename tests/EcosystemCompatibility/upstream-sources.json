@@ -64,6 +64,11 @@
           "path": "upstream/bootstrap/js/tests/unit/modal.spec.js",
           "cases": 60,
           "sha256": "51ceb04f5605b68385647811b16eb68620d39c8e5a33853443c8293449d145fe"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/offcanvas.spec.js",
+          "cases": 50,
+          "sha256": "8a19cc6750ff07e2ae21e94993a71c2e43a979208a47b0aeb6f87b9d4de7be88"
         }
       ],
       "supportFiles": [
@@ -79,7 +84,6 @@
       "harnessBlocked": [
         "carousel.spec.js",
         "jquery.spec.js",
-        "offcanvas.spec.js",
         "popover.spec.js",
         "scrollspy.spec.js",
         "tooltip.spec.js"

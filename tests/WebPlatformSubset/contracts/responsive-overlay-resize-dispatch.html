@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Responsive overlays are discoverable during synthetic resize dispatch</title>
+<body>
+<div id="overlay" class="overlay-lg showing" aria-modal="true" style="position: fixed"></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, error) {
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? String(error && error.message || error) : null,
+      stack: error && error.stack ? String(error.stack) : null
+    });
+  }
+
+  const selector = "[aria-modal][class*=show][class*=overlay-]";
+  const overlay = document.getElementById("overlay");
+  const selected = document.querySelectorAll(selector);
+  record(
+    "compound substring attribute selectors find a responsive overlay",
+    selected.length === 1 && selected[0] === overlay
+      ? null
+      : new Error("selector returned " + selected.length + " elements")
+  );
+
+  let resizeCalls = 0;
+  let observedOverlay = null;
+  let observedPosition = null;
+  window.addEventListener("resize", () => {
+    resizeCalls++;
+    observedOverlay = document.querySelector(selector);
+    observedPosition = observedOverlay && getComputedStyle(observedOverlay).position;
+  }, { once: true });
+  overlay.style.removeProperty("position");
+  window.dispatchEvent(new Event("resize"));
+  record(
+    "synthetic resize synchronously observes a responsive overlay after style removal",
+    resizeCalls === 1 && observedOverlay === overlay && observedPosition === "static"
+      ? null
+      : new Error("resizeCalls=" + resizeCalls
+          + ", sameOverlay=" + (observedOverlay === overlay)
+          + ", position=" + JSON.stringify(observedPosition))
+  );
+
+  state.diagnostics = [JSON.stringify({
+    selected: selected.length,
+    resizeCalls,
+    sameOverlay: observedOverlay === overlay,
+    observedPosition
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

@@ -4,6 +4,7 @@ const rootSuite = createSuite("");
 let currentSuite = rootSuite;
 let activeSpies = [];
 let lastExpectationFailure = null;
+const specTaskDrainMilliseconds = 10;
 
 function createSuite(name) {
   return { name, beforeAll: [], beforeEach: [], afterEach: [], afterAll: [], children: [] };
@@ -263,6 +264,11 @@ async function invokeTest(body, name) {
     });
   try {
     await Promise.race([execution, timeout]);
+    // Jasmine advances between specs through its asynchronous queue runner.
+    // Give already-queued component cleanup callbacks the same task boundary
+    // before restoring spies and starting the next spec; otherwise a pending
+    // transition fallback can be observed by a spy installed by the next test.
+    await new Promise(resolve => setTimeout(resolve, specTaskDrainMilliseconds));
     if (state.errors.length > errorStart) {
       throw new Error(`Jasmine-compatible test raised an asynchronous error: ${state.errors[errorStart]}`);
     }

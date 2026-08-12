@@ -127,6 +127,7 @@ int main()
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
             test_event_listener_options_reach_native_input_and_resize(focused_engine);
+            test_synthetic_window_resize_dispatch_uses_outer_listener_registry(focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -283,6 +284,7 @@ int main()
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
     test_event_listener_options_reach_native_input_and_resize(engine);
+    test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
     test_generated_idl_attributes_are_prototype_accessors(engine);
     test_document_links_is_a_live_named_html_collection(engine);

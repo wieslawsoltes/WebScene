@@ -1360,6 +1360,48 @@
             && document_value->IsObject()) {
             document_target = document_value.As<v8::Object>();
         }
+        const auto invoke_outer_resize_listeners = [&](bool capture) {
+            if (type != "resize" || self->in_frame_context() || receiver.IsEmpty()
+                || !receiver->StrictEquals(global)) return true;
+            set_phase(global, 2);
+            const auto listener_count = self->resize_listeners.size();
+            for (size_t index = 0; index < listener_count; ++index) {
+                auto& listener = self->resize_listeners[index];
+                if (listener.context.Get(info.GetIsolate()) != local_context
+                    || listener.capture != capture) continue;
+                auto callback = listener.callback.Get(info.GetIsolate());
+                if (callback.IsEmpty()) continue;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(info.GetIsolate());
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(info.GetIsolate())) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::Boolean::New(info.GetIsolate(), passive)).Check();
+                const auto callback_succeeded = invoke_callback(callback, global);
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::False(info.GetIsolate())).Check();
+                if (!callback_succeeded) return false;
+                if (immediate_propagation_stopped()) break;
+            }
+            return true;
+        };
         if (target == nullptr) {
             const auto direct_target_id = receiver_is_document
                 ? std::numeric_limits<uint32_t>::max()
@@ -1379,8 +1421,10 @@
                 && !invoke_listeners(0U, global, true, 1)) return;
             if (!propagation_stopped()
                 && (!invoke_listeners(direct_target_id, direct_target, true, 2)
+                || !invoke_outer_resize_listeners(true)
                 || (!immediate_propagation_stopped()
-                    && !invoke_listeners(direct_target_id, direct_target, false, 2)))) return;
+                    && (!invoke_listeners(direct_target_id, direct_target, false, 2)
+                        || !invoke_outer_resize_listeners(false))))) return;
             if (receiver_is_document
                 && read_boolean("bubbles")
                 && !propagation_stopped()
@@ -1500,6 +1544,11 @@
         if (listeners != self->frame_event_listeners.end()) {
             std::erase_if(
                 listeners->second,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
+        }
+        if (type == "resize") {
+            std::erase_if(
+                self->resize_listeners,
                 [](const auto& listener) { return listener.callback.IsEmpty(); });
         }
         event->Set(

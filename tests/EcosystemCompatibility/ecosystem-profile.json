@@ -137,6 +137,13 @@
       "reason": "All 60 cases from Bootstrap's unmodified modal.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/bootstrap-offcanvas-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "offcanvas-visibility", "focus-trap", "backdrop-policy", "keyboard-dismissal", "scroll-lock", "responsive-resize", "delegated-data-api", "transition-lifecycle", "custom-cancelable-events", "aria-state", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-offcanvas-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 50 cases from Bootstrap's unmodified offcanvas.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/react-dom.html",
       "type": "contract",
       "capabilities": ["createRoot", "hydrateRoot", "reconciliation", "keyed-reorder", "synthetic-events", "controlled-input", "portals", "batched-updates", "transitions", "Suspense", "lazy-modules", "unmount"],
@@ -148,7 +155,7 @@
   "excluded": [
     {
       "area": "remaining upstream internal framework suites",
-      "reason": "Eight unmodified Bootstrap source suites and three unmodified jQuery QUnit files are selected. Every remaining upstream jQuery, Bootstrap, and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
+      "reason": "Nine unmodified Bootstrap source suites and three unmodified jQuery QUnit files are selected. Every remaining upstream jQuery, Bootstrap, and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
     }
   ],
   "consumers": [
@@ -181,21 +188,21 @@
       "package": "bootstrap",
       "version": "5.3.8",
       "stage": "discovery",
-      "documents": ["contracts/bootstrap-components.html", "contracts/bootstrap-alert-upstream.html", "contracts/bootstrap-base-component-upstream.html", "contracts/bootstrap-button-upstream.html", "contracts/bootstrap-collapse-upstream.html", "contracts/bootstrap-toast-upstream.html", "contracts/bootstrap-tab-upstream.html", "contracts/bootstrap-dropdown-upstream.html", "contracts/bootstrap-modal-upstream.html"],
-      "selected": 322,
-      "runnable": 322,
+      "documents": ["contracts/bootstrap-components.html", "contracts/bootstrap-alert-upstream.html", "contracts/bootstrap-base-component-upstream.html", "contracts/bootstrap-button-upstream.html", "contracts/bootstrap-collapse-upstream.html", "contracts/bootstrap-toast-upstream.html", "contracts/bootstrap-tab-upstream.html", "contracts/bootstrap-dropdown-upstream.html", "contracts/bootstrap-modal-upstream.html", "contracts/bootstrap-offcanvas-upstream.html"],
+      "selected": 372,
+      "runnable": 372,
       "excluded": ["tooltip and popover visual parity"],
-      "harnessBlocked": ["carousel.spec.js", "jquery.spec.js", "offcanvas.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"],
+      "harnessBlocked": ["carousel.spec.js", "jquery.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"],
       "upstreamSuite": {
         "repository": "https://github.com/twbs/bootstrap.git",
         "tag": "v5.3.8",
         "commit": "25aa8cc0b32f0d1a54be575347e6d84b70b1acd7",
         "root": "js/tests/unit",
         "discoveredFiles": 14,
-        "selectedFiles": ["alert.spec.js", "base-component.spec.js", "button.spec.js", "collapse.spec.js", "dropdown.spec.js", "modal.spec.js", "tab.spec.js", "toast.spec.js"],
-        "selectedCases": 313,
-        "runnableCases": 313,
-        "harnessBlockedFiles": ["carousel.spec.js", "jquery.spec.js", "offcanvas.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"]
+        "selectedFiles": ["alert.spec.js", "base-component.spec.js", "button.spec.js", "collapse.spec.js", "dropdown.spec.js", "modal.spec.js", "offcanvas.spec.js", "tab.spec.js", "toast.spec.js"],
+        "selectedCases": 363,
+        "runnableCases": 363,
+        "harnessBlockedFiles": ["carousel.spec.js", "jquery.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"]
       }
     },
     {

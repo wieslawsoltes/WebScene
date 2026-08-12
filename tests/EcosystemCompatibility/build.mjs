@@ -111,6 +111,13 @@ const cases = [
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },
+  {
+    id: "bootstrap-offcanvas-upstream",
+    entry: "src/bootstrap-offcanvas-upstream.mjs",
+    title: "Bootstrap upstream offcanvas suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
   { id: "react-dom", entry: "src/react-dom.mjs", title: "React DOM composition", css: "" }
 ];
 
