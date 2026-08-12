@@ -57,97 +57,217 @@
         root.xml_mode = true;
         std::vector<dom_node*> stack{&root};
         size_t cursor = 0;
+        size_t error_position = std::string::npos;
+        std::string error_message;
+        size_t root_element_count = 0;
         const auto skip_space = [&](size_t& position, size_t limit) {
             while (position < limit
                 && std::isspace(static_cast<unsigned char>(xml[position]))) ++position;
         };
-        while (cursor < xml.size()) {
-            const auto open = xml.find('<', cursor);
-            if (open == std::string::npos) break;
-            if (open > cursor && !stack.empty()) {
-                const auto text = xml.substr(cursor, open - cursor);
-                if (!text.empty()) {
-                    auto& text_node = self->document.create_element("#text");
-                    text_node.xml_mode = true;
-                    text_node.text_content = text;
-                    self->document.append_child(*stack.back(), text_node);
-                }
+        const auto valid_name_start = [](unsigned char value) {
+            return std::isalpha(value) || value == '_' || value == ':';
+        };
+        const auto valid_name_part = [&](unsigned char value) {
+            return valid_name_start(value) || std::isdigit(value)
+                || value == '-' || value == '.';
+        };
+        const auto fail = [&](size_t position, std::string message) {
+            if (error_position == std::string::npos) {
+                error_position = position;
+                error_message = std::move(message);
             }
+        };
+        const auto append_text = [&](std::string value, bool cdata = false) {
+            if (value.empty() || stack.empty()) return;
+            if (stack.size() == 1U) {
+                if (!std::all_of(value.begin(), value.end(), [](unsigned char character) {
+                        return std::isspace(character);
+                    })) {
+                    fail(cursor, "text is not allowed outside the document element");
+                }
+                return;
+            }
+            auto& text_node = self->document.create_node(
+                dom_node_kind::text, "#text");
+            text_node.xml_mode = true;
+            text_node.text_content = cdata
+                ? std::move(value)
+                : decode_html_text(std::move(value));
+            self->document.append_child(*stack.back(), text_node);
+        };
+        while (cursor < xml.size() && error_position == std::string::npos) {
+            const auto open = xml.find('<', cursor);
+            if (open == std::string::npos) {
+                append_text(xml.substr(cursor));
+                cursor = xml.size();
+                break;
+            }
+            if (open > cursor) append_text(xml.substr(cursor, open - cursor));
+            if (error_position != std::string::npos) break;
             if (xml.compare(open, 4, "<!--") == 0) {
                 const auto end = xml.find("-->", open + 4U);
-                cursor = end == std::string::npos ? xml.size() : end + 3U;
+                if (end == std::string::npos) {
+                    fail(open, "unterminated comment");
+                    break;
+                }
+                cursor = end + 3U;
+                continue;
+            }
+            if (xml.compare(open, 9, "<![CDATA[") == 0) {
+                if (stack.size() == 1U) {
+                    fail(open, "CDATA is not allowed outside the document element");
+                    break;
+                }
+                const auto end = xml.find("]]>", open + 9U);
+                if (end == std::string::npos) {
+                    fail(open, "unterminated CDATA section");
+                    break;
+                }
+                append_text(xml.substr(open + 9U, end - open - 9U), true);
+                cursor = end + 3U;
+                continue;
+            }
+            if (xml.compare(open, 2, "<?") == 0) {
+                const auto end = xml.find("?>", open + 2U);
+                if (end == std::string::npos) {
+                    fail(open, "unterminated processing instruction");
+                    break;
+                }
+                cursor = end + 2U;
                 continue;
             }
             const auto end = xml.find('>', open + 1U);
-            if (end == std::string::npos) break;
-            if (open + 1U < xml.size() && xml[open + 1U] == '/') {
-                if (stack.size() > 1U) stack.pop_back();
+            if (end == std::string::npos) {
+                fail(open, "unterminated markup");
+                break;
+            }
+            if (xml.compare(open, 2, "<!") == 0) {
                 cursor = end + 1U;
                 continue;
             }
-            if (open + 1U < xml.size()
-                && (xml[open + 1U] == '!' || xml[open + 1U] == '?')) {
+            if (xml.compare(open, 2, "</") == 0) {
+                auto position = open + 2U;
+                skip_space(position, end);
+                const auto name_start = position;
+                while (position < end
+                    && valid_name_part(static_cast<unsigned char>(xml[position]))) ++position;
+                const auto tag = xml.substr(name_start, position - name_start);
+                skip_space(position, end);
+                if (tag.empty() || position != end || stack.size() <= 1U
+                    || stack.back()->tag != tag) {
+                    fail(name_start, "mismatched closing tag");
+                    break;
+                }
+                stack.pop_back();
                 cursor = end + 1U;
                 continue;
             }
             auto position = open + 1U;
-            skip_space(position, end);
-            const auto name_start = position;
+            if (position >= end
+                || !valid_name_start(static_cast<unsigned char>(xml[position]))) {
+                fail(position, "invalid element name");
+                break;
+            }
+            const auto name_start = position++;
             while (position < end
-                && !std::isspace(static_cast<unsigned char>(xml[position]))
-                && xml[position] != '/') ++position;
+                && valid_name_part(static_cast<unsigned char>(xml[position]))) ++position;
             const auto tag = xml.substr(name_start, position - name_start);
-            if (tag.empty()) {
-                cursor = end + 1U;
-                continue;
+            if (stack.size() == 1U && ++root_element_count > 1U) {
+                fail(name_start, "multiple document elements");
+                break;
             }
             auto& child = self->document.create_element(tag);
             child.xml_mode = true;
-            while (position < end) {
+            child.set_namespace("");
+            auto self_closing = false;
+            while (position < end && error_position == std::string::npos) {
                 skip_space(position, end);
-                if (position >= end || xml[position] == '/') break;
-                const auto attribute_start = position;
+                if (position >= end) break;
+                if (xml[position] == '/') {
+                    self_closing = true;
+                    ++position;
+                    skip_space(position, end);
+                    if (position != end) fail(position, "unexpected content after '/'");
+                    break;
+                }
+                if (!valid_name_start(static_cast<unsigned char>(xml[position]))) {
+                    fail(position, "invalid attribute name");
+                    break;
+                }
+                const auto attribute_start = position++;
                 while (position < end
-                    && !std::isspace(static_cast<unsigned char>(xml[position]))
-                    && xml[position] != '=' && xml[position] != '/') ++position;
+                    && valid_name_part(static_cast<unsigned char>(xml[position]))) ++position;
                 const auto attribute_name = xml.substr(
                     attribute_start, position - attribute_start);
                 skip_space(position, end);
-                std::string attribute_value;
-                if (position < end && xml[position] == '=') {
-                    ++position;
-                    skip_space(position, end);
-                    if (position < end && (xml[position] == '\'' || xml[position] == '"')) {
-                        const auto quote = xml[position++];
-                        const auto value_start = position;
-                        while (position < end && xml[position] != quote) ++position;
-                        attribute_value = xml.substr(value_start, position - value_start);
-                        if (position < end) ++position;
-                    } else {
-                        const auto value_start = position;
-                        while (position < end
-                            && !std::isspace(static_cast<unsigned char>(xml[position]))
-                            && xml[position] != '/') ++position;
-                        attribute_value = xml.substr(value_start, position - value_start);
-                    }
+                if (position >= end || xml[position] != '=') {
+                    fail(position, "attribute value is required");
+                    break;
                 }
-                if (!attribute_name.empty()) child.attributes[attribute_name] = attribute_value;
+                ++position;
+                skip_space(position, end);
+                if (position >= end || (xml[position] != '\'' && xml[position] != '"')) {
+                    fail(position, "attribute value must be quoted");
+                    break;
+                }
+                const auto quote = xml[position++];
+                const auto value_start = position;
+                while (position < end && xml[position] != quote) ++position;
+                if (position >= end) {
+                    fail(value_start, "unterminated attribute value");
+                    break;
+                }
+                auto attribute_value = decode_html_text(
+                    xml.substr(value_start, position - value_start));
+                ++position;
+                child.attributes[attribute_name] = attribute_value;
+                if (attribute_name == "xmlns") child.set_namespace(attribute_value);
             }
+            if (error_position != std::string::npos) break;
             if (const auto id = child.attributes.find("id"); id != child.attributes.end()) {
                 child.id_attribute = id->second;
             }
             if (const auto classes = child.attributes.find("class"); classes != child.attributes.end()) {
                 child.class_name = classes->second;
             }
-            if (!stack.empty()) self->document.append_child(*stack.back(), child);
-            auto self_closing = end > open && xml[end - 1U] == '/';
+            self->document.append_child(*stack.back(), child);
             if (!self_closing) stack.push_back(&child);
             cursor = end + 1U;
         }
+        if (error_position == std::string::npos && stack.size() != 1U) {
+            fail(xml.size(), "unclosed element");
+        }
+        if (error_position == std::string::npos && root_element_count != 1U) {
+            fail(0U, "document element is required");
+        }
+        auto* result_root = &root;
+        if (error_position != std::string::npos) {
+            auto& parser_root = self->document.create_element("#document-root");
+            parser_root.visible = false;
+            parser_root.xml_mode = true;
+            auto& parser_error = self->document.create_element("parsererror");
+            parser_error.xml_mode = true;
+            parser_error.set_namespace("");
+            auto& message = self->document.create_node(dom_node_kind::text, "#text");
+            message.xml_mode = true;
+            const auto line = static_cast<size_t>(std::count(
+                xml.begin(), xml.begin() + std::min(error_position, xml.size()), '\n')) + 1U;
+            const auto previous_newline = error_position == 0U
+                ? std::string::npos
+                : xml.rfind('\n', std::min(error_position, xml.size()) - 1U);
+            const auto column = error_position
+                - (previous_newline == std::string::npos ? 0U : previous_newline + 1U) + 1U;
+            message.text_content = "XML Parsing Error: " + error_message
+                + " at line " + std::to_string(line)
+                + " column " + std::to_string(column);
+            self->document.append_child(parser_error, message);
+            self->document.append_child(parser_root, parser_error);
+            result_root = &parser_root;
+        }
         auto local_context = info.GetIsolate()->GetCurrentContext();
-        self->detached_document_roots.insert(root.id);
+        self->detached_document_roots.insert(result_root->id);
         info.GetReturnValue().Set(wrap_detached_document(
-            *self, root, local_context, "about:blank"));
+            *self, *result_root, local_context, "about:blank"));
     }
 
     static void parsed_document_get_elements(const v8::FunctionCallbackInfo<v8::Value>& info)

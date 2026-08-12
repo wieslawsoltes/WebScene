@@ -34,10 +34,15 @@ function registerModule(name, options, body) {
 
 function registerTest(name, body, skipped = false) {
   const testName = String(name);
+  const includes = (selection, value) => typeof selection?.has === "function"
+    ? selection.has(value)
+    : Array.isArray(selection) && selection.includes(value);
   const blocked = globalThis.__webSceneQUnitBlockedNames;
-  if (blocked && (typeof blocked.has === "function"
-    ? blocked.has(testName)
-    : Array.isArray(blocked) && blocked.includes(testName))) return;
+  if (blocked && includes(blocked, testName)) return;
+  const only = globalThis.__webSceneQUnitOnlyNames;
+  if (only && !includes(only, testName)) return;
+  const excluded = globalThis.__webSceneQUnitExcludedNames;
+  if (excluded && includes(excluded, testName)) return;
   const index = registrationIndex++;
   const shard = globalThis.__webSceneQUnitShard;
   if (shard && index % Number(shard.count) !== Number(shard.index)) return;
@@ -104,10 +109,12 @@ function createAssert(testName) {
   let assertionCount = 0;
   let pending = 0;
   let settle = null;
+  const failures = [];
 
   const record = (condition, message) => {
     assertionCount++;
-    if (!condition) throw new Error(message || `QUnit assertion failed in ${testName}`);
+    if (!condition) failures.push(
+      new Error(message || `QUnit assertion failed in ${testName}`));
   };
   const assert = {
     expect(count) { expectedCount = Number(count); },
@@ -145,6 +152,10 @@ function createAssert(testName) {
       };
     },
     throws(callback, expected, message) {
+      if (typeof expected === "string" && message === undefined) {
+        message = expected;
+        expected = undefined;
+      }
       let thrown = null;
       try { callback(); } catch (error) { thrown = error; }
       const matches = thrown !== null && (
@@ -172,6 +183,7 @@ function createAssert(testName) {
       if (expectedCount !== null && assertionCount !== expectedCount) {
         throw new Error(`${testName}: expected ${expectedCount} assertions, observed ${assertionCount}`);
       }
+      if (failures.length) throw failures[0];
     }
   };
 }

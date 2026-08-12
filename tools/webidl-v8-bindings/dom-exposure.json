@@ -290,6 +290,41 @@
       "constants": []
     },
     {
+      "name": "HTMLFormElement",
+      "template": "html_form_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "indexedGetter": "form_or_select_indexed_getter",
+      "attributes": [
+        { "name": "length", "getter": "get_form_or_select_length" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "HTMLSelectElement",
+      "template": "html_select_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "indexedGetter": "form_or_select_indexed_getter",
+      "attributes": [
+        { "name": "length", "getter": "get_form_or_select_length" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "HTMLScriptElement",
+      "template": "html_script_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [
+        { "name": "text", "getter": "get_script_text", "setter": "set_script_text" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "HTMLSlotElement",
       "template": "html_slot_element_template",
       "constructor": "illegal_dom_constructor",

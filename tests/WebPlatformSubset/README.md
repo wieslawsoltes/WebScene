@@ -127,11 +127,11 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 78 candidate, 0 harness-blocked, and 5
+The pinned profile contains 110 required, 79 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes
-78/78 documents and 407/407 subtests while the release gate remains 110/110 documents
+79/79 documents and 415/415 subtests while the release gate remains 110/110 documents
 and 434/434 subtests:
 
 - complex `:is()` alternatives now match full selectors, CSS sibling combinators ignore
@@ -218,7 +218,11 @@ and 434/434 subtests:
   before its table instead of assuming it precedes unrelated earlier body content; and
 - the pinned `check-layout-th.js` adapter now loads its pinned relative support sheet,
   and empty bordered non-stretch flex items retain their intrinsic cross size through
-  dynamic `align-items` changes.
+  dynamic `align-items` changes; and
+- a Chrome-authorized generic library-primitives contract now requires real Text-node
+  replacement, interface-bounded script/form/select members, ordered document lookups,
+  detached-document identity, well-formed XML/CDATA behavior, and stable initial plus
+  hydrated iframe realm identity.
 
 The focused behavior is also covered by native runtime tests, managed selector tests,
 and the generated-binding freshness check. Candidate promotion is intentionally deferred
@@ -450,6 +454,20 @@ property samples. Script execution history occupies existing tail padding, so th
 compile-time 976-byte `dom_node` invariant is unchanged; ordinary nodes allocate no
 additional state. The optimized Inspector library grows by 272 bytes. All measured
 medians remain within the established 10% no-meaningful-regression envelope.
+
+The unchanged upstream jQuery core slice and its generic DOM/XML/iframe fixes were
+compared with their exact clean parent (`9ac2c31`) in six balanced fresh-process runs.
+Median-of-medians p50 moved from 0.789 ms to 0.770 ms (-2.3%) for 1,000
+startup/lifecycle samples, from 34.390 ms to 34.272 ms (-0.3%) for the 30-sample
+selector workload, and from 3.288 ms to 3.335 ms (+1.4%) for 50 generated
+named-property samples. Four balanced four-context/2,000-row memory probes moved the
+median incremental working set from 22,943,744 to 25,169,920 bytes per context (+9.7%)
+and post-destroy retention from 91,062,272 to 99,991,552 bytes (+9.8%). The increase is
+bounded to the 2,001 real Text nodes now represented by that authored workload;
+`dom_node` remains 976 bytes. The optimized Inspector library grows by 49,872 bytes
+(0.16%). Isolated and shared-isolate lifecycle probes pass context identity, hidden
+timers, context release, and shared-slot reuse. Every measured median remains within
+the established 10% no-meaningful-regression envelope.
 
 There are no remaining candidate failures on the local `osx-arm64` Inspector artifact.
 Promotion remains intentionally separate: the same unchanged bytes still need evidence

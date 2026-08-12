@@ -808,8 +808,10 @@
         // Documents containing executable/resource-bearing markup still need
         // their independent frame realm. Plain document.write replacement is
         // complete synchronously in the initial about:blank realm.
-        if (html.find("<script") != std::string::npos
-            || html.find("<link") != std::string::npos) {
+        const auto normalized_html = lower_html_name(html);
+        if (normalized_html.find("<script") != std::string::npos
+            || normalized_html.find("<link") != std::string::npos
+            || normalized_html.find("onload") != std::string::npos) {
             self->pending_frame_hydrations.push_back(node);
         }
     }

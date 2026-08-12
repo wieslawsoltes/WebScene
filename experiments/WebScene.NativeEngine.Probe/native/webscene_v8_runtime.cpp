@@ -189,6 +189,8 @@ struct v8_dom_runtime::implementation final {
         auto element = v8::FunctionTemplate::New(isolate);
         element->SetClassName(js_string(isolate, "HTMLElement"));
         element->InstanceTemplate()->SetInternalFieldCount(1);
+        element->InstanceTemplate()->SetHandler(
+            v8::IndexedPropertyHandlerConfiguration(form_or_select_indexed_getter));
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "style"), get_style);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "id"), get_id, set_id);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "className"), get_class_name, set_class_name);
@@ -208,6 +210,7 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "nodeValue"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "textContent"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerText"), get_inner_text, set_text_content);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "text"), get_script_text, set_script_text);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "data"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "namespaceURI"), get_namespace_uri);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "children"), get_children);
@@ -272,6 +275,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "readOnly"), get_read_only, set_read_only);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "options"), get_select_options);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "elements"), get_form_elements);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "length"), get_form_or_select_length);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "selectedIndex"), get_selected_index, set_selected_index);
         element->InstanceTemplate()->SetNativeDataProperty(
@@ -585,6 +589,8 @@ struct v8_dom_runtime::implementation final {
         frame_document->SetNativeDataProperty(
             js_string(isolate, "body"), get_body);
         frame_document->SetNativeDataProperty(
+            js_string(isolate, "head"), get_body);
+        frame_document->SetNativeDataProperty(
             js_string(isolate, "documentElement"), get_body);
         frame_document->SetNativeDataProperty(
             js_string(isolate, "activeElement"),
@@ -672,6 +678,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "visibilityState"),
             get_document_visibility_state);
         document_template->SetNativeDataProperty(js_string(isolate, "links"), get_document_links);
+        document_template->SetNativeDataProperty(js_string(isolate, "styleSheets"), get_document_style_sheets);
         document_template->SetNativeDataProperty(
             js_string(isolate, "cookie"),
             get_document_cookie,
@@ -746,6 +753,9 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "getElementsByClassName"),
             v8::FunctionTemplate::New(isolate, document_get_elements_by_class_name));
+        document_template->Set(
+            js_string(isolate, "getElementsByName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_name));
         document_template->Set(
             js_string(isolate, "createRange"),
             v8::FunctionTemplate::New(isolate, create_range));

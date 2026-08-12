@@ -41,6 +41,20 @@ const cases = [
     title: "jQuery upstream basic integration suite",
     css: ""
   },
+  ...Array.from({ length: 2 }, (_, index) => ({
+    id: `jquery-core-upstream-${index + 1}`,
+    entry: "src/jquery-core-upstream.mjs",
+    title: `jQuery upstream core suite shard ${index + 1}/2`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:2};globalThis.__webSceneQUnitExcludedNames=["jQuery('massive html trac-7990')"];</script>`,
+    css: ""
+  })),
+  {
+    id: "jquery-core-upstream-massive-html",
+    entry: "src/jquery-core-upstream.mjs",
+    title: "jQuery upstream core massive HTML case",
+    preamble: `<script>globalThis.__webSceneQUnitOnlyNames=["jQuery('massive html trac-7990')"];</script>`,
+    css: ""
+  },
   ...Array.from({ length: 3 }, (_, index) => ({
     id: `jquery-attributes-upstream-${index + 1}`,
     entry: "src/jquery-attributes-upstream.mjs",

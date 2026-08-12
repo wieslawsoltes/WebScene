@@ -258,14 +258,22 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        if (node->tag != "#text") {
+        const auto is_character_data = node->kind == dom_node_kind::text
+            || node->kind == dom_node_kind::comment
+            || node->kind == dom_node_kind::processing_instruction;
+        if (!is_character_data) {
             if (!self->blur_active_descendant_before_replacing_children(*node)) return;
             self->detach_all_children(*node);
         }
         const auto text = raw_value->IsNullOrUndefined()
             ? std::string{}
             : to_wtf8(info.GetIsolate(), raw_value);
-        if (node->tag == "textarea") {
+        if (is_character_data) {
+            node->text_content = text;
+            if (node->parent != nullptr) {
+                synchronize_textarea_value_from_children(*node->parent);
+            }
+        } else {
             node->text_content.clear();
             if (!text.empty()) {
                 auto& text_node = self->document.create_node(
@@ -273,15 +281,29 @@
                 text_node.text_content = text;
                 self->document.append_child(*node, text_node);
             }
-            synchronize_textarea_value_from_children(*node);
-        } else {
-            node->text_content = text;
-            if (node->kind == dom_node_kind::text && node->parent != nullptr) {
-                synchronize_textarea_value_from_children(*node->parent);
-            }
+            if (node->tag == "textarea") synchronize_textarea_value_from_children(*node);
         }
         self->activate_connected_stylesheet(*node);
         self->document.mark_dirty();
+    }
+
+    static void get_script_text(
+        v8::Local<v8::Name> name,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || node->tag != "script") return;
+        get_text_content(name, info);
+    }
+
+    static void set_script_text(
+        v8::Local<v8::Name> name,
+        v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || node->tag != "script") return;
+        set_text_content(name, value, info);
     }
 
     static void get_document_node_type(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -304,10 +326,14 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
-        const auto frame_document_root = root != nullptr && root->tag == "body"
-            && root->parent != nullptr && root->parent->tag == "iframe";
-        if (frame_document_root && !self->frame_context.IsEmpty()) {
-            info.GetReturnValue().Set(self->frame_context.Get(info.GetIsolate())->Global());
+        auto* frame = root;
+        while (frame != nullptr && frame->tag != "iframe") frame = frame->parent;
+        if (frame != nullptr) {
+            const auto actual = self->actual_frame_windows.find(frame->id);
+            info.GetReturnValue().Set(
+                actual != self->actual_frame_windows.end() && !actual->second.IsEmpty()
+                    ? actual->second.Get(info.GetIsolate())
+                    : self->frame_window(*frame));
             return;
         }
         info.GetReturnValue().Set(self->context.Get(info.GetIsolate())->Global());
@@ -320,7 +346,10 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
-        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), node->namespace_uri()));
+        const auto namespace_uri = node->namespace_uri();
+        info.GetReturnValue().Set(namespace_uri.empty()
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(js_dom_string(info.GetIsolate(), namespace_uri)));
     }
 
     static void get_attributes(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -706,6 +735,17 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto isolate = info.GetIsolate();
+        auto* node = unwrap_node(info.Holder());
+        auto* root = node;
+        while (root != nullptr && root->parent != nullptr) root = root->parent;
+        if (root != nullptr && self->detached_document_roots.contains(root->id)) {
+            info.GetReturnValue().Set(wrap_detached_document(
+                *self,
+                *root,
+                isolate->GetCurrentContext(),
+                "about:blank"));
+            return;
+        }
         v8::Local<v8::Value> document_value;
         if (isolate->GetCurrentContext()->Global()->Get(
                 isolate->GetCurrentContext(),
@@ -1766,6 +1806,41 @@
             result->Set(local_context, index, self->wrap_node(*controls[index])).Check();
         }
         info.GetReturnValue().Set(result);
+    }
+
+    static std::vector<dom_node*> form_or_select_items(dom_node& node)
+    {
+        std::vector<dom_node*> items;
+        if (node.tag == "form") collect_form_controls(node, items);
+        else if (node.tag == "select") collect_descendants_by_tag(node, "option", items);
+        return items;
+    }
+
+    static void get_form_or_select_length(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || (node->tag != "form" && node->tag != "select")) return;
+        info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(
+            info.GetIsolate(),
+            static_cast<uint32_t>(form_or_select_items(*node).size())));
+    }
+
+    static v8::Intercepted form_or_select_indexed_getter(
+        uint32_t index,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (self == nullptr || node == nullptr
+            || (node->tag != "form" && node->tag != "select")) {
+            return v8::Intercepted::kNo;
+        }
+        const auto items = form_or_select_items(*node);
+        if (index >= items.size()) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*items[index]));
+        return v8::Intercepted::kYes;
     }
 
     static void get_selected_index(

@@ -170,6 +170,22 @@
           "sha256": "8b32a1fc476fb9376bf95abf8e65b56c0204c344c139d345cbca76cf525c2cb6"
         },
         {
+          "path": "upstream/jquery/test/unit/core.js",
+          "cases": 57,
+          "sha256": "275ad61e30f2eb3c994a10bd477854e17289ac25626154b496dfa65616e58fc3",
+          "inFileHarnessBlocked": [
+            {
+              "name": "globalEval execution after script injection (trac-7862)",
+              "reason": "Requires jQuery's PHP wait endpoint and an external script response."
+            },
+            {
+              "name": "separately served core iframe fixtures",
+              "cases": 5,
+              "reason": "Requires jQuery's globalEval context, dynamic-ready, aliased-property, onready, and Symbol-polyfill iframe documents."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/attributes.js",
           "cases": 65,
           "sha256": "6aa2b9d730bd32032c4ca9881d574eb2d87bbc1b0a6f79326870e52d3f59aacc",
@@ -340,7 +356,6 @@
       "harnessBlocked": [
         "ajax.js",
         "animation.js",
-        "core.js",
         "effects.js",
         "event.js",
         "exports.js",

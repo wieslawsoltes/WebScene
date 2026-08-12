@@ -1092,6 +1092,11 @@
         dom_node& frame,
         dom_node& frame_body)
     {
+        v8::Local<v8::Object> frame_element;
+        {
+            v8::Context::Scope owner_context_scope(context.Get(isolate));
+            frame_element = wrap_node(frame);
+        }
         v8::Context::Scope context_scope(local_context);
         auto global = local_context->Global();
         auto frame_document_value = document_template.Get(isolate)->NewInstance(local_context).ToLocalChecked();
@@ -1142,7 +1147,7 @@
         }
         global->Set(local_context, js_string(isolate, "parent"), parent_window).Check();
         global->Set(local_context, js_string(isolate, "top"), context.Get(isolate)->Global()).Check();
-        global->Set(local_context, js_string(isolate, "frameElement"), wrap_node(frame)).Check();
+        global->Set(local_context, js_string(isolate, "frameElement"), frame_element).Check();
         global->SetNativeDataProperty(
             local_context,
             js_string(isolate, "devicePixelRatio"),
@@ -1655,9 +1660,11 @@
             ++frame_script_error_count;
             return false;
         }
+        const auto normalized_html = lower_html_name(html);
         const auto opening_tag = [&](std::string_view name) {
-            const auto open = html.find("<" + std::string(name));
-            const auto close = open == std::string::npos ? std::string::npos : html.find('>', open);
+            const auto open = normalized_html.find("<" + std::string(name));
+            const auto close = open == std::string::npos
+                ? std::string::npos : normalized_html.find('>', open);
             return open == std::string::npos || close == std::string::npos
                 ? std::string{}
                 : html.substr(open, close - open + 1U);
@@ -1677,14 +1684,17 @@
                 }
             }
         }
-        if (resource_root.empty() && !load_resource_callback) {
+        const auto stylesheets = parse_frame_stylesheets(html);
+        const auto scripts = parse_frame_scripts(html);
+        const auto requires_resource_loader = !stylesheets.empty()
+            || std::any_of(scripts.begin(), scripts.end(), [](const auto& script) {
+                return !script.source.empty();
+            });
+        if (requires_resource_loader && resource_root.empty() && !load_resource_callback) {
             frame_last_error_value = "The connected component resource root was not configured";
             ++frame_script_error_count;
             return false;
         }
-
-        const auto stylesheets = parse_frame_stylesheets(html);
-        const auto scripts = parse_frame_scripts(html);
         for (const auto& href : stylesheets) {
             start_resource_prefetch(href, frame_base_address, WEBSCENE_RESOURCE_STYLESHEET);
         }
@@ -2034,6 +2044,27 @@
             local_frame_context,
             js_string(isolate, "readyState"),
             js_string(isolate, "complete")).Check();
+        auto body_onload = std::string{};
+        for (auto [name, value] : parse_html_attributes(body_opening, 5U)) {
+            if (lower_html_name(name) != "onload") continue;
+            body_onload = std::move(value);
+            break;
+        }
+        if (!body_onload.empty()) {
+            std::string error;
+            const auto handler_source = "(function(event){" + body_onload
+                + "\n}).call(document.body, { type: 'load' });";
+            if (!execute_in_context(
+                    local_frame_context,
+                    handler_source,
+                    frame_base_address + "#body-onload",
+                    error,
+                    true)) {
+                frame_last_error_value = "Iframe body load handler failed: " + error;
+                ++frame_script_error_count;
+                return false;
+            }
+        }
         if (!dispatch_lifecycle_event(frame_global, "load")) return false;
         perform_microtask_checkpoint();
         frame_last_error_value.clear();

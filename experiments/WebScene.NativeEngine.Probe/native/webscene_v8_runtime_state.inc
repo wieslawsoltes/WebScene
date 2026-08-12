@@ -32,6 +32,9 @@
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> html_form_element_template;
+    v8::Global<v8::FunctionTemplate> html_select_element_template;
+    v8::Global<v8::FunctionTemplate> html_script_element_template;
     v8::Global<v8::FunctionTemplate> html_slot_element_template;
     v8::Global<v8::FunctionTemplate> html_style_element_template;
     uint32_t next_standalone_event_target_id{0x80000000U};
@@ -63,6 +66,7 @@
     std::unordered_map<uint64_t, v8::Global<v8::Object>> stylesheet_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> computed_style_wrappers;
     std::unordered_set<uint64_t> detached_document_roots;
+    std::unordered_map<uint64_t, v8::Global<v8::Object>> detached_documents;
     // Document.getElementById overwhelmingly targets unique IDs. Cache the
     // first tree-order match per document root, and rebuild lazily after any
     // DOM generation change so duplicate IDs, reparents, detached nodes, and

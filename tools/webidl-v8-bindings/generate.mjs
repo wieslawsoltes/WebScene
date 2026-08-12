@@ -184,6 +184,10 @@ for (const value of manifest.interfaces) {
     line(`    ${local}->Inherit(generated_${safe(value.parent)}_template);`);
   }
   line(`    ${local}->InstanceTemplate()->SetInternalFieldCount(2);`);
+  if (value.indexedGetter) {
+    line(`    ${local}->InstanceTemplate()->SetHandler(`);
+    line(`        v8::IndexedPropertyHandlerConfiguration(${value.indexedGetter}));`);
+  }
   if (value.attributes.length || value.methods.length) {
     line(`    auto generated_${safe(value.name)}_signature =`);
     line(`        v8::Signature::New(isolate, ${local});`);

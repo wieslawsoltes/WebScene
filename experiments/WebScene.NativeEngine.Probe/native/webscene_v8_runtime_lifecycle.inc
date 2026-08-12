@@ -100,6 +100,7 @@
         class_list_wrappers.clear();
         style_wrappers.clear();
         stylesheet_wrappers.clear();
+        detached_documents.clear();
         node_wrappers.clear();
         attr_wrappers.clear();
         attached_attributes.clear();
@@ -114,6 +115,9 @@
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        html_form_element_template.Reset();
+        html_select_element_template.Reset();
+        html_script_element_template.Reset();
         html_slot_element_template.Reset();
         html_style_element_template.Reset();
         shadow_root_template.Reset();

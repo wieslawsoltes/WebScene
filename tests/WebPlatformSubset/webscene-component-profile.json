@@ -820,6 +820,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-library-core-primitives.html",
+      "type": "contract",
+      "capabilities": ["text-content-text-child", "html-script-element-text", "form-select-indexed-access", "document-get-elements-by-name", "document-style-sheets", "detached-document-owner-document", "xml-well-formedness-cdata-parsererror", "initial-iframe-document-load"],
+      "evidence": ["jquery-4.0.0-core-reduction", "direct-chrome-neutral-contract", "native-neutral-contract"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery core prerequisites. It requires real Text children after textContent replacement, interface-bounded script/form/select APIs, document lookup order, detached-document identity, bounded well-formed XML/CDATA/error behavior, and initial plus hydrated iframe realm identity. Keep candidate until unchanged evidence passes on every released RID."
+    },
+    {
       "path": "contracts/disconnected-element-geometry.html",
       "type": "contract",
       "capabilities": ["disconnected-element", "empty-client-rect-list", "zero-bounding-client-rect"],

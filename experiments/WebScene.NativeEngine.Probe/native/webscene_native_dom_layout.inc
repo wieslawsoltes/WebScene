@@ -1007,13 +1007,17 @@ void native_document::layout_children(dom_node& parent)
                     auto word_width = measure_text_width(word, *run);
                     auto space_width = pending_space && cursor_x > 0
                         ? measure_text_width(" ", *run) : 0.0F;
+                    constexpr auto inline_wrap_epsilon = 0.01F;
                     if (allow_wrap && cursor_x > 0
-                        && cursor_x + space_width + word_width > content.width) {
+                        && cursor_x + space_width + word_width
+                            > content.width + inline_wrap_epsilon) {
                         start_new_line();
                         space_width = 0;
                     }
                     if (space_width > 0) append_fragment(*run, " ", space_width);
-                    while (allow_wrap && word_width > content.width && !word.empty()) {
+                    while (allow_wrap
+                        && word_width > content.width + inline_wrap_epsilon
+                        && !word.empty()) {
                         size_t characters = 1U;
                         while (characters < word.size()
                             && measure_text_width(

@@ -1,0 +1,147 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>DOM library core primitives</title>
+<body>
+<script>
+"use strict";
+
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+
+function assert(condition, message) { if (!condition) throw new Error(message); }
+function equal(actual, expected, message) {
+  if (!Object.is(actual, expected)) {
+    throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+function test(name, callback) {
+  try {
+    callback();
+    state.results.push({ name, status: "PASS", message: null, stack: null });
+  } catch (error) {
+    state.results.push({ name, status: "FAIL", message: String(error?.message || error), stack: error?.stack ? String(error.stack) : null });
+  }
+}
+function finish() {
+  if (state.complete) return;
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+}
+
+test("textContent replacement creates one real Text child", () => {
+  const host = document.createElement("div");
+  const previous = document.createElement("span");
+  host.appendChild(previous);
+  host.textContent = "alpha beta";
+  equal(previous.parentNode, null, "replaced child parent");
+  equal(host.childNodes.length, 1, "replacement child count");
+  equal(host.firstChild.nodeType, Node.TEXT_NODE, "replacement child type");
+  equal(host.firstChild.nodeValue, "alpha beta", "replacement child value");
+  host.textContent = null;
+  equal(host.childNodes.length, 0, "null replacement child count");
+});
+
+test("HTMLScriptElement owns text and connected script text executes", () => {
+  const script = document.createElement("script");
+  const div = document.createElement("div");
+  assert(script instanceof HTMLScriptElement, "script wrapper brand");
+  assert(HTMLScriptElement.prototype instanceof HTMLElement, "script prototype inheritance");
+  assert(Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, "text")?.set, "script text descriptor");
+  equal(Object.getOwnPropertyDescriptor(HTMLElement.prototype, "text"), undefined, "generic HTMLElement text descriptor");
+  assert(!("text" in div), "generic element inherited script text");
+  window.__webSceneScriptTextRuns = 0;
+  script.text = "window.__webSceneScriptTextRuns += 1";
+  equal(script.firstChild?.nodeType, Node.TEXT_NODE, "script text child type");
+  document.body.appendChild(script);
+  equal(window.__webSceneScriptTextRuns, 1, "connected script execution count");
+});
+
+test("form and select expose interface-bounded indexed access", () => {
+  const form = document.createElement("form");
+  form.innerHTML = "<input name='first'><div><input name='second'></div>";
+  const select = document.createElement("select");
+  select.innerHTML = "<option value='a'>A</option><option value='b'>B</option>";
+  const div = document.createElement("div");
+  assert(form instanceof HTMLFormElement, "form wrapper brand");
+  assert(select instanceof HTMLSelectElement, "select wrapper brand");
+  equal(form.length, 2, "form length");
+  assert(form[0] === form.elements[0] && form[1] === form.elements[1], "form indexed identity");
+  equal(select.length, 2, "select length");
+  assert(select[0] === select.options[0] && select[1] === select.options[1], "select indexed identity");
+  assert(!("length" in div), "generic element inherited form/select length");
+});
+
+test("Document name and stylesheet lookups preserve tree order", () => {
+  const host = document.createElement("section");
+  const first = document.createElement("input");
+  const second = document.createElement("object");
+  first.name = second.name = "webscene-core-name";
+  host.append(first, second);
+  document.body.appendChild(host);
+  const named = document.getElementsByName("webscene-core-name");
+  equal(named.length, 2, "named element count");
+  assert(named[0] === first && named[1] === second, "named element tree order");
+  const before = document.styleSheets.length;
+  const style = document.createElement("style");
+  style.textContent = ".webscene-core-sheet { color: rgb(1, 2, 3); }";
+  document.head.appendChild(style);
+  equal(document.styleSheets.length, before + 1, "connected stylesheet count");
+});
+
+test("detached documents retain ownerDocument and no default view", () => {
+  const detached = document.implementation.createHTMLDocument("Detached");
+  const child = detached.createElement("section");
+  detached.body.appendChild(child);
+  assert(child.ownerDocument === detached, "detached child ownerDocument identity");
+  equal(detached.defaultView, null, "detached document defaultView");
+  assert(detached.documentElement !== document.documentElement, "detached document root identity");
+});
+
+test("XML parsing preserves CDATA and reports malformed structure", () => {
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString("<Root><Value><![CDATA[a<b]]></Value><Entity>&amp;</Entity></Root>", "application/xml");
+  equal(parsed.documentElement.nodeName, "Root", "XML root case");
+  equal(parsed.querySelector("Value").textContent, "a<b", "CDATA text");
+  equal(parsed.querySelector("Entity").textContent, "&", "entity text");
+  equal(parsed.documentElement.namespaceURI, null, "unqualified XML namespace");
+  const malformed = parser.parseFromString("<Root><Value></Root>", "text/xml");
+  const error = malformed.querySelector("parsererror");
+  assert(error, "malformed XML parsererror");
+  assert(/line\s+1/i.test(error.textContent) && /column/i.test(error.textContent), `parsererror location '${error?.textContent}'`);
+});
+
+const iframe = document.createElement("iframe");
+document.body.appendChild(iframe);
+test("initial iframe exposes an HTML document and stable realm identity", () => {
+  const frameDocument = iframe.contentDocument;
+  assert(frameDocument.documentElement?.nodeName === "HTML", "initial documentElement");
+  assert(frameDocument.head?.nodeName === "HEAD", "initial head");
+  assert(frameDocument.body?.nodeName === "BODY", "initial body");
+  assert(frameDocument.defaultView === iframe.contentWindow, "initial defaultView identity");
+  assert(iframe.contentWindow.frameElement === iframe, "initial frameElement identity");
+});
+
+let frameCallbackObserved = false;
+window.__webSceneCoreFrameLoaded = () => {
+  if (frameCallbackObserved) return;
+  frameCallbackObserved = true;
+  test("iframe body onload runs in the hydrated frame realm", () => {
+    assert(iframe.contentDocument.body, "hydrated body");
+    assert(iframe.contentDocument.defaultView === iframe.contentWindow, "hydrated defaultView identity");
+    assert(iframe.contentWindow.frameElement === iframe, "hydrated frameElement identity");
+  });
+  finish();
+};
+iframe.contentDocument.open();
+iframe.contentDocument.write("<!doctype html><html><head></head><body onload=\"parent.__webSceneCoreFrameLoaded()\"></body></html>");
+iframe.contentDocument.close();
+setTimeout(() => {
+  if (frameCallbackObserved) return;
+  test("iframe body onload runs in the hydrated frame realm", () => { throw new Error("iframe body onload did not run"); });
+  finish();
+}, 2000);
+</script>
