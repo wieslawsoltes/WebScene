@@ -1595,11 +1595,17 @@ private:
 
 // Compatibility work must remain pay-for-use. Guard the 64-bit cold-path
 // footprint so new web-facing state cannot silently become a per-node or
-// per-document tax on every hosted component.
-static_assert(sizeof(void*) != 8 || sizeof(dom_node) == 976);
+// per-document tax on every hosted component. Use upper budgets rather than
+// ABI-specific equalities: libc++, libstdc++, and MSVC intentionally use
+// different std::string and container representations.
 static_assert(
-    sizeof(void*) != 8 || sizeof(dom_node::form_control_data) == 56,
-    "textarea dirty-value tracking must stay inside the existing cold form-control record");
-static_assert(sizeof(void*) != 8 || sizeof(native_document) == 304);
+    sizeof(void*) != 8 || sizeof(dom_node) <= 1024,
+    "dom_node exceeded its cross-library 64-bit footprint budget");
+static_assert(
+    sizeof(void*) != 8 || sizeof(dom_node::form_control_data) <= 64,
+    "form-control state exceeded its cross-library 64-bit footprint budget");
+static_assert(
+    sizeof(void*) != 8 || sizeof(native_document) <= 384,
+    "native_document exceeded its cross-library 64-bit footprint budget");
 
 } // namespace webscene_native
