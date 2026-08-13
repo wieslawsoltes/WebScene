@@ -175,7 +175,10 @@ async function evaluate(client, expression) {
 async function runChromeDocument(client, documentPath, timeoutSeconds) {
   const started = Date.now();
   const exceptions = [];
-  const listener = event => exceptions.push(event.exceptionDetails?.text || "Chrome runtime exception");
+  const listener = event => exceptions.push(
+    event.exceptionDetails?.exception?.description
+      || event.exceptionDetails?.text
+      || "Chrome runtime exception");
   client.on("Runtime.exceptionThrown", listener);
   try {
     await client.send("Page.navigate", { url: pathToFileURL(documentPath).href });
@@ -194,15 +197,20 @@ async function runChromeDocument(client, documentPath, timeoutSeconds) {
         message: "Chrome contract did not complete.", subtests: [], artifacts: null };
     }
     const subtests = state.results || [];
+    const expectedRuntimeExceptions = Array.isArray(state.expectedRuntimeExceptions)
+      ? state.expectedRuntimeExceptions.map(String)
+      : [];
+    const unexpectedRuntimeExceptions = exceptions.filter(message =>
+      !expectedRuntimeExceptions.some(expected => String(message).includes(expected)));
     const passed = state.harness?.status === 0
       && subtests.every(result => result.status === "PASS")
-      && exceptions.length === 0;
+      && unexpectedRuntimeExceptions.length === 0;
     return {
       path: documentPath,
       type: "contract",
       status: passed ? "PASS" : "FAIL",
       duration: Date.now() - started,
-      message: passed ? null : state.harness?.message || exceptions.join("\n") || "Chrome subtest failed.",
+      message: passed ? null : state.harness?.message || unexpectedRuntimeExceptions.join("\n") || "Chrome subtest failed.",
       subtests,
       artifacts: null
     };

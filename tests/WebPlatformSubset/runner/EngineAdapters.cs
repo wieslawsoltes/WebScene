@@ -67,6 +67,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         RunnerOptions options,
         ViewportSettings viewport,
         string upstreamRoot,
+        string documentPath,
         string html)
     {
         _viewport = viewport;
@@ -103,7 +104,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 X = viewport.Width,
                 Y = viewport.Height
             });
-            LoadPreparedDocument(html, upstreamRoot);
+            LoadPreparedDocument(html, upstreamRoot, documentPath);
             _loaded = true;
             for (var index = 0; index < 4; index++) SettleFrame();
         }
@@ -260,7 +261,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         if (_engine != IntPtr.Zero) NativeApi.EngineDestroy(_engine);
     }
 
-    private void LoadPreparedDocument(string html, string upstreamRoot)
+    private void LoadPreparedDocument(string html, string upstreamRoot, string documentPath)
     {
         var scripts = ScriptRegex.Matches(html)
             .Select(match => new
@@ -300,8 +301,11 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
             : [];
         body = HtmlScriptSemantics.RemoveExecutableScriptsAndStyles(body, ScriptRegex, StyleRegex);
         var markup = styles + body;
+        var documentDirectory = Path.GetDirectoryName(documentPath)?.Replace('\\', '/') ?? string.Empty;
+        if (documentDirectory.Length > 0) documentDirectory += "/";
 
         Execute($$"""
+            globalThis.__webSceneDocumentBasePath = {{JsonSerializer.Serialize(documentDirectory)}};
             const webSceneViewportRoot = document.body;
             const webSceneDocumentElement = document.createElement('html');
             const webSceneHead = document.createElement('head');
@@ -556,8 +560,9 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             view->Commands,
             checked((int)header.CommandCount));
 
-        foreach (ref readonly var command in commands)
+        for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
         {
+            ref readonly var command = ref commands[commandIndex];
             if (command.Kind == 30)
             {
                 PushOpacityGroup(canvas, command);
@@ -582,10 +587,23 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             {
                 canvas.Restore();
             }
+            else if (command.Kind == 12)
+            {
+                canvas.Save();
+                PushRoundedClip(
+                    canvas,
+                    command,
+                    ResolveDomCornerRadii(commands, commandIndex));
+            }
+            else if (command.Kind == 13)
+            {
+                canvas.Restore();
+            }
             else if (command.Kind is 1 or 7 or 17)
             {
-                if (command.Kind == 17) DrawShadow(canvas, command);
-                else DrawRect(canvas, command, stroke: false);
+                var radii = ResolveDomCornerRadii(commands, commandIndex);
+                if (command.Kind == 17) DrawShadow(canvas, command, radii);
+                else DrawRect(canvas, command, false, radii);
             }
             else if (command.Kind == 2)
             {
@@ -593,8 +611,9 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                 canvas.DrawLine(command.X, command.Y, command.Width, command.Height, paint);
             }
         }
-        foreach (ref readonly var command in commands)
+        for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
         {
+            ref readonly var command = ref commands[commandIndex];
             switch (command.Kind)
             {
                 case 30:
@@ -615,8 +634,21 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                 case 20:
                     canvas.Restore();
                     break;
+                case 12:
+                    canvas.Save();
+                    PushRoundedClip(
+                        canvas,
+                        command,
+                        ResolveDomCornerRadii(commands, commandIndex));
+                    break;
+                case 13:
+                    canvas.Restore();
+                    break;
                 case 18:
-                    DrawShadow(canvas, command);
+                    DrawShadow(
+                        canvas,
+                        command,
+                        ResolveDomCornerRadii(commands, commandIndex));
                     break;
                 case 3:
                     DrawText(canvas, view, command);
@@ -630,11 +662,19 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                     break;
                 case 9:
                 case 10:
-                    DrawRect(canvas, command, stroke: false);
+                    DrawRect(
+                        canvas,
+                        command,
+                        false,
+                        ResolveDomCornerRadii(commands, commandIndex));
                     break;
                 case 8:
                 case 11:
-                    DrawRect(canvas, command, stroke: true);
+                    DrawRect(
+                        canvas,
+                        command,
+                        true,
+                        ResolveDomCornerRadii(commands, commandIndex));
                     break;
             }
         }
@@ -651,7 +691,77 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         canvas.SaveLayer(paint);
     }
 
-    private static void DrawShadow(SKCanvas canvas, in NativeSceneCommand command)
+    private readonly record struct DomCornerRadii(
+        SKPoint TopLeft,
+        SKPoint TopRight,
+        SKPoint BottomRight,
+        SKPoint BottomLeft)
+    {
+        public bool Any => TopLeft.X > 0 || TopLeft.Y > 0
+            || TopRight.X > 0 || TopRight.Y > 0
+            || BottomRight.X > 0 || BottomRight.Y > 0
+            || BottomLeft.X > 0 || BottomLeft.Y > 0;
+    }
+
+    private static DomCornerRadii ResolveDomCornerRadii(
+        ReadOnlySpan<NativeSceneCommand> commands,
+        int commandIndex)
+    {
+        ref readonly var command = ref commands[commandIndex];
+        var topLeft = command.RadiusTopLeft;
+        var topRight = command.RadiusTopRight;
+        var bottomRight = command.RadiusBottomRight;
+        var bottomLeft = command.RadiusBottomLeft;
+        var hasEllipseMetadata = commandIndex > 0
+            && commands[commandIndex - 1].Kind == 32
+            && commands[commandIndex - 1].NodeId == command.NodeId
+            && commands[commandIndex - 1].X == command.X
+            && commands[commandIndex - 1].Y == command.Y
+            && commands[commandIndex - 1].Width == command.Width
+            && commands[commandIndex - 1].Height == command.Height;
+        if (!hasEllipseMetadata
+            && topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
+        {
+            var legacyRadius = (command.Flags >> 16) / 100f;
+            topLeft = topRight = bottomRight = bottomLeft = legacyRadius;
+        }
+        return new DomCornerRadii(
+            new(topLeft, hasEllipseMetadata
+                ? commands[commandIndex - 1].RadiusTopLeft : topLeft),
+            new(topRight, hasEllipseMetadata
+                ? commands[commandIndex - 1].RadiusTopRight : topRight),
+            new(bottomRight, hasEllipseMetadata
+                ? commands[commandIndex - 1].RadiusBottomRight : bottomRight),
+            new(bottomLeft, hasEllipseMetadata
+                ? commands[commandIndex - 1].RadiusBottomLeft : bottomLeft));
+    }
+
+    private static void DrawRoundedRect(
+        SKCanvas canvas,
+        in NativeSceneCommand command,
+        SKPaint paint,
+        in DomCornerRadii radii)
+    {
+        using var rounded = new SKRoundRect();
+        rounded.SetRectRadii(
+            new SKRect(
+                command.X,
+                command.Y,
+                command.X + command.Width,
+                command.Y + command.Height),
+            [
+                radii.TopLeft,
+                radii.TopRight,
+                radii.BottomRight,
+                radii.BottomLeft
+            ]);
+        canvas.DrawRoundRect(rounded, paint);
+    }
+
+    private static void DrawShadow(
+        SKCanvas canvas,
+        in NativeSceneCommand command,
+        in DomCornerRadii radii)
     {
         using var blur = command.StrokeWidth > 0
             ? SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.1f, command.StrokeWidth * 0.5f))
@@ -659,16 +769,44 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         using var paint = Paint(command.Rgba, SKPaintStyle.Fill, 1);
         paint.IsAntialias = true;
         paint.MaskFilter = blur;
+        DrawRoundedRect(canvas, command, paint, radii);
+    }
+
+    private static void PushRoundedClip(
+        SKCanvas canvas,
+        in NativeSceneCommand command,
+        in DomCornerRadii radii)
+    {
+        if (!radii.Any)
+        {
+            canvas.ClipRect(
+                new SKRect(
+                    command.X,
+                    command.Y,
+                    command.X + command.Width,
+                    command.Y + command.Height),
+                SKClipOperation.Intersect,
+                antialias: false);
+            return;
+        }
+
         using var rounded = new SKRoundRect();
         rounded.SetRectRadii(
-            new SKRect(command.X, command.Y, command.X + command.Width, command.Y + command.Height),
+            new SKRect(
+                command.X,
+                command.Y,
+                command.X + command.Width,
+                command.Y + command.Height),
             [
-                new(command.RadiusTopLeft, command.RadiusTopLeft),
-                new(command.RadiusTopRight, command.RadiusTopRight),
-                new(command.RadiusBottomRight, command.RadiusBottomRight),
-                new(command.RadiusBottomLeft, command.RadiusBottomLeft)
+                radii.TopLeft,
+                radii.TopRight,
+                radii.BottomRight,
+                radii.BottomLeft
             ]);
-        canvas.DrawRoundRect(rounded, paint);
+        canvas.ClipRoundRect(
+            rounded,
+            SKClipOperation.Intersect,
+            antialias: true);
     }
 
     private static void PushScaleTransform(
@@ -725,21 +863,17 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         _dom = null;
     }
 
-    private static void DrawRect(SKCanvas canvas, in NativeSceneCommand command, bool stroke)
+    private static void DrawRect(
+        SKCanvas canvas,
+        in NativeSceneCommand command,
+        bool stroke,
+        in DomCornerRadii radii)
     {
         var width = command.StrokeWidth > 0
             ? command.StrokeWidth
             : Math.Max(0.1f, (command.Flags & 0xffff) / 100f);
         using var paint = Paint(command.Rgba, stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill, width);
-        var topLeft = command.RadiusTopLeft;
-        var topRight = command.RadiusTopRight;
-        var bottomRight = command.RadiusBottomRight;
-        var bottomLeft = command.RadiusBottomLeft;
-        if (topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
-        {
-            topLeft = topRight = bottomRight = bottomLeft = (command.Flags >> 16) / 100f;
-        }
-        if (topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
+        if (!radii.Any)
         {
             // CSS axis-aligned backgrounds and borders cover exact device
             // pixels. Antialiasing every rectangle creates translucent seams
@@ -749,15 +883,6 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             canvas.DrawRect(command.X, command.Y, command.Width, command.Height, paint);
             return;
         }
-        using var rounded = new SKRoundRect();
-        rounded.SetRectRadii(
-            new SKRect(command.X, command.Y, command.X + command.Width, command.Y + command.Height),
-            [
-                new SKPoint(topLeft, topLeft),
-                new SKPoint(topRight, topRight),
-                new SKPoint(bottomRight, bottomRight),
-                new SKPoint(bottomLeft, bottomLeft)
-            ]);
         const uint borderTop = 1u << 28;
         const uint borderRight = 1u << 29;
         const uint borderBottom = 1u << 30;
@@ -772,7 +897,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             {
                 DrawRoundedBorderSides(
                     canvas, command, paint, sides,
-                    borderTop, borderRight, borderBottom, borderLeft);
+                    borderTop, borderRight, borderBottom, borderLeft, radii);
                 return;
             }
             var halfStroke = width * 0.5f;
@@ -782,6 +907,8 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             var outerBottom = command.Y + command.Height + halfStroke;
             var centerX = (outerLeft + outerRight) * 0.5f;
             var centerY = (outerTop + outerBottom) * 0.5f;
+            var roundedCommand = command;
+            var cornerRadii = radii;
             DrawSide(borderTop, outerLeft, outerTop, outerRight, outerTop);
             DrawSide(borderRight, outerRight, outerTop, outerRight, outerBottom);
             DrawSide(borderBottom, outerRight, outerBottom, outerLeft, outerBottom);
@@ -798,11 +925,11 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                 wedge.Close();
                 canvas.Save();
                 canvas.ClipPath(wedge, SKClipOperation.Intersect, antialias: true);
-                canvas.DrawRoundRect(rounded, paint);
+                DrawRoundedRect(canvas, roundedCommand, paint, cornerRadii);
                 canvas.Restore();
             }
         }
-        canvas.DrawRoundRect(rounded, paint);
+        DrawRoundedRect(canvas, command, paint, radii);
     }
 
     private static void DrawRoundedBorderSides(
@@ -813,54 +940,53 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         uint borderTop,
         uint borderRight,
         uint borderBottom,
-        uint borderLeft)
+        uint borderLeft,
+        in DomCornerRadii radii)
     {
         var left = command.X;
         var top = command.Y;
         var right = command.X + command.Width;
         var bottom = command.Y + command.Height;
-        var topLeft = command.RadiusTopLeft;
-        var topRight = command.RadiusTopRight;
-        var bottomRight = command.RadiusBottomRight;
-        var bottomLeft = command.RadiusBottomLeft;
         const float arcHandle = 0.55228475f;
         using var path = new SKPath();
 
         if ((sides & borderTop) != 0)
         {
-            path.MoveTo(left + topLeft, top);
-            path.LineTo(right - topRight, top);
+            path.MoveTo(left + radii.TopLeft.X, top);
+            path.LineTo(right - radii.TopRight.X, top);
         }
         if ((sides & borderRight) != 0)
         {
-            path.MoveTo(right, top + topRight);
-            path.LineTo(right, bottom - bottomRight);
+            path.MoveTo(right, top + radii.TopRight.Y);
+            path.LineTo(right, bottom - radii.BottomRight.Y);
         }
         if ((sides & borderBottom) != 0)
         {
-            path.MoveTo(right - bottomRight, bottom);
-            path.LineTo(left + bottomLeft, bottom);
+            path.MoveTo(right - radii.BottomRight.X, bottom);
+            path.LineTo(left + radii.BottomLeft.X, bottom);
         }
         if ((sides & borderLeft) != 0)
         {
-            path.MoveTo(left, bottom - bottomLeft);
-            path.LineTo(left, top + topLeft);
+            path.MoveTo(left, bottom - radii.BottomLeft.Y);
+            path.LineTo(left, top + radii.TopLeft.Y);
         }
 
-        AppendCorner(borderTop, borderLeft, topLeft,
-            left + topLeft, top, left, top + topLeft, true, true);
-        AppendCorner(borderTop, borderRight, topRight,
-            right - topRight, top, right, top + topRight, false, true);
-        AppendCorner(borderRight, borderBottom, bottomRight,
-            right, bottom - bottomRight, right - bottomRight, bottom, false, false);
-        AppendCorner(borderBottom, borderLeft, bottomLeft,
-            left + bottomLeft, bottom, left, bottom - bottomLeft, true, false);
+        AppendCorner(borderTop, borderLeft, radii.TopLeft,
+            left + radii.TopLeft.X, top, left, top + radii.TopLeft.Y, true, true);
+        AppendCorner(borderTop, borderRight, radii.TopRight,
+            right - radii.TopRight.X, top, right, top + radii.TopRight.Y, false, true);
+        AppendCorner(borderRight, borderBottom, radii.BottomRight,
+            right, bottom - radii.BottomRight.Y,
+            right - radii.BottomRight.X, bottom, false, false);
+        AppendCorner(borderBottom, borderLeft, radii.BottomLeft,
+            left + radii.BottomLeft.X, bottom,
+            left, bottom - radii.BottomLeft.Y, true, false);
         canvas.DrawPath(path, paint);
 
         void AppendCorner(
             uint firstSide,
             uint secondSide,
-            float radius,
+            SKPoint radius,
             float startX,
             float startY,
             float endX,
@@ -868,17 +994,19 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             bool leftCorner,
             bool topCorner)
         {
-            if ((sides & (firstSide | secondSide)) != (firstSide | secondSide) || radius <= 0) return;
+            if ((sides & (firstSide | secondSide)) != (firstSide | secondSide)
+                || radius.X <= 0 || radius.Y <= 0) return;
             path.MoveTo(startX, startY);
-            var control = radius * arcHandle;
+            var controlX = radius.X * arcHandle;
+            var controlY = radius.Y * arcHandle;
             if (topCorner && leftCorner)
-                path.CubicTo(startX - control, startY, endX, endY - control, endX, endY);
+                path.CubicTo(startX - controlX, startY, endX, endY - controlY, endX, endY);
             else if (topCorner)
-                path.CubicTo(startX + control, startY, endX, endY - control, endX, endY);
+                path.CubicTo(startX + controlX, startY, endX, endY - controlY, endX, endY);
             else if (leftCorner)
-                path.CubicTo(startX - control, startY, endX, endY + control, endX, endY);
+                path.CubicTo(startX - controlX, startY, endX, endY + controlY, endX, endY);
             else
-                path.CubicTo(startX, startY + control, endX + control, endY, endX, endY);
+                path.CubicTo(startX, startY + controlY, endX + controlX, endY, endX, endY);
         }
     }
 

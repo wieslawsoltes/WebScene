@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Disconnected element geometry</title>
+<body>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const element = document.createElement("div");
+  element.style.cssText = "width:40px;height:30px";
+  const rect = element.getBoundingClientRect();
+  const rects = element.getClientRects();
+  record(
+    "a disconnected element has no client rectangles",
+    element.isConnected === false && rects.length === 0,
+    `connected=${element.isConnected}, rects=${rects.length}`
+  );
+  record(
+    "a disconnected element has a zero bounding rectangle",
+    rect.x === 0 && rect.y === 0 && rect.width === 0 && rect.height === 0
+      && rect.right === 0 && rect.bottom === 0,
+    `rect=${JSON.stringify(rect)}`
+  );
+
+  state.diagnostics = [JSON.stringify({ rects: rects.length, rect })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>
+</body>

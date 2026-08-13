@@ -611,6 +611,55 @@ void test_contextual_fragment_exposes_parent_node_members(webscene_engine* engin
         "DocumentFragment ParentNode members or child identity regressed: " + result);
 }
 
+void test_custom_element_mutation_reactions_are_pay_for_use(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const originalSubtree = globalThis.__webSceneCustomElementsNotifySubtree;
+          const originalAttribute = globalThis.__webSceneCustomElementsNotifyAttribute;
+          let subtreeCalls = 0;
+          let attributeCalls = 0;
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifySubtree', {
+            value: () => { ++subtreeCalls; }, configurable: true
+          });
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifyAttribute', {
+            value: () => { ++attributeCalls; }, configurable: true
+          });
+
+          const cold = document.createElement('div');
+          cold.setAttribute('data-cold', 'yes');
+          document.body.appendChild(cold);
+          const beforeDefinition = [subtreeCalls, attributeCalls];
+
+          try { customElements.define('invalid', class extends HTMLElement {}); }
+          catch (_) {}
+          cold.setAttribute('data-invalid', 'still-cold');
+          document.body.appendChild(document.createElement('span'));
+          const afterInvalidDefinition = [subtreeCalls, attributeCalls];
+
+          class PayForUseElement extends HTMLElement {}
+          customElements.define('native-pay-for-use', PayForUseElement);
+          const hot = document.createElement('div');
+          hot.setAttribute('data-hot', 'yes');
+          document.body.appendChild(hot);
+          const afterValidDefinition = [subtreeCalls, attributeCalls];
+
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifySubtree', {
+            value: originalSubtree, configurable: true
+          });
+          Object.defineProperty(globalThis, '__webSceneCustomElementsNotifyAttribute', {
+            value: originalAttribute, configurable: true
+          });
+          return { beforeDefinition, afterInvalidDefinition, afterValidDefinition };
+        })()
+    )JS", "native-custom-elements-pay-for-use.js");
+    require(
+        result == R"({"beforeDefinition":[0,0],"afterInvalidDefinition":[0,0],"afterValidDefinition":[1,1]})",
+        "custom-element mutation reactions were not gated by the first valid definition: "
+            + result);
+}
+
 void test_autonomous_custom_element_lifecycle(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -868,6 +917,79 @@ void test_hover_specificity_preserves_visible_theme_icon(webscene_engine* engine
     require(
         result == R"JSON(["1","rgb(192, 202, 204)",true])JSON",
         "a later low-specificity rule hid or recolored the hovered child: " + result);
+}
+
+void test_complex_is_specificity_ignores_non_element_siblings(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .b.c + .d + .q.r + .s + #target {
+                font-size: 10px;
+                height: 10px;
+                width: 10px;
+              }
+              :is(.a, .b.c + .d, .q) + :is(* + .p, .q.r + .s, * + .t) + #target {
+                height: 20px;
+                width: 20px;
+              }
+              .b.c + .d + .q.r + .s + #target { width: 30px; }
+            </style>
+            <div class="b c"></div>
+            <div class="a d e"></div>
+            <div class="q r"></div>
+            <div class="p s t"></div>
+            <div id="target"></div>`;
+          const computed = getComputedStyle(document.getElementById('target'));
+          return [computed.width, computed.height, computed.fontSize];
+        })()
+    )JS", "native-complex-is-specificity.js");
+    require(
+        result == R"JSON(["30px","20px","10px"])JSON",
+        ":is() specificity or element-sibling matching regressed: " + result);
+}
+
+void test_inline_relative_line_height_uses_cascaded_font_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>div { font-size: 16px; }</style>
+            <div style="line-height: normal"></div>
+            <div style="line-height: 1"></div>
+            <div style="line-height: 10px"></div>
+            <div style="line-height: 10%"></div>`;
+          const elements = Array.from(document.querySelectorAll('div'));
+          const initial = elements.map(element => getComputedStyle(element).lineHeight);
+          elements[1].style.fontSize = '20px';
+          return { initial, updated: getComputedStyle(elements[1]).lineHeight };
+        })()
+    )JS", "native-inline-relative-line-height.js");
+    require(
+        result == R"JSON({"initial":["normal","16px","10px","1.6px"],"updated":"20px"})JSON",
+        "relative line-height did not follow the winning font-size: " + result);
+}
+
+void test_empty_inline_element_does_not_stretch_cross_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div id="fixture" style="position:absolute;top:-10000px;left:-10000px;width:10000px;height:10000px">
+              <a id="empty" href="#" title="empty"></a>
+            </div>`;
+          const fixture = document.getElementById('fixture').getBoundingClientRect();
+          const empty = document.getElementById('empty').getBoundingClientRect();
+          return {
+            fixture: [fixture.x, fixture.y, fixture.width, fixture.height],
+            empty: [empty.x, empty.y, empty.width, empty.height]
+          };
+        })()
+    )JS", "native-empty-inline-element-geometry.js");
+    require(
+        result == R"JSON({"fixture":[-10000,-10000,10000,10000],"empty":[-10000,-10000,0,0]})JSON",
+        "an empty inline element stretched to its containing block: " + result);
 }
 
 void test_hover_invalidation_updates_functional_and_sibling_subjects(
@@ -1544,6 +1666,38 @@ void test_empty_non_growing_flex_item_collapses_main_axis(webscene_engine* engin
     require(
         result == R"({"column":120,"scroll":[0,0],"inner":[0,0],"rowItem":[0,40],"hit":"BODY"})",
         "empty non-growing flex items expanded across the main axis: " + result);
+}
+
+void test_empty_bordered_flex_items_keep_intrinsic_cross_size(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .row { display:flex; height:100px; align-items:stretch; }
+              .item { border:5px solid green; width:50px; }
+              .start { align-self:flex-start; }
+            </style>
+            <div id="row" class="row">
+              <div id="item" class="item start"></div>
+            </div>`;
+          const row = document.getElementById('row');
+          const item = document.getElementById('item');
+          const before = [item.offsetWidth, item.offsetHeight, item.offsetTop];
+          row.style.alignItems = 'flex-end';
+          item.style.alignSelf = 'auto';
+          return {
+            before,
+            after: [item.offsetWidth, item.offsetHeight, item.offsetTop],
+            alignItems: getComputedStyle(row).alignItems,
+            alignSelf: getComputedStyle(item).alignSelf
+          };
+        })()
+    )JS", "native-empty-bordered-flex-cross-size.js");
+    require(
+        result == R"({"before":[60,10,0],"after":[60,10,90],"alignItems":"flex-end","alignSelf":"auto"})",
+        "empty bordered flex items lost their intrinsic cross size during dynamic alignment: "
+            + result);
 }
 
 void test_appending_child_invalidates_empty_selector(webscene_engine* engine)
@@ -2322,4 +2476,22 @@ void test_class_list_is_same_live_object(webscene_engine* engine)
         result == R"({"same":true,"distinct":true,"present":true,"calls":1,"assignedValue":"widgetbar-wrap unselectable","assignedAttribute":"widgetbar-wrap unselectable","assignedTokens":true,"reattached":true,"live":true})",
         "Element.classList did not preserve same-object identity and live method shadowing: "
             + result);
+}
+
+void test_bounded_css_named_color_palette()
+{
+    require(webscene_native::native_document::parse_color("silver") == 0xC0C0C0FFU,
+        "CSS silver did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("maroon") == 0x800000FFU,
+        "CSS maroon did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("purple") == 0x800080FFU,
+        "CSS purple did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("olive") == 0x808000FFU,
+        "CSS olive did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("navy") == 0x000080FFU,
+        "CSS navy did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("teal") == 0x008080FFU,
+        "CSS teal did not resolve to its standard RGBA value");
+    require(webscene_native::native_document::parse_color("orange") == 0xFFA500FFU,
+        "CSS orange did not resolve to its standard RGBA value");
 }

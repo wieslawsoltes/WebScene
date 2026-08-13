@@ -35,6 +35,34 @@ public sealed class CssSelectorSyntaxParserTests
         Assert.Equal(new[] { ".a:is(.b, .c)", "[data-value='x,y']", "div" }, selectors);
     }
 
+    [Theory]
+    [InlineData(".card:where(#ignored)", 10)]
+    [InlineData("article:is(.note, #winner)", 101)]
+    [InlineData("div:not(.a, #b)", 101)]
+    [InlineData("section:has(.item > #target)", 111)]
+    public void FunctionalSelectorsUseTheirMostSpecificArgument(
+        string selectorText,
+        int expectedSpecificity)
+    {
+        Assert.True(CssSelectorSyntaxParser.TryParse(selectorText, out var selector));
+
+        Assert.Equal(expectedSpecificity, selector.Specificity);
+    }
+
+    [Fact]
+    public void ComplexIsSpecificityMatchesSelectorsLevelFourCascadeExample()
+    {
+        Assert.True(CssSelectorSyntaxParser.TryParse(
+            ":is(.a, .b.c + .d, .q) + :is(* + .p, .q.r + .s, * + .t) + #target",
+            out var functional));
+        Assert.True(CssSelectorSyntaxParser.TryParse(
+            ".b.c + .d + .q.r + .s + #target",
+            out var expanded));
+
+        Assert.Equal(160, functional.Specificity);
+        Assert.Equal(expanded.Specificity, functional.Specificity);
+    }
+
     [Fact]
     public void ParsesCssEscapedIdentifiersWithoutTreatingEscapeTerminatorsAsCombinators()
     {

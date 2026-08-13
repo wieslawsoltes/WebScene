@@ -812,6 +812,71 @@ void test_event_listener_exceptions_do_not_abort_document_load()
     webscene_engine_destroy(engine);
 }
 
+void test_timer_error_handler_preserves_later_tasks()
+{
+    auto* engine = webscene_engine_create(64);
+    require(engine != nullptr, "timer-error engine creation failed");
+    const auto setup = evaluate(engine, R"JS(
+        (() => {
+          globalThis.__timerErrorLifecycle = [];
+          window.onerror = (message, source, line, column, error) => {
+            __timerErrorLifecycle.push([
+              'error',
+              String(message).includes('expected timer failure'),
+              error && error.message,
+              typeof source === 'string',
+              line > 0,
+              column > 0
+            ]);
+            window.onerror = null;
+            return true;
+          };
+          setTimeout(() => { throw new Error('expected timer failure'); }, 0);
+          setTimeout(() => { __timerErrorLifecycle.push('after'); }, 0);
+          return true;
+        })()
+    )JS", "native-timer-error-handler-setup.js");
+    require(setup == "true", "handled timer error rejected task drain: " + setup);
+    const auto result = evaluate(
+        engine,
+        "globalThis.__timerErrorLifecycle",
+        "native-timer-error-handler-result.js");
+    require(
+        result == R"([["error",true,"expected timer failure",true,true,true],"after"])",
+        "handled timer error stopped later task execution: " + result);
+    webscene_engine_destroy(engine);
+
+    auto* unhandled_engine = webscene_engine_create(64);
+    require(unhandled_engine != nullptr, "unhandled timer-error engine creation failed");
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(unhandled_engine, &before);
+    constexpr std::string_view unhandled_source =
+        "setTimeout(() => { throw new Error('unhandled timer failure'); }, 0); true";
+    require(
+        webscene_engine_execute_script(
+            unhandled_engine,
+            unhandled_source.data(),
+            unhandled_source.size(),
+            "native-unhandled-timer-error.js",
+            sizeof("native-unhandled-timer-error.js") - 1U) != 0,
+        "unhandled timer-error script was rejected before execution");
+    auto error = std::string{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_metrics after{};
+        webscene_engine_get_metrics(unhandled_engine, &after);
+        if (after.script_errors > before.script_errors) {
+            error = last_error(unhandled_engine);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        error.find("timer task failed") != std::string::npos
+            && error.find("unhandled timer failure") != std::string::npos,
+        "timer exception without Window.onerror no longer failed closed: " + error);
+    webscene_engine_destroy(unhandled_engine);
+}
+
 void test_dom_implementation_create_html_document()
 {
     resource_server server{

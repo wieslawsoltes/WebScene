@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Programmatic scroll events are queued and coalesced</title>
+<style>
+  body { margin: 0; }
+  #scroller { height: 40px; overflow: auto; }
+  #content { height: 200px; }
+</style>
+<div id="scroller"><div id="content"></div></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  (async () => {
+    const scroller = document.getElementById("scroller");
+    let earlyEvents = 0;
+    let lateEvents = 0;
+    scroller.addEventListener("scroll", () => earlyEvents++);
+
+    scroller.scrollTop = 20;
+    scroller.scrollTop = 40;
+    record(
+      "programmatic scroll offsets update before event dispatch",
+      scroller.scrollTop === 40 && earlyEvents === 0,
+      `immediate scrollTop=${scroller.scrollTop}, earlyEvents=${earlyEvents}`
+    );
+
+    scroller.addEventListener("scroll", () => lateEvents++);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    record(
+      "listeners registered before the queued task observe the scroll event",
+      earlyEvents === 1 && lateEvents === 1,
+      `queued earlyEvents=${earlyEvents}, lateEvents=${lateEvents}`
+    );
+    record(
+      "multiple offset writes in one turn coalesce to one event",
+      earlyEvents === 1 && scroller.scrollTop === 40,
+      `coalesced scrollTop=${scroller.scrollTop}, earlyEvents=${earlyEvents}`
+    );
+
+    scroller.scrollTop = 40;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    record(
+      "an unchanged offset does not queue another event",
+      earlyEvents === 1 && lateEvents === 1,
+      `unchanged earlyEvents=${earlyEvents}, lateEvents=${lateEvents}`
+    );
+
+    state.diagnostics = [JSON.stringify({
+      scrollTop: scroller.scrollTop,
+      earlyEvents,
+      lateEvents
+    })];
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  })().catch(error => {
+    state.results.push({
+      name: "programmatic scroll event task lifecycle",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = { status: 1, message: state.results.at(-1).message, stack: state.results.at(-1).stack };
+    state.complete = true;
+  });
+</script>

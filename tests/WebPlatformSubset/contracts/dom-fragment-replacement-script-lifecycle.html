@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>DOM fragment replacement and script lifecycle</title>
+<body>
+<script>
+"use strict";
+
+const state = window.__webSceneWptState = {
+  complete: false,
+  harness: null,
+  results: [],
+  errors: [],
+  diagnostics: []
+};
+
+function test(name, callback) {
+  try {
+    callback();
+    state.results.push({ name, status: "PASS", message: null, stack: null });
+  } catch (error) {
+    state.results.push({
+      name,
+      status: "FAIL",
+      message: String(error?.message || error),
+      stack: error?.stack ? String(error.stack) : null
+    });
+  }
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const host = document.createElement("div");
+document.body.appendChild(host);
+
+test("replaceChild splices DocumentFragment children in order", () => {
+  const wrapper = document.createElement("section");
+  const expected = ["a", "b", "c", "d"].map(value => {
+    const span = document.createElement("span");
+    span.textContent = value;
+    wrapper.appendChild(span);
+    return span;
+  });
+  host.appendChild(wrapper);
+
+  const fragment = document.createDocumentFragment();
+  for (const child of expected) fragment.appendChild(child);
+  const returned = host.replaceChild(fragment, wrapper);
+
+  assert(returned === wrapper, "replaceChild did not return the replaced node");
+  assert(wrapper.parentNode === null, "the replaced wrapper remained attached");
+  assert(fragment.childNodes.length === 0, "the fragment was not emptied");
+  assert(host.childNodes.length === expected.length, `host retained ${host.childNodes.length} children`);
+  assert(expected.every((child, index) => host.childNodes[index] === child), "child identity or order changed");
+  assert(expected.every(child => child.parentNode === host), "a replacement child has the wrong parent");
+});
+
+test("connected programmatic inline script executes synchronously and only once", () => {
+  window.__webSceneDynamicScriptRuns = 0;
+  const outerScript = document.currentScript;
+  const script = document.createElement("script");
+  window.__webSceneDynamicScript = script;
+  script.textContent = "window.__webSceneDynamicScriptRuns += 1; window.__webSceneDynamicCurrentScript = document.currentScript === window.__webSceneDynamicScript;";
+  host.appendChild(script);
+  assert(window.__webSceneDynamicScriptRuns === 1, "script did not execute synchronously on connection");
+  assert(window.__webSceneDynamicCurrentScript === true, "document.currentScript did not identify the executing script");
+  assert(document.currentScript === outerScript, "the previous document.currentScript was not restored");
+
+  const wrapper = document.createElement("b");
+  wrapper.appendChild(script);
+  host.appendChild(wrapper);
+  assert(window.__webSceneDynamicScriptRuns === 1, "moving the script executed it again");
+  delete window.__webSceneDynamicScript;
+});
+
+test("innerHTML-created inline script remains inert when moved", () => {
+  window.__webSceneInertScriptRuns = 0;
+  const container = document.createElement("div");
+  container.innerHTML = "<script>window.__webSceneInertScriptRuns += 1;<\/script>";
+  const script = container.firstChild;
+  assert(script?.nodeName === "SCRIPT", "innerHTML did not create the script node");
+  assert(window.__webSceneInertScriptRuns === 0, "innerHTML executed its script");
+  host.appendChild(script);
+  assert(window.__webSceneInertScriptRuns === 0, "moving an innerHTML-created script executed it");
+});
+
+const failures = state.results.filter(result => result.status !== "PASS");
+state.harness = failures.length === 0
+  ? { status: 0, message: null, stack: null }
+  : { status: 1, message: `${failures.length} assertion(s) failed`, stack: null };
+state.complete = true;
+</script>

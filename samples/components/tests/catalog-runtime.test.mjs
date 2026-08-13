@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -7,21 +8,34 @@ import { JSDOM } from 'jsdom';
 
 const componentsRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const catalog = JSON.parse(await readFile(join(componentsRoot, 'catalog.json'), 'utf8'));
+const matrix = JSON.parse(await readFile(join(componentsRoot, 'compatibility-matrix.json'), 'utf8'));
+const packageLock = JSON.parse(await readFile(join(componentsRoot, 'package-lock.json'), 'utf8'));
+const expectations = new Map(matrix.components.map(component => [component.id, component]));
 
-const expectations = {
-  'ComponentHost.Basic': ['Basic component host', interact('Clicked 0 times', 'Clicked 1 time')],
-  'Hybrid.ReactIslands': ['Independent component root', interact('Island count: 0', 'Island count: 1', 'counterChanged')],
-  TypeScriptDesktop: ['Desktop workspace', interact('Form', 'Profile form')],
-  ReactDashboard: ['Operations overview', interact('Inspect chart', 'Chart details')],
-  PluginWorkbench: ['Plugin workbench', interact('Load plugin', 'Unload plugin', 'pluginLoaded')],
-  MultiInstanceWorkstation: ['Isolated chart instance', interact('Local count: 0', 'Local count: 1')],
-  WebToNativeMigration: ['Existing React order panel', interact('#1048 · Contoso', 'Legacy component note', 'selectionChanged')],
-  OfflineKiosk: ['Station kiosk', interact('Print ticket', 'K-5499')],
-  HeadlessComponentTests: ['Headless component tests', interact('Pointer events: 0', 'Pointer events: 1')],
-  'HostBridge.Services': ['Host bridge services', interact('Invoke service', 'Completed', 'execute')],
-  AccessibilityGallery: ['Accessibility gallery', interact('Save profile', 'Profile saved successfully')],
-  'CanvasWorkbench.Advanced': ['Interactive canvas workbench', interact('Add indicator', 'Moving Average')]
-};
+test('compatibility matrix pins every catalog bundle and evidence lane', async () => {
+  assert.equal(matrix.schemaVersion, 1);
+  assert.equal(matrix.productNeutral, true);
+  for (const [name, version] of Object.entries(matrix.pinnedToolchain)) {
+    assert.equal(packageLock.packages[`node_modules/${name}`]?.version, version,
+      `${name} toolchain pin`);
+  }
+  assert.deepEqual(
+    matrix.components.map(component => component.id).sort(),
+    catalog.samples.map(sample => sample.id).sort());
+  for (const component of matrix.components) {
+    const bundle = await readFile(join(componentsRoot, component.id, 'dist', 'main.js'));
+    const manifest = JSON.parse(await readFile(
+      join(componentsRoot, component.id, 'webscene-component.json'), 'utf8'));
+    assert.equal(createHash('sha256').update(bundle).digest('hex'), component.bundleSha256,
+      `${component.id} bundle digest`);
+    assert.equal(manifest.entryPoint, 'dist/main.js', `${component.id} pinned local entry`);
+    assert.deepEqual(manifest.lifecycle, { mountExport: 'mount', unmountExport: 'unmount' },
+      `${component.id} deterministic lifecycle exports`);
+    assert.ok(manifest.capabilities.includes('dom'), `${component.id} DOM capability inventory`);
+    assert.equal(component.jsdom, 'pass');
+    assert.equal(component.native, 'pass');
+  }
+});
 
 for (const sample of catalog.samples) {
   test(`${sample.id} executes, renders, interacts and unmounts`, async () => {
@@ -30,13 +44,14 @@ for (const sample of catalog.samples) {
       runtime.window.mount({ instanceId: `test-${sample.id}` });
       await settle(runtime.window);
 
-      const [visibleText, interaction] = expectations[sample.id];
-      assert.match(runtime.document.body.textContent, new RegExp(escapeRegex(visibleText)));
+      const expectation = expectations.get(sample.id);
+      assert.ok(expectation, `${sample.id} must have a compatibility-matrix row`);
+      assert.match(runtime.document.body.textContent, new RegExp(escapeRegex(expectation.visibleText)));
       assert.ok(runtime.document.querySelector('main'), 'sample must render a visible application root');
       assert.ok(runtime.document.body.textContent.trim().length > 80, 'sample must contain meaningful visible content');
       assert.ok(runtime.document.querySelector('button, input'), 'sample must expose an interactive control');
 
-      await interaction(runtime);
+      await interact(expectation.interaction)(runtime);
       runtime.window.unmount();
       await settle(runtime.window);
       assert.equal(runtime.document.body.children.length, 0, 'unmount must remove the component root');
@@ -65,15 +80,22 @@ test('Hybrid.ReactIslands keeps state isolated across two JavaScript realms', as
   }
 });
 
-function interact(buttonText, expectedText, expectedInvocation) {
+function interact({ buttonText, expectedText, hostMethod }) {
   return async runtime => {
-    findButton(runtime.document, buttonText).click();
+    const button = findButton(runtime.document, buttonText);
+    let keyObserved = false;
+    button.addEventListener('keydown', event => { keyObserved = event.key === 'Enter'; }, { once: true });
+    button.focus();
+    button.dispatchEvent(new runtime.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    assert.equal(runtime.document.activeElement, button, 'keyboard focus must reach the interaction control');
+    assert.equal(keyObserved, true, 'keyboard events must reach the interaction control');
+    button.click();
     await settle(runtime.window);
     assert.match(runtime.document.body.textContent, new RegExp(escapeRegex(expectedText)));
-    if (expectedInvocation) {
+    if (hostMethod) {
       assert.ok(
-        runtime.invocations.some(invocation => invocation.method === expectedInvocation),
-        `expected host invocation '${expectedInvocation}'`
+        runtime.invocations.some(invocation => invocation.method === hostMethod),
+        `expected host invocation '${hostMethod}'`
       );
     }
   };

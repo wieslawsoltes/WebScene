@@ -6,10 +6,10 @@ using SkiaSharp;
 namespace WebScene.WebPlatformSubset.Runner;
 
 /// <summary>
-/// Supplies an independent, non-gating Chromium view of static reftests. The
-/// ordinary WPT result remains native-test versus native-reference; these
-/// metrics expose references that fail in Chromium and common-mode native
-/// rendering defects that a same-engine reftest cannot see.
+/// Supplies an independent, non-gating Chromium view of static reftests and
+/// self-verifying visual tests. The ordinary WPT result remains native-owned;
+/// these metrics expose references or visual pass conditions that fail in
+/// Chromium and common-mode native rendering defects.
 /// </summary>
 internal sealed class ChromiumReftestOracle
 {
@@ -79,6 +79,90 @@ internal sealed class ChromiumReftestOracle
                 {
                     ["test"] = chromiumTestPath,
                     ["reference"] = chromiumReferencePath
+                }
+            };
+        }
+    }
+
+    internal ChromiumOracleResult InspectVisual(
+        string testPath,
+        string artifactDirectory,
+        WptRenderSnapshot nativeTest,
+        IReadOnlyList<VisualColorCheck> checks,
+        IReadOnlyList<VisualColorGapCheck> gapChecks,
+        IReadOnlyList<VisualComponentCheck> componentChecks,
+        IReadOnlyList<VisualForegroundOffsetCheck> foregroundOffsetChecks,
+        IReadOnlyList<VisualComponentColorRegionCheck> componentColorRegionChecks)
+    {
+        var chromiumTestPath = Path.Combine(artifactDirectory, "chromium-actual.png");
+        try
+        {
+            Capture(testPath, chromiumTestPath);
+            var chromiumTest = ReadSnapshot(chromiumTestPath);
+            var observations = checks.Select(check =>
+            {
+                var count = VisualColorOracle.Count(chromiumTest, check.Color);
+                return new
+                {
+                    Check = check,
+                    Count = count,
+                    Passed = VisualColorOracle.Passes(check, count)
+                };
+            }).ToList();
+            var gapObservations = gapChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.MeasureGap(chromiumTest, check)
+            }).ToList();
+            var componentObservations = componentChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.InspectComponent(chromiumTest, check)
+            }).ToList();
+            var foregroundOffsetObservations = foregroundOffsetChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.MeasureForegroundOffset(chromiumTest, check)
+            }).ToList();
+            var componentColorRegionObservations = componentColorRegionChecks.Select(check => new
+            {
+                Check = check,
+                Observation = VisualColorOracle.InspectComponentColorRegion(chromiumTest, check)
+            }).ToList();
+            var passed = observations.All(item => item.Passed)
+                && gapObservations.All(item => item.Observation.Passed)
+                && componentObservations.All(item => item.Observation.Passed)
+                && foregroundOffsetObservations.All(item => item.Observation.Passed)
+                && componentColorRegionObservations.All(item => item.Observation.Passed);
+            return new ChromiumOracleResult
+            {
+                Status = passed ? "PASS" : "FAIL",
+                Message = string.Join(
+                    " ",
+                    observations.Select(item =>
+                        $"{item.Check.Color}: observed {item.Count}, expected "
+                        + VisualColorOracle.DescribeBounds(item.Check) + ".")
+                    .Concat(gapObservations.Select(item => item.Observation.Message))
+                    .Concat(componentObservations.Select(item => item.Observation.Message))
+                    .Concat(foregroundOffsetObservations.Select(item => item.Observation.Message))
+                    .Concat(componentColorRegionObservations.Select(item => item.Observation.Message))),
+                NativeToChromiumTest = ComparePixels(nativeTest, chromiumTest),
+                Artifacts = new Dictionary<string, string>
+                {
+                    ["test"] = chromiumTestPath,
+                    ["nativeTest"] = Path.Combine(artifactDirectory, "actual.png")
+                }
+            };
+        }
+        catch (Exception exception)
+        {
+            return new ChromiumOracleResult
+            {
+                Status = "ERROR",
+                Message = exception.Message,
+                Artifacts = new Dictionary<string, string>
+                {
+                    ["test"] = chromiumTestPath
                 }
             };
         }

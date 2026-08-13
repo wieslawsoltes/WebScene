@@ -313,7 +313,14 @@ enum inline_style_property : uint64_t {
     inline_float = 1ULL << 45U,
     inline_border = 1ULL << 46U,
     inline_flex_basis = 1ULL << 47U,
-    inline_grid = 1ULL << 48U
+    inline_grid = 1ULL << 48U,
+    inline_transition_property = 1ULL << 49U,
+    inline_transition_duration = 1ULL << 50U,
+    inline_transition_delay = 1ULL << 51U,
+    inline_transition_timing = 1ULL << 52U,
+    inline_table_border_model = 1ULL << 53U,
+    inline_transition = inline_transition_property | inline_transition_duration
+        | inline_transition_delay | inline_transition_timing
 };
 
 std::once_flag v8_initialize_once;
@@ -472,10 +479,10 @@ display_mode default_display_for_tag(std::string_view tag)
     // Compact HTML UA defaults. Component libraries rely on phrasing elements (most
     // visibly the dialog submit-button span) remaining inline when no author
     // display declaration is present.
-    constexpr std::array<std::string_view, 25> inline_tags{
+    constexpr std::array<std::string_view, 26> inline_tags{
         "a", "abbr", "b", "cite", "code", "em", "i", "kbd", "label",
         "mark", "q", "s", "samp", "small", "span", "strong", "sub", "sup",
-        "svg", "time", "u", "var", "path", "use", "circle"};
+        "svg", "time", "u", "var", "path", "use", "circle", "br"};
     constexpr std::array<std::string_view, 6> inline_block_tags{
         "button", "img", "input", "rect", "select", "textarea"};
     if (std::find(inline_block_tags.begin(), inline_block_tags.end(), tag)
@@ -622,6 +629,7 @@ display_mode default_display_for_node(const dom_node& node)
             ? display_mode::inline_flow
             : display_mode::none;
     }
+    if (node.attributes.contains("hidden")) return display_mode::none;
     if (node.tag == "input") {
         const auto type = node.attributes.find("type");
         if (type != node.attributes.end()) {

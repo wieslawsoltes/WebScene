@@ -864,7 +864,7 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
                 != std::string::npos
             && report.find(R"("feature":"function:hsl","classification":"unsupported")")
                 != std::string::npos
-            && report.find(R"("feature":"method:EventTarget.addEventListener","classification":"partially-supported")")
+            && report.find(R"("feature":"method:EventTarget.addEventListener","classification":"supported")")
                 != std::string::npos
             && report.find(R"("feature":"type:webscene-never-dispatched","classification":"unobserved-code-path")")
                 != std::string::npos

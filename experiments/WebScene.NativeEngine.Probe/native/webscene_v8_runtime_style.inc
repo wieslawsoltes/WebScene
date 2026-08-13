@@ -122,6 +122,19 @@
                 node.style.column_gap = {};
             }
             node.style.inline_property_mask &= ~inline_gap;
+        } else if (canonical_name == "border-spacing"
+            || canonical_name == "border-collapse") {
+            auto& table = node.style.mutable_table();
+            if (canonical_name == "border-spacing") {
+                table.border_spacing_horizontal = {2, length_unit::pixels};
+                table.border_spacing_vertical = {2, length_unit::pixels};
+            } else {
+                table.border_collapsed = false;
+            }
+            if (!authored.declarations.contains("border-spacing")
+                && !authored.declarations.contains("border-collapse")) {
+                node.style.inline_property_mask &= ~inline_table_border_model;
+            }
         } else if (name == "boxSizing" || name == "box-sizing") {
             node.style.border_box = false;
             node.style.inline_property_mask &= ~inline_box_sizing;
@@ -138,6 +151,7 @@
             node.style.border_top_right_radius = {};
             node.style.border_bottom_right_radius = {};
             node.style.border_bottom_left_radius = {};
+            node.style.clear_vertical_corner_radii();
             node.style.inline_property_mask &= ~inline_border_radius;
         } else if (name == "transform") {
             node.style.transform_translate_x = {};
@@ -163,6 +177,13 @@
             animations.transition_delay_value = "0s";
             animations.transition_timing_function_value = "ease";
             configure_style_transitions(node.style);
+            const auto has_authored_transition = std::any_of(
+                node.authored_style().declarations.begin(),
+                node.authored_style().declarations.end(),
+                [](const auto& entry) {
+                    return (inline_style_mask(entry.first) & inline_transition) != 0U;
+                });
+            if (!has_authored_transition) node.style.inline_property_mask &= ~inline_transition;
         } else if (name == "animation" || name == "animationName"
             || name == "animation-name" || name == "animationDuration"
             || name == "animation-duration" || name == "animationDelay"
@@ -271,6 +292,113 @@
         return result;
     }
 
+    static std::optional<std::string> expanded_inline_box_longhand(
+        const dom_node& node,
+        std::string_view canonical_name)
+    {
+        const auto serialize_length = [](const css_length& length) {
+            if (length.unit == length_unit::automatic) return std::string{};
+            if (length.unit == length_unit::max_content) return std::string{"max-content"};
+            if (length.unit == length_unit::min_content) return std::string{"min-content"};
+            if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+            if (length.unit == length_unit::percent
+                && std::abs(length.pixel_offset) > 0.000001F) {
+                return std::string{"calc("} + serialize_css_number(length.value) + "% "
+                    + (length.pixel_offset < 0 ? "- " : "+ ")
+                    + serialize_css_number(std::abs(length.pixel_offset)) + "px)";
+            }
+            const auto suffix = length.unit == length_unit::percent ? "%"
+                : length.unit == length_unit::em ? "em"
+                : length.unit == length_unit::rem ? "rem"
+                : length.unit == length_unit::viewport_width ? "vw"
+                : length.unit == length_unit::viewport_height ? "vh" : "px";
+            return serialize_css_number(length.value) + suffix;
+        };
+        const auto has = [&](uint64_t mask) {
+            return (node.style.inline_property_mask & mask) != 0U;
+        };
+        const auto& authored = node.authored_style().declarations;
+        if (has(inline_padding)) {
+            node_style specified;
+            auto applied = false;
+            constexpr std::array properties{
+                "padding", "padding-block", "padding-inline",
+                "padding-block-start", "padding-block-end",
+                "padding-inline-start", "padding-inline-end",
+                "padding-top", "padding-right", "padding-bottom", "padding-left"
+            };
+            for (const auto* property : properties) {
+                const auto declaration = authored.find(property);
+                if (declaration == authored.end()) continue;
+                applied = apply_padding_declaration(
+                    specified, property, declaration->second) || applied;
+            }
+            if (applied) {
+                if (canonical_name == "padding-left") return serialize_length(specified.padding_left);
+                if (canonical_name == "padding-top") return serialize_length(specified.padding_top);
+                if (canonical_name == "padding-right") return serialize_length(specified.padding_right);
+                if (canonical_name == "padding-bottom") return serialize_length(specified.padding_bottom);
+            }
+        }
+        if (has(inline_margin)) {
+            node_style specified;
+            auto applied = false;
+            constexpr std::array properties{
+                "margin", "margin-block", "margin-inline",
+                "margin-block-start", "margin-block-end",
+                "margin-inline-start", "margin-inline-end",
+                "margin-top", "margin-right", "margin-bottom", "margin-left"
+            };
+            for (const auto* property : properties) {
+                const auto declaration = authored.find(property);
+                if (declaration == authored.end()) continue;
+                applied = apply_margin_declaration(
+                    specified, property, declaration->second) || applied;
+            }
+            if (applied) {
+                if (canonical_name == "margin-left") return specified.margin_left_auto
+                    ? std::string{"auto"} : serialize_length(specified.margin_left);
+                if (canonical_name == "margin-top") return specified.margin_top_auto
+                    ? std::string{"auto"} : serialize_length(specified.margin_top);
+                if (canonical_name == "margin-right") return specified.margin_right_auto
+                    ? std::string{"auto"} : serialize_length(specified.margin_right);
+                if (canonical_name == "margin-bottom") return specified.margin_bottom_auto
+                    ? std::string{"auto"} : serialize_length(specified.margin_bottom);
+            }
+        }
+        if (has(inline_border)) {
+            node_style specified;
+            auto applied = false;
+            constexpr std::array properties{
+                "border", "border-width",
+                "border-top", "border-right", "border-bottom", "border-left",
+                "border-top-width", "border-right-width",
+                "border-bottom-width", "border-left-width"
+            };
+            for (const auto* property : properties) {
+                const auto declaration = authored.find(property);
+                if (declaration == authored.end()) continue;
+                applied = apply_border_declaration(
+                    specified, property, declaration->second) || applied;
+            }
+            if (applied) {
+                if (canonical_name == "border-left-width") {
+                    return serialize_length(specified.border_left_width);
+                }
+                if (canonical_name == "border-top-width") {
+                    return serialize_length(specified.border_top_width);
+                }
+                if (canonical_name == "border-right-width") {
+                    return serialize_length(specified.border_right_width);
+                }
+                if (canonical_name == "border-bottom-width") {
+                    return serialize_length(specified.border_bottom_width);
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
     static void sync_style_attribute(dom_node& node)
     {
         node.attributes["style"] = serialized_inline_style(node);
@@ -300,6 +428,7 @@
             : std::optional<std::string>(previous->second);
         node->clear_authored_style();
         node->style.clear_grid();
+        node->style.clear_table();
         node->style.inline_property_mask = 0U;
         node->style.important_property_mask = 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
@@ -502,6 +631,19 @@
                 node->style.column_gap = native_document::parse_length(first);
             }
             node->style.inline_property_mask |= inline_gap;
+        } else if (name == "border-spacing") {
+            std::istringstream stream(value);
+            std::string horizontal;
+            std::string vertical;
+            stream >> horizontal >> vertical;
+            auto& table = node->style.mutable_table();
+            table.border_spacing_horizontal = native_document::parse_length(horizontal);
+            table.border_spacing_vertical = native_document::parse_length(
+                vertical.empty() ? horizontal : vertical);
+            node->style.inline_property_mask |= inline_table_border_model;
+        } else if (name == "border-collapse") {
+            node->style.mutable_table().border_collapsed = value == "collapse";
+            node->style.inline_property_mask |= inline_table_border_model;
         } else if (name == "box-sizing") {
             node->style.border_box = value == "border-box";
             node->style.inline_property_mask |= inline_box_sizing;
@@ -513,10 +655,7 @@
             apply_corner_radius_declaration(
                 name,
                 value,
-                node->style.border_top_left_radius,
-                node->style.border_top_right_radius,
-                node->style.border_bottom_right_radius,
-                node->style.border_bottom_left_radius);
+                node->style);
             node->style.inline_property_mask |= inline_border_radius;
         } else if (name == "transform") {
             native_document::parse_transform_translate(
@@ -537,18 +676,23 @@
             node->style.inline_property_mask |= inline_transform_origin;
         } else if (name == "transition") {
             apply_transition_shorthand(node->style, value);
+            node->style.inline_property_mask |= inline_transition;
         } else if (name == "transition-property") {
             node->style.mutable_animations().transition_property_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_property;
         } else if (name == "transition-duration") {
             node->style.mutable_animations().transition_duration_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_duration;
         } else if (name == "transition-delay") {
             node->style.mutable_animations().transition_delay_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_delay;
         } else if (name == "transition-timing-function") {
             node->style.mutable_animations().transition_timing_function_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_timing;
         } else if (name == "opacity") {
             node->style.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
             node->style.inline_property_mask |= inline_opacity;
@@ -632,6 +776,7 @@
             node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
+        self->recompute_inline_font_relative_metrics(*node);
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
@@ -673,8 +818,12 @@
             const auto& authored_style = node->authored_style().declarations;
             const auto authored = authored_style.find(
                 canonical_css_property_name(name));
-            value = authored == authored_style.end()
-                ? "" : authored->second;
+            if (authored != authored_style.end()) value = authored->second;
+            else if (const auto expanded = expanded_inline_box_longhand(
+                         *node, canonical_css_property_name(name));
+                     expanded.has_value()) {
+                value = *expanded;
+            }
         } else if (name.starts_with("--")) {
             const std::string* known_value = nullptr;
             for (auto* current_node = node; current_node != nullptr;
@@ -743,6 +892,11 @@
             } else if (name == "z-index") {
                 value = node->style.z_index_auto
                     ? "auto" : std::to_string(node->style.z_index);
+            } else if (name == "position") {
+                value = node->style.position == position_mode::absolute ? "absolute"
+                    : node->style.position == position_mode::fixed ? "fixed"
+                    : node->style.position == position_mode::relative ? "relative"
+                    : "static";
             } else if (name == "float") {
                 value = node->style.floating == float_mode::left ? "left"
                     : node->style.floating == float_mode::right ? "right" : "none";
@@ -796,6 +950,16 @@
                 value = format_computed_length(node->style.row_gap, node->layout.height);
             } else if (name == "column-gap") {
                 value = format_computed_length(node->style.column_gap, node->layout.width);
+            } else if (name == "border-spacing") {
+                value = format_computed_length(
+                        node->style.table().border_spacing_horizontal,
+                        node->layout.width)
+                    + " "
+                    + format_computed_length(
+                        node->style.table().border_spacing_vertical,
+                        node->layout.height);
+            } else if (name == "border-collapse") {
+                value = node->style.table().border_collapsed ? "collapse" : "separate";
             } else if (name == "flex-direction") {
                 value = flex_direction_name(node->style);
             } else if (name == "flex-flow") {
@@ -925,9 +1089,15 @@
             } else if (name == "transition-property") {
                 value = node->style.animations().transition_property_value;
             } else if (name == "transition-duration") {
-                value = node->style.animations().transition_duration_value;
+                value = computed
+                    ? serialize_computed_time_list(
+                        node->style.animations().transition_duration_value)
+                    : node->style.animations().transition_duration_value;
             } else if (name == "transition-delay") {
-                value = node->style.animations().transition_delay_value;
+                value = computed
+                    ? serialize_computed_time_list(
+                        node->style.animations().transition_delay_value)
+                    : node->style.animations().transition_delay_value;
             } else if (name == "transition-timing-function") {
                 value = node->style.animations().transition_timing_function_value;
             } else if (name == "opacity") {
@@ -1059,8 +1229,12 @@
             const auto& authored_style = node->authored_style().declarations;
             const auto authored = authored_style.find(
                 canonical_css_property_name(name));
-            value = authored == authored_style.end()
-                ? "" : authored->second;
+            if (authored != authored_style.end()) value = authored->second;
+            else if (const auto expanded = expanded_inline_box_longhand(
+                         *node, canonical_css_property_name(name));
+                     expanded.has_value()) {
+                value = *expanded;
+            }
             info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));
             return;
         }
@@ -1099,6 +1273,29 @@
         const auto format_box_length = [&](const css_length& length) {
             return length.unit == length_unit::automatic
                 ? std::string{"0px"} : format_computed_length(length, 0);
+        };
+        const auto format_corner_radius = [&](const css_length& horizontal,
+                                              const css_length& vertical) {
+            const auto horizontal_value = format_computed_length(
+                horizontal, node->layout.width);
+            const auto vertical_value = format_computed_length(
+                vertical, node->layout.height);
+            return horizontal_value == vertical_value
+                ? horizontal_value
+                : horizontal_value + " " + vertical_value;
+        };
+        const auto compress_corner_axis = [](const std::array<std::string, 4>& values) {
+            if (values[0] == values[1] && values[0] == values[2]
+                && values[0] == values[3]) {
+                return values[0];
+            }
+            if (values[0] == values[2] && values[1] == values[3]) {
+                return values[0] + " " + values[1];
+            }
+            if (values[1] == values[3]) {
+                return values[0] + " " + values[1] + " " + values[2];
+            }
+            return values[0] + " " + values[1] + " " + values[2] + " " + values[3];
         };
         const auto resolve_transform_origin = [](css_length length, float available) {
             return length.unit == length_unit::percent
@@ -1208,6 +1405,16 @@
             value = format_computed_length(node->style.row_gap, node->layout.height);
         } else if (name == "columnGap") {
             value = format_computed_length(node->style.column_gap, node->layout.width);
+        } else if (name == "borderSpacing") {
+            value = format_computed_length(
+                    node->style.table().border_spacing_horizontal,
+                    node->layout.width)
+                + " "
+                + format_computed_length(
+                    node->style.table().border_spacing_vertical,
+                    node->layout.height);
+        } else if (name == "borderCollapse") {
+            value = node->style.table().border_collapsed ? "collapse" : "separate";
         } else if (name == "paddingLeft") {
             value = format_box_length(node->style.padding_left);
         } else if (name == "paddingTop") {
@@ -1241,13 +1448,21 @@
         } else if (name == "borderLeftColor") {
             value = serialize_color(node->style.border_left_rgba);
         } else if (name == "borderTopLeftRadius") {
-            value = format_length(node->style.border_top_left_radius);
+            value = format_corner_radius(
+                node->style.border_top_left_radius,
+                node->style.border_top_left_radius_y());
         } else if (name == "borderTopRightRadius") {
-            value = format_length(node->style.border_top_right_radius);
+            value = format_corner_radius(
+                node->style.border_top_right_radius,
+                node->style.border_top_right_radius_y());
         } else if (name == "borderBottomRightRadius") {
-            value = format_length(node->style.border_bottom_right_radius);
+            value = format_corner_radius(
+                node->style.border_bottom_right_radius,
+                node->style.border_bottom_right_radius_y());
         } else if (name == "borderBottomLeftRadius") {
-            value = format_length(node->style.border_bottom_left_radius);
+            value = format_corner_radius(
+                node->style.border_bottom_left_radius,
+                node->style.border_bottom_left_radius_y());
         } else if (name == "gridArea") {
             value = node->style.grid().area_value;
         } else if (name == "gridRow") {
@@ -1269,7 +1484,18 @@
         } else if (name == "boxSizing") {
             value = node->style.border_box ? "border-box" : "content-box";
         } else if (name == "borderRadius") {
-            value = serialize_css_number(node->style.border_top_left_radius.value) + "px";
+            const std::array<std::string, 4> horizontal{
+                format_computed_length(node->style.border_top_left_radius, node->layout.width),
+                format_computed_length(node->style.border_top_right_radius, node->layout.width),
+                format_computed_length(node->style.border_bottom_right_radius, node->layout.width),
+                format_computed_length(node->style.border_bottom_left_radius, node->layout.width)};
+            const std::array<std::string, 4> vertical{
+                format_computed_length(node->style.border_top_left_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_top_right_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_bottom_right_radius_y(), node->layout.height),
+                format_computed_length(node->style.border_bottom_left_radius_y(), node->layout.height)};
+            value = compress_corner_axis(horizontal);
+            if (horizontal != vertical) value += " / " + compress_corner_axis(vertical);
         } else if (name == "boxShadow") {
             if (!node->style.box_shadow_present) {
                 value = "none";
@@ -1335,9 +1561,13 @@
         } else if (name == "transitionProperty" || name == "transition-property") {
             value = node->style.animations().transition_property_value;
         } else if (name == "transitionDuration" || name == "transition-duration") {
-            value = node->style.animations().transition_duration_value;
+            value = computed
+                ? serialize_computed_time_list(node->style.animations().transition_duration_value)
+                : node->style.animations().transition_duration_value;
         } else if (name == "transitionDelay" || name == "transition-delay") {
-            value = node->style.animations().transition_delay_value;
+            value = computed
+                ? serialize_computed_time_list(node->style.animations().transition_delay_value)
+                : node->style.animations().transition_delay_value;
         } else if (name == "transitionTimingFunction"
             || name == "transition-timing-function") {
             value = node->style.animations().transition_timing_function_value;
@@ -1660,6 +1890,19 @@
                 node->style.column_gap = native_document::parse_length(first);
             }
             node->style.inline_property_mask |= inline_gap;
+        } else if (name == "borderSpacing") {
+            std::istringstream stream(value);
+            std::string horizontal;
+            std::string vertical;
+            stream >> horizontal >> vertical;
+            auto& table = node->style.mutable_table();
+            table.border_spacing_horizontal = native_document::parse_length(horizontal);
+            table.border_spacing_vertical = native_document::parse_length(
+                vertical.empty() ? horizontal : vertical);
+            node->style.inline_property_mask |= inline_table_border_model;
+        } else if (name == "borderCollapse") {
+            node->style.mutable_table().border_collapsed = value == "collapse";
+            node->style.inline_property_mask |= inline_table_border_model;
         } else if (name == "boxSizing") {
             node->style.border_box = value == "border-box";
             node->style.inline_property_mask |= inline_box_sizing;
@@ -1667,10 +1910,7 @@
             apply_corner_radius_declaration(
                 "border-radius",
                 value,
-                node->style.border_top_left_radius,
-                node->style.border_top_right_radius,
-                node->style.border_bottom_right_radius,
-            node->style.border_bottom_left_radius);
+                node->style);
             node->style.inline_property_mask |= inline_border_radius;
         } else if (name == "boxShadow") {
             auto complete = true;
@@ -1695,18 +1935,23 @@
             node->style.inline_property_mask |= inline_transform_origin;
         } else if (name == "transition") {
             apply_transition_shorthand(node->style, value);
+            node->style.inline_property_mask |= inline_transition;
         } else if (name == "transitionProperty") {
             node->style.mutable_animations().transition_property_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_property;
         } else if (name == "transitionDuration") {
             node->style.mutable_animations().transition_duration_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_duration;
         } else if (name == "transitionDelay") {
             node->style.mutable_animations().transition_delay_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_delay;
         } else if (name == "transitionTimingFunction") {
             node->style.mutable_animations().transition_timing_function_value = value;
             configure_style_transitions(node->style);
+            node->style.inline_property_mask |= inline_transition_timing;
         } else if (name == "animation") {
             apply_animation_shorthand(node->style, value);
         } else if (name == "animationName") {
@@ -1812,6 +2057,7 @@
             node->style.mutable_textual().white_space = value;
             node->style.inline_property_mask |= inline_white_space;
         }
+        self->recompute_inline_font_relative_metrics(*node);
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));

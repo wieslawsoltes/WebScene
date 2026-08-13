@@ -316,6 +316,45 @@
         }
     }
 
+    static v8::MaybeLocal<v8::Value> call_event_listener(
+        v8::Isolate* isolate,
+        v8::Local<v8::Context> local_context,
+        v8::Local<v8::Value> listener,
+        v8::Local<v8::Object> current_target,
+        int argument_count,
+        v8::Local<v8::Value> arguments[])
+    {
+        if (listener->IsFunction()) {
+            return listener.As<v8::Function>()->Call(
+                local_context,
+                current_target,
+                argument_count,
+                arguments);
+        }
+        if (!listener->IsObject()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "EventListener is not an object")));
+            return {};
+        }
+        auto listener_object = listener.As<v8::Object>();
+        v8::Local<v8::Value> handle_event;
+        if (!listener_object->Get(
+                local_context,
+                js_string(isolate, "handleEvent")).ToLocal(&handle_event)) {
+            return {};
+        }
+        if (!handle_event->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "EventListener.handleEvent is not callable")));
+            return {};
+        }
+        return handle_event.As<v8::Function>()->Call(
+            local_context,
+            listener_object,
+            argument_count,
+            arguments);
+    }
+
     static void add_event_listener(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -329,45 +368,70 @@
             decision.semantic_slice = "an event type and listener are required";
             return;
         }
-        if (!info[1]->IsFunction()) {
-            decision.classification = "unsupported";
-            decision.semantic_slice = "EventListener objects with handleEvent are not implemented";
-            return;
-        }
         const auto type = to_utf8(info.GetIsolate(), info[0]);
+        auto local_context = info.GetIsolate()->GetCurrentContext();
         bool use_capture = false;
         bool use_once = false;
+        bool use_passive = false;
+        v8::Local<v8::Object> use_signal;
         if (info.Length() > 2) {
             if (info[2]->IsBoolean()) {
                 use_capture = info[2]->BooleanValue(info.GetIsolate());
             } else if (info[2]->IsObject()) {
+                auto options = info[2].As<v8::Object>();
                 v8::Local<v8::Value> capture;
-                if (info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
+                if (options->Get(
+                        local_context,
                         js_string(info.GetIsolate(), "capture")).ToLocal(&capture)) {
                     use_capture = capture->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
                 }
                 v8::Local<v8::Value> once;
-                if (info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
+                if (options->Get(
+                        local_context,
                         js_string(info.GetIsolate(), "once")).ToLocal(&once)) {
                     use_once = once->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
                 }
                 v8::Local<v8::Value> passive;
-                const auto passive_requested = info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
-                        js_string(info.GetIsolate(), "passive")).ToLocal(&passive)
-                    && passive->BooleanValue(info.GetIsolate());
+                if (options->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "passive")).ToLocal(&passive)) {
+                    use_passive = passive->BooleanValue(info.GetIsolate());
+                } else {
+                    return;
+                }
                 v8::Local<v8::Value> signal;
-                const auto signal_requested = info[2].As<v8::Object>()->Get(
-                        info.GetIsolate()->GetCurrentContext(),
-                        js_string(info.GetIsolate(), "signal")).ToLocal(&signal)
-                    && !signal->IsNullOrUndefined();
-                if (passive_requested || signal_requested) {
-                    decision.classification = "partially-supported";
-                    decision.semantic_slice = "capture and once; passive enforcement and AbortSignal removal are not implemented";
+                if (!options->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "signal")).ToLocal(&signal)) {
+                    return;
+                }
+                if (!signal->IsUndefined()) {
+                    if (!signal->IsObject() || signal->IsNull()) {
+                        info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                            js_string(info.GetIsolate(),
+                                "Failed to execute 'addEventListener': signal is not an AbortSignal")));
+                        return;
+                    }
+                    use_signal = signal.As<v8::Object>();
+                    v8::Local<v8::Value> aborted;
+                    if (!use_signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)) {
+                        return;
+                    }
+                    if (aborted->BooleanValue(info.GetIsolate())) return;
                 }
             }
+        }
+        if (info[1]->IsNullOrUndefined()) return;
+        if (!info[1]->IsObject()) {
+            decision.classification = "unsupported";
+            decision.semantic_slice = "an EventListener must be a function or object";
+            return;
         }
         self->record_feature(
             "event",
@@ -401,23 +465,65 @@
                 target_node_id = standalone_target_id.value_or(0U);
             }
 #endif
-            auto name = to_utf8(info.GetIsolate(), info[1].As<v8::Function>()->GetName());
+            auto& registrations = self->frame_event_listeners[type];
+            const auto requested = info[1];
+            for (const auto& registration : registrations) {
+                auto callback = registration.callback.Get(info.GetIsolate());
+                if (!callback.IsEmpty()
+                    && registration.target == target_node_id
+                    && registration.context.Get(info.GetIsolate()) == local_context
+                    && registration.capture == use_capture
+                    && callback->StrictEquals(requested)) {
+                    return;
+                }
+            }
+            auto name = requested->IsFunction()
+                ? to_utf8(info.GetIsolate(), requested.As<v8::Function>()->GetName())
+                : std::string("<object listener>");
             if (name.empty()) name = "<anonymous>";
-            self->frame_event_listeners[type].push_back(
-                event_listener_registration{
-                    v8::Global<v8::Function>(
-                        info.GetIsolate(),
-                        info[1].As<v8::Function>()),
-                    v8::Global<v8::Context>(
-                        info.GetIsolate(),
-                        info.GetIsolate()->GetCurrentContext()),
-                    std::move(name),
-                    self->current_input_sequence,
-                    target_node_id,
-                    use_capture,
-                    use_once});
+            event_listener_registration registration{
+                v8::Global<v8::Value>(info.GetIsolate(), requested),
+                v8::Global<v8::Context>(info.GetIsolate(), local_context),
+                std::move(name),
+                self->current_input_sequence,
+                target_node_id,
+                use_capture,
+                use_once,
+                use_passive,
+                {}};
+            if (!use_signal.IsEmpty()) {
+                registration.signal.Reset(info.GetIsolate(), use_signal);
+            }
+            registrations.push_back(std::move(registration));
         } else if (type == "resize") {
-            self->resize_listeners.emplace_back(info.GetIsolate(), info[1].As<v8::Function>());
+            const auto requested = info[1];
+            for (const auto& registration : self->resize_listeners) {
+                auto callback = registration.callback.Get(info.GetIsolate());
+                if (!callback.IsEmpty()
+                    && registration.context.Get(info.GetIsolate()) == local_context
+                    && registration.capture == use_capture
+                    && callback->StrictEquals(requested)) {
+                    return;
+                }
+            }
+            auto name = requested->IsFunction()
+                ? to_utf8(info.GetIsolate(), requested.As<v8::Function>()->GetName())
+                : std::string("<object listener>");
+            if (name.empty()) name = "<anonymous>";
+            event_listener_registration registration{
+                v8::Global<v8::Value>(info.GetIsolate(), requested),
+                v8::Global<v8::Context>(info.GetIsolate(), local_context),
+                std::move(name),
+                self->current_input_sequence,
+                0U,
+                use_capture,
+                use_once,
+                use_passive,
+                {}};
+            if (!use_signal.IsEmpty()) {
+                registration.signal.Reset(info.GetIsolate(), use_signal);
+            }
+            self->resize_listeners.push_back(std::move(registration));
         }
     }
 
@@ -427,13 +533,14 @@
         self->record_feature(
             "dom",
             "method:EventTarget.removeEventListener",
-            info.Length() >= 2 && info[1]->IsFunction() ? "supported" : "invalid-authoring",
-            info.Length() >= 2 && info[1]->IsFunction()
-                ? std::string{} : "an event type and function listener are required",
+            info.Length() >= 2 && (info[1]->IsObject() || info[1]->IsNullOrUndefined())
+                ? "supported" : "invalid-authoring",
+            info.Length() >= 2 && (info[1]->IsObject() || info[1]->IsNullOrUndefined())
+                ? std::string{} : "an event type and object listener are required",
             "dom-binding");
-        if (info.Length() < 2 || !info[1]->IsFunction()) return;
+        if (info.Length() < 2 || info[1]->IsNullOrUndefined() || !info[1]->IsObject()) return;
         const auto type = to_utf8(info.GetIsolate(), info[0]);
-        const auto requested = info[1].As<v8::Function>();
+        const auto requested = info[1];
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         const auto standalone_target_id = generated_standalone_event_target_id(
             info.GetIsolate(), info.This());
@@ -489,16 +596,22 @@
                 // Do not erase while an event may be iterating the vector. The
                 // dispatch tail compacts this tombstone.
                 registration.callback.Reset();
+                registration.signal.Reset();
                 break;
             }
             return;
         }
         if (type != "resize") return;
-        for (auto iterator = self->resize_listeners.begin(); iterator != self->resize_listeners.end(); ++iterator) {
-            auto callback = iterator->Get(info.GetIsolate());
-            if (callback.IsEmpty() || !callback->StrictEquals(requested)) continue;
-            iterator->Reset();
-            self->resize_listeners.erase(iterator);
+        for (auto& registration : self->resize_listeners) {
+            auto callback = registration.callback.Get(info.GetIsolate());
+            if (registration.context.Get(info.GetIsolate()) != info.GetIsolate()->GetCurrentContext()
+                || registration.capture != requested_capture
+                || callback.IsEmpty()
+                || !callback->StrictEquals(requested)) {
+                continue;
+            }
+            registration.callback.Reset();
+            registration.signal.Reset();
             break;
         }
     }
@@ -605,6 +718,107 @@
         auto event = info.IsConstructCall() ? info.This() : v8::Object::New(info.GetIsolate());
         initialize_constructed_event(info, event, false);
         info.GetReturnValue().Set(event);
+    }
+
+    static void document_create_event(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (info.Length() < 1) {
+            self->record_feature(
+                "dom",
+                "method:Document.createEvent",
+                "invalid-authoring",
+                "an event interface name is required",
+                "dom-binding");
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Document.createEvent requires an interface name")));
+            return;
+        }
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::String> interface_value;
+        if (!info[0]->ToString(local_context).ToLocal(&interface_value)) return;
+        const auto interface_name = to_utf8(info.GetIsolate(), interface_value);
+        const auto supported = interface_name == "Event";
+        self->record_feature(
+            "dom",
+            "method:Document.createEvent",
+            supported ? "supported" : "unsupported",
+            supported ? std::string{} : "only the bounded Event interface is supported",
+            "dom-binding");
+        if (!supported) {
+            throw_dom_exception(
+                info,
+                "The requested event interface is not supported",
+                "NotSupportedError");
+            return;
+        }
+        v8::Local<v8::Value> constructor_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "Event")).ToLocal(&constructor_value)
+            || !constructor_value->IsFunction()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Event constructor is unavailable")));
+            return;
+        }
+        v8::Local<v8::Value> arguments[] = {js_string(info.GetIsolate(), "")};
+        v8::Local<v8::Object> event;
+        if (!constructor_value.As<v8::Function>()->NewInstance(
+                local_context,
+                1,
+                arguments).ToLocal(&event)) return;
+        info.GetReturnValue().Set(event);
+    }
+
+    static void event_init_event(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (info.Length() < 1) {
+            self->record_feature(
+                "dom",
+                "method:Event.initEvent",
+                "invalid-authoring",
+                "an event type is required",
+                "dom-binding");
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Event.initEvent requires an event type")));
+            return;
+        }
+        self->record_feature(
+            "dom",
+            "method:Event.initEvent",
+            "supported",
+            {},
+            "dom-binding");
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto event = info.This();
+        v8::Local<v8::String> type;
+        if (!info[0]->ToString(local_context).ToLocal(&type)) return;
+        event->Set(local_context, js_string(info.GetIsolate(), "type"), type).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "bubbles"),
+            v8::Boolean::New(
+                info.GetIsolate(),
+                info.Length() > 1 && info[1]->BooleanValue(info.GetIsolate()))).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "cancelable"),
+            v8::Boolean::New(
+                info.GetIsolate(),
+                info.Length() > 2 && info[2]->BooleanValue(info.GetIsolate()))).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "defaultPrevented"),
+            v8::False(info.GetIsolate())).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "__webscenePropagationStopped"),
+            v8::False(info.GetIsolate())).Check();
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "__websceneImmediatePropagationStopped"),
+            v8::False(info.GetIsolate())).Check();
     }
 
     static void mouse_event_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -783,17 +997,137 @@
         info.GetReturnValue().Set(observer);
     }
 
+    static void abort_signal_throw_if_aborted(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        v8::Local<v8::Value> aborted;
+        if (!info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+            || !aborted->BooleanValue(info.GetIsolate())) {
+            return;
+        }
+        v8::Local<v8::Value> reason;
+        if (info.This()->Get(
+                local_context,
+                js_string(info.GetIsolate(), "reason")).ToLocal(&reason)) {
+            info.GetIsolate()->ThrowException(reason);
+        }
+    }
+
+    static void abort_controller_abort(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || !info.Data()->IsObject()) return;
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto signal = info.Data().As<v8::Object>();
+        v8::Local<v8::Value> aborted;
+        if (!signal->Get(
+                local_context,
+                js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+            || aborted->BooleanValue(info.GetIsolate())) {
+            return;
+        }
+
+        const auto default_reason = info.Length() == 0 || info[0]->IsUndefined();
+        auto reason = default_reason
+            ? v8::Exception::Error(
+                js_string(info.GetIsolate(), "This operation was aborted"))
+            : info[0];
+        if (default_reason && reason->IsObject()) {
+            reason.As<v8::Object>()->Set(
+                local_context,
+                js_string(info.GetIsolate(), "name"),
+                js_string(info.GetIsolate(), "AbortError")).Check();
+        }
+        signal->Set(
+            local_context,
+            js_string(info.GetIsolate(), "aborted"),
+            v8::True(info.GetIsolate())).Check();
+        signal->Set(
+            local_context,
+            js_string(info.GetIsolate(), "reason"),
+            reason).Check();
+
+        const auto remove_aborted = [&](auto& registrations) {
+            for (auto& registration : registrations) {
+                if (registration.signal.IsEmpty()) continue;
+                auto registered_signal = registration.signal.Get(info.GetIsolate());
+                if (!registered_signal->StrictEquals(signal)) continue;
+                registration.callback.Reset();
+                registration.signal.Reset();
+            }
+        };
+        for (auto& [type, registrations] : self->frame_event_listeners) {
+            static_cast<void>(type);
+            remove_aborted(registrations);
+        }
+        remove_aborted(self->resize_listeners);
+
+        auto event = self->create_event_instance(local_context);
+        event->Set(
+            local_context,
+            js_string(info.GetIsolate(), "type"),
+            js_string(info.GetIsolate(), "abort")).Check();
+        v8::Local<v8::Value> dispatcher;
+        if (signal->Get(
+                local_context,
+                js_string(info.GetIsolate(), "dispatchEvent")).ToLocal(&dispatcher)
+            && dispatcher->IsFunction()) {
+            v8::Local<v8::Value> arguments[] = {event};
+            static_cast<void>(dispatcher.As<v8::Function>()->Call(
+                local_context, signal, 1, arguments));
+        }
+    }
+
     static void abort_controller_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'AbortController': Please use the 'new' operator")));
+            return;
+        }
+        self->record_feature(
+            "web-api",
+            "AbortController.constructor",
+            "partially-supported",
+            "abort state, reason, listener delivery, and EventTarget listener cleanup; static AbortSignal composition helpers are not implemented",
+            "web-api-binding");
         auto isolate = info.GetIsolate();
         auto local_context = isolate->GetCurrentContext();
-        auto controller = info.IsConstructCall() ? info.This() : v8::Object::New(isolate);
-        auto signal = v8::Object::New(isolate);
+        auto controller = info.This();
+        v8::Local<v8::Value> event_target_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "EventTarget")).ToLocal(&event_target_value)
+            || !event_target_value->IsFunction()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                js_string(isolate, "AbortController requires EventTarget")));
+            return;
+        }
+        auto signal = event_target_value.As<v8::Function>()->NewInstance(
+            local_context, 0, nullptr).ToLocalChecked();
         signal->Set(local_context, js_string(isolate, "aborted"), v8::False(isolate)).Check();
-        signal->Set(local_context, js_string(isolate, "addEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        signal->Set(local_context, js_string(isolate, "removeEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        signal->Set(local_context, js_string(isolate, "reason"), v8::Undefined(isolate)).Check();
+        signal->Set(local_context, js_string(isolate, "onabort"), v8::Null(isolate)).Check();
+        signal->Set(
+            local_context,
+            js_string(isolate, "throwIfAborted"),
+            v8::Function::New(
+                local_context,
+                abort_signal_throw_if_aborted).ToLocalChecked()).Check();
         controller->Set(local_context, js_string(isolate, "signal"), signal).Check();
-        controller->Set(local_context, js_string(isolate, "abort"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        controller->Set(
+            local_context,
+            js_string(isolate, "abort"),
+            v8::Function::New(
+                local_context,
+                abort_controller_abort,
+                signal).ToLocalChecked()).Check();
         info.GetReturnValue().Set(controller);
     }
 
@@ -1030,11 +1364,13 @@
         const auto listeners = self->frame_event_listeners.find(type);
         v8::Local<v8::Value> arguments[] = {event};
         const auto invoke_callback = [&](
-            v8::Local<v8::Function> callback,
+            v8::Local<v8::Value> callback,
             v8::Local<v8::Object> current_target) {
             v8::TryCatch try_catch(info.GetIsolate());
-            if (!callback->Call(
+            if (!call_event_listener(
+                    info.GetIsolate(),
                     local_context,
+                    callback,
                     current_target,
                     1,
                     arguments).IsEmpty()) {
@@ -1072,8 +1408,32 @@
                     || listener.capture != capture) continue;
                 auto callback = listener.callback.Get(info.GetIsolate());
                 if (callback.IsEmpty()) continue;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(info.GetIsolate());
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(info.GetIsolate())) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::Boolean::New(info.GetIsolate(), passive)).Check();
                 invoke_callback(callback, current_target);
-                if (listener.once) listener.callback.Reset();
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::False(info.GetIsolate())).Check();
                 if (immediate_propagation_stopped()) break;
             }
             return true;
@@ -1101,6 +1461,48 @@
             && document_value->IsObject()) {
             document_target = document_value.As<v8::Object>();
         }
+        const auto invoke_outer_resize_listeners = [&](bool capture) {
+            if (type != "resize" || self->in_frame_context() || receiver.IsEmpty()
+                || !receiver->StrictEquals(global)) return true;
+            set_phase(global, 2);
+            const auto listener_count = self->resize_listeners.size();
+            for (size_t index = 0; index < listener_count; ++index) {
+                auto& listener = self->resize_listeners[index];
+                if (listener.context.Get(info.GetIsolate()) != local_context
+                    || listener.capture != capture) continue;
+                auto callback = listener.callback.Get(info.GetIsolate());
+                if (callback.IsEmpty()) continue;
+                if (!listener.signal.IsEmpty()) {
+                    auto signal = listener.signal.Get(info.GetIsolate());
+                    v8::Local<v8::Value> aborted;
+                    if (signal->Get(
+                            local_context,
+                            js_string(info.GetIsolate(), "aborted")).ToLocal(&aborted)
+                        && aborted->BooleanValue(info.GetIsolate())) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                        continue;
+                    }
+                }
+                const auto passive = listener.passive;
+                if (listener.once) {
+                    listener.callback.Reset();
+                    listener.signal.Reset();
+                }
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::Boolean::New(info.GetIsolate(), passive)).Check();
+                const auto callback_succeeded = invoke_callback(callback, global);
+                event->Set(
+                    local_context,
+                    js_string(info.GetIsolate(), "__websceneInPassiveListener"),
+                    v8::False(info.GetIsolate())).Check();
+                if (!callback_succeeded) return false;
+                if (immediate_propagation_stopped()) break;
+            }
+            return true;
+        };
         if (target == nullptr) {
             const auto direct_target_id = receiver_is_document
                 ? std::numeric_limits<uint32_t>::max()
@@ -1120,8 +1522,10 @@
                 && !invoke_listeners(0U, global, true, 1)) return;
             if (!propagation_stopped()
                 && (!invoke_listeners(direct_target_id, direct_target, true, 2)
+                || !invoke_outer_resize_listeners(true)
                 || (!immediate_propagation_stopped()
-                    && !invoke_listeners(direct_target_id, direct_target, false, 2)))) return;
+                    && (!invoke_listeners(direct_target_id, direct_target, false, 2)
+                        || !invoke_outer_resize_listeners(false))))) return;
             if (receiver_is_document
                 && read_boolean("bubbles")
                 && !propagation_stopped()
@@ -1243,6 +1647,11 @@
                 listeners->second,
                 [](const auto& listener) { return listener.callback.IsEmpty(); });
         }
+        if (type == "resize") {
+            std::erase_if(
+                self->resize_listeners,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
+        }
         event->Set(
             local_context,
             js_string(info.GetIsolate(), "currentTarget"),
@@ -1304,6 +1713,22 @@
         info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), height));
     }
 
+    static dom_node* frame_owner_for_window(
+        implementation& self,
+        v8::Local<v8::Object> holder)
+    {
+        if (auto* node = unwrap_node(holder); node != nullptr && node->tag == "iframe") {
+            return node;
+        }
+        for (const auto& [id, persistent] : self.actual_frame_windows) {
+            if (!persistent.IsEmpty() && persistent.Get(self.isolate)->StrictEquals(holder)) {
+                auto* node = self.document.find_by_native_id(id);
+                return node != nullptr && node->tag == "iframe" ? node : nullptr;
+            }
+        }
+        return nullptr;
+    }
+
     static void get_window_scroll_x(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -1311,9 +1736,14 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry));
-        info.GetReturnValue().Set(v8::Number::New(
-            info.GetIsolate(),
-            self->active_root().scroll_left));
+        const auto* frame = frame_owner_for_window(*self, info.Holder());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),
+            known == self->frame_window_scroll_offsets.end()
+                ? self->active_root().scroll_left
+                : known->second.first));
     }
 
     static void get_window_scroll_y(
@@ -1323,9 +1753,80 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry));
-        info.GetReturnValue().Set(v8::Number::New(
-            info.GetIsolate(),
-            self->active_root().scroll_top));
+        const auto* frame = frame_owner_for_window(*self, info.Holder());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),
+            known == self->frame_window_scroll_offsets.end()
+                ? self->active_root().scroll_top
+                : known->second.second));
+    }
+
+    static void window_scroll_to(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry));
+        self->ensure_layout();
+
+        auto& root = self->active_root();
+        auto* frame = frame_owner_for_window(*self, info.This());
+        const auto known = frame == nullptr
+            ? self->frame_window_scroll_offsets.end()
+            : self->frame_window_scroll_offsets.find(frame->id);
+        auto left = static_cast<double>(known == self->frame_window_scroll_offsets.end()
+            ? root.scroll_left : known->second.first);
+        auto top = static_cast<double>(known == self->frame_window_scroll_offsets.end()
+            ? root.scroll_top : known->second.second);
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        if (info.Length() > 0 && info[0]->IsObject()) {
+            const auto options = info[0].As<v8::Object>();
+            const auto read_axis = [&](const char* name, double current_value) {
+                v8::Local<v8::Value> value;
+                if (!options->Get(local_context, js_string(info.GetIsolate(), name))
+                        .ToLocal(&value)
+                    || value->IsUndefined()) {
+                    return current_value;
+                }
+                return value->NumberValue(local_context).FromMaybe(0.0);
+            };
+            left = read_axis("left", left);
+            top = read_axis("top", top);
+        } else {
+            left = info.Length() > 0
+                ? info[0]->NumberValue(local_context).FromMaybe(0.0)
+                : 0.0;
+            top = info.Length() > 1
+                ? info[1]->NumberValue(local_context).FromMaybe(0.0)
+                : 0.0;
+        }
+        if (!std::isfinite(left)) left = 0.0;
+        if (!std::isfinite(top)) top = 0.0;
+
+        if (frame != nullptr) {
+            self->frame_window_scroll_offsets[frame->id] = {
+                std::max(0.0F, static_cast<float>(left)),
+                std::max(0.0F, static_cast<float>(top))};
+            return;
+        }
+
+        const auto maximum_left = std::max(
+            0.0F,
+            root.scroll_content_width - root.scroll_viewport_width);
+        const auto maximum_top = std::max(
+            0.0F,
+            root.scroll_content_height - root.scroll_viewport_height);
+        const auto next_left = std::clamp(static_cast<float>(left), 0.0F, maximum_left);
+        const auto next_top = std::clamp(static_cast<float>(top), 0.0F, maximum_top);
+        if (std::abs(next_left - root.scroll_left) <= 0.01F
+            && std::abs(next_top - root.scroll_top) <= 0.01F) {
+            return;
+        }
+        root.scroll_left = next_left;
+        root.scroll_top = next_top;
+        self->document.mark_dirty();
+        self->enqueue_programmatic_scroll_event(root);
     }
 
     static void get_device_pixel_ratio(

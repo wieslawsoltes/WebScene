@@ -1,3 +1,225 @@
+void test_fragment_replacement_and_inline_script_lifecycle(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const host = document.createElement('div');
+          document.body.appendChild(host);
+          const wrapper = document.createElement('section');
+          const children = ['a', 'b', 'c', 'd'].map(value => {
+            const child = document.createElement('span');
+            child.textContent = value;
+            wrapper.appendChild(child);
+            return child;
+          });
+          host.appendChild(wrapper);
+          const fragment = document.createDocumentFragment();
+          children.forEach(child => fragment.appendChild(child));
+          const returned = host.replaceChild(fragment, wrapper);
+          const fragmentResult = [
+            returned === wrapper,
+            wrapper.parentNode === null,
+            fragment.childNodes.length,
+            host.childNodes.length,
+            children.every((child, index) => host.childNodes[index] === child),
+            children.every(child => child.parentNode === host)
+          ];
+
+          globalThis.__nativeDynamicScriptRuns = 0;
+          const outerScript = document.currentScript;
+          const script = document.createElement('script');
+          globalThis.__nativeDynamicScript = script;
+          script.textContent = 'globalThis.__nativeDynamicScriptRuns += 1;'
+            + 'globalThis.__nativeDynamicCurrentScript = '
+            + 'document.currentScript === globalThis.__nativeDynamicScript;';
+          host.appendChild(script);
+          const firstRun = globalThis.__nativeDynamicScriptRuns;
+          const currentScriptLifecycle = [
+            globalThis.__nativeDynamicCurrentScript,
+            document.currentScript === outerScript
+          ];
+          const scriptWrapper = document.createElement('b');
+          scriptWrapper.appendChild(script);
+          host.appendChild(scriptWrapper);
+
+          globalThis.__nativeInertScriptRuns = 0;
+          const parsed = document.createElement('div');
+          parsed.innerHTML = '<script>globalThis.__nativeInertScriptRuns += 1;<\/script>';
+          host.appendChild(parsed.firstChild);
+          return {
+            fragment: fragmentResult,
+            scripts: [firstRun, globalThis.__nativeDynamicScriptRuns,
+              globalThis.__nativeInertScriptRuns],
+            currentScript: currentScriptLifecycle
+          };
+        })()
+    )JS", "native-fragment-replacement-script-lifecycle.js");
+    require(
+        result == R"JSON({"fragment":[true,true,0,4,true,true],"scripts":[1,1,0],"currentScript":[true,true]})JSON",
+        "fragment replacement or inline script lifecycle diverged: " + result);
+}
+
+void test_dom_box_dimensions_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .border-box, .border-box * { box-sizing: border-box; }
+              table { border-spacing: 0; }
+              td { margin: 0; padding: 0; border: 0; }
+              #authored { padding:9px !important; border:7px solid !important; }
+            </style>
+            <table id="tracks"><col id="single"><col id="double" span="2"><tbody><tr>
+              <td></td><td id="a">a</td><td id="b">b</td>
+            </tr></tbody></table>
+            <table><tbody><tr id="row"><td style="width:42px;height:42px"></td></tr></tbody></table>
+            <table class="border-box"><thead>
+              <tr><th id="h1" style="width:200px;padding:5px"></th></tr>
+              <tr><th id="h2" style="width:190px;padding:5px"></th></tr>
+              <tr><th id="h3" style="width:180px;padding:5px"></th></tr>
+            </thead></table>
+            <table class="border-box"><tbody><tr><td id="cell"
+              style="height:20px;padding:5px;border:1px solid;line-height:18px">text</td></tr></tbody></table>
+            <textarea id="textarea" style="height:0;padding:2px;border:1px solid;box-sizing:border-box"></textarea>`;
+          const original = document.createElement('div');
+          original.style.cssText = 'width:100px;height:80px;padding:2px;border:3px solid;margin:4px';
+          const clone = original.cloneNode(true);
+          const authored = document.createElement('div');
+          authored.id = 'authored';
+          authored.style.cssText = 'padding:2px;border:3px solid';
+          const disconnected = document.createElement('div');
+          disconnected.style.cssText = 'width:40px;height:30px';
+          const disconnectedRect = disconnected.getBoundingClientRect();
+          document.body.appendChild(authored);
+          single.style.width = '300px';
+          a.style.width = '200px';
+          b.style.width = '400px';
+          const width = id => document.getElementById(id).getBoundingClientRect().width;
+          const height = id => document.getElementById(id).getBoundingClientRect().height;
+          return {
+            clone: [
+              clone.style.getPropertyValue('width'),
+              clone.style.getPropertyValue('padding'),
+              clone.style.paddingLeft,
+              clone.style.borderLeftWidth
+            ],
+            authoredEdges: [
+              authored.style.paddingLeft,
+              authored.style.borderLeftWidth,
+              getComputedStyle(authored).paddingLeft,
+              getComputedStyle(authored).borderLeftWidth
+            ],
+            disconnected: [
+              disconnected.isConnected,
+              disconnected.getClientRects().length,
+              disconnectedRect.x,
+              disconnectedRect.y,
+              disconnectedRect.width,
+              disconnectedRect.height
+            ],
+            columns: [width('single'), width('double')],
+            row: width('row'),
+            headers: [width('h1'), width('h2'), width('h3')],
+            heights: [height('cell'), height('textarea')]
+          };
+        })()
+    )JS", "native-dom-box-dimensions-primitives.js");
+    const auto expected = R"JSON({"clone":["100px","2px","2px","3px"],"authoredEdges":["2px","3px","9px","7px"],"disconnected":[false,0,0,0,0,0],"columns":[300,600],"row":42,"headers":[200,200,200],"heights":[30,6]})JSON";
+    require(
+        result == expected,
+        "DOM box dimension primitives diverged: " + result);
+}
+
+void test_dom_traversal_cloning_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <section id="subject" test="value"><p><span></span></p><em></em></section>
+            <template id="template"><article data-source="template"><strong>copied</strong></article></template>`;
+          const subject = document.getElementById('subject');
+          const source = document.getElementById('template').content.firstElementChild;
+          const deep = document.importNode(source, true);
+          const shallow = document.importNode(source, false);
+          const detached = document.createElement('div');
+          const position = detached.compareDocumentPosition(subject);
+          return {
+            has: [subject.matches(':has(p)'), subject.matches(':has(p):has(em)')],
+            empty: [
+              subject.matches("[test^='']"),
+              subject.matches("[test$='']"),
+              subject.matches("[test*='']")
+            ],
+            imported: [
+              deep !== source,
+              deep.parentNode === null,
+              deep.getAttribute('data-source'),
+              deep.firstElementChild?.localName,
+              deep.textContent,
+              shallow.childNodes.length
+            ],
+            contains: [document.contains(subject), document.contains(detached)],
+            position: [
+              position,
+              Node.DOCUMENT_POSITION_DISCONNECTED,
+              Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC
+            ]
+          };
+        })()
+    )JS", "native-dom-traversal-cloning-primitives.js");
+    const auto expected = R"JSON({"has":[true,true],"empty":[false,false,false],"imported":[true,true,"template","strong","copied",0],"contains":[true,false],"position":[35,1,32]})JSON";
+    require(
+        result == expected,
+        "DOM traversal/cloning primitives diverged: " + result);
+}
+
+void test_textarea_child_text_value_lifecycle(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <form id="textarea-form">
+              <textarea id="parsed" name="message" value="ignored">?\nZ</textarea>
+            </form>`;
+          const form = document.getElementById('textarea-form');
+          const parsed = document.getElementById('parsed');
+          const initial = [
+            parsed.textContent,
+            parsed.defaultValue,
+            parsed.value,
+            parsed.getAttribute('value')
+          ];
+          parsed.value = 'dirty';
+          parsed.defaultValue = 'replacement\r\ndefault';
+          const dirty = [
+            parsed.textContent,
+            parsed.defaultValue,
+            parsed.firstChild?.data,
+            parsed.innerHTML,
+            parsed.value
+          ];
+          form.reset();
+          const reset = parsed.value;
+          parsed.textContent = 'clean update';
+          const clean = [parsed.defaultValue, parsed.value];
+          const dynamic = document.createElement('textarea');
+          document.body.appendChild(dynamic);
+          void dynamic.value;
+          const child = document.createTextNode('appended');
+          dynamic.appendChild(child);
+          child.data = 'updated';
+          const appended = [dynamic.defaultValue, dynamic.value];
+          document.body.appendChild(child);
+          const removed = [dynamic.defaultValue, dynamic.value];
+          return { initial, dirty, reset, clean, appended, removed };
+        })()
+    )JS", "native-textarea-child-text-value-lifecycle.js");
+    const auto expected = R"JSON({"initial":["?\nZ","?\nZ","?\nZ","ignored"],"dirty":["replacement\r\ndefault","replacement\r\ndefault","replacement\r\ndefault","replacement\r\ndefault","dirty"],"reset":"replacement\ndefault","clean":["clean update","clean update"],"appended":["updated","updated"],"removed":["",""]})JSON";
+    require(
+        result == expected,
+        "textarea child-text/default/current/reset lifecycle diverged: " + result);
+}
+
 void test_secondary_click(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -86,6 +308,250 @@ void test_primary_click_mouse_event_detail(webscene_engine* engine)
     if (result != R"({"events":[["pointerdown",0],["mousedown",1],["pointerup",0],["mouseup",1],["click",1]],"activeTag":"BODY","activeId":null})") {
         fail("primary event detail or canceled-mousedown focus default diverged from Chrome: " + result);
     }
+}
+
+void test_event_listener_options_reach_native_input_and_resize(webscene_engine* engine)
+{
+    resize(engine, 320, 200, 880U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const target = document.createElement('div');
+          target.id = 'listener-options-target';
+          target.style.position = 'fixed';
+          target.style.left = '0';
+          target.style.top = '0';
+          target.style.width = '100px';
+          target.style.height = '100px';
+          target.style.background = 'black';
+          target.style.zIndex = '999999';
+          document.body.appendChild(target);
+          globalThis.__listenerOptions = {
+            passiveDefaultPrevented: null,
+            abortedMouseup: 0,
+            onceClicks: 0,
+            onceResizes: 0,
+            abortedResizes: 0,
+            abortEvents: 0,
+            abortReasonStable: false,
+            abortThrowStable: false,
+            objectMouseups: 0,
+            objectResizes: 0,
+            removedObjectCalls: 0,
+            objectThisStable: true
+          };
+          target.addEventListener('mousedown', event => {
+            event.preventDefault();
+            __listenerOptions.passiveDefaultPrevented = event.defaultPrevented;
+          }, { passive: true });
+          const inputController = new AbortController();
+          target.addEventListener('mouseup', () => __listenerOptions.abortedMouseup++, {
+            signal: inputController.signal
+          });
+          inputController.abort();
+          const inputObjectListener = {
+            handleEvent() {
+              throw new Error('stale object listener method');
+            }
+          };
+          target.addEventListener('mouseup', inputObjectListener, { once: true });
+          target.addEventListener('mouseup', inputObjectListener);
+          inputObjectListener.handleEvent = function(event) {
+            __listenerOptions.objectMouseups++;
+            __listenerOptions.objectThisStable &&=
+              this === inputObjectListener && event.currentTarget === target;
+          };
+          const removedObjectListener = {
+            handleEvent() {
+              __listenerOptions.removedObjectCalls++;
+            }
+          };
+          target.addEventListener('click', removedObjectListener);
+          target.removeEventListener('click', removedObjectListener);
+          const click = () => __listenerOptions.onceClicks++;
+          target.addEventListener('click', click, { once: true });
+          target.addEventListener('click', click);
+          addEventListener('resize', () => __listenerOptions.onceResizes++, { once: true });
+          const resizeObjectListener = {
+            handleEvent(event) {
+              __listenerOptions.objectResizes++;
+              __listenerOptions.objectThisStable &&=
+                this === resizeObjectListener && event.currentTarget === window;
+            }
+          };
+          addEventListener('resize', resizeObjectListener, { once: true });
+          const resizeController = new AbortController();
+          addEventListener('resize', () => __listenerOptions.abortedResizes++, {
+            signal: resizeController.signal
+          });
+          resizeController.abort();
+          const semanticsController = new AbortController();
+          const semanticsReason = { source: 'listener-options-test' };
+          semanticsController.signal.onabort = () => __listenerOptions.abortEvents++;
+          semanticsController.abort(semanticsReason);
+          semanticsController.abort({ source: 'ignored-second-abort' });
+          __listenerOptions.abortReasonStable =
+            semanticsController.signal.reason === semanticsReason;
+          try {
+            semanticsController.signal.throwIfAborted();
+          } catch (error) {
+            __listenerOptions.abortThrowStable = error === semanticsReason;
+          }
+        })()
+    )JS", "native-event-listener-options-setup.js");
+    require(
+        evaluate(
+            engine,
+            "document.getElementById('listener-options-target')?.offsetWidth",
+            "native-event-listener-options-ready.js") == "100",
+        "native listener-option target did not complete layout");
+
+    auto consumed = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 881U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 882U, false);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 883U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 884U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 4U,
+        "native listener-option pointer inputs were not consumed");
+    consumed = consumed_input_count(engine);
+    resize(engine, 321, 201, 885U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 1U,
+        "first listener-option resize was not consumed");
+    consumed = consumed_input_count(engine);
+    resize(engine, 322, 202, 886U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed + 1U,
+        "second listener-option resize was not consumed");
+
+    const auto result = evaluate(
+        engine,
+        "globalThis.__listenerOptions",
+        "native-event-listener-options-result.js");
+    if (result != R"({"passiveDefaultPrevented":false,"abortedMouseup":0,"onceClicks":1,"onceResizes":1,"abortedResizes":0,"abortEvents":1,"abortReasonStable":true,"abortThrowStable":true,"objectMouseups":1,"objectResizes":1,"removedObjectCalls":0,"objectThisStable":true})") {
+        fail("listener options diverged across native input or resize dispatch: " + result);
+    }
+}
+
+void test_synthetic_window_resize_dispatch_uses_outer_listener_registry(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const state = {
+            calls: 0,
+            captureCalls: 0,
+            passiveCalls: 0,
+            passiveDefaultPrevented: true,
+            abortedCalls: 0,
+            removedCalls: 0,
+            target: true,
+            currentTarget: true,
+            objectThis: true
+          };
+          const listener = {
+            handleEvent(event) {
+              state.calls++;
+              state.target &&= event.target === window;
+              state.currentTarget &&= event.currentTarget === window;
+              state.objectThis &&= this === listener;
+            }
+          };
+          const capture = () => state.captureCalls++;
+          const removed = () => state.removedCalls++;
+          const controller = new AbortController();
+          window.addEventListener('resize', capture, true);
+          window.addEventListener('resize', listener, { once: true });
+          window.addEventListener('resize', event => {
+            state.passiveCalls++;
+            event.preventDefault();
+            state.passiveDefaultPrevented &&= event.defaultPrevented;
+          }, { passive: true, once: true });
+          window.addEventListener('resize', () => state.abortedCalls++, {
+            signal: controller.signal
+          });
+          controller.abort();
+          window.addEventListener('resize', removed);
+          window.removeEventListener('resize', removed);
+          const first = window.dispatchEvent(new Event('resize', { cancelable: true }));
+          const second = window.dispatchEvent(new Event('resize'));
+          return { ...state, first, second };
+        })()
+    )JS", "native-synthetic-window-resize.js");
+    require(
+        result == R"({"calls":1,"captureCalls":2,"passiveCalls":1,"passiveDefaultPrevented":false,"abortedCalls":0,"removedCalls":0,"target":true,"currentTarget":true,"objectThis":true,"first":true,"second":true})",
+        "synthetic Window resize bypassed outer listener dispatch: " + result);
+}
+
+void test_document_create_event_and_init_event(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const event = document.createEvent('Event');
+          const before = [
+            event instanceof Event,
+            event.type,
+            event.bubbles,
+            event.cancelable
+          ];
+          event.initEvent('legacy-activate', true, true);
+          const target = document.createElement('button');
+          document.body.appendChild(target);
+          let observed = null;
+          target.addEventListener('legacy-activate', received => {
+            observed = {
+              identity: received === event,
+              target: received.target === target,
+              currentTarget: received.currentTarget === target
+            };
+            received.preventDefault();
+          });
+          const dispatchResult = target.dispatchEvent(event);
+          const canceled = event.defaultPrevented;
+          event.initEvent('reinitialized', false, false);
+          let unsupported = null;
+          try {
+            document.createEvent('UnknownEvent');
+          } catch (error) {
+            unsupported = [error instanceof DOMException, error.name];
+          }
+          let missingCreateArgument = false;
+          let missingInitArgument = false;
+          try {
+            document.createEvent();
+          } catch (error) {
+            missingCreateArgument = error instanceof TypeError;
+          }
+          try {
+            document.createEvent('Event').initEvent();
+          } catch (error) {
+            missingInitArgument = error instanceof TypeError;
+          }
+          return {
+            before,
+            observed,
+            dispatchResult,
+            canceled,
+            reinitialized: [
+              event.type,
+              event.bubbles,
+              event.cancelable,
+              event.defaultPrevented
+            ],
+            unsupported,
+            missingCreateArgument,
+            missingInitArgument
+          };
+        })()
+    )JS", "native-document-create-event.js");
+    require(
+        result == R"({"before":[true,"",false,false],"observed":{"identity":true,"target":true,"currentTarget":true},"dispatchResult":false,"canceled":true,"reinitialized":["reinitialized",false,false,false],"unsupported":[true,"NotSupportedError"],"missingCreateArgument":true,"missingInitArgument":true})",
+        "Document.createEvent or Event.initEvent diverged from the bounded contract: " + result);
 }
 
 void test_native_mouseup_honors_immediate_propagation_stop(webscene_engine* engine)
@@ -1231,4 +1697,318 @@ void test_hidden_document_defers_presentation_work()
                 == "\"mutated while hidden\"",
         "restored visibility did not publish the deferred document state");
     webscene_engine_destroy(engine);
+}
+void test_component_catalog_mounts_interacts_and_unmounts()
+{
+    struct component_case final {
+        std::string_view id;
+        std::string_view visible_text;
+        std::string_view button_text;
+        std::string_view expected_text;
+    };
+    static constexpr std::array cases{
+        component_case{"ComponentHost.Basic", "Basic component host", "Clicked 0 times", "Clicked 1 time"},
+        component_case{"Hybrid.ReactIslands", "Independent component root", "Island count: 0", "Island count: 1"},
+        component_case{"TypeScriptDesktop", "Desktop workspace", "Form", "Profile form"},
+        component_case{"ReactDashboard", "Operations overview", "Inspect chart", "Chart details"},
+        component_case{"PluginWorkbench", "Plugin workbench", "Load plugin", "Unload plugin"},
+        component_case{"MultiInstanceWorkstation", "Isolated chart instance", "Local count: 0", "Local count: 1"},
+        component_case{"WebToNativeMigration", "Existing React order panel", "#1048 · Contoso", "Legacy component note"},
+        component_case{"OfflineKiosk", "Station kiosk", "Print ticket", "K-5499"},
+        component_case{"HeadlessComponentTests", "Headless component tests", "Pointer events: 0", "Pointer events: 1"},
+        component_case{"HostBridge.Services", "Host bridge services", "Invoke service", "Completed"},
+        component_case{"AccessibilityGallery", "Accessibility gallery", "Save profile", "Profile saved successfully"},
+        component_case{"CanvasWorkbench.Advanced", "Interactive canvas workbench", "Add indicator", "Moving Average"}
+    };
+    const auto repository_root = std::filesystem::path(__FILE__)
+        .parent_path().parent_path().parent_path().parent_path();
+    const auto quote = [](std::string_view value) {
+        std::string result{"'"};
+        for (const auto character : value) {
+            if (character == '\\' || character == '\'') result.push_back('\\');
+            result.push_back(character);
+        }
+        result.push_back('\'');
+        return result;
+    };
+    for (const auto& fixture : cases) {
+        const auto bundle_path = repository_root / "samples/components"
+            / fixture.id / "dist/main.js";
+        std::ifstream stream(bundle_path, std::ios::binary);
+        require(stream.good(), "component catalog bundle was not found: " + std::string(fixture.id));
+        const std::string bundle{
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>()};
+        auto* engine = webscene_engine_create(64);
+        require(engine != nullptr, "component catalog engine creation failed");
+        const auto release_engine = std::unique_ptr<webscene_engine, decltype(&webscene_engine_destroy)>(
+            engine, webscene_engine_destroy);
+        execute_and_wait(engine, R"JS(
+          globalThis.webscene = {
+            profileVersion: '1.0',
+            host: new Proxy({}, { get: (_, capability) => ({
+              invoke(method, argumentsValue = {}) {
+                (globalThis.__componentInvocations ||= []).push({ capability, method, argumentsValue });
+                return Promise.resolve({ accepted: true });
+              }
+            }) })
+          };
+        )JS", "component-catalog-host.js");
+        execute_and_wait(engine, bundle, std::string(fixture.id) + "-bundle.js");
+        require(
+            evaluate(
+                engine,
+                "mount({instanceId:" + quote(fixture.id) + "}); true",
+                std::string(fixture.id) + "-mount.js") == "true",
+            "component catalog mount failed: " + std::string(fixture.id));
+        auto mounted = false;
+        for (auto attempt = 0; attempt < 500 && !mounted; ++attempt) {
+            mounted = evaluate(
+                engine,
+                "!!document.querySelector('main') && document.body.textContent.includes("
+                    + quote(fixture.visible_text) + ") && document.body.textContent.trim().length > 80",
+                std::string(fixture.id) + "-mounted.js") == "true";
+            if (!mounted) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(mounted, "component catalog visible mount failed: " + std::string(fixture.id));
+
+        const auto interaction = R"JS((() => {
+          const expected = )JS" + quote(fixture.button_text) + R"JS(;
+          const button = Array.from(document.querySelectorAll('button'))
+            .find(candidate => candidate.textContent.includes(expected));
+          if (!button) return false;
+          let keyObserved = false;
+          button.addEventListener('keydown', event => { keyObserved = event.key === 'Enter'; }, { once: true });
+          button.focus();
+          const keyEvent = new Event('keydown', { bubbles: true });
+          Object.defineProperty(keyEvent, 'key', { value: 'Enter' });
+          button.dispatchEvent(keyEvent);
+          if (document.activeElement !== button || !keyObserved) return false;
+          button.click();
+          return true;
+        })())JS";
+        require(
+            evaluate(engine, interaction, std::string(fixture.id) + "-interaction.js") == "true",
+            "component catalog keyboard/pointer interaction failed: " + std::string(fixture.id));
+        auto updated = false;
+        for (auto attempt = 0; attempt < 500 && !updated; ++attempt) {
+            updated = evaluate(
+                engine,
+                "document.body.textContent.includes(" + quote(fixture.expected_text) + ")",
+                std::string(fixture.id) + "-updated.js") == "true";
+            if (!updated) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(updated, "component catalog update failed: " + std::string(fixture.id));
+        require(
+            evaluate(engine, "unmount(); document.body.children.length === 0",
+                std::string(fixture.id) + "-unmount.js") == "true",
+            "component catalog unmount failed: " + std::string(fixture.id));
+    }
+}
+void test_generated_idl_attributes_are_prototype_accessors(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'id');
+          const element = document.createElement('div');
+          element.id = 'prototype-accessor';
+          let rejectedPlainReceiver = false;
+          try { descriptor.get.call({}); }
+          catch (error) { rejectedPlainReceiver = error instanceof TypeError; }
+          return {
+            getter: typeof descriptor.get,
+            setter: typeof descriptor.set,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+            own: Object.prototype.hasOwnProperty.call(element, 'id'),
+            value: element.getAttribute('id'),
+            rejectedPlainReceiver
+          };
+        })()
+    )JS", "native-generated-idl-prototype-accessors.js");
+    require(
+        result == R"JSON({"getter":"function","setter":"function","enumerable":true,"configurable":true,"own":false,"value":"prototype-accessor","rejectedPlainReceiver":true})JSON",
+        "generated IDL attributes did not retain Web IDL prototype shape: " + result);
+}
+
+void test_document_links_is_a_live_named_html_collection(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<a id="later" name="shared" href="/later"></a>';
+          const links = document.links;
+          const area = document.createElement('area');
+          area.id = 'earlier';
+          area.name = 'shared';
+          area.href = '/earlier';
+          document.body.prepend(area);
+          let illegalConstructor = false;
+          let illegalItemReceiver = false;
+          let illegalNamedItemReceiver = false;
+          let illegalLengthReceiver = false;
+          try { new HTMLCollection(); }
+          catch (error) { illegalConstructor = error instanceof TypeError; }
+          try { HTMLCollection.prototype.item.call({}, 0); }
+          catch (error) { illegalItemReceiver = error instanceof TypeError; }
+          try { HTMLCollection.prototype.namedItem.call({}, 'earlier'); }
+          catch (error) { illegalNamedItemReceiver = error instanceof TypeError; }
+          try {
+            Object.getOwnPropertyDescriptor(HTMLCollection.prototype, 'length').get.call({});
+          } catch (error) { illegalLengthReceiver = error instanceof TypeError; }
+          const beforeRemoval = {
+            sameObject: links === document.links,
+            brand: links instanceof HTMLCollection
+              && Object.prototype.toString.call(links) === '[object HTMLCollection]',
+            length: links.length,
+            first: links[0]?.id,
+            second: links.item(1)?.id,
+            id: links.namedItem('earlier')?.id,
+            nameFirst: links.namedItem('shared')?.id,
+            namedProperty: links.earlier?.id,
+            lengthOnPrototype: !Object.hasOwn(links, 'length')
+              && typeof Object.getOwnPropertyDescriptor(
+                HTMLCollection.prototype, 'length')?.get === 'function'
+          };
+          area.removeAttribute('href');
+          const afterHrefRemoval = [
+            links.length,
+            links[0]?.id,
+            links.namedItem('earlier'),
+            links.earlier
+          ];
+          area.setAttribute('href', '/earlier');
+          area.remove();
+          return {
+            beforeRemoval,
+            afterHrefRemoval,
+            afterDetach: [links.length, links[0]?.id],
+            illegalConstructor,
+            illegalItemReceiver,
+            illegalNamedItemReceiver,
+            illegalLengthReceiver
+          };
+        })()
+    )JS", "native-document-links-html-collection.js");
+    require(
+        result == R"JSON({"beforeRemoval":{"sameObject":true,"brand":true,"length":2,"first":"earlier","second":"later","id":"earlier","nameFirst":"earlier","namedProperty":"earlier","lengthOnPrototype":true},"afterHrefRemoval":[1,"later",null,null],"afterDetach":[1,"later"],"illegalConstructor":true,"illegalItemReceiver":true,"illegalNamedItemReceiver":true,"illegalLengthReceiver":true})JSON",
+        "Document.links did not retain live named HTMLCollection semantics: " + result);
+}
+
+void test_scrollspy_product_neutral_primitives(webscene_engine* engine)
+{
+    const auto immediate = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div style="height:84px"></div>
+            <div id="scrollspy-scroller" style="position:relative;height:100px;overflow:auto">
+              <div style="position:relative;height:100%">one</div>
+              <div style="position:relative;height:100%">two</div>
+              <div style="position:relative;height:100%">three</div>
+              <div style="position:relative;height:100%">four</div>
+              <div style="position:relative;height:100%">five</div>
+            </div>
+            <div id="hidden-section" style="height:40px" hidden></div>
+            <div id="following-section" style="height:10px"></div>
+            <a id="bare-fragment" href="#"></a>
+            <a id="relative-bare-fragment" href="relative#"></a>
+            <a id="named-fragment" href="#section"></a>`;
+          const scroller = document.getElementById('scrollspy-scroller');
+          const hidden = document.getElementById('hidden-section');
+          const following = document.getElementById('following-section');
+          const hiddenFollowingTop = following.offsetTop;
+          const hiddenInitial = hidden.offsetHeight === 0
+            && hidden.getClientRects().length === 0;
+          hidden.removeAttribute('hidden');
+          const hiddenRestored = hidden.offsetHeight === 40
+            && following.offsetTop === hiddenFollowingTop + 40;
+          hidden.setAttribute('hidden', '');
+          const hiddenReapplied = hidden.offsetHeight === 0
+            && following.offsetTop === hiddenFollowingTop;
+          globalThis.__programmaticScrollEarly = 0;
+          globalThis.__programmaticScrollLate = 0;
+          scroller.addEventListener('scroll', () => __programmaticScrollEarly++);
+          scroller.scrollTop = 20;
+          scroller.scrollTop = 40;
+          scroller.addEventListener('scroll', () => __programmaticScrollLate++);
+          return {
+            position: getComputedStyle(scroller).getPropertyValue('position'),
+            fragments: [
+              document.getElementById('bare-fragment').hash,
+              document.getElementById('relative-bare-fragment').hash,
+              document.getElementById('named-fragment').hash
+            ],
+            hidden: [hiddenInitial, hiddenRestored, hiddenReapplied],
+            range: [scroller.clientHeight, scroller.scrollHeight],
+            offsets: Array.from(scroller.children, child => child.offsetTop),
+            immediate: [scroller.scrollTop, __programmaticScrollEarly, __programmaticScrollLate]
+          };
+        })()
+    )JS", "native-scrollspy-neutral-primitives.js");
+    require(
+        immediate == R"JSON({"position":"relative","fragments":["","","#section"],"hidden":[true,true,true],"range":[100,500],"offsets":[0,100,200,300,400],"immediate":[40,0,0]})JSON",
+        "ScrollSpy neutral primitives were inconsistent before the queued scroll task: "
+            + immediate);
+
+    auto eventual = std::string{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        eventual = evaluate(engine, R"JS(
+            ({
+              scrollTop: document.getElementById('scrollspy-scroller').scrollTop,
+              early: __programmaticScrollEarly,
+              late: __programmaticScrollLate
+            })
+        )JS", "native-scrollspy-queued-scroll-result.js");
+        if (eventual == R"JSON({"scrollTop":40,"early":1,"late":1})JSON") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        eventual == R"JSON({"scrollTop":40,"early":1,"late":1})JSON",
+        "programmatic scroll writes did not coalesce into one queued event: " + eventual);
+
+    const auto unchanged = evaluate(engine, R"JS(
+        (() => {
+          const scroller = document.getElementById('scrollspy-scroller');
+          scroller.scrollTop = 40;
+          return [__programmaticScrollEarly, __programmaticScrollLate];
+        })()
+    )JS", "native-scrollspy-unchanged-scroll.js");
+    require(
+        unchanged == "[1,1]",
+        "an unchanged programmatic offset synchronously altered event counts: " + unchanged);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    require(
+        evaluate(engine, "[__programmaticScrollEarly, __programmaticScrollLate]",
+            "native-scrollspy-unchanged-scroll-result.js") == "[1,1]",
+        "an unchanged programmatic offset queued an additional scroll event");
+}
+
+void test_window_scroll_primitives(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<div style="width:1800px;height:1600px"></div>';
+          const methods = [typeof scrollTo, typeof scroll, scrollTo === scroll];
+          scrollTo(120, 140);
+          const numeric = [scrollX, scrollY, pageXOffset, pageYOffset];
+          scrollTo({ top: 210 });
+          const topOnly = [scrollX, scrollY];
+          scroll({ left: 170 });
+          const leftOnly = [scrollX, scrollY];
+          scrollTo(-20, 100000);
+          const maximumY = document.documentElement.scrollHeight - innerHeight;
+          const clamped = [scrollX, scrollY === maximumY, maximumY > 210];
+          scrollTo(0, 0);
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameMethods = [
+            typeof frame.contentWindow.scrollTo,
+            typeof frame.contentWindow.scroll
+          ];
+          frame.remove();
+          return { methods, numeric, topOnly, leftOnly, clamped, frameMethods };
+        })()
+    )JS", "native-window-scroll-primitives.js");
+    require(
+        result == R"JSON({"methods":["function","function",true],"numeric":[120,140,120,140],"topOnly":[120,210],"leftOnly":[170,210],"clamped":[0,true,true],"frameMethods":["function","function"]})JSON",
+        "Window scrolling primitives were inconsistent: " + result);
 }

@@ -428,7 +428,7 @@
       "type": "contract",
       "capabilities": ["window-event-target", "window-add-event-listener", "window-remove-event-listener", "window-dispatch-event"],
       "evidence": ["bootstrap-5.3.8-popper-scroll-parent-cleanup"],
-      "reason": "Required after the native runner pass the exact listener registration, dispatch, removal, and post-removal lifecycle reduction and Bootstrap's selected Popper lifecycle passes in the Chrome/native matrix. Listener options, AbortSignal integration, passive semantics, and the complete EventTarget surface remain outside this bounded claim. Evidence: artifacts/ecosystem-consumers-matrix-v9-20260722/ecosystem-results.json and artifacts/web-platform-required-ecosystem-promoted-v1-20260722."
+      "reason": "Required after the native runner passes the exact listener registration, dispatch, removal, and post-removal lifecycle reduction and Bootstrap's selected Popper lifecycle passes in the Chrome/native matrix. Once, passive, and AbortSignal listener options are covered separately as candidates by unchanged upstream WPT and native input/resize authority; they do not silently enlarge this required claim. Evidence: artifacts/ecosystem-consumers-matrix-v9-20260722/ecosystem-results.json and artifacts/web-platform-required-ecosystem-promoted-v1-20260722."
     },
     {
       "path": "contracts/dom-attribute-domstring-coercion.html",
@@ -503,9 +503,9 @@
     {
       "path": "contracts/dom-anchor-hash-reflection.html",
       "type": "contract",
-      "capabilities": ["anchor-hash-getter", "anchor-hash-setter", "href-fragment-attribute-reflection"],
+      "capabilities": ["anchor-hash-getter", "anchor-hash-setter", "href-fragment-attribute-reflection", "anchor-href-document-resolution", "script-src-document-resolution"],
       "evidence": ["bootstrap-scrollspy-target-discovery-reduction"],
-      "reason": "Required after Chrome and native pass the bounded fragment-anchor getter/setter reduction and Bootstrap ScrollSpy target discovery passes in the Chrome/native consumer matrix. The contract permits each certified document loader's base-URL serialization while requiring fragment replacement and removal; full HTMLHyperlinkElementUtils URL parsing is not claimed. Evidence: artifacts/web-platform-candidate-ecosystem-v14-chrome-contracts-v2-20260722, artifacts/web-platform-candidate-ecosystem-v14-three-contracts-v2-20260722, and artifacts/ecosystem-consumers-matrix-v14-offset-fixed-20260722."
+      "reason": "Required after Chrome and native pass the bounded fragment-anchor getter/setter reduction and Bootstrap ScrollSpy target discovery passes in the Chrome/native consumer matrix. Fragment-only anchor href and inert script src IDL reads resolve against the owning document URL while getAttribute retains authored bytes; fragment replacement and removal remain reflected. Full HTMLHyperlinkElementUtils URL parsing is not claimed. Evidence: artifacts/web-platform-candidate-ecosystem-v14-chrome-contracts-v2-20260722, artifacts/web-platform-candidate-ecosystem-v14-three-contracts-v2-20260722, artifacts/ecosystem-consumers-matrix-v14-offset-fixed-20260722, and the unchanged jQuery 4.0.0 basic and attributes suites."
     },
     {
       "path": "css/cssom/escape.html",
@@ -820,6 +820,97 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-library-core-primitives.html",
+      "type": "contract",
+      "capabilities": ["text-content-text-child", "html-script-element-text", "form-select-indexed-access", "document-get-elements-by-name", "document-style-sheets", "detached-document-owner-document", "xml-well-formedness-cdata-parsererror", "initial-iframe-document-load"],
+      "evidence": ["jquery-4.0.0-core-reduction", "direct-chrome-neutral-contract", "native-neutral-contract"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery core prerequisites. It requires real Text children after textContent replacement, interface-bounded script/form/select APIs, document lookup order, detached-document identity, bounded well-formed XML/CDATA/error behavior, and initial plus hydrated iframe realm identity. Keep candidate until unchanged evidence passes on every released RID."
+    },
+    {
+      "path": "contracts/disconnected-element-geometry.html",
+      "type": "contract",
+      "capabilities": ["disconnected-element", "empty-client-rect-list", "zero-bounding-client-rect"],
+      "evidence": ["jquery-4.0.0-offset-reduction"],
+      "reason": "Chrome-authorized product-neutral reduction for disconnected geometry used by DOM utility libraries. A detached element has no rendered client rectangles and exposes a zero bounding rectangle regardless of authored dimensions."
+    },
+    {
+      "path": "contracts/dom-box-dimensions-primitives.html",
+      "type": "contract",
+      "capabilities": ["clone-authored-style", "table-column-track-geometry", "table-row-track-geometry", "automatic-table-track-sizing", "border-box-control-minimum"],
+      "evidence": ["jquery-4.0.0-dimensions-reduction", "dom-box-dimensions-primitives"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery dimension prerequisites: cloned authored box declarations, resolved COL/span geometry, automatic table row/track sizing, and zero-content border-box control geometry."
+    },
+    {
+      "path": "contracts/dom-traversal-cloning-primitives.html",
+      "type": "contract",
+      "capabilities": ["selector-has-descendant", "attribute-empty-substring-selector", "document-element-parentage", "document-import-node", "disconnected-document-position"],
+      "evidence": ["jquery-4.0.0-traversing-reduction", "dom-traversal-cloning-primitives"],
+      "reason": "Chrome-authorized product-neutral reduction of unchanged jQuery traversal prerequisites: bounded descendant :has(), empty substring attribute matching, document-root ancestry, detached deep/shallow import, and disconnected position flags."
+    },
+    {
+      "path": "contracts/html-textarea-default-value-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["textarea-child-text-default", "textarea-dirty-value", "textarea-defaultValue", "textarea-newline-normalization", "textarea-form-reset"],
+      "evidence": ["jquery-4.0.0-serialize-form-reduction", "html-textarea-value-lifecycle"],
+      "reason": "Chrome-authorized product-neutral reduction of form serialization prerequisites: textarea child text supplies the default and initial current value, dirty current values remain isolated from default changes, and reset restores the newline-normalized child-text default."
+    },
+    {
+      "path": "contracts/empty-inline-element-geometry.html",
+      "type": "contract",
+      "capabilities": ["empty-inline-box-geometry", "non-stretched-inline-cross-size", "offscreen-positioned-container"],
+      "evidence": ["bootstrap-v5.3.8-tooltip-popper-placement-reduction"],
+      "reason": "Chrome-authorized product-neutral reduction of overlay placement input: an empty inline reference contributes no cross-size instead of stretching to a tall containing block."
+    },
+    {
+      "path": "contracts/dom-anchor-empty-fragment-reflection.html",
+      "type": "contract",
+      "capabilities": ["anchor-empty-fragment-reflection", "relative-url-fragment-reflection"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-empty-target-reduction"],
+      "reason": "Product-neutral reduction of target discovery: an anchor whose URL ends in a bare fragment delimiter must expose an empty hash, while a named fragment retains its leading delimiter."
+    },
+    {
+      "path": "contracts/html-hidden-attribute-layout.html",
+      "type": "contract",
+      "capabilities": ["html-hidden-attribute", "box-suppression", "dynamic-hidden-layout-restoration"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-hidden-section-reduction"],
+      "reason": "Product-neutral reduction of observable-section discovery: the HTML hidden attribute suppresses layout boxes and flow contribution, and dynamic removal/restoration updates geometry synchronously."
+    },
+    {
+      "path": "contracts/programmatic-scroll-event-task.html",
+      "type": "contract",
+      "capabilities": ["programmatic-scroll-event-task", "scroll-event-coalescing", "late-listener-observation", "unchanged-offset-idempotence"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-scroll-task-reduction"],
+      "reason": "Product-neutral reduction of browser scroll ordering: offset writes update geometry immediately while one scroll event is queued per target, listeners registered before that task observe it, and an unchanged offset queues no additional event."
+    },
+    {
+      "path": "contracts/overflow-percentage-child-scroll-range.html",
+      "type": "contract",
+      "capabilities": ["percentage-height-flow-children", "logical-flow-offsets", "complete-scroll-overflow-extent", "final-child-scroll-alignment"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-backward-scroll-reduction"],
+      "reason": "Product-neutral reduction of bounded overflow navigation: consecutive percentage-height flow children resolve against a definite viewport, all contribute to scrollHeight, and the final child can align at the viewport boundary."
+    },
+    {
+      "path": "contracts/document-create-event-init.html",
+      "type": "contract",
+      "capabilities": ["document-create-event", "event-init-event", "event-identity", "cancelable-dispatch", "event-reinitialization"],
+      "evidence": ["bootstrap-v5.3.8-carousel-hammer-simulator-reduction"],
+      "reason": "Product-neutral reduction of an official gesture-simulator prerequisite: document.createEvent('Event') must return an Event whose legacy initEvent method sets type, bubbling, and cancelability and resets cancellation when reinitialized."
+    },
+    {
+      "path": "contracts/responsive-overlay-resize-dispatch.html",
+      "type": "contract",
+      "capabilities": ["compound-attribute-selectors", "window-resize-event", "synthetic-dispatch", "computed-position-after-inline-removal"],
+      "evidence": ["bootstrap-v5.3.8-offcanvas-responsive-resize-reduction"],
+      "reason": "Product-neutral reduction of responsive overlay handling: a compound substring-attribute selector must find the open overlay, and a synthetic Window resize listener must synchronously observe its non-fixed computed position after inline style removal."
+    },
+    {
+      "path": "contracts/dynamic-transition-style-task-order.html",
+      "type": "contract",
+      "capabilities": ["innerhtml-style-attribute", "transition-duration-computed-style", "synthetic-click", "javascript-run-to-completion", "timer-task-order"],
+      "evidence": ["bootstrap-v5.3.8-modal-static-backdrop-reduction"],
+      "reason": "Product-neutral reduction of a modal consumer divergence: dynamically parsed transition-duration must reach computed style in seconds, and a timer queued by a synthetic click listener must not run before the click caller's next statement."
+    },
+    {
       "path": "contracts/html-single-select-layout.html",
       "type": "contract",
       "capabilities": ["collapsed-single-select-layout", "selected-option-paint", "option-box-suppression", "programmatic-select-state"],
@@ -900,6 +991,41 @@
       "reason": "Candidate decision fixture for the generated EventTarget to HTMLElement binding slice. It measures distinct constructors and prototype inheritance, HTML/text/SVG wrapper brands, operation placement and lengths, illegal invocation, constructor behavior, attribute descriptor placement, and wrapper identity."
     },
     {
+      "path": "dom/events/AddEventListenerOptions-once.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "event-listener-once", "nested-event-dispatch", "duplicate-listener-identity", "stop-immediate-propagation"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving that once listeners are removed before invocation, remain correct through nested dispatch, deduplicate by callback/type/capture, and interact correctly with stopImmediatePropagation."
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-passive.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "event-listener-passive", "passive-prevent-default", "passive-return-value", "listener-option-identity"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving passive option dictionary access, cancellation suppression through preventDefault and returnValue, isolation between listeners, and duplicate identity independent of passive state."
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-signal.any.js",
+      "type": "testharness",
+      "capabilities": ["window-any-js-harness", "abort-controller", "abort-signal-listener-removal", "nested-abort-dispatch", "signal-option-validation"],
+      "evidence": ["unchanged-upstream-eventtarget-options-wpt"],
+      "reason": "Unchanged window-targeted WPT proving synchronous AbortSignal listener removal before and during dispatch, composition with once/capture/manual removal, nested abort safety, already-aborted suppression, and null-signal validation."
+    },
+    {
+      "path": "dom/events/EventTarget-add-listener-platform-object.html",
+      "type": "testharness",
+      "capabilities": ["event-listener-object", "autonomous-custom-element-listener", "programmatic-click-dispatch"],
+      "evidence": ["unchanged-upstream-eventlistener-object-wpt"],
+      "reason": "Unchanged WPT proving that an autonomous custom element can register itself as a click listener and receive activation through its prototype handleEvent method."
+    },
+    {
+      "path": "dom/events/EventTarget-this-of-listener.html",
+      "type": "testharness",
+      "capabilities": ["event-listener-object", "event-listener-this-binding", "dynamic-handle-event-lookup", "function-listener-precedence"],
+      "evidence": ["unchanged-upstream-eventlistener-object-wpt"],
+      "reason": "Unchanged WPT proving function currentTarget this-binding, object-listener identity, per-dispatch handleEvent lookup, late handleEvent definition, and function precedence across supported Element, Text, DocumentFragment, Comment, and ProcessingInstruction targets."
+    },
+    {
       "path": "contracts/css-syntax-parser-recovery.html",
       "type": "contract",
       "capabilities": ["css-syntax-component-values", "declaration-recovery", "ascii-case-insensitive-property-names", "important-token-parsing", "dynamic-style-reparse"],
@@ -910,8 +1036,8 @@
       "path": "contracts/html5-tree-construction-primitives.html",
       "type": "contract",
       "capabilities": ["html5-tree-construction", "adoption-agency", "table-foster-parenting", "named-character-references", "comments", "whitespace-text", "foreign-content-namespaces", "template-contents"],
-      "evidence": ["html5ever-parser-spike"],
-      "reason": "Candidate denominator for the compile-time html5ever investigation. It deliberately remains non-gating until separate legacy and html5ever native artifacts have been compared against the adoption gates."
+      "evidence": ["html5ever-parser-spike", "chrome-authorized-foster-parent-structure"],
+      "reason": "Product-neutral HTML5 tree-construction coverage for adoption-agency reconstruction, table foster parenting, named entities, comments, foreign content, and template contents. Chrome and the native html5ever tree-sink test agree on the structural foster-parent invariant; keep candidate until the complete contract passes the packaged runtime on every released RID."
     },
     {
       "path": "contracts/monaco-editor-runtime-primitives.html",
@@ -961,6 +1087,27 @@
       "capabilities": ["dom-content-loaded-event", "window-load-event", "document-ready-state-order", "programmatic-element-scroll", "scroll-event-target"],
       "evidence": ["observed-hosted-component-document-event-audit", "table-and-dialog-overflow-scrolling"],
       "reason": "Product-neutral lifecycle reduction for document and scroll events observed in complex hosted components. It requires interactive/complete readiness ordering and a real overflow scrollTop mutation that publishes exactly one targeted scroll event."
+    },
+    {
+      "path": "contracts/window-timer-error-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["window-onerror", "timer-exception-reporting", "error-source-location", "task-queue-continuation"],
+      "evidence": ["jquery-4.0.0-ready-error-isolation-reduction"],
+      "reason": "Product-neutral reduction for browser-style asynchronous error reporting. A timer exception reaches an installed Window.onerror callback with its Error and source location, then a later timer still runs. The pre-existing fail-closed behavior remains unchanged when no handler is installed; keep candidate until every released native RID passes."
+    },
+    {
+      "path": "contracts/dom-fragment-replacement-script-lifecycle.html",
+      "type": "contract",
+      "capabilities": ["replace-child-document-fragment", "fragment-child-splicing", "programmatic-inline-script", "synchronous-script-connection", "script-one-shot-lifecycle", "document-current-script", "innerhtml-script-inertness"],
+      "evidence": ["jquery-4.0.0-wrap-reduction"],
+      "reason": "Product-neutral reduction for DOM mutation and script lifecycle primitives used by component libraries. Replacing a child with a DocumentFragment must splice the fragment's children with identity and order intact; a programmatically created inline script executes synchronously on its first connected insertion and never on a later move; an innerHTML-created script remains inert when moved. Keep candidate until every released native RID passes."
+    },
+    {
+      "path": "contracts/window-scroll-primitives.html",
+      "type": "contract",
+      "capabilities": ["window-scroll-to", "window-scroll-alias", "scroll-options-dictionary", "window-scroll-offsets", "document-scroll-range"],
+      "evidence": ["jquery-4.0.0-offset-reduction"],
+      "reason": "Product-neutral reduction for document scrolling used by component geometry libraries. Numeric scrollTo and its scroll alias update both offset pairs synchronously, options dictionaries retain omitted axes, and writes clamp to the laid-out document range. Keep candidate until every released native RID passes."
     },
     {
       "path": "contracts/observed-keyboard-focus-input-primitives.html",
@@ -1136,7 +1283,7 @@
       "type": "contract",
       "capabilities": ["open-shadow-root", "default-and-named-slots", "shadow-style-scoping", "composed-event-path", "event-retargeting", "shadow-focus-retargeting", "shadow-custom-element-lifecycle"],
       "evidence": ["shadow-dom-native-side-table", "shadow-dom-product-neutral-contract"],
-      "reason": "Candidate production-shaped Shadow DOM slice. It requires cold native ownership, open identity plus closed-root concealment, logical DOM query boundaries, default/named distribution, scoped shadow CSS, composed layout geometry, event paths and outside retargeting, focus retargeting, and custom-element lifecycle through connected shadow descendants. slotchange/flattening, declarative Shadow DOM, adoptedStyleSheets, ::slotted/::part, and complete focus delegation remain outside this bounded milestone."
+      "reason": "Candidate production-shaped Shadow DOM slice. It requires cold native ownership, open identity plus closed-root concealment, logical DOM query boundaries, default/named and recursively flattened distribution, scoped shadow CSS, composed layout geometry, event paths and outside retargeting, focus retargeting, and custom-element lifecycle through connected shadow descendants. Manual distribution, slotchange, declarative Shadow DOM, adoptedStyleSheets, ::slotted/::part, and complete focus delegation remain outside this bounded milestone."
     },
     {
       "path": "contracts/shadow-dom-rendering.html",
@@ -1158,14 +1305,14 @@
       "type": "testharness",
       "capabilities": ["html-slot-element-interface", "slot-name-reflection", "dynamic-slot-assignment", "flattened-slot-assignment"],
       "evidence": ["unchanged-pinned-wpt-html-slot-element"],
-      "reason": "Unchanged upstream discovery coverage for the basic and nested slot surface. Default/named direct distribution and closed-root assignedSlot concealment are in scope; manual assignment, flattening and nested redistribution remain visible discovery gaps."
+      "reason": "Unchanged upstream coverage for default/named direct distribution, closed-root assignedSlot concealment, and recursive flattening through nested slots. Manual assignment and slotchange remain visible gaps."
     },
     {
       "path": "shadow-dom/ShadowRoot-interface.html",
       "type": "testharness",
       "capabilities": ["shadow-root-interface", "shadow-root-active-element", "shadow-root-inner-html", "shadow-root-style-sheets"],
       "evidence": ["unchanged-pinned-wpt-shadow-root-interface"],
-      "reason": "Unchanged upstream discovery coverage. Open/closed ownership, activeElement and innerHTML inform this milestone while StyleSheetList remains deferred and is expected to keep this candidate partially failing."
+      "reason": "Unchanged upstream coverage for open/closed ownership, activeElement, innerHTML, and stable connected ShadowRoot.styleSheets identity. adoptedStyleSheets and complete CSSStyleSheet mutation remain deferred."
     },
     {
       "path": "contracts/window-screen-primitives.html",
@@ -1173,52 +1320,180 @@
       "capabilities": ["window-screen", "screen-stable-identity", "screen-dimensions", "screen-color-depth", "iframe-screen-realm"],
       "evidence": ["hosted-page-analytics-screen-resolution-read", "native-screen-viewport-regression"],
       "reason": "Product-neutral reduction of the hosted-page startup failure discovered when a third-party analytics script read window.screen.width. It requires stable Screen identity, finite dimensions and depth metadata in both the top-level Window and a same-origin iframe. Keep candidate until the unchanged bytes pass Chrome and the native runner."
-    }
-  ],
-  "harnessBlocked": [
-    {
-      "path": "css/CSS2/lists/list-style-001.xht",
-      "type": "visual",
-      "capabilities": ["list-style-shorthand", "square-list-marker", "list-item-marker-paint"],
-      "evidence": ["r5-list-style-computed-values", "r5-list-marker-native-pixel"],
-      "reason": "This pinned CSS2 visual case verifies that list-style:square produces a square marker, but it has neither rel=match nor testharness assertions. The subset runner cannot execute self-verifying visual tests unchanged, and the case does not exercise list-style-position:inside or first-line participation. Keep it harness-blocked and use the independent local marker-pixel gate for this base rule."
-    },
-    {
-      "path": "css/CSS2/lists/list-style-position-020.xht",
-      "type": "visual",
-      "capabilities": ["inside-list-marker", "first-line-inline-participation", "continuation-line-wrap"],
-      "evidence": ["r5-inside-list-marker-first-line-reduction"],
-      "reason": "This is the closest CSS2 visual statement of the exact rule: an inside marker participates on the first line while the following forced line starts at the principal block edge. It has no rel=match or assertions, so the current exact-match/testharness adapter cannot execute it unchanged; the runner-compatible nested-list reftest remains candidate and the minimal local reduction must carry the precise geometry claim."
-    },
-    {
-      "path": "css/CSS2/visufx/visibility-layout-001.xht",
-      "type": "visual",
-      "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression"],
-      "evidence": ["side-hide-options-measuring-menu", "synchronous-popup-placement"],
-      "reason": "This is the nearest official WPT and exactly asserts the base rule that visibility:hidden suppresses paint without removing layout boxes. It is a self-verifying visual test without rel=match, and it does not compose inherited hidden visibility with generated ::before content. Keep it harness-blocked; the product-neutral native/portable regression covers that exact composition and synchronous geometry read."
-    },
-    {
-      "path": "css/css-backgrounds/border-radius-overflow-hidden.html",
-      "type": "visual",
-      "capabilities": ["rounded-overflow-clipping", "border-radius", "descendant-paint-clipping"],
-      "evidence": ["chart-hover-market-status-marker"],
-      "reason": "This exact upstream coverage is a self-overlaid visual test without rel=match or testharness assertions. The product-neutral pixel spike now covers the primitive; promote after the subset runner can evaluate self-verifying visual tests."
-    },
-    {
-      "path": "css/css-backgrounds/border-radius-shorthand-001.htm",
-      "type": "visual",
-      "capabilities": ["border-radius-shorthand", "corner-longhand-expansion", "elliptical-radius-values"],
-      "evidence": ["volume-settings-footer-buttons", "rounded-dialog-controls"],
-      "reason": "This is the nearest official WPT for the base shorthand rule: it checks one-value expansion and a three-value horizontal/two-value vertical ellipse. It is a self-overlaid visual test without rel=match, and WebScene's Avalonia projection still models only one scalar per corner, so elliptical vertical paint is not claimed. WPT does not currently combine this rule with the connected-component composition of var()-substitution plus additive calc(max()) used values; the native/portable raster spike covers that exact composition."
     },
     {
       "path": "css/css-flexbox/relayout-align-items.html",
       "type": "testharness",
-      "capabilities": ["flex-align-items", "dynamic-flex-relayout"],
-      "evidence": ["toolbar-vertical-alignment", "dialog-row-alignment"],
-      "reason": "Requires WPT check-layout-th.js support and flexbox support styles; add as the next adapter facility."
+      "capabilities": ["flex-align-items", "dynamic-flex-relayout", "check-layout-testharness"],
+      "evidence": ["unchanged-pinned-wpt-check-layout-flex-relayout"],
+      "reason": "Unchanged upstream dynamic flex relayout coverage executed through the runner's product-neutral pinned check-layout-th.js adapter. It verifies used heights and vertical offsets after changing align-items from stretch to flex-end and flex-start to stretch."
+    },
+    {
+      "path": "css/CSS2/lists/list-style-position-020.xht",
+      "type": "visual",
+      "capabilities": ["inside-list-marker", "first-line-inline-participation", "continuation-line-wrap", "self-verifying-visual-wpt"],
+      "evidence": ["r5-inside-list-marker-first-line-reduction", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the inside-marker fixture exposes no authored red failure pixels"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 1000,
+          "description": "the authored blue principal block is visibly rendered"
+        }
+      ],
+      "visualForegroundOffsetChecks": [
+        {
+          "anchorColor": "#0000ff",
+          "firstTop": 2,
+          "firstHeight": 15,
+          "secondTop": 18,
+          "secondHeight": 18,
+          "horizontalInset": 2,
+          "maximumLuminance": 240,
+          "minimumComponentHeight": 6,
+          "minimumComponentPixels": 8,
+          "firstComponentIndex": 1,
+          "minimumOffsetPixels": 4,
+          "maximumOffsetPixels": 32,
+          "description": "the forced second line starts left of the first-line text and beneath the inside marker"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT requires an inside marker to participate in the first line while the forced continuation starts at the principal block edge. An anchor-relative component oracle skips the marker component and compares the first text glyph on each line, independently requiring that geometry in native and Chromium without depending on identical font metrics."
+    },
+    {
+      "path": "css/CSS2/lists/list-style-001.xht",
+      "type": "visual",
+      "capabilities": ["list-style-shorthand", "square-list-marker", "list-item-marker-paint", "self-verifying-visual-wpt"],
+      "evidence": ["r5-list-style-computed-values", "r5-list-marker-native-pixel", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the list marker fixture exposes no authored red failure pixels"
+        }
+      ],
+      "visualComponentChecks": [
+        {
+          "x": 20,
+          "y": 40,
+          "width": 30,
+          "height": 90,
+          "maximumLuminance": 240,
+          "minimumWidth": 3,
+          "maximumWidth": 10,
+          "minimumHeight": 3,
+          "maximumHeight": 10,
+          "minimumPixels": 9,
+          "minimumFillRatio": 0.65,
+          "description": "list-style square paints a compact filled marker before the principal block"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT requires list-style:square on a display:list-item box to paint a square marker. The bounded visual oracle rejects failure color and blank-render false passes while a marker-region shape check distinguishes the authored square from missing, circular, or text-only output."
+    },
+    {
+      "path": "css/CSS2/visufx/visibility-layout-001.xht",
+      "type": "visual",
+      "capabilities": ["visibility-hidden", "layout-box-retention", "paint-suppression", "self-verifying-visual-wpt"],
+      "evidence": ["side-hide-options-measuring-menu", "synchronous-popup-placement", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "visibility hidden exposes no authored red failure pixels"
+        },
+        {
+          "color": "#ffa500",
+          "minimumPixels": 5000,
+          "description": "the authored orange control box is visibly rendered"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 5000,
+          "description": "the authored blue control box is visibly rendered"
+        }
+      ],
+      "visualGapChecks": [
+        {
+          "firstColor": "#ffa500",
+          "secondColor": "#0000ff",
+          "axis": "vertical",
+          "minimumPixels": 90,
+          "maximumPixels": 102,
+          "description": "the hidden one-inch box retains its vertical layout space"
+        }
+      ],
+      "reason": "Unchanged pinned CSS2 WPT explicitly passes when the hidden red box paints nothing while retaining one inch of layout space between visible orange and blue controls. Exact failure/success colors prevent hidden paint and blank-render false passes; the bounded spatial color oracle proves the controls remain separated by the hidden box."
+    },
+    {
+      "path": "css/css-backgrounds/border-radius-overflow-hidden.html",
+      "type": "visual",
+      "capabilities": ["rounded-overflow-clipping", "border-radius", "descendant-paint-clipping", "self-verifying-visual-wpt"],
+      "evidence": ["chart-hover-market-status-marker", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "rounded overflow clipping exposes no authored red failure pixels"
+        },
+        {
+          "color": "#008000",
+          "minimumPixels": 5000,
+          "description": "rounded overflow clipping retains the authored green success surface"
+        }
+      ],
+      "reason": "Unchanged pinned WPT self-overlays a green reference over red clipped content and explicitly passes when no red remains. The bounded visual oracle rejects any exact authored red failure pixels and requires a substantial exact green success surface so a blank or missing render cannot pass."
+    },
+    {
+      "path": "css/css-backgrounds/border-radius-shorthand-001.htm",
+      "type": "visual",
+      "capabilities": ["border-radius-shorthand", "corner-longhand-expansion", "elliptical-radius-values", "self-verifying-visual-wpt"],
+      "evidence": ["volume-settings-footer-buttons", "rounded-dialog-controls", "unchanged-pinned-wpt-self-verifying-visual"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "the shorthand overlays expose no authored red failure pixels"
+        },
+        {
+          "color": "#000000",
+          "minimumPixels": 3000,
+          "description": "both authored black rounded borders are visibly rendered"
+        }
+      ],
+      "visualComponentColorRegionChecks": [
+        {
+          "color": "#000000",
+          "componentIndex": 1,
+          "minimumAnchorWidth": 200,
+          "minimumAnchorHeight": 200,
+          "x": 218,
+          "y": 18,
+          "width": 2,
+          "height": 18,
+          "maximumPixels": 15,
+          "description": "the second border's tall top-right ellipse does not reach the scalar-radius edge region"
+        },
+        {
+          "color": "#000000",
+          "componentIndex": 1,
+          "minimumAnchorWidth": 200,
+          "minimumAnchorHeight": 200,
+          "x": 218,
+          "y": 180,
+          "width": 2,
+          "height": 26,
+          "minimumPixels": 40,
+          "description": "the second border's flat bottom-right ellipse reaches its component-relative edge region"
+        }
+      ],
+      "reason": "Unchanged pinned CSS Backgrounds WPT for scalar shorthand expansion and three-value horizontal/two-value vertical elliptical radii. Exact failure/success colors reject blank or exposed-reference renders, while component-relative edge regions independently distinguish the authored ellipse from the former scalar projection in both native and Chromium captures."
     }
   ],
+  "harnessBlocked": [],
   "excluded": [
     {
       "area": "print-and-paged-media",

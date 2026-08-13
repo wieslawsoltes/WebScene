@@ -28,7 +28,79 @@ internal sealed class ProfileTest
     public string? Reference { get; init; }
     public List<string> Capabilities { get; init; } = [];
     public List<string> Evidence { get; init; } = [];
+    public List<VisualColorCheck> VisualChecks { get; init; } = [];
+    public List<VisualColorGapCheck> VisualGapChecks { get; init; } = [];
+    public List<VisualComponentCheck> VisualComponentChecks { get; init; } = [];
+    public List<VisualForegroundOffsetCheck> VisualForegroundOffsetChecks { get; init; } = [];
+    public List<VisualComponentColorRegionCheck> VisualComponentColorRegionChecks { get; init; } = [];
     public string? Reason { get; init; }
+}
+
+internal sealed class VisualColorCheck
+{
+    public required string Color { get; init; }
+    public int? MinimumPixels { get; init; }
+    public int? MaximumPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualColorGapCheck
+{
+    public required string FirstColor { get; init; }
+    public required string SecondColor { get; init; }
+    public string Axis { get; init; } = "vertical";
+    public int? MinimumPixels { get; init; }
+    public int? MaximumPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualComponentCheck
+{
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int MaximumLuminance { get; init; } = 240;
+    public int? MinimumWidth { get; init; }
+    public int? MaximumWidth { get; init; }
+    public int? MinimumHeight { get; init; }
+    public int? MaximumHeight { get; init; }
+    public int? MinimumPixels { get; init; }
+    public double? MinimumFillRatio { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualForegroundOffsetCheck
+{
+    public required string AnchorColor { get; init; }
+    public int FirstTop { get; init; }
+    public int FirstHeight { get; init; }
+    public int SecondTop { get; init; }
+    public int SecondHeight { get; init; }
+    public int HorizontalInset { get; init; }
+    public int MaximumLuminance { get; init; } = 240;
+    public int MinimumComponentHeight { get; init; } = 1;
+    public int MinimumComponentPixels { get; init; } = 1;
+    public int FirstComponentIndex { get; init; }
+    public int SecondComponentIndex { get; init; }
+    public int? MinimumOffsetPixels { get; init; }
+    public int? MaximumOffsetPixels { get; init; }
+    public string? Description { get; init; }
+}
+
+internal sealed class VisualComponentColorRegionCheck
+{
+    public required string Color { get; init; }
+    public int ComponentIndex { get; init; }
+    public int MinimumAnchorWidth { get; init; } = 1;
+    public int MinimumAnchorHeight { get; init; } = 1;
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int? MinimumPixels { get; init; }
+    public int? MaximumPixels { get; init; }
+    public string? Description { get; init; }
 }
 
 internal sealed class ExcludedArea
@@ -41,6 +113,7 @@ internal sealed class RunArtifact
 {
     public required string Schema { get; init; }
     public required string Profile { get; init; }
+    public required string ProfileSha256 { get; init; }
     public required string WptRevision { get; init; }
     public required string Runtime { get; init; }
     public required string Engine { get; init; }

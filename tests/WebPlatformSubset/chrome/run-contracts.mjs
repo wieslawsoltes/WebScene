@@ -179,14 +179,19 @@ async function runDocument(client, baseUrl, relativePath, timeoutSeconds, except
       message: "Chrome contract did not complete.", subtests: [] };
   }
   const subtests = state.results || [];
+  const expectedRuntimeExceptions = Array.isArray(state.expectedRuntimeExceptions)
+    ? state.expectedRuntimeExceptions.map(String)
+    : [];
+  const unexpectedRuntimeExceptions = exceptionState.current.filter(message =>
+    !expectedRuntimeExceptions.some(expected => String(message).includes(expected)));
   const passed = state.harness?.status === 0
     && subtests.every(result => result.status === "PASS")
-    && exceptionState.current.length === 0;
+    && unexpectedRuntimeExceptions.length === 0;
   return {
     path: relativePath,
     status: passed ? "PASS" : "FAIL",
     duration: Date.now() - started,
-    message: passed ? null : state.harness?.message || exceptionState.current.join("\n") || "Chrome subtest failed.",
+    message: passed ? null : state.harness?.message || unexpectedRuntimeExceptions.join("\n") || "Chrome subtest failed.",
     subtests,
     diagnostics: state.diagnostics || []
   };
@@ -214,7 +219,10 @@ try {
 }
 const exceptionState = { current: [] };
 chrome.client.on("Runtime.exceptionThrown", event => {
-  exceptionState.current.push(event.exceptionDetails?.text || "Chrome runtime exception");
+  exceptionState.current.push(
+    event.exceptionDetails?.exception?.description
+      || event.exceptionDetails?.text
+      || "Chrome runtime exception");
 });
 const results = [];
 try {

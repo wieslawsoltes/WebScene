@@ -21,18 +21,28 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> event_target_template;
     v8::Global<v8::FunctionTemplate> node_template;
+    v8::Global<v8::FunctionTemplate> attr_template;
+    v8::Global<v8::FunctionTemplate> character_data_template;
+    v8::Global<v8::FunctionTemplate> text_template;
+    v8::Global<v8::FunctionTemplate> comment_template;
+    v8::Global<v8::FunctionTemplate> processing_instruction_template;
     v8::Global<v8::FunctionTemplate> document_fragment_template;
     v8::Global<v8::FunctionTemplate> shadow_root_template;
 #endif
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> html_form_element_template;
+    v8::Global<v8::FunctionTemplate> html_select_element_template;
+    v8::Global<v8::FunctionTemplate> html_script_element_template;
     v8::Global<v8::FunctionTemplate> html_slot_element_template;
+    v8::Global<v8::FunctionTemplate> html_style_element_template;
     uint32_t next_standalone_event_target_id{0x80000000U};
 #endif
     v8::Global<v8::ObjectTemplate> style_template;
     v8::Global<v8::ObjectTemplate> frame_document_template;
     v8::Global<v8::ObjectTemplate> frame_window_template;
+    v8::Global<v8::FunctionTemplate> html_collection_template;
     v8::Global<v8::Object> dom_implementation_object;
     v8::Global<v8::Object> document_object;
     v8::Global<v8::ObjectTemplate> document_template;
@@ -47,10 +57,16 @@
     std::unordered_map<uint64_t, pending_callback_promise>
         pending_callback_promises;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> node_wrappers;
+    uint32_t next_attr_id{1U};
+    std::unordered_map<uint32_t, std::unique_ptr<attr_state>> attr_states;
+    std::unordered_map<uint32_t, v8::Global<v8::Object>> attr_wrappers;
+    std::unordered_map<std::string, attr_state*> attached_attributes;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> class_list_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> style_wrappers;
+    std::unordered_map<uint64_t, v8::Global<v8::Object>> stylesheet_wrappers;
     std::unordered_map<uint64_t, v8::Global<v8::Object>> computed_style_wrappers;
     std::unordered_set<uint64_t> detached_document_roots;
+    std::unordered_map<uint64_t, v8::Global<v8::Object>> detached_documents;
     // Document.getElementById overwhelmingly targets unique IDs. Cache the
     // first tree-order match per document root, and rebuild lazily after any
     // DOM generation change so duplicate IDs, reparents, detached nodes, and
@@ -68,6 +84,7 @@
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_documents;
     std::unordered_map<uint32_t, dom_node*> provisional_frame_bodies;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> frame_windows;
+    std::unordered_map<uint32_t, std::pair<float, float>> frame_window_scroll_offsets;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_windows;
     std::unordered_map<uint32_t, v8::Global<v8::Context>> actual_frame_contexts;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_documents;
@@ -89,9 +106,11 @@
         event_callback_index_counts;
     std::string last_mousemove_ancestry;
 #endif
-    std::vector<v8::Global<v8::Function>> resize_listeners;
+    std::vector<event_listener_registration> resize_listeners;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
+    std::vector<pending_programmatic_scroll_event>
+        pending_programmatic_scroll_events;
     native_websocket_transport websocket_transport;
     std::unordered_map<uint64_t, websocket_binding> websocket_bindings;
     std::vector<connected_resource_task> connected_resources;
@@ -105,6 +124,10 @@
     uint64_t next_host_request_id{0};
     std::vector<std::unique_ptr<resize_observer_state>> resize_observers;
     bool resize_observers_pending{false};
+    // DOM mutations stay on the native fast path until a realm registers its
+    // first custom element. Once activated, the flag remains enabled for this
+    // runtime so reactions in any outer or frame realm cannot be skipped.
+    bool custom_elements_active{false};
     std::vector<std::string> loaded_resource_names;
     uint32_t next_timer_id{1};
     uint32_t active_timer_id{0};

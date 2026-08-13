@@ -10,8 +10,20 @@
   try {
     const link = document.getElementById("link");
     if (link.hash !== "#first") throw new Error(`initial anchor hash was ${JSON.stringify(link.hash)}`);
+    if (link.href !== location.href.replace(/#.*$/, "") + "#first") {
+      throw new Error(`initial resolved href was ${JSON.stringify(link.href)}`);
+    }
+    const script = document.createElement("script");
+    script.type = "application/x-webscene-inert";
+    script.setAttribute("src", "#first");
+    if (script.src !== link.href || script.getAttribute("src") !== "#first") {
+      throw new Error(`script URL reflection was src=${JSON.stringify(script.src)} attr=${JSON.stringify(script.getAttribute("src"))}`);
+    }
     link.hash = "second";
     if (link.hash !== "#second") throw new Error(`mutated anchor hash was ${JSON.stringify(link.hash)}`);
+    if (link.href !== location.href.replace(/#.*$/, "") + "#second") {
+      throw new Error(`mutated resolved href was ${JSON.stringify(link.href)}`);
+    }
     if (!String(link.getAttribute("href")).endsWith("#second")) {
       throw new Error(`mutated href attribute was ${JSON.stringify(link.getAttribute("href"))}`);
     }

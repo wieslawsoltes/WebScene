@@ -1,3 +1,11 @@
+    struct attr_state final {
+        uint32_t id{0};
+        std::string namespace_uri;
+        std::string name;
+        std::string value;
+        dom_node* owner{nullptr};
+    };
+
     struct timer_task final {
         uint32_t id;
         bool animation_frame;
@@ -16,6 +24,12 @@
         v8::Global<v8::Value> data;
         std::string target_origin;
         std::string source_origin;
+    };
+
+    struct pending_programmatic_scroll_event final {
+        uint32_t target_id;
+        v8::Global<v8::Context> context;
+        uint64_t input_sequence;
     };
 
     struct websocket_binding final {
@@ -191,13 +205,15 @@
     };
 
     struct event_listener_registration final {
-        v8::Global<v8::Function> callback;
+        v8::Global<v8::Value> callback;
         v8::Global<v8::Context> context;
         std::string name;
         uint64_t registration_sequence{0};
         uint32_t target{0};
         bool capture{false};
         bool once{false};
+        bool passive{false};
+        v8::Global<v8::Object> signal;
     };
 
     enum class process_compilation_state : uint8_t {

@@ -35,6 +35,33 @@ const cases = [
     title: "jQuery upstream callbacks suite",
     css: ""
   },
+  {
+    id: "jquery-basic-upstream",
+    entry: "src/jquery-basic-upstream.mjs",
+    title: "jQuery upstream basic integration suite",
+    css: ""
+  },
+  ...Array.from({ length: 2 }, (_, index) => ({
+    id: `jquery-core-upstream-${index + 1}`,
+    entry: "src/jquery-core-upstream.mjs",
+    title: `jQuery upstream core suite shard ${index + 1}/2`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:2};globalThis.__webSceneQUnitExcludedNames=["jQuery('massive html trac-7990')"];</script>`,
+    css: ""
+  })),
+  {
+    id: "jquery-core-upstream-massive-html",
+    entry: "src/jquery-core-upstream.mjs",
+    title: "jQuery upstream core massive HTML case",
+    preamble: `<script>globalThis.__webSceneQUnitOnlyNames=["jQuery('massive html trac-7990')"];</script>`,
+    css: ""
+  },
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-selector-upstream-${index + 1}`,
+    entry: "src/jquery-selector-upstream.mjs",
+    title: `jQuery upstream selector suite shard ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: ""
+  })),
   ...Array.from({ length: 3 }, (_, index) => ({
     id: `jquery-attributes-upstream-${index + 1}`,
     entry: "src/jquery-attributes-upstream.mjs",
@@ -49,6 +76,69 @@ const cases = [
     preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
     css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
   })),
+  {
+    id: "jquery-serialize-upstream",
+    entry: "src/jquery-serialize-upstream.mjs",
+    title: "jQuery upstream serialize suite",
+    css: ""
+  },
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-traversing-upstream-${index + 1}`,
+    entry: "src/jquery-traversing-upstream.mjs",
+    title: `jQuery upstream traversing suite ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: ""
+  })),
+  ...Array.from({ length: 4 }, (_, index) => ({
+    id: `jquery-dimensions-upstream-${index + 1}`,
+    entry: "src/jquery-dimensions-upstream.mjs",
+    title: `jQuery upstream dimensions suite ${index + 1}/4`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:4};</script>`,
+    css: `${qunitFixtureCss}\n${jqueryTestsuiteCss}`
+  })),
+  {
+    id: "jquery-deferred-upstream",
+    entry: "src/jquery-deferred-upstream.mjs",
+    title: "jQuery upstream Deferred suite",
+    css: ""
+  },
+  {
+    id: "jquery-deprecated-upstream",
+    entry: "src/jquery-deprecated-upstream.mjs",
+    title: "jQuery upstream deprecated APIs suite",
+    css: ""
+  },
+  ...Array.from({ length: 3 }, (_, index) => ({
+    id: `jquery-data-upstream-${index + 1}`,
+    entry: "src/jquery-data-upstream.mjs",
+    title: `jQuery upstream data suite ${index + 1}/3`,
+    preamble: `<script>globalThis.__webSceneQUnitShard={index:${index},count:3};</script>`,
+    css: ""
+  })),
+  {
+    id: "jquery-queue-upstream",
+    entry: "src/jquery-queue-upstream.mjs",
+    title: "jQuery upstream queue suite",
+    css: ""
+  },
+  {
+    id: "jquery-ready-upstream",
+    entry: "src/jquery-ready-upstream.mjs",
+    title: "jQuery upstream DOM ready suite",
+    css: ""
+  },
+  {
+    id: "jquery-wrap-upstream",
+    entry: "src/jquery-wrap-upstream.mjs",
+    title: "jQuery upstream wrapping suite",
+    css: ""
+  },
+  {
+    id: "jquery-offset-upstream",
+    entry: "src/jquery-offset-upstream.mjs",
+    title: "jQuery upstream offset suite",
+    css: ""
+  },
   {
     id: "bootstrap-components",
     entry: "src/bootstrap-components.mjs",
@@ -101,6 +191,55 @@ const cases = [
     id: "bootstrap-dropdown-upstream",
     entry: "src/bootstrap-dropdown-upstream.mjs",
     title: "Bootstrap upstream dropdown suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-modal-upstream",
+    entry: "src/bootstrap-modal-upstream.mjs",
+    title: "Bootstrap upstream modal suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-offcanvas-upstream",
+    entry: "src/bootstrap-offcanvas-upstream.mjs",
+    title: "Bootstrap upstream offcanvas suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-carousel-upstream",
+    entry: "src/bootstrap-carousel-upstream.mjs",
+    title: "Bootstrap upstream carousel suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-scrollspy-upstream",
+    entry: "src/bootstrap-scrollspy-upstream.mjs",
+    title: "Bootstrap upstream ScrollSpy suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-jquery-upstream",
+    entry: "src/bootstrap-jquery-upstream.mjs",
+    title: "Bootstrap upstream jQuery integration suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-popover-upstream",
+    entry: "src/bootstrap-popover-upstream.mjs",
+    title: "Bootstrap upstream Popover suite",
+    css: "",
+    plugins: [bootstrapUpstreamSourceResolver]
+  },
+  {
+    id: "bootstrap-tooltip-upstream",
+    entry: "src/bootstrap-tooltip-upstream.mjs",
+    title: "Bootstrap upstream Tooltip suite",
     css: "",
     plugins: [bootstrapUpstreamSourceResolver]
   },

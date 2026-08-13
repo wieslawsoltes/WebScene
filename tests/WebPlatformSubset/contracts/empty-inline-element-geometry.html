@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Empty inline boxes do not stretch to their containing block height</title>
+<style>
+  body { margin: 0; }
+  #fixture {
+    position: absolute;
+    top: -10000px;
+    left: -10000px;
+    width: 10000px;
+    height: 10000px;
+  }
+</style>
+<body>
+<div id="fixture"><a id="empty" href="#" title="empty"></a></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const fixture = document.getElementById("fixture");
+  const empty = document.getElementById("empty");
+  const fixtureRect = fixture.getBoundingClientRect();
+  const emptyRect = empty.getBoundingClientRect();
+  record(
+    "the definite containing block retains its authored height",
+    fixtureRect.height === 10000,
+    `fixture height was ${fixtureRect.height}`
+  );
+  record(
+    "an empty inline element has no stretched border-box extent",
+    emptyRect.width === 0 && emptyRect.height === 0,
+    `empty size was ${emptyRect.width}x${emptyRect.height}`
+  );
+  record(
+    "the empty inline rect remains at its logical origin",
+    emptyRect.left === fixtureRect.left && emptyRect.top === fixtureRect.top
+      && emptyRect.right === emptyRect.left && emptyRect.bottom === emptyRect.top,
+    `fixture=${JSON.stringify(fixtureRect)}, empty=${JSON.stringify(emptyRect)}`
+  );
+
+  state.diagnostics = [JSON.stringify({ fixtureRect, emptyRect })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

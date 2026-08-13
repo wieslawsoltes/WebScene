@@ -1092,6 +1092,11 @@
         dom_node& frame,
         dom_node& frame_body)
     {
+        v8::Local<v8::Object> frame_element;
+        {
+            v8::Context::Scope owner_context_scope(context.Get(isolate));
+            frame_element = wrap_node(frame);
+        }
         v8::Context::Scope context_scope(local_context);
         auto global = local_context->Global();
         auto frame_document_value = document_template.Get(isolate)->NewInstance(local_context).ToLocalChecked();
@@ -1142,7 +1147,7 @@
         }
         global->Set(local_context, js_string(isolate, "parent"), parent_window).Check();
         global->Set(local_context, js_string(isolate, "top"), context.Get(isolate)->Global()).Check();
-        global->Set(local_context, js_string(isolate, "frameElement"), wrap_node(frame)).Check();
+        global->Set(local_context, js_string(isolate, "frameElement"), frame_element).Check();
         global->SetNativeDataProperty(
             local_context,
             js_string(isolate, "devicePixelRatio"),
@@ -1181,6 +1186,13 @@
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "preventDefault"),
             v8::FunctionTemplate::New(isolate, event_prevent_default));
+        event_template->PrototypeTemplate()->Set(
+            js_string(isolate, "initEvent"),
+            v8::FunctionTemplate::New(isolate, event_init_event));
+        event_template->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "returnValue"),
+            v8::FunctionTemplate::New(isolate, event_return_value_get),
+            v8::FunctionTemplate::New(isolate, event_return_value_set));
         event_template->PrototypeTemplate()->Set(
             js_string(isolate, "stopPropagation"),
             v8::FunctionTemplate::New(isolate, event_stop_propagation));
@@ -1246,6 +1258,10 @@
         global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
 #endif
+        global->SetLazyDataProperty(
+            local_context,
+            js_string(isolate, "HTMLCollection"),
+            get_html_collection_constructor).Check();
         install_document_constructor(
             local_context,
             global,
@@ -1644,9 +1660,11 @@
             ++frame_script_error_count;
             return false;
         }
+        const auto normalized_html = lower_html_name(html);
         const auto opening_tag = [&](std::string_view name) {
-            const auto open = html.find("<" + std::string(name));
-            const auto close = open == std::string::npos ? std::string::npos : html.find('>', open);
+            const auto open = normalized_html.find("<" + std::string(name));
+            const auto close = open == std::string::npos
+                ? std::string::npos : normalized_html.find('>', open);
             return open == std::string::npos || close == std::string::npos
                 ? std::string{}
                 : html.substr(open, close - open + 1U);
@@ -1666,14 +1684,17 @@
                 }
             }
         }
-        if (resource_root.empty() && !load_resource_callback) {
+        const auto stylesheets = parse_frame_stylesheets(html);
+        const auto scripts = parse_frame_scripts(html);
+        const auto requires_resource_loader = !stylesheets.empty()
+            || std::any_of(scripts.begin(), scripts.end(), [](const auto& script) {
+                return !script.source.empty();
+            });
+        if (requires_resource_loader && resource_root.empty() && !load_resource_callback) {
             frame_last_error_value = "The connected component resource root was not configured";
             ++frame_script_error_count;
             return false;
         }
-
-        const auto stylesheets = parse_frame_stylesheets(html);
-        const auto scripts = parse_frame_scripts(html);
         for (const auto& href : stylesheets) {
             start_resource_prefetch(href, frame_base_address, WEBSCENE_RESOURCE_STYLESHEET);
         }
@@ -1937,7 +1958,7 @@
                 "supported",
                 {},
                 "event-dispatch");
-            auto event = v8::Object::New(isolate);
+            auto event = create_event_instance(local_frame_context);
             event->Set(
                 local_frame_context,
                 js_string(isolate, "type"),
@@ -1953,6 +1974,9 @@
             v8::Local<v8::Value> arguments[] = {event};
             const auto listeners = frame_event_listeners.find(type);
             if (listeners != frame_event_listeners.end()) {
+                const auto target_id = is_document_object(target)
+                    ? std::numeric_limits<uint32_t>::max()
+                    : 0U;
                 auto* listener_list = &listeners->second;
                 // Listener callbacks can register more listeners. Snapshot the
                 // initial length, as EventTarget dispatch does, and reacquire
@@ -1960,21 +1984,53 @@
                 const auto listener_count = listener_list->size();
                 for (size_t index = 0; index < listener_count; ++index) {
                     auto& listener = (*listener_list)[index];
-                    if (listener.context.Get(isolate) != local_frame_context) continue;
+                    if (listener.context.Get(isolate) != local_frame_context
+                        || listener.target != target_id) continue;
                     auto callback = listener.callback.Get(isolate);
                     if (callback.IsEmpty()) continue;
+                    if (!listener.signal.IsEmpty()) {
+                        auto signal = listener.signal.Get(isolate);
+                        v8::Local<v8::Value> aborted;
+                        if (signal->Get(
+                                local_frame_context,
+                                js_string(isolate, "aborted")).ToLocal(&aborted)
+                            && aborted->BooleanValue(isolate)) {
+                            listener.callback.Reset();
+                            listener.signal.Reset();
+                            continue;
+                        }
+                    }
+                    const auto passive = listener.passive;
+                    if (listener.once) {
+                        listener.callback.Reset();
+                        listener.signal.Reset();
+                    }
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::Boolean::New(isolate, passive)).Check();
                     v8::TryCatch try_catch(isolate);
-                    if (callback->Call(
+                    const auto callback_succeeded = !call_event_listener(
+                            isolate,
                             local_frame_context,
+                            callback,
                             target,
                             1,
-                            arguments).IsEmpty()) {
+                            arguments).IsEmpty();
+                    event->Set(
+                        local_frame_context,
+                        js_string(isolate, "__websceneInPassiveListener"),
+                        v8::False(isolate)).Check();
+                    if (!callback_succeeded) {
                         frame_last_error_value = std::string("Iframe ") + type
                             + " dispatch failed: " + describe_exception(try_catch, local_frame_context);
                         ++frame_script_error_count;
                         return false;
                     }
                 }
+                std::erase_if(
+                    *listener_list,
+                    [](const auto& listener) { return listener.callback.IsEmpty(); });
             }
             perform_microtask_checkpoint();
             return true;
@@ -1988,6 +2044,27 @@
             local_frame_context,
             js_string(isolate, "readyState"),
             js_string(isolate, "complete")).Check();
+        auto body_onload = std::string{};
+        for (auto [name, value] : parse_html_attributes(body_opening, 5U)) {
+            if (lower_html_name(name) != "onload") continue;
+            body_onload = std::move(value);
+            break;
+        }
+        if (!body_onload.empty()) {
+            std::string error;
+            const auto handler_source = "(function(event){" + body_onload
+                + "\n}).call(document.body, { type: 'load' });";
+            if (!execute_in_context(
+                    local_frame_context,
+                    handler_source,
+                    frame_base_address + "#body-onload",
+                    error,
+                    true)) {
+                frame_last_error_value = "Iframe body load handler failed: " + error;
+                ++frame_script_error_count;
+                return false;
+            }
+        }
         if (!dispatch_lifecycle_event(frame_global, "load")) return false;
         perform_microtask_checkpoint();
         frame_last_error_value.clear();

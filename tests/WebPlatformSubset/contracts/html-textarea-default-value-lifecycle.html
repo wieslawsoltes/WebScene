@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Textarea child text, current value, dirty value, and reset lifecycle</title>
+<body>
+<form id="fixture"><textarea id="parsed" name="message" value="ignored">?
+Z</textarea></form>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const form = document.getElementById("fixture");
+  const parsed = document.getElementById("parsed");
+  const parsedDefault = "?\nZ";
+  record(
+    "parsed textarea child text supplies defaultValue",
+    parsed.textContent === parsedDefault && parsed.defaultValue === parsedDefault,
+    `text=${JSON.stringify(parsed.textContent)}, default=${JSON.stringify(parsed.defaultValue)}`
+  );
+  record(
+    "parsed textarea child text supplies its initial current value",
+    parsed.value === parsedDefault,
+    `value=${JSON.stringify(parsed.value)}`
+  );
+  record(
+    "a textarea value content attribute does not replace its child-text default",
+    parsed.getAttribute("value") === "ignored" && parsed.value === parsedDefault,
+    `attribute=${JSON.stringify(parsed.getAttribute("value"))}, value=${JSON.stringify(parsed.value)}`
+  );
+
+  parsed.value = "dirty";
+  parsed.defaultValue = "replacement\r\ndefault";
+  record(
+    "defaultValue replaces child text without overwriting a dirty current value",
+    parsed.textContent === "replacement\r\ndefault"
+      && parsed.defaultValue === "replacement\r\ndefault"
+      && parsed.firstChild?.data === "replacement\r\ndefault"
+      && parsed.innerHTML === "replacement\r\ndefault"
+      && parsed.value === "dirty",
+    `text=${JSON.stringify(parsed.textContent)}, default=${JSON.stringify(parsed.defaultValue)}, innerHTML=${JSON.stringify(parsed.innerHTML)}, value=${JSON.stringify(parsed.value)}`
+  );
+  form.reset();
+  record(
+    "form reset restores the newline-normalized child-text default",
+    parsed.value === "replacement\ndefault",
+    `value=${JSON.stringify(parsed.value)}`
+  );
+
+  parsed.textContent = "clean update";
+  record(
+    "child text changes update the current value while it is clean",
+    parsed.defaultValue === "clean update" && parsed.value === "clean update",
+    `default=${JSON.stringify(parsed.defaultValue)}, value=${JSON.stringify(parsed.value)}`
+  );
+
+  const dynamic = document.createElement("textarea");
+  document.body.appendChild(dynamic);
+  void dynamic.value;
+  const child = document.createTextNode("appended");
+  dynamic.appendChild(child);
+  child.data = "updated";
+  record(
+    "child character-data changes update an initialized clean textarea",
+    dynamic.defaultValue === "updated" && dynamic.value === "updated",
+    `default=${JSON.stringify(dynamic.defaultValue)}, value=${JSON.stringify(dynamic.value)}`
+  );
+  document.body.appendChild(child);
+  record(
+    "moving a child out updates its former clean textarea",
+    dynamic.defaultValue === "" && dynamic.value === "",
+    `default=${JSON.stringify(dynamic.defaultValue)}, value=${JSON.stringify(dynamic.value)}`
+  );
+
+  state.diagnostics = [JSON.stringify({
+    parsed: {
+      textContent: parsed.textContent,
+      defaultValue: parsed.defaultValue,
+      value: parsed.value
+    },
+    dynamic: {
+      textContent: dynamic.textContent,
+      defaultValue: dynamic.defaultValue,
+      value: dynamic.value
+    }
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

@@ -25,6 +25,8 @@ on:
     - 'scripts/build-native-engine-runtime-linux-container.sh'
     - 'scripts/build-native-engine-runtime.ps1'
     - 'scripts/pack-packages.sh'
+    - 'scripts/verify-cross-rid-compatibility.py'
+    - 'scripts/tests/test_verify_cross_rid_compatibility.py'
     - 'scripts/verify-release-packages.py'
     - 'src/WebScene.Backend.Abstractions/**'
     - 'src/WebScene.Backend.Avalonia/**'
@@ -33,6 +35,7 @@ on:
     - 'src/WebScene.Sdk.NativeHost.Shared/**'
     - 'src/WebScene.Sdk.Uno/**'
     - 'src/WebScene.Diagnostics.Cdp/**'
+    - 'tests/WebPlatformSubset/**'
     - 'tests/WebScene.Runtime.PackageSmoke/**'
     - 'tests/WebScene.Uno.PackageSmoke/**'
     - 'third-party/v8-patches/**'
@@ -48,6 +51,10 @@ jobs:
       publish: ${{ steps.version.outputs.publish }}
     steps:
     - uses: actions/checkout@v4
+    - name: Test cross-RID evidence verifier
+      run: |
+        python3 -m unittest \
+          scripts/tests/test_verify_cross_rid_compatibility.py
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
@@ -294,6 +301,33 @@ jobs:
           -UpstreamV8 `
           -PartitionAlloc `
           -Output "$env:GITHUB_WORKSPACE/artifacts/nuget-packages"
+    - name: Run candidate compatibility discovery
+      continue-on-error: true
+      shell: bash
+      run: |
+        case '${{ matrix.rid }}' in
+          osx-arm64) native_name=libwebscene_native_engine.dylib ;;
+          linux-x64) native_name=libwebscene_native_engine.so ;;
+          win-x64) native_name=webscene_native_engine.dll ;;
+          *) echo "Unsupported discovery RID '${{ matrix.rid }}'." >&2; exit 1 ;;
+        esac
+        native_path="$(
+          find artifacts/native-engine-runtime-build \
+            -path "*/package-smoke/runtimes/${{ matrix.rid }}/native/$native_name" \
+            -print -quit
+        )"
+        if [[ -z "$native_path" ]]; then
+          echo "Unable to locate the packaged ${{ matrix.rid }} native runtime." >&2
+          exit 1
+        fi
+        build_dir="${native_path%%/package-smoke/runtimes/*}"
+        dotnet run \
+          --project tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj \
+          -c Release --no-build -- \
+          --selection candidate \
+          --native-library "$native_path" \
+          --native-cache-directory "$build_dir/code-cache" \
+          --output "$build_dir/wpt-candidate-results"
     - id: v8-sdk-ready
       name: Validate completed V8 SDK for caching
       if: always() && steps.v8-cache.outputs.cache-hit != 'true'
@@ -346,6 +380,27 @@ jobs:
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/icu/LICENSE
           artifacts/native-engine-v8/${{ matrix.rid }}/v8/third_party/partition_alloc/src
         key: webscene-v8-sdk-${{ matrix.v8_cache_generation }}-${{ matrix.rid }}-${{ hashFiles('third-party/v8-patches/**') }}-${{ steps.v8-cache-key.outputs.image-version }}-${{ hashFiles(matrix.v8_cache_script, matrix.v8_cache_patch) }}
+    - name: Upload required compatibility evidence
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-required-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-results/**
+        if-no-files-found: error
+    - name: Upload failed compatibility evidence
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-required-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-results/**
+        if-no-files-found: warn
+    - name: Upload candidate compatibility evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-candidate-${{ matrix.rid }}-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/native-engine-runtime-build/**/wpt-candidate-results/**
+        if-no-files-found: warn
     - name: Upload verified RID package
       uses: actions/upload-artifact@v4
       with:
@@ -353,9 +408,37 @@ jobs:
         path: artifacts/nuget-packages/*.nupkg
         if-no-files-found: error
 
+  required-evidence:
+    name: Verify cross-RID required evidence
+    needs: [metadata, native]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download required compatibility evidence
+      uses: actions/download-artifact@v4
+      with:
+        pattern: compatibility-required-*
+        path: artifacts/required-compatibility
+    - name: Verify exact required profile across released RIDs
+      run: |
+        python3 scripts/verify-cross-rid-compatibility.py \
+          --input-root artifacts/required-compatibility \
+          --profile tests/WebPlatformSubset/webscene-component-profile.json \
+          --selection required \
+          --expected-rid osx-arm64 \
+          --expected-rid linux-x64 \
+          --expected-rid win-x64 \
+          --output artifacts/required-compatibility/cross-rid-summary.json
+    - name: Upload cross-RID required summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-required-summary-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/required-compatibility/cross-rid-summary.json
+        if-no-files-found: error
+
   package-set:
     name: Verify release package set
-    needs: [metadata, packages, native]
+    needs: [metadata, packages, native, required-evidence]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -394,6 +477,39 @@ jobs:
           artifacts/nuget-packages/*.json
           artifacts/nuget-packages/packages.sha256
         if-no-files-found: error
+
+  candidate-evidence:
+    name: Verify cross-RID candidate evidence
+    needs: [metadata, native]
+    if: always() && needs.metadata.result == 'success'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download candidate compatibility evidence
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        pattern: compatibility-candidate-*
+        path: artifacts/candidate-compatibility
+    - name: Verify exact candidate profile across released RIDs
+      if: always()
+      run: |
+        python3 scripts/verify-cross-rid-compatibility.py \
+          --input-root artifacts/candidate-compatibility \
+          --profile tests/WebPlatformSubset/webscene-component-profile.json \
+          --selection candidate \
+          --expected-rid osx-arm64 \
+          --expected-rid linux-x64 \
+          --expected-rid win-x64 \
+          --output artifacts/candidate-compatibility/cross-rid-summary.json
+    - name: Upload cross-RID candidate summary
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-candidate-summary-${{ needs.metadata.outputs.package-version }}
+        path: artifacts/candidate-compatibility/cross-rid-summary.json
+        if-no-files-found: warn
 
   consumer:
     name: Package consumer ${{ matrix.rid }}

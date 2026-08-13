@@ -7,8 +7,8 @@ a framework pass into a standards claim.
 The first bounded profile contains:
 
 - jQuery 4.0.0: selectors/traversal, DOM mutation and deep cloning,
-  attributes/properties, CSSOM, delegated events, single/multiple-value forms, and
-  Deferred callbacks;
+  attributes/properties, CSSOM and box dimensions, delegated events,
+  single/multiple-value forms, and Deferred callbacks;
 - Bootstrap 5.3.8: tabs, collapse, dropdown/Popper placement, modal lifecycle,
   tooltip, popover, offcanvas, ScrollSpy, carousel transitions, custom events,
   classes, and ARIA state;
@@ -16,13 +16,23 @@ The first bounded profile contains:
   controlled inputs, portals, batching, transitions, Suspense resolution, hydration
   reuse, and unmount cleanup.
 
-Current native evidence (2026-08-09): the native engine passes 18/18 consumer documents
-and 450/450 selected assertions. Historical three-engine evidence from 2026-07-23 had
-Chrome, the former managed adapter, and native at the same denominator. Fifteen
-documents execute 424 unchanged official-source cases: all 253
+Current Chrome and native evidence (2026-08-12): both engines pass 47/47 consumer
+documents and 1071/1071 selected results. Historical three-engine evidence from 2026-07-23 had
+Chrome, the former managed adapter, and native at its then-current denominator. Twenty-seven
+documents previously executed 828 unchanged official-source cases. The current 44
+official-source documents report 1045 selected case results: all 591
 selected Bootstrap cases, all 51 dynamically registered cases from jQuery 4.0.0's
-unmodified `callbacks.js`, 65 selected browser-local cases from its unmodified
-`attributes.js`, and 55 selected browser-local cases from its unmodified `css.js`.
+unmodified `callbacks.js`, all 13 browser-local cross-module cases from its unmodified
+`basic.js`, all 57 browser-local cases from its unmodified `core.js`, 65 selected browser-local cases from its unmodified
+`attributes.js`, 55 selected browser-local cases from its unmodified `css.js`, and all
+4 cases from its unmodified `serialize.js`, plus 62 browser-local cases from its
+unmodified `traversing.js` and 29 browser-local cases from its unmodified
+`dimensions.js`, 13 registered results from its unmodified `queue.js`, and all 28
+registrations from its unmodified `deferred.js`, plus 39 browser-local cases from its
+unmodified `data.js`, 7 registrations from its unmodified `deprecated.js`, and all 5
+browser-local registrations from its unmodified `ready.js`, plus all 16 registrations
+from its unmodified `wrap.js`, and all 10 browser-local registrations from its
+unmodified `offset.js`.
 The remaining 26 assertions are the three owned composition fixtures.
 
 The four new CSS shards preserve the exact upstream `css.js`, official fixture markup,
@@ -56,7 +66,7 @@ suppressed geometry beneath `display:none` and preserve numeric z-index CSSOM va
 through connection, stylesheet recascade, negative mutation, and removal. Direct
 Chrome and both adapters pass all seven assertions. Correct z-index then exposed and
 fixed retained-canvas host grouping without introducing application-specific runtime
-behavior. Native consequently passes all 450/450 selected assertions. The computed
+behavior. Native consequently passed all 450/450 assertions at that checkpoint. The computed
 CSSStyleDeclaration named-property reduction then closes the managed
 unsupported-property return assertion by distinguishing method fallback from supported
 IDL aliases. The detached computed-style reduction then makes snapshot reuse sensitive
@@ -71,7 +81,7 @@ Chrome-authorized font-relative box reduction resolves that final assertion with
 jQuery-specific behavior: opposing percentage insets remain independent, dynamic
 percent-to-em replacement and four-value `inset` follow inherited font-size mutation,
 and width, min-height, padding, gap, and flex-basis expose consistent pixel values.
-Chrome, managed, and native consequently pass the complete 450/450 denominator.
+Chrome, managed, and native consequently passed the complete 450/450 denominator.
 Evidence:
 `artifacts/ecosystem-consumers-font-relative-box-final-v1-20260723/` and
 `artifacts/web-platform-required-font-relative-promoted-v1-20260723/`.
@@ -86,13 +96,14 @@ and both adapters passed both it and all 6/6 assertions in the unchanged pinned 
 The generic WPT adapter also gained BODY `onload` startup support so future
 check-layout documents can run unchanged.
 
-Seven documents execute all 253 cases from Bootstrap 5.3.8's unmodified
-`alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `collapse.spec.js`,
-`dropdown.spec.js`, `tab.spec.js`, and `toast.spec.js` with their unmodified fixture
+Fourteen documents now execute all 591 cases from Bootstrap 5.3.8's unmodified
+`alert.spec.js`, `base-component.spec.js`, `button.spec.js`, `carousel.spec.js`, `collapse.spec.js`,
+`dropdown.spec.js`, `jquery.spec.js`, `modal.spec.js`, `offcanvas.spec.js`, `popover.spec.js`,
+`scrollspy.spec.js`, `tab.spec.js`, `toast.spec.js`, and `tooltip.spec.js` with their unmodified fixture
 helper. `upstream-sources.json` pins and inventories all 14 Bootstrap unit files, all
 24 jQuery QUnit unit files, and all 128 React DOM Jest files at their exact official
-tags and commits. It selects seven Bootstrap files and three jQuery files, leaving 7,
-21, and 128 files respectively classified as harness-blocked. Vendored selected bytes,
+tags and commits. It selects all fourteen Bootstrap files and fifteen jQuery files, leaving
+no Bootstrap files, 9 jQuery files, and 128 React DOM files classified as harness-blocked. Vendored selected bytes,
 licenses, and support files carry SHA-256 pins, and the build fails if those bytes
 drift. Evidence: `artifacts/ecosystem-consumers-chrome-jquery-css-v1-20260723/`,
 `artifacts/ecosystem-consumers-managed-jquery-css-v3-disconnected-20260723/`, and
@@ -101,6 +112,191 @@ evidence is
 `artifacts/ecosystem-consumers-font-relative-box-final-v1-20260723/ecosystem-results.json`;
 the matching Chrome, managed, and native per-engine results are retained beneath that
 evidence directory.
+
+The modal tranche adds 60 unchanged assertions for visibility, focus trapping,
+backdrop and keyboard policy, scroll locking, resize, data APIs, transition lifecycle,
+ARIA state, and instance disposal. Its one native divergence reduced to the neutral
+`dynamic-transition-style-task-order.html` contract: `innerHTML`-parsed transition
+longhands survive recascade and computed time values serialize in seconds, while a
+synthetic click retains ordinary timer task ordering. The engine fix preserves inline
+origin and per-longhand `!important` precedence without adding hot DOM-node storage.
+
+The adjacent offcanvas tranche adds 50 unchanged assertions for configuration,
+responsive resize dismissal, focus trapping, backdrop and keyboard policy, scroll
+locking, transitions, data APIs, ARIA state, jQuery dispatch, and disposal. A generic
+Jasmine task boundary prevents already-queued transition cleanup from contaminating the
+next spec's spies. Its one native divergence reduced to
+`responsive-overlay-resize-dispatch.html`: JavaScript synthetic resize dispatch now
+uses the same outer-Window listener registry as host resize input, including once,
+passive, AbortSignal, capture, and object-listener semantics.
+
+The Carousel tranche adds all 66 unchanged assertions for navigation, keyboard and RTL
+direction, touch and pointer swipes, interval cycling, pause/resume, wrapping,
+visibility policy, indicators, slide events, delegated data APIs, jQuery dispatch, and
+disposal. It uses Bootstrap's exact `hammer-simulator` test prerequisite at a locked
+version. The native-only divergence reduced to `document-create-event-init.html`:
+the bounded legacy `Document.createEvent("Event")` path returns a real `Event`, and
+`Event.initEvent()` initializes and reinitializes its type, bubbling, cancelability,
+propagation, and cancellation state. Unsupported legacy interface names fail with
+`NotSupportedError`; no Carousel-specific runtime path was added.
+
+The adjacent ScrollSpy tranche adds all 40 unchanged assertions for target discovery,
+forward and backward bounded scrolling, hidden-section filtering, active navigation,
+smooth scrolling, Unicode fragments, data APIs, lifecycle, and jQuery dispatch. Four
+Chrome-authorized product-neutral reductions close the native divergences: bare fragment
+URLs expose an empty anchor `hash`; the standard `hidden` attribute suppresses and
+dynamically restores layout; programmatic offset changes queue and coalesce one scroll
+event while retaining immediate geometry and unchanged-offset idempotence; and
+`CSSStyleDeclaration.getPropertyValue("position")` exposes the connected scroller's
+computed position so child-relative offsets are not mixed with document-relative ones.
+No ScrollSpy-specific runtime path was added.
+
+The adjacent jQuery-integration tranche adds both unchanged assertions for all twelve
+Bootstrap component plugin registrations and namespaced jQuery event delivery through
+the Alert data API. Its adapter establishes jQuery before loading the original source
+and waits for the same `DOMContentLoaded` boundary Bootstrap uses to install plugins,
+eliminating browser-scheduling dependence without modifying the upstream test. Chrome
+and native both pass, and there are no production source or artifact changes in this
+tranche.
+
+The Popover tranche adds all 31 unchanged assertions for content/title resolution,
+template reuse, custom classes, manual and multi-trigger show/hide behavior, instance
+lifecycle, and the jQuery interface. Discovery exposed an adapter-ordering divergence:
+the bounded inter-spec task drain ran before `afterEach`, allowing a resolved fixture's
+queued transition lifecycle to restart and overlap the next spec. Cleanup now runs at
+Jasmine's actual boundary before the drain, while spies remain installed until queued
+cleanup finishes. Chrome and native pass the full lane after the change; no Popover-
+specific or production runtime path was added, and pixel parity remains outside this
+functional claim.
+
+The Tooltip tranche adds all 89 unchanged assertions for constructor/configuration,
+Popper modifiers and placement, delegated click/focus/hover state, delayed transitions,
+mobile workarounds, content replacement and sanitization, accessibility labeling,
+custom classes, disposal, instance APIs, and the jQuery bridge. Its native placement
+divergence reduced to an empty inline reference inside a tall positioned container:
+the generic horizontal layout path stretched every zero-intrinsic-height child to the
+container cross size, even outside Flexbox. Empty inline boxes now retain zero cross-
+size like Chrome, while the existing flex-container path is unchanged. No Tooltip-
+specific runtime path or pixel-parity claim was added.
+
+The jQuery serialization tranche adds all 4 unchanged `serialize.js` cases for nested
+parameter encoding, constructed values, successful form controls, multiple forms, and
+newline submission normalization. The one native divergence reduced to textarea value
+lifecycle: HTML child text, not a `value` content attribute, supplies the default and
+initial current value; later default changes do not overwrite a dirty current value;
+and form reset restores the newline-normalized child-text default. An independent
+eight-assertion Chrome/native contract covers parsed and dynamic text, `defaultValue`,
+dirty isolation, child insertion/removal, and reset. The dirty bit fits in the existing
+56-byte cold form-control record, leaving ordinary DOM nodes unchanged.
+
+The adjacent jQuery traversal tranche adds 62 unchanged browser-local `traversing.js`
+cases for filtering, ancestry, sibling/child traversal, mixed-node collections,
+document order, disconnected nodes, fragments, templates, and cloning/import behavior.
+Three `contents()` cases remain explicitly harness-blocked because they require a
+separately served iframe, object/SVG resource document, or frame child context; one
+positional-selector case remains skipped by jQuery's own QUnit selector policy. The
+native divergences reduced to an independent 11-assertion Chrome/native contract:
+bounded descendant `:has()`, empty substring attribute selectors, browser-shaped
+document-root ancestry and containment, deep/shallow `Document.importNode()`, and
+disconnected-document-position constants. No jQuery-specific runtime path was added.
+
+The adjacent jQuery dimensions tranche adds 29 unchanged browser-local `dimensions.js`
+cases for width/height setters, inner and outer box dimensions, content-box and
+border-box sizing, hidden and disconnected elements, inline/SVG/table geometry,
+scroll containers, and coordinate mutation. The separately served
+`window vs. large document` iframe case remains explicitly harness-blocked. Five
+native divergences reduced to a six-assertion Chrome/native contract covering detached
+authored-style cloning, shorthand longhand CSSOM under an overriding important rule,
+resolved `COL` geometry, automatic table-row shrink-to-fit, shared table tracks,
+table-cell minimum height, and zero-content border-box controls. The table path now
+honors authored column tracks and the standard separated-border spacing model,
+including `border-spacing`, `border-collapse`, and CSSOM mutation, through cold
+table-only state. No jQuery-specific runtime path was added.
+
+The adjacent jQuery queue tranche adds 13 unchanged `queue.js` registrations for named
+and default queues, dequeue callback order, delayed timers, queue clearing, and Deferred
+promise settlement. Eleven cases execute in both Chrome and native; the two stop-hook
+cases retain jQuery's own effects-module skip policy and remain visibly reported as
+`SKIP`. The tranche requires no engine changes and therefore broadens real-consumer
+coverage without changing runtime memory or performance characteristics.
+
+The adjacent jQuery Deferred tranche adds all 28 unchanged `deferred.js` registrations
+for resolution, rejection, progress, pipe/then chaining, thenable assimilation,
+exception hooks, and `jQuery.when()` aggregation. The adapter binds jQuery's pinned UMD
+distribution so its factory retains the official strict callback-context behavior, and
+the QUnit-compatible `assert.async()` callback now ignores arguments as upstream QUnit
+does. Chrome and native pass the complete tranche without production runtime changes.
+
+The adjacent jQuery data tranche adds 39 unchanged browser-local `data.js` cases for
+element and plain-object caches, typed `data-*` parsing, hyphen/camel-case key
+interoperability, expando cleanup, and node-type eligibility. Three shards bound
+retained-runtime cost; Chrome and native pass all 39 cases. The preloaded-iframe unload
+case and separately served data-attribute document remain explicitly harness-blocked.
+No production runtime change was required.
+
+The adjacent jQuery basic integration tranche adds all 13 browser-local cases from the
+unchanged `basic.js` across attributes, CSS, data, dimensions, events, manipulation,
+offsets, selectors, serialization, and wrapping. Its Ajax case remains explicitly
+harness-blocked because it requires jQuery's PHP mock server. One native divergence
+reduced to the existing anchor-reflection contract: URL-valued `href` and `src` IDL
+reads resolve authored fragments against the document URL while `getAttribute()`
+retains the original fragment. The production fix applies generically to URL-bearing
+HTML elements; Chrome and native pass the neutral reduction and all 13 upstream cases.
+
+The adjacent jQuery deprecated-API tranche adds all 7 browser-local registrations from
+the unchanged `deprecated.js`: six execute legacy bind/unbind, delegation, hover,
+event-shorthand, and proxy behavior, while the selector-alias registration retains
+jQuery's own selector-policy `SKIP`. The Ajax-event alias case remains explicitly
+harness-blocked because it requires jQuery's PHP success/error fixtures. Chrome and
+native pass the complete selected tranche without production runtime changes.
+
+The adjacent jQuery readiness tranche adds all 5 browser-local registrations from the
+unchanged `ready.js` for pre/post-DOM-ready state, handler order and arguments,
+asynchronous late registration, Deferred/native Promise assimilation, and exception
+isolation. The separately served `holdReady` iframe remains explicitly harness-blocked.
+The adapter begins QUnit execution at jQuery's own ready boundary and declares the three
+intentional upstream callback errors to the generic evidence harness. The native gap
+reduced to `window-timer-error-lifecycle.html`: an installed `window.onerror` receives
+a timer exception and source location while later tasks continue. The path remains
+fail-closed when no handler exists, and no persistent runtime state was added.
+
+The adjacent jQuery wrapping tranche adds all 16 registrations from the unchanged
+`wrap.js` for `wrap`, `wrapAll`, `wrapInner`, `unwrap`, mixed text/comment nodes,
+event preservation, and one-shot script movement. Its two native divergences reduced
+to the product-neutral `dom-fragment-replacement-script-lifecycle.html` contract:
+`replaceChild()` splices a `DocumentFragment` with identity and order intact, a
+programmatically created inline script executes synchronously on its first connected
+insertion with browser-shaped `document.currentScript`, restores the previous script,
+does not execute again when moved, and an `innerHTML`-created script stays inert. Chrome
+and native pass the neutral 3/3 contract and the complete unchanged
+suite. The script-history byte fits in existing `dom_node` tail padding, retaining the
+fixed 976-byte node; no jQuery-specific runtime path was added.
+
+The adjacent jQuery offset tranche adds all 10 browser-local registrations from the
+unchanged `offset.js` for empty, disconnected, hidden, zero-sized, and ordinary element
+geometry, position and offset objects, offset-parent selection, fractional setters, and
+same-origin iframe document scrolling. Its 24 named separately served absolute,
+relative, static, fixed, table, scroll, body, and box-matrix registrations remain
+explicitly harness-blocked. The native gaps reduced to two product-neutral contracts:
+numeric and dictionary `window.scrollTo()` plus its `scroll()` alias now clamp against
+the parsed document's two-axis overflow range, and disconnected elements expose an empty
+client-rect list with a zero bounding rectangle. Chrome and native pass both neutral
+contracts and the complete selected suite; no jQuery-specific runtime path was added.
+
+The adjacent jQuery core tranche adds all 57 browser-local registrations from the
+unchanged `core.js` for construction, collection and object utilities, HTML and XML
+parsing, global evaluation, containment, iteration, and ready-exception behavior. One
+PHP external-script case and five separately served iframe cases remain explicitly
+harness-blocked. The unchanged 30,000-element registration runs in its own document so
+cold retained-runtime work cannot delay unrelated asynchronous assertions. Native gaps
+reduced to generic DOM behavior: `textContent` creates real Text children, connected
+script text evaluates, form/select collections expose bounded indexed access,
+`Document.styleSheets` and `getElementsByName()` are available, detached documents retain
+`ownerDocument` identity without loading resources, XML parsing validates structure and
+CDATA, and initial iframes expose an HTML/HEAD/BODY document whose body load handler runs
+in the frame realm. A subpixel inline-wrap tolerance preserves existing table-menu
+alignment after real Text nodes enter layout. Chrome and native pass all 47 documents
+and 1071 assertions; no jQuery-specific production path was added.
 
 Every selected, harness-blocked, or excluded upstream file remains listed in
 `upstream-sources.json` and summarized in `ecosystem-profile.json`. A failure must be

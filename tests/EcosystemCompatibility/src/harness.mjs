@@ -6,11 +6,19 @@ export const state = globalThis.__webSceneWptState = {
   diagnostics: []
 };
 
+function isExpectedRuntimeException(value) {
+  const message = String(value);
+  return Array.isArray(state.expectedRuntimeExceptions)
+    && state.expectedRuntimeExceptions.some(expected => message.includes(String(expected)));
+}
+
 globalThis.addEventListener?.("error", event => {
-  state.errors.push(String(event?.error?.stack || event?.message || event));
+  const message = String(event?.error?.stack || event?.message || event);
+  if (!isExpectedRuntimeException(message)) state.errors.push(message);
 });
 globalThis.addEventListener?.("unhandledrejection", event => {
-  state.errors.push(String(event?.reason?.stack || event?.reason || event));
+  const message = String(event?.reason?.stack || event?.reason || event);
+  if (!isExpectedRuntimeException(message)) state.errors.push(message);
 });
 
 export function assert(condition, message) {

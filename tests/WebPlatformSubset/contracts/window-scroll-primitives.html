@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Window scrolling primitives</title>
+<style>html, body { margin: 0; }</style>
+<div id="content" style="width:1800px;height:1600px"></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+  }
+
+  test("Window exposes numeric scrolling and offset aliases", () => {
+    assert(typeof window.scrollTo === "function", "window.scrollTo was absent");
+    assert(typeof window.scroll === "function", "window.scroll was absent");
+    window.scrollTo(120, 140);
+    assert(scrollX === 120 && pageXOffset === 120,
+      `horizontal offsets were ${scrollX}/${pageXOffset}`);
+    assert(scrollY === 140 && pageYOffset === 140,
+      `vertical offsets were ${scrollY}/${pageYOffset}`);
+  });
+
+  test("ScrollToOptions retains an omitted axis", () => {
+    window.scrollTo({ top: 210 });
+    assert(scrollX === 120 && scrollY === 210,
+      `top-only options produced ${scrollX},${scrollY}`);
+    window.scroll({ left: 170 });
+    assert(scrollX === 170 && scrollY === 210,
+      `left-only options produced ${scrollX},${scrollY}`);
+  });
+
+  test("Window scrolling clamps to the laid-out document range", () => {
+    window.scrollTo(-20, 100000);
+    const maximumY = document.documentElement.scrollHeight
+      - document.documentElement.clientHeight;
+    assert(scrollX === 0, `negative horizontal scroll clamped to ${scrollX}`);
+    assert(maximumY > 210 && scrollY === maximumY,
+      `vertical scroll was ${scrollY}, expected ${maximumY}`);
+    window.scrollTo(0, 0);
+  });
+
+  state.diagnostics = [JSON.stringify({
+    scrollWidth: document.documentElement.scrollWidth,
+    scrollHeight: document.documentElement.scrollHeight,
+    innerWidth,
+    innerHeight
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

@@ -112,6 +112,83 @@ int main()
         "ordinary V8 runtime unexpectedly advertised Inspector support");
 #endif
     require(webscene_engine_prewarm() != 0, "V8 prewarm failed");
+    if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
+        filter != nullptr) {
+        const auto selected = std::string_view(filter);
+        if (selected == "elliptical-corner-radii") {
+            test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_elliptical_corner_radii_reach_cssom(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "event-listener-options") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_event_listener_options_reach_native_input_and_resize(focused_engine);
+            test_synthetic_window_resize_dispatch_uses_outer_listener_registry(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "document-create-event") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_document_create_event_and_init_event(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "scrollspy-primitives") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_scrollspy_product_neutral_primitives(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "window-scroll-primitives") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_window_scroll_primitives(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "empty-inline-geometry") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_empty_inline_element_does_not_stretch_cross_size(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "textarea-value-lifecycle") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_textarea_child_text_value_lifecycle(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "dom-traversal-cloning-primitives") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_dom_traversal_cloning_primitives(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "dom-box-dimensions-primitives") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_dom_box_dimensions_primitives(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "fragment-replacement-script-lifecycle") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_fragment_replacement_and_inline_script_lifecycle(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        fail(std::string("unknown WEBSCENE_NATIVE_ENGINE_TEST_FILTER: ") + filter);
+    }
     test_binary_reverse_callback_is_leased_and_completed();
     test_generated_binary_cross_context_promise();
     test_shared_isolate_reuses_destroyed_context_slot();
@@ -121,11 +198,13 @@ int main()
     test_hidden_document_defers_presentation_work();
     test_animation_runtime_is_cold_for_static_nodes();
     test_textual_style_state_is_cold_and_copy_on_write();
+    test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
     test_table_and_form_state_are_cold_for_ordinary_nodes();
     test_shadow_dom_state_is_document_cold_and_pay_for_use();
     test_document_clear_releases_and_reinitializes_node_pool();
     test_native_id_lookup_tracks_creation_erasure_and_clear();
     test_compact_attribute_collection_preserves_map_semantics();
+    test_component_catalog_mounts_interacts_and_unmounts();
     test_out_of_flow_client_geometry_reuse_is_scoped();
     test_screen_tracks_viewport();
     test_zero_command_engine_starts_with_clean_scene();
@@ -138,6 +217,7 @@ int main()
     test_document_script_failure_remains_diagnostic();
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
+    test_timer_error_handler_preserves_later_tasks();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
@@ -192,13 +272,18 @@ int main()
     test_insert_before_preserves_tree_identity_and_atomicity(engine);
     test_related_tree_mutations_preserve_identity_and_atomicity(engine);
     test_contextual_fragment_exposes_parent_node_members(engine);
+    test_custom_element_mutation_reactions_are_pay_for_use(engine);
     test_autonomous_custom_element_lifecycle(engine);
     test_shadow_dom_composed_runtime_geometry(engine);
     test_monaco_browser_primitives(engine);
     test_monaco_view_line_dom_mutations(engine);
     test_class_list_is_same_live_object(engine);
+    test_bounded_css_named_color_palette();
     test_visibility_inherits_for_computed_style_and_focus(engine);
     test_hover_specificity_preserves_visible_theme_icon(engine);
+    test_complex_is_specificity_ignores_non_element_siblings(engine);
+    test_inline_relative_line_height_uses_cascaded_font_size(engine);
+    test_empty_inline_element_does_not_stretch_cross_size(engine);
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
@@ -211,6 +296,7 @@ int main()
     test_wrapped_flex_resolves_each_line_independently(engine);
     test_zero_height_flex_item_grows_and_hit_tests_descendants(engine);
     test_empty_non_growing_flex_item_collapses_main_axis(engine);
+    test_empty_bordered_flex_items_keep_intrinsic_cross_size(engine);
     test_appending_child_invalidates_empty_selector(engine);
     test_inline_block_preserves_vertical_padding(engine);
     test_pointer_hit_targets_and_related_targets_are_elements(engine);
@@ -232,6 +318,8 @@ int main()
     test_segmented_rounded_borders_share_an_unclipped_join(engine);
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
+    test_rounded_overflow_visual_fixture_geometry(engine);
+    test_elliptical_corner_radii_reach_cssom(engine);
     test_row_flex_vertical_scroll_extent_remains_bounded(engine);
     test_toolbar_scroll_chevrons_use_single_rotation(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);
@@ -251,9 +339,19 @@ int main()
     test_adjacent_inline_runs_share_wrapped_lines(engine);
     test_inline_flex_preserves_padding_and_line_box(engine);
     test_document_position(engine);
+    test_dom_box_dimensions_primitives(engine);
+    test_dom_traversal_cloning_primitives(engine);
+    test_fragment_replacement_and_inline_script_lifecycle(engine);
+    test_textarea_child_text_value_lifecycle(engine);
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
+    test_event_listener_options_reach_native_input_and_resize(engine);
+    test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
+    test_document_create_event_and_init_event(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
+    test_generated_idl_attributes_are_prototype_accessors(engine);
+    test_document_links_is_a_live_named_html_collection(engine);
+    test_scrollspy_product_neutral_primitives(engine);
     test_component_library_dom_discovery_primitives(engine);
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
@@ -307,6 +405,7 @@ int main()
     engine = webscene_engine_create(64);
     require(engine != nullptr, "transition regression engine creation failed");
     test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(engine);
+    test_inline_transition_longhands_survive_dynamic_parse_and_recascade(engine);
     test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(engine);
     test_rotation_keyframes_use_host_clock_and_wrap_continuously(engine);
     webscene_engine_destroy(engine);

@@ -196,6 +196,104 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_rounded_overflow_visual_fixture_geometry(webscene_engine* engine)
+{
+    resize(engine, 800, 600, 43U);
+    const auto geometry = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<p>instructions</p><div class="container">
+            <div class="test"><div class="contents"></div></div>
+            <div class="ref"></div>
+          </div>`;
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            div { position:absolute }
+            .ref,.test { border-radius:30px }
+            .ref { width:104px;height:104px;left:-2px;top:-2px;background:green }
+            .test,.contents { width:100px;height:100px;background:red }
+            .test { overflow:hidden }
+          `;
+          document.head.appendChild(style);
+          const container = document.querySelector('.container').getBoundingClientRect();
+          const test = document.querySelector('.test').getBoundingClientRect();
+          const contents = document.querySelector('.contents').getBoundingClientRect();
+          const reference = document.querySelector('.ref').getBoundingClientRect();
+          return [
+            test.left - container.left,
+            test.top - container.top,
+            contents.left - test.left,
+            contents.top - test.top,
+            reference.left - test.left,
+            reference.top - test.top,
+            test.width,
+            test.height,
+            reference.width,
+            reference.height
+          ];
+        })()
+    )JS", "native-rounded-overflow-visual-geometry.js");
+    require(
+        geometry == R"([0,0,0,0,-2,-2,100,100,104,104])",
+        "rounded overflow WPT geometry diverged: " + geometry);
+}
+
+void test_elliptical_corner_radii_reach_cssom(webscene_engine* engine)
+{
+    require(
+        evaluate(engine, "true", "native-elliptical-radius-startup.js") == "true",
+        "elliptical radius fixture runtime did not start");
+    resize(engine, 400, 180, 45U);
+    wait_for_consumed_inputs(
+        engine,
+        1U,
+        "elliptical radius fixture resize was not consumed");
+    const auto cssom = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            .radius-probe {
+              position:absolute; top:10px; width:100px; height:80px; font-size:10px;
+            }
+            #longhand {
+              left:10px; background:rgb(1,2,3);
+              border-top-left-radius:20px 10px;
+              border-top-right-radius:30px 15px;
+              border-bottom-right-radius:40px 20px;
+              border-bottom-left-radius:10px 5px;
+            }
+            #shorthand {
+              left:130px; background:rgb(4,5,6);
+              border-radius:2em 3em 4em 1em / 1em 1.5em 2em .5em;
+            }
+            #scalar {
+              left:250px; background:rgb(7,8,9); border-radius:12px;
+            }
+          </style>
+          <div id="longhand" class="radius-probe"></div>
+          <div id="shorthand" class="radius-probe"></div>
+          <div id="scalar" class="radius-probe"></div>`;
+          const serialize = element => {
+            const style = getComputedStyle(element);
+            return {
+              all: style.borderRadius,
+              tl: style.borderTopLeftRadius,
+              tr: style.borderTopRightRadius,
+              br: style.borderBottomRightRadius,
+              bl: style.borderBottomLeftRadius
+            };
+          };
+          return {
+            longhand: serialize(document.querySelector('#longhand')),
+            shorthand: serialize(document.querySelector('#shorthand')),
+            scalar: serialize(document.querySelector('#scalar'))
+          };
+        })()
+    )JS", "native-elliptical-radius-cssom.js");
+    require(
+        cssom == R"({"longhand":{"all":"20px 30px 40px 10px / 10px 15px 20px 5px","tl":"20px 10px","tr":"30px 15px","br":"40px 20px","bl":"10px 5px"},"shorthand":{"all":"20px 30px 40px 10px / 10px 15px 20px 5px","tl":"20px 10px","tr":"30px 15px","br":"40px 20px","bl":"10px 5px"},"scalar":{"all":"12px","tl":"12px","tr":"12px","br":"12px","bl":"12px"}})",
+        "elliptical border-radius CSSOM serialization diverged: " + cssom);
+}
+
 void test_row_flex_vertical_scroll_extent_remains_bounded(webscene_engine* engine)
 {
     resize(engine, 400, 200, 43U);
@@ -465,7 +563,7 @@ void test_semantic_table_auto_layout_and_intrinsic_cell_content(webscene_engine*
           document.body.style.width = '800px';
           const style = document.createElement('style');
           style.textContent = `
-            table { width: 800px; white-space: nowrap; }
+            table { width: 800px; white-space: nowrap; border-spacing: 0; }
             th, td { padding: 10px; }
             .content { display: inline-block; width: max-content; }
           `;
@@ -603,6 +701,7 @@ void test_implicit_grid_contains_scrollable_table(webscene_engine* engine)
           scroller.style.overflow = 'auto';
           const table = document.createElement('table');
           table.style.width = '100%';
+          table.style.borderSpacing = '0';
           const body = document.createElement('tbody');
           for (let index = 0; index < 40; index++) {
             const row = document.createElement('tr');

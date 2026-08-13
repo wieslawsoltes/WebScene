@@ -112,6 +112,59 @@
       "a detached cookie-averse Document exposed live cookies");
   });
 
+  test("Document links is a live tree-ordered named HTMLCollection", () => {
+    const links = document.links;
+    const releaseLink = document.getElementById("release-link");
+    assert(links === document.links,
+      "document.links did not retain SameObject identity");
+    assert(links instanceof HTMLCollection,
+      "document.links was not an HTMLCollection instance");
+    assert(Object.prototype.toString.call(links) === "[object HTMLCollection]",
+      `document.links exposed the wrong string brand: ${Object.prototype.toString.call(links)}`);
+    assert(typeof links.item === "function" && typeof links.namedItem === "function",
+      "HTMLCollection lookup methods were absent");
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLCollection.prototype, "length");
+    assert(typeof lengthDescriptor?.get === "function"
+      && !Object.prototype.hasOwnProperty.call(links, "length"),
+      "HTMLCollection length was not a prototype accessor");
+    assert(links[0] === releaseLink
+      && links.item(0) === releaseLink
+      && links.item(20) === null,
+      "initial indexed HTMLCollection lookup was incorrect");
+    assert(links.namedItem("release-link") === releaseLink
+      && links["release-link"] === releaseLink,
+      "initial ID-based HTMLCollection lookup was incorrect");
+
+    const area = document.createElement("area");
+    area.id = "map-area";
+    area.setAttribute("name", "region-link");
+    area.setAttribute("href", "/region");
+    document.body.prepend(area);
+    assert(links.length === 2
+      && links[0] === area
+      && links.item(1) === releaseLink,
+      "HTMLCollection did not update in document tree order after insertion");
+    assert(links.namedItem("map-area") === area
+      && links.namedItem("region-link") === area
+      && links["map-area"] === area
+      && links["region-link"] === area,
+      "HTMLCollection did not expose live ID and name lookups");
+
+    area.removeAttribute("href");
+    assert(links.length === 1
+      && links.item(0) === releaseLink
+      && links.namedItem("map-area") === null
+      && links["map-area"] === undefined,
+      "HTMLCollection retained an area after href removal");
+    area.setAttribute("href", "/region");
+    assert(links.length === 2 && links[0] === area,
+      "HTMLCollection did not recover after href restoration");
+    area.remove();
+    assert(links.length === 1 && links[0] === releaseLink,
+      "HTMLCollection did not update after subtree removal");
+  });
+
   test("live Document keeps HTML and BODY distinct and exposes the bounded viewport scroller", () => {
     assert(document.documentElement.tagName === "HTML"
       && document.head.tagName === "HEAD"

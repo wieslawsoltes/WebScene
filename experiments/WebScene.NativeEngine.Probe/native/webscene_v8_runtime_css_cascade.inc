@@ -59,63 +59,162 @@
         return result;
     }
 
-    static bool apply_corner_radius_declaration(
+    static bool apply_corner_radius_values(
         std::string_view name,
         const std::string& value,
         css_length& top_left,
         css_length& top_right,
         css_length& bottom_right,
-        css_length& bottom_left)
+        css_length& bottom_left,
+        css_length& top_left_y,
+        css_length& top_right_y,
+        css_length& bottom_right_y,
+        css_length& bottom_left_y)
     {
-        const auto assign = [&](css_length& target) {
-            target = native_document::parse_length(value);
-        };
-        if (name == "border-top-left-radius" || name == "border-start-start-radius") {
-            assign(top_left);
-            return true;
-        }
-        if (name == "border-top-right-radius" || name == "border-start-end-radius") {
-            assign(top_right);
-            return true;
-        }
-        if (name == "border-bottom-right-radius" || name == "border-end-end-radius") {
-            assign(bottom_right);
-            return true;
-        }
-        if (name == "border-bottom-left-radius" || name == "border-end-start-radius") {
-            assign(bottom_left);
-            return true;
-        }
-        if (name != "border-radius") return false;
-
-        std::vector<css_length> radii;
+        std::vector<css_length> horizontal;
+        std::vector<css_length> vertical;
+        auto* target = &horizontal;
         size_t token_start = std::string::npos;
         int parenthesis_depth = 0;
+        size_t slash_count = 0U;
         for (size_t index = 0; index <= value.size(); ++index) {
             const auto character = index < value.size() ? value[index] : ' ';
             if (character == '(') ++parenthesis_depth;
             else if (character == ')' && parenthesis_depth > 0) --parenthesis_depth;
+            const auto slash = parenthesis_depth == 0 && character == '/';
             const auto separator = parenthesis_depth == 0
-                && (std::isspace(static_cast<unsigned char>(character)) || character == '/');
+                && (std::isspace(static_cast<unsigned char>(character)) || slash);
             if (!separator && token_start == std::string::npos) token_start = index;
             if (separator && token_start != std::string::npos) {
-                radii.push_back(native_document::parse_length(
+                target->push_back(native_document::parse_length(
                     value.substr(token_start, index - token_start)));
                 token_start = std::string::npos;
-                if (radii.size() == 4U) break;
             }
-            // Elliptical vertical radii follow the top-level slash. The scene
-            // ABI currently carries one radius per corner, so retain the
-            // horizontal radii instead of accidentally tokenizing the calc()
-            // expression at its internal whitespace.
-            if (character == '/' && parenthesis_depth == 0) break;
+            if (slash) {
+                ++slash_count;
+                target = &vertical;
+            }
         }
-        if (radii.empty()) return true;
-        top_left = radii[0];
-        top_right = radii.size() > 1U ? radii[1] : radii[0];
-        bottom_right = radii.size() > 2U ? radii[2] : radii[0];
-        bottom_left = radii.size() > 3U ? radii[3]
-            : radii.size() > 1U ? radii[1] : radii[0];
+
+        const auto assign = [&](css_length& horizontal_radius,
+                                css_length& vertical_radius) {
+            if (horizontal.empty() || horizontal.size() > 2U
+                || slash_count != 0U || !vertical.empty()) return;
+            horizontal_radius = horizontal[0];
+            vertical_radius = horizontal.size() > 1U ? horizontal[1] : horizontal[0];
+        };
+        if (name == "border-top-left-radius" || name == "border-start-start-radius") {
+            assign(top_left, top_left_y);
+            return true;
+        }
+        if (name == "border-top-right-radius" || name == "border-start-end-radius") {
+            assign(top_right, top_right_y);
+            return true;
+        }
+        if (name == "border-bottom-right-radius" || name == "border-end-end-radius") {
+            assign(bottom_right, bottom_right_y);
+            return true;
+        }
+        if (name == "border-bottom-left-radius" || name == "border-end-start-radius") {
+            assign(bottom_left, bottom_left_y);
+            return true;
+        }
+        if (name != "border-radius") return false;
+        if (horizontal.empty() || horizontal.size() > 4U || vertical.size() > 4U
+            || slash_count > 1U || (slash_count == 1U && vertical.empty())) return true;
+        const auto expand = [](const std::vector<css_length>& values,
+                               css_length& first,
+                               css_length& second,
+                               css_length& third,
+                               css_length& fourth) {
+            first = values[0];
+            second = values.size() > 1U ? values[1] : values[0];
+            third = values.size() > 2U ? values[2] : values[0];
+            fourth = values.size() > 3U ? values[3]
+                : values.size() > 1U ? values[1] : values[0];
+        };
+        expand(horizontal, top_left, top_right, bottom_right, bottom_left);
+        if (vertical.empty()) {
+            top_left_y = top_left;
+            top_right_y = top_right;
+            bottom_right_y = bottom_right;
+            bottom_left_y = bottom_left;
+        } else {
+            expand(vertical, top_left_y, top_right_y, bottom_right_y, bottom_left_y);
+        }
+        return true;
+    }
+
+    static bool apply_corner_radius_declaration(
+        std::string_view name,
+        const std::string& value,
+        node_style& style)
+    {
+        auto top_left_y = style.border_top_left_radius_y();
+        auto top_right_y = style.border_top_right_radius_y();
+        auto bottom_right_y = style.border_bottom_right_radius_y();
+        auto bottom_left_y = style.border_bottom_left_radius_y();
+        if (!apply_corner_radius_values(
+                name,
+                value,
+                style.border_top_left_radius,
+                style.border_top_right_radius,
+                style.border_bottom_right_radius,
+                style.border_bottom_left_radius,
+                top_left_y,
+                top_right_y,
+                bottom_right_y,
+                bottom_left_y)) {
+            return false;
+        }
+        style.set_vertical_corner_radii(
+            top_left_y,
+            top_right_y,
+            bottom_right_y,
+            bottom_left_y);
+        return true;
+    }
+
+    static bool apply_corner_radius_declaration(
+        std::string_view name,
+        const std::string& value,
+        node_style::pseudo_element& pseudo)
+    {
+        auto top_left_y = pseudo.elliptical_border_radius
+            ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius;
+        auto top_right_y = pseudo.elliptical_border_radius
+            ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius;
+        auto bottom_right_y = pseudo.elliptical_border_radius
+            ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius;
+        auto bottom_left_y = pseudo.elliptical_border_radius
+            ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius;
+        if (!apply_corner_radius_values(
+                name,
+                value,
+                pseudo.border_top_left_radius,
+                pseudo.border_top_right_radius,
+                pseudo.border_bottom_right_radius,
+                pseudo.border_bottom_left_radius,
+                top_left_y,
+                top_right_y,
+                bottom_right_y,
+                bottom_left_y)) {
+            return false;
+        }
+        pseudo.border_top_left_radius_y = top_left_y;
+        pseudo.border_top_right_radius_y = top_right_y;
+        pseudo.border_bottom_right_radius_y = bottom_right_y;
+        pseudo.border_bottom_left_radius_y = bottom_left_y;
+        const auto differs = [](css_length first, css_length second) {
+            return first.value != second.value
+                || first.unit != second.unit
+                || first.pixel_offset != second.pixel_offset;
+        };
+        pseudo.elliptical_border_radius =
+            differs(top_left_y, pseudo.border_top_left_radius)
+            || differs(top_right_y, pseudo.border_top_right_radius)
+            || differs(bottom_right_y, pseudo.border_bottom_right_radius)
+            || differs(bottom_left_y, pseudo.border_bottom_left_radius);
         return true;
     }
 
@@ -301,10 +400,7 @@
         } else if (apply_corner_radius_declaration(
             name,
             value,
-            pseudo.border_top_left_radius,
-            pseudo.border_top_right_radius,
-            pseudo.border_bottom_right_radius,
-            pseudo.border_bottom_left_radius)) {
+            pseudo)) {
         } else if (name == "background" || name == "background-color") {
             pseudo.background_current_color = value == "currentcolor" || value == "currentColor";
             pseudo.background_rgba = pseudo.background_current_color
@@ -836,6 +932,18 @@
         }
     }
 
+    static std::string serialize_computed_time_list(const std::string& value)
+    {
+        const auto times = split_css_component_list(value, ',');
+        std::string result;
+        for (const auto& time : times) {
+            if (!result.empty()) result += ", ";
+            result += serialize_css_number(
+                static_cast<double>(parse_css_time_ms(time)) / 1000.0) + "s";
+        }
+        return result.empty() ? std::string{"0s"} : result;
+    }
+
     static void configure_style_transitions(node_style& style)
     {
         if (!style.has_animation_data()) return;
@@ -1245,6 +1353,9 @@
                 reset.row_gap = previous.row_gap;
                 reset.column_gap = previous.column_gap;
             }
+            if (is_inline(inline_table_border_model)) {
+                reset.mutable_table() = previous.table();
+            }
             if (is_inline(inline_flex_direction)) {
                 reset.direction = previous.direction;
                 reset.flex_reverse = previous.flex_reverse;
@@ -1267,6 +1378,11 @@
                 reset.border_top_right_radius = previous.border_top_right_radius;
                 reset.border_bottom_right_radius = previous.border_bottom_right_radius;
                 reset.border_bottom_left_radius = previous.border_bottom_left_radius;
+                reset.set_vertical_corner_radii(
+                    previous.border_top_left_radius_y(),
+                    previous.border_top_right_radius_y(),
+                    previous.border_bottom_right_radius_y(),
+                    previous.border_bottom_left_radius_y());
             }
             if (is_inline(inline_box_shadow)) {
                 reset.box_shadow_offset_x = previous.box_shadow_offset_x;
@@ -1500,10 +1616,7 @@
                 apply_corner_radius_declaration(
                     name,
                     value,
-                    node.style.border_top_left_radius,
-                    node.style.border_top_right_radius,
-                    node.style.border_bottom_right_radius,
-                    node.style.border_bottom_left_radius);
+                    node.style);
             }
             return;
         } else if (name == "transform") {
@@ -1840,6 +1953,28 @@
         } else if (name == "column-gap" && !is_inline(inline_gap)) {
             node.style.column_gap = value == "normal" ? css_length{}
                 : native_document::parse_length(value);
+        } else if (name == "border-spacing"
+            && !is_inline(inline_table_border_model)) {
+            std::istringstream stream(value);
+            std::string horizontal;
+            std::string vertical;
+            stream >> horizontal >> vertical;
+            if (horizontal.empty()) {
+                decision.classification = "invalid-authoring";
+            } else {
+                auto& table = node.style.mutable_table();
+                table.border_spacing_horizontal = native_document::parse_length(horizontal);
+                table.border_spacing_vertical = native_document::parse_length(
+                    vertical.empty() ? horizontal : vertical);
+            }
+        } else if (name == "border-collapse"
+            && !is_inline(inline_table_border_model)) {
+            if (value == "collapse" || value == "separate") {
+                node.style.mutable_table().border_collapsed = value == "collapse";
+            } else {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "collapse and separate keywords";
+            }
         } else if (name == "display" && !is_inline(inline_display)) {
             node.style.display = parse_display_mode(value);
         } else if (name == "table-layout") {
@@ -2212,6 +2347,21 @@
         }
     }
 
+    void recompute_inline_font_relative_metrics(dom_node& node)
+    {
+        const auto line_height = node.authored_style().declarations.find("line-height");
+        if ((node.style.inline_property_mask & inline_line_height) != 0U
+            && (node.style.important_property_mask & inline_line_height) == 0U
+            && line_height != node.authored_style().declarations.end()) {
+            const auto font_size = node.style.font_size >= 0
+                ? node.style.font_size : inherited_font_size(node);
+            node.style.line_height = resolved_declared_line_height(
+                node,
+                line_height->second,
+                font_size);
+        }
+    }
+
     void apply_css_rules(dom_node& node)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -2295,6 +2445,7 @@
             node.style.border_top_right_radius = {};
             node.style.border_bottom_right_radius = {};
             node.style.border_bottom_left_radius = {};
+            node.style.clear_vertical_corner_radii();
         }
         if ((node.style.inline_property_mask & inline_transform) == 0U) {
             node.style.transform_translate_x = {};
@@ -2327,6 +2478,9 @@
         if ((node.style.inline_property_mask & inline_gap) == 0U) {
             node.style.row_gap = {};
             node.style.column_gap = {};
+        }
+        if ((node.style.inline_property_mask & inline_table_border_model) == 0U) {
+            node.style.clear_table();
         }
         if ((node.style.inline_property_mask & inline_flex_wrap) == 0U) node.style.flex_wrap = false;
         if ((node.style.inline_property_mask & inline_flex_grow) == 0U) node.style.flex_grow = 0;
@@ -2502,6 +2656,31 @@
                 apply_css_declaration(node, declaration);
             }
         }
+        // Inline transition declarations are stored separately from the hot
+        // style object. Recascade clears cold animation state before applying
+        // stylesheet rules, so restore the inline origin afterward while
+        // retaining per-longhand !important precedence.
+        constexpr std::array transition_properties{
+            "transition",
+            "transition-property",
+            "transition-duration",
+            "transition-delay",
+            "transition-timing-function"
+        };
+        for (const auto* property : transition_properties) {
+            const auto authored = node.authored_style().declarations.find(property);
+            if (authored == node.authored_style().declarations.end()) continue;
+            const auto inline_important =
+                node.authored_style().important_declarations.contains(property);
+            const auto property_mask = inline_style_mask(property);
+            if (!inline_important
+                && (node.style.important_property_mask & property_mask) != 0U) continue;
+            apply_css_declaration(node, {property, authored->second, inline_important});
+        }
+        // Inline relative line-height is authored at a higher origin, but its
+        // computed pixel value depends on the winning font-size. Re-resolve it
+        // only after stylesheet declarations have completed their cascade.
+        recompute_inline_font_relative_metrics(node);
         // Pseudo-elements inherit the originating element's completed
         // computed style. Apply them only after its custom and ordinary
         // declarations so `::before { background:var(--active-bg) }` resolves
@@ -2625,6 +2804,7 @@
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
+        recompute_inline_font_relative_metrics(node);
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
             if (pseudo_kind == 3) {
                 for (const auto& declaration : rule->declarations()) {
@@ -2729,6 +2909,8 @@
     {
         for (auto* current = &node; current != nullptr; current = current->parent) {
             if (current == &document.body()) return true;
+            if (current->parent == nullptr
+                && detached_document_roots.contains(current->id)) return true;
             for (const auto& [frame_id, provisional_body] : provisional_frame_bodies) {
                 if (current != provisional_body) continue;
                 const auto* frame = document.find_by_native_id(frame_id);

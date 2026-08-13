@@ -25,6 +25,62 @@
       "reason": "All 51 dynamically registered cases from jQuery's unmodified callbacks.js execute through the bounded QUnit-compatible browser harness; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/jquery-basic-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "cross-module-integration", "attributes-properties", "css-show-hide", "core-utilities", "data-cache", "box-dimensions", "event-lifecycle", "dom-manipulation", "offset-geometry", "selectors-traversal", "form-serialization", "wrapping", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-basic-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs all 13 browser-local cross-module cases from jQuery's unchanged basic.js; the Ajax/mock-server case remains explicitly harness-blocked. Compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-core-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "jquery-construction", "collection-utilities", "object-utilities", "html-parsing", "xml-parsing", "global-evaluation", "containment", "iteration", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-core-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/2 of the 57 browser-local cases from jQuery's unchanged core.js, excluding the separately isolated 30,000-element case. One PHP mock-server case and five separately served iframe cases remain explicitly harness-blocked; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-core-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "jquery-construction", "collection-utilities", "object-utilities", "html-parsing", "xml-parsing", "global-evaluation", "containment", "iteration", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-core-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/2 of the same unchanged 57-case core source, excluding the separately isolated 30,000-element case; sharding bounds retained-runtime cost without rewriting or omitting selected cases."
+    },
+    {
+      "path": "contracts/jquery-core-upstream-massive-html.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "large-html-parsing", "large-dom-construction", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-core-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs the unchanged 30,000-element core.js registration in its own document so its intentionally large retained-runtime cost cannot delay unrelated asynchronous cases."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/4 of the 56 browser-local, current-browser-aligned cases from jQuery's unchanged selector.js. Three separately served iframe registrations and one form-navigation/reload case remain explicitly harness-blocked. One pinned :disabled expectation is excluded because the current HTML Standard and Chrome 151 include option/optgroup descendants of a disabled select; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/4 of the same unchanged 56-case selector selection; sharding bounds retained-runtime cost without rewriting selected cases."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/4 of the same unchanged 56-case selector selection; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-selector-upstream-4.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "selector-tokenization", "selector-combinators", "attribute-selectors", "structural-pseudo-classes", "jquery-selector-extensions", "document-fragment-selection", "unique-sort", "matches-selector", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-selector-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 4/4 of the same unchanged 56-case selector selection; compatibility evidence, not a standards claim."
+    },
+    {
       "path": "contracts/jquery-attributes-upstream-1.html",
       "type": "contract",
       "capabilities": ["official-upstream-suite", "attribute-reflection", "property-reflection", "boolean-attributes", "form-values", "select-option-state", "class-token-mutation", "svg-class-mutation", "xml-attributes", "fixture-reset"],
@@ -72,6 +128,132 @@
       "capabilities": ["official-upstream-suite", "computed-style", "css-property-assignment", "relative-css-values", "unit-conversion", "show-hide-toggle", "cascade-display", "box-model", "custom-properties", "visibility-selectors", "fixture-reset"],
       "evidence": ["jquery-4.0.0-css-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
       "reason": "Runs shard 4/4 of the same unchanged 55-case CSS source; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-serialize-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "parameter-encoding", "nested-data-serialization", "form-control-serialization", "successful-controls", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-serialize-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "All 4 cases from jQuery's unmodified serialize.js execute against its complete official fixture through the bounded QUnit-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-traversing-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "dom-traversal", "selector-filtering", "document-order", "mixed-node-collections", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-traversing-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/4 of the unchanged browser-local traversing.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-traversing-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "dom-traversal", "selector-filtering", "document-order", "mixed-node-collections", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-traversing-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/4 of the unchanged browser-local traversing.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-traversing-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "dom-traversal", "selector-filtering", "document-order", "mixed-node-collections", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-traversing-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/4 of the unchanged browser-local traversing.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-traversing-upstream-4.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "dom-traversal", "selector-filtering", "document-order", "mixed-node-collections", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-traversing-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 4/4 of the unchanged browser-local traversing.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-dimensions-upstream-4.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "box-dimensions", "hidden-and-disconnected-geometry", "box-sizing", "inline-and-table-layout", "scroll-container-geometry"],
+      "evidence": ["jquery-4.0.0-dimensions-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 4/4 of the unchanged browser-local dimensions.js cases; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-queue-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "named-queues", "queue-ordering", "dequeue-callbacks", "delay-timers", "queue-promises", "queue-clearing", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-queue-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs the unchanged browser-local queue.js cases with the effects-only branches retaining their upstream skip policy; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-ready-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "dom-readiness", "domcontentloaded-ordering", "ready-handler-order", "ready-handler-arguments", "asynchronous-late-handlers", "promise-assimilation", "ready-error-isolation"],
+      "evidence": ["jquery-4.0.0-ready-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs all 5 browser-local registrations from jQuery's unchanged ready.js after the same DOMContentLoaded boundary assumed by upstream QUnit. The separately served holdReady iframe case remains explicitly harness-blocked. Compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-wrap-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "wrap", "wrap-all", "wrap-inner", "unwrap", "text-and-comment-nodes", "event-preservation", "script-node-lifecycle", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-wrap-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs all 16 browser-local cases from jQuery's unchanged wrap.js against its complete official fixture. Compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-offset-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "offset-getter", "offset-setter", "position", "offset-parent", "hidden-and-disconnected-geometry", "fractional-geometry", "document-scroll", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-offset-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs all 10 browser-local QUnit registrations from jQuery's unchanged offset.js against its complete official fixture. The separately served absolute, relative, static, fixed, table, body, scroll and box-matrix fixtures remain explicitly harness-blocked. Compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-deferred-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "deferred-resolution", "deferred-rejection", "progress-notification", "promise-chaining", "thenable-assimilation", "error-hooks", "when-aggregation", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-deferred-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs every unchanged browser-local deferred.js registration through the bounded QUnit-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-deprecated-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "legacy-event-aliases", "event-binding", "event-delegation", "mouseenter-mouseleave", "event-shorthands", "proxy-binding", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-deprecated-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs all 7 browser-local registrations from jQuery's unchanged deprecated.js; six execute and the selector-module alias case retains jQuery's own selector-policy skip. The Ajax/mock-server case remains explicitly harness-blocked. Compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-data-upstream-1.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "element-data-cache", "plain-object-data-cache", "data-attribute-parsing", "hyphenated-data-keys", "expando-cleanup", "node-type-eligibility", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-data-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 1/3 of 39 browser-local cases from jQuery's unchanged data.js. Two separately served iframe cases remain explicitly harness-blocked; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/jquery-data-upstream-2.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "element-data-cache", "plain-object-data-cache", "data-attribute-parsing", "hyphenated-data-keys", "expando-cleanup", "node-type-eligibility", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-data-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 2/3 of the same unchanged 39-case data source; sharding bounds retained-runtime cost without rewriting or omitting selected cases."
+    },
+    {
+      "path": "contracts/jquery-data-upstream-3.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "element-data-cache", "plain-object-data-cache", "data-attribute-parsing", "hyphenated-data-keys", "expando-cleanup", "node-type-eligibility", "fixture-reset"],
+      "evidence": ["jquery-4.0.0-data-unit", "jquery-commit-4f2fae08f23b54ce09322e62e73cce6161b8d3cb"],
+      "reason": "Runs shard 3/3 of the same unchanged 39-case data source; compatibility evidence, not a standards claim."
     },
     {
       "path": "contracts/bootstrap-components.html",
@@ -130,6 +312,55 @@
       "reason": "All 87 cases from Bootstrap's unmodified dropdown.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
     },
     {
+      "path": "contracts/bootstrap-modal-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "modal-visibility", "focus-trap", "backdrop-policy", "keyboard-dismissal", "scroll-lock", "resize-handling", "delegated-data-api", "transition-lifecycle", "custom-cancelable-events", "aria-state", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-modal-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 60 cases from Bootstrap's unmodified modal.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/bootstrap-offcanvas-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "offcanvas-visibility", "focus-trap", "backdrop-policy", "keyboard-dismissal", "scroll-lock", "responsive-resize", "delegated-data-api", "transition-lifecycle", "custom-cancelable-events", "aria-state", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-offcanvas-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 50 cases from Bootstrap's unmodified offcanvas.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/bootstrap-carousel-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "carousel-navigation", "keyboard-direction", "pointer-and-touch-swipe", "pause-and-cycle", "interval-scheduling", "wrap-policy", "visibility-policy", "slide-events", "indicators", "rtl-direction", "delegated-data-api", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-carousel-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 66 cases from Bootstrap's unmodified carousel.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/bootstrap-scrollspy-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "intersection-observer", "scroll-root-activation", "forward-and-backward-scrolling", "target-discovery", "hidden-section-filtering", "active-navigation-state", "smooth-scroll", "unicode-fragment-targets", "delegated-data-api", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-scrollspy-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 40 cases from Bootstrap's unmodified scrollspy.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/bootstrap-jquery-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "jquery-plugin-registration", "jquery-namespaced-events", "delegated-data-api", "component-plugin-bridge"],
+      "evidence": ["bootstrap-v5.3.8-jquery-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "Both cases from Bootstrap's unmodified jquery.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards claim."
+    },
+    {
+      "path": "contracts/bootstrap-popover-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "popover-content", "popover-template", "popover-lifecycle", "custom-class", "multi-trigger-state", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-popover-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 31 cases from Bootstrap's unmodified popover.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards or pixel-parity claim."
+    },
+    {
+      "path": "contracts/bootstrap-tooltip-upstream.html",
+      "type": "contract",
+      "capabilities": ["official-upstream-suite", "tooltip-content", "tooltip-template", "tooltip-lifecycle", "delegated-trigger", "focus-hover-click-state", "delayed-show-hide", "popper-configuration", "sanitization", "accessibility-labeling", "instance-lifecycle", "jquery-interface"],
+      "evidence": ["bootstrap-v5.3.8-tooltip-spec", "bootstrap-commit-25aa8cc0b32f0d1a54be575347e6d84b70b1acd7"],
+      "reason": "All 89 cases from Bootstrap's unmodified tooltip.spec.js execute through the bounded Jasmine-compatible browser harness; compatibility evidence, not a standards or pixel-parity claim."
+    },
+    {
       "path": "contracts/react-dom.html",
       "type": "contract",
       "capabilities": ["createRoot", "hydrateRoot", "reconciliation", "keyed-reorder", "synthetic-events", "controlled-input", "portals", "batched-updates", "transitions", "Suspense", "lazy-modules", "unmount"],
@@ -141,7 +372,7 @@
   "excluded": [
     {
       "area": "remaining upstream internal framework suites",
-      "reason": "Seven unmodified Bootstrap source suites and three unmodified jQuery QUnit files are selected. Every remaining upstream jQuery, Bootstrap, and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
+      "reason": "All fourteen unmodified Bootstrap source suites and sixteen unmodified jQuery QUnit files are selected. Every remaining upstream jQuery and React DOM file stays enumerated as harness-blocked or excluded until its original cases execute reproducibly."
     }
   ],
   "consumers": [
@@ -150,11 +381,11 @@
       "package": "jquery",
       "version": "4.0.0",
       "stage": "discovery",
-      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html"],
-      "selected": 179,
-      "runnable": 179,
+      "documents": ["contracts/jquery-core.html", "contracts/jquery-callbacks-upstream.html", "contracts/jquery-basic-upstream.html", "contracts/jquery-core-upstream-1.html", "contracts/jquery-core-upstream-2.html", "contracts/jquery-core-upstream-massive-html.html", "contracts/jquery-selector-upstream-1.html", "contracts/jquery-selector-upstream-2.html", "contracts/jquery-selector-upstream-3.html", "contracts/jquery-selector-upstream-4.html", "contracts/jquery-attributes-upstream-1.html", "contracts/jquery-attributes-upstream-2.html", "contracts/jquery-attributes-upstream-3.html", "contracts/jquery-css-upstream-1.html", "contracts/jquery-css-upstream-2.html", "contracts/jquery-css-upstream-3.html", "contracts/jquery-css-upstream-4.html", "contracts/jquery-serialize-upstream.html", "contracts/jquery-traversing-upstream-1.html", "contracts/jquery-traversing-upstream-2.html", "contracts/jquery-traversing-upstream-3.html", "contracts/jquery-traversing-upstream-4.html", "contracts/jquery-dimensions-upstream-1.html", "contracts/jquery-dimensions-upstream-2.html", "contracts/jquery-dimensions-upstream-3.html", "contracts/jquery-dimensions-upstream-4.html", "contracts/jquery-queue-upstream.html", "contracts/jquery-ready-upstream.html", "contracts/jquery-wrap-upstream.html", "contracts/jquery-offset-upstream.html", "contracts/jquery-deferred-upstream.html", "contracts/jquery-deprecated-upstream.html", "contracts/jquery-data-upstream-1.html", "contracts/jquery-data-upstream-2.html", "contracts/jquery-data-upstream-3.html"],
+      "selected": 518,
+      "runnable": 518,
       "excluded": ["Ajax transport and server fixtures", "animation timing", "legacy-browser compatibility branches"],
-      "harnessBlocked": ["21 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One attributes.js case and five css.js cases require a mock server, Shadow DOM, browser zoom, separately served iframe fixtures, or child browsing contexts."],
+      "harnessBlocked": ["8 of 24 upstream QUnit unit files still need fixture, assertion, timing, iframe, or mock-server adaptation.", "One basic.js case, one attributes.js case, six core.js cases, four selector.js cases, five css.js cases, two data.js cases, one deprecated.js case, one ready.js case, three traversing.js cases, one dimensions.js case, and 24 named offset.js iframe registrations require a mock server, browser zoom, separately served resource fixtures, navigation/reload, or child browsing contexts. One selector.js :disabled expectation is excluded as pinned upstream-version drift against the current HTML Standard and Chrome 151."],
       "upstreamSuite": {
         "repository": "https://github.com/jquery/jquery.git",
         "tag": "4.0.0",
@@ -162,11 +393,11 @@
         "root": "test/unit",
         "discoveredFiles": 24,
         "staticRegistrations": 847,
-        "selectedFiles": ["attributes.js", "callbacks.js", "css.js"],
-        "selectedCases": 171,
-        "runnableCases": 171,
-        "harnessBlockedFiles": 21,
-        "inFileHarnessBlockedCases": 6
+        "selectedFiles": ["attributes.js", "basic.js", "callbacks.js", "core.js", "css.js", "data.js", "deferred.js", "deprecated.js", "dimensions.js", "offset.js", "queue.js", "ready.js", "selector.js", "serialize.js", "traversing.js", "wrap.js"],
+        "selectedCases": 510,
+        "runnableCases": 510,
+        "harnessBlockedFiles": 8,
+        "inFileHarnessBlockedCases": 49
       }
     },
     {
@@ -174,21 +405,21 @@
       "package": "bootstrap",
       "version": "5.3.8",
       "stage": "discovery",
-      "documents": ["contracts/bootstrap-components.html", "contracts/bootstrap-alert-upstream.html", "contracts/bootstrap-base-component-upstream.html", "contracts/bootstrap-button-upstream.html", "contracts/bootstrap-collapse-upstream.html", "contracts/bootstrap-toast-upstream.html", "contracts/bootstrap-tab-upstream.html", "contracts/bootstrap-dropdown-upstream.html"],
-      "selected": 262,
-      "runnable": 262,
+      "documents": ["contracts/bootstrap-components.html", "contracts/bootstrap-alert-upstream.html", "contracts/bootstrap-base-component-upstream.html", "contracts/bootstrap-button-upstream.html", "contracts/bootstrap-collapse-upstream.html", "contracts/bootstrap-toast-upstream.html", "contracts/bootstrap-tab-upstream.html", "contracts/bootstrap-dropdown-upstream.html", "contracts/bootstrap-modal-upstream.html", "contracts/bootstrap-offcanvas-upstream.html", "contracts/bootstrap-carousel-upstream.html", "contracts/bootstrap-scrollspy-upstream.html", "contracts/bootstrap-jquery-upstream.html", "contracts/bootstrap-popover-upstream.html", "contracts/bootstrap-tooltip-upstream.html"],
+      "selected": 600,
+      "runnable": 600,
       "excluded": ["tooltip and popover visual parity"],
-      "harnessBlocked": ["carousel.spec.js", "jquery.spec.js", "modal.spec.js", "offcanvas.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"],
+      "harnessBlocked": [],
       "upstreamSuite": {
         "repository": "https://github.com/twbs/bootstrap.git",
         "tag": "v5.3.8",
         "commit": "25aa8cc0b32f0d1a54be575347e6d84b70b1acd7",
         "root": "js/tests/unit",
         "discoveredFiles": 14,
-        "selectedFiles": ["alert.spec.js", "base-component.spec.js", "button.spec.js", "collapse.spec.js", "dropdown.spec.js", "tab.spec.js", "toast.spec.js"],
-        "selectedCases": 253,
-        "runnableCases": 253,
-        "harnessBlockedFiles": ["carousel.spec.js", "jquery.spec.js", "modal.spec.js", "offcanvas.spec.js", "popover.spec.js", "scrollspy.spec.js", "tooltip.spec.js"]
+        "selectedFiles": ["alert.spec.js", "base-component.spec.js", "button.spec.js", "carousel.spec.js", "collapse.spec.js", "dropdown.spec.js", "jquery.spec.js", "modal.spec.js", "offcanvas.spec.js", "popover.spec.js", "scrollspy.spec.js", "tab.spec.js", "toast.spec.js", "tooltip.spec.js"],
+        "selectedCases": 591,
+        "runnableCases": 591,
+        "harnessBlockedFiles": []
       }
     },
     {

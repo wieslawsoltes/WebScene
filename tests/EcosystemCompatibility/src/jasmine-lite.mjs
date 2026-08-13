@@ -4,6 +4,7 @@ const rootSuite = createSuite("");
 let currentSuite = rootSuite;
 let activeSpies = [];
 let lastExpectationFailure = null;
+const specTaskDrainMilliseconds = 10;
 
 function createSuite(name) {
   return { name, beforeAll: [], beforeEach: [], afterEach: [], afterAll: [], children: [] };
@@ -98,11 +99,12 @@ function matchesEqual(actual, expected) {
     && expectedKeys.every(key => Object.hasOwn(actual, key) && matchesEqual(actual[key], expected[key]));
 }
 
-function expectation(actual, negated = false) {
+function expectation(actual, negated = false, context = "") {
   const verify = (condition, message) => {
     if (negated ? condition : !condition) {
-      lastExpectationFailure = message;
-      throw new Error(message);
+      const contextualMessage = context ? `${context}: ${message}` : message;
+      lastExpectationFailure = contextualMessage;
+      throw new Error(contextualMessage);
     }
   };
   const matchers = {
@@ -134,6 +136,12 @@ function expectation(actual, negated = false) {
     toBeInstanceOf(constructor) {
       verify(actual instanceof constructor,
         `expected ${describeValue(actual)} ${negated ? "not " : ""}to be an instance of ${constructor?.name}`);
+    },
+    toBeCloseTo(expected, precision = 2) {
+      const tolerance = Math.pow(10, -precision) / 2;
+      verify(typeof actual === "number" && typeof expected === "number"
+          && Math.abs(actual - expected) < tolerance,
+        `expected ${describeValue(actual)} ${negated ? "not " : ""}to be close to ${describeValue(expected)}`);
     },
     toHaveClass(className) {
       verify(Boolean(actual?.classList?.contains(className)),
@@ -180,14 +188,22 @@ function expectation(actual, negated = false) {
       verify(matched,
         `expected ${describeValue(actual)} ${negated ? "not " : ""}to match ${describeValue(expected)}`);
     },
+    toContain(expected) {
+      const matched = typeof actual === "string"
+        ? actual.includes(String(expected))
+        : Array.isArray(actual) && actual.some(value => matchesEqual(value, expected));
+      verify(matched,
+        `expected ${describeValue(actual)} ${negated ? "not " : ""}to contain ${describeValue(expected)}`);
+    },
     nothing() {
       // Jasmine's explicit no-op assertion documents that reaching this
       // callback is itself the expectation.
     }
   };
   Object.defineProperty(matchers, "not", {
-    get: () => expectation(actual, !negated)
+    get: () => expectation(actual, !negated, context)
   });
+  matchers.withContext = message => expectation(actual, negated, String(message));
   return matchers;
 }
 
@@ -212,6 +228,11 @@ function createSpyFunction(original = null) {
     returnValue: value => {
       spyImplementation = () => value;
       return spy;
+    },
+    callFake: implementation => {
+      if (typeof implementation !== "function") throw new Error("callFake requires a function");
+      spyImplementation = implementation;
+      return spy;
     }
   };
   return spy;
@@ -223,6 +244,35 @@ globalThis.spyOn = (owner, propertyName) => {
   const spy = createSpyFunction(original);
   owner[propertyName] = spy;
   activeSpies.push(() => { owner[propertyName] = original; });
+  return spy;
+};
+
+globalThis.spyOnProperty = (owner, propertyName, accessType = "get") => {
+  if (accessType !== "get" && accessType !== "set") {
+    throw new Error(`Unsupported property access type '${accessType}'`);
+  }
+  const ownDescriptor = Object.getOwnPropertyDescriptor(owner, propertyName);
+  let descriptor = ownDescriptor;
+  let prototype = Object.getPrototypeOf(owner);
+  while (!descriptor && prototype) {
+    descriptor = Object.getOwnPropertyDescriptor(prototype, propertyName);
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  const original = descriptor?.[accessType];
+  if (typeof original !== "function") {
+    throw new Error(`'${propertyName}' has no ${accessType} accessor`);
+  }
+  const spy = createSpyFunction(original);
+  Object.defineProperty(owner, propertyName, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: accessType === "get" ? spy : descriptor.get,
+    set: accessType === "set" ? spy : descriptor.set
+  });
+  activeSpies.push(() => {
+    if (ownDescriptor) Object.defineProperty(owner, propertyName, ownDescriptor);
+    else delete owner[propertyName];
+  });
   return spy;
 };
 
@@ -309,6 +359,21 @@ async function executeSuite(suite, ancestors) {
             status: "FAIL",
             message: String(error?.message || error),
             stack: error?.stack ? String(error.stack) : null
+          });
+        }
+        // Jasmine runs afterEach before advancing its asynchronous queue. Give
+        // already-queued component cleanup callbacks a task boundary only after
+        // fixture cleanup, but before restoring spies and starting the next spec.
+        // This prevents pending transition fallbacks from contaminating the next
+        // test without allowing a resolved test's old fixture to restart first.
+        const cleanupErrorStart = state.errors.length;
+        await new Promise(resolve => setTimeout(resolve, specTaskDrainMilliseconds));
+        if (state.errors.length > cleanupErrorStart) {
+          state.results.push({
+            name: `${name} queued cleanup`,
+            status: "FAIL",
+            message: String(state.errors[cleanupErrorStart]),
+            stack: null
           });
         }
         restoreSpies();

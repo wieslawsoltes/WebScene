@@ -18,7 +18,7 @@ namespace WebScene.WebPlatformSubset.Runner;
 
 internal sealed partial class WptSubsetRunner
 {
-    private const string ArtifactSchema = "webscene-wpt-subset-result-v2";
+    private const string ArtifactSchema = "webscene-wpt-subset-result-v3";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -30,6 +30,7 @@ internal sealed partial class WptSubsetRunner
     private readonly string _standardsSubsetRoot;
     private readonly string _upstreamRoot;
     private readonly ProfileManifest _manifest;
+    private readonly string _manifestSha256;
     private readonly string _testHarness;
     private readonly string _checkLayoutHarness;
     private readonly HashSet<string> _pinnedUpstreamFiles;
@@ -50,10 +51,14 @@ internal sealed partial class WptSubsetRunner
             "WebPlatformSubset");
         _upstreamRoot = Path.Combine(_standardsSubsetRoot, "upstream");
         _pinnedUpstreamFiles = ReadPinnedUpstreamFiles();
+        var manifestText = File.ReadAllText(options.ManifestPath);
         _manifest = JsonSerializer.Deserialize<ProfileManifest>(
-                        File.ReadAllText(options.ManifestPath),
+                        manifestText,
                         JsonOptions)
                     ?? throw new InvalidDataException("The profile manifest is empty.");
+        _manifestSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                manifestText.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))))
+            .ToLowerInvariant();
         _testHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "testharness.js"));
         _checkLayoutHarness = File.ReadAllText(Path.Combine(_upstreamRoot, "resources", "check-layout-th.js"));
         _chromiumOracle = string.IsNullOrWhiteSpace(options.ChromiumPath)
@@ -85,9 +90,12 @@ internal sealed partial class WptSubsetRunner
         foreach (var test in tests)
         {
             Console.Write($"RUN  {test.Path} ... ");
-            var result = string.Equals(test.Type, "reftest", StringComparison.OrdinalIgnoreCase)
-                ? RunReftest(test)
-                : RunTestHarness(test);
+            var result = test.Type switch
+            {
+                "reftest" => RunReftest(test),
+                "visual" => RunVisualTest(test),
+                _ => RunTestHarness(test)
+            };
             results.Add(result);
             Console.WriteLine($"{result.Status} ({result.Duration.TotalMilliseconds:F0} ms)");
             foreach (var failedSubtest in result.Subtests.Where(item => item.Status != "PASS"))
@@ -110,6 +118,7 @@ internal sealed partial class WptSubsetRunner
         {
             Schema = ArtifactSchema,
             Profile = _manifest.Profile,
+            ProfileSha256 = _manifestSha256,
             WptRevision = _manifest.WptRevision,
             Runtime = _manifest.Runtime,
             Engine = "native",
@@ -156,7 +165,9 @@ internal sealed partial class WptSubsetRunner
             var source = File.ReadAllText(sourcePath);
             var html = string.Equals(test.Type, "contract", StringComparison.OrdinalIgnoreCase)
                 ? source
-                : PrepareTestHarnessDocument(source, test.Path);
+                : test.Path.EndsWith(".any.js", StringComparison.OrdinalIgnoreCase)
+                    ? PrepareWindowAnyTestHarnessDocument(source, test.Path)
+                    : PrepareTestHarnessDocument(source, test.Path);
             var state = RunHarnessDocument(html, test.Path);
             timer.Stop();
 
@@ -304,6 +315,118 @@ internal sealed partial class WptSubsetRunner
         }
     }
 
+    private TestResult RunVisualTest(ProfileTest test)
+    {
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            var snapshot = RenderDocument(
+                File.ReadAllText(TestDocumentPath(test.Path)),
+                test.Path);
+            var artifactDirectory = Path.Combine(
+                _options.OutputDirectory,
+                SanitizeArtifactName(test.Path));
+            Directory.CreateDirectory(artifactDirectory);
+            var actualPath = Path.Combine(artifactDirectory, "actual.png");
+            SavePixels(snapshot, actualPath);
+
+            var colorChecks = test.VisualChecks.Select(check =>
+            {
+                var count = VisualColorOracle.Count(snapshot, check.Color);
+                var passed = VisualColorOracle.Passes(check, count);
+                var bounds = VisualColorOracle.DescribeBounds(check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? $"{check.Color} pixel count is {bounds}",
+                    Status = passed ? "PASS" : "FAIL",
+                    Message = $"Observed {count} exact opaque-or-visible {check.Color} pixels; expected {bounds}."
+                };
+            }).ToList();
+            var gapChecks = test.VisualGapChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.MeasureGap(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description
+                        ?? $"{check.FirstColor} to {check.SecondColor} {check.Axis} gap",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var componentChecks = test.VisualComponentChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.InspectComponent(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "foreground component shape",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var foregroundOffsetChecks = test.VisualForegroundOffsetChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.MeasureForegroundOffset(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "foreground line offset",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var componentColorRegionChecks = test.VisualComponentColorRegionChecks.Select(check =>
+            {
+                var observation = VisualColorOracle.InspectComponentColorRegion(snapshot, check);
+                return new SubtestResult
+                {
+                    Name = check.Description ?? "component-relative color region",
+                    Status = observation.Passed ? "PASS" : "FAIL",
+                    Message = observation.Message
+                };
+            });
+            var checks = colorChecks.Concat(gapChecks)
+                .Concat(componentChecks)
+                .Concat(foregroundOffsetChecks)
+                .Concat(componentColorRegionChecks)
+                .ToList();
+            timer.Stop();
+            var passed = checks.All(check => check.Status == "PASS");
+            return new TestResult
+            {
+                Path = test.Path,
+                Type = test.Type,
+                Status = passed ? "PASS" : "FAIL",
+                Duration = timer.Elapsed,
+                Message = passed
+                    ? "The self-verifying visual color oracle passed."
+                    : "The self-verifying visual color oracle failed.",
+                Subtests = checks,
+                Artifacts = new Dictionary<string, string>
+                {
+                    ["actual"] = actualPath
+                },
+                ChromiumOracle = _chromiumOracle?.InspectVisual(
+                    TestDocumentPath(test.Path),
+                    artifactDirectory,
+                    snapshot,
+                    test.VisualChecks,
+                    test.VisualGapChecks,
+                    test.VisualComponentChecks,
+                    test.VisualForegroundOffsetChecks,
+                    test.VisualComponentColorRegionChecks)
+            };
+        }
+        catch (TimeoutException exception)
+        {
+            timer.Stop();
+            return Failure(test, "TIMEOUT", timer.Elapsed, exception.Message);
+        }
+        catch (Exception exception)
+        {
+            timer.Stop();
+            return Failure(test, "HARNESS-ERROR", timer.Elapsed, exception.ToString());
+        }
+    }
+
     private HarnessState RunHarnessDocument(string html, string documentPath)
     {
         using var environment = CreateEnvironment(html, documentPath);
@@ -366,11 +489,11 @@ internal sealed partial class WptSubsetRunner
 
     private IWptEngineEnvironment CreateEnvironment(string html, string documentPath)
     {
-        _ = documentPath;
         return new NativeWptEngineEnvironment(
             _options,
             _manifest.Viewport,
             _upstreamRoot,
+            documentPath,
             html);
     }
 
@@ -427,6 +550,21 @@ internal sealed partial class WptSubsetRunner
         }
 
         return replaced;
+    }
+
+    private string PrepareWindowAnyTestHarnessDocument(string source, string path)
+    {
+        if (source.Contains("</script", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Window .any.js test '{path}' cannot be safely inlined by the bounded adapter.");
+        }
+
+        return "<!doctype html><meta charset=\"utf-8\">"
+            + "<script>" + HarnessPreamble + "</script>"
+            + "<script>" + _testHarness + "</script>"
+            + "<script>" + HarnessReporter + "</script>"
+            + "<script>" + source + "</script>";
     }
 
     private string ResolvePinnedRelativeClassicScripts(string html, string documentPath)
@@ -638,7 +776,7 @@ internal sealed partial class WptSubsetRunner
             {
                 throw new FileNotFoundException($"Conformance document '{test.Path}' is missing.");
             }
-            if (test.Type is not ("testharness" or "reftest" or "contract"))
+            if (test.Type is not ("testharness" or "reftest" or "contract" or "visual"))
             {
                 throw new InvalidDataException($"Unknown test type '{test.Type}' for '{test.Path}'.");
             }
@@ -646,6 +784,122 @@ internal sealed partial class WptSubsetRunner
                 (string.IsNullOrWhiteSpace(test.Reference) || !File.Exists(TestDocumentPath(test.Reference))))
             {
                 throw new FileNotFoundException($"Reference for '{test.Path}' is missing.");
+            }
+            if (test.Type == "visual")
+            {
+                if (test.VisualChecks.Count == 0)
+                {
+                    throw new InvalidDataException(
+                        $"Visual test '{test.Path}' has no color checks.");
+                }
+                foreach (var check in test.VisualChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.Color);
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' color '{check.Color}' has no pixel bound.");
+                    }
+                    if (check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' color '{check.Color}' has invalid pixel bounds.");
+                    }
+                }
+                foreach (var check in test.VisualGapChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.FirstColor);
+                    _ = VisualColorOracle.Parse(check.SecondColor);
+                    if (check.Axis is not ("horizontal" or "vertical"))
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' has invalid gap axis '{check.Axis}'.");
+                    }
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' gap has no pixel bound.");
+                    }
+                    if (check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' gap has invalid pixel bounds.");
+                    }
+                }
+                foreach (var check in test.VisualComponentChecks)
+                {
+                    if (check.X < 0 || check.Y < 0 || check.Width <= 0 || check.Height <= 0
+                        || check.X + check.Width > _manifest.Viewport.Width
+                        || check.Y + check.Height > _manifest.Viewport.Height
+                        || check.MaximumLuminance is < 0 or > 255
+                        || check.MinimumWidth is < 0 || check.MaximumWidth is < 0
+                        || check.MinimumHeight is < 0 || check.MaximumHeight is < 0
+                        || check.MinimumPixels is < 0
+                        || check.MinimumWidth > check.MaximumWidth
+                        || check.MinimumHeight > check.MaximumHeight
+                        || check.MinimumFillRatio is < 0 or > 1)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component shape has invalid bounds.");
+                    }
+                    if (!check.MinimumWidth.HasValue && !check.MaximumWidth.HasValue
+                        && !check.MinimumHeight.HasValue && !check.MaximumHeight.HasValue
+                        && !check.MinimumPixels.HasValue && !check.MinimumFillRatio.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component shape has no assertion.");
+                    }
+                }
+                foreach (var check in test.VisualForegroundOffsetChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.AnchorColor);
+                    if (check.FirstTop < 0 || check.FirstHeight <= 0
+                        || check.SecondTop < 0 || check.SecondHeight <= 0
+                        || check.FirstTop + check.FirstHeight > _manifest.Viewport.Height
+                        || check.SecondTop + check.SecondHeight > _manifest.Viewport.Height
+                        || check.HorizontalInset < 0
+                        || check.HorizontalInset * 2 >= _manifest.Viewport.Width
+                        || check.MaximumLuminance is < 0 or > 255
+                        || check.MinimumComponentHeight <= 0
+                        || check.MinimumComponentPixels <= 0
+                        || check.MinimumOffsetPixels > check.MaximumOffsetPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' foreground offset has invalid bounds.");
+                    }
+                    if (!check.MinimumOffsetPixels.HasValue
+                        && !check.MaximumOffsetPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' foreground offset has no assertion.");
+                    }
+                }
+                foreach (var check in test.VisualComponentColorRegionChecks)
+                {
+                    _ = VisualColorOracle.Parse(check.Color);
+                    if (check.ComponentIndex < 0
+                        || check.MinimumAnchorWidth <= 0
+                        || check.MinimumAnchorHeight <= 0
+                        || check.MinimumAnchorWidth > _manifest.Viewport.Width
+                        || check.MinimumAnchorHeight > _manifest.Viewport.Height
+                        || check.X < 0 || check.Y < 0
+                        || check.Width <= 0 || check.Height <= 0
+                        || check.X + check.Width > _manifest.Viewport.Width
+                        || check.Y + check.Height > _manifest.Viewport.Height
+                        || check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                        || check.MinimumPixels > check.MaximumPixels)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component-relative color region has invalid bounds.");
+                    }
+                    if (!check.MinimumPixels.HasValue && !check.MaximumPixels.HasValue)
+                    {
+                        throw new InvalidDataException(
+                            $"Visual test '{test.Path}' component-relative color region has no assertion.");
+                    }
+                }
             }
         }
     }

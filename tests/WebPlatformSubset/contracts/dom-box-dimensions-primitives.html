@@ -1,0 +1,135 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Detached and table box dimension primitives</title>
+<style>
+  #tracks { border-spacing: 0; }
+  #tracks td { margin: 0; padding: 0; border: 0; }
+  #row-table { border-collapse: separate; border-spacing: 0; }
+  #row-table tr { margin: 0; border: 10px solid; padding: 0; }
+  #row-table td { margin: 0; border: 0; padding: 0; width: 42px; height: 42px; }
+  #headers { border-collapse: separate; }
+  #authored-edge { padding:9px !important; border:7px solid !important; }
+  .border-box, .border-box * { box-sizing: border-box; }
+</style>
+<body>
+<table id="tracks">
+  <col id="single-track"><col id="double-track" span="2">
+  <tbody><tr><td></td><td id="track-a">a</td><td id="track-b">b</td></tr></tbody>
+</table>
+<table id="row-table"><tbody><tr id="measured-row"><td></td></tr></tbody></table>
+<table id="headers" class="border-box">
+  <thead>
+    <tr><th id="header-200" style="width:200px;padding:5px"></th></tr>
+    <tr><th id="header-190" style="width:190px;padding:5px"></th></tr>
+    <tr><th id="header-180" style="width:180px;padding:5px"></th></tr>
+  </thead>
+</table>
+<table id="cell-table" class="border-box"><tbody><tr>
+  <td id="border-box-cell" style="height:20px;padding:5px;border:1px solid;line-height:18px">text</td>
+</tr></tbody></table>
+<textarea id="border-box-textarea" style="height:0;padding:2px;border:1px solid;box-sizing:border-box"></textarea>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  const original = document.createElement("div");
+  original.style.cssText = "width:100px;height:80px;padding:2px;border:3px solid;margin:4px";
+  const clone = original.cloneNode(true);
+  const authoredEdge = document.createElement("div");
+  authoredEdge.id = "authored-edge";
+  authoredEdge.style.cssText = "padding:2px;border:3px solid";
+  document.body.appendChild(authoredEdge);
+  record(
+    "deep cloning preserves authored box declarations on a detached element",
+    clone.style.getPropertyValue("width") === "100px"
+      && clone.style.getPropertyValue("height") === "80px"
+      && clone.style.getPropertyValue("padding") === "2px"
+      && clone.style.getPropertyValue("border") === "3px solid"
+      && clone.style.getPropertyValue("margin") === "4px"
+      && authoredEdge.style.paddingLeft === "2px"
+      && authoredEdge.style.borderLeftWidth === "3px"
+      && getComputedStyle(authoredEdge).paddingLeft === "9px"
+      && getComputedStyle(authoredEdge).borderLeftWidth === "7px",
+    `cssText=${clone.style.cssText}, authored=${authoredEdge.style.paddingLeft}/${authoredEdge.style.borderLeftWidth}, computed=${getComputedStyle(authoredEdge).paddingLeft}/${getComputedStyle(authoredEdge).borderLeftWidth}`
+  );
+
+  document.getElementById("single-track").style.width = "300px";
+  document.getElementById("track-a").style.width = "200px";
+  document.getElementById("track-b").style.width = "400px";
+  const singleWidth = document.getElementById("single-track").getBoundingClientRect().width;
+  const doubleWidth = document.getElementById("double-track").getBoundingClientRect().width;
+  const singleComputedWidth = getComputedStyle(document.getElementById("single-track")).width;
+  const doubleComputedWidth = getComputedStyle(document.getElementById("double-track")).width;
+  const singleOffsetWidth = document.getElementById("single-track").offsetWidth;
+  const doubleOffsetWidth = document.getElementById("double-track").offsetWidth;
+  record(
+    "table column boxes expose nonzero resolved track geometry",
+    singleWidth > 0 && doubleWidth > singleWidth,
+    `rect=${singleWidth}/${doubleWidth}, computed=${singleComputedWidth}/${doubleComputedWidth}, offset=${singleOffsetWidth}/${doubleOffsetWidth}`
+  );
+
+  const rowWidth = document.getElementById("measured-row").getBoundingClientRect().width;
+  record(
+    "an automatic table row uses its tracks rather than the containing block width",
+    rowWidth === 42,
+    `width=${rowWidth}`
+  );
+
+  const headerWidths = ["header-200", "header-190", "header-180"]
+    .map(id => document.getElementById(id).getBoundingClientRect().width);
+  record(
+    "single-column table rows share the widest automatic track",
+    headerWidths.every(width => width === 200),
+    `widths=${headerWidths.join(",")}`
+  );
+
+  const cellHeight = document.getElementById("border-box-cell")
+    .getBoundingClientRect().height;
+  record(
+    "table-cell height includes its padding under descendant border-box styling",
+    cellHeight === 30,
+    `height=${cellHeight}`
+  );
+
+  const textareaHeight = document.getElementById("border-box-textarea")
+    .getBoundingClientRect().height;
+  record(
+    "a zero-content border-box textarea retains padding and border height",
+    textareaHeight === 6,
+    `height=${textareaHeight}`
+  );
+
+  state.diagnostics = [JSON.stringify({
+    singleWidth,
+    doubleWidth,
+    singleComputedWidth,
+    doubleComputedWidth,
+    singleOffsetWidth,
+    doubleOffsetWidth,
+    rowWidth,
+    headerWidths,
+    cellHeight,
+    textareaHeight
+  })];
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>
+</body>

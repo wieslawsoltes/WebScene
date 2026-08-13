@@ -65,7 +65,9 @@ std::string resolved_list_style(const dom_node& node, bool position)
 
 std::string list_marker_text(const dom_node& node)
 {
-    if (node.tag != "li") return {};
+    if (node.tag != "li" && node.style.display != display_mode::list_item) {
+        return {};
+    }
     const auto type = resolved_list_style(node, false);
     if (type == "none") return {};
     if (type != "decimal" && type != "decimal-leading-zero") {
@@ -80,7 +82,10 @@ std::string list_marker_text(const dom_node& node)
         }
         for (const auto* sibling : node.parent->children) {
             if (sibling == &node) break;
-            if (sibling->tag == "li") ++value;
+            if (sibling->tag == "li"
+                || (node.tag != "li" && sibling->style.display == display_mode::list_item)) {
+                ++value;
+            }
         }
     }
     if (const auto authored = node.attributes.find("value");

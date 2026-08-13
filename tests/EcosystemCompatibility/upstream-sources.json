@@ -59,6 +59,41 @@
           "path": "upstream/bootstrap/js/tests/unit/dropdown.spec.js",
           "cases": 87,
           "sha256": "49fc59fdc685ae4d63f91c0e8548db6ccdca85ea30f31d183013358d16044b32"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/modal.spec.js",
+          "cases": 60,
+          "sha256": "51ceb04f5605b68385647811b16eb68620d39c8e5a33853443c8293449d145fe"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/offcanvas.spec.js",
+          "cases": 50,
+          "sha256": "8a19cc6750ff07e2ae21e94993a71c2e43a979208a47b0aeb6f87b9d4de7be88"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/carousel.spec.js",
+          "cases": 66,
+          "sha256": "ffaafb6b4ec0455466df8bc2cfbb4e6f0a43b322651cd54cd0b1a9ff953a5c7e"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/scrollspy.spec.js",
+          "cases": 40,
+          "sha256": "b398af154217a37dca1dc14548f101a8abb6fd532f6d04321244cac43f6bf726"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/jquery.spec.js",
+          "cases": 2,
+          "sha256": "f91cc9d12596d52bc9f9920d9835d6af8606ce25c987a5b4dcb46994eea4c342"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/popover.spec.js",
+          "cases": 31,
+          "sha256": "3347bc027908c2ddb9af304d8fb9253661b1d72ee61b90233b85c60ed3740031"
+        },
+        {
+          "path": "upstream/bootstrap/js/tests/unit/tooltip.spec.js",
+          "cases": 89,
+          "sha256": "129ef3c39c702f7f2883174926f6479a4851b4624d2f1aafdf5d2347cff54e82"
         }
       ],
       "supportFiles": [
@@ -69,17 +104,17 @@
         {
           "path": "upstream/bootstrap/LICENSE",
           "sha256": "4620c84ad5ce8602ff65640ed6b7c8b78ebb9e036584f0ebc1ccc88206a4bb51"
+        },
+        {
+          "path": "node_modules/hammer-simulator/index.js",
+          "sha256": "1f201d88203b954953019351a53a1d6bbb2491bd7c4584d48731f835cb61500e"
+        },
+        {
+          "path": "node_modules/hammer-simulator/LICENSE",
+          "sha256": "45041de253b840bd7dce1fd06a07b430aca47b9a3e8c7d6610afeff5ec813da5"
         }
       ],
-      "harnessBlocked": [
-        "carousel.spec.js",
-        "jquery.spec.js",
-        "modal.spec.js",
-        "offcanvas.spec.js",
-        "popover.spec.js",
-        "scrollspy.spec.js",
-        "tooltip.spec.js"
-      ],
+      "harnessBlocked": [],
       "excluded": []
     },
     {
@@ -119,9 +154,58 @@
       "staticRegistrations": 847,
       "selected": [
         {
+          "path": "upstream/jquery/test/unit/basic.js",
+          "cases": 13,
+          "sha256": "ced50b918c2095befec031a396f623bdcbbd69dc2f16b48bfc860f6346167c70",
+          "inFileHarnessBlocked": [
+            {
+              "name": "ajax",
+              "reason": "Requires jQuery's PHP mock server for GET, POST, and HTML load responses."
+            }
+          ]
+        },
+        {
           "path": "upstream/jquery/test/unit/callbacks.js",
           "cases": 51,
           "sha256": "8b32a1fc476fb9376bf95abf8e65b56c0204c344c139d345cbca76cf525c2cb6"
+        },
+        {
+          "path": "upstream/jquery/test/unit/core.js",
+          "cases": 57,
+          "sha256": "275ad61e30f2eb3c994a10bd477854e17289ac25626154b496dfa65616e58fc3",
+          "inFileHarnessBlocked": [
+            {
+              "name": "globalEval execution after script injection (trac-7862)",
+              "reason": "Requires jQuery's PHP wait endpoint and an external script response."
+            },
+            {
+              "name": "separately served core iframe fixtures",
+              "cases": 5,
+              "reason": "Requires jQuery's globalEval context, dynamic-ready, aliased-property, onready, and Symbol-polyfill iframe documents."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/selector.js",
+          "cases": 56,
+          "sha256": "ef1964f22d833f473b84cf98b66d4e671dee7e9f36c75ad3ac08a476066e757d",
+          "inFileHarnessBlocked": [
+            {
+              "name": "separately served selector iframe fixtures",
+              "cases": 3,
+              "reason": "Requires jQuery's HTML5 attribute, mixed-window sort, and multiple-jQuery cache iframe documents."
+            },
+            {
+              "name": "Iframe dispatch should not affect jQuery (trac-13936)",
+              "reason": "Requires form submission to navigate and reload the fixture iframe before a second load event."
+            }
+          ],
+          "inFileUpstreamSkipped": [
+            {
+              "name": "pseudo - :(dis|en)abled, optgroup and option",
+              "reason": "The pinned jQuery 4.0.0 source expects four matches, but the current HTML Standard defines option and optgroup descendants of a disabled select as actually disabled and Chrome 151 returns six. The unchanged stale expectation is not used as WebScene authority."
+            }
+          ]
         },
         {
           "path": "upstream/jquery/test/unit/attributes.js",
@@ -160,6 +244,121 @@
               "reason": "Requires jQuery's separately served css/cssComputeStyleTests.html iframe fixture and child browsing context."
             }
           ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/data.js",
+          "cases": 39,
+          "sha256": "ed2abeb7ab33cc6c6ccb34ec8695d1c400deb26a8317033b1ee640028192331e",
+          "inFileHarnessBlocked": [
+            {
+              "name": ".removeData should not throw exceptions. (trac-10080)",
+              "reason": "Requires jQuery's preloaded iframe fixture and a second navigation that dispatches unload."
+            },
+            {
+              "name": "enumerate data attrs on body (trac-14894)",
+              "reason": "Requires jQuery's separately served data/dataAttrs.html fixture and a child browsing context."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/deferred.js",
+          "cases": 28,
+          "sha256": "c1aa93f428a366bc1759c7f5b5eb71efc13bbdce3062196fefca3986de6cfcde"
+        },
+        {
+          "path": "upstream/jquery/test/unit/deprecated.js",
+          "cases": 7,
+          "sha256": "4e46a2927165c33107b0f418e7f43b10352c1e6b9306cd97b3e92d31e28ea649",
+          "inFileHarnessBlocked": [
+            {
+              "name": "Ajax events aliases (with context)",
+              "reason": "Requires jQuery's PHP mock server for success and error responses."
+            }
+          ],
+          "inFileUpstreamSkipped": [
+            {
+              "name": "jQuery.expr[ \":\" ], jQuery.expr.filters",
+              "reason": "The unchanged source skips this compatibility alias when the full jQuery selector-policy suite is not selected."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/dimensions.js",
+          "cases": 29,
+          "sha256": "21d0e311f926af72ee72cbc43192c4d9917b2728d7d36a030f7c184ae6c57ebc",
+          "inFileHarnessBlocked": [
+            {
+              "name": "window vs. large document",
+              "reason": "Requires jQuery's separately served dimensions/documentLarge.html fixture and a child browsing context."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/offset.js",
+          "cases": 10,
+          "sha256": "edc0347c467f5be2dbc4d1cc9a6f384424a2b6437f8392fd1433a11fee1a7334",
+          "inFileHarnessBlocked": [
+            {
+              "name": "separately served offset geometry fixtures",
+              "cases": 24,
+              "reason": "Requires jQuery's absolute, relative, static, fixed, table, scroll, body, and combinatorial boxes iframe documents."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/queue.js",
+          "cases": 13,
+          "sha256": "5c904a833b859cb1da64ff82f837663b024327fb130dbe62d0bbfe6342ebd3b4",
+          "inFileUpstreamSkipped": [
+            {
+              "name": "delay() can be stopped",
+              "reason": "The unchanged source skips this case when the effects module is not selected."
+            },
+            {
+              "name": "queue stop hooks",
+              "reason": "The unchanged source skips this case when the effects module is not selected."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/ready.js",
+          "cases": 5,
+          "sha256": "c30e53c5f9b154a708a645bb75c474b919fd57a3df48e7c575330e35af8b22a6",
+          "inFileHarnessBlocked": [
+            {
+              "name": "holdReady test needs to be a standalone test since it deals with DOM ready",
+              "reason": "Requires jQuery's separately served readywait.html iframe and its delayed release script."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/serialize.js",
+          "cases": 4,
+          "sha256": "a857cc74ecbcdd3531b4a7a3b3c29cbb9911a332dc7d7121fa9d178145c989e6"
+        },
+        {
+          "path": "upstream/jquery/test/unit/traversing.js",
+          "cases": 62,
+          "sha256": "1b7fbb4ac877a45726183c8661ab3ca345e5cbd3789b8d5220525ff1fa5d7211",
+          "inFileHarnessBlocked": [
+            {
+              "name": "contents()",
+              "reason": "Requires jQuery's separately loaded data/iframe.html fixture and a child browsing context."
+            },
+            {
+              "name": "contents() for <object />",
+              "reason": "Requires jQuery's separately served SVG object fixture and nested resource document."
+            },
+            {
+              "name": "contents() for <frame />",
+              "reason": "Requires jQuery's separately served frame.html fixture and child browsing context."
+            }
+          ]
+        },
+        {
+          "path": "upstream/jquery/test/unit/wrap.js",
+          "cases": 16,
+          "sha256": "3bfab9c675776f12f71a4e2a44a95e2c5ab7ebd3e20e2fa1f8a201d3be93a12f"
         }
       ],
       "supportFiles": [
@@ -179,25 +378,12 @@
       "harnessBlocked": [
         "ajax.js",
         "animation.js",
-        "basic.js",
-        "core.js",
-        "data.js",
-        "deferred.js",
-        "deprecated.js",
-        "dimensions.js",
         "effects.js",
         "event.js",
         "exports.js",
         "manipulation.js",
-        "offset.js",
-        "queue.js",
-        "ready.js",
-        "selector.js",
-        "serialize.js",
         "support.js",
-        "traversing.js",
-        "tween.js",
-        "wrap.js"
+        "tween.js"
       ],
       "excluded": []
     },

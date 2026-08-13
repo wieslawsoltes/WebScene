@@ -68,6 +68,7 @@
         resize_listeners.clear();
         timers.clear();
         pending_window_messages.clear();
+        pending_programmatic_scroll_events.clear();
         pending_interop_promises.clear();
         pending_callback_promises.clear();
         interop_handles.clear();
@@ -81,6 +82,7 @@
         resize_observers.clear();
         frame_documents.clear();
         frame_windows.clear();
+        frame_window_scroll_offsets.clear();
         frame_load_listeners.clear();
         frame_event_listeners.clear();
         actual_frame_windows.clear();
@@ -98,19 +100,34 @@
         computed_style_wrappers.clear();
         class_list_wrappers.clear();
         style_wrappers.clear();
+        stylesheet_wrappers.clear();
+        detached_documents.clear();
         node_wrappers.clear();
+        attr_wrappers.clear();
+        attached_attributes.clear();
+        attr_states.clear();
         dom_implementation_object.Reset();
         document_object.Reset();
         style_template.Reset();
         frame_document_template.Reset();
         frame_window_template.Reset();
+        html_collection_template.Reset();
         document_template.Reset();
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        html_form_element_template.Reset();
+        html_select_element_template.Reset();
+        html_script_element_template.Reset();
         html_slot_element_template.Reset();
+        html_style_element_template.Reset();
         shadow_root_template.Reset();
         document_fragment_template.Reset();
+        processing_instruction_template.Reset();
+        comment_template.Reset();
+        text_template.Reset();
+        character_data_template.Reset();
+        attr_template.Reset();
         node_template.Reset();
         event_target_template.Reset();
 #endif

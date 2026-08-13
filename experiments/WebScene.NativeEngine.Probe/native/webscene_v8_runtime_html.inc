@@ -223,6 +223,11 @@
             || name == "grid-column-end") {
             return inline_grid;
         }
+        if (name == "transition") return inline_transition;
+        if (name == "transition-property") return inline_transition_property;
+        if (name == "transition-duration") return inline_transition_duration;
+        if (name == "transition-delay") return inline_transition_delay;
+        if (name == "transition-timing-function") return inline_transition_timing;
         if (name == "background" || name == "background-color") return inline_background;
         if (name == "overflow" || name == "overflow-x" || name == "overflow-y") return inline_overflow;
         if (name == "visibility") return inline_visibility;
@@ -249,6 +254,10 @@
         if (name == "justify-content") return inline_justify_content;
         if (name == "gap" || name == "row-gap" || name == "column-gap"
             || name == "rowGap" || name == "columnGap") return inline_gap;
+        if (name == "border-spacing" || name == "borderSpacing"
+            || name == "border-collapse" || name == "borderCollapse") {
+            return inline_table_border_model;
+        }
         if (name == "box-sizing") return inline_box_sizing;
         if (name == "box-shadow" || name == "boxShadow") return inline_box_shadow;
         if (canonical_name == "border"
@@ -380,6 +389,13 @@
                     record_html_attribute_feature(name, "html5ever");
                 }
                 apply_css_rules(node);
+                if (node.tag == "script") {
+                    // Scripts created by fragment parsing are inert, and the
+                    // document parser executes its authored scripts through
+                    // the navigation pipeline. In either case, reconnecting
+                    // the resulting DOM node must never execute it again.
+                    node.script_state = script_execution_state::already_started;
+                }
                 if (const auto style = node.attributes.find("style");
                     style != node.attributes.end()) {
                     uint64_t inline_property_mask = 0U;
@@ -393,16 +409,19 @@
                     node.style.inline_property_mask |= inline_property_mask;
                     detect_css_compositions(node);
                 }
-                if (node.tag == "input" || node.tag == "textarea") {
+                if (node.tag == "input") {
                     const auto value = node.attributes.find("value");
                     if (value != node.attributes.end()) {
                         auto& form = node.mutable_form_control();
                         form.value = value->second;
                         form.value_initialized = true;
+                        form.dirty_value = false;
                         form.selection_start = form.value.size();
                         form.selection_end = form.value.size();
                         form.selection_direction = text_selection_direction::none;
                     }
+                } else if (node.tag == "textarea") {
+                    reset_textarea_value(node);
                 }
                 if (node.tag == "iframe") {
                     const auto source = node.attributes.find("src");
@@ -604,6 +623,9 @@
                 {},
                 "html-element");
             auto& node = document.create_element(name);
+            if (name == "script") {
+                node.script_state = script_execution_state::already_started;
+            }
             const auto svg = name == "svg"
                 || stack.back()->tag == "svg"
                 || stack.back()->attributes.contains("namespace");
@@ -631,11 +653,12 @@
                     node.attributes[stored_name] = value;
                 }
             }
-            if (name == "input" || name == "textarea") {
+            if (name == "input") {
                 const auto value = node.attributes.find("value");
                 if (value != node.attributes.end()) {
                     node.mutable_form_control().value = value->second;
                     node.mutable_form_control().value_initialized = true;
+                    node.mutable_form_control().dirty_value = false;
                     node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
                     node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
                     node.mutable_form_control().selection_direction = text_selection_direction::none;
@@ -708,7 +731,9 @@
 #endif
         if (!self->blur_active_descendant_before_replacing_children(*output)) return;
         self->detach_all_children(*output);
+        output->text_content.clear();
         if (!html.empty()) self->parse_inner_html(*output, html, parent);
+        else synchronize_textarea_value_from_children(*output);
     }
 
     static void get_content_window(
@@ -783,8 +808,10 @@
         // Documents containing executable/resource-bearing markup still need
         // their independent frame realm. Plain document.write replacement is
         // complete synchronously in the initial about:blank realm.
-        if (html.find("<script") != std::string::npos
-            || html.find("<link") != std::string::npos) {
+        const auto normalized_html = lower_html_name(html);
+        if (normalized_html.find("<script") != std::string::npos
+            || normalized_html.find("<link") != std::string::npos
+            || normalized_html.find("onload") != std::string::npos) {
             self->pending_frame_hydrations.push_back(node);
         }
     }

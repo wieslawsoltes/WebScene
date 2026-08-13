@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Window timer error lifecycle</title>
+<script>
+"use strict";
+
+const state = window.__webSceneWptState = {
+  complete: false,
+  harness: null,
+  results: [],
+  errors: [],
+  diagnostics: [],
+  expectedRuntimeExceptions: ["expected timer failure"]
+};
+const observations = [];
+
+window.onerror = (message, source, line, column, error) => {
+  observations.push({ message: String(message), source, line, column, error });
+  window.onerror = null;
+  return true;
+};
+
+setTimeout(() => {
+  throw new Error("expected timer failure");
+}, 0);
+
+setTimeout(() => {
+  try {
+    if (observations.length !== 1) throw new Error(`observed ${observations.length} errors`);
+    const observation = observations[0];
+    if (!observation.message.includes("expected timer failure")) {
+      throw new Error(`message was ${JSON.stringify(observation.message)}`);
+    }
+    if (observation.error?.message !== "expected timer failure") {
+      throw new Error(`Error object was ${String(observation.error)}`);
+    }
+    if (typeof observation.source !== "string") throw new Error("source was not a string");
+    if (!(observation.line > 0) || !(observation.column > 0)) {
+      throw new Error(`source location was ${observation.line}:${observation.column}`);
+    }
+    state.results.push({
+      name: "window.onerror observes a timer exception without stopping later tasks",
+      status: "PASS",
+      message: null,
+      stack: null
+    });
+    state.harness = { status: 0, message: null, stack: null };
+  } catch (error) {
+    state.results.push({
+      name: "window.onerror observes a timer exception without stopping later tasks",
+      status: "FAIL",
+      message: String(error?.message || error),
+      stack: error?.stack ? String(error.stack) : null
+    });
+    state.harness = { status: 1, message: String(error?.message || error), stack: error?.stack || null };
+  }
+  state.complete = true;
+}, 0);
+</script>

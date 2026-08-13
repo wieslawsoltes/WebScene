@@ -223,19 +223,67 @@
             : v8::Local<v8::Value>(self->wrap_node(*slot)));
     }
 
+    static bool assigned_nodes_flatten_requested(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.Length() == 0 || !info[0]->IsObject()) return false;
+        v8::Local<v8::Value> flatten;
+        return info[0].As<v8::Object>()->Get(
+                info.GetIsolate()->GetCurrentContext(),
+                js_string(info.GetIsolate(), "flatten"))
+                .ToLocal(&flatten)
+            && flatten->BooleanValue(info.GetIsolate());
+    }
+
+    static void append_flattened_slot_nodes(
+        native_document& document,
+        dom_node& slot,
+        std::vector<dom_node*>& result)
+    {
+        const auto* state = document.shadow_dom(slot);
+        const auto& candidates = state != nullptr && !state->assigned_nodes.empty()
+            ? state->assigned_nodes
+            : slot.children;
+        for (auto* candidate : candidates) {
+            if (candidate != nullptr
+                && candidate->kind == dom_node_kind::element
+                && candidate->tag == "slot") {
+                append_flattened_slot_nodes(document, *candidate, result);
+            } else if (candidate != nullptr) {
+                result.push_back(candidate);
+            }
+        }
+    }
+
+    static std::vector<dom_node*> slot_nodes_for_options(
+        native_document& document,
+        dom_node* slot,
+        bool flatten)
+    {
+        if (slot == nullptr || document.containing_shadow_root(*slot) == nullptr) return {};
+        const auto* state = document.shadow_dom(*slot);
+        if (!flatten) return state == nullptr
+            ? std::vector<dom_node*>{}
+            : state->assigned_nodes;
+        std::vector<dom_node*> result;
+        append_flattened_slot_nodes(document, *slot, result);
+        return result;
+    }
+
     static void slot_assigned_nodes(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
         self->refresh_all_shadow_distributions();
         auto* slot = unwrap_node(info.This());
-        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
-        const auto count = state == nullptr ? 0 : state->assigned_nodes.size();
+        const auto nodes = slot_nodes_for_options(
+            self->document, slot, assigned_nodes_flatten_requested(info));
+        const auto count = nodes.size();
         auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(count));
         auto local_context = info.GetIsolate()->GetCurrentContext();
         for (uint32_t index = 0; index < count; ++index) {
             result->Set(
                 local_context, index,
-                self->wrap_node(*state->assigned_nodes[index])).Check();
+                self->wrap_node(*nodes[index])).Check();
         }
         info.GetReturnValue().Set(result);
     }
@@ -245,13 +293,12 @@
         auto* self = current(info.GetIsolate());
         self->refresh_all_shadow_distributions();
         auto* slot = unwrap_node(info.This());
-        const auto* state = slot == nullptr ? nullptr : self->document.shadow_dom(*slot);
+        const auto nodes = slot_nodes_for_options(
+            self->document, slot, assigned_nodes_flatten_requested(info));
         std::vector<dom_node*> elements;
-        if (state != nullptr) {
-            for (auto* node : state->assigned_nodes) {
-                if (node != nullptr && node->kind == dom_node_kind::element) {
-                    elements.push_back(node);
-                }
+        for (auto* node : nodes) {
+            if (node != nullptr && node->kind == dom_node_kind::element) {
+                elements.push_back(node);
             }
         }
         auto result = v8::Array::New(
@@ -260,6 +307,120 @@
         for (uint32_t index = 0; index < elements.size(); ++index) {
             result->Set(
                 local_context, index, self->wrap_node(*elements[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
+    v8::Local<v8::Object> style_sheet_for(dom_node& node)
+    {
+        const auto key = wrapper_key(node);
+        const auto known = stylesheet_wrappers.find(key);
+        if (known != stylesheet_wrappers.end() && !known->second.IsEmpty()) {
+            return known->second.Get(isolate);
+        }
+        const auto local_context = isolate->GetCurrentContext();
+        auto result = v8::Object::New(isolate);
+        result->Set(
+            local_context,
+            js_string(isolate, "ownerNode"),
+            wrap_node(node)).Check();
+        stylesheet_wrappers.emplace(key, v8::Global<v8::Object>(isolate, result));
+        return result;
+    }
+
+    static void get_style_sheet(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (self == nullptr || node == nullptr || !self->is_connected(*node)) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        info.GetReturnValue().Set(self->style_sheet_for(*node));
+    }
+
+    static void get_shadow_style_sheets(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = unwrap_node(info.Holder());
+        std::vector<dom_node*> styles;
+        if (self != nullptr && root != nullptr && self->is_connected(*root)) {
+            const auto collect = [&](const auto& visit, dom_node& parent) -> void {
+                for (auto* child : parent.children) {
+                    if (child == nullptr) continue;
+                    if (child->kind == dom_node_kind::element && child->tag == "style") {
+                        styles.push_back(child);
+                    }
+                    visit(visit, *child);
+                }
+            };
+            collect(collect, *root);
+        }
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto result = v8::Array::New(
+            info.GetIsolate(), static_cast<int>(styles.size()));
+        for (uint32_t index = 0; index < styles.size(); ++index) {
+            result->Set(
+                local_context, index,
+                self->style_sheet_for(*styles[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
+    static void get_document_style_sheets(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = static_cast<dom_node*>(info.Holder()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self->active_root();
+        std::vector<dom_node*> styles;
+        const auto collect = [&](const auto& visit, dom_node& parent) -> void {
+            for (auto* child : parent.children) {
+                if (child == nullptr) continue;
+                auto is_sheet = child->kind == dom_node_kind::element
+                    && child->tag == "style";
+                if (!is_sheet && child->kind == dom_node_kind::element
+                    && child->tag == "link") {
+                    const auto rel = child->attributes.find("rel");
+                    if (rel != child->attributes.end()) {
+                        const auto tokens = lower_html_name(rel->second);
+                        size_t cursor = 0;
+                        while (cursor < tokens.size()) {
+                            while (cursor < tokens.size()
+                                && std::isspace(static_cast<unsigned char>(tokens[cursor]))) {
+                                ++cursor;
+                            }
+                            const auto begin = cursor;
+                            while (cursor < tokens.size()
+                                && !std::isspace(static_cast<unsigned char>(tokens[cursor]))) {
+                                ++cursor;
+                            }
+                            if (tokens.substr(begin, cursor - begin) == "stylesheet") {
+                                is_sheet = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (is_sheet) styles.push_back(child);
+                visit(visit, *child);
+            }
+        };
+        collect(collect, *root);
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto result = v8::Array::New(
+            info.GetIsolate(), static_cast<int>(styles.size()));
+        for (uint32_t index = 0; index < styles.size(); ++index) {
+            result->Set(
+                local_context, index,
+                self->style_sheet_for(*styles[index])).Check();
         }
         info.GetReturnValue().Set(result);
     }
@@ -420,6 +581,11 @@
             pending_window_messages,
             [&](const auto& task) {
                 return task.target_context.Get(isolate) == local_context;
+            });
+        std::erase_if(
+            pending_programmatic_scroll_events,
+            [&](const auto& task) {
+                return task.context.Get(isolate) == local_context;
             });
         std::erase_if(
             connected_resources,
@@ -594,6 +760,7 @@
 
     void notify_custom_elements_subtree(dom_node& root, const char* phase)
     {
+        if (!custom_elements_active) return;
         auto local_context = isolate->GetCurrentContext();
         v8::Local<v8::Value> raw_callback;
         if (!local_context->Global()->Get(
@@ -635,6 +802,7 @@
         const std::optional<std::string>& new_value,
         const std::optional<std::string>& namespace_uri = std::nullopt)
     {
+        if (!custom_elements_active) return;
         auto local_context = isolate->GetCurrentContext();
         v8::Local<v8::Value> raw_callback;
         if (!local_context->Global()->Get(
@@ -684,6 +852,7 @@
         for (auto* child : children) {
             if (child != nullptr) weaken_detached_subtree_wrappers(*child);
         }
+        synchronize_textarea_value_from_children(parent);
         if (stylesheets_changed) recascade_after_stylesheet_change();
     }
 
@@ -725,6 +894,7 @@
                     | (frame_realm ? (1ULL << 63U) : 0ULL);
                 live = live
                     || inspect(node_wrappers, key)
+                    || inspect(detached_documents, node.id)
                     || inspect(class_list_wrappers, key)
                     || inspect(style_wrappers, key)
                     || inspect(computed_style_wrappers, key)
@@ -752,6 +922,12 @@
         erase_wrappers(style_wrappers);
         erase_wrappers(computed_style_wrappers);
         erase_wrappers(canvas_contexts);
+        std::erase_if(detached_documents, [&](const auto& entry) {
+            return node_ids.contains(static_cast<uint32_t>(entry.first));
+        });
+        std::erase_if(detached_document_roots, [&](const auto id) {
+            return node_ids.contains(static_cast<uint32_t>(id));
+        });
         std::erase_if(canvas_states, [&](const auto& entry) {
             return node_ids.contains(static_cast<uint32_t>(entry.first));
         });
@@ -773,6 +949,7 @@
         for (const auto id : node_ids) {
             frame_documents.erase(id);
             frame_windows.erase(id);
+            frame_window_scroll_offsets.erase(id);
             actual_frame_windows.erase(id);
             if (const auto found = actual_frame_contexts.find(id);
                 found != actual_frame_contexts.end()
@@ -869,13 +1046,27 @@
             ? (node.namespace_uri() == dom_node::html_namespace_uri
                 ? (node.tag == "slot"
                     ? html_slot_element_template.Get(isolate)
+                    : node.tag == "form"
+                        ? html_form_element_template.Get(isolate)
+                    : node.tag == "select"
+                        ? html_select_element_template.Get(isolate)
+                    : node.tag == "script"
+                        ? html_script_element_template.Get(isolate)
+                    : node.tag == "style"
+                        ? html_style_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
                 : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
                 ? (document.is_shadow_root(node)
                     ? shadow_root_template.Get(isolate)
                     : document_fragment_template.Get(isolate))
-                : node_template.Get(isolate);
+                : node.kind == dom_node_kind::text
+                    ? text_template.Get(isolate)
+                    : node.kind == dom_node_kind::comment
+                        ? comment_template.Get(isolate)
+                        : node.kind == dom_node_kind::processing_instruction
+                            ? processing_instruction_template.Get(isolate)
+                            : node_template.Get(isolate);
         auto object = selected_template->InstanceTemplate()
 #else
         auto object = element_template.Get(isolate)->InstanceTemplate()
@@ -1024,6 +1215,9 @@
         v8::Local<v8::Object> wrapper,
         v8::Local<v8::Context> resource_context)
     {
+        for (auto* ancestor = &node; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (detached_document_roots.contains(ancestor->id)) return;
+        }
         if (node.tag == "script") {
             const auto authored_type = node.attributes.find("type");
             if (authored_type != node.attributes.end()) {
@@ -1039,6 +1233,65 @@
                     || type == "application/ecmascript"
                     || type == "text/ecmascript";
                 if (!executable) return;
+            }
+            if (!is_connected(node)
+                || node.script_state == script_execution_state::already_started) {
+                return;
+            }
+            // The already-started flag is set before evaluation, matching the
+            // browser's one-shot lifecycle even when execution reports an
+            // error or script code synchronously reparents its own element.
+            node.script_state = script_execution_state::already_started;
+            const auto source_iterator = node.attributes.find("src");
+            if (source_iterator == node.attributes.end()
+                || source_iterator->second.empty()) {
+                std::string source;
+                append_node_text(node, source);
+                if (!source.empty()) {
+                    const auto name = (in_frame_context()
+                            ? frame_base_address
+                            : document_base_address)
+                        + "#dynamic-inline-script-" + std::to_string(node.id);
+                    v8::Local<v8::Value> document_value;
+                    v8::Local<v8::Value> previous_current_script;
+                    auto restore_current_script = false;
+                    auto document_object_value = resource_context->Global()->Get(
+                        resource_context,
+                        js_string(isolate, "document"));
+                    if (document_object_value.ToLocal(&document_value)
+                        && document_value->IsObject()) {
+                        restore_current_script = document_value.As<v8::Object>()->Get(
+                            resource_context,
+                            js_string(isolate, "currentScript")).ToLocal(
+                                &previous_current_script);
+                        document_value.As<v8::Object>()->Set(
+                            resource_context,
+                            js_string(isolate, "currentScript"),
+                            wrapper).Check();
+                    }
+                    std::string error;
+                    const auto executed = execute_in_context(
+                        resource_context,
+                        source,
+                        name,
+                        error,
+                        false);
+                    if (!document_value.IsEmpty() && document_value->IsObject()) {
+                        document_value.As<v8::Object>()->Set(
+                            resource_context,
+                            js_string(isolate, "currentScript"),
+                            restore_current_script
+                                ? previous_current_script
+                                : v8::Null(isolate)).Check();
+                    }
+                    if (!executed) {
+                        frame_last_error_value = "Connected inline script failed: " + error;
+                        ++frame_script_error_count;
+                        return;
+                    }
+                    ++frame_script_execution_count;
+                }
+                return;
             }
         }
         if (node.tag == "img") {
@@ -1134,14 +1387,17 @@
             ? resolve_resource_url(node.attributes["src"], document_base_address)
             : std::string("about:blank");
         set_document_address(local_context, object, source);
+        auto& html = document.create_element("html");
+        auto& head = document.create_element("head");
         auto& body = document.create_element("body");
-        document.append_child(node, body);
+        document.append_child(node, html);
+        document.append_child(html, head);
+        document.append_child(html, body);
         object->SetAlignedPointerInInternalField(
             0,
-            &body,
+            &html,
             v8::kEmbedderDataTypeTagDefault);
         provisional_frame_bodies[node.id] = &body;
-        object->Set(local_context, js_string(isolate, "body"), wrap_node(body)).Check();
         frame_documents[node.id].Reset(isolate, object);
         return object;
     }
@@ -1543,6 +1799,222 @@
                 : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
     }
 
+    static dom_node* html_collection_root(v8::Local<v8::Object> object)
+    {
+        return object->InternalFieldCount() < 1
+            ? nullptr
+            : static_cast<dom_node*>(object->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault));
+    }
+
+    std::vector<dom_node*> document_link_nodes(dom_node& root) const
+    {
+        return query_selector_nodes(root, "a[href], area[href]", true);
+    }
+
+    dom_node* document_link_named_item(dom_node& root, std::string_view name) const
+    {
+        if (name.empty()) return nullptr;
+        for (auto* node : document_link_nodes(root)) {
+            if (node == nullptr) continue;
+            if (node->id_attribute == name) return node;
+            const auto authored_name = node->attributes.find("name");
+            if (authored_name != node->attributes.end()
+                && authored_name->second == name) return node;
+        }
+        return nullptr;
+    }
+
+    static void html_collection_constructor(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.IsConstructCall()
+            && info.Length() == 1
+            && info[0]->IsExternal()) {
+            info.This()->SetAlignedPointerInInternalField(
+                0,
+                info[0].As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault),
+                v8::kEmbedderDataTypeTagDefault);
+            info.GetReturnValue().Set(info.This());
+            return;
+        }
+        info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+            js_string(info.GetIsolate(), "Illegal constructor")));
+    }
+
+    v8::Local<v8::FunctionTemplate> ensure_html_collection_template()
+    {
+        if (!html_collection_template.IsEmpty()) {
+            return html_collection_template.Get(isolate);
+        }
+        auto html_collection = v8::FunctionTemplate::New(
+            isolate,
+            html_collection_constructor);
+        html_collection->SetClassName(js_string(isolate, "HTMLCollection"));
+        html_collection->InstanceTemplate()->SetInternalFieldCount(1);
+        auto signature = v8::Signature::New(isolate, html_collection);
+        auto length_symbol = v8::Symbol::New(
+            isolate,
+            js_string(isolate, "WebScene.HTMLCollection.length"));
+        html_collection->InstanceTemplate()->SetNativeDataProperty(
+            length_symbol,
+            get_html_collection_length,
+            nullptr,
+            js_string(isolate, "length"),
+            v8::PropertyAttribute::None);
+        html_collection->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "length"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_length_get,
+                length_symbol,
+                signature,
+                0),
+            v8::Local<v8::FunctionTemplate>(),
+            v8::PropertyAttribute::None);
+        html_collection->InstanceTemplate()->SetHandler(
+            v8::IndexedPropertyHandlerConfiguration(html_collection_indexed_getter));
+        html_collection->InstanceTemplate()->SetHandler(
+            v8::NamedPropertyHandlerConfiguration(
+                html_collection_named_getter,
+                nullptr,
+                nullptr,
+                nullptr,
+                nullptr,
+                {},
+                v8::PropertyHandlerFlags::kNonMasking));
+        html_collection->PrototypeTemplate()->Set(
+            js_string(isolate, "item"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_item,
+                v8::Local<v8::Value>(),
+                signature,
+                1,
+                v8::ConstructorBehavior::kThrow));
+        html_collection->PrototypeTemplate()->Set(
+            js_string(isolate, "namedItem"),
+            v8::FunctionTemplate::New(
+                isolate,
+                html_collection_named_item,
+                v8::Local<v8::Value>(),
+                signature,
+                1,
+                v8::ConstructorBehavior::kThrow));
+        html_collection->PrototypeTemplate()->Set(
+            v8::Symbol::GetToStringTag(isolate),
+            js_string(isolate, "HTMLCollection"),
+            static_cast<v8::PropertyAttribute>(
+                v8::PropertyAttribute::ReadOnly
+                | v8::PropertyAttribute::DontEnum));
+        html_collection_template.Reset(isolate, html_collection);
+        return html_collection;
+    }
+
+    static void get_html_collection_constructor(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        info.GetReturnValue().Set(self->ensure_html_collection_template()
+            ->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
+    }
+
+    static void get_html_collection_length(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return;
+        info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(
+            info.GetIsolate(),
+            static_cast<uint32_t>(self->document_link_nodes(*root).size())));
+    }
+
+    static void html_collection_length_get(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto symbol = info.Data().As<v8::Symbol>();
+        v8::Local<v8::Value> value;
+        if (info.This()->Get(
+                info.GetIsolate()->GetCurrentContext(),
+                symbol).ToLocal(&value)) {
+            info.GetReturnValue().Set(value);
+        }
+    }
+
+    static v8::Intercepted html_collection_indexed_getter(
+        uint32_t index,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return v8::Intercepted::kNo;
+        const auto links = self->document_link_nodes(*root);
+        if (index >= links.size()) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*links[index]));
+        return v8::Intercepted::kYes;
+    }
+
+    static v8::Intercepted html_collection_named_getter(
+        v8::Local<v8::Name> property,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        if (!property->IsString()) return v8::Intercepted::kNo;
+        auto* self = current(info.GetIsolate());
+        auto* root = html_collection_root(info.Holder());
+        if (self == nullptr || root == nullptr) return v8::Intercepted::kNo;
+        const auto name = to_utf8(info.GetIsolate(), property.As<v8::Value>());
+        auto* match = self->document_link_named_item(*root, name);
+        if (match == nullptr) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*match));
+        return v8::Intercepted::kYes;
+    }
+
+    static dom_node* require_html_collection(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* root = html_collection_root(info.This());
+        if (root == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Illegal invocation")));
+        }
+        return root;
+    }
+
+    static void html_collection_item(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = require_html_collection(info);
+        if (self == nullptr || root == nullptr) return;
+        const auto index = info.Length() > 0
+            ? info[0]->Uint32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0U)
+            : 0U;
+        const auto links = self->document_link_nodes(*root);
+        info.GetReturnValue().Set(index < links.size()
+            ? v8::Local<v8::Value>(self->wrap_node(*links[index]))
+            : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
+    }
+
+    static void html_collection_named_item(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* root = require_html_collection(info);
+        if (self == nullptr || root == nullptr) return;
+        const auto name = info.Length() > 0
+            ? to_utf8(info.GetIsolate(), info[0])
+            : std::string{};
+        auto* match = self->document_link_named_item(*root, name);
+        info.GetReturnValue().Set(match == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*match)));
+    }
+
     static void get_body(
         v8::Local<v8::Name> property,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -1599,6 +2071,57 @@
             }
         }
         info.GetReturnValue().Set(self->wrap_node(*root));
+    }
+
+    static dom_node* document_element_node(implementation& self, v8::Local<v8::Object> holder)
+    {
+        auto* root = static_cast<dom_node*>(holder->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        if (root == nullptr) root = &self.active_root();
+        if (root->tag == "html") return root;
+        if (root->tag == "body") {
+            const auto html = std::find_if(
+                root->children.begin(), root->children.end(), [](const auto* child) {
+                    return child != nullptr && child->tag == "html";
+                });
+            return html == root->children.end() ? root : *html;
+        }
+        if (root->tag == "#document-root") {
+            const auto element = std::find_if(
+                root->children.begin(), root->children.end(), [](const auto* child) {
+                    return child != nullptr && !child->tag.starts_with('#');
+                });
+            return element == root->children.end() ? nullptr : *element;
+        }
+        return root;
+    }
+
+    static void get_document_boundary_child(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* element = document_element_node(*self, info.Holder());
+        info.GetReturnValue().Set(element == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*element)));
+    }
+
+    static void get_document_child_nodes(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* element = document_element_node(*self, info.Holder());
+        auto result = v8::Array::New(info.GetIsolate(), element == nullptr ? 0 : 1);
+        if (element != nullptr) {
+            result->Set(
+                info.GetIsolate()->GetCurrentContext(),
+                0,
+                self->wrap_node(*element)).Check();
+        }
+        info.GetReturnValue().Set(result);
     }
 
     static void get_document_implementation(
@@ -1765,24 +2288,29 @@
             0,
             v8::kEmbedderDataTypeTagDefault));
         if (root == nullptr) root = &self->active_root();
-        std::vector<dom_node*> links;
-        for (auto* node : self->document.query_selector_all(*root, "a")) {
-            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
-        }
-        for (auto* node : self->document.query_selector_all(*root, "area")) {
-            if (node != nullptr && node->attributes.contains("href")) links.push_back(node);
-        }
-        auto collection = v8::Array::New(
-            info.GetIsolate(),
-            static_cast<int>(links.size()));
+        auto isolate = info.GetIsolate();
         auto local_context = info.GetIsolate()->GetCurrentContext();
-        for (uint32_t index = 0; index < links.size(); ++index) {
-            collection->Set(local_context, index, self->wrap_node(*links[index])).Check();
+        auto private_key = v8::Private::ForApi(
+            isolate,
+            js_string(isolate, "WebScene.Document.links"));
+        v8::Local<v8::Value> known;
+        if (info.Holder()->GetPrivate(local_context, private_key).ToLocal(&known)
+            && known->IsObject()) {
+            info.GetReturnValue().Set(known);
+            return;
         }
-        collection->Set(
-            local_context,
-            js_string(info.GetIsolate(), "item"),
-            v8::Function::New(local_context, collection_item).ToLocalChecked()).Check();
+        v8::Local<v8::Value> constructor_value;
+        if (!local_context->Global()->Get(
+                local_context,
+                js_string(isolate, "HTMLCollection")).ToLocal(&constructor_value)
+            || !constructor_value->IsFunction()) return;
+        v8::Local<v8::Value> arguments[]{v8::External::New(
+            isolate,
+            root,
+            v8::kExternalPointerTypeTagDefault)};
+        auto collection = constructor_value.As<v8::Function>()
+            ->NewInstance(local_context, 1, arguments).ToLocalChecked();
+        info.Holder()->SetPrivate(local_context, private_key, collection).Check();
         info.GetReturnValue().Set(collection);
     }
 
@@ -1876,18 +2404,8 @@
             }
         }
 
-        auto detached = self->document_template.Get(info.GetIsolate())
-            ->NewInstance(local_context).ToLocalChecked();
-        detached->SetAlignedPointerInInternalField(
-            0,
-            &html,
-            v8::kEmbedderDataTypeTagDefault);
-        detached->Set(
-            local_context,
-            js_string(info.GetIsolate(), "oninput"),
-            v8::Null(info.GetIsolate())).Check();
-        self->set_document_address(local_context, detached, "about:blank");
-        info.GetReturnValue().Set(detached);
+        info.GetReturnValue().Set(wrap_detached_document(
+            *self, html, local_context, "about:blank"));
     }
 
     static v8::Local<v8::Object> wrap_detached_document(
@@ -1896,6 +2414,12 @@
         v8::Local<v8::Context> local_context,
         const char* address)
     {
+        self.detached_document_roots.insert(root.id);
+        self.register_detached_subtree(root);
+        const auto known = self.detached_documents.find(root.id);
+        if (known != self.detached_documents.end() && !known->second.IsEmpty()) {
+            return known->second.Get(self.isolate);
+        }
         auto detached = self.document_template.Get(self.isolate)
             ->NewInstance(local_context).ToLocalChecked();
         detached->SetAlignedPointerInInternalField(
@@ -1907,7 +2431,55 @@
             js_string(self.isolate, "oninput"),
             v8::Null(self.isolate)).Check();
         self.set_document_address(local_context, detached, address);
+        v8::Local<v8::Value> constructor;
+        if (local_context->Global()->Get(
+                local_context, js_string(self.isolate, "Document"))
+                .ToLocal(&constructor)
+            && constructor->IsFunction()) {
+            v8::Local<v8::Value> prototype;
+            if (constructor.As<v8::Function>()->Get(
+                    local_context, js_string(self.isolate, "prototype"))
+                    .ToLocal(&prototype)
+                && prototype->IsObject()) {
+                detached->SetPrototype(local_context, prototype).Check();
+            }
+        }
+        auto& retained = self.detached_documents[root.id];
+        retained.Reset(self.isolate, detached);
+        retained.SetWeak();
         return detached;
+    }
+
+    v8::Local<v8::Object> create_empty_document(v8::Local<v8::Context> local_context)
+    {
+        auto& root = document.create_element("#document-root");
+        root.visible = false;
+        detached_document_roots.insert(root.id);
+        return wrap_detached_document(*this, root, local_context, "about:blank");
+    }
+
+    static void document_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Document': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr) {
+            info.GetReturnValue().Set(self->create_empty_document(
+                info.GetIsolate()->GetCurrentContext()));
+        }
+    }
+
+    static void clone_document(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self != nullptr) {
+            info.GetReturnValue().Set(self->create_empty_document(
+                info.GetIsolate()->GetCurrentContext()));
+        }
     }
 
     static void create_xml_document(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1992,6 +2564,23 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
+    static void text_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Text': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        auto& node = self->document.create_element("#text");
+        node.text_content = info.Length() > 0
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
     static void create_comment(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2007,27 +2596,319 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
-    static void create_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    static void comment_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (!info.IsConstructCall()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Failed to construct 'Comment': Please use the 'new' operator")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        auto& node = self->document.create_element("#comment");
+        node.text_content = info.Length() > 0
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static void create_processing_instruction(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        if (info.Length() < 2) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "Document.createProcessingInstruction requires 2 arguments")));
+            return;
+        }
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr) return;
+        const auto target = to_wtf8(info.GetIsolate(), info[0]);
+        const auto data = to_wtf8(info.GetIsolate(), info[1]);
+        if (target.empty()) {
+            throw_dom_exception(info, "The target is not a valid XML name", "InvalidCharacterError");
+            return;
+        }
+        if (data.find("?>") != std::string::npos) {
+            throw_dom_exception(info, "The data contains an invalid processing-instruction terminator", "InvalidCharacterError");
+            return;
+        }
+        auto& node = self->document.create_element("#processing-instruction");
+        node.set_namespace({}, target);
+        node.text_content = data;
+        info.GetReturnValue().Set(self->wrap_node(node));
+    }
+
+    static attr_state* unwrap_attr(v8::Local<v8::Object> object)
+    {
+        if (object.IsEmpty() || object->InternalFieldCount() < 2) return nullptr;
+        const auto value = object->GetInternalField(1).As<v8::Value>();
+        return value->IsExternal()
+            ? static_cast<attr_state*>(value.As<v8::External>()->Value(
+                v8::kExternalPointerTypeTagDefault))
+            : nullptr;
+    }
+
+    static std::string attribute_attachment_key(const dom_node& owner, std::string_view name)
+    {
+        return std::to_string(owner.id) + ":" + std::string(name);
+    }
+
+    v8::Local<v8::Object> wrap_attr(attr_state& state)
+    {
+        const auto known = attr_wrappers.find(state.id);
+        if (known != attr_wrappers.end() && !known->second.IsEmpty()) {
+            return known->second.Get(isolate);
+        }
+        auto object = attr_template.Get(isolate)->InstanceTemplate()
+            ->NewInstance(isolate->GetCurrentContext()).ToLocalChecked();
+        object->SetAlignedPointerInInternalField(
+            0, nullptr, v8::kEmbedderDataTypeTagDefault);
+        object->SetInternalField(1, v8::External::New(
+            isolate, &state, v8::kExternalPointerTypeTagDefault));
+        attr_wrappers.emplace(state.id, v8::Global<v8::Object>(isolate, object));
+        return object;
+    }
+
+    attr_state& create_attr_state(
+        std::string name,
+        std::string namespace_uri = {},
+        dom_node* owner = nullptr,
+        std::string value = {})
+    {
+        auto state = std::make_unique<attr_state>();
+        state->id = next_attr_id++;
+        state->namespace_uri = std::move(namespace_uri);
+        state->name = std::move(name);
+        state->value = std::move(value);
+        state->owner = owner;
+        auto* result = state.get();
+        attr_states.emplace(result->id, std::move(state));
+        if (owner != nullptr) {
+            attached_attributes[attribute_attachment_key(*owner, result->name)] = result;
+        }
+        return *result;
+    }
+
+    attr_state& attached_attr(dom_node& owner, std::string_view name)
+    {
+        const auto key = attribute_attachment_key(owner, name);
+        const auto known = attached_attributes.find(key);
+        if (known != attached_attributes.end()) return *known->second;
+        const auto value = owner.attributes.find(name);
+        return create_attr_state(
+            std::string(name), {}, &owner,
+            value == owner.attributes.end() ? std::string{} : value->second);
+    }
+
+    void detach_attr(dom_node& owner, std::string_view name, std::string value)
+    {
+        const auto key = attribute_attachment_key(owner, name);
+        const auto known = attached_attributes.find(key);
+        if (known == attached_attributes.end()) return;
+        known->second->value = std::move(value);
+        known->second->owner = nullptr;
+        attached_attributes.erase(known);
+    }
+
+    static void create_attribute_with_namespace(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool namespaced)
     {
         auto* self = current(info.GetIsolate());
-        const auto local_context = info.GetIsolate()->GetCurrentContext();
-        auto name = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        if (self == nullptr) return;
+        const auto name_index = namespaced ? 1 : 0;
+        if (info.Length() <= name_index) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "Attribute creation requires a name")));
+            return;
+        }
+        auto name = to_utf8(info.GetIsolate(), info[name_index]);
         auto* document_root = info.This()->InternalFieldCount() > 0
             ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
-                0,
-                v8::kEmbedderDataTypeTagDefault))
+                0, v8::kEmbedderDataTypeTagDefault))
             : nullptr;
-        if (document_root == nullptr || !document_root->xml_mode) name = lower_html_name(name);
-        auto attribute = v8::Object::New(info.GetIsolate());
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeType"), v8::Integer::New(info.GetIsolate(), 2)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "name"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "localName"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeName"), js_dom_string(info.GetIsolate(), name)).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "value"), js_string(info.GetIsolate(), "")).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "nodeValue"), js_string(info.GetIsolate(), "")).Check();
-        attribute->Set(local_context, js_string(info.GetIsolate(), "ownerDocument"), info.This()).Check();
-        self->record_feature("dom", "Document.createAttribute", "supported", {}, "dom-api");
-        info.GetReturnValue().Set(attribute);
+        if (!namespaced && (document_root == nullptr || !document_root->xml_mode)) {
+            name = lower_html_name(name);
+        }
+        const auto namespace_uri = namespaced && !info[0]->IsNullOrUndefined()
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        auto& state = self->create_attr_state(std::move(name), namespace_uri);
+        self->record_feature(
+            "dom",
+            namespaced ? "Document.createAttributeNS" : "Document.createAttribute",
+            "supported", {}, "dom-api");
+        info.GetReturnValue().Set(self->wrap_attr(state));
+    }
+
+    static void create_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        create_attribute_with_namespace(info, false);
+    }
+
+    static void create_attribute_ns(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        create_attribute_with_namespace(info, true);
+    }
+
+    static void get_attr_name(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        if (state != nullptr) info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), state->name));
+    }
+
+    static void get_attr_namespace_uri(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        info.GetReturnValue().Set(state == nullptr || state->namespace_uri.empty()
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(js_dom_string(info.GetIsolate(), state->namespace_uri)));
+    }
+
+    static void get_attr_value(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        const auto* state = unwrap_attr(info.Holder());
+        if (state == nullptr) return;
+        auto value = state->value;
+        if (state->owner != nullptr) {
+            const auto match = state->owner->attributes.find(state->name);
+            if (match != state->owner->attributes.end()) value = match->second;
+        }
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), value));
+    }
+
+    static void set_attr_value(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* state = unwrap_attr(info.Holder());
+        if (self == nullptr || state == nullptr) return;
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        if (state->owner == nullptr) {
+            state->value = text;
+            return;
+        }
+        const auto old_value = state->owner->attributes.contains(state->name)
+            ? std::optional<std::string>(state->owner->attributes.at(state->name))
+            : std::nullopt;
+        state->owner->attributes[state->name] = text;
+        if (state->name == "id") state->owner->id_attribute = text;
+        else if (state->name == "class") state->owner->class_name = text;
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *state->owner, state->name, old_value, text,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+    }
+
+    static void get_attr_owner_element(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        const auto* state = unwrap_attr(info.Holder());
+        info.GetReturnValue().Set(state == nullptr || state->owner == nullptr
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_node(*state->owner)));
+    }
+
+    static void get_attr_node_type(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 2));
+    }
+
+    static void get_attr_owner_document(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        info.GetReturnValue().Set(self->document_object.Get(info.GetIsolate()));
+    }
+
+    static void get_attr_specified(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+    }
+
+    static void set_attribute_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* owner = unwrap_node(info.This());
+        auto* state = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_attr(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || owner == nullptr || state == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "setAttributeNode requires an Attr")));
+            return;
+        }
+        if (state->owner != nullptr && state->owner != owner) {
+            throw_dom_exception(info, "The attribute is already in use", "InUseAttributeError");
+            return;
+        }
+        attr_state* previous = nullptr;
+        if (owner->attributes.contains(state->name)) {
+            previous = &self->attached_attr(*owner, state->name);
+        }
+        const auto value = state->owner == nullptr
+            ? state->value
+            : owner->attributes.at(state->name);
+        const auto old_value = owner->attributes.contains(state->name)
+            ? std::optional<std::string>(owner->attributes.at(state->name))
+            : std::nullopt;
+        owner->attributes[state->name] = value;
+        if (state->name == "id") owner->id_attribute = value;
+        else if (state->name == "class") owner->class_name = value;
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *owner, state->name, old_value, value,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+        if (previous != nullptr && previous != state) {
+            previous->value = old_value.value_or(std::string{});
+            previous->owner = nullptr;
+        }
+        state->owner = owner;
+        self->attached_attributes[attribute_attachment_key(*owner, state->name)] = state;
+        info.GetReturnValue().Set(previous == nullptr || previous == state
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(self->wrap_attr(*previous)));
+    }
+
+    static void remove_attribute_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* owner = unwrap_node(info.This());
+        auto* state = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_attr(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || owner == nullptr || state == nullptr
+            || state->owner != owner || !owner->attributes.contains(state->name)) {
+            throw_dom_exception(info, "The attribute was not found", "NotFoundError");
+            return;
+        }
+        const auto old_value = owner->attributes.at(state->name);
+        owner->attributes.erase(state->name);
+        if (state->name == "id") owner->id_attribute.clear();
+        else if (state->name == "class") owner->class_name.clear();
+        state->value = old_value;
+        state->owner = nullptr;
+        self->attached_attributes.erase(attribute_attachment_key(*owner, state->name));
+        self->document.mark_dirty();
+        self->notify_custom_element_attribute(
+            *owner, state->name, old_value, std::nullopt,
+            state->namespace_uri.empty()
+                ? std::nullopt
+                : std::optional<std::string>(state->namespace_uri));
+        info.GetReturnValue().Set(info[0]);
     }
 
     static void create_document_fragment(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2044,6 +2925,47 @@
         info.GetReturnValue().Set(self->wrap_node(node));
     }
 
+    static dom_node& clone_dom_subtree(
+        implementation& self,
+        const dom_node& original,
+        bool deep)
+    {
+        auto& clone = self.document.create_node(original.kind, original.tag);
+        clone.set_namespace(
+            original.namespace_uri(),
+            original.namespace_prefix());
+        clone.id_attribute = original.id_attribute;
+        clone.class_name = original.class_name;
+        clone.text_content = original.text_content;
+        clone.script_state = original.script_state;
+        clone.xml_mode = original.xml_mode;
+        if (original.has_form_control()) {
+            clone.mutable_form_control() = original.form_control();
+        }
+        clone.attributes = original.attributes;
+        clone.style = original.style;
+        if (original.has_authored_style()) {
+            clone.mutable_authored_style() = original.authored_style();
+        }
+        clone.visible = true;
+        if (deep) {
+            for (const auto* child : original.children) {
+                if (child == nullptr) continue;
+                auto& child_clone = clone_dom_subtree(self, *child, true);
+                self.document.append_child(clone, child_clone);
+            }
+            if (original.template_contents != nullptr) {
+                auto& clone_contents = self.document.parser_template_contents(clone);
+                for (const auto* child : original.template_contents->children) {
+                    if (child == nullptr) continue;
+                    auto& child_clone = clone_dom_subtree(self, *child, true);
+                    self.document.append_child(clone_contents, child_clone);
+                }
+            }
+        }
+        return clone;
+    }
+
     static void clone_node(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2054,40 +2976,25 @@
             return;
         }
         const auto deep = info.Length() > 0 && info[0]->BooleanValue(info.GetIsolate());
-        const auto clone_subtree = [&](const auto& recurse, const dom_node& original) -> dom_node& {
-            auto& clone = self->document.create_node(original.kind, original.tag);
-            clone.set_namespace(
-                original.namespace_uri(),
-                original.namespace_prefix());
-            clone.id_attribute = original.id_attribute;
-            clone.class_name = original.class_name;
-            clone.text_content = original.text_content;
-            clone.xml_mode = original.xml_mode;
-            if (original.has_form_control()) {
-                clone.mutable_form_control() = original.form_control();
-            }
-            clone.attributes = original.attributes;
-            clone.style = original.style;
-            clone.visible = true;
-            if (deep) {
-                for (const auto* child : original.children) {
-                    if (child == nullptr) continue;
-                    auto& child_clone = recurse(recurse, *child);
-                    self->document.append_child(clone, child_clone);
-                }
-                if (original.template_contents != nullptr) {
-                    auto& clone_contents = self->document.parser_template_contents(clone);
-                    for (const auto* child : original.template_contents->children) {
-                        if (child == nullptr) continue;
-                        auto& child_clone = recurse(recurse, *child);
-                        self->document.append_child(clone_contents, child_clone);
-                    }
-                }
-            }
-            return clone;
-        };
-        auto& clone = clone_subtree(clone_subtree, *source);
+        auto& clone = clone_dom_subtree(*self, *source, deep);
         self->notify_custom_elements_subtree(clone, "connected");
+        info.GetReturnValue().Set(self->wrap_node(clone));
+    }
+
+    static void document_import_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* source = info.Length() > 0 && info[0]->IsObject()
+            ? unwrap_node(info[0].As<v8::Object>())
+            : nullptr;
+        if (self == nullptr || source == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "importNode requires a native DOM node")));
+            return;
+        }
+        const auto deep = info.Length() > 1
+            && info[1]->BooleanValue(info.GetIsolate());
+        auto& clone = clone_dom_subtree(*self, *source, deep);
         info.GetReturnValue().Set(self->wrap_node(clone));
     }
 
@@ -2278,6 +3185,50 @@
             names));
     }
 
+    static void document_get_elements_by_name(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::dom_query));
+        const auto name = info.Length() > 0
+            ? to_wtf8(info.GetIsolate(), info[0])
+            : std::string{};
+        auto* root = static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+            0,
+            v8::kEmbedderDataTypeTagDefault));
+        auto& query_root = root == nullptr ? self->active_root() : *root;
+        std::vector<dom_node*> matches;
+        const auto collect = [&](const auto& visit, dom_node& parent) -> void {
+            for (auto* child : parent.children) {
+                if (child == nullptr) continue;
+                if (child->kind == dom_node_kind::element) {
+                    const auto authored_name = child->attributes.find("name");
+                    if (authored_name != child->attributes.end()
+                        && authored_name->second == name) {
+                        matches.push_back(child);
+                    }
+                }
+                visit(visit, *child);
+            }
+        };
+        if (query_root.kind == dom_node_kind::element) {
+            const auto authored_name = query_root.attributes.find("name");
+            if (authored_name != query_root.attributes.end()
+                && authored_name->second == name) {
+                matches.push_back(&query_root);
+            }
+        }
+        collect(collect, query_root);
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto result = v8::Array::New(
+            info.GetIsolate(), static_cast<int>(matches.size()));
+        for (uint32_t index = 0; index < matches.size(); ++index) {
+            result->Set(
+                local_context, index,
+                self->wrap_node(*matches[index])).Check();
+        }
+        info.GetReturnValue().Set(result);
+    }
+
     static void element_query_selector_all(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2345,13 +3296,64 @@
         info.GetReturnValue().Set(v8::False(info.GetIsolate()));
     }
 
+    static void document_contains(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || info.Length() < 1 || !info[0]->IsObject()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        if (info[0].As<v8::Object>()->StrictEquals(info.This())) {
+            info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+            return;
+        }
+        auto* candidate = unwrap_node(info[0].As<v8::Object>());
+        auto* root = info.This()->InternalFieldCount() > 0
+            ? static_cast<dom_node*>(info.This()->GetAlignedPointerFromInternalField(
+                0,
+                v8::kEmbedderDataTypeTagDefault))
+            : nullptr;
+        if (root == nullptr) root = &self->active_root();
+        for (auto* node = candidate; node != nullptr;
+            node = self->document.dom_parent(*node)) {
+            if (node == root) {
+                info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+                return;
+            }
+        }
+        info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+    }
+
     static void element_compare_document_position(
         const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
         auto* reference = unwrap_node(info.This());
         auto* other = info.Length() > 0 && info[0]->IsObject()
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
+        const auto main_document = self->document_object.Get(info.GetIsolate());
+        const auto reference_is_document = !main_document.IsEmpty()
+            && info.This()->StrictEquals(main_document);
+        const auto other_is_document = !main_document.IsEmpty()
+            && info.Length() > 0
+            && info[0]->StrictEquals(main_document);
+        if (reference_is_document != other_is_document) {
+            auto* candidate = reference_is_document ? other : reference;
+            auto connected = false;
+            for (auto* ancestor = candidate; ancestor != nullptr;
+                ancestor = self->document.dom_parent(*ancestor)) {
+                if (ancestor == &self->active_root()) {
+                    connected = true;
+                    break;
+                }
+            }
+            if (connected) {
+                info.GetReturnValue().Set(v8::Integer::New(
+                    info.GetIsolate(), reference_is_document ? 4 | 16 : 2 | 8));
+                return;
+            }
+        }
         if (reference == other && reference != nullptr) {
             info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), 0));
             return;
@@ -2361,7 +3363,6 @@
             return;
         }
 
-        auto* self = current(info.GetIsolate());
         const auto build_path = [self](dom_node* node) {
             std::vector<dom_node*> path;
             for (; node != nullptr; node = self->document.dom_parent(*node)) {
@@ -2675,9 +3676,8 @@
     static dom_node* provisional_frame_owner(v8::Local<v8::Object> document)
     {
         auto* node = unwrap_node(document);
-        if (node != nullptr && node->tag == "body"
-            && node->parent != nullptr && node->parent->tag == "iframe") {
-            return node->parent;
+        for (auto* ancestor = node; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor->tag == "iframe") return ancestor;
         }
         return node != nullptr && node->tag == "iframe" ? node : nullptr;
     }
@@ -2793,6 +3793,7 @@
                 self->enqueue_iframe_hydration_if_needed(*fragment_child);
                 self->notify_custom_elements_subtree(*fragment_child, "connected");
             }
+            synchronize_textarea_value_from_children(*parent);
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
             return;
@@ -2805,7 +3806,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         if (!self->document.append_child(*parent, *child)) {
@@ -2826,6 +3829,7 @@
             info.GetIsolate()->GetCurrentContext());
         self->enqueue_iframe_hydration_if_needed(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -2880,7 +3884,9 @@
                 if (self->is_connected(*candidate)) {
                     self->notify_custom_elements_subtree(*candidate, "disconnected");
                 }
-                std::erase(candidate->parent->children, candidate);
+                auto* old_parent = candidate->parent;
+                std::erase(old_parent->children, candidate);
+                synchronize_textarea_value_from_children(*old_parent);
                 candidate->parent = nullptr;
             }
             candidate->visible = true;
@@ -2899,6 +3905,7 @@
         }
         self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*parent);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -2923,6 +3930,7 @@
         std::erase(parent->children, child);
         child->parent = nullptr;
         self->weaken_detached_subtree_wrappers(*child);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[0]);
     }
@@ -2947,37 +3955,67 @@
             info.GetReturnValue().Set(info[1]);
             return;
         }
-        if (insertion_would_create_cycle(parent, replacement)) {
+        std::vector<dom_node*> replacements;
+        if (replacement->tag == "#document-fragment") {
+            replacements = replacement->children;
+        } else {
+            replacements.push_back(replacement);
+        }
+        if (std::any_of(
+                replacements.begin(),
+                replacements.end(),
+                [parent](const auto* candidate) {
+                    return insertion_would_create_cycle(parent, candidate);
+                })) {
             throw_hierarchy_request(info.GetIsolate(), "replaceChild");
             return;
         }
-        if (replacement->parent != nullptr) {
-            if (self->is_connected(*replacement)) {
-                self->notify_custom_elements_subtree(*replacement, "disconnected");
+        if (!self->blur_active_element_before_detach(*previous)) return;
+        for (auto* candidate : replacements) {
+            if (candidate == nullptr || candidate == previous) continue;
+            if (candidate->parent != nullptr) {
+                if (self->is_connected(*candidate)) {
+                    self->notify_custom_elements_subtree(*candidate, "disconnected");
+                }
+                auto* old_parent = candidate->parent;
+                std::erase(old_parent->children, candidate);
+                synchronize_textarea_value_from_children(*old_parent);
+                candidate->parent = nullptr;
             }
-            std::erase(replacement->parent->children, replacement);
-            replacement->parent = nullptr;
+        }
+        if (replacement->tag == "#document-fragment") {
+            replacement->children.clear();
         }
         const auto iterator = std::find(parent->children.begin(), parent->children.end(), previous);
         if (iterator == parent->children.end()) return;
-        if (!self->blur_active_element_before_detach(*previous)) return;
         if (self->is_connected(*previous)) {
             self->notify_custom_elements_subtree(*previous, "disconnected");
         }
         self->deactivate_connected_stylesheets(*previous, false);
-        *iterator = replacement;
-        replacement->parent = parent;
-        replacement->visible = true;
+        const auto insertion_index = static_cast<size_t>(
+            iterator - parent->children.begin());
+        parent->children.erase(iterator);
         previous->parent = nullptr;
         self->weaken_detached_subtree_wrappers(*previous);
-        self->recascade_connected_subtree(*replacement);
-        self->activate_connected_stylesheet(*replacement);
-        self->enqueue_connected_resource_if_needed(
-            *replacement,
-            info[0].As<v8::Object>(),
-            info.GetIsolate()->GetCurrentContext());
-        self->enqueue_iframe_hydration_if_needed(*replacement);
-        self->notify_custom_elements_subtree(*replacement, "connected");
+        auto next_index = insertion_index;
+        for (auto* candidate : replacements) {
+            if (candidate == nullptr || candidate == previous) continue;
+            candidate->parent = parent;
+            candidate->visible = true;
+            parent->children.insert(
+                parent->children.begin()
+                    + static_cast<std::ptrdiff_t>(next_index++),
+                candidate);
+            self->recascade_connected_subtree(*candidate);
+            self->activate_connected_stylesheet(*candidate);
+            self->enqueue_connected_resource_if_needed(
+                *candidate,
+                self->wrap_node(*candidate),
+                info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*candidate);
+            self->notify_custom_elements_subtree(*candidate, "connected");
+        }
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
         info.GetReturnValue().Set(info[1]);
     }
@@ -3005,7 +4043,9 @@
                 if (self->is_connected(*child)) {
                     self->notify_custom_elements_subtree(*child, "disconnected");
                 }
-                std::erase(child->parent->children, child);
+                auto* old_parent = child->parent;
+                std::erase(old_parent->children, child);
+                synchronize_textarea_value_from_children(*old_parent);
                 child->parent = nullptr;
             }
             self->document.append_child(*parent, *child);
@@ -3013,6 +4053,7 @@
         self->recascade_connected_subtree(*parent);
         self->activate_connected_stylesheet(*parent);
         self->notify_custom_elements_subtree(*parent, "connected");
+        synchronize_textarea_value_from_children(*parent);
     }
 
     static void remove_element(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -3020,6 +4061,7 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.This());
         if (node == nullptr || node->parent == nullptr) return;
+        auto* parent = node->parent;
         if (!self->blur_active_element_before_detach(*node)) return;
         if (self->is_connected(*node)) {
             self->notify_custom_elements_subtree(*node, "disconnected");
@@ -3029,6 +4071,7 @@
         node->parent = nullptr;
         node->visible = false;
         self->weaken_detached_subtree_wrappers(*node);
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3092,7 +4135,9 @@
                     self->notify_custom_elements_subtree(
                         *replacement, "disconnected");
                 }
-                std::erase(replacement->parent->children, replacement);
+                auto* old_parent = replacement->parent;
+                std::erase(old_parent->children, replacement);
+                synchronize_textarea_value_from_children(*old_parent);
                 replacement->parent = nullptr;
             }
             flattened.push_back(replacement);
@@ -3128,6 +4173,7 @@
             self->enqueue_iframe_hydration_if_needed(*replacement);
             self->notify_custom_elements_subtree(*replacement, "connected");
         }
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3183,6 +4229,7 @@
             self->enqueue_iframe_hydration_if_needed(*child);
             self->notify_custom_elements_subtree(*child, "connected");
         }
+        synchronize_textarea_value_from_children(*parent);
         self->document.mark_dirty();
     }
 
@@ -3224,6 +4271,7 @@
             if (old != old_parent->children.end()) {
                 const auto old_index = static_cast<size_t>(old - old_parent->children.begin());
                 old_parent->children.erase(old);
+                synchronize_textarea_value_from_children(*old_parent);
                 if (old_parent == parent && old_index < index) --index;
             }
             child->parent = nullptr;
@@ -3235,6 +4283,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[1]);
     }
 
@@ -3253,7 +4302,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         child->parent = parent;
@@ -3262,6 +4313,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }
 
@@ -3284,7 +4336,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         const auto position = std::find(parent->children.begin(), parent->children.end(), reference);
@@ -3295,6 +4349,7 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
     }
 
     static void insert_before_self(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -3358,6 +4413,7 @@
                 self->notify_custom_elements_subtree(
                     *fragment_child, "connected");
             }
+            synchronize_textarea_value_from_children(*parent);
             self->document.mark_dirty();
             info.GetReturnValue().Set(info[0]);
             return;
@@ -3398,7 +4454,9 @@
             if (self->is_connected(*child)) {
                 self->notify_custom_elements_subtree(*child, "disconnected");
             }
-            std::erase(child->parent->children, child);
+            auto* old_parent = child->parent;
+            std::erase(old_parent->children, child);
+            synchronize_textarea_value_from_children(*old_parent);
             child->parent = nullptr;
         }
         if (before == nullptr) {
@@ -3406,6 +4464,7 @@
                 self->recascade_connected_subtree(*child);
                 self->activate_connected_stylesheet(*child);
                 self->notify_custom_elements_subtree(*child, "connected");
+                synchronize_textarea_value_from_children(*parent);
                 info.GetReturnValue().Set(info[0]);
             }
             return;
@@ -3420,5 +4479,6 @@
         self->recascade_connected_subtree(*child);
         self->activate_connected_stylesheet(*child);
         self->notify_custom_elements_subtree(*child, "connected");
+        synchronize_textarea_value_from_children(*parent);
         info.GetReturnValue().Set(info[0]);
     }

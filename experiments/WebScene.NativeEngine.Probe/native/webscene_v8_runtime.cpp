@@ -189,6 +189,8 @@ struct v8_dom_runtime::implementation final {
         auto element = v8::FunctionTemplate::New(isolate);
         element->SetClassName(js_string(isolate, "HTMLElement"));
         element->InstanceTemplate()->SetInternalFieldCount(1);
+        element->InstanceTemplate()->SetHandler(
+            v8::IndexedPropertyHandlerConfiguration(form_or_select_indexed_getter));
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "style"), get_style);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "id"), get_id, set_id);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "className"), get_class_name, set_class_name);
@@ -208,6 +210,7 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "nodeValue"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "textContent"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerText"), get_inner_text, set_text_content);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "text"), get_script_text, set_script_text);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "data"), get_text_content, set_text_content);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "namespaceURI"), get_namespace_uri);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "children"), get_children);
@@ -260,6 +263,8 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "enctype"), get_reflected_string_attribute, set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "htmlFor"), get_reflected_string_attribute, set_reflected_string_attribute);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "lang"), get_reflected_string_attribute, set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "type"), get_element_type, set_element_type);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "name"), get_reflected_string_attribute, set_reflected_string_attribute);
@@ -272,6 +277,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "readOnly"), get_read_only, set_read_only);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "options"), get_select_options);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "elements"), get_form_elements);
+        element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "length"), get_form_or_select_length);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "selectedIndex"), get_selected_index, set_selected_index);
         element->InstanceTemplate()->SetNativeDataProperty(
@@ -314,6 +320,24 @@ struct v8_dom_runtime::implementation final {
         element->PrototypeTemplate()->Set(
             js_string(isolate, "DOCUMENT_FRAGMENT_NODE"),
             v8::Integer::New(isolate, 11));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_DISCONNECTED"),
+            v8::Integer::New(isolate, 1));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_PRECEDING"),
+            v8::Integer::New(isolate, 2));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_FOLLOWING"),
+            v8::Integer::New(isolate, 4));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINS"),
+            v8::Integer::New(isolate, 8));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINED_BY"),
+            v8::Integer::New(isolate, 16));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC"),
+            v8::Integer::New(isolate, 32));
         element->PrototypeTemplate()->Set(
             js_string(isolate, "appendChild"),
             v8::FunctionTemplate::New(isolate, append_child));
@@ -549,6 +573,49 @@ struct v8_dom_runtime::implementation final {
         frame_document->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
+        frame_document->Set(
+            js_string(isolate, "getElementsByTagName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_tag_name));
+        frame_document->Set(
+            js_string(isolate, "getElementsByClassName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_class_name));
+        frame_document->Set(
+            js_string(isolate, "getElementsByName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_name));
+        frame_document->Set(
+            js_string(isolate, "compareDocumentPosition"),
+            v8::FunctionTemplate::New(isolate, element_compare_document_position));
+        frame_document->Set(
+            js_string(isolate, "createElement"),
+            v8::FunctionTemplate::New(isolate, create_element));
+        frame_document->Set(
+            js_string(isolate, "createElementNS"),
+            v8::FunctionTemplate::New(isolate, create_element_ns));
+        frame_document->Set(
+            js_string(isolate, "createTextNode"),
+            v8::FunctionTemplate::New(isolate, create_text_node));
+        frame_document->Set(
+            js_string(isolate, "createDocumentFragment"),
+            v8::FunctionTemplate::New(isolate, create_document_fragment));
+        frame_document->Set(
+            js_string(isolate, "createEvent"),
+            v8::FunctionTemplate::New(isolate, document_create_event));
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "body"), get_body);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "head"), get_body);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "documentElement"), get_body);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "nodeType"), get_document_node_type);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "nodeName"), get_document_node_name);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "firstChild"), get_document_boundary_child);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "lastChild"), get_document_boundary_child);
+        frame_document->SetNativeDataProperty(
+            js_string(isolate, "childNodes"), get_document_child_nodes);
         frame_document->SetNativeDataProperty(
             js_string(isolate, "activeElement"),
             get_provisional_frame_active_element);
@@ -571,6 +638,12 @@ struct v8_dom_runtime::implementation final {
         frame_window->Set(
             js_string(isolate, "focus"),
             v8::FunctionTemplate::New(isolate, window_focus));
+        frame_window->Set(
+            js_string(isolate, "scrollTo"),
+            v8::FunctionTemplate::New(isolate, window_scroll_to));
+        frame_window->Set(
+            js_string(isolate, "scroll"),
+            v8::FunctionTemplate::New(isolate, window_scroll_to));
         frame_window->SetNativeDataProperty(
             js_string(isolate, "frameElement"),
             get_provisional_frame_element);
@@ -616,6 +689,12 @@ struct v8_dom_runtime::implementation final {
             get_scrolling_element);
         document_template->SetNativeDataProperty(js_string(isolate, "nodeType"), get_document_node_type);
         document_template->SetNativeDataProperty(js_string(isolate, "nodeName"), get_document_node_name);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "firstChild"), get_document_boundary_child);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "lastChild"), get_document_boundary_child);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "childNodes"), get_document_child_nodes);
         document_template->SetNativeDataProperty(js_string(isolate, "defaultView"), get_default_view);
         document_template->SetNativeDataProperty(js_string(isolate, "location"), get_document_location);
         document_template->SetNativeDataProperty(
@@ -629,6 +708,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "visibilityState"),
             get_document_visibility_state);
         document_template->SetNativeDataProperty(js_string(isolate, "links"), get_document_links);
+        document_template->SetNativeDataProperty(js_string(isolate, "styleSheets"), get_document_style_sheets);
         document_template->SetNativeDataProperty(
             js_string(isolate, "cookie"),
             get_document_cookie,
@@ -656,11 +736,35 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "createComment"),
             v8::FunctionTemplate::New(isolate, create_comment));
         document_template->Set(
+            js_string(isolate, "createProcessingInstruction"),
+            v8::FunctionTemplate::New(isolate, create_processing_instruction));
+        document_template->Set(
             js_string(isolate, "createAttribute"),
             v8::FunctionTemplate::New(isolate, create_attribute));
         document_template->Set(
+            js_string(isolate, "createAttributeNS"),
+            v8::FunctionTemplate::New(isolate, create_attribute_ns));
+        document_template->Set(
             js_string(isolate, "createDocumentFragment"),
             v8::FunctionTemplate::New(isolate, create_document_fragment));
+        document_template->Set(
+            js_string(isolate, "createEvent"),
+            v8::FunctionTemplate::New(isolate, document_create_event));
+        document_template->Set(
+            js_string(isolate, "appendChild"),
+            v8::FunctionTemplate::New(isolate, append_child));
+        document_template->Set(
+            js_string(isolate, "cloneNode"),
+            v8::FunctionTemplate::New(isolate, clone_document));
+        document_template->Set(
+            js_string(isolate, "importNode"),
+            v8::FunctionTemplate::New(isolate, document_import_node));
+        document_template->Set(
+            js_string(isolate, "contains"),
+            v8::FunctionTemplate::New(isolate, document_contains));
+        document_template->Set(
+            js_string(isolate, "compareDocumentPosition"),
+            v8::FunctionTemplate::New(isolate, element_compare_document_position));
         document_template->Set(
             js_string(isolate, "getElementById"),
             v8::FunctionTemplate::New(isolate, get_element_by_id));
@@ -682,6 +786,9 @@ struct v8_dom_runtime::implementation final {
         document_template->Set(
             js_string(isolate, "getElementsByClassName"),
             v8::FunctionTemplate::New(isolate, document_get_elements_by_class_name));
+        document_template->Set(
+            js_string(isolate, "getElementsByName"),
+            v8::FunctionTemplate::New(isolate, document_get_elements_by_name));
         document_template->Set(
             js_string(isolate, "createRange"),
             v8::FunctionTemplate::New(isolate, create_range));
@@ -933,7 +1040,7 @@ struct v8_dom_runtime::implementation final {
         v8::Local<v8::Object> global,
         v8::Local<v8::Object> document_value)
     {
-        auto constructor_template = v8::FunctionTemplate::New(isolate);
+        auto constructor_template = v8::FunctionTemplate::New(isolate, document_constructor);
         constructor_template->SetClassName(js_string(isolate, "Document"));
         auto constructor = constructor_template->GetFunction(local_context).ToLocalChecked();
         global->Set(local_context, js_string(isolate, "Document"), constructor).Check();
@@ -1872,6 +1979,7 @@ struct v8_dom_runtime::implementation final {
 
             const installCustomElementsPlatform = () => {
             if (globalThis.__webSceneCustomElementsNotifySubtree) return;
+            const activateCustomElements = globalThis.__webSceneActivateCustomElements;
             const NativeHTMLElement = globalThis.HTMLElement;
             const nativeCreateElement = document.createElement;
             const definitions = new Map();
@@ -1879,6 +1987,7 @@ struct v8_dom_runtime::implementation final {
             const pendingDefinitions = new Map();
             const elementStates = new WeakMap();
             const constructionStack = [];
+            let registryActive = false;
             const reservedNames = new Set([
               'annotation-xml', 'color-profile', 'font-face',
               'font-face-src', 'font-face-uri', 'font-face-format',
@@ -1955,15 +2064,27 @@ struct v8_dom_runtime::implementation final {
               return element;
             }
             Object.setPrototypeOf(WebSceneHTMLElement, NativeHTMLElement);
-            Object.defineProperty(WebSceneHTMLElement, 'name', {
+            let HTMLElementConstructor;
+            HTMLElementConstructor = new Proxy(WebSceneHTMLElement, {
+              construct(target, args, newTarget) {
+                const current = constructionStack[constructionStack.length - 1];
+                const registered = current && current.definition.constructor === newTarget
+                  || constructorDefinitions.has(newTarget);
+                if (newTarget === HTMLElementConstructor || !registered) {
+                  throw new TypeError('Illegal constructor');
+                }
+                return Reflect.construct(target, args, newTarget);
+              }
+            });
+            Object.defineProperty(HTMLElementConstructor, 'name', {
               value: 'HTMLElement', configurable: true
             });
-            WebSceneHTMLElement.prototype = NativeHTMLElement.prototype;
-            Object.defineProperty(WebSceneHTMLElement.prototype, 'constructor', {
-              value: WebSceneHTMLElement, writable: true, configurable: true
+            HTMLElementConstructor.prototype = NativeHTMLElement.prototype;
+            Object.defineProperty(HTMLElementConstructor.prototype, 'constructor', {
+              value: HTMLElementConstructor, writable: true, configurable: true
             });
             Object.defineProperty(globalThis, 'HTMLElement', {
-              value: WebSceneHTMLElement, writable: true, configurable: true
+              value: HTMLElementConstructor, writable: true, configurable: true
             });
 
             const upgradeElement = (element, forcedDefinition = undefined) => {
@@ -2098,6 +2219,10 @@ struct v8_dom_runtime::implementation final {
                 };
                 definitions.set(normalized, definition);
                 constructorDefinitions.set(constructor, definition);
+                if (!registryActive) {
+                  registryActive = true;
+                  activateCustomElements();
+                }
                 for (const element of document.querySelectorAll(normalized)) {
                   upgradeElement(element, definition);
                   connectElement(element);
@@ -2147,7 +2272,7 @@ struct v8_dom_runtime::implementation final {
                     'NotSupportedError');
                 }
                 const element = Reflect.apply(nativeCreateElement, this, args);
-                upgradeElement(element);
+                if (registryActive) upgradeElement(element);
                 return element;
               }, writable: true, configurable: true
             });
@@ -2195,8 +2320,20 @@ struct v8_dom_runtime::implementation final {
 
     void install_custom_elements_platform(v8::Local<v8::Context> local_context)
     {
+        auto global = local_context->Global();
+        global->DefineOwnProperty(
+            local_context,
+            js_string(isolate, "__webSceneActivateCustomElements"),
+            v8::Function::New(
+                local_context,
+                [](const v8::FunctionCallbackInfo<v8::Value>& info) {
+                    if (auto* self = current(info.GetIsolate()); self != nullptr) {
+                        self->custom_elements_active = true;
+                    }
+                }).ToLocalChecked(),
+            v8::PropertyAttribute::DontEnum).Check();
         v8::Local<v8::Value> raw_installer;
-        if (!local_context->Global()->Get(
+        if (!global->Get(
                 local_context,
                 js_string(isolate, "__webSceneInstallCustomElementsPlatform"))
                 .ToLocal(&raw_installer)
@@ -2207,9 +2344,12 @@ struct v8_dom_runtime::implementation final {
         v8::TryCatch try_catch(isolate);
         static_cast<void>(raw_installer.As<v8::Function>()->Call(
             local_context,
-            local_context->Global(),
+            global,
             0,
             nullptr));
+        global->Delete(
+            local_context,
+            js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
                 + describe_exception(try_catch, local_context);
@@ -2287,6 +2427,13 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "preventDefault"),
             v8::FunctionTemplate::New(isolate, event_prevent_default));
         event_template->PrototypeTemplate()->Set(
+            js_string(isolate, "initEvent"),
+            v8::FunctionTemplate::New(isolate, event_init_event));
+        event_template->PrototypeTemplate()->SetAccessorProperty(
+            js_string(isolate, "returnValue"),
+            v8::FunctionTemplate::New(isolate, event_return_value_get),
+            v8::FunctionTemplate::New(isolate, event_return_value_set));
+        event_template->PrototypeTemplate()->Set(
             js_string(isolate, "stopPropagation"),
             v8::FunctionTemplate::New(isolate, event_stop_propagation));
         event_template->PrototypeTemplate()->Set(
@@ -2354,6 +2501,11 @@ struct v8_dom_runtime::implementation final {
             dom_parser_template->GetFunction(local_context).ToLocalChecked()).Check();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         install_generated_dom_constructors(local_context, global);
+        global->Set(
+            local_context,
+            js_string(isolate, "AbortController"),
+            v8::FunctionTemplate::New(isolate, abort_controller_constructor)
+                ->GetFunction(local_context).ToLocalChecked()).Check();
 #else
         auto element_constructor = element_template.Get(isolate)->GetFunction(local_context).ToLocalChecked();
         element_constructor->Set(
@@ -2372,6 +2524,30 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "DOCUMENT_FRAGMENT_NODE"),
             v8::Integer::New(isolate, 11)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_DISCONNECTED"),
+            v8::Integer::New(isolate, 1)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_PRECEDING"),
+            v8::Integer::New(isolate, 2)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_FOLLOWING"),
+            v8::Integer::New(isolate, 4)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINS"),
+            v8::Integer::New(isolate, 8)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_CONTAINED_BY"),
+            v8::Integer::New(isolate, 16)).Check();
+        element_constructor->Set(
+            local_context,
+            js_string(isolate, "DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC"),
+            v8::Integer::New(isolate, 32)).Check();
         global->Set(local_context, js_string(isolate, "Node"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Element"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "HTMLElement"), element_constructor).Check();
@@ -2385,6 +2561,10 @@ struct v8_dom_runtime::implementation final {
         global->Set(local_context, js_string(isolate, "DocumentFragment"), element_constructor).Check();
         global->Set(local_context, js_string(isolate, "Window"), element_constructor).Check();
 #endif
+        global->SetLazyDataProperty(
+            local_context,
+            js_string(isolate, "HTMLCollection"),
+            get_html_collection_constructor).Check();
         install_document_constructor(
             local_context,
             global,
@@ -2753,9 +2933,14 @@ struct v8_dom_runtime::implementation final {
 
             class WebSceneRequest {
               constructor(input, options = {}) {
-                this.url = String(
+                const rawUrl = String(
                   input && typeof input === 'object' && 'url' in input
                     ? input.url : input);
+                this.url = globalThis.__webSceneDocumentBasePath
+                    && !rawUrl.startsWith('/')
+                    && !/^[a-z][a-z0-9+.-]*:/i.test(rawUrl)
+                  ? globalThis.__webSceneDocumentBasePath + rawUrl
+                  : rawUrl;
                 this.method = String(options.method ?? input?.method ?? 'GET')
                   .toUpperCase();
                 this.headers = new WebSceneHeaders(
@@ -2783,6 +2968,62 @@ struct v8_dom_runtime::implementation final {
               });
             }
 
+            class WebSceneXMLHttpRequest {
+              constructor() {
+                this.readyState = 0;
+                this.status = 0;
+                this.statusText = '';
+                this.responseText = '';
+                this.responseXML = null;
+                this.response = null;
+                this.onload = null;
+                this.onerror = null;
+                this.onreadystatechange = null;
+                this._method = 'GET';
+                this._url = '';
+                this._mimeType = '';
+              }
+              open(method, url) {
+                this._method = String(method).toUpperCase();
+                this._url = String(url);
+                this.readyState = 1;
+                this.onreadystatechange?.(new Event('readystatechange'));
+              }
+              overrideMimeType(value) {
+                this._mimeType = String(value);
+              }
+              send() {
+                if (this._method !== 'GET') {
+                  throw new TypeError(`WebScene XMLHttpRequest does not support ${this._method}`);
+                }
+                queueMicrotask(() => {
+                  try {
+                    const requestUrl = globalThis.__webSceneDocumentBasePath
+                        && !this._url.startsWith('/')
+                        && !/^[a-z][a-z0-9+.-]*:/i.test(this._url)
+                      ? globalThis.__webSceneDocumentBasePath + this._url
+                      : this._url;
+                    const body = __webSceneFetchText(requestUrl);
+                    this.responseText = body;
+                    this.response = body;
+                    if (this._mimeType.includes('xml')) {
+                      this.responseXML = new DOMParser().parseFromString(body, 'text/xml');
+                    }
+                    this.status = 200;
+                    this.statusText = 'OK';
+                    this.readyState = 4;
+                    this.onreadystatechange?.(new Event('readystatechange'));
+                    this.onload?.(new Event('load'));
+                  } catch (error) {
+                    this.status = 0;
+                    this.readyState = 4;
+                    this.onreadystatechange?.(new Event('readystatechange'));
+                    this.onerror?.(new Event('error'));
+                  }
+                });
+              }
+            }
+
             Object.defineProperties(globalThis, {
               Headers: {
                 value: WebSceneHeaders, writable: true, configurable: true
@@ -2795,6 +3036,9 @@ struct v8_dom_runtime::implementation final {
               },
               fetch: {
                 value: webSceneFetch, writable: true, configurable: true
+              },
+              XMLHttpRequest: {
+                value: WebSceneXMLHttpRequest, writable: true, configurable: true
               }
             });
           })();
@@ -2823,6 +3067,17 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "focus"),
             v8::Function::New(local_context, window_focus).ToLocalChecked()).Check();
+        auto scroll_to = v8::Function::New(
+            local_context,
+            window_scroll_to).ToLocalChecked();
+        global->Set(
+            local_context,
+            js_string(isolate, "scrollTo"),
+            scroll_to).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "scroll"),
+            scroll_to).Check();
     }
 
     void install_host_bridge(v8::Local<v8::Context> local_context)
@@ -3463,6 +3718,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
     return impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
+        || !impl_->pending_programmatic_scroll_events.empty()
         || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()
         || impl_->resize_observers_pending

@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Percentage-height flow children contribute their full overflow extent</title>
+<style>
+  body { margin: 0; }
+  #preceding { height: 84px; }
+  #scroller { position: relative; height: 100px; overflow: auto; }
+  .section { position: relative; height: 100%; padding: 0; margin: 0; }
+</style>
+<div id="preceding"></div>
+<div id="scroller">
+  <div id="section-1" class="section">one</div>
+  <div id="section-2" class="section">two</div>
+  <div id="section-3" class="section">three</div>
+  <div id="section-4" class="section">four</div>
+  <div id="section-5" class="section">five</div>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  (async () => {
+    const scroller = document.getElementById("scroller");
+    const sections = [...scroller.children];
+    const heights = sections.map(section => section.offsetHeight);
+    const offsets = sections.map(section => section.offsetTop);
+    const computedPosition = getComputedStyle(scroller).getPropertyValue("position");
+    record(
+      "getPropertyValue exposes the computed position of a connected scroller",
+      scroller.offsetTop === 84 && computedPosition === "relative",
+      `offsetTop=${scroller.offsetTop}, computed position='${computedPosition}'`
+    );
+    record(
+      "percentage-height flow children resolve against the definite viewport",
+      heights.every(height => height === 100),
+      `section heights were ${heights.join(",")}`
+    );
+    record(
+      "percentage-height flow children retain consecutive logical offsets",
+      offsets.join(",") === "0,100,200,300,400",
+      `section offsets were ${offsets.join(",")}`
+    );
+    record(
+      "the overflow range includes every percentage-height child",
+      scroller.clientHeight === 100 && scroller.scrollHeight === 500,
+      `viewport/extent was ${scroller.clientHeight}/${scroller.scrollHeight}`
+    );
+
+    let scrollEvents = 0;
+    scroller.addEventListener("scroll", () => scrollEvents++);
+    scroller.scrollTop = 400;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const fifthTop = sections[4].getBoundingClientRect().top;
+    const scrollerTop = scroller.getBoundingClientRect().top;
+    record(
+      "the final child can be aligned to the overflow viewport",
+      scroller.scrollTop === 400 && fifthTop === scrollerTop && scrollEvents === 1,
+      `scrollTop=${scroller.scrollTop}, fifthTop=${fifthTop}, scrollerTop=${scrollerTop}, events=${scrollEvents}`
+    );
+
+    state.diagnostics = [JSON.stringify({
+      clientHeight: scroller.clientHeight,
+      scrollHeight: scroller.scrollHeight,
+      scrollTop: scroller.scrollTop,
+      heights,
+      offsets,
+      scrollEvents,
+      computedPosition
+    })];
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  })().catch(error => {
+    state.results.push({
+      name: "percentage-height overflow lifecycle",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = { status: 1, message: state.results.at(-1).message, stack: state.results.at(-1).stack };
+    state.complete = true;
+  });
+</script>

@@ -109,6 +109,8 @@
             ? 3
             : node != nullptr && node->kind == dom_node_kind::comment
                 ? 8
+            : node != nullptr && node->kind == dom_node_kind::processing_instruction
+                ? 7
             : node != nullptr && node->kind == dom_node_kind::document_fragment
                 ? 11
             : node != nullptr && node->kind == dom_node_kind::document_type
@@ -117,6 +119,17 @@
         info.GetReturnValue().Set(v8::Integer::New(
             info.GetIsolate(),
             type));
+    }
+
+    static void get_processing_instruction_target(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node != nullptr) {
+            info.GetReturnValue().Set(js_dom_string(
+                info.GetIsolate(), node->namespace_prefix()));
+        }
     }
 
     static void get_native_node_id(
@@ -136,6 +149,46 @@
             || node.kind == dom_node_kind::document_type) return;
         value += node.text_content;
         for (const auto* child : node.children) append_node_text(*child, value);
+    }
+
+    static std::string normalize_textarea_newlines(std::string_view value)
+    {
+        std::string normalized;
+        normalized.reserve(value.size());
+        for (size_t index = 0; index < value.size(); ++index) {
+            if (value[index] == '\r') {
+                if (index + 1U < value.size() && value[index + 1U] == '\n') ++index;
+                normalized.push_back('\n');
+            } else {
+                normalized.push_back(value[index]);
+            }
+        }
+        return normalized;
+    }
+
+    static std::string textarea_default_value(const dom_node& node)
+    {
+        std::string value;
+        append_node_text(node, value);
+        return value;
+    }
+
+    static void reset_textarea_value(dom_node& node)
+    {
+        auto& control = node.mutable_form_control();
+        control.value = normalize_textarea_newlines(textarea_default_value(node));
+        control.value_initialized = true;
+        control.dirty_value = false;
+        control.selection_start = control.value.size();
+        control.selection_end = control.value.size();
+        control.selection_direction = text_selection_direction::none;
+    }
+
+    static void synchronize_textarea_value_from_children(dom_node& node)
+    {
+        if (node.tag == "textarea" && !node.form_control().dirty_value) {
+            reset_textarea_value(node);
+        }
     }
 
     static void get_text_content(
@@ -205,15 +258,52 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
-        if (node->tag != "#text") {
+        const auto is_character_data = node->kind == dom_node_kind::text
+            || node->kind == dom_node_kind::comment
+            || node->kind == dom_node_kind::processing_instruction;
+        if (!is_character_data) {
             if (!self->blur_active_descendant_before_replacing_children(*node)) return;
             self->detach_all_children(*node);
         }
-        node->text_content = raw_value->IsNullOrUndefined()
+        const auto text = raw_value->IsNullOrUndefined()
             ? std::string{}
             : to_wtf8(info.GetIsolate(), raw_value);
+        if (is_character_data) {
+            node->text_content = text;
+            if (node->parent != nullptr) {
+                synchronize_textarea_value_from_children(*node->parent);
+            }
+        } else {
+            node->text_content.clear();
+            if (!text.empty()) {
+                auto& text_node = self->document.create_node(
+                    dom_node_kind::text, "#text");
+                text_node.text_content = text;
+                self->document.append_child(*node, text_node);
+            }
+            if (node->tag == "textarea") synchronize_textarea_value_from_children(*node);
+        }
         self->activate_connected_stylesheet(*node);
         self->document.mark_dirty();
+    }
+
+    static void get_script_text(
+        v8::Local<v8::Name> name,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || node->tag != "script") return;
+        get_text_content(name, info);
+    }
+
+    static void set_script_text(
+        v8::Local<v8::Name> name,
+        v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || node->tag != "script") return;
+        set_text_content(name, value, info);
     }
 
     static void get_document_node_type(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -236,10 +326,14 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
-        const auto frame_document_root = root != nullptr && root->tag == "body"
-            && root->parent != nullptr && root->parent->tag == "iframe";
-        if (frame_document_root && !self->frame_context.IsEmpty()) {
-            info.GetReturnValue().Set(self->frame_context.Get(info.GetIsolate())->Global());
+        auto* frame = root;
+        while (frame != nullptr && frame->tag != "iframe") frame = frame->parent;
+        if (frame != nullptr) {
+            const auto actual = self->actual_frame_windows.find(frame->id);
+            info.GetReturnValue().Set(
+                actual != self->actual_frame_windows.end() && !actual->second.IsEmpty()
+                    ? actual->second.Get(info.GetIsolate())
+                    : self->frame_window(*frame));
             return;
         }
         info.GetReturnValue().Set(self->context.Get(info.GetIsolate())->Global());
@@ -252,7 +346,10 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
-        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), node->namespace_uri()));
+        const auto namespace_uri = node->namespace_uri();
+        info.GetReturnValue().Set(namespace_uri.empty()
+            ? v8::Local<v8::Value>(v8::Null(info.GetIsolate()))
+            : v8::Local<v8::Value>(js_dom_string(info.GetIsolate(), namespace_uri)));
     }
 
     static void get_attributes(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -266,31 +363,12 @@
             if (attribute.first == "id" || attribute.first == "class") continue;
             attributes.push_back(attribute);
         }
+        auto* self = current(info.GetIsolate());
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Array::New(info.GetIsolate(), static_cast<int>(attributes.size()));
         for (uint32_t index = 0; index < attributes.size(); ++index) {
-            auto attribute = v8::Object::New(info.GetIsolate());
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "name"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "localName"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "nodeName"),
-                js_string(info.GetIsolate(), attributes[index].first.c_str())).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "value"),
-                js_dom_string(info.GetIsolate(), attributes[index].second)).Check();
-            attribute->Set(
-                local_context,
-                js_string(info.GetIsolate(), "nodeValue"),
-                js_dom_string(info.GetIsolate(), attributes[index].second)).Check();
-            result->Set(local_context, index, attribute).Check();
+            auto& state = self->attached_attr(*node, attributes[index].first);
+            result->Set(local_context, index, self->wrap_attr(state)).Check();
         }
         result->Set(
             local_context,
@@ -345,6 +423,22 @@
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto* node = unwrap_node(info.Holder());
         const auto parent_element = to_utf8(info.GetIsolate(), property) == "parentElement";
+        const auto active_document_element = node != nullptr && node->tag == "html"
+            && (node == &self->active_root() || node->parent == &self->active_root());
+        if (active_document_element) {
+            if (parent_element) {
+                info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+                return;
+            }
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            v8::Local<v8::Value> document_value;
+            if (local_context->Global()->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "document")).ToLocal(&document_value)) {
+                info.GetReturnValue().Set(document_value);
+            }
+            return;
+        }
         info.GetReturnValue().Set(node == nullptr || node->parent == nullptr
                 || self->document.is_shadow_root(*node)
                 || (parent_element && node->parent->kind != dom_node_kind::element)
@@ -473,11 +567,11 @@
 
     static void get_is_connected(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
+        auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
-        auto* root = node;
-        while (root != nullptr && root->parent != nullptr) root = root->parent;
         info.GetReturnValue().Set(v8::Boolean::New(
-            info.GetIsolate(), root != nullptr && root == &current(info.GetIsolate())->document.body()));
+            info.GetIsolate(),
+            node != nullptr && self->is_connected(*node)));
     }
 
     static void get_owner_svg_element(
@@ -641,6 +735,28 @@
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(self->profile(binding_category::dom_property));
         auto isolate = info.GetIsolate();
+        auto* node = unwrap_node(info.Holder());
+        for (auto* ancestor = node; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (self->detached_document_roots.contains(ancestor->id)) {
+                info.GetReturnValue().Set(wrap_detached_document(
+                    *self,
+                    *ancestor,
+                    isolate->GetCurrentContext(),
+                    "about:blank"));
+                return;
+            }
+            if (ancestor->tag == "html" && ancestor->parent != nullptr
+                && ancestor->parent->tag == "iframe") {
+                auto* frame = ancestor->parent;
+                const auto actual = self->actual_frame_documents.find(frame->id);
+                if (actual != self->actual_frame_documents.end()) {
+                    info.GetReturnValue().Set(actual->second.Get(isolate));
+                } else {
+                    info.GetReturnValue().Set(self->frame_document(*frame));
+                }
+                return;
+            }
+        }
         v8::Local<v8::Value> document_value;
         if (isolate->GetCurrentContext()->Global()->Get(
                 isolate->GetCurrentContext(),
@@ -1056,17 +1172,7 @@
         if (std::abs(next - node->scroll_left) <= 0.01F) return;
         node->scroll_left = next;
         self->document.mark_dirty();
-        webscene_input_event input{};
-        input.sequence = self->current_input_sequence;
-        v8::TryCatch try_catch(info.GetIsolate());
-        if (!self->dispatch_input_event_type(input, "scroll", *node)) {
-            const auto error = self->describe_exception(
-                try_catch,
-                info.GetIsolate()->GetCurrentContext());
-            self->last_error = "Programmatic scrollLeft dispatch failed: " + error;
-            info.GetIsolate()->ThrowException(v8::Exception::Error(
-                js_string(info.GetIsolate(), self->last_error.c_str())));
-        }
+        self->enqueue_programmatic_scroll_event(*node);
     }
 
     static void set_scroll_top(
@@ -1092,17 +1198,7 @@
         if (std::abs(next - node->scroll_top) <= 0.01F) return;
         node->scroll_top = next;
         self->document.mark_dirty();
-        webscene_input_event input{};
-        input.sequence = self->current_input_sequence;
-        v8::TryCatch try_catch(info.GetIsolate());
-        if (!self->dispatch_input_event_type(input, "scroll", *node)) {
-            const auto error = self->describe_exception(
-                try_catch,
-                info.GetIsolate()->GetCurrentContext());
-            self->last_error = "Programmatic scrollTop dispatch failed: " + error;
-            info.GetIsolate()->ThrowException(v8::Exception::Error(
-                js_string(info.GetIsolate(), self->last_error.c_str())));
-        }
+        self->enqueue_programmatic_scroll_event(*node);
     }
 
     static void element_scroll_into_view(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1440,7 +1536,9 @@
         if (node == nullptr) return;
         const auto iterator = node->attributes.find("type");
         const auto value = iterator != node->attributes.end()
-            ? iterator->second
+            ? (node->tag == "input" || node->tag == "button"
+                ? lower_html_name(iterator->second)
+                : iterator->second)
             : node->tag == "input" ? std::string("text")
             : node->tag == "button" ? std::string("submit")
             : node->tag == "select" && node->attributes.contains("multiple")
@@ -1488,8 +1586,14 @@
         auto name = to_utf8(info.GetIsolate(), property);
         if (!node->xml_mode) name = lower_html_name(name);
         if (!node->xml_mode && name == "htmlfor") name = "for";
-        node->attributes[name] = to_utf8(info.GetIsolate(), value);
+        const auto previous = node->attributes.find(name);
+        const std::optional<std::string> old_value = previous == node->attributes.end()
+            ? std::nullopt
+            : std::optional<std::string>(previous->second);
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        node->attributes[name] = text;
         self->document.mark_dirty();
+        self->notify_custom_element_attribute(*node, name, old_value, text);
     }
 
     static void get_default_value(
@@ -1498,6 +1602,11 @@
     {
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || (node->tag != "input" && node->tag != "textarea")) return;
+        if (node->tag == "textarea") {
+            info.GetReturnValue().Set(js_dom_string(
+                info.GetIsolate(), textarea_default_value(*node)));
+            return;
+        }
         const auto authored = node->attributes.find("value");
         info.GetReturnValue().Set(js_dom_string(
             info.GetIsolate(),
@@ -1512,7 +1621,21 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || (node->tag != "input" && node->tag != "textarea")) return;
-        node->attributes["value"] = to_wtf8(info.GetIsolate(), value);
+        const auto text = to_wtf8(info.GetIsolate(), value);
+        if (node->tag == "textarea") {
+            if (!self->blur_active_descendant_before_replacing_children(*node)) return;
+            self->detach_all_children(*node);
+            node->text_content.clear();
+            if (!text.empty()) {
+                auto& text_node = self->document.create_node(
+                    dom_node_kind::text, "#text");
+                text_node.text_content = text;
+                self->document.append_child(*node, text_node);
+            }
+            synchronize_textarea_value_from_children(*node);
+        } else {
+            node->attributes["value"] = text;
+        }
         self->document.mark_dirty();
     }
 
@@ -1698,6 +1821,41 @@
         info.GetReturnValue().Set(result);
     }
 
+    static std::vector<dom_node*> form_or_select_items(dom_node& node)
+    {
+        std::vector<dom_node*> items;
+        if (node.tag == "form") collect_form_controls(node, items);
+        else if (node.tag == "select") collect_descendants_by_tag(node, "option", items);
+        return items;
+    }
+
+    static void get_form_or_select_length(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr || (node->tag != "form" && node->tag != "select")) return;
+        info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(
+            info.GetIsolate(),
+            static_cast<uint32_t>(form_or_select_items(*node).size())));
+    }
+
+    static v8::Intercepted form_or_select_indexed_getter(
+        uint32_t index,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.Holder());
+        if (self == nullptr || node == nullptr
+            || (node->tag != "form" && node->tag != "select")) {
+            return v8::Intercepted::kNo;
+        }
+        const auto items = form_or_select_items(*node);
+        if (index >= items.size()) return v8::Intercepted::kNo;
+        info.GetReturnValue().Set(self->wrap_node(*items[index]));
+        return v8::Intercepted::kYes;
+    }
+
     static void get_selected_index(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -1771,14 +1929,18 @@
             }
         }
         if (!node->mutable_form_control().value_initialized) {
-            const auto value = node->attributes.find("value");
-            if (value != node->attributes.end()) {
-                node->mutable_form_control().value = value->second;
+            if (node->tag == "textarea") {
+                reset_textarea_value(*node);
+            } else {
+                const auto value = node->attributes.find("value");
+                if (value != node->attributes.end()) {
+                    node->mutable_form_control().value = value->second;
+                }
+                node->mutable_form_control().value_initialized = true;
+                node->mutable_form_control().selection_start = node->mutable_form_control().value.size();
+                node->mutable_form_control().selection_end = node->mutable_form_control().value.size();
+                node->mutable_form_control().selection_direction = text_selection_direction::none;
             }
-            node->mutable_form_control().value_initialized = true;
-            node->mutable_form_control().selection_start = node->mutable_form_control().value.size();
-            node->mutable_form_control().selection_end = node->mutable_form_control().value.size();
-            node->mutable_form_control().selection_direction = text_selection_direction::none;
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), node->mutable_form_control().value.c_str()));
     }
@@ -1854,6 +2016,9 @@
             ? std::string{}
             : to_utf8(info.GetIsolate(), value);
         node->mutable_form_control().value_initialized = true;
+        if (node->tag == "textarea") {
+            node->mutable_form_control().dirty_value = true;
+        }
         node->mutable_form_control().selection_start = std::min(node->mutable_form_control().selection_start, node->mutable_form_control().value.size());
         node->mutable_form_control().selection_end = std::min(node->mutable_form_control().selection_end, node->mutable_form_control().value.size());
         if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
@@ -2057,11 +2222,16 @@
                 node.mutable_form_control().selectedness = false;
             }
             if (node.tag == "input" || node.tag == "textarea") {
-                const auto authored = node.attributes.find("value");
-                node.mutable_form_control().value = authored == node.attributes.end()
-                    ? std::string{}
-                    : authored->second;
-                node.mutable_form_control().value_initialized = true;
+                if (node.tag == "textarea") {
+                    reset_textarea_value(node);
+                } else {
+                    const auto authored = node.attributes.find("value");
+                    node.mutable_form_control().value = authored == node.attributes.end()
+                        ? std::string{}
+                        : authored->second;
+                    node.mutable_form_control().value_initialized = true;
+                    node.mutable_form_control().dirty_value = false;
+                }
                 if (node.tag == "input") {
                     node.mutable_form_control().checkedness_initialized = false;
                     node.mutable_form_control().checkedness = false;
@@ -2107,6 +2277,37 @@
         if (node == nullptr) return;
         const auto name = to_utf8(info.GetIsolate(), property);
         const auto iterator = node->attributes.find(name);
+        const auto url_reflected = (name == "href"
+                && (node->tag == "a" || node->tag == "area" || node->tag == "link"))
+            || (name == "src"
+                && (node->tag == "audio" || node->tag == "embed"
+                    || node->tag == "iframe" || node->tag == "img"
+                    || node->tag == "input" || node->tag == "script"
+                    || node->tag == "source" || node->tag == "track"
+                    || node->tag == "video"));
+        if (iterator != node->attributes.end() && url_reflected) {
+            auto* self = current(info.GetIsolate());
+            auto base = self->in_frame_context()
+                ? self->frame_base_address : self->document_base_address;
+            if (base.empty()) {
+                auto local_context = info.GetIsolate()->GetCurrentContext();
+                v8::Local<v8::Value> location;
+                v8::Local<v8::Value> href;
+                if (local_context->Global()->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "location")).ToLocal(&location)
+                    && location->IsObject()
+                    && location.As<v8::Object>()->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "href")).ToLocal(&href)
+                    && !href->IsNullOrUndefined()) {
+                    base = to_utf8(info.GetIsolate(), href);
+                }
+            }
+            const auto resolved = resolve_resource_url(iterator->second, base);
+            info.GetReturnValue().Set(js_string(info.GetIsolate(), resolved.c_str()));
+            return;
+        }
         info.GetReturnValue().Set(js_string(
             info.GetIsolate(),
             iterator == node->attributes.end() ? "" : iterator->second.c_str()));
@@ -2154,6 +2355,7 @@
         }
         const auto fragment = iterator->second.find('#');
         const auto value = fragment == std::string::npos
+                || fragment + 1U == iterator->second.size()
             ? std::string{}
             : iterator->second.substr(fragment);
         info.GetReturnValue().Set(js_string(info.GetIsolate(), value.c_str()));

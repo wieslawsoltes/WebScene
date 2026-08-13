@@ -115,7 +115,7 @@ internal static class CommandLine
         Console.WriteLine("  --timeout-seconds <seconds>         Per-document timeout (default: 10)");
         Console.WriteLine("  --native-library <path>              Native engine library for native mode");
         Console.WriteLine("  --native-cache-directory <path>      Native V8 compilation cache");
-        Console.WriteLine("  --chromium-path <path>               Optional Chromium reftest oracle executable");
+        Console.WriteLine("  --chromium-path <path>               Optional Chromium rendering oracle executable");
         Console.WriteLine("  --output <directory>                Artifact directory");
         Console.WriteLine("  --manifest <path>                   Profile manifest path");
         Console.WriteLine("  --list                              List selected tests without running");

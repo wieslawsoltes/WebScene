@@ -34,10 +34,15 @@ function registerModule(name, options, body) {
 
 function registerTest(name, body, skipped = false) {
   const testName = String(name);
+  const includes = (selection, value) => typeof selection?.has === "function"
+    ? selection.has(value)
+    : Array.isArray(selection) && selection.includes(value);
   const blocked = globalThis.__webSceneQUnitBlockedNames;
-  if (blocked && (typeof blocked.has === "function"
-    ? blocked.has(testName)
-    : Array.isArray(blocked) && blocked.includes(testName))) return;
+  if (blocked && includes(blocked, testName)) return;
+  const only = globalThis.__webSceneQUnitOnlyNames;
+  if (only && !includes(only, testName)) return;
+  const excluded = globalThis.__webSceneQUnitExcludedNames;
+  if (excluded && includes(excluded, testName)) return;
   const index = registrationIndex++;
   const shard = globalThis.__webSceneQUnitShard;
   if (shard && index % Number(shard.count) !== Number(shard.index)) return;
@@ -103,12 +108,13 @@ function createAssert(testName) {
   let expectedCount = null;
   let assertionCount = 0;
   let pending = 0;
-  let asynchronousFailure = null;
   let settle = null;
+  const failures = [];
 
   const record = (condition, message) => {
     assertionCount++;
-    if (!condition) throw new Error(message || `QUnit assertion failed in ${testName}`);
+    if (!condition) failures.push(
+      new Error(message || `QUnit assertion failed in ${testName}`));
   };
   const assert = {
     expect(count) { expectedCount = Number(count); },
@@ -138,15 +144,18 @@ function createAssert(testName) {
     async(count = 1) {
       let remaining = Number(count) || 1;
       pending += remaining;
-      return error => {
+      return () => {
         if (remaining <= 0) return;
-        if (error) asynchronousFailure = error instanceof Error ? error : new Error(String(error));
         remaining--;
         pending--;
         if (pending === 0 && settle) settle();
       };
     },
     throws(callback, expected, message) {
+      if (typeof expected === "string" && message === undefined) {
+        message = expected;
+        expected = undefined;
+      }
       let thrown = null;
       try { callback(); } catch (error) { thrown = error; }
       const matches = thrown !== null && (
@@ -171,10 +180,10 @@ function createAssert(testName) {
             () => reject(new Error(`QUnit-compatible test timed out after 5000 ms: ${testName}`)), 5000))
         ]);
       }
-      if (asynchronousFailure) throw asynchronousFailure;
       if (expectedCount !== null && assertionCount !== expectedCount) {
         throw new Error(`${testName}: expected ${expectedCount} assertions, observed ${assertionCount}`);
       }
+      if (failures.length) throw failures[0];
     }
   };
 }
@@ -196,6 +205,8 @@ async function executeTest(module, test) {
   }
   const context = {};
   const assertion = createAssert(name);
+  const registeredAssertions = QUnit.assert;
+  QUnit.assert = assertion.assert;
   try {
     for (const item of lineage) await item.hooks.beforeEach?.call(context, assertion.assert);
     await test.body.call(context, assertion.assert);
@@ -221,6 +232,7 @@ async function executeTest(module, test) {
         });
       }
     }
+    QUnit.assert = registeredAssertions;
   }
 }
 
