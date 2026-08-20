@@ -30,7 +30,14 @@
             canvas_command_kind::fill_text,
             canvas_intern_string(*state->node, text),
             {info[1]->NumberValue(context).FromMaybe(0),
-             info[2]->NumberValue(context).FromMaybe(0)});
+             info[2]->NumberValue(context).FromMaybe(0),
+             info.Length() > 3
+                ? info[3]->NumberValue(context).FromMaybe(0)
+                : 0});
+        if (info.Length() > 3) {
+            state->node->mutable_canvas().commands.back().flags |=
+                WEBSCENE_CANVAS_COMMAND_FLAG_TEXT_MAX_WIDTH;
+        }
     }
 
     static void canvas_stroke_text_no_op(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -51,7 +58,14 @@
             canvas_command_kind::stroke_text,
             canvas_intern_string(*state->node, text),
             {info[1]->NumberValue(context).FromMaybe(0),
-             info[2]->NumberValue(context).FromMaybe(0)});
+             info[2]->NumberValue(context).FromMaybe(0),
+             info.Length() > 3
+                ? info[3]->NumberValue(context).FromMaybe(0)
+                : 0});
+        if (info.Length() > 3) {
+            state->node->mutable_canvas().commands.back().flags |=
+                WEBSCENE_CANVAS_COMMAND_FLAG_TEXT_MAX_WIDTH;
+        }
     }
 
     static canvas_state* canvas_path_state(
@@ -1790,20 +1804,148 @@
         info.GetReturnValue().Set(result);
     }
 
+    struct canvas_font_description final {
+        std::string family{"sans-serif"};
+        float size{10.0F};
+        int32_t weight{400};
+    };
+
+    static canvas_font_description parse_canvas_font(std::string_view shorthand)
+    {
+        canvas_font_description result;
+        const auto first = shorthand.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) return result;
+        const auto last = shorthand.find_last_not_of(" \t\r\n");
+        shorthand = shorthand.substr(first, last - first + 1U);
+
+        size_t size_start = std::string_view::npos;
+        size_t px_end = std::string_view::npos;
+        for (size_t index = 0; index + 1U < shorthand.size(); ++index) {
+            if ((shorthand[index] == 'p' || shorthand[index] == 'P')
+                && (shorthand[index + 1U] == 'x' || shorthand[index + 1U] == 'X')) {
+                auto number_start = index;
+                while (number_start > 0U) {
+                    const auto character = shorthand[number_start - 1U];
+                    if ((character >= '0' && character <= '9')
+                        || character == '.' || character == '+' || character == '-') {
+                        --number_start;
+                        continue;
+                    }
+                    break;
+                }
+                float parsed_size = 0.0F;
+                const auto number = shorthand.substr(number_start, index - number_start);
+                const auto parse_result = std::from_chars(
+                    number.data(),
+                    number.data() + number.size(),
+                    parsed_size);
+                if (parse_result.ec == std::errc{}
+                    && parse_result.ptr == number.data() + number.size()
+                    && std::isfinite(parsed_size)
+                    && parsed_size > 0.0F) {
+                    result.size = parsed_size;
+                    size_start = number_start;
+                    px_end = index + 2U;
+                    break;
+                }
+            }
+        }
+        if (size_start == std::string_view::npos) return result;
+
+        auto prefix = shorthand.substr(0, size_start);
+        size_t token_start = 0U;
+        while (token_start < prefix.size()) {
+            token_start = prefix.find_first_not_of(" \t\r\n", token_start);
+            if (token_start == std::string_view::npos) break;
+            auto token_end = prefix.find_first_of(" \t\r\n", token_start);
+            if (token_end == std::string_view::npos) token_end = prefix.size();
+            auto token = prefix.substr(token_start, token_end - token_start);
+            std::string lower(token);
+            std::transform(
+                lower.begin(), lower.end(), lower.begin(),
+                [](unsigned char character) {
+                    return static_cast<char>(std::tolower(character));
+                });
+            if (lower == "bold" || lower == "bolder") {
+                result.weight = 700;
+            } else if (lower == "lighter") {
+                result.weight = 300;
+            } else if (lower != "normal") {
+                int32_t parsed_weight = 0;
+                const auto weight_result = std::from_chars(
+                    token.data(), token.data() + token.size(), parsed_weight);
+                if (weight_result.ec == std::errc{}
+                    && weight_result.ptr == token.data() + token.size()
+                    && parsed_weight >= 1 && parsed_weight <= 1000) {
+                    result.weight = parsed_weight;
+                }
+            }
+            token_start = token_end;
+        }
+
+        auto family_start = shorthand.find_first_not_of(" \t\r\n", px_end);
+        if (family_start != std::string_view::npos
+            && shorthand[family_start] == '/') {
+            ++family_start;
+            family_start = shorthand.find_first_not_of(" \t\r\n", family_start);
+            if (family_start != std::string_view::npos) {
+                family_start = shorthand.find_first_of(" \t\r\n", family_start);
+                family_start = shorthand.find_first_not_of(" \t\r\n", family_start);
+            }
+        }
+        if (family_start != std::string_view::npos) {
+            result.family = std::string(shorthand.substr(family_start));
+        }
+        return result;
+    }
+
     static void canvas_measure_text(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
-        current(info.GetIsolate())->record_feature(
+        auto* self = current(info.GetIsolate());
+        self->record_feature(
             "canvas",
             "CanvasRenderingContext2D.measureText",
             "partially-supported",
-            "approximate width only",
+            "host-backed advance and font bounds; glyph ink bounds are approximate",
             "native-binding");
         const auto text = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        const auto font = canvas_string_property(info, "font", "10px sans-serif");
+        const auto parsed_font = parse_canvas_font(font);
+        const auto metrics = self->document.measure_text(
+            text,
+            parsed_font.family,
+            parsed_font.size,
+            parsed_font.weight);
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Object::New(info.GetIsolate());
-        result->Set(
-            info.GetIsolate()->GetCurrentContext(),
-            js_string(info.GetIsolate(), "width"),
-            v8::Number::New(info.GetIsolate(), static_cast<double>(text.size()) * 7.0)).Check();
+        const auto set_metric = [&](const char* name, double value) {
+            result->Set(
+                local_context,
+                js_string(info.GetIsolate(), name),
+                v8::Number::New(info.GetIsolate(), value)).Check();
+        };
+        set_metric("width", metrics.advance_width);
+        const auto text_align = canvas_string_property(info, "textAlign", "start");
+        const auto alignment_offset = text_align == "center"
+            ? metrics.advance_width * 0.5
+            : text_align == "right" || text_align == "end"
+                ? metrics.advance_width
+                : 0.0;
+        set_metric(
+            "actualBoundingBoxLeft",
+            metrics.actual_bounding_box_left + alignment_offset);
+        set_metric(
+            "actualBoundingBoxRight",
+            metrics.actual_bounding_box_right - alignment_offset);
+        set_metric("fontBoundingBoxAscent", metrics.ascent);
+        set_metric("fontBoundingBoxDescent", metrics.descent);
+        set_metric("actualBoundingBoxAscent", metrics.actual_bounding_box_ascent);
+        set_metric("actualBoundingBoxDescent", metrics.actual_bounding_box_descent);
+        set_metric("emHeightAscent", metrics.ascent);
+        set_metric("emHeightDescent", metrics.descent);
+        set_metric("hangingBaseline", metrics.ascent * 0.8);
+        set_metric("alphabeticBaseline", 0.0);
+        set_metric("ideographicBaseline", metrics.descent);
         info.GetReturnValue().Set(result);
     }
 

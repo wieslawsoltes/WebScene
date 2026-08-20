@@ -43,6 +43,8 @@ internal enum NativeSceneCompositionMessage
     BeginManualFrames,
     EndManualFrames,
     ManualFrame,
+    TextScale1X,
+    TextScaleRetina,
     Stop
 }
 
@@ -343,19 +345,29 @@ internal sealed unsafe class NativeSceneCompositionHandler
         NativeSceneRenderObserver renderObserver,
         NativeScenePublicationMailbox publicationMailbox,
         NativeSceneUiWakeGate uiWakeGate,
-        Action scheduleUiWake)
+        Action scheduleUiWake,
+        double deviceScaleFactor)
     {
         _engine = engine;
         _renderObserver = renderObserver;
         _publicationMailbox = publicationMailbox;
         _uiWakeGate = uiWakeGate;
         _scheduleUiWake = scheduleUiWake;
+        _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
     }
 
     public override void OnMessage(object message)
     {
         if (message is not NativeSceneCompositionMessage command)
         {
+            return;
+        }
+
+        if (command is NativeSceneCompositionMessage.TextScale1X
+            or NativeSceneCompositionMessage.TextScaleRetina)
+        {
+            _renderer.SetPresenterDeviceScaleFactor(
+                command == NativeSceneCompositionMessage.TextScaleRetina ? 2 : 1);
             return;
         }
 

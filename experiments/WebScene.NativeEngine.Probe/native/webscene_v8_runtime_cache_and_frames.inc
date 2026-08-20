@@ -1315,8 +1315,9 @@
             js_string(isolate, "__webSceneRecordWebApi"),
             v8::Function::New(local_context, record_web_api_use).ToLocalChecked()).Check();
 
-        const auto frame_href = !frame_base_address.empty()
-            ? frame_base_address
+        const auto& current_frame_base = current_base_address();
+        const auto frame_href = !current_frame_base.empty()
+            ? current_frame_base
             : std::string("http://127.0.0.1/")
                 + resource_root.filename().generic_string() + '/';
         set_context_location(local_context, global, frame_href);
@@ -1743,6 +1744,7 @@
         const auto body_opening = opening_tag("body");
 
         auto& frame_body = document.create_element("body");
+        frame_base_addresses[&frame_body] = frame_base_address;
         record_feature(
             "html",
             "element:body",
@@ -1952,12 +1954,6 @@
         // that event have run.
         v8::Context::Scope lifecycle_context_scope(local_frame_context);
         const auto dispatch_lifecycle_event = [&](v8::Local<v8::Object> target, const char* type) {
-            record_feature(
-                "event",
-                std::string("type:") + type,
-                "supported",
-                {},
-                "event-dispatch");
             auto event = create_event_instance(local_frame_context);
             event->Set(
                 local_frame_context,
@@ -1965,72 +1961,40 @@
                 js_string(isolate, type)).Check();
             event->Set(
                 local_frame_context,
-                js_string(isolate, "target"),
-                target).Check();
+                js_string(isolate, "bubbles"),
+                v8::Boolean::New(
+                    isolate,
+                    std::string_view(type) == "DOMContentLoaded")).Check();
             event->Set(
                 local_frame_context,
-                js_string(isolate, "currentTarget"),
-                target).Check();
+                js_string(isolate, "cancelable"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_frame_context,
+                js_string(isolate, "defaultPrevented"),
+                v8::False(isolate)).Check();
+            v8::Local<v8::Value> dispatcher;
+            if (!target->Get(
+                    local_frame_context,
+                    js_string(isolate, "dispatchEvent")).ToLocal(&dispatcher)
+                || !dispatcher->IsFunction()) {
+                frame_last_error_value =
+                    std::string("Iframe ") + type + " dispatcher is unavailable";
+                ++frame_script_error_count;
+                return false;
+            }
+            v8::TryCatch try_catch(isolate);
             v8::Local<v8::Value> arguments[] = {event};
-            const auto listeners = frame_event_listeners.find(type);
-            if (listeners != frame_event_listeners.end()) {
-                const auto target_id = is_document_object(target)
-                    ? std::numeric_limits<uint32_t>::max()
-                    : 0U;
-                auto* listener_list = &listeners->second;
-                // Listener callbacks can register more listeners. Snapshot the
-                // initial length, as EventTarget dispatch does, and reacquire
-                // each persistent handle after returning from JavaScript.
-                const auto listener_count = listener_list->size();
-                for (size_t index = 0; index < listener_count; ++index) {
-                    auto& listener = (*listener_list)[index];
-                    if (listener.context.Get(isolate) != local_frame_context
-                        || listener.target != target_id) continue;
-                    auto callback = listener.callback.Get(isolate);
-                    if (callback.IsEmpty()) continue;
-                    if (!listener.signal.IsEmpty()) {
-                        auto signal = listener.signal.Get(isolate);
-                        v8::Local<v8::Value> aborted;
-                        if (signal->Get(
-                                local_frame_context,
-                                js_string(isolate, "aborted")).ToLocal(&aborted)
-                            && aborted->BooleanValue(isolate)) {
-                            listener.callback.Reset();
-                            listener.signal.Reset();
-                            continue;
-                        }
-                    }
-                    const auto passive = listener.passive;
-                    if (listener.once) {
-                        listener.callback.Reset();
-                        listener.signal.Reset();
-                    }
-                    event->Set(
-                        local_frame_context,
-                        js_string(isolate, "__websceneInPassiveListener"),
-                        v8::Boolean::New(isolate, passive)).Check();
-                    v8::TryCatch try_catch(isolate);
-                    const auto callback_succeeded = !call_event_listener(
-                            isolate,
-                            local_frame_context,
-                            callback,
-                            target,
-                            1,
-                            arguments).IsEmpty();
-                    event->Set(
-                        local_frame_context,
-                        js_string(isolate, "__websceneInPassiveListener"),
-                        v8::False(isolate)).Check();
-                    if (!callback_succeeded) {
-                        frame_last_error_value = std::string("Iframe ") + type
-                            + " dispatch failed: " + describe_exception(try_catch, local_frame_context);
-                        ++frame_script_error_count;
-                        return false;
-                    }
-                }
-                std::erase_if(
-                    *listener_list,
-                    [](const auto& listener) { return listener.callback.IsEmpty(); });
+            if (dispatcher.As<v8::Function>()->Call(
+                    local_frame_context,
+                    target,
+                    1,
+                    arguments).IsEmpty()) {
+                frame_last_error_value = std::string("Iframe ") + type
+                    + " dispatch failed: "
+                    + describe_exception(try_catch, local_frame_context);
+                ++frame_script_error_count;
+                return false;
             }
             perform_microtask_checkpoint();
             return true;

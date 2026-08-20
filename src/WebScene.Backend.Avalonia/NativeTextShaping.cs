@@ -42,11 +42,20 @@ public struct NativeTextMetrics
     public float Ascent;
     public float Descent;
     public float Leading;
+    public float ActualBoundingBoxLeft;
+    public float ActualBoundingBoxRight;
+    public float ActualBoundingBoxAscent;
+    public float ActualBoundingBoxDescent;
 }
 
 public static class NativeTextShaping
 {
     internal const uint TabularNumerals = 1u << 0;
+    internal readonly record struct CanvasFontDescription(
+        float Size,
+        int Weight,
+        SKFontStyleSlant Slant,
+        string FamilyList);
     private static readonly ConcurrentDictionary<string, SKTypeface> Typefaces =
         new(StringComparer.Ordinal);
     private static readonly object WebTypefaceCacheGate = new();
@@ -148,11 +157,26 @@ public static class NativeTextShaping
     }
 
     public static SKTypeface ResolveTypeface(string familyList, int fontWeight)
-        => ResolveTypeface(familyList, fontWeight, null);
+        => ResolveTypeface(
+            familyList,
+            fontWeight,
+            SKFontStyleSlant.Upright,
+            null);
 
     internal static SKTypeface ResolveTypeface(
         string familyList,
         int fontWeight,
+        WebTypefaceRegistry? registry)
+        => ResolveTypeface(
+            familyList,
+            fontWeight,
+            SKFontStyleSlant.Upright,
+            registry);
+
+    internal static SKTypeface ResolveTypeface(
+        string familyList,
+        int fontWeight,
+        SKFontStyleSlant slant,
         WebTypefaceRegistry? registry)
     {
         foreach (var rawFamily in familyList.Split(
@@ -170,29 +194,30 @@ public static class NativeTextShaping
         }
 
         var requestedWeight = Math.Clamp(fontWeight, 1, 1000);
-        var key = $"{familyList}\u001f{requestedWeight}";
+        var key = $"{familyList}\u001f{requestedWeight}\u001f{(int)slant}";
         return Typefaces.GetOrAdd(key, _ =>
         {
             foreach (var rawFamily in familyList.Split(
                          ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
                 var family = rawFamily.Trim('"', '\'');
-                if (family is "-apple-system" or "BlinkMacSystemFont" or "system-ui"
+                var genericFamily = family.ToLowerInvariant();
+                if (genericFamily is "-apple-system" or "blinkmacsystemfont" or "system-ui"
                     or "sans-serif")
                 {
                     family = OperatingSystem.IsMacOS() ? ".AppleSystemUIFont" : "Arial";
                 }
-                else if (family == "serif") family = "Times New Roman";
-                else if (family == "monospace") family = OperatingSystem.IsMacOS() ? "Menlo" : "Consolas";
+                else if (genericFamily == "serif") family = "Times New Roman";
+                else if (genericFamily == "monospace") family = OperatingSystem.IsMacOS() ? "Menlo" : "Consolas";
 
                 var candidate = SKTypeface.FromFamilyName(
                     family,
                     requestedWeight,
                     (int)SKFontStyleWidth.Normal,
-                    SKFontStyleSlant.Upright);
+                    slant);
                 if (candidate is not null
                     && (string.Equals(candidate.FamilyName, family, StringComparison.OrdinalIgnoreCase)
-                        || rawFamily is "-apple-system" or "BlinkMacSystemFont" or "system-ui"
+                        || genericFamily is "-apple-system" or "blinkmacsystemfont" or "system-ui"
                             or "sans-serif" or "serif" or "monospace"))
                 {
                     return candidate;
@@ -201,6 +226,101 @@ public static class NativeTextShaping
             }
             return SKTypeface.Default;
         });
+    }
+
+    internal static bool TryParseCanvasFont(
+        string shorthand,
+        out CanvasFontDescription font)
+    {
+        font = new CanvasFontDescription(
+            10,
+            400,
+            SKFontStyleSlant.Upright,
+            "sans-serif");
+        if (string.IsNullOrWhiteSpace(shorthand)) return false;
+
+        var px = shorthand.IndexOf("px", StringComparison.OrdinalIgnoreCase);
+        if (px <= 0) return false;
+        var sizeStart = px - 1;
+        while (sizeStart >= 0
+               && (char.IsDigit(shorthand[sizeStart])
+                   || shorthand[sizeStart] is '.' or '-' or '+'))
+        {
+            sizeStart--;
+        }
+        sizeStart++;
+        if (!float.TryParse(
+                shorthand.AsSpan(sizeStart, px - sizeStart),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var size)
+            || !float.IsFinite(size)
+            || size <= 0)
+        {
+            return false;
+        }
+
+        var weight = 400;
+        var slant = SKFontStyleSlant.Upright;
+        foreach (var token in shorthand[..sizeStart].Split(
+                     (char[]?)null,
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (token.Equals("bold", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("bolder", StringComparison.OrdinalIgnoreCase))
+            {
+                weight = 700;
+            }
+            else if (token.Equals("lighter", StringComparison.OrdinalIgnoreCase))
+            {
+                weight = 300;
+            }
+            else if (token.Equals("italic", StringComparison.OrdinalIgnoreCase))
+            {
+                slant = SKFontStyleSlant.Italic;
+            }
+            else if (token.Equals("oblique", StringComparison.OrdinalIgnoreCase))
+            {
+                slant = SKFontStyleSlant.Oblique;
+            }
+            else if (int.TryParse(
+                         token,
+                         NumberStyles.Integer,
+                         CultureInfo.InvariantCulture,
+                         out var numericWeight)
+                     && numericWeight is >= 1 and <= 1000)
+            {
+                weight = numericWeight;
+            }
+        }
+
+        var familyStart = px + 2;
+        while (familyStart < shorthand.Length && char.IsWhiteSpace(shorthand[familyStart]))
+        {
+            familyStart++;
+        }
+        if (familyStart < shorthand.Length && shorthand[familyStart] == '/')
+        {
+            familyStart++;
+            while (familyStart < shorthand.Length && char.IsWhiteSpace(shorthand[familyStart]))
+            {
+                familyStart++;
+            }
+            while (familyStart < shorthand.Length && !char.IsWhiteSpace(shorthand[familyStart]))
+            {
+                familyStart++;
+            }
+            while (familyStart < shorthand.Length && char.IsWhiteSpace(shorthand[familyStart]))
+            {
+                familyStart++;
+            }
+        }
+        if (familyStart >= shorthand.Length) return false;
+        var familyList = shorthand[familyStart..].Trim();
+        if (familyList.Length == 0) return false;
+
+        font = new CanvasFontDescription(size, weight, slant, familyList);
+        return true;
     }
 
     internal static float ResolveWidthScale(
@@ -223,6 +343,114 @@ public static class NativeTextShaping
             1.0222f + (16f - size) * 0.0062f - (weight - 400f) * 0.000133f,
             0.96f,
             1.08f);
+    }
+
+    internal static float ResolveShapedWidthScale(
+        string text,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        SKPaint paint,
+        float shapedWidth,
+        uint featureFlags,
+        WebTypefaceRegistry? registry = null)
+    {
+        if ((featureFlags & TabularNumerals) != 0)
+        {
+            return ResolveWidthScale(
+                familyList,
+                fontSize,
+                fontWeight,
+                registry);
+        }
+        if (!OperatingSystem.IsMacOS()
+            || !UsesMacSystemUiMetrics(familyList, registry)
+            || shapedWidth <= 0
+            || !UsesMacSystemUiPlatformAdvances(text))
+        {
+            return 1f;
+        }
+
+        // SkiaSharp 2.88's HarfBuzz bridge under-reports the hidden macOS
+        // system face and does not reflect its selected weight in advances.
+        // CoreText-backed Skia advances retain those axes. Keep HarfBuzz's
+        // glyph selection and kerning, but scale the run to the platform
+        // advance used by Blink's -apple-system face.
+        var platformWidth = paint.MeasureText(text);
+        if (!float.IsFinite(platformWidth) || platformWidth <= 0) return 1f;
+        var size = Math.Clamp(fontSize, 8f, 24f);
+        var weight = Math.Clamp(fontWeight, 100, 900);
+        var platformCalibration = Math.Clamp(
+            0.975f - (size - 14f) * 0.006f + (weight - 400f) * 0.00005f,
+            0.93f,
+            1.02f);
+        // A standalone collapsed space is a real inline advance. The hidden
+        // system face exposed to HarfBuzz under-reports it by roughly one
+        // third on macOS, so the upper bound must admit the platform value.
+        return Math.Clamp(platformWidth * platformCalibration / shapedWidth, 0.8f, 1.4f);
+    }
+
+    private static bool UsesMacSystemUiPlatformAdvances(string text)
+    {
+        var sawCompatibleRune = false;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            var category = Rune.GetUnicodeCategory(rune);
+            if (IsLatinLetter(rune, category))
+            {
+                sawCompatibleRune = true;
+                continue;
+            }
+
+            // Punctuation is commonly split into a separate inline text run.
+            // In particular, a typographic apostrophe must not switch an
+            // otherwise Latin run back to HarfBuzz's narrower hidden-system-
+            // font advances. Doing so makes adjacent fragments use visibly
+            // different tracking and also makes bold fragments look heavier.
+            if (category is UnicodeCategory.DecimalDigitNumber
+                or UnicodeCategory.LetterNumber
+                or UnicodeCategory.OtherNumber
+                or UnicodeCategory.NonSpacingMark
+                or UnicodeCategory.SpacingCombiningMark
+                or UnicodeCategory.SpaceSeparator
+                or UnicodeCategory.LineSeparator
+                or UnicodeCategory.ParagraphSeparator
+                or UnicodeCategory.ConnectorPunctuation
+                or UnicodeCategory.DashPunctuation
+                or UnicodeCategory.OpenPunctuation
+                or UnicodeCategory.ClosePunctuation
+                or UnicodeCategory.InitialQuotePunctuation
+                or UnicodeCategory.FinalQuotePunctuation
+                or UnicodeCategory.OtherPunctuation
+                or UnicodeCategory.MathSymbol
+                or UnicodeCategory.CurrencySymbol)
+            {
+                sawCompatibleRune = true;
+                continue;
+            }
+
+            return false;
+        }
+        return sawCompatibleRune;
+    }
+
+    private static bool IsLatinLetter(Rune rune, UnicodeCategory category)
+    {
+        if (category is not (UnicodeCategory.UppercaseLetter
+            or UnicodeCategory.LowercaseLetter
+            or UnicodeCategory.TitlecaseLetter
+            or UnicodeCategory.ModifierLetter
+            or UnicodeCategory.OtherLetter))
+        {
+            return false;
+        }
+        var value = rune.Value;
+        return value is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z')
+            or (>= 0x00C0 and <= 0x024F) // Latin-1 and Latin Extended A/B.
+            or (>= 0x1E00 and <= 0x1EFF) // Latin Extended Additional.
+            or (>= 0x2C60 and <= 0x2C7F) // Latin Extended C.
+            or (>= 0xA720 and <= 0xA7FF) // Latin Extended D.
+            or (>= 0xAB30 and <= 0xAB6F); // Latin Extended E.
     }
 
     internal static float MeasureShapedWidth(
@@ -258,6 +486,98 @@ public static class NativeTextShaping
         return width;
     }
 
+    internal static SKRect MeasureShapedInkBounds(
+        SKShaper shaper,
+        string text,
+        SKPaint paint,
+        uint featureFlags,
+        float tabularDigitScale = 1f,
+        float horizontalAdvanceScale = 1f)
+    {
+        if (string.IsNullOrEmpty(text)) return SKRect.Empty;
+        if ((featureFlags & TabularNumerals) == 0)
+        {
+            return MeasureShapedTextRunBounds(
+                shaper,
+                text,
+                0,
+                paint,
+                horizontalAdvanceScale);
+        }
+
+        var result = SKRect.Empty;
+        var hasBounds = false;
+        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var cursor = 0f;
+        for (var index = 0; index < text.Length;)
+        {
+            string segment;
+            float advance;
+            if (text[index] is >= '0' and <= '9')
+            {
+                segment = text[index].ToString();
+                advance = tabularDigitWidth;
+                index++;
+            }
+            else
+            {
+                var start = index++;
+                while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
+                segment = text[start..index];
+                advance = shaper.Shape(segment, paint).Width;
+            }
+
+            var bounds = MeasureShapedTextRunBounds(
+                shaper,
+                segment,
+                cursor,
+                paint,
+                horizontalAdvanceScale);
+            if (!bounds.IsEmpty)
+            {
+                if (hasBounds) result.Union(bounds);
+                else
+                {
+                    result = bounds;
+                    hasBounds = true;
+                }
+            }
+            cursor += advance * horizontalAdvanceScale;
+        }
+        return result;
+    }
+
+    private static SKRect MeasureShapedTextRunBounds(
+        SKShaper shaper,
+        string text,
+        float x,
+        SKPaint paint,
+        float horizontalAdvanceScale)
+    {
+        var shaped = shaper.Shape(text, 0, 0, paint);
+        if (shaped.Codepoints.Length == 0 || shaped.Points.Length == 0)
+        {
+            return SKRect.Empty;
+        }
+
+        using var font = paint.ToFont();
+        font.Typeface = shaper.Typeface;
+        using var builder = new SKTextBlobBuilder();
+        var glyphCount = Math.Min(shaped.Codepoints.Length, shaped.Points.Length);
+        var run = builder.AllocatePositionedRun(font, glyphCount);
+        var glyphs = run.GetGlyphSpan();
+        var positions = run.GetPositionSpan();
+        for (var index = 0; index < glyphCount; index++)
+        {
+            glyphs[index] = (ushort)shaped.Codepoints[index];
+            positions[index] = new SKPoint(
+                x + shaped.Points[index].X * horizontalAdvanceScale,
+                shaped.Points[index].Y);
+        }
+        using var blob = builder.Build();
+        return blob?.Bounds ?? SKRect.Empty;
+    }
+
     internal static void DrawShapedText(
         SKCanvas canvas,
         SKShaper shaper,
@@ -266,35 +586,75 @@ public static class NativeTextShaping
         float baseline,
         SKPaint paint,
         uint featureFlags,
-        float tabularDigitScale = 1f)
+        float tabularDigitScale = 1f,
+        float horizontalAdvanceScale = 1f,
+        float measuredWidth = float.NaN,
+        float deviceScaleFactor = 1f)
     {
         if (string.IsNullOrEmpty(text))
         {
             return;
         }
+        var unscaledWidth = float.IsFinite(measuredWidth)
+            ? measuredWidth
+            : MeasureShapedWidth(
+                shaper,
+                text,
+                paint,
+                featureFlags,
+                tabularDigitScale);
+        var cursor = paint.TextAlign switch
+        {
+            SKTextAlign.Center => x - unscaledWidth * horizontalAdvanceScale * .5f,
+            SKTextAlign.Right => x - unscaledWidth * horizontalAdvanceScale,
+            _ => x
+        };
         if ((featureFlags & TabularNumerals) == 0)
         {
-            DrawShapedTextRun(canvas, shaper, text, x, baseline, paint);
+            DrawShapedTextRun(
+                canvas,
+                shaper,
+                text,
+                cursor,
+                baseline,
+                paint,
+                horizontalAdvanceScale,
+                deviceScaleFactor);
             return;
         }
 
         var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
-        var cursor = x;
         for (var index = 0; index < text.Length;)
         {
             if (text[index] is >= '0' and <= '9')
             {
                 var digit = text[index].ToString();
-                DrawShapedTextRun(canvas, shaper, digit, cursor, baseline, paint);
-                cursor += tabularDigitWidth;
+                DrawShapedTextRun(
+                    canvas,
+                    shaper,
+                    digit,
+                    cursor,
+                    baseline,
+                    paint,
+                    horizontalAdvanceScale,
+                    deviceScaleFactor);
+                cursor += tabularDigitWidth * horizontalAdvanceScale;
                 index++;
                 continue;
             }
             var start = index++;
             while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
             var segment = text[start..index];
-            DrawShapedTextRun(canvas, shaper, segment, cursor, baseline, paint);
-            cursor += shaper.Shape(segment, paint).Width;
+            DrawShapedTextRun(
+                canvas,
+                shaper,
+                segment,
+                cursor,
+                baseline,
+                paint,
+                horizontalAdvanceScale,
+                deviceScaleFactor);
+            cursor += shaper.Shape(segment, paint).Width * horizontalAdvanceScale;
         }
     }
 
@@ -304,9 +664,11 @@ public static class NativeTextShaping
         string text,
         float x,
         float baseline,
-        SKPaint paint)
+        SKPaint paint,
+        float horizontalAdvanceScale,
+        float deviceScaleFactor)
     {
-        var result = shaper.Shape(text, x, baseline, paint);
+        var result = shaper.Shape(text, 0, baseline, paint);
         if (result.Codepoints.Length == 0 || result.Points.Length == 0)
         {
             return;
@@ -314,6 +676,9 @@ public static class NativeTextShaping
 
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
+        var rasterization = ResolveFontRasterizationProfile(deviceScaleFactor);
+        font.Subpixel = rasterization.Subpixel;
+        font.BaselineSnap = rasterization.BaselineSnap;
         using var builder = new SKTextBlobBuilder();
         var glyphCount = Math.Min(result.Codepoints.Length, result.Points.Length);
         var run = builder.AllocatePositionedRun(font, glyphCount);
@@ -322,7 +687,9 @@ public static class NativeTextShaping
         for (var index = 0; index < glyphCount; index++)
         {
             glyphs[index] = (ushort)result.Codepoints[index];
-            positions[index] = result.Points[index];
+            positions[index] = new SKPoint(
+                x + result.Points[index].X * horizontalAdvanceScale,
+                result.Points[index].Y);
         }
 
         using var textBlob = builder.Build();
@@ -331,14 +698,18 @@ public static class NativeTextShaping
             return;
         }
 
-        var xOffset = paint.TextAlign switch
-        {
-            SKTextAlign.Center => -result.Width * 0.5f,
-            SKTextAlign.Right => -result.Width,
-            _ => 0f,
-        };
-        canvas.DrawText(textBlob, xOffset, 0, paint);
+        canvas.DrawText(textBlob, 0, 0, paint);
     }
+
+    internal readonly record struct FontRasterizationProfile(
+        bool Subpixel,
+        bool BaselineSnap);
+
+    internal static FontRasterizationProfile ResolveFontRasterizationProfile(
+        float deviceScaleFactor)
+        => float.IsFinite(deviceScaleFactor) && deviceScaleFactor >= 1.5f
+            ? new(Subpixel: true, BaselineSnap: false)
+            : new(Subpixel: false, BaselineSnap: true);
 
     internal static uint ResolveFeatureFlags(
         string text,
@@ -470,22 +841,39 @@ public static class NativeTextShaping
             ? 0
             : StringInfo.ParseCombiningCharacters(text).Length;
         var spaces = text.Count(character => character == ' ');
+        var widthScale = ResolveShapedWidthScale(
+            text,
+            familyList,
+            fontSize,
+            fontWeight,
+            paint,
+            shapedWidth,
+            featureFlags,
+            registry);
+        var inkBounds = MeasureShapedInkBounds(
+            shaper,
+            text,
+            paint,
+            featureFlags,
+            ResolveTabularDigitScale(familyList, registry),
+            widthScale);
+        var spacing = Math.Max(0, graphemes - 1) * letterSpacing
+            + spaces * wordSpacing;
         return new NativeTextMetrics
         {
             StructSize = (uint)Marshal.SizeOf<NativeTextMetrics>(),
-            AdvanceWidth = shapedWidth
-                * ((featureFlags & TabularNumerals) != 0
-                    ? ResolveWidthScale(
-                        familyList,
-                        fontSize,
-                        fontWeight,
-                        registry)
-                    : 1f)
-                + Math.Max(0, graphemes - 1) * letterSpacing
-                + spaces * wordSpacing,
+            AdvanceWidth = shapedWidth * widthScale + spacing,
             Ascent = -fontMetrics.Ascent,
             Descent = fontMetrics.Descent,
-            Leading = fontMetrics.Leading
+            Leading = fontMetrics.Leading,
+            // Canvas TextMetrics distances are signed. In particular, the
+            // left distance is negative when the ink begins to the right of
+            // the alignment point; clamping it changes browser layout code
+            // that derives tooltip and label bounds from these fields.
+            ActualBoundingBoxLeft = -inkBounds.Left,
+            ActualBoundingBoxRight = inkBounds.Right + spacing,
+            ActualBoundingBoxAscent = -inkBounds.Top,
+            ActualBoundingBoxDescent = inkBounds.Bottom
         };
     }
 

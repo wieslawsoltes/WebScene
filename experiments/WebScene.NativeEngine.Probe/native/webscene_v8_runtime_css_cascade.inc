@@ -1405,7 +1405,10 @@
                 reset.transform_origin_y = previous.transform_origin_y;
                 reset.transform_origin_specified = previous.transform_origin_specified;
             }
-            if (is_inline(inline_background)) reset.background_rgba = previous.background_rgba;
+            if (is_inline(inline_background)) {
+                reset.background_rgba = previous.background_rgba;
+                reset.background_current_color = previous.background_current_color;
+            }
             if (is_inline(inline_overflow)) {
                 reset.overflow_x = previous.overflow_x;
                 reset.overflow_y = previous.overflow_y;
@@ -1527,6 +1530,7 @@
                 && !explicit_document_element
                 ? node.parent->style.background_rgba
                 : 0U;
+            node.style.background_current_color = false;
             return;
         }
         const auto parse_declared_color = [&](const std::string& color_value) {
@@ -2135,8 +2139,7 @@
             }
             std::string markup;
             std::string resolved_url;
-            const auto& base = in_frame_context()
-                ? frame_base_address : document_base_address;
+            const auto& base = current_base_address();
             if (!load_text_resource(
                     *url,
                     base,
@@ -2184,6 +2187,8 @@
             decision.semantic_slice = "cover, contain, auto, percentages, and pixel lengths";
         } else if ((name == "background" || name == "background-color")
             && !is_inline(inline_background)) {
+            node.style.background_current_color =
+                lower_html_name(value) == "currentcolor";
             const auto parsed = parse_declared_color(value);
             if (parsed != 0U || value == "transparent"
                 || lower_html_name(value) == "currentcolor") node.style.background_rgba = parsed;
@@ -2497,7 +2502,10 @@
             node.style.box_shadow_rgba = 0;
             node.style.box_shadow_present = false;
         }
-        if ((node.style.inline_property_mask & inline_background) == 0U) node.style.background_rgba = 0;
+        if ((node.style.inline_property_mask & inline_background) == 0U) {
+            node.style.background_rgba = 0;
+            node.style.background_current_color = false;
+        }
         node.style.clear_background_image();
         if ((node.style.inline_property_mask & inline_overflow) == 0U) {
             node.style.overflow_x = overflow_mode::visible;
@@ -2655,6 +2663,25 @@
                 if (declaration.name.starts_with("--")) continue;
                 apply_css_declaration(node, declaration);
             }
+        }
+        // An inline declaration can be authored before the stylesheet that
+        // defines one of its var() references is connected. Its first
+        // computed-value attempt is then invalid, but the authored tokens must
+        // remain live and be recomputed when the variable becomes available.
+        // Replay only variable-dependent inline declarations here. Temporarily
+        // removing their inline guard lets the declaration update its own
+        // computed value while the important-origin mask still prevents a
+        // normal inline declaration from overriding an author !important rule.
+        for (const auto& [name, value] : node.authored_style().declarations) {
+            if (name.starts_with("--") || value.find("var(") == std::string::npos) continue;
+            const auto property_mask = inline_style_mask(name);
+            const auto retained_inline_mask = node.style.inline_property_mask;
+            node.style.inline_property_mask &= ~property_mask;
+            apply_css_declaration(
+                node,
+                {name, value,
+                    node.authored_style().important_declarations.contains(name)});
+            node.style.inline_property_mask = retained_inline_mask;
         }
         // Inline transition declarations are stored separately from the hot
         // style object. Recascade clears cold animation state before applying
@@ -3199,7 +3226,7 @@
         if (styles.empty()) return;
 
         for (auto* style : styles) deactivate_connected_stylesheets(*style, false);
-        const auto& base = in_frame_context() ? frame_base_address : document_base_address;
+        const auto& base = current_base_address();
         for (auto* style : styles) {
             std::string stylesheet;
             append_node_text(*style, stylesheet);

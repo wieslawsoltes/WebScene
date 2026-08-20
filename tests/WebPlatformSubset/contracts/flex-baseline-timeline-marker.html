@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flex baseline timeline label and outlined marker geometry</title>
+<style>
+  body { margin: 0; }
+  #timeline {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    width: 273px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  #day { box-sizing: content-box; width: 30px; padding-top: 3px; font-size: 10px; line-height: 12px; }
+  #track { position: relative; flex: 1 1 auto; height: 7px; }
+  #marker-layer { position: absolute; inset: 0 0 0 30px; }
+  #marker {
+    position: absolute;
+    left: 40%;
+    top: 2px;
+    bottom: -1px;
+    width: 1px;
+    background: rgb(219, 219, 219);
+    outline: 1px rgb(31, 31, 31) solid;
+  }
+</style>
+<div id="timeline">
+  <div id="day">THU</div>
+  <div id="track"></div>
+  <div id="marker-layer"><i id="marker"></i></div>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const result = { name: "padded label, non-text track, and outlined marker retain timeline geometry" };
+  try {
+    const rect = id => document.getElementById(id).getBoundingClientRect();
+    const timeline = rect("timeline");
+    const day = rect("day");
+    const track = rect("track");
+    const marker = rect("marker");
+    const markerStyle = getComputedStyle(document.getElementById("marker"));
+    const close = (actual, expected, label, tolerance = .6) => {
+      if (Math.abs(actual - expected) > tolerance) {
+        throw new Error(label + ": expected " + expected + ", got " + actual);
+      }
+    };
+
+    close(timeline.height, 15, "timeline height", .1);
+    close(day.top, timeline.top, "day top", .1);
+    close(track.top, timeline.top + 6, "synthetic non-text baseline");
+    close(marker.top + marker.height / 2, track.top + track.height / 2,
+      "marker and track centers");
+    if (markerStyle.outlineWidth !== "1px" || markerStyle.outlineStyle !== "solid" ||
+        markerStyle.outlineColor !== "rgb(31, 31, 31)") {
+      throw new Error("marker outline was not preserved: " +
+        [markerStyle.outlineWidth, markerStyle.outlineStyle, markerStyle.outlineColor].join("/"));
+    }
+
+    result.status = "PASS";
+    result.message = null;
+    result.stack = null;
+    state.diagnostics = [JSON.stringify({ timeline, day, track, marker,
+      outline: { width: markerStyle.outlineWidth, style: markerStyle.outlineStyle,
+        color: markerStyle.outlineColor } })];
+    state.harness = { status: 0, message: null, stack: null };
+  } catch (error) {
+    result.status = "FAIL";
+    result.message = String(error && error.message || error);
+    result.stack = error && error.stack ? String(error.stack) : null;
+    state.harness = { status: 1, message: result.message, stack: result.stack };
+  }
+  state.results.push(result);
+  state.complete = true;
+</script>

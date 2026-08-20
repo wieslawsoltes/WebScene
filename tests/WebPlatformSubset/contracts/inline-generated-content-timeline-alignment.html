@@ -20,11 +20,13 @@
   .baseline-timeline { display: flex; align-items: baseline; width: 360px; }
   .baseline-day { box-sizing: content-box; font: 10px/12px sans-serif; padding-top: 3px; width: 30px; }
   .baseline-track { flex: 1 1 auto; height: 7px; }
+  .centered-inline { width: 273px; text-align: center; }
 </style>
 <p id="status-text" class="status-text"><span id="status-first" class="status-item">All's well — market is open.</span><span id="status-second" class="status-item"><b>It'll close in 3 hours.</b></span></p>
 <span id="status-reference" class="status-item status-reference">All's well — market is open.</span>
 <div id="timeline" class="timeline"><span id="timeline-day" class="timeline-day">WED</span><span id="timeline-track" class="timeline-track"><i id="timeline-marker" class="timeline-marker"></i></span></div>
 <div id="baseline-timeline" class="baseline-timeline"><span id="baseline-day" class="baseline-day">WED</span><span id="baseline-track" class="baseline-track"></span></div>
+<div id="centered-inline" class="centered-inline"><span id="centered-prefix">Reference zone:</span> <span id="centered-value">Sample (UTC+0)</span></div>
 <script>
   const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
@@ -42,6 +44,9 @@
     const baselineTimeline = rect("baseline-timeline");
     const baselineDay = rect("baseline-day");
     const baselineTrack = rect("baseline-track");
+    const centeredInline = rect("centered-inline");
+    const centeredPrefix = rect("centered-prefix");
+    const centeredValue = rect("centered-value");
     const failures = [];
     const close = (actual, expected, label, tolerance = .6) => {
       if (Math.abs(actual - expected) > tolerance) {
@@ -66,13 +71,17 @@
     close(baselineDay.top, baselineTimeline.top, "baseline day top", .1);
     close(baselineTrack.top, baselineTimeline.top + 6,
       "non-text timeline track baseline placement", .6);
+    close((centeredPrefix.left + centeredValue.right) / 2,
+      centeredInline.left + centeredInline.width / 2,
+      "flattened inline text-align center", .6);
+    state.diagnostics = [JSON.stringify({ statusFirst, statusSecond, statusReference,
+      timeline, timelineDay, timelineTrack, timelineMarker,
+      baselineTimeline, baselineDay, baselineTrack,
+      centeredInline, centeredPrefix, centeredValue })];
     if (failures.length) throw new Error(failures.join("; "));
     result.status = "PASS";
     result.message = null;
     result.stack = null;
-    state.diagnostics = [JSON.stringify({ statusFirst, statusSecond, statusReference,
-      timeline, timelineDay, timelineTrack, timelineMarker,
-      baselineTimeline, baselineDay, baselineTrack })];
     state.harness = { status: 0, message: null, stack: null };
   } catch (error) {
     result.status = "FAIL";

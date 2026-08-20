@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Transform translate preserves nested calc and custom-property arguments</title>
+<style>
+  body { margin: 0; }
+  #switch {
+    --switch-width: 38px;
+    --switch-thumb: 14px;
+    --switch-padding: 3px;
+    position: fixed;
+    display: block;
+    left: 10px;
+    top: 20px;
+    width: var(--switch-width);
+    height: 20px;
+  }
+  #thumb {
+    display: block;
+    width: var(--switch-thumb);
+    height: var(--switch-thumb);
+    transform: translate(var(--switch-padding), var(--switch-padding));
+  }
+  #switch.checked #thumb {
+    transform: translate(
+      calc(var(--switch-width) - var(--switch-thumb) - var(--switch-padding)),
+      var(--switch-padding));
+  }
+</style>
+<span id="switch"><span id="thumb"></span></span>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function matrix(node) {
+    const value = getComputedStyle(node).transform;
+    assert(value.startsWith("matrix(") && value.endsWith(")"),
+      "computed transform was not a matrix: " + value);
+    return value.slice(7, -1).split(",").map(Number);
+  }
+
+  function near(actual, expected, message) {
+    assert(Math.abs(actual - expected) < .01,
+      `${message}: expected ${expected}, got ${actual}`);
+  }
+
+  try {
+    const control = document.getElementById("switch");
+    const thumb = document.getElementById("thumb");
+    let transform = matrix(thumb);
+    let rect = thumb.getBoundingClientRect();
+    near(transform[4], 3, "unchecked translateX");
+    near(transform[5], 3, "unchecked translateY");
+    near(rect.x, 13, "unchecked client x");
+    near(rect.y, 23, "unchecked client y");
+
+    control.classList.add("checked");
+    transform = matrix(thumb);
+    rect = thumb.getBoundingClientRect();
+    near(transform[4], 21, "checked calc translateX");
+    near(transform[5], 3, "checked translateY");
+    near(rect.x, 31, "checked client x");
+    near(rect.y, 23, "checked client y");
+
+    state.results.push({
+      name: "nested calc transform arguments preserve switch-thumb geometry",
+      status: "PASS",
+      message: null,
+      stack: null
+    });
+    state.harness = { status: 0, message: null, stack: null };
+    state.diagnostics = [JSON.stringify({ transform, rect })];
+  } catch (error) {
+    const message = String(error && error.message || error);
+    const stack = error && error.stack ? String(error.stack) : null;
+    state.results.push({
+      name: "nested calc transform arguments preserve switch-thumb geometry",
+      status: "FAIL",
+      message,
+      stack
+    });
+    state.harness = { status: 1, message, stack };
+  }
+  state.complete = true;
+</script>

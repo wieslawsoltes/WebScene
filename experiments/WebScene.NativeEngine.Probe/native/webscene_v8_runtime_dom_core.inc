@@ -513,8 +513,26 @@
 
     bool in_frame_context() const
     {
-        if (frame_context.IsEmpty()) return false;
-        return isolate->GetCurrentContext() == frame_context.Get(isolate);
+        if (context.IsEmpty()) return false;
+        const auto current_context = isolate->GetCurrentContext();
+        return !current_context.IsEmpty()
+            && current_context != context.Get(isolate);
+    }
+
+    const std::string& current_base_address() const
+    {
+        const auto current_context = isolate->GetCurrentContext();
+        if (!current_context.IsEmpty()) {
+            const auto* root = static_cast<const dom_node*>(
+                current_context->GetAlignedPointerFromEmbedderData(
+                    1,
+                    v8::kEmbedderDataTypeTagDefault));
+            if (const auto found = frame_base_addresses.find(root);
+                found != frame_base_addresses.end()) {
+                return found->second;
+            }
+        }
+        return document_base_address;
     }
 
     bool is_document_object(v8::Local<v8::Object> candidate) const
@@ -624,6 +642,11 @@
             if (found != actual_frame_contexts.end()
                 && !found->second.IsEmpty()) {
                 const auto local_context = found->second.Get(isolate);
+                const auto* frame_root = static_cast<const dom_node*>(
+                    local_context->GetAlignedPointerFromEmbedderData(
+                        1,
+                        v8::kEmbedderDataTypeTagDefault));
+                frame_base_addresses.erase(frame_root);
                 detached_contexts.push_back(local_context);
                 cancel_detached_frame_context_tasks(local_context);
                 destroy_inspector_context(local_context);
@@ -936,6 +959,9 @@
         });
         std::erase_if(connected_resources, [&](const auto& resource) {
             return nodes.contains(resource.node);
+        });
+        std::erase_if(frame_base_addresses, [&](const auto& entry) {
+            return nodes.contains(const_cast<dom_node*>(entry.first));
         });
         for (auto& observer : resize_observers) {
             std::erase_if(observer->nodes, [&](const auto* node) {
@@ -1327,6 +1353,40 @@
             v8::Global<v8::Object>(isolate, wrapper)});
     }
 
+    void enqueue_connected_resources_subtree(
+        dom_node& root,
+        v8::Local<v8::Object> wrapper,
+        v8::Local<v8::Context> resource_context)
+    {
+        enqueue_connected_resource_if_needed(root, wrapper, resource_context);
+        for (auto* child : root.children) {
+            if (child == nullptr) continue;
+            enqueue_connected_resources_subtree(
+                *child,
+                wrap_node(*child),
+                resource_context);
+        }
+    }
+
+    void enqueue_connected_image_resources_subtree(
+        dom_node& root,
+        v8::Local<v8::Context> resource_context)
+    {
+        if (root.tag == "img") {
+            enqueue_connected_resource_if_needed(
+                root,
+                wrap_node(root),
+                resource_context);
+        }
+        for (auto* child : root.children) {
+            if (child != nullptr) {
+                enqueue_connected_image_resources_subtree(
+                    *child,
+                    resource_context);
+            }
+        }
+    }
+
     void enqueue_iframe_hydration_if_needed(dom_node& node)
     {
         if (!is_connected(node)) return;
@@ -1344,8 +1404,7 @@
             if (object != object_urls.end()) {
                 node.attributes["object-html"] = object->second;
             } else {
-                const auto& base =
-                    in_frame_context() ? frame_base_address : document_base_address;
+                const auto& base = current_base_address();
                 const auto resolved = resolve_resource_url(source->second, base);
                 if (resolved.starts_with("http://")
                     || resolved.starts_with("https://")) {
@@ -2942,6 +3001,13 @@
         if (original.has_form_control()) {
             clone.mutable_form_control() = original.form_control();
         }
+        if (original.replaced_image().complete) {
+            // Cloning a decoded image preserves its current request state.
+            // Component renderers commonly decode an off-tree image and then
+            // clone it into the visible subtree; dropping this state leaves
+            // the clone permanently at its fallback background.
+            clone.mutable_replaced_image() = original.replaced_image();
+        }
         clone.attributes = original.attributes;
         clone.style = original.style;
         if (original.has_authored_style()) {
@@ -3786,7 +3852,7 @@
                 self->recascade_connected_subtree(*fragment_child);
                 self->recascade_connected_node(*parent);
                 self->activate_connected_stylesheet(*fragment_child);
-                self->enqueue_connected_resource_if_needed(
+                self->enqueue_connected_resources_subtree(
                     *fragment_child,
                     self->wrap_node(*fragment_child),
                     info.GetIsolate()->GetCurrentContext());
@@ -3823,7 +3889,7 @@
         // exactly this pattern).
         self->recascade_connected_node(*parent);
         self->activate_connected_stylesheet(*child);
-        self->enqueue_connected_resource_if_needed(
+        self->enqueue_connected_resources_subtree(
             *child,
             info[0].As<v8::Object>(),
             info.GetIsolate()->GetCurrentContext());
@@ -3896,7 +3962,7 @@
         for (auto* child : inserted) {
             if (child == nullptr) continue;
             self->recascade_connected_subtree(*child);
-            self->enqueue_connected_resource_if_needed(
+            self->enqueue_connected_resources_subtree(
                 *child,
                 self->wrap_node(*child),
                 info.GetIsolate()->GetCurrentContext());
@@ -4008,7 +4074,7 @@
                 candidate);
             self->recascade_connected_subtree(*candidate);
             self->activate_connected_stylesheet(*candidate);
-            self->enqueue_connected_resource_if_needed(
+            self->enqueue_connected_resources_subtree(
                 *candidate,
                 self->wrap_node(*candidate),
                 info.GetIsolate()->GetCurrentContext());
@@ -4166,7 +4232,7 @@
                 replacement);
             self->recascade_connected_subtree(*replacement);
             self->activate_connected_stylesheet(*replacement);
-            self->enqueue_connected_resource_if_needed(
+            self->enqueue_connected_resources_subtree(
                 *replacement,
                 self->wrap_node(*replacement),
                 info.GetIsolate()->GetCurrentContext());
@@ -4222,7 +4288,7 @@
                 child);
             self->recascade_connected_subtree(*child);
             self->activate_connected_stylesheet(*child);
-            self->enqueue_connected_resource_if_needed(
+            self->enqueue_connected_resources_subtree(
                 *child,
                 self->wrap_node(*child),
                 info.GetIsolate()->GetCurrentContext());

@@ -49,6 +49,7 @@ internal sealed class VisualColorGapCheck
     public required string FirstColor { get; init; }
     public required string SecondColor { get; init; }
     public string Axis { get; init; } = "vertical";
+    public int ChannelTolerance { get; init; }
     public int? MinimumPixels { get; init; }
     public int? MaximumPixels { get; init; }
     public string? Description { get; init; }

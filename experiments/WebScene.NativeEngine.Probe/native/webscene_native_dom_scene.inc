@@ -463,8 +463,11 @@ void native_document::append_scene(
                 node.style.box_shadow_blur_radius});
         }
     }
+    const auto background_rgba = node.style.background_current_color
+        ? resolved_foreground(node)
+        : node.style.background_rgba;
     if (paint_self
-        && (node.style.background_rgba & 0xFFU) != 0U
+        && (background_rgba & 0xFFU) != 0U
         && node.layout.width > 0
         && node.layout.height > 0) {
         append_ellipse_metadata(
@@ -482,7 +485,7 @@ void native_document::append_scene(
             node.layout.y,
             node.layout.width,
             node.layout.height,
-            with_opacity(node.style.background_rgba),
+            with_opacity(background_rgba),
             node.id,
             radii.top_left,
             radii.top_right,

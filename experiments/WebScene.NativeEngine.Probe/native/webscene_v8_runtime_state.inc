@@ -88,6 +88,7 @@
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_windows;
     std::unordered_map<uint32_t, v8::Global<v8::Context>> actual_frame_contexts;
     std::unordered_map<uint32_t, v8::Global<v8::Object>> actual_frame_documents;
+    std::unordered_map<const dom_node*, std::string> frame_base_addresses;
     session_storage_state outer_session_storage;
     session_storage_state outer_local_storage;
     std::unordered_map<uint32_t, std::unique_ptr<session_storage_state>> frame_session_storage;

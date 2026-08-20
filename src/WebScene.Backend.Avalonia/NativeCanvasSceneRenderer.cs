@@ -48,6 +48,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
         new(StringComparer.Ordinal);
     private NativeTextShaping.WebTypefaceRegistry? _webTypefaces;
+    private float _presenterDeviceScaleFactor = 1f;
     private SKPicture? s_domBackdropPicture;
     private SKPicture? s_domOverlayPicture;
     private uint s_domCommandCount;
@@ -60,6 +61,19 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     internal void SetWebTypefaceRegistry(
         NativeTextShaping.WebTypefaceRegistry? registry)
         => _webTypefaces = registry;
+
+    internal bool SetPresenterDeviceScaleFactor(double deviceScaleFactor)
+    {
+        var normalized = double.IsFinite(deviceScaleFactor) && deviceScaleFactor >= 1.5
+            ? 2f
+            : 1f;
+        if (_presenterDeviceScaleFactor == normalized)
+        {
+            return false;
+        }
+        _presenterDeviceScaleFactor = normalized;
+        return true;
+    }
 
     internal NativeRendererMemoryMetrics ReadMemoryMetrics()
     {
@@ -735,13 +749,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             paint,
             featureFlags,
             tabularDigitScale);
-        var widthScale = (featureFlags & NativeTextShaping.TabularNumerals) != 0
-            ? NativeTextShaping.ResolveWidthScale(
-                parts[4],
-                fontSize,
-                fontWeight,
-                _webTypefaces)
-            : 1f;
+        var widthScale = NativeTextShaping.ResolveShapedWidthScale(
+            parts[5],
+            parts[4],
+            fontSize,
+            fontWeight,
+            paint,
+            shapedWidth,
+            featureFlags,
+            _webTypefaces);
         var renderedWidth = shapedWidth * widthScale;
         var x = parts[3] switch
         {
@@ -757,8 +773,6 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             + (contentHeight - glyphHeight) * 0.5f
             - metrics.Ascent
             + (parsedLineHeight == 0 ? 3f : 0f);
-        canvas.Save();
-        canvas.Scale(widthScale, 1f, x, baseline);
         NativeTextShaping.DrawShapedText(
             canvas,
             shaper,
@@ -767,8 +781,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             baseline,
             paint,
             featureFlags,
-            tabularDigitScale);
-        canvas.Restore();
+            tabularDigitScale,
+            widthScale,
+            shapedWidth,
+            _presenterDeviceScaleFactor);
     }
 
     private static void DrawDomShadow(
@@ -1163,6 +1179,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     {
         var state = CanvasState.Default;
         var states = new Stack<CanvasState>();
+        var textShapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
         var hasDrawn = false;
         using var path = new SKPath();
         var commands = new ReadOnlySpan<NativeCanvasCommand>(
@@ -1292,11 +1309,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     }
                     break;
                 case 25:
-                    DrawText(canvas, view, layer, command, state, false);
+                    DrawText(canvas, view, layer, command, state, false, textShapers);
                     hasDrawn = true;
                     break;
                 case 26:
-                    DrawText(canvas, view, layer, command, state, true);
+                    DrawText(canvas, view, layer, command, state, true, textShapers);
                     hasDrawn = true;
                     break;
                 case 27:
@@ -1330,6 +1347,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 case 56: state.ShadowOffsetX = command.V0; break;
                 case 57: state.ShadowOffsetY = command.V0; break;
             }
+        }
+        foreach (var shaper in textShapers.Values)
+        {
+            shaper.Dispose();
         }
     }
 
@@ -1389,7 +1410,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         in NativeCanvasLayer layer,
         in NativeCanvasCommand command,
         in CanvasState state,
-        bool stroke)
+        bool stroke,
+        Dictionary<string, SKShaper> shapers)
     {
         var text = StringAt(view, layer, command.ResourceId);
         if (text.Length == 0) return;
@@ -1397,7 +1419,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             state,
             !stroke,
             stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill);
-        ConfigureFont(paint, state.Font);
+        var font = ConfigureFont(paint, state.Font);
         paint.TextAlign = state.TextAlign switch
         {
             "center" => SKTextAlign.Center,
@@ -1406,15 +1428,85 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         };
         var y = (float)command.V1;
         var metrics = paint.FontMetrics;
-        y += state.TextBaseline switch
+        y += ResolveCanvasTextBaselineOffset(state.TextBaseline, metrics);
+        if (!shapers.TryGetValue(state.Font, out var shaper))
+        {
+            shaper = new SKShaper(paint.Typeface);
+            shapers.Add(state.Font, shaper);
+        }
+        var featureFlags = NativeTextShaping.ResolveFeatureFlags(
+            text,
+            font.FamilyList,
+            0,
+            _webTypefaces);
+        var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
+            font.FamilyList,
+            _webTypefaces);
+        var shapedWidth = NativeTextShaping.MeasureShapedWidth(
+            shaper,
+            text,
+            paint,
+            featureFlags,
+            tabularDigitScale);
+        var widthScale = NativeTextShaping.ResolveShapedWidthScale(
+            text,
+            font.FamilyList,
+            font.Size,
+            font.Weight,
+            paint,
+            shapedWidth,
+            featureFlags,
+            _webTypefaces);
+        widthScale = ConstrainCanvasTextWidth(
+            widthScale,
+            shapedWidth,
+            command.Flags,
+            command.V2);
+        if (widthScale <= 0) return;
+        var x = (float)command.V0;
+        NativeTextShaping.DrawShapedText(
+            canvas,
+            shaper,
+            text,
+            x,
+            y,
+            paint,
+            featureFlags,
+            tabularDigitScale,
+            widthScale,
+            shapedWidth,
+            _presenterDeviceScaleFactor);
+    }
+
+    internal static float ResolveCanvasTextBaselineOffset(
+        string baseline,
+        SKFontMetrics metrics)
+        => baseline switch
         {
             "top" => -metrics.Top,
             "hanging" => -metrics.Ascent * 0.8f,
-            "middle" => -(metrics.Ascent + metrics.Descent) / 2,
+            // Canvas commands use the positioned-run origin for the middle
+            // baseline. Applying Skia's font-bounds correction here shifts
+            // compact badges and axis labels below their authored origin.
+            "middle" => 0,
             "bottom" or "ideographic" => -metrics.Bottom,
             _ => 0
         };
-        canvas.DrawText(text, (float)command.V0, y, paint);
+
+    internal static float ConstrainCanvasTextWidth(
+        float widthScale,
+        float shapedWidth,
+        uint commandFlags,
+        double commandMaxWidth)
+    {
+        const uint textMaxWidthFlag = 1u << 17;
+        if ((commandFlags & textMaxWidthFlag) == 0) return widthScale;
+        var maxWidth = (float)commandMaxWidth;
+        if (!float.IsFinite(maxWidth) || maxWidth <= 0) return 0;
+        var renderedWidth = shapedWidth * widthScale;
+        return renderedWidth > maxWidth
+            ? widthScale * maxWidth / renderedWidth
+            : widthScale;
     }
 
     private static SKPaint CreatePaint(in CanvasState state, bool fill, SKPaintStyle style)
@@ -1454,45 +1546,79 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return paint;
     }
 
-    private void ConfigureFont(SKPaint paint, string font)
+    private NativeTextShaping.CanvasFontDescription ConfigureFont(
+        SKPaint paint,
+        string font)
     {
-        var px = font.IndexOf("px", StringComparison.OrdinalIgnoreCase);
-        var size = 10f;
-        var family = "sans-serif";
-        if (px > 0)
+        if (!NativeTextShaping.TryParseCanvasFont(font, out var parsed))
         {
-            var start = px - 1;
-            while (start >= 0 && (char.IsDigit(font[start]) || font[start] is '.' or '-' or '+')) start--;
-            if (float.TryParse(
-                    font.AsSpan(start + 1, px - start - 1),
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var parsedSize)
-                && parsedSize > 0)
+            parsed = new NativeTextShaping.CanvasFontDescription(
+                10,
+                400,
+                SKFontStyleSlant.Upright,
+                "sans-serif");
+        }
+        foreach (var rawFamily in parsed.FamilyList.Split(
+                     ',',
+                     StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var family = rawFamily.Trim('"', '\'');
+            if (_webTypefaces?.TryResolve(family, out var webTypeface) == true)
             {
-                size = parsedSize;
-            }
-            var families = font[(px + 2)..].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            if (families.Length != 0)
-            {
-                family = families[0].Trim('"', '\'');
+                paint.Typeface = webTypeface;
+                paint.TextSize = parsed.Size;
+                return parsed;
             }
         }
-        if (_webTypefaces?.TryResolve(family, out var webTypeface) == true)
+
+        var key = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{parsed.FamilyList}\u001f{parsed.Weight}\u001f{(int)parsed.Slant}");
+        if (!s_typefaces.TryGetValue(key, out var typeface))
         {
-            paint.Typeface = webTypeface;
-        }
-        else
-        {
-            if (!s_typefaces.TryGetValue(family, out var typeface))
+            foreach (var rawFamily in parsed.FamilyList.Split(
+                         ',',
+                         StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
-                typeface = SKTypeface.FromFamilyName(family)
-                    ?? SKTypeface.Default;
-                s_typefaces[family] = typeface;
+                var family = rawFamily.Trim('"', '\'');
+                var generic = family.ToLowerInvariant();
+                if (generic is "-apple-system" or "blinkmacsystemfont" or "system-ui"
+                    or "sans-serif")
+                {
+                    family = OperatingSystem.IsMacOS() ? ".AppleSystemUIFont" : "Arial";
+                }
+                else if (generic == "serif")
+                {
+                    family = "Times New Roman";
+                }
+                else if (generic == "monospace")
+                {
+                    family = OperatingSystem.IsMacOS() ? "Menlo" : "Consolas";
+                }
+                var candidate = SKTypeface.FromFamilyName(
+                    family,
+                    parsed.Weight,
+                    (int)SKFontStyleWidth.Normal,
+                    parsed.Slant);
+                if (candidate is not null
+                    && (string.Equals(
+                            candidate.FamilyName,
+                            family,
+                            StringComparison.OrdinalIgnoreCase)
+                        || generic is "-apple-system" or "blinkmacsystemfont" or "system-ui"
+                            or "sans-serif" or "serif" or "monospace"))
+                {
+                    typeface = candidate;
+                    break;
+                }
+                candidate?.Dispose();
             }
-            paint.Typeface = typeface;
+            typeface ??= SKTypeface.Default;
+            s_typefaces[key] = typeface;
         }
-        paint.TextSize = size;
+        paint.Typeface = typeface;
+        paint.TextSize = parsed.Size;
+        return parsed;
     }
 
     private static void AppendArc(SKPath path, in NativeCanvasCommand command)

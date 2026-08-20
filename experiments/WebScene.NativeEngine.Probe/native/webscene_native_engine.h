@@ -179,7 +179,8 @@ typedef union webscene_canvas_command_data {
 } webscene_canvas_command_data;
 
 enum {
-    WEBSCENE_CANVAS_COMMAND_FLAG_EVEN_ODD = 1U << 16U
+    WEBSCENE_CANVAS_COMMAND_FLAG_EVEN_ODD = 1U << 16U,
+    WEBSCENE_CANVAS_COMMAND_FLAG_TEXT_MAX_WIDTH = 1U << 17U
 };
 
 /*
@@ -499,6 +500,10 @@ typedef struct webscene_text_metrics {
     float ascent;
     float descent;
     float leading;
+    float actual_bounding_box_left;
+    float actual_bounding_box_right;
+    float actual_bounding_box_ascent;
+    float actual_bounding_box_descent;
 } webscene_text_metrics;
 
 /*

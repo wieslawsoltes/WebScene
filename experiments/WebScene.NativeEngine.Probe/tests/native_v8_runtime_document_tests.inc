@@ -27,6 +27,137 @@ void test_flex_baseline_uses_host_font_metrics()
         "flex baseline alignment ignored the host shaper's ascent/descent metrics");
 }
 
+void test_flex_baseline_moves_descendant_pseudo_paint_boxes()
+{
+    webscene_native::native_document document(measure_baseline_fixture_text, nullptr);
+    auto& row = document.create_element("div");
+    row.style.display = webscene_native::display_mode::flex;
+    row.style.align_items = webscene_native::align_mode::baseline;
+    row.style.width = {100.0F, webscene_native::length_unit::pixels};
+
+    auto& label = document.create_element("span");
+    label.style.width = {30.0F, webscene_native::length_unit::pixels};
+    label.style.padding_top = {3.0F, webscene_native::length_unit::pixels};
+    label.style.font_size = 10.0F;
+    label.style.line_height = 12.0F;
+    auto& text = document.create_element("#text");
+    text.text_content = "DAY";
+
+    auto& track = document.create_element("span");
+    track.style.position = webscene_native::position_mode::relative;
+    track.style.width = {70.0F, webscene_native::length_unit::pixels};
+    track.style.height = {7.0F, webscene_native::length_unit::pixels};
+    auto& segment = document.create_element("i");
+    segment.style.position = webscene_native::position_mode::absolute;
+    segment.style.left = {0.0F, webscene_native::length_unit::pixels};
+    segment.style.top = {0.0F, webscene_native::length_unit::pixels};
+    segment.style.width = {100.0F, webscene_native::length_unit::percent};
+    segment.style.height = {100.0F, webscene_native::length_unit::percent};
+    auto& generated = segment.style.mutable_before_pseudo();
+    generated.generated = true;
+    generated.content = "";
+    generated.position = webscene_native::position_mode::absolute;
+    generated.left = {0.0F, webscene_native::length_unit::pixels};
+    generated.top = {0.0F, webscene_native::length_unit::pixels};
+    generated.width = {100.0F, webscene_native::length_unit::percent};
+    generated.height = {100.0F, webscene_native::length_unit::percent};
+    generated.background_rgba = 0x00FFFFFFU;
+
+    require(
+        document.append_child(document.body(), row)
+            && document.append_child(row, label)
+            && document.append_child(label, text)
+            && document.append_child(row, track)
+            && document.append_child(track, segment),
+        "generated baseline-paint fixture could not build its flex row");
+    document.layout(200.0F, 100.0F);
+
+    require(
+        track.layout.y > row.layout.y + 5.0F,
+        "generated baseline-paint fixture did not exercise a cross-axis shift");
+    require(
+        std::abs(segment.style.before_pseudo().layout.y - segment.layout.y) < 0.01F,
+        "flex baseline translation left the descendant pseudo paint box at its "
+        "pre-alignment position");
+}
+
+uint8_t measure_contextual_inline_fixture_text(
+    void*,
+    const char* text,
+    size_t text_length,
+    const char*,
+    size_t,
+    float,
+    int32_t,
+    float,
+    float,
+    webscene_text_metrics* metrics)
+{
+    if (text == nullptr || metrics == nullptr
+        || metrics->struct_size < sizeof(webscene_text_metrics)) return 0;
+    const std::string_view value(text, text_length);
+    metrics->advance_width = value == "alpha beta"
+        ? 73.0F
+        : static_cast<float>(text_length) * 4.0F;
+    metrics->ascent = 8.0F;
+    metrics->descent = 2.0F;
+    metrics->leading = 0.0F;
+    return 1;
+}
+
+void test_merged_inline_fragment_uses_contextual_host_advance()
+{
+    webscene_native::native_document document(
+        measure_contextual_inline_fixture_text,
+        nullptr);
+    auto& paragraph = document.create_element("p");
+    paragraph.style.width = {200.0F, webscene_native::length_unit::pixels};
+    auto& text = document.create_element("#text");
+    text.text_content = "alpha beta";
+    require(
+        document.append_child(document.body(), paragraph)
+            && document.append_child(paragraph, text),
+        "contextual inline fixture could not build its paragraph");
+
+    document.layout(200.0F, 100.0F);
+
+    require(
+        text.text_layout_fragments.size() == 1U
+            && std::abs(text.text_layout_fragments.front().width - 73.0F) < 0.01F,
+        "merged inline fragment retained the additive word advance instead of the "
+        "host shaper's contextual run advance");
+}
+
+void test_flattened_inline_fragment_honors_text_alignment()
+{
+    webscene_native::native_document document(
+        measure_contextual_inline_fixture_text,
+        nullptr);
+    auto& block = document.create_element("div");
+    block.style.width = {200.0F, webscene_native::length_unit::pixels};
+    block.style.mutable_textual().text_align = "center";
+    auto& wrapper = document.create_element("span");
+    auto& text = document.create_element("#text");
+    text.text_content = "alpha beta";
+    require(
+        document.append_child(document.body(), block)
+            && document.append_child(block, wrapper)
+            && document.append_child(wrapper, text),
+        "centered flattened-inline fixture could not build its descendants");
+
+    document.layout(200.0F, 100.0F);
+
+    require(
+        text.text_layout_fragments.size() == 1U,
+        "centered flattened-inline text did not produce one contextual fragment");
+    const auto& fragment = text.text_layout_fragments.front();
+    require(
+        std::abs(
+            (fragment.x + fragment.width * 0.5F)
+            - (block.layout.x + block.layout.width * 0.5F)) < 0.01F,
+        "flattened inline layout ignored the block's text-align:center geometry");
+}
+
 void test_viewport_hit_testing_traverses_zero_height_document_root()
 {
     webscene_native::native_document document;

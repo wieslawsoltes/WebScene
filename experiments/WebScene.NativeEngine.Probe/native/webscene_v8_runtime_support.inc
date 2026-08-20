@@ -1532,9 +1532,25 @@ float resolve_connected_css_length(
     case length_unit::rem:
         return length.value * root_font_size;
     case length_unit::viewport_width:
-        return root->layout.width * length.value / 100.0F;
+        return root->layout.width * length.value / 100.0F + length.pixel_offset;
     case length_unit::viewport_height:
-        return root->layout.height * length.value / 100.0F;
+        return root->layout.height * length.value / 100.0F + length.pixel_offset;
+    case length_unit::viewport_width_capped:
+        return std::min(
+            root->layout.width * length.value / 100.0F,
+            length.pixel_offset);
+    case length_unit::viewport_height_capped:
+        return std::min(
+            root->layout.height * length.value / 100.0F,
+            length.pixel_offset);
+    case length_unit::viewport_width_floored:
+        return std::max(
+            root->layout.width * length.value / 100.0F,
+            length.pixel_offset);
+    case length_unit::viewport_height_floored:
+        return std::max(
+            root->layout.height * length.value / 100.0F,
+            length.pixel_offset);
     case length_unit::automatic:
     case length_unit::max_content:
     case length_unit::min_content:
@@ -1600,6 +1616,10 @@ float connected_computed_dimension(
         case length_unit::rem:
         case length_unit::viewport_width:
         case length_unit::viewport_height:
+        case length_unit::viewport_width_capped:
+        case length_unit::viewport_height_capped:
+        case length_unit::viewport_width_floored:
+        case length_unit::viewport_height_floored:
             // display:none suppresses box generation, not the computed value of
             // an independently resolvable declaration. Percentage and intrinsic
             // values still require a real formatting context and remain on the

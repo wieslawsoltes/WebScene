@@ -583,7 +583,10 @@ public static unsafe partial class NativeWebSceneApi
     {
         try
         {
-            if (metrics.StructSize < Marshal.SizeOf<NativeTextMetrics>() || fontSize <= 0)
+            const uint legacyMetricsSize = 20;
+            const uint shapedInkMetricsSize = 36;
+            var availableMetricsSize = metrics.StructSize;
+            if (availableMetricsSize < legacyMetricsSize || fontSize <= 0)
             {
                 return 0;
             }
@@ -605,6 +608,13 @@ public static unsafe partial class NativeWebSceneApi
             metrics.Ascent = measured.Ascent;
             metrics.Descent = measured.Descent;
             metrics.Leading = measured.Leading;
+            if (availableMetricsSize >= shapedInkMetricsSize)
+            {
+                metrics.ActualBoundingBoxLeft = measured.ActualBoundingBoxLeft;
+                metrics.ActualBoundingBoxRight = measured.ActualBoundingBoxRight;
+                metrics.ActualBoundingBoxAscent = measured.ActualBoundingBoxAscent;
+                metrics.ActualBoundingBoxDescent = measured.ActualBoundingBoxDescent;
+            }
             return 1;
         }
         catch (Exception error)

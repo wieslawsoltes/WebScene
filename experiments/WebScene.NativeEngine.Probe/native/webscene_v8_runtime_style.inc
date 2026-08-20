@@ -202,6 +202,7 @@
         } else if (name == "background" || name == "backgroundColor"
             || name == "background-color") {
             node.style.background_rgba = 0;
+            node.style.background_current_color = false;
             node.style.inline_property_mask &= ~inline_background;
         } else if (name == "overflow") {
             node.style.overflow_x = overflow_mode::visible;
@@ -709,7 +710,10 @@
             node->style.inline_property_mask |= inline_cursor;
         }
         else if (name == "background" || name == "background-color") {
-            node->style.background_rgba = native_document::parse_color(value);
+            node->style.background_current_color =
+                lower_html_name(value) == "currentcolor";
+            node->style.background_rgba = node->style.background_current_color
+                ? 0U : native_document::parse_color(value);
             node->style.inline_property_mask |= inline_background;
         } else if (name == "color") {
             node->style.foreground_rgba = native_document::parse_color(value);
@@ -868,7 +872,11 @@
                 if (length.unit == length_unit::em
                     || length.unit == length_unit::rem
                     || length.unit == length_unit::viewport_width
-                    || length.unit == length_unit::viewport_height) {
+                    || length.unit == length_unit::viewport_height
+                    || length.unit == length_unit::viewport_width_capped
+                    || length.unit == length_unit::viewport_height_capped
+                    || length.unit == length_unit::viewport_width_floored
+                    || length.unit == length_unit::viewport_height_floored) {
                     return format_pixels(resolve_connected_css_length(
                         *node, length, reference));
                 }
@@ -1264,7 +1272,11 @@
             if (length.unit == length_unit::em
                 || length.unit == length_unit::rem
                 || length.unit == length_unit::viewport_width
-                || length.unit == length_unit::viewport_height) {
+                || length.unit == length_unit::viewport_height
+                || length.unit == length_unit::viewport_width_capped
+                || length.unit == length_unit::viewport_height_capped
+                || length.unit == length_unit::viewport_width_floored
+                || length.unit == length_unit::viewport_height_floored) {
                 return format_pixels(resolve_connected_css_length(
                     *node, length, reference));
             }
@@ -1607,7 +1619,19 @@
             value = node->style.background_image().size_x + " "
                 + node->style.background_image().size_y;
         } else if (name == "background" || name == "backgroundColor") {
-            value = serialize_color(node->style.background_rgba);
+            auto background = node->style.background_rgba;
+            if (node->style.background_current_color) {
+                background = 0U;
+                for (auto* current = node; current != nullptr; current = current->parent) {
+                    const auto foreground = current->painted_foreground_value();
+                    if ((foreground & 0xFFU) != 0U) {
+                        background = foreground;
+                        break;
+                    }
+                }
+                if ((background & 0xFFU) == 0U) background = 0xD1D4DCFFU;
+            }
+            value = serialize_color(background);
         } else if (name == "borderTopWidth") {
             value = serialize_css_number(node->style.border_top_width.value) + "px";
         } else if (name == "borderTopStyle") {
@@ -1970,7 +1994,10 @@
                 : std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
             node->style.inline_property_mask |= inline_opacity;
         } else if (name == "background" || name == "backgroundColor") {
-            node->style.background_rgba = native_document::parse_color(value);
+            node->style.background_current_color =
+                lower_html_name(value) == "currentcolor";
+            node->style.background_rgba = node->style.background_current_color
+                ? 0U : native_document::parse_color(value);
             node->style.inline_property_mask |= inline_background;
         } else if (name == "overflow") {
             std::istringstream stream(value);

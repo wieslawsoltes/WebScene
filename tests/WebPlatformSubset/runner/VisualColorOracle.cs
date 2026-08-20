@@ -66,7 +66,10 @@ internal static class VisualColorOracle
         return count;
     }
 
-    internal static PixelBounds? FindBounds(WptRenderSnapshot snapshot, string color)
+    internal static PixelBounds? FindBounds(
+        WptRenderSnapshot snapshot,
+        string color,
+        int channelTolerance = 0)
     {
         var (red, green, blue) = Parse(color);
         var left = snapshot.PixelSize.Width;
@@ -75,9 +78,9 @@ internal static class VisualColorOracle
         var bottom = -1;
         for (var offset = 0; offset + 3 < snapshot.Pixels.Length; offset += 4)
         {
-            if (snapshot.Pixels[offset] != blue
-                || snapshot.Pixels[offset + 1] != green
-                || snapshot.Pixels[offset + 2] != red
+            if (Math.Abs(snapshot.Pixels[offset] - blue) > channelTolerance
+                || Math.Abs(snapshot.Pixels[offset + 1] - green) > channelTolerance
+                || Math.Abs(snapshot.Pixels[offset + 2] - red) > channelTolerance
                 || snapshot.Pixels[offset + 3] == 0)
             {
                 continue;
@@ -99,8 +102,8 @@ internal static class VisualColorOracle
         WptRenderSnapshot snapshot,
         VisualColorGapCheck check)
     {
-        var first = FindBounds(snapshot, check.FirstColor);
-        var second = FindBounds(snapshot, check.SecondColor);
+        var first = FindBounds(snapshot, check.FirstColor, check.ChannelTolerance);
+        var second = FindBounds(snapshot, check.SecondColor, check.ChannelTolerance);
         if (first is null || second is null)
         {
             return new GapObservation(

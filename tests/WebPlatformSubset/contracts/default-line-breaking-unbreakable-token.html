@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Default line breaking preserves unbreakable tokens and timeline marker geometry</title>
+<style>
+  body { margin: 0; }
+  .timeline { position: relative; width: 120px; height: 32px; font-family: sans-serif; font-size: 11px; line-height: 14px; }
+  .track { position: absolute; left: 0; top: 4px; width: 120px; height: 7px; }
+  .marker { position: absolute; left: 70%; top: 50%; width: 1px; height: 14px; transform: translate(-50%, -50%); }
+  .label { position: absolute; left: 70%; top: 14px; width: 28px; transform: translateX(-50%); }
+</style>
+<div class="timeline"><div id="track" class="track"><i id="marker" class="marker"></i></div><div id="label" class="label">04:00</div></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const result = { name: "default wrapping preserves a narrow unbreakable label and its marker alignment" };
+  try {
+    const rect = id => document.getElementById(id).getBoundingClientRect();
+    const track = rect("track");
+    const marker = rect("marker");
+    const label = rect("label");
+    const failures = [];
+    if (Math.abs(label.height - 14) > .1) {
+      failures.push("unbreakable token height: expected 14, got " + label.height);
+    }
+    const markerCenter = marker.top + marker.height / 2;
+    const trackCenter = track.top + track.height / 2;
+    if (Math.abs(markerCenter - trackCenter) > .1) {
+      failures.push("marker/track centers: " + markerCenter + "/" + trackCenter);
+    }
+    if (failures.length) throw new Error(failures.join("; "));
+    result.status = "PASS";
+    result.message = null;
+    result.stack = null;
+    state.diagnostics = [JSON.stringify({ track, marker, label })];
+    state.harness = { status: 0, message: null, stack: null };
+  } catch (error) {
+    result.status = "FAIL";
+    result.message = String(error && error.message || error);
+    result.stack = error && error.stack ? String(error.stack) : null;
+    state.harness = { status: 1, message: result.message, stack: result.stack };
+  }
+  state.results.push(result);
+  state.complete = true;
+</script>

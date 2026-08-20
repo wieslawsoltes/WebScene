@@ -288,6 +288,13 @@
       "reason": "Required after the unchanged upstream negative-translation assertion passes in exact native and forced-portable runs. The same computed matrix is used for visual application and CSSOM serialization, coupled to independent ordered-composition tests. Evidence: TestResults/WPT-transform-order-{native,portable}/results.json."
     },
     {
+      "path": "contracts/transform-translate-nested-calc.html",
+      "type": "contract",
+      "capabilities": ["transform-translate", "calc", "custom-properties", "computed-style-serialization", "transformed-bounding-rect"],
+      "evidence": ["switch-thumb-checked-position", "nested-transform-function-tokenization"],
+      "reason": "Required product-neutral reduction of a checked switch thumb whose translate() target uses a nested calc() expression and custom properties. It asserts both computed matrix values and client geometry before and after synchronous class invalidation."
+    },
+    {
       "path": "css/css-grid/alignment/grid-gutters-001.html",
       "type": "reftest",
       "reference": "css/css-grid/reference/grid-equal-gutters-ref.html",
@@ -783,6 +790,20 @@
       "reason": "Required after the corrected unchanged bytes pass all 3/3 assertions in Chrome and the native runner. The contract proves whitespace-only ::after content on a true inline child contributes advance before the next fragment, an absolutely positioned percentage-translated marker is centered, and a padded text label shares Chrome's first-baseline geometry with a non-text timeline track. Chrome rejected the earlier inline-block formulation because trailing collapsible whitespace inside an atomic inline-level box correctly collapses; that evidence was retained and the assertion was corrected before promotion. Evidence: artifacts/web-platform-inline-status-chrome-v1-20260723/results.json (rejected formulation), artifacts/web-platform-inline-status-chrome-v2-20260723/results.json, artifacts/web-platform-inline-status-managed-fixed-v3-20260723/results.json, and artifacts/web-platform-inline-status-native-current-v2-20260723/results.json."
     },
     {
+      "path": "contracts/flex-baseline-timeline-marker.html",
+      "type": "contract",
+      "capabilities": ["flex-first-baseline-alignment", "non-text-flex-baseline-synthesis", "absolute-opposing-insets", "outline-computed-longhands"],
+      "evidence": ["product-neutral-padded-label", "product-neutral-outlined-current-time-marker", "native-neutral-contract"],
+      "reason": "Focused product-neutral regression for a padded text label sharing a first baseline with a non-text track. It independently verifies the current-time marker's vertical center and outline longhands so unrelated generated-content failures cannot hide this geometry authority."
+    },
+    {
+      "path": "contracts/default-line-breaking-unbreakable-token.html",
+      "type": "contract",
+      "capabilities": ["default-line-breaking", "unbreakable-token-overflow", "percentage-translate-centering"],
+      "evidence": ["narrow-timeline-label", "current-time-marker-alignment", "direct-chrome-neutral-contract", "native-neutral-contract"],
+      "reason": "Required product-neutral reduction of a narrow timeline label. Under normal white-space and line-breaking rules an unbreakable token overflows its used box on one line rather than being split at an arbitrary character; the independently positioned current-time marker remains centered on its track."
+    },
+    {
       "path": "contracts/font-shaping-and-inline-layout.html",
       "type": "contract",
       "capabilities": ["font-family-computed-style", "font-size-computed-style", "font-weight-selection", "line-height-computed-style", "harfbuzz-run-shaping", "kerning", "combining-mark-clusters", "letter-spacing", "word-spacing", "collapsed-inline-whitespace", "shaped-advance-wrapping", "inline-cross-axis-alignment", "complex-script-geometry"],
@@ -1227,8 +1248,8 @@
       "path": "contracts/canvas-2d-chart-primitives.html",
       "type": "contract",
       "capabilities": ["canvas-2d-context", "canvas-state-stack", "canvas-path", "canvas-transform", "canvas-clipping", "canvas-text-metrics", "path2d-composition"],
-      "evidence": ["observed-hosted-component-canvas-feature-audit"],
-      "reason": "Product-neutral chart-shaped composition covering Canvas 2D and Path2D operations observed in complex hosted components."
+      "evidence": ["observed-hosted-component-canvas-feature-audit", "native-host-font-metrics-regression"],
+      "reason": "Product-neutral Canvas composition covering stateful 2D and Path2D operations, fillText maxWidth, and host-backed TextMetrics that vary with font size and family and expose finite font plus shaped-ink bounds."
     },
     {
       "path": "contracts/css-media-query-primitives.html",
@@ -1491,6 +1512,59 @@
         }
       ],
       "reason": "Unchanged pinned CSS Backgrounds WPT for scalar shorthand expansion and three-value horizontal/two-value vertical elliptical radii. Exact failure/success colors reject blank or exposed-reference renders, while component-relative edge regions independently distinguish the authored ellipse from the former scalar projection in both native and Chromium captures."
+    },
+    {
+      "path": "contracts/system-ui-inline-text-paint.html",
+      "type": "visual",
+      "capabilities": ["system-ui-font-axes", "contextual-inline-advance", "generated-space-advance", "baseline-text-paint"],
+      "evidence": ["product-neutral-system-ui-pixel-oracle"],
+      "visualChecks": [
+        {
+          "color": "#ff00ff",
+          "maximumPixels": 0,
+          "description": "the generated timeline segment fully covers its authored failure color"
+        },
+        {
+          "color": "#00ff00",
+          "minimumPixels": 20,
+          "description": "the normal-weight system UI run paints visible glyph interiors"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 20,
+          "description": "the bold system UI run paints visible glyph interiors"
+        },
+        {
+          "color": "#00ffff",
+          "minimumPixels": 1500,
+          "description": "the generated baseline-aligned timeline segments paint at their fixed size"
+        },
+        {
+          "color": "#d1d4dc",
+          "minimumPixels": 40,
+          "description": "normal-weight light body copy paints visible glyph interiors"
+        }
+      ],
+      "visualGapChecks": [
+        {
+          "firstColor": "#00ff00",
+          "secondColor": "#0000ff",
+          "axis": "horizontal",
+          "minimumPixels": 5,
+          "maximumPixels": 11,
+          "description": "generated inline whitespace remains visible between differently weighted runs"
+        },
+        {
+          "firstColor": "#ff0000",
+          "secondColor": "#00ffff",
+          "axis": "vertical",
+          "channelTolerance": 32,
+          "minimumPixels": -8,
+          "maximumPixels": -6,
+          "description": "compact label ink remains vertically aligned with generated timeline segments"
+        }
+      ],
+      "reason": "Product-neutral raster reduction for a macOS system-UI text mismatch: contextual run shaping must agree with layout, generated whitespace must remain visible across a weight boundary, and compact label ink must align with fixed-height timeline segments painted by a positioned pseudo-element after flex baseline placement. Native and Chromium captures are retained for pixel-level comparison."
     }
   ],
   "harnessBlocked": [],

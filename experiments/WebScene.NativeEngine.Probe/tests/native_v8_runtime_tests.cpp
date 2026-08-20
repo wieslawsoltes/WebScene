@@ -138,6 +138,18 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "canvas-text-metrics") {
+            test_canvas_text_metrics_use_host_font_axes();
+            return 0;
+        }
+        if (selected == "frame-resource-base-url") {
+            test_dynamic_frame_resources_use_each_document_base_url();
+            return 0;
+        }
+        if (selected == "frame-lifecycle") {
+            test_deferred_frame_script_observes_window_dom_content_loaded();
+            return 0;
+        }
         if (selected == "scrollspy-primitives") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -193,6 +205,9 @@ int main()
     test_generated_binary_cross_context_promise();
     test_shared_isolate_reuses_destroyed_context_slot();
     test_flex_baseline_uses_host_font_metrics();
+    test_flex_baseline_moves_descendant_pseudo_paint_boxes();
+    test_merged_inline_fragment_uses_contextual_host_advance();
+    test_flattened_inline_fragment_honors_text_alignment();
     test_viewport_hit_testing_traverses_zero_height_document_root();
     test_document_direction_and_visibility_are_native_properties();
     test_hidden_document_defers_presentation_work();
@@ -228,11 +243,14 @@ int main()
     test_process_wide_resource_load_single_flight();
     test_resource_cache_policy_matrix();
     test_due_timer_precedes_dynamic_resource_wave();
+    test_dynamic_frame_resources_use_each_document_base_url();
+    test_deferred_frame_script_observes_window_dom_content_loaded();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
     test_executed_compilation_units_enrich_persistent_cache();
     test_process_wide_compilation_single_flight();
+    test_canvas_text_metrics_use_host_font_axes();
     auto* engine = webscene_engine_create(64);
     require(engine != nullptr, "engine creation failed");
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -289,7 +307,11 @@ int main()
     test_single_fractional_grid_track_stays_one_column(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
     test_calc_percent_with_pixel_offset(engine);
+    test_calc_viewport_units_with_pixel_offsets_bound_fixed_boxes(engine);
+    test_current_color_and_color_mix_reach_element_and_pseudo_paint(engine);
+    test_adjacent_inline_spans_wrap_through_generated_whitespace(engine);
     test_flex_basis_reserves_fixed_track(engine);
+    test_absolute_flex_child_uses_container_static_position(engine);
     test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
     test_floats_share_a_bounded_formatting_line(engine);
@@ -303,6 +325,7 @@ int main()
     test_pointer_cursor_and_external_anchor_host_handoff(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
+    test_transform_translate_calc_arguments_preserve_nested_functions(engine);
     test_transform_transition_uses_host_clock_for_translate_and_scale(engine);
     test_transform_transition_interpolates_from_none(engine);
     test_cssom_serializes_resolved_numbers_without_trailing_zeroes(engine);
@@ -330,6 +353,8 @@ int main()
     test_auto_height_flex_popup_expands_overflowing_flex_child(engine);
     test_constrained_column_flex_scroll_item_keeps_footer_inside(engine);
     test_later_dom_overlay_background_paints_above_retained_canvas(engine);
+    test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(engine);
+    test_canvas_text_max_width_is_preserved_in_scene(engine);
     test_canvas_path_even_odd_fill_rule_reaches_scene(engine);
     test_canvas_fill_rect_emits_only_relevant_paint_state(engine);
     test_canvas_path_2d_add_path_does_not_fill_stale_current_path(engine);
@@ -337,6 +362,7 @@ int main()
     test_detached_canvas_descendants_leave_native_scene(engine);
     test_compound_root_selector_applies_dark_custom_palette(engine);
     test_adjacent_inline_runs_share_wrapped_lines(engine);
+    test_default_line_breaking_does_not_split_unbreakable_tokens(engine);
     test_inline_flex_preserves_padding_and_line_box(engine);
     test_document_position(engine);
     test_dom_box_dimensions_primitives(engine);

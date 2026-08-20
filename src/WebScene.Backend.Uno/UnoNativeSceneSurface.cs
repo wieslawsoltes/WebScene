@@ -169,13 +169,21 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
 
     public ulong SubmitResize(double width, double height)
     {
+        var deviceScaleFactor = XamlRoot?.RasterizationScale ?? 1;
+        if (_renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor))
+        {
+            NativeWebSceneApi.EngineRequestSceneCheckpoint(_engine);
+        }
         var sequence = unchecked((ulong)Interlocked.Increment(ref _sequence));
         var input = new InputEvent
         {
             Kind = 6,
             Sequence = sequence,
             X = Math.Max(0, width),
-            Y = Math.Max(0, height)
+            Y = Math.Max(0, height),
+            DeltaX = deviceScaleFactor > 0 && double.IsFinite(deviceScaleFactor)
+                ? deviceScaleFactor
+                : 1
         };
         LastResizeSequence = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0
             ? sequence

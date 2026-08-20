@@ -1,3 +1,145 @@
+struct canvas_text_measurement_probe final {
+    std::string text;
+    std::string family;
+    float size{0};
+    int32_t weight{0};
+    size_t calls{0};
+};
+
+uint8_t measure_canvas_fixture_text(
+    void* user_data,
+    const char* text,
+    size_t text_length,
+    const char* font_family,
+    size_t font_family_length,
+    float font_size,
+    int32_t font_weight,
+    float,
+    float,
+    webscene_text_metrics* metrics)
+{
+    if (user_data == nullptr || text == nullptr || font_family == nullptr
+        || metrics == nullptr
+        || metrics->struct_size < sizeof(webscene_text_metrics)) {
+        return 0U;
+    }
+    auto& probe = *static_cast<canvas_text_measurement_probe*>(user_data);
+    probe.text.assign(text, text_length);
+    probe.family.assign(font_family, font_family_length);
+    probe.size = font_size;
+    probe.weight = font_weight;
+    ++probe.calls;
+    metrics->advance_width = static_cast<float>(text_length) * font_size * 0.5F
+        + static_cast<float>(font_weight) * 0.001F;
+    metrics->ascent = font_size * 0.75F;
+    metrics->descent = font_size * 0.25F;
+    metrics->leading = font_size * 0.1F;
+    metrics->actual_bounding_box_left = 1.0F;
+    metrics->actual_bounding_box_right = metrics->advance_width - 2.0F;
+    metrics->actual_bounding_box_ascent = font_size * 0.6F;
+    metrics->actual_bounding_box_descent = font_size * 0.15F;
+    return 1U;
+}
+
+void test_canvas_text_metrics_use_host_font_axes()
+{
+    canvas_text_measurement_probe probe;
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.text_measure_callback = measure_canvas_fixture_text;
+    options.text_measure_user_data = &probe;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "canvas text-metrics engine creation failed");
+
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const context = document.createElement('canvas').getContext('2d');
+          context.font = '10px sans-serif';
+          const small = context.measureText('MMMM');
+          context.font = '20px sans-serif';
+          const large = context.measureText('MMMM');
+          context.font = "bold 12px -apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif";
+          const bold = context.measureText('Label');
+          return {
+            defaultFieldsAreFinite: [
+              bold.width,
+              bold.actualBoundingBoxAscent,
+              bold.actualBoundingBoxDescent,
+              bold.fontBoundingBoxAscent,
+              bold.fontBoundingBoxDescent
+            ].every(Number.isFinite),
+            sizeChangesAdvance: large.width > small.width * 1.9,
+            ascent: bold.actualBoundingBoxAscent,
+            descent: bold.actualBoundingBoxDescent,
+            fontAscent: bold.fontBoundingBoxAscent,
+            fontDescent: bold.fontBoundingBoxDescent
+          };
+        })()
+    )JS", "native-canvas-host-text-metrics.js");
+
+    require(
+        result.find("\"defaultFieldsAreFinite\":true") != std::string::npos
+            && result.find("\"sizeChangesAdvance\":true") != std::string::npos,
+        "Canvas TextMetrics did not use finite host font metrics: " + result);
+    require(
+        result.find("\"ascent\":7.2") != std::string::npos
+            && result.find("\"descent\":1.8") != std::string::npos
+            && result.find("\"fontAscent\":9") != std::string::npos
+            && result.find("\"fontDescent\":3") != std::string::npos,
+        "Canvas TextMetrics did not distinguish glyph ink from font bounds: " + result);
+    require(probe.calls == 3U, "Canvas measureText did not invoke the host once per distinct font");
+    require(probe.text == "Label", "Canvas measureText changed the measured text");
+    require(
+        probe.family == "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif",
+        "Canvas measureText lost the authored fallback family list: " + probe.family);
+    require(std::abs(probe.size - 12.0F) < 0.001F, "Canvas measureText lost the px font size");
+    require(probe.weight == 700, "Canvas measureText lost the bold font weight");
+
+    webscene_engine_destroy(engine);
+}
+
+void test_canvas_text_max_width_is_preserved_in_scene(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<canvas id="labels" width="200" height="80"></canvas>';
+          const context = document.getElementById('labels').getContext('2d');
+          context.font = '20px sans-serif';
+          context.fillText('compressed fill', 80, 24, 37);
+          context.strokeText('natural stroke', 80, 52);
+        })()
+    )JS", "native-canvas-text-max-width-setup.js");
+    webscene_engine_request_scene_checkpoint(engine);
+
+    auto observed_fill = false;
+    auto observed_natural_stroke = false;
+    for (auto attempt = 0; attempt < 100
+        && (!observed_fill || !observed_natural_stroke); ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine); scene != nullptr) {
+            for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
+                const auto& command = scene->canvas_commands[index];
+                if (command.kind == 25U) {
+                    observed_fill =
+                        (command.flags & WEBSCENE_CANVAS_COMMAND_FLAG_TEXT_MAX_WIDTH) != 0U
+                        && std::abs(command.data.values[2] - 37.0) < 0.001;
+                } else if (command.kind == 26U) {
+                    observed_natural_stroke =
+                        (command.flags & WEBSCENE_CANVAS_COMMAND_FLAG_TEXT_MAX_WIDTH) == 0U;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_fill || !observed_natural_stroke) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(observed_fill, "Canvas fillText maxWidth was lost before scene publication");
+    require(
+        observed_natural_stroke,
+        "Canvas strokeText without maxWidth incorrectly requested condensation");
+}
+
 void test_canvas_path_even_odd_fill_rule_reaches_scene(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -397,6 +539,48 @@ void test_adjacent_inline_runs_share_wrapped_lines(webscene_engine* engine)
     )JS", "native-adjacent-inline-runs.js");
     if (result != "[42,21,42,true]") {
         fail("adjacent inline runs did not share a two-line formatting context: " + result);
+    }
+}
+
+void test_default_line_breaking_does_not_split_unbreakable_tokens(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const timeline = document.createElement('div');
+          timeline.style.cssText =
+            'position:relative;width:120px;height:32px;'
+            + 'font-family:sans-serif;font-size:11px;line-height:14px';
+          const track = document.createElement('div');
+          track.style.cssText =
+            'position:absolute;left:0;top:4px;width:120px;height:7px';
+          const marker = document.createElement('i');
+          marker.style.cssText =
+            'position:absolute;left:70%;top:50%;width:1px;height:14px;'
+            + 'transform:translate(-50%,-50%)';
+          const label = document.createElement('div');
+          label.style.cssText =
+            'position:absolute;left:70%;top:14px;width:28px;'
+            + 'transform:translateX(-50%)';
+          label.textContent = '04:00';
+          track.appendChild(marker);
+          timeline.append(track, label);
+          document.body.appendChild(timeline);
+          const trackRect = track.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          const labelRect = label.getBoundingClientRect();
+          return {
+            labelHeight: labelRect.height,
+            labelTextHeight: label.firstChild.getBoundingClientRect().height,
+            markerCenter: markerRect.top + markerRect.height / 2,
+            trackCenter: trackRect.top + trackRect.height / 2
+          };
+        })()
+    )JS", "native-unbreakable-timeline-label.js");
+    if (result != R"({"labelHeight":14,"labelTextHeight":14,"markerCenter":7.5,"trackCenter":7.5})") {
+        fail("default line breaking split a timeline token or displaced its marker: " + result);
     }
 }
 

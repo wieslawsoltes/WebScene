@@ -1016,9 +1016,7 @@ struct v8_dom_runtime::implementation final {
             "asynchronous GET/HEAD text responses through the host resource loader",
             "web-api-binding");
         const auto specifier = to_utf8(info.GetIsolate(), info[0]);
-        const auto& base = self->in_frame_context()
-            ? self->frame_base_address
-            : self->document_base_address;
+        const auto& base = self->current_base_address();
         std::string content;
         std::string resolved;
         if (!self->load_text_resource(
@@ -3155,7 +3153,7 @@ struct v8_dom_runtime::implementation final {
 
     bool queue_external_url(const std::string& authored)
     {
-        const auto& base = in_frame_context() ? frame_base_address : document_base_address;
+        const auto& base = current_base_address();
         const auto resolved = resolve_resource_url(authored, base);
         const auto lower = lower_html_name(resolved);
         if (!lower.starts_with("https://") && !lower.starts_with("http://")) return true;

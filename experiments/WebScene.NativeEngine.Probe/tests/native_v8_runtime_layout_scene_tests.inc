@@ -883,6 +883,78 @@ void test_later_dom_overlay_background_paints_above_retained_canvas(webscene_eng
         "a descendant z-index reordered an earlier ancestor above a later DOM overlay");
 }
 
+void test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(
+    webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const appendPane = color => {
+            const pane = document.createElement('div');
+            pane.style.width = '80px';
+            pane.style.height = '40px';
+            pane.style.backgroundColor = color;
+            const canvas = document.createElement('canvas');
+            canvas.width = 80;
+            canvas.height = 40;
+            canvas.style.width = '80px';
+            canvas.style.height = '40px';
+            canvas.getContext('2d').fillRect(0, 0, 80, 40);
+            pane.appendChild(canvas);
+            document.body.appendChild(pane);
+          };
+          appendPane('#a10000');
+          appendPane('#00a100');
+          const overlay = document.createElement('div');
+          overlay.style.width = '80px';
+          overlay.style.height = '40px';
+          overlay.style.backgroundColor = '#0000a1';
+          document.body.appendChild(overlay);
+        })()
+    )JS", "native-multiple-canvas-pane-paint-order.js");
+    require(
+        evaluate(
+            engine,
+            "document.querySelectorAll('canvas').length",
+            "native-multiple-canvas-pane-paint-order-ready.js") == "2",
+        "multiple canvas pane fixture did not materialize");
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto first_pane_is_backdrop = false;
+    auto second_pane_is_backdrop = false;
+    auto final_overlay_is_foreground = false;
+    auto retained_layer_count = uint32_t{0U};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            retained_layer_count = scene->header.canvas_layer_count;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                const auto rgb = command.rgba >> 8U;
+                first_pane_is_backdrop = first_pane_is_backdrop
+                    || (rgb == 0xA10000U && command.kind == 1U);
+                second_pane_is_backdrop = second_pane_is_backdrop
+                    || (rgb == 0x00A100U && command.kind == 1U);
+                final_overlay_is_foreground = final_overlay_is_foreground
+                    || (rgb == 0x0000A1U && command.kind == 9U);
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (retained_layer_count >= 2U
+            && first_pane_is_backdrop
+            && second_pane_is_backdrop
+            && final_overlay_is_foreground) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(retained_layer_count >= 2U, "multiple canvas panes did not publish retained layers");
+    require(first_pane_is_backdrop, "the first canvas pane background was promoted above its canvas");
+    require(second_pane_is_backdrop, "a later canvas pane background was promoted above its canvas");
+    require(final_overlay_is_foreground, "DOM after the final canvas did not remain in the overlay");
+}
+
 void test_shadow_dom_composed_runtime_geometry(webscene_engine* engine)
 {
     resize(engine, 800, 600, 86U);

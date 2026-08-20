@@ -38,9 +38,45 @@ try {
   context.fill();
   context.stroke();
   context.fillText("chart", 48, 30);
-  const metrics = context.measureText("chart");
-  assert(Number.isFinite(metrics.width) && metrics.width >= 0,
-    "measureText returns a finite non-negative width");
+  context.fillText("condensed", 48, 46, 12);
+  context.font = "10px sans-serif";
+  const small = context.measureText("Canvas 123");
+  context.font = "20px sans-serif";
+  const large = context.measureText("Canvas 123");
+  context.font = "700 20px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  const weighted = context.measureText("Canvas 123");
+  const mixedNumeric = context.measureText("Ex Date: Mon Aug 10 2026");
+  context.font = "20px monospace";
+  const monospaced = context.measureText("iiiiWWWW");
+  context.font = "20px serif";
+  const serif = context.measureText("iiiiWWWW");
+  assert(Number.isFinite(small.width) && small.width > 0,
+    "measureText returns a finite positive width");
+  assert(large.width > small.width * 1.8 && large.width < small.width * 2.2,
+    "measureText follows the active font size: " + small.width + "/" + large.width);
+  assert(Number.isFinite(weighted.actualBoundingBoxAscent)
+      && Number.isFinite(weighted.actualBoundingBoxDescent)
+      && weighted.actualBoundingBoxAscent > 0,
+    "TextMetrics exposes finite host ascent and descent: "
+      + weighted.actualBoundingBoxAscent + "/" + weighted.actualBoundingBoxDescent);
+  assert(Number.isFinite(mixedNumeric.actualBoundingBoxLeft)
+      && Number.isFinite(mixedNumeric.actualBoundingBoxRight)
+      && mixedNumeric.actualBoundingBoxRight > mixedNumeric.width * .9,
+    "mixed alpha-numeric TextMetrics retain browser-like ink and advance bounds");
+  assert(Math.abs(monospaced.width - serif.width) > .1,
+    "measureText resolves the active font family: " + monospaced.width + "/" + serif.width);
+  const label = document.createElement("span");
+  label.textContent = "Canvas label";
+  label.style.cssText = "position:absolute;left:0;top:110px;display:inline-block;white-space:pre";
+  label.style.fontWeight = "700";
+  label.style.fontSize = "20px";
+  label.style.fontFamily = "-apple-system,BlinkMacSystemFont,Arial,sans-serif";
+  document.body.appendChild(label);
+  context.font = "700 20px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  const canvasLabelWidth = context.measureText(label.textContent).width;
+  const domLabelWidth = label.getBoundingClientRect().width;
+  assert(Math.abs(canvasLabelWidth - domLabelWidth) <= 2,
+    "DOM and Canvas consume the same host font advance: " + domLabelWidth + "/" + canvasLabelWidth);
   context.restore();
 
   const base = new Path2D();

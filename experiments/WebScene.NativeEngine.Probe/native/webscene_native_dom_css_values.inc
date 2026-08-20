@@ -9,8 +9,22 @@ css_length native_document::parse_length(const std::string& value)
                 static_cast<float>(calculated->value),
                 calculated->unit == calc_unit::percent
                     ? length_unit::percent
-                    : length_unit::pixels,
-                static_cast<float>(calculated->pixel_offset)};
+                    : calculated->unit == calc_unit::viewport_width
+                        ? calculated->bound == calc_value::bound_kind::minimum
+                            ? length_unit::viewport_width_capped
+                            : calculated->bound == calc_value::bound_kind::maximum
+                                ? length_unit::viewport_width_floored
+                                : length_unit::viewport_width
+                        : calculated->unit == calc_unit::viewport_height
+                            ? calculated->bound == calc_value::bound_kind::minimum
+                                ? length_unit::viewport_height_capped
+                                : calculated->bound == calc_value::bound_kind::maximum
+                                    ? length_unit::viewport_height_floored
+                                    : length_unit::viewport_height
+                            : length_unit::pixels,
+                static_cast<float>(calculated->bound == calc_value::bound_kind::none
+                    ? calculated->pixel_offset
+                    : calculated->pixel_bound)};
         }
         return {};
     }
@@ -80,13 +94,39 @@ void native_document::parse_transform_translate(
         const auto open = value.find(std::string(function) + "(");
         if (open == std::string::npos) return std::vector<std::string>{};
         const auto start = open + function.size() + 1U;
-        const auto close = value.find(')', start);
+        // Transform operands may themselves be functions. In particular,
+        // translate(calc(...), var(...)) must close and split at the outer
+        // transform level instead of treating calc's first ')' as the end.
+        auto close = std::string::npos;
+        auto depth = 1;
+        for (auto index = start; index < value.size(); ++index) {
+            if (value[index] == '(') {
+                ++depth;
+            } else if (value[index] == ')' && --depth == 0) {
+                close = index;
+                break;
+            }
+        }
         if (close == std::string::npos) return std::vector<std::string>{};
-        auto arguments = value.substr(start, close - start);
-        std::replace(arguments.begin(), arguments.end(), ',', ' ');
-        std::istringstream stream(arguments);
+        const auto arguments = std::string_view(value).substr(start, close - start);
         std::vector<std::string> result;
-        for (std::string argument; stream >> argument;) result.push_back(std::move(argument));
+        auto token_start = std::string_view::npos;
+        depth = 0;
+        for (size_t index = 0; index <= arguments.size(); ++index) {
+            const auto at_end = index == arguments.size();
+            const auto character = at_end ? '\0' : arguments[index];
+            const auto separator = at_end
+                || (depth == 0
+                    && (character == ','
+                        || std::isspace(static_cast<unsigned char>(character))));
+            if (!separator && token_start == std::string_view::npos) token_start = index;
+            if (!at_end && character == '(') ++depth;
+            else if (!at_end && character == ')' && depth > 0) --depth;
+            if (separator && token_start != std::string_view::npos) {
+                result.emplace_back(arguments.substr(token_start, index - token_start));
+                token_start = std::string_view::npos;
+            }
+        }
         return result;
     };
 
@@ -181,69 +221,183 @@ void native_document::parse_transform_origin(
 
 uint32_t native_document::parse_color(const std::string& value)
 {
-    if (value == "transparent" || value.empty()) return 0;
-    if (value == "black") return 0x000000FFU;
-    if (value == "white") return 0xFFFFFFFFU;
-    if (value == "red") return 0xFF0000FFU;
-    if (value == "green") return 0x008000FFU;
-    if (value == "lime") return 0x00FF00FFU;
-    if (value == "blue") return 0x0000FFFFU;
-    if (value == "yellow") return 0xFFFF00FFU;
-    if (value == "cyan" || value == "aqua") return 0x00FFFFFFU;
-    if (value == "magenta" || value == "fuchsia") return 0xFF00FFFFU;
-    if (value == "gray" || value == "grey") return 0x808080FFU;
-    if (value == "silver") return 0xC0C0C0FFU;
-    if (value == "maroon") return 0x800000FFU;
-    if (value == "purple") return 0x800080FFU;
-    if (value == "olive") return 0x808000FFU;
-    if (value == "navy") return 0x000080FFU;
-    if (value == "teal") return 0x008080FFU;
-    if (value == "orange") return 0xFFA500FFU;
-    if (value.starts_with("rgb(")) {
+    auto normalized = value;
+    const auto first = normalized.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return 0;
+    const auto last = normalized.find_last_not_of(" \t\r\n");
+    normalized = normalized.substr(first, last - first + 1U);
+    std::transform(
+        normalized.begin(), normalized.end(), normalized.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+
+    if (normalized == "transparent") return 0;
+    if (normalized == "black") return 0x000000FFU;
+    if (normalized == "white") return 0xFFFFFFFFU;
+    if (normalized == "red") return 0xFF0000FFU;
+    if (normalized == "green") return 0x008000FFU;
+    if (normalized == "lime") return 0x00FF00FFU;
+    if (normalized == "blue") return 0x0000FFFFU;
+    if (normalized == "yellow") return 0xFFFF00FFU;
+    if (normalized == "cyan" || normalized == "aqua") return 0x00FFFFFFU;
+    if (normalized == "magenta" || normalized == "fuchsia") return 0xFF00FFFFU;
+    if (normalized == "gray" || normalized == "grey") return 0x808080FFU;
+    if (normalized == "silver") return 0xC0C0C0FFU;
+    if (normalized == "maroon") return 0x800000FFU;
+    if (normalized == "purple") return 0x800080FFU;
+    if (normalized == "olive") return 0x808000FFU;
+    if (normalized == "navy") return 0x000080FFU;
+    if (normalized == "teal") return 0x008080FFU;
+    if (normalized == "orange") return 0xFFA500FFU;
+    if (normalized.starts_with("color(srgb ") && normalized.ends_with(')')) {
+        auto components = normalized.substr(11U, normalized.size() - 12U);
+        std::replace(components.begin(), components.end(), '/', ' ');
+        std::istringstream stream(components);
+        float red = 0;
+        float green = 0;
+        float blue = 0;
+        float alpha = 1;
+        if (stream >> red >> green >> blue) {
+            static_cast<void>(stream >> alpha);
+            const auto channel = [](float component) {
+                return static_cast<uint32_t>(std::lround(
+                    std::clamp(component, 0.0F, 1.0F) * 255.0F));
+            };
+            return channel(red) << 24U
+                | channel(green) << 16U
+                | channel(blue) << 8U
+                | channel(alpha);
+        }
+    }
+    if (normalized.starts_with("color-mix(") && normalized.ends_with(')')) {
+        auto arguments = std::string_view(normalized).substr(
+            10U, normalized.size() - 11U);
+        if (arguments.starts_with("in srgb,")) {
+            arguments.remove_prefix(8U);
+            while (!arguments.empty()
+                && std::isspace(static_cast<unsigned char>(arguments.front()))) {
+                arguments.remove_prefix(1U);
+            }
+            size_t separator = std::string_view::npos;
+            auto depth = 0;
+            for (size_t index = 0; index < arguments.size(); ++index) {
+                if (arguments[index] == '(') ++depth;
+                else if (arguments[index] == ')') --depth;
+                else if (arguments[index] == ',' && depth == 0) {
+                    separator = index;
+                    break;
+                }
+            }
+            if (separator != std::string_view::npos) {
+                auto parse_stop = [](std::string_view component) {
+                    while (!component.empty()
+                        && std::isspace(static_cast<unsigned char>(component.front()))) {
+                        component.remove_prefix(1U);
+                    }
+                    while (!component.empty()
+                        && std::isspace(static_cast<unsigned char>(component.back()))) {
+                        component.remove_suffix(1U);
+                    }
+                    auto weight = -1.0F;
+                    if (component.ends_with('%')) {
+                        const auto space = component.find_last_of(" \t\r\n");
+                        if (space != std::string_view::npos) {
+                            weight = parse_number(component.substr(
+                                space + 1U, component.size() - space - 2U), -1.0F);
+                            component = component.substr(0, space);
+                            while (!component.empty()
+                                && std::isspace(static_cast<unsigned char>(component.back()))) {
+                                component.remove_suffix(1U);
+                            }
+                        }
+                    }
+                    return std::pair{std::string(component), weight};
+                };
+                auto [first_color, first_weight] = parse_stop(
+                    arguments.substr(0, separator));
+                auto [second_color, second_weight] = parse_stop(
+                    arguments.substr(separator + 1U));
+                if (first_weight < 0 && second_weight < 0) {
+                    first_weight = second_weight = 50.0F;
+                } else if (first_weight < 0) {
+                    first_weight = 100.0F - second_weight;
+                } else if (second_weight < 0) {
+                    second_weight = 100.0F - first_weight;
+                }
+                const auto total = first_weight + second_weight;
+                if (first_weight >= 0 && second_weight >= 0 && total > 0) {
+                    const auto first_rgba = parse_color(first_color);
+                    const auto second_rgba = parse_color(second_color);
+                    const auto weight1 = first_weight / total;
+                    const auto weight2 = second_weight / total;
+                    const auto alpha1 = static_cast<float>(first_rgba & 0xFFU) / 255.0F;
+                    const auto alpha2 = static_cast<float>(second_rgba & 0xFFU) / 255.0F;
+                    const auto alpha = alpha1 * weight1 + alpha2 * weight2;
+                    const auto mixed_channel = [&](uint32_t shift) {
+                        if (alpha <= 0.0F) return uint32_t{0U};
+                        const auto channel1 = static_cast<float>((first_rgba >> shift) & 0xFFU);
+                        const auto channel2 = static_cast<float>((second_rgba >> shift) & 0xFFU);
+                        return static_cast<uint32_t>(std::lround(std::clamp(
+                            (channel1 * alpha1 * weight1 + channel2 * alpha2 * weight2)
+                                / alpha,
+                            0.0F,
+                            255.0F)));
+                    };
+                    return mixed_channel(24U) << 24U
+                        | mixed_channel(16U) << 16U
+                        | mixed_channel(8U) << 8U
+                        | static_cast<uint32_t>(std::lround(
+                            std::clamp(alpha, 0.0F, 1.0F) * 255.0F));
+                }
+            }
+        }
+    }
+    if (normalized.starts_with("rgb(")) {
         int red = 0;
         int green = 0;
         int blue = 0;
-        if (std::sscanf(value.c_str(), "rgb(%d, %d, %d)", &red, &green, &blue) == 3
-            || std::sscanf(value.c_str(), "rgb(%d,%d,%d)", &red, &green, &blue) == 3) {
+        if (std::sscanf(normalized.c_str(), "rgb(%d, %d, %d)", &red, &green, &blue) == 3
+            || std::sscanf(normalized.c_str(), "rgb(%d,%d,%d)", &red, &green, &blue) == 3) {
             return static_cast<uint32_t>(std::clamp(red, 0, 255)) << 24U
                 | static_cast<uint32_t>(std::clamp(green, 0, 255)) << 16U
                 | static_cast<uint32_t>(std::clamp(blue, 0, 255)) << 8U
                 | 0xFFU;
         }
     }
-    if (value.starts_with("rgba(")) {
+    if (normalized.starts_with("rgba(")) {
         int red = 0;
         int green = 0;
         int blue = 0;
         float alpha = 0;
-        if (std::sscanf(value.c_str(), "rgba(%d, %d, %d, %f)", &red, &green, &blue, &alpha) == 4
-            || std::sscanf(value.c_str(), "rgba(%d,%d,%d,%f)", &red, &green, &blue, &alpha) == 4) {
+        if (std::sscanf(normalized.c_str(), "rgba(%d, %d, %d, %f)", &red, &green, &blue, &alpha) == 4
+            || std::sscanf(normalized.c_str(), "rgba(%d,%d,%d,%f)", &red, &green, &blue, &alpha) == 4) {
             return static_cast<uint32_t>(std::clamp(red, 0, 255)) << 24U
                 | static_cast<uint32_t>(std::clamp(green, 0, 255)) << 16U
                 | static_cast<uint32_t>(std::clamp(blue, 0, 255)) << 8U
                 | static_cast<uint32_t>(std::clamp(alpha, 0.0F, 1.0F) * 255.0F);
         }
     }
-    if ((value.size() == 4 || value.size() == 5) && value.front() == '#') {
+    if ((normalized.size() == 4 || normalized.size() == 5) && normalized.front() == '#') {
         const auto expand = [](char digit) {
             return parse_hex_pair(digit, digit);
         };
-        return static_cast<uint32_t>(expand(value[1])) << 24U
-            | static_cast<uint32_t>(expand(value[2])) << 16U
-            | static_cast<uint32_t>(expand(value[3])) << 8U
-            | (value.size() == 5 ? expand(value[4]) : 0xFFU);
+        return static_cast<uint32_t>(expand(normalized[1])) << 24U
+            | static_cast<uint32_t>(expand(normalized[2])) << 16U
+            | static_cast<uint32_t>(expand(normalized[3])) << 8U
+            | (normalized.size() == 5 ? expand(normalized[4]) : 0xFFU);
     }
-    if (value.size() == 7 && value.front() == '#') {
-        return static_cast<uint32_t>(parse_hex_pair(value[1], value[2])) << 24U
-            | static_cast<uint32_t>(parse_hex_pair(value[3], value[4])) << 16U
-            | static_cast<uint32_t>(parse_hex_pair(value[5], value[6])) << 8U
+    if (normalized.size() == 7 && normalized.front() == '#') {
+        return static_cast<uint32_t>(parse_hex_pair(normalized[1], normalized[2])) << 24U
+            | static_cast<uint32_t>(parse_hex_pair(normalized[3], normalized[4])) << 16U
+            | static_cast<uint32_t>(parse_hex_pair(normalized[5], normalized[6])) << 8U
             | 0xFFU;
     }
-    if (value.size() == 9 && value.front() == '#') {
-        return static_cast<uint32_t>(parse_hex_pair(value[1], value[2])) << 24U
-            | static_cast<uint32_t>(parse_hex_pair(value[3], value[4])) << 16U
-            | static_cast<uint32_t>(parse_hex_pair(value[5], value[6])) << 8U
-            | parse_hex_pair(value[7], value[8]);
+    if (normalized.size() == 9 && normalized.front() == '#') {
+        return static_cast<uint32_t>(parse_hex_pair(normalized[1], normalized[2])) << 24U
+            | static_cast<uint32_t>(parse_hex_pair(normalized[3], normalized[4])) << 16U
+            | static_cast<uint32_t>(parse_hex_pair(normalized[5], normalized[6])) << 8U
+            | parse_hex_pair(normalized[7], normalized[8]);
     }
     return 0;
 }
@@ -279,9 +433,17 @@ float native_document::resolve_length(css_length value, float available, float f
         // non-element fallback paths.
         return value.value * 14.0F;
     case length_unit::viewport_width:
-        return viewport_width_ * value.value / 100.0F;
+        return viewport_width_ * value.value / 100.0F + value.pixel_offset;
     case length_unit::viewport_height:
-        return viewport_height_ * value.value / 100.0F;
+        return viewport_height_ * value.value / 100.0F + value.pixel_offset;
+    case length_unit::viewport_width_capped:
+        return std::min(viewport_width_ * value.value / 100.0F, value.pixel_offset);
+    case length_unit::viewport_height_capped:
+        return std::min(viewport_height_ * value.value / 100.0F, value.pixel_offset);
+    case length_unit::viewport_width_floored:
+        return std::max(viewport_width_ * value.value / 100.0F, value.pixel_offset);
+    case length_unit::viewport_height_floored:
+        return std::max(viewport_height_ * value.value / 100.0F, value.pixel_offset);
     case length_unit::max_content:
     case length_unit::min_content:
     case length_unit::fit_content:

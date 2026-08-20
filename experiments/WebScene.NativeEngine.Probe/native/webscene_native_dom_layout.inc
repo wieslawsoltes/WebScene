@@ -47,7 +47,12 @@ void native_document::layout(float viewport_width, float viewport_height)
     layout_children(*body_);
     update_paint_z_index(*this, *body_);
     auto retained_canvas_seen = false;
-    update_retained_canvas_paint_phase(*this, *body_, retained_canvas_seen);
+    auto retained_canvases_remaining = count_retained_canvases(*this, *body_);
+    update_retained_canvas_paint_phase(
+        *this,
+        *body_,
+        retained_canvas_seen,
+        retained_canvases_remaining);
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
@@ -894,6 +899,7 @@ void native_document::layout_children(dom_node& parent)
             });
     if (inline_formatting_context) {
         std::vector<dom_node*> text_runs;
+        std::deque<dom_node> generated_whitespace_runs;
         struct positioned_inline_item final {
             dom_node* node;
             size_t preceding_text_runs;
@@ -922,15 +928,26 @@ void native_document::layout_children(dom_node& parent)
             // boxes. Flattening their text into the surrounding line discards
             // their own padding, background, and border geometry.
             if (node.style.display != display_mode::inline_flow) return false;
-            // Generated content belongs to the inline subtree at the point
-            // where its originating element participates. Flattening only the
-            // DOM text descendants drops child ::before/::after content (for
-            // example an authored separator space between adjacent status
-            // fragments), so let the general inline-item path place it.
-            if (pseudo_generates_box(node.style.before_pseudo())
-                || pseudo_generates_box(node.style.after_pseudo())) {
-                return false;
-            }
+            const auto append_generated_whitespace = [&](const auto& pseudo) {
+                if (!pseudo_generates_box(pseudo)) return true;
+                // Whitespace-only generated inline content is a line-breaking
+                // boundary, not an atomic inline box. Keeping it in the
+                // flattened run stream lets adjacent styled spans fragment
+                // across lines while preserving the authored separator.
+                if (pseudo.display != display_mode::inline_flow
+                    || is_out_of_flow(pseudo.position)
+                    || std::any_of(
+                        pseudo.content.begin(),
+                        pseudo.content.end(),
+                        [](unsigned char character) { return !std::isspace(character); })) {
+                    return false;
+                }
+                generated_whitespace_runs.push_back(
+                    make_pseudo_layout_node(node, pseudo));
+                text_runs.push_back(&generated_whitespace_runs.back());
+                return true;
+            };
+            if (!append_generated_whitespace(node.style.before_pseudo())) return false;
             // Inline flex/grid boxes establish their own formatting contexts. Flattening
             // their descendants into the surrounding text run loses their padding,
             // alignment and line-box height.
@@ -947,6 +964,7 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (!collect_runs(*child)) return false;
             }
+            if (!append_generated_whitespace(node.style.after_pseudo())) return false;
             return true;
         };
         auto supported = true;
@@ -961,6 +979,7 @@ void native_document::layout_children(dom_node& parent)
             auto cursor_y = 0.0F;
             auto current_line_height = 0.0F;
             auto pending_space = false;
+            dom_node* pending_space_run = nullptr;
             std::vector<layout_rect> static_anchors(text_runs.size() + 1U);
             static_anchors[0] = {
                 content.x,
@@ -981,9 +1000,17 @@ void native_document::layout_children(dom_node& parent)
                     auto& previous = run.text_layout_fragments.back();
                     if (std::abs(previous.y - (content.y + cursor_y)) < 0.01F
                         && std::abs(previous.x + previous.width - (content.x + cursor_x)) < 0.01F) {
-                        previous.text += text;
-                        previous.width += width;
-                        cursor_x += width;
+                        // The host shaper's advance is not necessarily additive:
+                        // kerning, ligatures and platform-font calibration can make
+                        // measure("one two") differ from the sum of separately
+                        // measured words and spaces. The scene paints the merged
+                        // fragment as one shaped run, so keep its layout advance in
+                        // lockstep with that exact run as it is assembled.
+                        auto combined_text = previous.text + text;
+                        const auto combined_width = measure_text_width(combined_text, run);
+                        cursor_x += combined_width - previous.width;
+                        previous.text = std::move(combined_text);
+                        previous.width = combined_width;
                         current_line_height = std::max(current_line_height, line_height);
                         return;
                     }
@@ -1014,32 +1041,22 @@ void native_document::layout_children(dom_node& parent)
                         start_new_line();
                         space_width = 0;
                     }
-                    if (space_width > 0) append_fragment(*run, " ", space_width);
-                    while (allow_wrap
-                        && word_width > content.width + inline_wrap_epsilon
-                        && !word.empty()) {
-                        size_t characters = 1U;
-                        while (characters < word.size()
-                            && measure_text_width(
-                                std::string_view(word).substr(0, characters + 1U),
-                                *run) <= content.width) {
-                            ++characters;
-                        }
-                        const auto part = word.substr(0, characters);
-                        const auto part_width = measure_text_width(part, *run);
-                        append_fragment(*run, part, part_width);
-                        word.erase(0, characters);
-                        word_width = measure_text_width(word, *run);
-                        if (!word.empty()) start_new_line();
+                    if (space_width > 0) {
+                        append_fragment(
+                            pending_space_run != nullptr ? *pending_space_run : *run,
+                            " ",
+                            space_width);
                     }
                     if (!word.empty()) append_fragment(*run, word, word_width);
                     word.clear();
                     pending_space = false;
+                    pending_space_run = nullptr;
                 };
                 for (const auto character : transformed_text) {
                     if (std::isspace(static_cast<unsigned char>(character))) {
                         flush_word();
                         pending_space = true;
+                        pending_space_run = run;
                     } else {
                         word.push_back(character);
                     }
@@ -1050,6 +1067,77 @@ void native_document::layout_children(dom_node& parent)
                     content.y + cursor_y,
                     0,
                     current_line_height};
+            }
+
+            // The flattened inline fast path places fragments from the content
+            // edge as it assembles each line. Apply the block's inline-axis
+            // alignment after every line has its final shaped advance; keeping
+            // this in layout (rather than centering each paint command inside
+            // its own glyph-width box) also makes CSSOM geometry and positioned
+            // inline static anchors agree with the painted result.
+            const auto text_alignment = resolved_text_align(parent);
+            if (text_alignment == "center" || text_alignment == "right"
+                || text_alignment == "end") {
+                struct flattened_line_alignment final {
+                    float y{0};
+                    float right{0};
+                    float offset{0};
+                };
+                std::vector<flattened_line_alignment> lines;
+                for (const auto* run : text_runs) {
+                    for (const auto& fragment : run->text_layout_fragments) {
+                        auto line = std::find_if(
+                            lines.begin(),
+                            lines.end(),
+                            [&](const auto& candidate) {
+                                return std::abs(candidate.y - fragment.y) < 0.01F;
+                            });
+                        if (line == lines.end()) {
+                            lines.push_back({fragment.y, fragment.x + fragment.width, 0});
+                        } else {
+                            line->right = std::max(line->right, fragment.x + fragment.width);
+                        }
+                    }
+                }
+                for (auto& line : lines) {
+                    const auto used_width = std::max(0.0F, line.right - content.x);
+                    const auto free_width = std::max(0.0F, content.width - used_width);
+                    line.offset = text_alignment == "center"
+                        ? free_width * 0.5F
+                        : free_width;
+                }
+                const auto offset_for_y = [&](float y) {
+                    const auto line = std::find_if(
+                        lines.begin(),
+                        lines.end(),
+                        [&](const auto& candidate) {
+                            return std::abs(candidate.y - y) < 0.01F;
+                        });
+                    return line == lines.end() ? 0.0F : line->offset;
+                };
+                for (auto* run : text_runs) {
+                    for (auto& fragment : run->text_layout_fragments) {
+                        fragment.x += offset_for_y(fragment.y);
+                    }
+                }
+                for (auto& anchor : static_anchors) {
+                    anchor.x += offset_for_y(anchor.y);
+                }
+            }
+
+            // A whitespace-only pseudo is flattened into a synthetic text run
+            // so it can participate in collapsing and wrapping. Its fragment
+            // still belongs to the originating inline box for CSSOM geometry:
+            // getBoundingClientRect() on `span::after { content: " " }` must
+            // include the generated advance even though the pseudo has no DOM
+            // node of its own.
+            for (auto& generated : generated_whitespace_runs) {
+                if (generated.parent == nullptr) continue;
+                auto& originating_fragments = generated.parent->text_layout_fragments;
+                originating_fragments.insert(
+                    originating_fragments.end(),
+                    generated.text_layout_fragments.begin(),
+                    generated.text_layout_fragments.end());
             }
 
             std::function<bool(dom_node&, layout_rect&)> update_inline_box =
@@ -1138,6 +1226,44 @@ void native_document::layout_children(dom_node& parent)
                     : has_top && has_bottom
                         ? std::max(0.0F, containing.height - top - bottom)
                         : intrinsic_size(child, false, containing.height);
+                // Inline formatting collects out-of-flow descendants into a
+                // deferred positioned pass. They retain the same min/max used
+                // size rules as positioned children of block/flex formatting
+                // contexts; omitting this clamp lets fixed popups ignore their
+                // viewport-bounded max-height and grow with their contents.
+                const auto constrain_positioned_size = [&](bool horizontal, float size) {
+                    const auto available = horizontal
+                        ? containing.width : containing.height;
+                    const auto& minimum = horizontal
+                        ? child.style.min_width : child.style.min_height;
+                    const auto& maximum = horizontal
+                        ? child.style.max_width : child.style.max_height;
+                    const auto box_adjustment = child.style.border_box ? 0.0F
+                        : horizontal
+                            ? resolve_length(child, child.style.padding_left, available, 0)
+                                + resolve_length(child, child.style.padding_right, available, 0)
+                                + resolve_length(child, child.style.border_left_width, available, 0)
+                                + resolve_length(child, child.style.border_right_width, available, 0)
+                            : resolve_length(child, child.style.padding_top, available, 0)
+                                + resolve_length(child, child.style.padding_bottom, available, 0)
+                                + resolve_length(child, child.style.border_top_width, available, 0)
+                                + resolve_length(child, child.style.border_bottom_width, available, 0);
+                    if (is_specified(maximum)) {
+                        size = std::min(
+                            size,
+                            resolve_length(child, maximum, available, size)
+                                + box_adjustment);
+                    }
+                    if (is_specified(minimum)) {
+                        size = std::max(
+                            size,
+                            resolve_length(child, minimum, available, 0)
+                                + box_adjustment);
+                    }
+                    return std::max(0.0F, size);
+                };
+                assigned.width = constrain_positioned_size(true, assigned.width);
+                assigned.height = constrain_positioned_size(false, assigned.height);
                 assigned.x = containing.x + (has_left
                     ? left + margin_left
                     : has_right
@@ -1432,13 +1558,27 @@ void native_document::layout_children(dom_node& parent)
     }
     if (is_grid_container(parent.style.display) && parent_grid.fractional_rows) {
         std::vector<dom_node*> flow_children;
-        for (auto* child : composed_children(parent)) {
+        const auto append_grid_child = [&](const auto& self, dom_node* child) -> void {
+            if (child == nullptr) return;
             child->visible = parent.visible && child->style.display != display_mode::none;
             if (!child->visible) {
                 child->layout = {};
-                continue;
+                return;
+            }
+            if (child->style.display == display_mode::contents
+                && !is_out_of_flow(child->style.position)) {
+                child->layout = {};
+                child->scroll_content_width = 0;
+                child->scroll_content_height = 0;
+                for (auto* descendant : composed_children(*child)) {
+                    self(self, descendant);
+                }
+                return;
             }
             if (!is_out_of_flow(child->style.position)) flow_children.push_back(child);
+        };
+        for (auto* child : composed_children(parent)) {
+            append_grid_child(append_grid_child, child);
         }
         if (!flow_children.empty()) {
             auto trailing_height = 0.0F;
@@ -2014,16 +2154,34 @@ void native_document::layout_children(dom_node& parent)
                 false,
                 assigned.height,
                 containing.height);
+            const auto flex_static_main_offset = [&] {
+                if (!flex_container) return horizontal ? cursor : 0.0F;
+                if (parent.style.justify_content == justify_mode::center) {
+                    return horizontal
+                        ? (content.width - assigned.width) * 0.5F
+                        : (content.height - assigned.height) * 0.5F;
+                }
+                if (parent.style.justify_content == justify_mode::end) {
+                    return horizontal
+                        ? content.width - assigned.width
+                        : content.height - assigned.height;
+                }
+                return 0.0F;
+            }();
             assigned.x = containing.x + (has_left
                 ? left + margin_left
                 : has_right
                     ? containing.width - right - margin_right - assigned.width
-                    : content.x - containing.x + (horizontal ? cursor : 0) + margin_left);
+                    : content.x - containing.x
+                        + (horizontal ? flex_static_main_offset : 0.0F)
+                        + margin_left);
             assigned.y = containing.y + (has_top
                 ? top + margin_top
                 : has_bottom
                     ? containing.height - bottom - margin_bottom - assigned.height
-                    : content.y - containing.y + (horizontal ? 0 : cursor) + margin_top);
+                    : content.y - containing.y
+                        + (horizontal ? 0.0F : flex_static_main_offset)
+                        + margin_top);
             if (child->style.position != position_mode::fixed) {
                 assigned.x -= parent.scroll_left;
                 assigned.y -= parent.scroll_top;
@@ -2286,6 +2444,26 @@ void native_document::layout_children(dom_node& parent)
         }
         ++placed_flow_count;
     }
+    // Cross-axis alignment moves an already laid-out subtree. Generated boxes
+    // are stored on their originating element rather than in composed_children,
+    // so they must follow the same translation explicitly. Leaving them behind
+    // makes a pseudo-element background paint at the pre-alignment position
+    // while the element, its text, and getBoundingClientRect() all report the
+    // aligned position.
+    const auto shift_subtree_y = [&](const auto& self, dom_node& node, float offset) -> void {
+        node.layout.y += offset;
+        for (auto& fragment : node.text_layout_fragments) fragment.y += offset;
+        if (node.style.has_pseudo_elements()) {
+            auto& before = node.style.mutable_before_pseudo();
+            auto& after = node.style.mutable_after_pseudo();
+            if (before.generated) before.layout.y += offset;
+            if (after.generated) after.layout.y += offset;
+        }
+        if (node.list_marker_layout.width > 0 || node.list_marker_layout.height > 0) {
+            node.list_marker_layout.y += offset;
+        }
+        for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
+    };
     if (flex_container && horizontal && !parent.style.flex_wrap) {
         std::function<std::optional<float>(const dom_node&)> first_text_baseline =
             [&](const dom_node& node) -> std::optional<float> {
@@ -2318,11 +2496,6 @@ void native_document::layout_children(dom_node& parent)
                 first_text_baseline(*child).value_or(child->layout.y + child->layout.height));
         }
         if (std::isfinite(target_baseline)) {
-            const auto shift_subtree_y = [&](const auto& self, dom_node& node, float offset) -> void {
-                node.layout.y += offset;
-                for (auto& fragment : node.text_layout_fragments) fragment.y += offset;
-                for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
-            };
             for (auto* child : ordered_children) {
                 if (!participates_in_flow(child) || !child->visible || !uses_baseline(*child)) continue;
                 const auto baseline = first_text_baseline(*child)
@@ -2346,11 +2519,6 @@ void native_document::layout_children(dom_node& parent)
                     + resolve_length(
                         *child, child->style.margin_bottom, content.height, 0));
         }
-        const auto shift_subtree_y = [&](const auto& self, dom_node& node, float offset) -> void {
-            node.layout.y += offset;
-            for (auto& fragment : node.text_layout_fragments) fragment.y += offset;
-            for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
-        };
         for (auto* child : ordered_children) {
             if (!participates_in_flow(child) || !child->visible
                 || child->style.textual().vertical_align != "middle") continue;
@@ -2970,6 +3138,30 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
                 child.layout.height = expanded_height;
                 layout_children(child);
             }
+        }
+    }
+    // The intrinsic contribution of auto-height contents is evaluated before
+    // max-height, but the final used principal box must remain capped even
+    // when overflow is visible.
+    if (is_specified(child.style.max_height)) {
+        const auto available_height = parent != nullptr
+            ? parent->layout.height : viewport_height_;
+        const auto capped_height = std::min(
+            child.layout.height,
+            resolve_length(
+                child,
+                child.style.max_height,
+                available_height,
+                child.layout.height));
+        if (capped_height + 0.01F < child.layout.height) {
+            child.layout.height = capped_height;
+            // Descendant percentages and stretch alignment were resolved
+            // against the pre-clamp intrinsic height. Reflow once against the
+            // final used max-height so the principal box and its grid/flex
+            // contents agree in the same layout pass.
+            layout_children(child);
+        } else {
+            child.layout.height = capped_height;
         }
     }
 }

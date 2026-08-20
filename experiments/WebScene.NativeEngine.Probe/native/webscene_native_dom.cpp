@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -229,14 +230,36 @@ void collect_fixed_positioned_nodes(
     }
 }
 
+size_t count_retained_canvases(
+    const native_document& document,
+    const dom_node& node)
+{
+    auto count = node.tag == "canvas" && !node.canvas().commands.empty()
+        ? size_t{1U}
+        : size_t{0U};
+    for (const auto* child : document.composed_children(node)) {
+        count += count_retained_canvases(document, *child);
+    }
+    return count;
+}
+
 void update_retained_canvas_paint_phase(
     const native_document& document,
     dom_node& node,
-    bool& retained_canvas_seen)
+    bool& retained_canvas_seen,
+    size_t& retained_canvases_remaining)
 {
-    node.paints_after_retained_canvas = retained_canvas_seen;
+    // The presenter has one DOM backdrop before all retained canvases and one
+    // overlay after them. Normal DOM between canvases must stay in the backdrop
+    // so a later canvas can paint above its own host background. Only DOM after
+    // the final canvas can safely use the global overlay by document order.
+    node.paints_after_retained_canvas =
+        retained_canvas_seen && retained_canvases_remaining == 0U;
     if (node.tag == "canvas" && !node.canvas().commands.empty()) {
         retained_canvas_seen = true;
+        if (retained_canvases_remaining != 0U) {
+            --retained_canvases_remaining;
+        }
     }
     auto paint_order = document.composed_children(node);
     if (std::any_of(paint_order.begin(), paint_order.end(), [](const auto* child) {
@@ -252,7 +275,11 @@ void update_retained_canvas_paint_phase(
             });
     }
     for (auto* child : paint_order) {
-        update_retained_canvas_paint_phase(document, *child, retained_canvas_seen);
+        update_retained_canvas_paint_phase(
+            document,
+            *child,
+            retained_canvas_seen,
+            retained_canvases_remaining);
     }
 }
 
@@ -324,12 +351,21 @@ float parse_number(std::string_view value, float fallback = 0)
     return end != copy.c_str() && std::isfinite(result) ? result : fallback;
 }
 
-enum class calc_unit : uint8_t { number, pixels, percent, invalid };
+enum class calc_unit : uint8_t {
+    number,
+    pixels,
+    percent,
+    viewport_width,
+    viewport_height,
+    invalid
+};
 
 struct calc_value final {
     double value{0};
     calc_unit unit{calc_unit::invalid};
     double pixel_offset{0};
+    enum class bound_kind : uint8_t { none, minimum, maximum } bound{bound_kind::none};
+    double pixel_bound{0};
 };
 
 class calc_parser final {
@@ -406,14 +442,7 @@ private:
                 whitespace();
                 while (consume(',')) {
                     auto next = expression();
-                    if (!compatible(result, next)) return invalid();
-                    if (result.unit == calc_unit::number && result.value == 0
-                        && next.unit != calc_unit::number) result.unit = next.unit;
-                    if (next.unit == calc_unit::number && next.value == 0
-                        && result.unit != calc_unit::number) next.unit = result.unit;
-                    result.value = name == "max"
-                        ? std::max(result.value, next.value)
-                        : std::min(result.value, next.value);
+                    if (!combine_extrema(result, next, name == "max")) return invalid();
                     whitespace();
                 }
                 return consume(')') ? result : invalid();
@@ -431,12 +460,66 @@ private:
         if (source_.substr(position_).starts_with("px")) {
             position_ += 2U;
             unit = calc_unit::pixels;
+        } else if (source_.substr(position_).starts_with("vw")) {
+            position_ += 2U;
+            unit = calc_unit::viewport_width;
+        } else if (source_.substr(position_).starts_with("vh")) {
+            position_ += 2U;
+            unit = calc_unit::viewport_height;
         } else if (position_ < source_.size() && source_[position_] == '%') {
             ++position_;
             unit = calc_unit::percent;
         }
         static_cast<void>(start);
         return {number, unit};
+    }
+
+    static bool viewport_unit(calc_unit unit)
+    {
+        return unit == calc_unit::viewport_width
+            || unit == calc_unit::viewport_height;
+    }
+
+    static bool combine_extrema(calc_value& result, calc_value next, bool maximum)
+    {
+        if (result.unit == next.unit || result.value == 0 || next.value == 0) {
+                    if (result.unit == calc_unit::number && result.value == 0
+                        && next.unit != calc_unit::number) result.unit = next.unit;
+                    if (next.unit == calc_unit::number && next.value == 0
+                        && result.unit != calc_unit::number) next.unit = result.unit;
+            const auto next_is_selected = maximum
+                        ? next.value > result.value
+                            || (next.value == result.value
+                                && next.pixel_offset > result.pixel_offset)
+                        : next.value < result.value
+                            || (next.value == result.value
+                                && next.pixel_offset < result.pixel_offset);
+            if (next_is_selected) result = next;
+            return true;
+        }
+
+        auto* viewport = viewport_unit(result.unit) ? &result
+            : viewport_unit(next.unit) ? &next : nullptr;
+        const auto* pixels = result.unit == calc_unit::pixels ? &result
+            : next.unit == calc_unit::pixels ? &next : nullptr;
+        if (viewport == nullptr || pixels == nullptr
+            || viewport->pixel_offset != 0
+            || pixels->bound != calc_value::bound_kind::none) return false;
+        const auto requested_bound = maximum
+            ? calc_value::bound_kind::maximum
+            : calc_value::bound_kind::minimum;
+        if (viewport->bound != calc_value::bound_kind::none
+            && viewport->bound != requested_bound) return false;
+        if (viewport->bound == calc_value::bound_kind::none) {
+            viewport->bound = requested_bound;
+            viewport->pixel_bound = pixels->value;
+        } else {
+            viewport->pixel_bound = maximum
+                ? std::max(viewport->pixel_bound, pixels->value)
+                : std::min(viewport->pixel_bound, pixels->value);
+        }
+        result = *viewport;
+        return true;
     }
 
     static bool compatible(calc_value left, calc_value right)
@@ -450,17 +533,27 @@ private:
     {
         return compatible(left, right)
             || (left.unit == calc_unit::percent && right.unit == calc_unit::pixels)
-            || (left.unit == calc_unit::pixels && right.unit == calc_unit::percent);
+            || (left.unit == calc_unit::pixels && right.unit == calc_unit::percent)
+            || (left.unit == calc_unit::viewport_width && right.unit == calc_unit::pixels)
+            || (left.unit == calc_unit::pixels && right.unit == calc_unit::viewport_width)
+            || (left.unit == calc_unit::viewport_height && right.unit == calc_unit::pixels)
+            || (left.unit == calc_unit::pixels && right.unit == calc_unit::viewport_height);
     }
 
     static calc_value add(calc_value left, calc_value right, double sign)
     {
         if (!add_compatible(left, right)) return invalid();
-        if (left.unit == calc_unit::percent && right.unit == calc_unit::pixels) {
+        if ((left.unit == calc_unit::percent
+                || left.unit == calc_unit::viewport_width
+                || left.unit == calc_unit::viewport_height)
+            && right.unit == calc_unit::pixels) {
             left.pixel_offset += right.value * sign;
             return left;
         }
-        if (left.unit == calc_unit::pixels && right.unit == calc_unit::percent) {
+        if (left.unit == calc_unit::pixels
+            && (right.unit == calc_unit::percent
+                || right.unit == calc_unit::viewport_width
+                || right.unit == calc_unit::viewport_height)) {
             right.value *= sign;
             right.pixel_offset = left.value + right.pixel_offset * sign;
             return right;

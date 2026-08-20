@@ -110,6 +110,20 @@
       "connected STYLE moved from a detached fragment was not activated");
   });
 
+  test("an inline var declaration recomputes when its root variable is defined later", () => {
+    const lateTarget = document.createElement("div");
+    lateTarget.setAttribute("style", "color: var(--late-inline-color)");
+    fixture.appendChild(lateTarget);
+
+    const lateStyle = document.createElement("style");
+    lateStyle.textContent = ":root { --late-inline-color: rgb(255, 145, 0); }";
+    fixture.appendChild(lateStyle);
+
+    assert(getComputedStyle(lateTarget).color === "rgb(255, 145, 0)",
+      "inline var() remained invalid after its root variable was connected: " +
+      getComputedStyle(lateTarget).color);
+  });
+
   test("custom-property mutation invalidates computed values synchronously", () => {
     dynamicStyle.textContent =
       ".custom-property-probe { --basic: updated; --vertical-tab:\u000bchanged\u000b; }";

@@ -443,7 +443,7 @@
             auto task_context = task.context.Get(isolate);
             if (task_context.IsEmpty()) continue;
             v8::Context::Scope task_context_scope(task_context);
-            const auto& base = in_frame_context() ? frame_base_address : document_base_address;
+            const auto& base = current_base_address();
             if (task.node->tag == "link") {
                 const auto href = task.node->attributes.find("href");
                 if (href != task.node->attributes.end()
@@ -545,7 +545,7 @@
             if (href_iterator != node.attributes.end()) {
                 std::string stylesheet;
                 std::string stylesheet_name;
-                const auto& base = in_frame_context() ? frame_base_address : document_base_address;
+                const auto& base = current_base_address();
                 const auto object_url = object_urls.find(href_iterator->second);
                 const auto loaded = object_url != object_urls.end()
                     ? (stylesheet = object_url->second,
@@ -592,7 +592,7 @@
             std::string source;
             std::shared_ptr<const immutable_text_source> immutable_source;
             std::string script_name;
-            const auto& base = in_frame_context() ? frame_base_address : document_base_address;
+            const auto& base = current_base_address();
             if (!load_text_resource(
                     source_iterator->second,
                     base,
@@ -662,8 +662,7 @@
                 };
                 std::string markup;
                 std::string resolved_source;
-                const auto& base =
-                    in_frame_context() ? frame_base_address : document_base_address;
+                const auto& base = current_base_address();
                 if (!load_text_resource(
                         source->second,
                         base,

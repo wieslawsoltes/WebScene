@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>System UI inline text and generated baseline paint geometry</title>
+<style>
+  html, body { margin: 0; width: 800px; height: 600px; overflow: hidden; background: #202020; }
+  #fixture {
+    margin: 32px;
+    font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  }
+  #status {
+    margin: 0;
+    font-size: 14px;
+    line-height: 21px;
+    white-space: nowrap;
+  }
+  #normal { color: #00ff00; }
+  #normal::after { content: " "; }
+  #strong { color: #0000ff; font-weight: 700; }
+  #timeline {
+    align-items: baseline;
+    display: flex;
+    margin-top: 24px;
+    width: 273px;
+  }
+  #day {
+    box-sizing: content-box;
+    color: #ff0000;
+    font-size: 10px;
+    line-height: 12px;
+    overflow: hidden;
+    padding-top: 3px;
+    width: 30px;
+  }
+  #track {
+    flex: 1 1 auto;
+    height: 7px;
+    position: relative;
+  }
+  #segment {
+    background: #ff00ff;
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+  #segment::before {
+    background: #00ffff;
+    content: "";
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+  #body-copy {
+    color: #d1d4dc;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 21px;
+    margin: 24px 0 0;
+  }
+</style>
+<main id="fixture">
+  <p id="status"><span id="normal">Market is open.</span><span id="strong">Next session</span></p>
+  <div id="timeline"><span id="day">THU</span><span id="track"><i id="segment"></i></span></div>
+  <p id="body-copy">Reference data is delayed by 15 minutes.</p>
+</main>

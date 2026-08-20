@@ -25,6 +25,10 @@ enum class length_unit : uint8_t {
     rem,
     viewport_width,
     viewport_height,
+    viewport_width_capped,
+    viewport_height_capped,
+    viewport_width_floored,
+    viewport_height_floored,
     max_content,
     min_content,
     fit_content
@@ -474,6 +478,9 @@ struct node_style final {
     css_length flex_basis{};
     float opacity{1};
     uint32_t background_rgba{0};
+    // currentColor is a used-value dependency, not a transparent color. Keep
+    // it deferred so inherited color and declaration order resolve correctly.
+    bool background_current_color{false};
     uint32_t foreground_rgba{0};
     uint32_t border_left_rgba{0};
     uint32_t border_top_rgba{0};
@@ -1405,6 +1412,13 @@ public:
     std::vector<transition_event_record> take_transition_events();
     float measure_inline_content_width(const dom_node& node) const;
     size_t text_caret_offset_at_x(const dom_node& node, float x) const;
+    webscene_text_metrics measure_text(
+        std::string_view value,
+        std::string_view family,
+        float font_size,
+        int32_t font_weight,
+        float letter_spacing = 0.0F,
+        float word_spacing = 0.0F) const;
 
     static css_length parse_length(const std::string& value);
     static void parse_transform_translate(

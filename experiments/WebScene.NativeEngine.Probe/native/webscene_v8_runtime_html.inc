@@ -506,6 +506,11 @@
         }
         activate_html5ever_subtree(parent);
         recascade_connected_subtree(parent);
+        if (is_connected(parent)) {
+            enqueue_connected_image_resources_subtree(
+                parent,
+                isolate->GetCurrentContext());
+        }
         document.mark_dirty();
         for (auto* child : parent.children) {
             if (child != nullptr) {
@@ -704,6 +709,11 @@
         // `.dot:not(:last-child)` remain stale even though Element.matches()
         // observes the finished tree.
         recascade_connected_subtree(parent);
+        if (is_connected(parent)) {
+            enqueue_connected_image_resources_subtree(
+                parent,
+                isolate->GetCurrentContext());
+        }
         document.mark_dirty();
         for (auto* child : parent.children) {
             if (child != nullptr) {

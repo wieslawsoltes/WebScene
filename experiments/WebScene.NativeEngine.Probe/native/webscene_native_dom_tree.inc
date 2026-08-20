@@ -12,16 +12,28 @@ webscene_text_metrics native_document::measure_text(
     const dom_node& node) const
 {
     const auto transformed = resolved_text_transform(node, std::string(value));
-    const auto font_size = resolved_font_size(node);
-    const auto family = resolved_font_family(node);
-    const auto weight = resolved_font_weight(node);
-    const auto letter_spacing = resolved_letter_spacing(node);
-    const auto word_spacing = resolved_word_spacing(node);
-    text_measurement_key key{
+    return measure_text(
         transformed,
-        family,
+        resolved_font_family(node),
+        resolved_font_size(node),
+        resolved_font_weight(node),
+        resolved_letter_spacing(node),
+        resolved_word_spacing(node));
+}
+
+webscene_text_metrics native_document::measure_text(
+    std::string_view value,
+    std::string_view family,
+    float font_size,
+    int32_t font_weight,
+    float letter_spacing,
+    float word_spacing) const
+{
+    text_measurement_key key{
+        std::string(value),
+        std::string(family),
         font_size,
-        weight,
+        font_weight,
         letter_spacing,
         word_spacing};
     if (const auto cached = text_measurement_cache_.find(key);
@@ -33,21 +45,25 @@ webscene_text_metrics native_document::measure_text(
     }
     webscene_text_metrics measured{
         sizeof(webscene_text_metrics),
-        fallback_text_width(transformed, font_size),
+        fallback_text_width(value, font_size),
         font_size * 0.9F,
         font_size * 0.1F,
-        0.0F};
+        0.0F,
+        0.0F,
+        fallback_text_width(value, font_size),
+        font_size * 0.9F,
+        font_size * 0.1F};
     if (text_measure_callback_ != nullptr) {
         webscene_text_metrics metrics{};
         metrics.struct_size = sizeof(metrics);
         if (text_measure_callback_(
                 text_measure_user_data_,
-                transformed.data(),
-                transformed.size(),
+                value.data(),
+                value.size(),
                 family.data(),
                 family.size(),
                 font_size,
-                weight,
+                font_weight,
                 letter_spacing,
                 word_spacing,
                 &metrics) != 0U
@@ -149,21 +165,6 @@ std::vector<std::string> native_document::wrap_text_lines(
     std::string current;
     std::string word;
     while (source >> word) {
-        while (measure_text_width(word, node) > available_width && word.size() > 1U) {
-            if (!current.empty()) {
-                lines.push_back(std::move(current));
-                current.clear();
-            }
-            size_t split = 1U;
-            while (split < word.size()
-                && measure_text_width(
-                    std::string_view(word).substr(0, split + 1U), node) <= available_width) {
-                ++split;
-            }
-            lines.push_back(word.substr(0, split));
-            word.erase(0, split);
-        }
-        if (word.empty()) continue;
         if (current.empty()) {
             current = std::move(word);
         } else if (measure_text_width(current + " " + word, node) <= available_width) {

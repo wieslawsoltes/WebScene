@@ -747,9 +747,10 @@ internal sealed partial class WptSubsetRunner
         {
             throw new InvalidDataException("The WebScene component conformance profile must use the V8 runtime.");
         }
-        if (_manifest.Viewport.DeviceScaleFactor != 1)
+        if (!double.IsFinite(_manifest.Viewport.DeviceScaleFactor)
+            || _manifest.Viewport.DeviceScaleFactor <= 0)
         {
-            throw new InvalidDataException("The current headless adapter supports only deviceScaleFactor=1.");
+            throw new InvalidDataException("The viewport deviceScaleFactor must be finite and positive.");
         }
         if (!string.IsNullOrWhiteSpace(_options.ChromiumPath)
             && !File.Exists(_options.ChromiumPath))
@@ -821,7 +822,7 @@ internal sealed partial class WptSubsetRunner
                         throw new InvalidDataException(
                             $"Visual test '{test.Path}' gap has no pixel bound.");
                     }
-                    if (check.MinimumPixels is < 0 || check.MaximumPixels is < 0
+                    if (check.ChannelTolerance is < 0 or > 255
                         || check.MinimumPixels > check.MaximumPixels)
                     {
                         throw new InvalidDataException(

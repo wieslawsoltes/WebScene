@@ -1591,6 +1591,173 @@ void test_due_timer_precedes_dynamic_resource_wave()
     webscene_engine_destroy(engine);
 }
 
+void test_dynamic_frame_resources_use_each_document_base_url()
+{
+    resource_server server{
+        .content = {
+            {"https://parent.test/index.html", R"HTML(
+                <html><body><script>
+                  globalThis.__frameResourceOrigins = [];
+                  globalThis.__frameMessageOrigins = [];
+                  for (const source of [
+                    'https://first-frame.test/frame.html',
+                    'https://second-frame.test/frame.html'
+                  ]) {
+                    const frame = document.createElement('iframe');
+                    frame.src = source;
+                    document.body.appendChild(frame);
+                  }
+                </script></body></html>)HTML"},
+            {"https://first-frame.test/frame.html", R"HTML(
+                <html><body><script>
+                  addEventListener('message', event =>
+                    parent.__frameMessageOrigins.push([
+                      'first', event.origin, event.source === parent
+                    ]));
+                  const resource = document.createElement('script');
+                  resource.src = '/assets/dynamic.js';
+                  resource.onload = () => parent.__frameResourceOrigins.push('first-load');
+                  document.head.appendChild(resource);
+                </script></body></html>)HTML"},
+            {"https://second-frame.test/frame.html", R"HTML(
+                <html><body><script>
+                  addEventListener('message', event =>
+                    parent.__frameMessageOrigins.push([
+                      'second', event.origin, event.source === parent
+                    ]));
+                  const resource = document.createElement('script');
+                  resource.src = '/assets/dynamic.js';
+                  resource.onload = () => parent.__frameResourceOrigins.push('second-load');
+                  document.head.appendChild(resource);
+                </script></body></html>)HTML"},
+            {"https://first-frame.test/assets/dynamic.js",
+                "parent.__frameResourceOrigins.push('first-script');"},
+            {"https://second-frame.test/assets/dynamic.js",
+                "parent.__frameResourceOrigins.push('second-script');"}
+        }};
+    const webscene_engine_options options{
+        sizeof(webscene_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "frame-resource-base engine creation failed");
+    const std::string url = "https://parent.test/index.html";
+    require(
+        webscene_engine_load_url(engine, url.data(), url.size()) != 0,
+        "frame-resource-base document load failed");
+
+    auto origins = std::string{};
+    for (auto attempt = 0; attempt < 400; ++attempt) {
+        origins = evaluate(
+            engine,
+            "[...globalThis.__frameResourceOrigins].sort()",
+            "frame-resource-base-result.js");
+        if (origins
+            == R"(["first-load","first-script","second-load","second-script"])") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        origins == R"(["first-load","first-script","second-load","second-script"])",
+        "dynamic frame resources did not resolve against their owning documents: "
+            + origins);
+    execute(engine, R"JS(
+        (() => {
+          const children = Array.from(document.querySelectorAll('iframe'));
+          children[0].contentWindow.postMessage(
+            'first-probe', 'https://first-frame.test');
+          children[1].contentWindow.postMessage(
+            'second-probe', 'https://second-frame.test');
+        })()
+    )JS", "frame-message-origin-send.js");
+    auto message_origins = std::string{};
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        message_origins = evaluate(
+            engine,
+            "[...globalThis.__frameMessageOrigins].sort()",
+            "frame-message-origin-result.js");
+        if (message_origins
+            == R"([["first","https://parent.test",true],["second","https://parent.test",true]])") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        message_origins
+            == R"([["first","https://parent.test",true],["second","https://parent.test",true]])",
+        "cross-origin frame messages did not expose the sender origin: "
+            + message_origins);
+    webscene_engine_destroy(engine);
+}
+
+void test_deferred_frame_script_observes_window_dom_content_loaded()
+{
+    resource_server server{
+        .content = {
+            {"https://frame-lifecycle.test/index.html", R"HTML(
+                <html><body><script>
+                  globalThis.__frameLifecycle = [];
+                  const frame = document.createElement('iframe');
+                  frame.src = 'https://child-lifecycle.test/frame.html';
+                  document.body.appendChild(frame);
+                </script></body></html>)HTML"},
+            {"https://child-lifecycle.test/frame.html", R"HTML(
+                <html><head>
+                  <script defer src="/deferred.js"></script>
+                </head><body></body></html>)HTML"},
+            {"https://child-lifecycle.test/deferred.js", R"JS(
+                parent.__frameLifecycle.push(['defer', document.readyState]);
+                document.addEventListener('DOMContentLoaded', event => {
+                  parent.__frameLifecycle.push([
+                    'document-domcontentloaded', document.readyState,
+                    event.target === document, event.currentTarget === document
+                  ]);
+                });
+                window.addEventListener('DOMContentLoaded', event => {
+                  parent.__frameLifecycle.push([
+                    'window-domcontentloaded', document.readyState,
+                    event.target === document, event.currentTarget === window
+                  ]);
+                });
+                window.addEventListener('load', () => {
+                  parent.__frameLifecycle.push(['load', document.readyState]);
+                });
+            )JS"}
+        }};
+    const webscene_engine_options options{
+        sizeof(webscene_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "frame-lifecycle engine creation failed");
+    const std::string url = "https://frame-lifecycle.test/index.html";
+    require(
+        webscene_engine_load_url(engine, url.data(), url.size()) != 0,
+        "frame-lifecycle document load failed");
+
+    auto lifecycle = std::string{};
+    for (auto attempt = 0; attempt < 400; ++attempt) {
+        lifecycle = evaluate(
+            engine,
+            "globalThis.__frameLifecycle",
+            "frame-lifecycle-result.js");
+        if (lifecycle.ends_with(R"(["load","complete"]])")) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        lifecycle == R"JSON([["defer","interactive"],["document-domcontentloaded","interactive",true,true],["window-domcontentloaded","interactive",true,true],["load","complete"]])JSON",
+        "deferred iframe lifecycle did not propagate DOMContentLoaded to Window: "
+            + lifecycle);
+    webscene_engine_destroy(engine);
+}
+
 void test_dynamic_stylesheet_custom_properties_preserve_cascade_order()
 {
     resource_server server{

@@ -57,7 +57,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
     private readonly IntPtr _engine;
     private readonly NativeInteropInvoker _interop;
     private readonly ViewportSettings _viewport;
-    private readonly NativeSceneSnapshotRenderer _renderer = new();
+    private readonly NativeSceneSnapshotRenderer _renderer;
     private ulong _sequence;
     private double _frameTimestampMs;
     private bool _loaded;
@@ -71,6 +71,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         string html)
     {
         _viewport = viewport;
+        _renderer = new NativeSceneSnapshotRenderer(viewport.DeviceScaleFactor);
         var libraryPath = options.NativeLibraryPath;
         if (string.IsNullOrWhiteSpace(libraryPath))
         {
@@ -544,7 +545,16 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
     private const uint SceneCheckpoint = 1;
     private const uint SceneDomReplacement = 2;
     private SKPicture? _dom;
+    private readonly Dictionary<string, SKShaper> _textShapers = new(StringComparer.Ordinal);
+    private readonly float _deviceScaleFactor;
     private ulong _revision;
+
+    internal NativeSceneSnapshotRenderer(double deviceScaleFactor)
+    {
+        _deviceScaleFactor = double.IsFinite(deviceScaleFactor) && deviceScaleFactor >= 1.5
+            ? 2f
+            : 1f;
+    }
 
     internal void Apply(NativeSceneView* view)
     {
@@ -651,7 +661,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
                         ResolveDomCornerRadii(commands, commandIndex));
                     break;
                 case 3:
-                    DrawText(canvas, view, command);
+                    DrawText(canvas, view, command, _textShapers);
                     break;
                 case 4:
                 case 5:
@@ -831,27 +841,41 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
 
     internal WptRenderSnapshot Capture(int width, int height, Vector dpi)
     {
-        using var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+        var scaleX = Math.Max(1, dpi.X / 96.0);
+        var scaleY = Math.Max(1, dpi.Y / 96.0);
+        var pixelWidth = Math.Max(1, (int)Math.Ceiling(width * scaleX));
+        var pixelHeight = Math.Max(1, (int)Math.Ceiling(height * scaleY));
+        using var bitmap = new SKBitmap(
+            pixelWidth,
+            pixelHeight,
+            SKColorType.Bgra8888,
+            SKAlphaType.Unpremul);
         using (var canvas = new SKCanvas(bitmap))
         {
             canvas.Clear(SKColors.Transparent);
+            canvas.Scale((float)scaleX, (float)scaleY);
             if (_dom is not null) canvas.DrawPicture(_dom);
             canvas.Flush();
         }
 
-        var pixels = new byte[checked(bitmap.RowBytes * height)];
+        var pixels = new byte[checked(bitmap.RowBytes * pixelHeight)];
         Marshal.Copy(bitmap.GetPixels(), pixels, 0, pixels.Length);
-        if (bitmap.RowBytes != width * 4)
+        if (bitmap.RowBytes != pixelWidth * 4)
         {
-            var compact = new byte[checked(width * height * 4)];
-            for (var row = 0; row < height; row++)
+            var compact = new byte[checked(pixelWidth * pixelHeight * 4)];
+            for (var row = 0; row < pixelHeight; row++)
             {
-                Buffer.BlockCopy(pixels, row * bitmap.RowBytes, compact, row * width * 4, width * 4);
+                Buffer.BlockCopy(
+                    pixels,
+                    row * bitmap.RowBytes,
+                    compact,
+                    row * pixelWidth * 4,
+                    pixelWidth * 4);
             }
             pixels = compact;
         }
         return new WptRenderSnapshot(
-            new PixelSize(width, height),
+            new PixelSize(pixelWidth, pixelHeight),
             dpi,
             PixelFormat.Bgra8888,
             pixels);
@@ -861,6 +885,8 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
     {
         _dom?.Dispose();
         _dom = null;
+        foreach (var shaper in _textShapers.Values) shaper.Dispose();
+        _textShapers.Clear();
     }
 
     private static void DrawRect(
@@ -1010,34 +1036,89 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         }
     }
 
-    private static void DrawText(
+    private void DrawText(
         SKCanvas canvas,
         NativeSceneView* view,
-        in NativeSceneCommand command)
+        in NativeSceneCommand command,
+        Dictionary<string, SKShaper> shapers)
     {
         var parts = StringAt(view, command.Flags).Split('\t', 6);
         if (parts.Length != 6
-            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var size))
+            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var size)
+            || size <= 0)
         {
             return;
         }
+        var lineHeight = float.TryParse(
+            parts[1],
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var parsedLineHeight)
+            && parsedLineHeight > 0
+            ? parsedLineHeight
+            : size * 1.2f;
+        var fontWeight = int.TryParse(
+            parts[2],
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var parsedWeight)
+            ? Math.Clamp(parsedWeight, 1, 1000)
+            : 400;
         using var paint = Paint(command.Rgba, SKPaintStyle.Fill, 1);
-        paint.TextSize = Math.Max(1, size);
-        paint.TextAlign = parts[3] switch
+        var typeface = NativeTextShaping.ResolveTypeface(parts[4], fontWeight);
+        paint.TextSize = size;
+        paint.Typeface = typeface;
+        var shaperKey = parts[4] + '\t' + fontWeight.ToString(CultureInfo.InvariantCulture);
+        if (!shapers.TryGetValue(shaperKey, out var shaper))
         {
-            "center" => SKTextAlign.Center,
-            "right" or "end" => SKTextAlign.Right,
-            _ => SKTextAlign.Left
-        };
-        var x = paint.TextAlign switch
+            shaper = new SKShaper(typeface);
+            shapers.Add(shaperKey, shaper);
+        }
+        var featureFlags = NativeTextShaping.ResolveFeatureFlags(parts[5], parts[4], 0);
+        var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(parts[4]);
+        var shapedWidth = NativeTextShaping.MeasureShapedWidth(
+            shaper,
+            parts[5],
+            paint,
+            featureFlags,
+            tabularDigitScale);
+        var widthScale = NativeTextShaping.ResolveShapedWidthScale(
+            parts[5],
+            parts[4],
+            size,
+            fontWeight,
+            paint,
+            shapedWidth,
+            featureFlags);
+        var renderedWidth = shapedWidth * widthScale;
+        var x = parts[3] switch
         {
-            SKTextAlign.Center => command.X + command.Width / 2,
-            SKTextAlign.Right => command.X + command.Width,
-            _ => command.X
+            "center" => command.X + (command.Width - renderedWidth) * 0.5f,
+            "right" or "end" => command.X + command.Width - renderedWidth,
+            _ => command.X,
         };
         paint.GetFontMetrics(out var metrics);
-        var baseline = command.Y + (command.Height - (metrics.Descent + metrics.Ascent)) / 2;
-        canvas.DrawText(parts[5], x, baseline, paint);
+        var glyphHeight = metrics.Descent - metrics.Ascent;
+        var contentHeight = Math.Min(
+            Math.Max(lineHeight, glyphHeight),
+            Math.Max(lineHeight, command.Height));
+        var baseline = command.Y
+            + Math.Max(0, (command.Height - contentHeight) * 0.5f)
+            + (contentHeight - glyphHeight) * 0.5f
+            - metrics.Ascent
+            + (parsedLineHeight == 0 ? 3f : 0f);
+        NativeTextShaping.DrawShapedText(
+            canvas,
+            shaper,
+            parts[5],
+            x,
+            baseline,
+            paint,
+            featureFlags,
+            tabularDigitScale,
+            widthScale,
+            shapedWidth,
+            _deviceScaleFactor);
     }
 
     private static void DrawSvgPath(
@@ -1140,8 +1221,6 @@ internal static unsafe class NativeApi
     private static readonly TextMeasureCallback TextMeasure = MeasureText;
     private static readonly IntPtr TextMeasureAddress =
         Marshal.GetFunctionPointerForDelegate(TextMeasure);
-    private static readonly Dictionary<string, SKTypeface> TextTypefaces =
-        new(StringComparer.Ordinal);
 
     internal static void Configure(string libraryPath)
     {
@@ -1183,43 +1262,6 @@ internal static unsafe class NativeApi
         }
     }
 
-    private static SKTypeface ResolveTypeface(string familyList, int fontWeight)
-    {
-        var requestedWeight = Math.Clamp(fontWeight, 1, 1000);
-        var key = $"{familyList}\u001f{requestedWeight}";
-        lock (TextTypefaces)
-        {
-            if (TextTypefaces.TryGetValue(key, out var cached)) return cached;
-            foreach (var rawFamily in familyList.Split(
-                         ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-            {
-                var family = rawFamily.Trim('"', '\'');
-                if (family is "-apple-system" or "BlinkMacSystemFont" or "system-ui"
-                    or "sans-serif")
-                {
-                    family = OperatingSystem.IsMacOS() ? ".AppleSystemUIFont" : "Arial";
-                }
-                else if (family == "serif") family = "Times New Roman";
-                else if (family == "monospace") family = OperatingSystem.IsMacOS() ? "Menlo" : "Consolas";
-                var candidate = SKTypeface.FromFamilyName(
-                    family,
-                    requestedWeight,
-                    (int)SKFontStyleWidth.Normal,
-                    SKFontStyleSlant.Upright);
-                if (candidate is not null
-                    && (string.Equals(candidate.FamilyName, family, StringComparison.OrdinalIgnoreCase)
-                        || rawFamily is "-apple-system" or "BlinkMacSystemFont" or "system-ui"
-                            or "sans-serif" or "serif" or "monospace"))
-                {
-                    TextTypefaces[key] = candidate;
-                    return candidate;
-                }
-                candidate?.Dispose();
-            }
-            return TextTypefaces[key] = SKTypeface.Default;
-        }
-    }
-
     private static byte MeasureText(
         IntPtr userData,
         IntPtr text,
@@ -1234,24 +1276,31 @@ internal static unsafe class NativeApi
     {
         try
         {
-            if (metrics.StructSize < Marshal.SizeOf<NativeTextMetrics>() || fontSize <= 0) return 0;
+            const uint legacyMetricsSize = 20;
+            const uint shapedInkMetricsSize = 36;
+            var availableMetricsSize = metrics.StructSize;
+            if (availableMetricsSize < legacyMetricsSize || fontSize <= 0) return 0;
             var value = Marshal.PtrToStringUTF8(text, checked((int)textLength)) ?? string.Empty;
             var family = Marshal.PtrToStringUTF8(fontFamily, checked((int)fontFamilyLength))
                 ?? "sans-serif";
-            var typeface = ResolveTypeface(family, fontWeight);
-            using var paint = new SKPaint { TextSize = fontSize, Typeface = typeface };
-            using var shaper = new SKShaper(typeface);
-            var result = shaper.Shape(value, paint);
-            paint.GetFontMetrics(out var fontMetrics);
-            var graphemes = string.IsNullOrEmpty(value)
-                ? 0
-                : StringInfo.ParseCombiningCharacters(value).Length;
-            metrics.AdvanceWidth = result.Width
-                + Math.Max(0, graphemes - 1) * letterSpacing
-                + value.Count(character => character == ' ') * wordSpacing;
-            metrics.Ascent = -fontMetrics.Ascent;
-            metrics.Descent = fontMetrics.Descent;
-            metrics.Leading = fontMetrics.Leading;
+            var measured = NativeTextShaping.Measure(
+                value,
+                family,
+                fontSize,
+                fontWeight,
+                letterSpacing,
+                wordSpacing);
+            metrics.AdvanceWidth = measured.AdvanceWidth;
+            metrics.Ascent = measured.Ascent;
+            metrics.Descent = measured.Descent;
+            metrics.Leading = measured.Leading;
+            if (availableMetricsSize >= shapedInkMetricsSize)
+            {
+                metrics.ActualBoundingBoxLeft = measured.ActualBoundingBoxLeft;
+                metrics.ActualBoundingBoxRight = measured.ActualBoundingBoxRight;
+                metrics.ActualBoundingBoxAscent = measured.ActualBoundingBoxAscent;
+                metrics.ActualBoundingBoxDescent = measured.ActualBoundingBoxDescent;
+            }
             return 1;
         }
         catch
@@ -1370,6 +1419,10 @@ internal struct NativeTextMetrics
     public float Ascent;
     public float Descent;
     public float Leading;
+    public float ActualBoundingBoxLeft;
+    public float ActualBoundingBoxRight;
+    public float ActualBoundingBoxAscent;
+    public float ActualBoundingBoxDescent;
 }
 
 [StructLayout(LayoutKind.Sequential)]

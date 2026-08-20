@@ -199,7 +199,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                         _renderObserver,
                         _compositionMailbox,
                         _compositionUiWakeGate,
-                        ScheduleCompositionUiWake));
+                        ScheduleCompositionUiWake,
+                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1));
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
                 ElementComposition.SetElementChildVisual(this, _customVisual);
                 Volatile.Write(ref _compositionProjectionActive, 1);
@@ -949,6 +950,22 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         var deviceScaleFactor = requestedDeviceScaleFactor
             ?? TopLevel.GetTopLevel(this)?.RenderScaling
             ?? 1;
+        bool textProfileChanged;
+        lock (_rendererGate)
+        {
+            textProfileChanged = _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
+        }
+        if (_customVisual is not null)
+        {
+            _customVisual.SendHandlerMessage(
+                deviceScaleFactor >= 1.5
+                    ? NativeSceneCompositionMessage.TextScaleRetina
+                    : NativeSceneCompositionMessage.TextScale1X);
+        }
+        if (textProfileChanged)
+        {
+            NativeWebSceneApi.EngineRequestSceneCheckpoint(_engine);
+        }
         var sequence = NextSequence();
         var input = new InputEvent
         {

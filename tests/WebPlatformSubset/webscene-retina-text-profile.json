@@ -1,0 +1,67 @@
+{
+  "profile": "webscene-retina-text-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 2
+  },
+  "required": [
+    {
+      "path": "contracts/system-ui-inline-text-paint.html",
+      "type": "visual",
+      "capabilities": [
+        "retina-system-ui-font-paint",
+        "contextual-inline-advance",
+        "baseline-text-paint"
+      ],
+      "evidence": ["product-neutral-retina-pixel-oracle"],
+      "visualChecks": [
+        {
+          "color": "#00ff00",
+          "minimumPixels": 60,
+          "description": "normal-weight system UI glyph interiors remain visible at 2x"
+        },
+        {
+          "color": "#0000ff",
+          "minimumPixels": 60,
+          "description": "bold system UI glyph interiors remain visible at 2x"
+        },
+        {
+          "color": "#00ffff",
+          "minimumPixels": 6000,
+          "description": "the generated fixed-size baseline segments are rasterized at 2x"
+        },
+        {
+          "color": "#d1d4dc",
+          "minimumPixels": 160,
+          "description": "normal-weight light body copy paints visible glyph interiors at 2x"
+        }
+      ],
+      "visualGapChecks": [
+        {
+          "firstColor": "#00ff00",
+          "secondColor": "#0000ff",
+          "axis": "horizontal",
+          "minimumPixels": 10,
+          "maximumPixels": 22,
+          "description": "generated inline whitespace remains visible at 2x"
+        },
+        {
+          "firstColor": "#ff0000",
+          "secondColor": "#00ffff",
+          "axis": "vertical",
+          "channelTolerance": 32,
+          "minimumPixels": -16,
+          "maximumPixels": -12,
+          "description": "compact label ink remains aligned with generated timeline segments at 2x"
+        }
+      ],
+      "reason": "Product-neutral 2x raster gate for macOS system-UI shaping, weight, whitespace, and mixed text/generated-box baseline alignment."
+    }
+  ],
+  "candidate": [],
+  "harnessBlocked": [],
+  "excluded": []
+}

@@ -459,6 +459,21 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
           image.onload = () => __nativeSvgImageLoads++;
           image.src = 'symbol.svg';
           document.body.appendChild(image);
+
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = '<img id="native-nested-svg-image" src="symbol.svg" style="width:18px;height:18px">';
+          const nested = wrapper.querySelector('img');
+          globalThis.__nativeNestedSvgImageLoads = 0;
+          nested.addEventListener('load', () => __nativeNestedSvgImageLoads++);
+          document.body.appendChild(wrapper);
+
+          const connectedWrapper = document.createElement('div');
+          document.body.appendChild(connectedWrapper);
+          globalThis.__nativeConnectedInnerHtmlSvgImageLoads = 0;
+          connectedWrapper.innerHTML = '<img id="native-connected-inner-html-svg-image" src="symbol.svg" style="width:18px;height:18px">';
+          connectedWrapper.querySelector('img').addEventListener(
+            'load',
+            () => __nativeConnectedInnerHtmlSvgImageLoads++);
         })()
     )JS", "native-svg-img-setup.js");
 
@@ -466,16 +481,28 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
     for (auto attempt = 0; attempt < 200; ++attempt) {
         image_state = evaluate(engine, R"JS((() => {
           const image = document.querySelector('#native-svg-image');
+          const nested = document.querySelector('#native-nested-svg-image');
+          const connected = document.querySelector('#native-connected-inner-html-svg-image');
           return {
             complete: image.complete,
             currentSrc: image.currentSrc,
             naturalWidth: image.naturalWidth,
             naturalHeight: image.naturalHeight,
-            loads: __nativeSvgImageLoads
+            loads: __nativeSvgImageLoads,
+            nestedComplete: nested.complete,
+            nestedWidth: nested.naturalWidth,
+            nestedLoads: __nativeNestedSvgImageLoads,
+            connectedComplete: connected.complete,
+            connectedWidth: connected.naturalWidth,
+            connectedLoads: __nativeConnectedInnerHtmlSvgImageLoads
           };
         })())JS", "native-svg-img-state.js");
         if (image_state.find(R"("complete":true)") != std::string::npos
-            && image_state.find(R"("loads":1)") != std::string::npos) {
+            && image_state.find(R"("loads":1)") != std::string::npos
+            && image_state.find(R"("nestedComplete":true)") != std::string::npos
+            && image_state.find(R"("nestedLoads":1)") != std::string::npos
+            && image_state.find(R"("connectedComplete":true)") != std::string::npos
+            && image_state.find(R"("connectedLoads":1)") != std::string::npos) {
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -485,9 +512,34 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
             && image_state.find("symbol.svg") != std::string::npos
             && image_state.find(R"("naturalWidth":24)") != std::string::npos
             && image_state.find(R"("naturalHeight":12)") != std::string::npos
-            && image_state.find(R"("loads":1)") != std::string::npos,
+            && image_state.find(R"("loads":1)") != std::string::npos
+            && image_state.find(R"("nestedComplete":true)") != std::string::npos
+            && image_state.find(R"("nestedWidth":24)") != std::string::npos
+            && image_state.find(R"("nestedLoads":1)") != std::string::npos
+            && image_state.find(R"("connectedComplete":true)") != std::string::npos
+            && image_state.find(R"("connectedWidth":24)") != std::string::npos
+            && image_state.find(R"("connectedLoads":1)") != std::string::npos,
         "SVG IMG element did not expose an asynchronous loaded state: "
             + image_state);
+
+    const auto cloned_image_state = evaluate(engine, R"JS(
+        (() => {
+          const clone = document.querySelector('#native-svg-image').cloneNode(false);
+          clone.id = 'native-cloned-svg-image';
+          document.body.appendChild(clone);
+          return {
+            source: clone.src,
+            width: clone.getBoundingClientRect().width,
+            height: clone.getBoundingClientRect().height
+          };
+        })()
+    )JS", "native-cloned-svg-img-state.js");
+    require(
+        cloned_image_state.find("symbol.svg") != std::string::npos
+            && cloned_image_state.find(R"("width":18)") != std::string::npos
+            && cloned_image_state.find(R"("height":18)") != std::string::npos,
+        "cloneNode discarded an image element's authored geometry: "
+            + cloned_image_state);
 
     execute(engine, R"JS(
         (() => {
@@ -522,11 +574,10 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
     for (auto attempt = 0; attempt < 100; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
+            auto matching_images = 0U;
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 if (command.kind == 6U
-                    && std::abs(command.x) < 0.01F
-                    && std::abs(command.y) < 0.01F
                     && std::abs(command.width - 18.0F) < 0.01F
                     && std::abs(command.height - 18.0F) < 0.01F
                     && command.flags < scene->string_count) {
@@ -534,11 +585,13 @@ void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)
                     const std::string_view bytes(
                         scene->string_bytes + resource.byte_offset,
                         resource.byte_length);
-                    found = bytes.find("<svg") != std::string_view::npos
-                        && bytes.find("0 0 24 12") != std::string_view::npos;
-                    break;
+                    if (bytes.find("<svg") != std::string_view::npos
+                        && bytes.find("0 0 24 12") != std::string_view::npos) {
+                        ++matching_images;
+                    }
                 }
             }
+            found = matching_images >= 4U;
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
         }

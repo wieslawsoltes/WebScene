@@ -1119,6 +1119,8 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
           document.body.appendChild(grid);
           return [
             grid.getBoundingClientRect().width,
+            wrapper.getBoundingClientRect().width,
+            wrapper.getBoundingClientRect().height,
             content.getBoundingClientRect().width,
             footer.getBoundingClientRect().width,
             content.getBoundingClientRect().height,
@@ -1126,7 +1128,7 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
           ];
         })()
     )JS", "native-single-grid-track.js");
-    if (result != R"([344,344,344,169,"contents"])") {
+    if (result != R"([344,0,0,344,344,169,"contents"])") {
         fail("a single 1fr grid track was split into columns: " + result);
     }
 }
@@ -1225,6 +1227,154 @@ void test_calc_percent_with_pixel_offset(webscene_engine* engine)
     }
 }
 
+void test_calc_viewport_units_with_pixel_offsets_bound_fixed_boxes(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              #popup {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 2000px;
+                height: 2000px;
+                max-width: min(
+                  var(--input-max-width, 10000vw),
+                  var(--anchor-max-width, 10000vw),
+                  var(--screen-max-width, 10000vw),
+                  var(--resize-max-width, 10000vw));
+                max-height: min(
+                  var(--input-max-height, 100000vh),
+                  var(--anchor-max-height, 100000vh),
+                  var(--screen-max-height, 100000vh),
+                  var(--resize-max-height, 100000vh));
+              }
+            </style>
+            <div id="popup" style="
+              --screen-max-width: 289px;
+              --screen-max-height: 126px;
+            "></div>`;
+          const rect = document.getElementById('popup').getBoundingClientRect();
+          const style = getComputedStyle(document.getElementById('popup'));
+          return {
+            width: rect.width,
+            height: rect.height,
+            expectedWidth: innerWidth - 31,
+            expectedHeight: innerHeight - 74,
+            maxWidth: style.maxWidth,
+            maxHeight: style.maxHeight
+          };
+        })()
+    )JS", "native-calc-viewport-pixel-offset.js");
+    require(
+        result.find("\"width\":289") != std::string::npos
+            && result.find("\"height\":126") != std::string::npos,
+        "viewport-unit calc() constraints were discarded from a fixed box: " + result);
+}
+
+void test_current_color_and_color_mix_reach_element_and_pseudo_paint(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .theme { color: rgb(12, 34, 56); }
+              .current { width: 20px; height: 20px; background: currentColor; }
+              .mixed {
+                position: relative;
+                width: 20px;
+                height: 20px;
+                --accent: #00bcd4;
+                --accent-wash: color-mix(in srgb, var(--accent), transparent 80%);
+              }
+              .mixed::after {
+                content: "";
+                display: block;
+                position: absolute;
+                inset: 0;
+                background: var(--accent-wash);
+              }
+            </style>
+            <div class="theme"><div id="current" class="current"></div></div>
+            <div id="mixed" class="mixed"></div>`;
+          return {
+            current: getComputedStyle(document.getElementById('current')).backgroundColor,
+            mixedVariable: getComputedStyle(document.getElementById('mixed'))
+              .getPropertyValue('--accent-wash')
+          };
+        })()
+    )JS", "native-currentcolor-color-mix-setup.js");
+    require(
+        result.find("\"current\":\"rgb(12, 34, 56)\"") != std::string::npos,
+        "inherited currentColor did not resolve for an element background: " + result);
+    require(
+        result.find("color-mix(in srgb, var(--accent), transparent 80%)")
+            != std::string::npos,
+        "authored color-mix custom property was not retained: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_current = false;
+    auto observed_mix = false;
+    for (auto attempt = 0; attempt < 100 && (!observed_current || !observed_mix); ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine); scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto rgba = scene->commands[index].rgba;
+                observed_current = observed_current || rgba == 0x0C2238FFU;
+                observed_mix = observed_mix || rgba == 0x00BCD433U;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_current || !observed_mix) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(observed_current, "currentColor element background did not reach native paint");
+    require(observed_mix, "color-mix custom property did not reach pseudo-element paint");
+}
+
+void test_adjacent_inline_spans_wrap_through_generated_whitespace(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              p { width: 120px; margin: 0; font: 14px/20px sans-serif; }
+              #first::after { content: " "; }
+              #second { font-weight: 700; }
+            </style>
+            <p id="paragraph"><span id="first">one two three</span><span id="second">four five six seven</span></p>`;
+          const paragraph = document.getElementById('paragraph').getBoundingClientRect();
+          const first = document.getElementById('first').getBoundingClientRect();
+          const second = document.getElementById('second').getBoundingClientRect();
+          return {
+            paragraphHeight: paragraph.height,
+            firstWidth: first.width,
+            secondWidth: second.width,
+            secondY: second.y
+          };
+        })()
+    )JS", "native-inline-generated-whitespace-wrap.js");
+    const auto paragraph_height = std::stof(evaluate(engine, R"JS(
+        document.getElementById('paragraph').getBoundingClientRect().height
+    )JS", "native-inline-generated-whitespace-height.js"));
+    const auto second_width = std::stof(evaluate(engine, R"JS(
+        document.getElementById('second').getBoundingClientRect().width
+    )JS", "native-inline-generated-whitespace-width.js"));
+    require(
+        paragraph_height >= 40.0 && paragraph_height <= 60.0
+            && second_width > 20.0,
+        "generated whitespace forced adjacent inline text into an atomic zero-width box: "
+            + result);
+}
+
 void test_flex_basis_reserves_fixed_track(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -1295,6 +1445,30 @@ void test_flex_basis_reserves_fixed_track(webscene_engine* engine)
     if (result != "[30,12,243,12,80,\"none\",0,0,80,12,\"0\",\"1\"]") {
         fail("flex-basis did not remain confined to the flex main axis: " + result);
     }
+}
+
+void test_absolute_flex_child_uses_container_static_position(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              #host { position: relative; display: flex; width: 40px; height: 20px; }
+              #image { width: 18px; height: 18px; }
+              #fallback { position: absolute; width: 18px; height: 18px; opacity: 0; }
+            </style>
+            <div id="host"><div id="image"></div><div id="fallback"></div></div>`;
+          const host = document.getElementById('host').getBoundingClientRect();
+          const fallback = document.getElementById('fallback').getBoundingClientRect();
+          return [fallback.x - host.x, fallback.y - host.y, fallback.width, fallback.height];
+        })()
+    )JS", "native-absolute-flex-static-position.js");
+    require(
+        result == "[0,0,18,18]",
+        "an absolute flex child used the cursor after preceding flow items as its static position: "
+            + result);
 }
 
 void test_flex_flow_shorthand_controls_layout_and_cssom(webscene_engine* engine)
@@ -2287,6 +2461,42 @@ void test_transform_origin_keywords_cascade_independently_from_inline_transform(
             && close(scales[2].x, 80.0F) && close(scales[2].width, 0.625F)
             && close(scales[3].x, 130.0F) && close(scales[3].width, 1.25F),
         "left/center/right transform-origin keywords did not survive inline transform cascade");
+}
+
+void test_transform_translate_calc_arguments_preserve_nested_functions(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              #switch-thumb {
+                --switch-width: 38px;
+                --switch-thumb: 14px;
+                --switch-padding: 3px;
+                position: fixed;
+                left: 10px;
+                top: 20px;
+                width: var(--switch-thumb);
+                height: var(--switch-thumb);
+                transform: translate(
+                  calc(var(--switch-width) - var(--switch-thumb) - var(--switch-padding)),
+                  var(--switch-padding));
+              }
+            </style>
+            <span id="switch-thumb"></span>`;
+          const thumb = document.getElementById('switch-thumb');
+          const rect = thumb.getBoundingClientRect();
+          return {
+            transform: getComputedStyle(thumb).transform,
+            rect: [rect.x, rect.y, rect.width, rect.height]
+          };
+        })()
+    )JS", "transform-translate-nested-calc-arguments.js");
+    require(
+        result == R"JSON({"transform":"matrix(1, 0, 0, 1, 21, 3)","rect":[31,23,14,14]})JSON",
+        "nested calc() transform arguments were split before their closing parenthesis: "
+            + result);
 }
 
 void test_transform_transition_uses_host_clock_for_translate_and_scale(

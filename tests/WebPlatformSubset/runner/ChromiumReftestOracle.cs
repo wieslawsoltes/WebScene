@@ -220,7 +220,7 @@ internal sealed class ChromiumReftestOracle
                          "--no-first-run",
                          "--no-default-browser-check",
                          "--allow-file-access-from-files",
-                         "--force-device-scale-factor=1",
+                         $"--force-device-scale-factor={_viewport.DeviceScaleFactor.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                          "--run-all-compositor-stages-before-draw",
                          $"--window-size={_viewport.Width},{_viewport.Height}",
                          $"--user-data-dir={profileDirectory}",
@@ -281,7 +281,7 @@ internal sealed class ChromiumReftestOracle
         }
     }
 
-    private static WptRenderSnapshot ReadSnapshot(string path)
+    private WptRenderSnapshot ReadSnapshot(string path)
     {
         using var bitmap = SKBitmap.Decode(path)
             ?? throw new InvalidDataException($"Chromium screenshot '{path}' is not a readable PNG.");
@@ -300,7 +300,9 @@ internal sealed class ChromiumReftestOracle
         }
         return new WptRenderSnapshot(
             new PixelSize(bitmap.Width, bitmap.Height),
-            new Vector(96, 96),
+            new Vector(
+                96 * _viewport.DeviceScaleFactor,
+                96 * _viewport.DeviceScaleFactor),
             PixelFormat.Bgra8888,
             pixels);
     }
