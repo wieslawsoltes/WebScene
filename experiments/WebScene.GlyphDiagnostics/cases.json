@@ -1,0 +1,21 @@
+{
+  "width": 720,
+  "height": 640,
+  "background": "#202020",
+  "foreground": "#d1d4dc",
+  "family": "-apple-system, BlinkMacSystemFont, sans-serif",
+  "cases": [
+    { "id": "capital-a", "text": "A", "size": 14, "weight": 400, "x": 24, "baseline": 38 },
+    { "id": "lowercase-a", "text": "a", "size": 14, "weight": 400, "x": 24, "baseline": 88 },
+    { "id": "wide-m", "text": "m", "size": 14, "weight": 400, "x": 24, "baseline": 138 },
+    { "id": "narrow-i", "text": "i", "size": 14, "weight": 400, "x": 24, "baseline": 188 },
+    { "id": "digit-one", "text": "1", "size": 12, "weight": 400, "x": 24, "baseline": 238 },
+    { "id": "period", "text": ".", "size": 14, "weight": 400, "x": 24, "baseline": 288 },
+    { "id": "body-copy", "text": "AAPL data is delayed by 15 minutes.", "size": 14, "weight": 400, "x": 24, "baseline": 338 },
+    { "id": "heading", "text": "Market open", "size": 16, "weight": 700, "x": 24, "baseline": 390 },
+    { "id": "mixed-weight-copy", "text": "It’ll open fully in 25 minutes.", "size": 14, "weight": 700, "x": 24, "baseline": 442 },
+    { "id": "timeline", "text": "THU 09:30 16:00", "size": 12, "weight": 400, "x": 24, "baseline": 494 },
+    { "id": "latin-shapes", "text": "Hamburgefontsiv", "size": 14, "weight": 400, "x": 24, "baseline": 546 },
+    { "id": "digits-punctuation", "text": "0123456789 .,:;’", "size": 14, "weight": 400, "x": 24, "baseline": 598 }
+  ]
+}

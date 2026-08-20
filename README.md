@@ -247,6 +247,7 @@ not a general browser and not blanket website compatibility.
 | Path | Purpose |
 | --- | --- |
 | `experiments/WebScene.NativeEngine.Probe` | Native V8/DOM/CSS/layout/scene engine and C ABI |
+| `experiments/WebScene.GlyphDiagnostics` | macOS system-UI glyph position and raster comparison against Chromium/CoreText |
 | `src/WebScene.Backend.Avalonia` | Avalonia presenter and native scene integration |
 | `src/WebScene.Sdk.Avalonia` | Reusable native Avalonia component host |
 | `src/WebScene.Backend.Uno` | Supported Uno Skia desktop presenter |

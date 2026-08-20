@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebScene glyph diagnostics</title>
+<style>
+  html, body { margin: 0; overflow: hidden; }
+  canvas, #dom { display: block; }
+  #dom { position: relative; }
+  #dom span { position: absolute; white-space: pre; }
+</style>
+<canvas id="canvas"></canvas>
+<div id="dom"></div>
+<script>
+  const request = new XMLHttpRequest();
+  request.open("GET", "cases.json", false);
+  request.send();
+  const config = JSON.parse(request.responseText);
+  const scale = window.devicePixelRatio;
+  const canvas = document.querySelector("#canvas");
+  canvas.width = config.width * scale;
+  canvas.height = config.height * scale;
+  canvas.style.width = `${config.width}px`;
+  canvas.style.height = `${config.height}px`;
+  const context = canvas.getContext("2d", { alpha: false });
+  context.scale(scale, scale);
+  context.fillStyle = config.background;
+  context.fillRect(0, 0, config.width, config.height);
+  context.fillStyle = config.foreground;
+  context.textBaseline = "alphabetic";
+
+  const metrics = [];
+  for (const item of config.cases) {
+    context.font = `${item.weight} ${item.size}px ${config.family}`;
+    context.fillText(item.text, item.x, item.baseline);
+    const measured = context.measureText(item.text);
+    const characters = Array.from(item.text);
+    metrics.push({
+      id: item.id,
+      width: measured.width,
+      prefixPositions: characters.map((_, index) =>
+        context.measureText(characters.slice(0, index).join("")).width),
+      actualBoundingBoxLeft: measured.actualBoundingBoxLeft,
+      actualBoundingBoxRight: measured.actualBoundingBoxRight,
+      actualBoundingBoxAscent: measured.actualBoundingBoxAscent,
+      actualBoundingBoxDescent: measured.actualBoundingBoxDescent
+    });
+  }
+  globalThis.__glyphDiagnosticMetrics = metrics;
+
+  const dom = document.querySelector("#dom");
+  dom.style.width = `${config.width}px`;
+  dom.style.height = `${config.height}px`;
+  dom.style.background = config.background;
+  for (const item of config.cases) {
+    const span = document.createElement("span");
+    span.textContent = item.text;
+    span.style.left = `${item.x}px`;
+    span.style.top = `${item.baseline - item.size}px`;
+    span.style.color = config.foreground;
+    span.style.font = `${item.weight} ${item.size}px/1 ${config.family}`;
+    dom.append(span);
+  }
+  document.documentElement.dataset.glyphMetrics = btoa(unescape(encodeURIComponent(JSON.stringify(metrics))));
+</script>
