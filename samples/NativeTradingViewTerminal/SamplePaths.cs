@@ -4,7 +4,8 @@ namespace NativeTradingViewTerminal;
 
 internal sealed record SamplePaths(
     string NativeLibraryPath,
-    string CompilationCacheDirectory)
+    string CompilationCacheDirectory,
+    string DocumentUrl)
 {
     internal const string TerminalUrl =
         "https://trading-terminal.tradingview-widget.com/";
@@ -13,6 +14,7 @@ internal sealed record SamplePaths(
     {
         string? configuredLibrary = null;
         string? configuredCache = null;
+        string? configuredUrl = null;
         for (var index = 0; index < arguments.Count; index++)
         {
             switch (arguments[index])
@@ -22,6 +24,9 @@ internal sealed record SamplePaths(
                     break;
                 case "--cache" when index + 1 < arguments.Count:
                     configuredCache = Path.GetFullPath(arguments[++index]);
+                    break;
+                case "--url" when index + 1 < arguments.Count:
+                    configuredUrl = arguments[++index];
                     break;
             }
         }
@@ -46,7 +51,12 @@ internal sealed record SamplePaths(
             "NativeTradingViewTerminal",
             "v8-cache");
         Directory.CreateDirectory(cache);
-        return new SamplePaths(nativeLibrary, cache);
+        return new SamplePaths(
+            nativeLibrary,
+            cache,
+            string.IsNullOrWhiteSpace(configuredUrl)
+                ? TerminalUrl
+                : configuredUrl);
     }
 
     internal static string NativeLibraryFileName()

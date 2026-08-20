@@ -22,6 +22,21 @@ dotnet run --project samples/NativeTradingViewTerminal -c Release -- \
   --output artifacts/native-tradingview-terminal
 ```
 
+Run the Sandwich Trading Platform multi-chart geometry proof with a
+deterministic in-process market-data bridge:
+
+```bash
+dotnet run --project samples/NativeTradingViewTerminal -c Release -- \
+  --sandwich-layout-proof \
+  --url https://tv.sandwichtrading.com/tp-v1/index.html \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --output artifacts/sandwich-layout-proof
+```
+
+Pass `--composition` to run the same round trip through the compositor-backed
+presenter used by the interactive sample. Run both modes when certifying a layout
+transition fix.
+
 The hosted terminal delegates its data connection to a separately navigated
 TradingView iframe. The proof runs that iframe in its own native V8 realm and
 observes the `WebSocket` created organically by TradingView's datafeed code; it

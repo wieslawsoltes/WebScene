@@ -35,7 +35,7 @@ internal static class HeadlessProof
             Dispatcher.UIThread.RunJobs();
             PumpUntil(
                 view.LoadAsync(
-                    SamplePaths.TerminalUrl,
+                    paths.DocumentUrl,
                     paths.NativeLibraryPath,
                     paths.CompilationCacheDirectory),
                 TimeSpan.FromSeconds(90));

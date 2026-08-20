@@ -34,9 +34,9 @@ public sealed partial class MainWindow : Window
         {
             var paths = SamplePaths.Resolve(_arguments);
             StatusText.Text = "Loading hosted TradingView terminal…";
-            DiagnosticsText.Text = SamplePaths.TerminalUrl;
+            DiagnosticsText.Text = paths.DocumentUrl;
             await TerminalHost.LoadAsync(
-                SamplePaths.TerminalUrl,
+                paths.DocumentUrl,
                 paths.NativeLibraryPath,
                 paths.CompilationCacheDirectory);
             StatusText.Text = "TradingView terminal loaded";
