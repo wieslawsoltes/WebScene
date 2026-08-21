@@ -110,6 +110,69 @@ void animation_frame_and_wait(
         "animation frame was not consumed");
 }
 
+void test_concurrent_input_producers_remain_consumable()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "concurrent-input engine creation failed");
+
+    constexpr uint32_t producer_count = 8U;
+    constexpr uint32_t inputs_per_producer = 768U;
+    constexpr uint64_t expected_inputs =
+        static_cast<uint64_t>(producer_count) * inputs_per_producer;
+    std::atomic<uint32_t> ready{0U};
+    std::atomic<bool> start{false};
+    std::atomic<uint64_t> sequence{1U};
+    std::atomic<uint64_t> accepted{0U};
+    std::vector<std::thread> producers;
+    producers.reserve(producer_count);
+
+    for (uint32_t producer = 0; producer < producer_count; ++producer) {
+        producers.emplace_back([&, producer] {
+            ready.fetch_add(1U, std::memory_order_release);
+            while (!start.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            for (uint32_t index = 0; index < inputs_per_producer; ++index) {
+                const webscene_input_event input{
+                    WEBSCENE_INPUT_POINTER_MOVE,
+                    0U,
+                    sequence.fetch_add(1U, std::memory_order_relaxed),
+                    static_cast<double>(producer * inputs_per_producer + index),
+                    static_cast<double>(producer),
+                    0,
+                    0};
+                require(
+                    webscene_engine_enqueue(engine, &input) != 0,
+                    "concurrent input was rejected before ring capacity");
+                accepted.fetch_add(1U, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    while (ready.load(std::memory_order_acquire) != producer_count) {
+        std::this_thread::yield();
+    }
+    start.store(true, std::memory_order_release);
+    for (auto& producer : producers) producer.join();
+
+    require(
+        accepted.load(std::memory_order_relaxed) == expected_inputs,
+        "concurrent producers did not submit every input");
+    wait_for_consumed_inputs(
+        engine,
+        expected_inputs,
+        "concurrently accepted input became invisible to the worker");
+
+    webscene_engine_metrics metrics{};
+    webscene_engine_get_metrics(engine, &metrics);
+    require(
+        metrics.enqueued_inputs == expected_inputs
+            && metrics.consumed_inputs == expected_inputs
+            && metrics.dropped_inputs == 0U,
+        "concurrent input accounting did not remain lossless");
+    webscene_engine_destroy(engine);
+}
+
 void notify_animation_frame_requested_test(void* user_data)
 {
     static_cast<std::atomic<uint32_t>*>(user_data)

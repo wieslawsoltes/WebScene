@@ -138,6 +138,10 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "concurrent-input-producers") {
+            test_concurrent_input_producers_remain_consumable();
+            return 0;
+        }
         if (selected == "canvas-text-metrics") {
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
@@ -233,6 +237,7 @@ int main()
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
     test_timer_error_handler_preserves_later_tasks();
+    test_concurrent_input_producers_remain_consumable();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();

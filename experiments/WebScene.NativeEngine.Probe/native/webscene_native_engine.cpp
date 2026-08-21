@@ -63,6 +63,14 @@ class input_ring final {
 public:
     bool try_push(const webscene_input_event& value)
     {
+        // Pointer/keyboard input is submitted by the host UI thread while
+        // display frames are submitted by the compositor thread. Serialize
+        // those producers before entering the SPSC ring protocol; otherwise
+        // two producers can both publish from the same write index, and a
+        // delayed producer can even move write_ backwards. The latter makes
+        // accepted input invisible to the worker until the ring wraps and
+        // presents as a permanently frozen hosted scene.
+        std::lock_guard producer_lock(producer_mutex_);
         const auto write = write_.load(std::memory_order_relaxed);
         const auto next = increment(write);
         if (next == read_.load(std::memory_order_acquire)) {
@@ -99,6 +107,7 @@ private:
     }
 
     std::array<webscene_input_event, input_capacity> values_{};
+    std::mutex producer_mutex_;
     alignas(64) std::atomic<uint32_t> write_{0};
     alignas(64) std::atomic<uint32_t> read_{0};
 };
