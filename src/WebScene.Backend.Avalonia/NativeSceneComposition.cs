@@ -103,6 +103,12 @@ internal sealed class NativeSceneUiWakeGate
         => Volatile.Write(ref _pending, 0);
 }
 
+internal enum NativeSceneUiWakePriority
+{
+    Normal,
+    Immediate
+}
+
 internal static class NativeScenePublicationWakePolicy
 {
     public static bool RequiresUiWake(
@@ -110,10 +116,10 @@ internal static class NativeScenePublicationWakePolicy
         long renderedSceneCount)
         => matchingResizePublication || renderedSceneCount == 0;
 
-    public static DispatcherPriority Priority(bool matchingResizePublication)
+    public static NativeSceneUiWakePriority Priority(bool matchingResizePublication)
         => matchingResizePublication
-            ? DispatcherPriority.Send
-            : DispatcherPriority.Normal;
+            ? NativeSceneUiWakePriority.Immediate
+            : NativeSceneUiWakePriority.Normal;
 }
 
 public readonly record struct NativeScenePublished(

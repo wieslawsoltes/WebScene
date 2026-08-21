@@ -1,5 +1,4 @@
 using WebScene.Backends.Avalonia.Native;
-using Avalonia.Threading;
 using Xunit;
 
 namespace WebScene.Backend.Avalonia.Tests;
@@ -85,11 +84,11 @@ public sealed class NativeScenePublicationMailboxTests
     public void MatchingResizePublicationUsesImmediateUiWakePriority()
     {
         Assert.Equal(
-            DispatcherPriority.Send,
+            NativeSceneUiWakePriority.Immediate,
             NativeScenePublicationWakePolicy.Priority(
                 matchingResizePublication: true));
         Assert.Equal(
-            DispatcherPriority.Normal,
+            NativeSceneUiWakePriority.Normal,
             NativeScenePublicationWakePolicy.Priority(
                 matchingResizePublication: false));
     }

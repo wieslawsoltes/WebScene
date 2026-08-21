@@ -536,7 +536,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             // one UI-to-compositor message.
             ScheduleCompositionUiWake(
                 NativeScenePublicationWakePolicy.Priority(
-                    matchingResizePublication));
+                    matchingResizePublication) == NativeSceneUiWakePriority.Immediate
+                    ? DispatcherPriority.Send
+                    : DispatcherPriority.Normal);
             return;
         }
 
