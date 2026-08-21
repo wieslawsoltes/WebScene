@@ -413,7 +413,9 @@
         } else if (name == "font-size") {
             pseudo.font_size = std::max(0.0F, native_document::parse_length(value).value);
         } else if (name == "line-height") {
-            if (value != "inherit" && value != "normal") {
+            if (value == "normal" || value == "initial" || value == "revert") {
+                pseudo.line_height = -2.0F;
+            } else if (value != "inherit" && value != "unset") {
                 pseudo.line_height = std::max(0.0F, native_document::parse_length(value).value);
             } else {
                 decision.classification = "partially-supported";
@@ -1431,6 +1433,10 @@
                 reset.mutable_textual().font_family =
                     previous.textual().font_family;
             }
+            if (is_inline(inline_font_smoothing)) {
+                reset.mutable_textual().font_smoothing =
+                    previous.textual().font_smoothing;
+            }
             if (is_inline(inline_font_weight)) reset.font_weight = previous.font_weight;
             if (is_inline(inline_line_height)) reset.line_height = previous.line_height;
             if (is_inline(inline_letter_spacing)) {
@@ -2278,6 +2284,11 @@
             node.style.mutable_textual().font_family =
                 value == "inherit" || value == "unset"
                 ? std::string{} : value;
+        } else if ((name == "-webkit-font-smoothing" || name == "webkit-font-smoothing")
+            && !is_inline(inline_font_smoothing)) {
+            node.style.mutable_textual().font_smoothing =
+                value == "inherit" || value == "unset"
+                ? std::string{} : value;
         } else if (name == "font-weight" && !is_inline(inline_font_weight)) {
             node.style.font_weight = value == "inherit" || value == "unset" ? 0
                 : value == "bold" ? 700
@@ -2523,6 +2534,9 @@
             textual != nullptr) {
             if ((node.style.inline_property_mask & inline_font_family) == 0U) {
                 textual->font_family.clear();
+            }
+            if ((node.style.inline_property_mask & inline_font_smoothing) == 0U) {
+                textual->font_smoothing.clear();
             }
             textual->list_style_position.clear();
             textual->list_style_type.clear();

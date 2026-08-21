@@ -49,6 +49,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         new(StringComparer.Ordinal);
     private NativeTextShaping.WebTypefaceRegistry? _webTypefaces;
     private float _presenterDeviceScaleFactor = 1f;
+
+    internal float PresenterDeviceScaleFactor => _presenterDeviceScaleFactor;
     private SKPicture? s_domBackdropPicture;
     private SKPicture? s_domOverlayPicture;
     private uint s_domCommandCount;
@@ -701,13 +703,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         Dictionary<string, SKShaper> shapers)
     {
         var resource = DomStringAt(view, command.Flags);
-        var parts = resource.Split('\t', 6);
-        if (parts.Length != 6
+        var parts = resource.Split('\t', 7);
+        if (parts.Length is not (6 or 7)
             || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var fontSize)
             || fontSize <= 0)
         {
             return;
         }
+        var text = parts.Length == 7 ? parts[6] : parts[5];
+        var fontSmoothing = parts.Length == 7 ? parts[5] : "auto";
         var lineHeight = float.TryParse(
             parts[1],
             NumberStyles.Float,
@@ -737,7 +741,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             shapers.Add(shaperKey, shaper);
         }
         var featureFlags = NativeTextShaping.ResolveFeatureFlags(
-            parts[5],
+            text,
             parts[4],
             0,
             _webTypefaces);
@@ -746,7 +750,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             _webTypefaces);
         var positioned = NativeTextShaping.TryPositionTextRun(
             shaper,
-            parts[5],
+            text,
             parts[4],
             fontSize,
             fontWeight,
@@ -759,14 +763,14 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             ? positionedRun.AdvanceWidth
             : NativeTextShaping.MeasureShapedWidth(
                 shaper,
-                parts[5],
+                text,
                 paint,
                 featureFlags,
                 tabularDigitScale);
         var widthScale = positioned
             ? 1f
             : NativeTextShaping.ResolveShapedWidthScale(
-                parts[5],
+                text,
                 parts[4],
                 fontSize,
                 fontWeight,
@@ -792,7 +796,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         NativeTextShaping.DrawShapedText(
             canvas,
             shaper,
-            parts[5],
+            text,
             x,
             baseline,
             paint,
@@ -801,7 +805,9 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             widthScale,
             shapedWidth,
             _presenterDeviceScaleFactor,
-            positioned ? positionedRun : null);
+            positioned ? positionedRun : null,
+            NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(
+                fontSmoothing));
     }
 
     private static void DrawDomShadow(

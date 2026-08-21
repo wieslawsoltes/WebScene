@@ -406,6 +406,7 @@ int main()
     test_svg_img_element_loads_and_reaches_scene(engine);
     test_virtual_html_root_inherits_font_metrics(engine);
     test_font_shorthand_inherit_resets_control_metrics(engine);
+    test_webkit_font_smoothing_inherits_into_text_scene(engine);
     test_all_unset_resets_modeled_control_properties(engine);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     test_startup_profile_names_scripts_and_tasks();

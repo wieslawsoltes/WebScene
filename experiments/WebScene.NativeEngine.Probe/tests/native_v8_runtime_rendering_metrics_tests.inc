@@ -677,6 +677,59 @@ void test_font_shorthand_inherit_resets_control_metrics(webscene_engine* engine)
         "font:inherit did not reset control metrics to inherited values: " + state);
 }
 
+void test_webkit_font_smoothing_inherits_into_text_scene(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { -webkit-font-smoothing: antialiased; }
+              #copy { display: block; font: 400 14px/18px sans-serif; }
+            </style>
+            <span id="copy">Generic body copy</span>`;
+        })()
+    )JS", "native-font-smoothing-setup.js");
+    const auto state = evaluate(engine, R"JS((() => {
+      const style = getComputedStyle(document.getElementById('copy'));
+      return {
+        property: style.getPropertyValue('-webkit-font-smoothing'),
+        named: style.webkitFontSmoothing
+      };
+    })())JS", "native-font-smoothing-read.js");
+    require(
+        state.find(R"("property":"antialiased")") != std::string::npos
+            && state.find(R"("named":"antialiased")") != std::string::npos,
+        "inherited -webkit-font-smoothing was not exposed through CSSOM: " + state);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed = false;
+    for (auto attempt = 0; attempt < 100 && !observed; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine); scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 3U || command.flags >= scene->string_count) continue;
+                const auto& descriptor = scene->strings[command.flags];
+                if (descriptor.byte_offset > scene->string_byte_count
+                    || descriptor.byte_length
+                        > scene->string_byte_count - descriptor.byte_offset) {
+                    continue;
+                }
+                const std::string resource{
+                    scene->string_bytes + descriptor.byte_offset,
+                    descriptor.byte_length};
+                // Inline layout may emit one scene text command per word.
+                observed = resource.find("\tantialiased\tGeneric")
+                    != std::string::npos;
+                if (observed) break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(observed, "inherited font smoothing did not reach the text scene resource");
+}
+
 void test_all_unset_resets_modeled_control_properties(webscene_engine* engine)
 {
     execute(engine, R"JS(

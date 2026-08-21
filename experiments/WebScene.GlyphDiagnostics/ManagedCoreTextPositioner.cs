@@ -2,7 +2,9 @@ using System.Runtime.InteropServices;
 
 internal static class ManagedCoreTextPositioner
 {
-    internal static CoreTextRunMetrics[] Shape(Configuration configuration)
+    internal static CoreTextRunMetrics[] Shape(
+        Configuration configuration,
+        bool disableKerning = true)
     {
         if (!OperatingSystem.IsMacOS())
         {
@@ -11,14 +13,18 @@ internal static class ManagedCoreTextPositioner
 
         var fontAttribute = CoreTextAttribute("kCTFontAttributeName");
         var kernAttribute = CoreTextAttribute("kCTKernAttributeName");
-        var zero = 0d;
-        var kernValue = CoreFoundation.CFNumberCreate(
-            IntPtr.Zero,
-            CoreFoundation.NumberDouble,
-            ref zero);
-        if (kernValue == IntPtr.Zero)
+        var kernValue = IntPtr.Zero;
+        if (disableKerning)
         {
-            throw new InvalidOperationException("Could not create the CoreText kern value.");
+            var zero = 0d;
+            kernValue = CoreFoundation.CFNumberCreate(
+                IntPtr.Zero,
+                CoreFoundation.NumberDouble,
+                ref zero);
+            if (kernValue == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Could not create the CoreText kern value.");
+            }
         }
 
         try
@@ -32,7 +38,7 @@ internal static class ManagedCoreTextPositioner
         }
         finally
         {
-            CoreFoundation.CFRelease(kernValue);
+            if (kernValue != IntPtr.Zero) CoreFoundation.CFRelease(kernValue);
         }
     }
 
@@ -59,13 +65,21 @@ internal static class ManagedCoreTextPositioner
             IntPtr.Zero,
             item.Text,
             item.Text.Length);
-        var attributes = CoreFoundation.CFDictionaryCreate(
-            IntPtr.Zero,
-            [fontAttribute, kernAttribute],
-            [font, kernValue],
-            2,
-            IntPtr.Zero,
-            IntPtr.Zero);
+        var attributes = kernValue == IntPtr.Zero
+            ? CoreFoundation.CFDictionaryCreate(
+                IntPtr.Zero,
+                [fontAttribute],
+                [font],
+                1,
+                IntPtr.Zero,
+                IntPtr.Zero)
+            : CoreFoundation.CFDictionaryCreate(
+                IntPtr.Zero,
+                [fontAttribute, kernAttribute],
+                [font, kernValue],
+                2,
+                IntPtr.Zero,
+                IntPtr.Zero);
         var attributed = attributes == IntPtr.Zero || text == IntPtr.Zero
             ? IntPtr.Zero
             : CoreFoundation.CFAttributedStringCreate(

@@ -22,9 +22,16 @@ selection, shaping/positioning, and rasterization.
 - WebScene's production Skia masks are pixel-identical to Chromium canvas and DOM for
   all six isolated glyph cases at both 1x and 2x.
 - Differences begin when multiple glyphs are positioned into a run.
-- Substituting CoreText positions while retaining Skia glyph painting reduces average
-  multi-glyph pixel MAE from 0.03391 to 0.01819 at 1x and from 0.03160 to 0.01010 at
-  2x.
+- Substituting normally kerned CoreText positions while retaining Skia glyph painting,
+  and applying Blink's macOS `SKFont` profile, reduces average multi-glyph pixel MAE
+  from 0.03391 to 0.00048 at 1x and from 0.03160 to 0.00018 at 2x.
+- The earlier CoreText experiment explicitly set `kCTKernAttributeName` to zero. That
+  explained most of the remaining full-run difference: allowing CoreText's normal
+  kerning reduced the 2x result from 0.01010 to 0.00018 without replacing Skia masks.
+- A capture from the real Avalonia OpenGL presenter confirmed an exact 2x canvas
+  matrix and 1.0 content scale, ruling out unintended fractional presenter scaling.
+  Reproducing its RGBA, RGB-horizontal, color-space-unspecified surface in the CPU
+  oracle changed MAE only from 0.00018 to 0.00030.
 - Invoking CoreText directly from managed code produces byte-identical Skia images to
   the standalone Swift/CoreText control. A native WebScene runtime helper is therefore
   not required for the macOS path.
@@ -37,7 +44,8 @@ selection, shaping/positioning, and rasterization.
   behind a bounded macOS system-font eligibility gate. The service caches verified runs
   and font handles, uses the same positions for measurement and painting, and falls back
   per run to HarfBuzz/Skia. `WEBSCENE_TEXT_POSITIONING=harfbuzz` retains the previous path
-  as a before/after and rollback control.
+  as a before/after and rollback control. Chromium-compatible macOS font flags are the
+  default; `WEBSCENE_TEXT_RASTERIZATION=current` retains the former profile.
 
 ## Architecture
 
@@ -133,6 +141,111 @@ Correct generic-family resolution as part of this work:
 
 Enable DirectWrite positioning only after the Windows pixel oracle demonstrates an
 overall improvement without prose, scaling, or weight regressions.
+
+### Windows execution checklist
+
+This is the hand-off sequence for implementing the Windows path. Complete it in order;
+do not enable DirectWrite by default merely because the interop layer works.
+
+#### 1. Establish the Windows baseline
+
+- Use a Windows 11 x64 machine with the .NET 8 and .NET 10 SDKs, the Visual Studio C++
+  workload, current Chrome, and displays or deterministic virtual displays at 100%,
+  125%, 150%, and 200% scaling.
+- Make `experiments/WebScene.GlyphDiagnostics` select platform-specific controls rather
+  than exiting through its current macOS-only CoreText path. Keep `cases.json`, the
+  Chrome capture, crop regions, and error calculations shared so Windows and macOS
+  reports remain comparable.
+- Add a `ManagedDirectWritePositioner.cs` diagnostic provider. Capture the current
+  HarfBuzz/Skia output, Chromium canvas and DOM output, DirectWrite-positioned/Skia-
+  painted output, and a native framework text control for every corpus case and scale.
+- Store `report.json`, `report.md`, PNGs, glyph IDs, clusters, advances, offsets, font
+  metrics, resolved face identity, device scale, and canvas matrix under
+  `TestResults/GlyphDiagnostics/windows-<rid>-<scale>`.
+- Record the baseline command and Chrome version in the report. The intended command,
+  once the diagnostic is made cross-platform, is:
+
+  ```powershell
+  dotnet run --project experiments/WebScene.GlyphDiagnostics -c Release -- `
+    --platform windows --scales 1,1.25,1.5,2 `
+    --output TestResults/GlyphDiagnostics/windows-x64
+  ```
+
+Deliverable: a baseline report that identifies whether the residual error comes from
+font-family resolution, glyph selection, run positions, raster masks, or device-scale
+rounding. Do not start by tuning arbitrary width or weight multipliers.
+
+#### 2. Correct and test font identity
+
+- Update `NativeTextShaping.ResolveTypeface` so Windows `system-ui` resolves to the
+  Windows UI family (normally Segoe UI), while `sans-serif` retains an independent
+  generic-family mapping. Remove the current Windows fallback that maps both to Arial.
+- Keep `-apple-system` and `BlinkMacSystemFont` as fallback aliases on Windows; they
+  must not pretend that an Apple face is installed.
+- Report the DirectWrite family/face names, weight, stretch, style, font-file identity,
+  collection index, simulations, and variation axes. Report the corresponding
+  `SKTypeface` identity beside them.
+- Add platform-conditional tests in `NativeTextShapingTests` for the generic-family
+  mapping and for regular, semibold, bold, italic, and missing-family fallback.
+
+Deliverable: DirectWrite and Skia demonstrably select the same physical face for every
+run eligible for platform positioning.
+
+#### 3. Implement the bounded DirectWrite provider
+
+- Add `WindowsDirectWriteRunPositioner : INativeTextRunPositioner`, preferably in a
+  Windows-specific source file beside `NativeTextRunPositioning.cs`. Select it from
+  `DefaultNativeTextRunPositioner` only on Windows.
+- Use `IDWriteTextAnalyzer.GetGlyphs` and `GetGlyphPlacements` (or an equivalent API
+  that exposes the complete `DWRITE_GLYPH_RUN`) to return glyph IDs, cluster mapping,
+  advances, and X/Y offsets for the whole run. Do not call DirectWrite once per glyph.
+- Convert advances and offsets from DIPs without rounding them to device pixels.
+  Preserve direction, script, locale, features, weight, stretch, slant, and variation
+  axes in the request and cache key.
+- Reuse the existing `NativePositionedTextRun`/`SKTextBlob` painting path. DirectWrite
+  positions glyphs; the host-provided SkiaSharp remains the only glyph painter.
+- Reject the platform result unless its glyph IDs and face identity match the active
+  Skia typeface. On any COM, shaping, identity, feature, or cache failure, return
+  `false` so the existing HarfBuzz/Skia run renders normally.
+- Mirror the macOS bounded caches: one process-wide DirectWrite factory, cached font
+  faces/analysis state, a bounded run cache, and no COM allocation in the draw loop.
+
+Initial eligibility is deliberately narrow: single-face Latin system-UI runs, upright
+style, tested weights, no downloaded font, no emoji or fallback split, no unsupported
+OpenType feature, and an exact glyph-ID match.
+
+#### 4. Use one authority for measurement and painting
+
+- Confirm that `NativeTextShaping.TryPositionTextRun`, `MeasureShapedWidth`, intrinsic
+  layout, wrapping, and `DrawShapedText` use the same accepted positioned run.
+- Add tests for spaces crossing style boundaries, `AV`/`To` kerning, `ffi`, compact
+  prices, punctuation, mixed weights, wrapping thresholds, and fractional scales.
+- Delete no HarfBuzz calibration until the DirectWrite path covers the same case and
+  its fallback behavior is separately tested.
+
+Deliverable: no width, wrap, caret, or baseline discontinuity when a line contains both
+eligible DirectWrite-positioned runs and HarfBuzz fallback runs.
+
+#### 5. Gate rollout with evidence
+
+- Run `dotnet test WebScene.sln -c Release` and the required Web Platform subset on
+  Windows x64 before and after the change.
+- Run the glyph diagnostic at all four scales with both
+  `WEBSCENE_TEXT_POSITIONING=harfbuzz` and the DirectWrite candidate. Keep both reports
+  as CI artifacts.
+- Add a Windows pixel-oracle lane with a pinned Chrome build or record the exact Chrome
+  version in every result. Compare both average corpus error and per-case error; a gain
+  in compact numerics cannot compensate for a prose or weight regression.
+- Benchmark cold start, first shape, warm cached shape, allocation rate, draw time, and
+  cache memory. The platform path must not add a per-frame factory/font-face creation or
+  a per-glyph managed/native transition.
+- Keep `WEBSCENE_TEXT_POSITIONING=harfbuzz` as the rollback switch. Add an explicit
+  `directwrite` diagnostic value before making automatic Windows selection the default.
+
+The Windows path is complete only when the report shows a net pixel improvement at all
+four scales, every eligible run uses matching DirectWrite/Skia glyph identities,
+fallback cases render successfully, the required WPT and managed suites are green, and
+the benchmark stays inside the established performance budgets.
 
 ## Linux implementation
 
@@ -251,8 +364,11 @@ systems and installed font versions.
   system-font eligibility gate.
 - [x] Add bounded cache and fallback coverage.
 - [x] Re-run the 1x and 2x Chromium pixel-oracle profiles through the production
-  service path; its images are byte-identical to the validated managed CoreText
-  candidate and retain the measured Chromium improvement.
+  service path; its images are byte-identical to the normally kerned managed CoreText
+  candidate and reduce mean multi-glyph MAE to 0.00048 and 0.00018 respectively.
+- [x] Preserve inherited `-webkit-font-smoothing` through CSSOM and the shared scene,
+  and select the matching macOS Skia raster profile per text run. Keep the process
+  environment setting as an explicit diagnostic/host override.
 
 ### Phase 2: Windows
 

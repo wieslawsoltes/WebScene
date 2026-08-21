@@ -159,9 +159,9 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
             ? IntPtr.Zero
             : CoreFoundation.CFDictionaryCreate(
                 IntPtr.Zero,
-                [CoreText.FontAttribute, CoreText.KernAttribute],
-                [font, CoreText.ZeroKernValue],
-                2,
+                [CoreText.FontAttribute],
+                [font],
+                1,
                 IntPtr.Zero,
                 IntPtr.Zero);
         var attributed = attributes == IntPtr.Zero
@@ -325,8 +325,6 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
     {
         private const string Library =
             "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
-        internal const int NumberDouble = 6;
-
         [DllImport(Library)]
         internal static extern void CFRelease(IntPtr value);
 
@@ -335,12 +333,6 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
             IntPtr allocator,
             [MarshalAs(UnmanagedType.LPWStr)] string characters,
             nint length);
-
-        [DllImport(Library)]
-        internal static extern IntPtr CFNumberCreate(
-            IntPtr allocator,
-            int type,
-            ref double value);
 
         [DllImport(Library)]
         internal static extern IntPtr CFDictionaryCreate(
@@ -369,8 +361,6 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
         private const string Library =
             "/System/Library/Frameworks/CoreText.framework/CoreText";
         internal static readonly IntPtr FontAttribute = ResolveAttribute("kCTFontAttributeName");
-        internal static readonly IntPtr KernAttribute = ResolveAttribute("kCTKernAttributeName");
-        internal static readonly IntPtr ZeroKernValue = CreateZeroKernValue();
 
         [DllImport(Library)]
         internal static extern IntPtr CTLineCreateWithAttributedString(IntPtr attributedString);
@@ -411,19 +401,6 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
             {
                 NativeLibrary.Free(library);
             }
-        }
-
-        private static IntPtr CreateZeroKernValue()
-        {
-            var zero = 0d;
-            var value = CoreFoundation.CFNumberCreate(
-                IntPtr.Zero,
-                CoreFoundation.NumberDouble,
-                ref zero);
-            return value != IntPtr.Zero
-                ? value
-                : throw new InvalidOperationException(
-                    "Could not create the CoreText kerning attribute.");
         }
     }
 }

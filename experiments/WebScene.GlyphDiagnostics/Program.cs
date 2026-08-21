@@ -37,6 +37,23 @@ foreach (var scale in new[] { 1f, 2f })
     RenderSkia(configuration, scale, RenderMode.ProductionService,
         Path.Combine(outputDirectory, $"skia-production-service-{scale:0}x.png"),
         Path.Combine(outputDirectory, $"skia-production-service-{scale:0}x.metrics.json"));
+    RenderSkia(configuration, scale, RenderMode.ProductionServiceChromium,
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-{scale:0}x.metrics.json"));
+    RenderSkia(configuration, scale, RenderMode.ProductionServiceChromiumGrayscale,
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-grayscale-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-grayscale-{scale:0}x.metrics.json"));
+    RenderSkia(configuration, scale, RenderMode.ProductionServiceChromiumAntialiased,
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-antialiased-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-production-service-chromium-antialiased-{scale:0}x.metrics.json"));
+    RenderSkia(configuration, scale, RenderMode.ProductionService,
+        Path.Combine(outputDirectory, $"skia-presenter-surface-current-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-presenter-surface-current-{scale:0}x.metrics.json"),
+        presenterSurface: true);
+    RenderSkia(configuration, scale, RenderMode.ProductionServiceChromium,
+        Path.Combine(outputDirectory, $"skia-presenter-surface-chromium-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-presenter-surface-chromium-{scale:0}x.metrics.json"),
+        presenterSurface: true);
     RenderSkia(configuration, scale, RenderMode.ShapedDefault,
         Path.Combine(outputDirectory, $"skia-shaped-default-{scale:0}x.png"),
         Path.Combine(outputDirectory, $"skia-shaped-default-{scale:0}x.metrics.json"));
@@ -68,10 +85,27 @@ foreach (var scale in new[] { 1f, 2f })
         scale,
         managedCoreTextMetricsPath,
         Path.Combine(outputDirectory, $"managed-coretext-skia-{scale:0}x.png"));
+    var defaultKerningCoreTextMetricsPath = Path.Combine(
+        outputDirectory, $"managed-coretext-default-kerning-{scale:0}x.metrics.json");
+    var defaultKerningCoreTextRuns = ManagedCoreTextPositioner.Shape(
+        configuration,
+        disableKerning: false);
+    File.WriteAllText(
+        defaultKerningCoreTextMetricsPath,
+        JsonSerializer.Serialize(
+            defaultKerningCoreTextRuns,
+            new JsonSerializerOptions { WriteIndented = true }));
+    RenderSkiaAtCoreTextPositions(
+        configuration,
+        scale,
+        defaultKerningCoreTextMetricsPath,
+        Path.Combine(outputDirectory, $"managed-coretext-default-kerning-skia-{scale:0}x.png"));
     var productionCoreTextMetricsPath = Path.Combine(
         outputDirectory, $"production-coretext-{scale:0}x.metrics.json");
     var productionCoreTextRuns = ShapeWithProductionCoreTextService(configuration);
-    ValidateEquivalentCoreTextRuns(managedCoreTextRuns, productionCoreTextRuns);
+    ValidateEquivalentCoreTextRuns(
+        defaultKerningCoreTextRuns,
+        productionCoreTextRuns);
     File.WriteAllText(
         productionCoreTextMetricsPath,
         JsonSerializer.Serialize(
@@ -108,7 +142,7 @@ foreach (var scale in new[] { 1f, 2f })
         "--metrics", Path.Combine(outputDirectory, $"chrome-{scale:0}x.metrics.json"),
         "--scale", scale.ToString(CultureInfo.InvariantCulture),
         "--width", configuration.Width.ToString(CultureInfo.InvariantCulture),
-        "--height", (configuration.Height * 2).ToString(CultureInfo.InvariantCulture)
+        "--height", (configuration.Height * 3).ToString(CultureInfo.InvariantCulture)
     ]);
     RenderSkiaAtChromePrefixPositions(
         configuration,
@@ -187,15 +221,21 @@ static void RenderSkia(
     float scale,
     RenderMode mode,
     string imagePath,
-    string metricsPath)
+    string metricsPath,
+    bool presenterSurface = false)
 {
     var info = new SKImageInfo(
         checked((int)(configuration.Width * scale)),
         checked((int)(configuration.Height * scale)),
-        SKColorType.Bgra8888,
+        presenterSurface ? SKColorType.Rgba8888 : SKColorType.Bgra8888,
         SKAlphaType.Premul,
-        SKColorSpace.CreateSrgb());
-    using var surface = SKSurface.Create(info)
+        presenterSurface ? null : SKColorSpace.CreateSrgb());
+    using var surfaceProperties = presenterSurface
+        ? new SKSurfaceProperties(SKPixelGeometry.RgbHorizontal)
+        : null;
+    using var surface = (surfaceProperties is null
+        ? SKSurface.Create(info)
+        : SKSurface.Create(info, surfaceProperties))
         ?? throw new InvalidOperationException("Could not create the Skia diagnostic surface.");
     var canvas = surface.Canvas;
     canvas.Clear(SKColor.Parse(configuration.Background));
@@ -220,7 +260,11 @@ static void RenderSkia(
             item.Text, configuration.Family, 0);
         var shaped = shaper.Shape(item.Text, 0, item.Baseline, paint);
         NativePositionedTextRun? positionedRun = null;
-        var positioned = mode == RenderMode.ProductionService
+        var usesProductionService = mode is RenderMode.ProductionService
+            or RenderMode.ProductionServiceChromium
+            or RenderMode.ProductionServiceChromiumGrayscale
+            or RenderMode.ProductionServiceChromiumAntialiased;
+        var positioned = usesProductionService
             && NativeTextShaping.TryPositionTextRun(
                 shaper,
                 item.Text,
@@ -239,7 +283,7 @@ static void RenderSkia(
                 item.Text,
                 paint,
                 features);
-        var widthScale = (mode is RenderMode.Production or RenderMode.ProductionService)
+        var widthScale = (mode == RenderMode.Production || usesProductionService)
             && !positioned
             ? NativeTextShaping.ResolveShapedWidthScale(
                 item.Text,
@@ -250,8 +294,18 @@ static void RenderSkia(
                 width,
                 features)
             : 1f;
-        if (mode is RenderMode.Production or RenderMode.ProductionService)
+        if (mode == RenderMode.Production || usesProductionService)
         {
+            var rasterizationMode = mode switch
+            {
+                RenderMode.ProductionServiceChromium =>
+                    NativeTextShaping.NativeFontRasterizationMode.Chromium,
+                RenderMode.ProductionServiceChromiumGrayscale =>
+                    NativeTextShaping.NativeFontRasterizationMode.ChromiumGrayscale,
+                RenderMode.ProductionServiceChromiumAntialiased =>
+                    NativeTextShaping.NativeFontRasterizationMode.ChromiumAntialiased,
+                _ => NativeTextShaping.NativeFontRasterizationMode.Current
+            };
             NativeTextShaping.DrawShapedText(
                 canvas,
                 shaper,
@@ -264,7 +318,8 @@ static void RenderSkia(
                 widthScale,
                 width,
                 scale,
-                positioned ? positionedRun : null);
+                positioned ? positionedRun : null,
+                rasterizationMode);
         }
         else if (mode == RenderMode.PlatformAdvances)
         {
@@ -745,6 +800,11 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                 outputDirectory, $"managed-coretext-{scale}x.metrics.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!
             .ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var defaultKerningCoreTextMetrics = JsonSerializer.Deserialize<CoreTextRunMetrics[]>(
+            File.ReadAllText(Path.Combine(
+                outputDirectory, $"managed-coretext-default-kerning-{scale}x.metrics.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!
+            .ToDictionary(item => item.Id, StringComparer.Ordinal);
         var coreTextRunMetrics = JsonSerializer.Deserialize<CoreTextRunMetrics[]>(
             File.ReadAllText(Path.Combine(
                 outputDirectory, $"coretext-{scale}x.metrics.json")),
@@ -757,6 +817,11 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             .ToDictionary(item => item.Id, StringComparer.Ordinal);
         using var production = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-{scale}x.png"));
         using var productionService = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-service-{scale}x.png"));
+        using var productionServiceChromium = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-service-chromium-{scale}x.png"));
+        using var productionServiceChromiumGrayscale = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-service-chromium-grayscale-{scale}x.png"));
+        using var productionServiceChromiumAntialiased = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-service-chromium-antialiased-{scale}x.png"));
+        using var presenterSurfaceCurrent = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-presenter-surface-current-{scale}x.png"));
+        using var presenterSurfaceChromium = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-presenter-surface-chromium-{scale}x.png"));
         using var shapedDefault = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-shaped-default-{scale}x.png"));
         using var platformAdvances = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-platform-advances-{scale}x.png"));
         using var platformHarfBuzzKerning = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-platform-hb-kerning-{scale}x.png"));
@@ -764,6 +829,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         using var managedSkiaHarfBuzz = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-skia-hb-{scale}x.png"));
         using var managedSkiaHarfBuzzVariations = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-skia-hb-variations-{scale}x.png"));
         using var managedCoreTextSkia = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-coretext-skia-{scale}x.png"));
+        using var defaultKerningCoreTextSkia = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-coretext-default-kerning-skia-{scale}x.png"));
         using var productionCoreTextSkia = SKBitmap.Decode(Path.Combine(outputDirectory, $"production-coretext-skia-{scale}x.png"));
         using var coreTextPositions = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-coretext-positions-{scale}x.png"));
         using var chromePositions = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-chrome-positions-{scale}x.png"));
@@ -773,6 +839,11 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         var expectedHeight = configuration.Height * scale;
         ValidateDimensions("Skia production", production, expectedWidth, expectedHeight);
         ValidateDimensions("Skia production positioning service", productionService, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia production positioning service with Chromium profile", productionServiceChromium, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia production positioning service with Chromium grayscale profile", productionServiceChromiumGrayscale, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia production positioning service with Chromium antialiased profile", productionServiceChromiumAntialiased, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia presenter-like surface with current profile", presenterSurfaceCurrent, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia presenter-like surface with Chromium profile", presenterSurfaceChromium, expectedWidth, expectedHeight);
         ValidateDimensions("Skia shaped default", shapedDefault, expectedWidth, expectedHeight);
         ValidateDimensions("Skia platform advances", platformAdvances, expectedWidth, expectedHeight);
         ValidateDimensions("Skia platform advances with HarfBuzz kerning", platformHarfBuzzKerning, expectedWidth, expectedHeight);
@@ -780,21 +851,27 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         ValidateDimensions("Managed Skia-backed HarfBuzz", managedSkiaHarfBuzz, expectedWidth, expectedHeight);
         ValidateDimensions("Managed Skia-backed HarfBuzz with variations", managedSkiaHarfBuzzVariations, expectedWidth, expectedHeight);
         ValidateDimensions("Managed CoreText positions with Skia raster", managedCoreTextSkia, expectedWidth, expectedHeight);
+        ValidateDimensions("Managed CoreText default kerning with Skia raster", defaultKerningCoreTextSkia, expectedWidth, expectedHeight);
         ValidateDimensions("Production CoreText service with Skia raster", productionCoreTextSkia, expectedWidth, expectedHeight);
         ValidateDimensions("Skia at CoreText positions", coreTextPositions, expectedWidth, expectedHeight);
         ValidateDimensions("Skia at Chromium prefix positions", chromePositions, expectedWidth, expectedHeight);
         ValidateDimensions("CoreText", coreText, expectedWidth, expectedHeight);
-        if (chrome.Width < expectedWidth || chrome.Height < expectedHeight * 2)
+        if (chrome.Width < expectedWidth || chrome.Height < expectedHeight * 3)
         {
             throw new InvalidDataException(
                 $"Chromium image was {chrome.Width}x{chrome.Height}; expected at least "
-                + $"{expectedWidth}x{expectedHeight * 2}.");
+                + $"{expectedWidth}x{expectedHeight * 3}.");
         }
 
         var sources = new Dictionary<string, ImageView>
         {
             ["skia-production"] = new(production, 0, 0),
             ["skia-production-service"] = new(productionService, 0, 0),
+            ["skia-production-service-chromium"] = new(productionServiceChromium, 0, 0),
+            ["skia-production-service-chromium-grayscale"] = new(productionServiceChromiumGrayscale, 0, 0),
+            ["skia-production-service-chromium-antialiased"] = new(productionServiceChromiumAntialiased, 0, 0),
+            ["skia-presenter-surface-current"] = new(presenterSurfaceCurrent, 0, 0),
+            ["skia-presenter-surface-chromium"] = new(presenterSurfaceChromium, 0, 0),
             ["skia-shaped-default"] = new(shapedDefault, 0, 0),
             ["skia-platform-advances"] = new(platformAdvances, 0, 0),
             ["skia-platform-hb-kerning"] = new(platformHarfBuzzKerning, 0, 0),
@@ -802,12 +879,14 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             ["managed-skia-hb"] = new(managedSkiaHarfBuzz, 0, 0),
             ["managed-skia-hb-variations"] = new(managedSkiaHarfBuzzVariations, 0, 0),
             ["managed-coretext-skia"] = new(managedCoreTextSkia, 0, 0),
+            ["managed-coretext-default-kerning-skia"] = new(defaultKerningCoreTextSkia, 0, 0),
             ["production-coretext-skia"] = new(productionCoreTextSkia, 0, 0),
             ["skia-coretext-positions"] = new(coreTextPositions, 0, 0),
             ["skia-chrome-positions"] = new(chromePositions, 0, 0),
             ["coretext"] = new(coreText, 0, 0),
             ["chrome-canvas"] = new(chrome, 0, 0),
-            ["chrome-dom"] = new(chrome, 0, expectedHeight)
+            ["chrome-dom"] = new(chrome, 0, expectedHeight),
+            ["chrome-dom-antialiased"] = new(chrome, 0, expectedHeight * 2)
         };
         var cases = new List<CaseReport>();
         foreach (var item in configuration.Cases)
@@ -823,16 +902,35 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             var ink = sources.ToDictionary(
                 pair => pair.Key,
                 pair => MeasureInk(pair.Value, region, configuration));
+            var cssAntialiasedCandidates = new[]
+            {
+                (Source: "skia-production-service-chromium",
+                    Alias: "skia-production-service-chromium-vs-css"),
+                (Source: "skia-production-service-chromium-grayscale",
+                    Alias: "skia-production-service-chromium-grayscale-vs-css"),
+                (Source: "skia-production-service-chromium-antialiased",
+                    Alias: "skia-production-service-chromium-antialiased-vs-css")
+            };
+            foreach (var candidate in cssAntialiasedCandidates)
+            {
+                ink[candidate.Alias] = ink[candidate.Source];
+            }
             var comparisons = new List<PixelComparison>();
             foreach (var candidate in new[]
                      {
                          "skia-production", "skia-shaped-default", "skia-platform-advances",
                          "skia-production-service",
+                         "skia-production-service-chromium",
+                         "skia-production-service-chromium-grayscale",
+                         "skia-production-service-chromium-antialiased",
+                         "skia-presenter-surface-current",
+                         "skia-presenter-surface-chromium",
                          "skia-platform-hb-kerning",
                          "skia-hb-variations",
                          "managed-skia-hb",
                          "managed-skia-hb-variations",
                          "managed-coretext-skia",
+                         "managed-coretext-default-kerning-skia",
                          "production-coretext-skia",
                          "skia-coretext-positions",
                          "skia-chrome-positions",
@@ -849,11 +947,27 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                     ink["chrome-canvas"].Bounds,
                     refinementRadius: 2 * scale));
             }
+            var cssAntialiasedInk = MeasureInk(
+                sources["chrome-dom-antialiased"], region, configuration);
+            foreach (var candidate in cssAntialiasedCandidates)
+            {
+                comparisons.Add(Compare(
+                    candidate.Alias,
+                    sources[candidate.Source],
+                    sources["chrome-dom-antialiased"],
+                    region,
+                    configuration,
+                    ink[candidate.Source].Bounds,
+                    cssAntialiasedInk.Bounds,
+                    refinementRadius: 2 * scale,
+                    referenceName: "chrome-dom-antialiased"));
+            }
             var productionRun = productionMetrics[item.Id];
             var productionServiceRun = productionServiceMetrics[item.Id];
             var managedRun = managedMetrics[item.Id];
             var managedVariationRun = managedVariationMetrics[item.Id];
             var managedCoreTextRun = managedCoreTextMetrics[item.Id];
+            var defaultKerningCoreTextRun = defaultKerningCoreTextMetrics[item.Id];
             var coreTextRun = coreTextRunMetrics[item.Id];
             var chromeRun = chromeRunMetrics[item.Id];
             var positionComparisons = new List<PositionComparison>
@@ -879,6 +993,10 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                 ComparePositions(
                     "managed-coretext",
                     managedCoreTextRun.Positions.Select(position => position[0]),
+                    chromeRun.PrefixPositions),
+                ComparePositions(
+                    "managed-coretext-default-kerning",
+                    defaultKerningCoreTextRun.Positions.Select(position => position[0]),
                     chromeRun.PrefixPositions),
                 ComparePositions(
                     "coretext",
@@ -975,7 +1093,8 @@ static PixelComparison Compare(
     Configuration configuration,
     PixelRegion? sourceBounds,
     PixelRegion? referenceBounds,
-    int refinementRadius)
+    int refinementRadius,
+    string referenceName = "chrome-canvas")
 {
     var background = SKColor.Parse(configuration.Background);
     var foreground = SKColor.Parse(configuration.Foreground);
@@ -1017,7 +1136,7 @@ static PixelComparison Compare(
     }
     return new PixelComparison(
         sourceName,
-        "chrome-canvas",
+        referenceName,
         best.Dx,
         best.Dy,
         best.Error,
@@ -1071,8 +1190,17 @@ static string FormatReport(DiagnosticReport report)
         foreach (var source in new[]
                  {
                      "skia-production", "skia-production-service",
+                     "skia-production-service-chromium",
+                     "skia-production-service-chromium-grayscale",
+                     "skia-production-service-chromium-antialiased",
+                     "skia-production-service-chromium-vs-css",
+                     "skia-production-service-chromium-grayscale-vs-css",
+                     "skia-production-service-chromium-antialiased-vs-css",
+                     "skia-presenter-surface-current",
+                     "skia-presenter-surface-chromium",
                      "skia-hb-variations", "managed-skia-hb",
                      "managed-skia-hb-variations", "managed-coretext-skia",
+                     "managed-coretext-default-kerning-skia",
                      "production-coretext-skia",
                      "skia-coretext-positions", "skia-chrome-positions",
                      "coretext"
@@ -1210,6 +1338,9 @@ enum RenderMode
 {
     Production,
     ProductionService,
+    ProductionServiceChromium,
+    ProductionServiceChromiumGrayscale,
+    ProductionServiceChromiumAntialiased,
     ShapedDefault,
     PlatformAdvances,
     PlatformAdvancesWithHarfBuzzKerning,

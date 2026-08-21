@@ -394,7 +394,8 @@ void native_document::append_scene(
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
-                << resolved_font_family(node) << '\t' << pseudo.content;
+                << resolved_font_family(node) << '\t'
+                << resolved_font_smoothing(node) << '\t' << pseudo.content;
             commands.push_back(webscene_scene_command{
                 3U,
                 append_scene_string(resource.str(), strings, string_bytes),
@@ -902,7 +903,8 @@ void native_document::append_scene(
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'
-                << resolved_font_family(node) << '\t' << option_label(*selected);
+                << resolved_font_family(node) << '\t'
+                << resolved_font_smoothing(node) << '\t' << option_label(*selected);
             commands.push_back(webscene_scene_command{
                 3U,
                 append_scene_string(resource.str(), strings, string_bytes),
@@ -944,7 +946,8 @@ void native_document::append_scene(
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'
-                << resolved_font_family(node) << '\t' << node.form_control().value;
+                << resolved_font_family(node) << '\t'
+                << resolved_font_smoothing(node) << '\t' << node.form_control().value;
             commands.push_back(webscene_scene_command{
                 3U,
                 append_scene_string(resource.str(), strings, string_bytes),
@@ -985,6 +988,7 @@ void native_document::append_scene(
                 resource << font_size << '\t' << fragment.height << '\t'
                     << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
                     << resolved_font_family(node) << '\t'
+                    << resolved_font_smoothing(node) << '\t'
                     << resolved_text_transform(node, fragment.text);
                 commands.push_back(webscene_scene_command{
                     3U,
@@ -1034,6 +1038,7 @@ void native_document::append_scene(
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << resolved_text_align(node) << '\t'
                 << resolved_font_family(node) << '\t'
+                << resolved_font_smoothing(node) << '\t'
                 << lines[line_index];
             commands.push_back(webscene_scene_command{
                 3U,

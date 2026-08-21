@@ -736,6 +736,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
             effective.Y,
             _viewportWidth,
             _viewportHeight);
+        var presenterMatrix = canvas.TotalMatrix;
+        var contentMatrix = presenterMatrix;
         var save = canvas.Save();
         try
         {
@@ -747,6 +749,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             };
             canvas.DrawRect(0, 0, (float)effective.X, (float)effective.Y, background);
             canvas.Scale(scale.X, scale.Y);
+            contentMatrix = canvas.TotalMatrix;
             var retainedStarted = Stopwatch.GetTimestamp();
             _renderer.RenderRetained(
                 canvas,
@@ -759,6 +762,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             canvas.RestoreToCount(save);
         }
+        NativePresenterTextDiagnostics.TryCapture(
+            lease.SkSurface,
+            presenterMatrix,
+            contentMatrix,
+            effective,
+            _viewportWidth,
+            _viewportHeight,
+            scale,
+            _renderer.PresenterDeviceScaleFactor);
         skiaSubmitTicks = Stopwatch.GetTimestamp() - skiaStarted;
 
         if (_hasPendingRenderMetrics)
@@ -1215,6 +1227,125 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
     {
         Interlocked.Exchange(ref s_latestResizeTimestamp, timestamp);
         Interlocked.Exchange(ref s_latestResizeSequence, unchecked((long)sequence));
+    }
+}
+
+internal static class NativePresenterTextDiagnostics
+{
+    private const string OutputDirectoryEnvironmentVariable =
+        "WEBSCENE_TEXT_PRESENTER_DIAGNOSTICS";
+    private static readonly string? OutputDirectory =
+        Environment.GetEnvironmentVariable(OutputDirectoryEnvironmentVariable);
+    private static long s_firstEligibleFrame;
+    private static int s_captureState;
+
+    internal static void TryCapture(
+        SKSurface? surface,
+        SKMatrix presenterMatrix,
+        SKMatrix contentMatrix,
+        global::Avalonia.Vector effectiveSize,
+        float viewportWidth,
+        float viewportHeight,
+        Vector2 contentScale,
+        float presenterDeviceScaleFactor)
+    {
+        if (surface is null || string.IsNullOrWhiteSpace(OutputDirectory))
+        {
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        var firstFrame = Interlocked.CompareExchange(
+            ref s_firstEligibleFrame,
+            now,
+            0);
+        if (firstFrame == 0) firstFrame = now;
+        if (Stopwatch.GetElapsedTime(firstFrame, now) < TimeSpan.FromSeconds(8)
+            || Interlocked.CompareExchange(ref s_captureState, 1, 0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(OutputDirectory);
+            surface.Canvas.Flush();
+            using var image = surface.Snapshot();
+            using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+            using (var stream = File.Create(Path.Combine(
+                       OutputDirectory,
+                       "presenter-surface.png")))
+            {
+                encoded.SaveTo(stream);
+            }
+
+            var colorSpace = image.ColorSpace;
+            var rasterization = NativeTextShaping.ResolveFontRasterizationProfile(
+                presenterDeviceScaleFactor);
+            var metadata = new
+            {
+                CapturedUtc = DateTimeOffset.UtcNow,
+                RasterizationMode = NativeTextShaping.ActiveFontRasterizationMode.ToString(),
+                RasterizationOverride = Environment.GetEnvironmentVariable(
+                    NativeTextShaping.RasterizationModeEnvironmentVariable),
+                Rasterization = new
+                {
+                    rasterization.Subpixel,
+                    rasterization.BaselineSnap,
+                    Edging = rasterization.Edging.ToString(),
+                    Hinting = rasterization.Hinting.ToString(),
+                    rasterization.LinearMetrics,
+                    rasterization.EmbeddedBitmaps
+                },
+                PresenterDeviceScaleFactor = presenterDeviceScaleFactor,
+                EffectiveSize = new { effectiveSize.X, effectiveSize.Y },
+                Viewport = new { Width = viewportWidth, Height = viewportHeight },
+                ContentScale = new { contentScale.X, contentScale.Y },
+                PresenterMatrix = MatrixValues(presenterMatrix),
+                ContentMatrix = MatrixValues(contentMatrix),
+                Surface = new
+                {
+                    image.Width,
+                    image.Height,
+                    ColorType = image.ColorType.ToString(),
+                    AlphaType = image.AlphaType.ToString(),
+                    IsSrgb = colorSpace?.IsSrgb,
+                    GammaIsCloseToSrgb = colorSpace?.GammaIsCloseToSrgb,
+                    GammaIsLinear = colorSpace?.GammaIsLinear,
+                    PixelGeometry = surface.SurfaceProperties.PixelGeometry.ToString(),
+                    Flags = surface.SurfaceProperties.Flags.ToString(),
+                    Backend = surface.Context?.Backend.ToString() ?? "CPU"
+                }
+            };
+            File.WriteAllText(
+                Path.Combine(OutputDirectory, "presenter-metadata.json"),
+                JsonSerializer.Serialize(
+                    metadata,
+                    new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(
+                $"WebScene text presenter diagnostic captured to {OutputDirectory}");
+            Interlocked.Exchange(ref s_captureState, 2);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine(
+                $"WebScene text presenter diagnostic failed: {error.Message}");
+            Interlocked.Exchange(ref s_captureState, 0);
+        }
+
+        static object MatrixValues(SKMatrix matrix)
+            => new
+            {
+                matrix.ScaleX,
+                matrix.SkewX,
+                matrix.TransX,
+                matrix.SkewY,
+                matrix.ScaleY,
+                matrix.TransY,
+                matrix.Persp0,
+                matrix.Persp1,
+                matrix.Persp2
+            };
     }
 }
 #endif

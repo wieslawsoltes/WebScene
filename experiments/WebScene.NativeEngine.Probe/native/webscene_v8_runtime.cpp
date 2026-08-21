@@ -524,7 +524,8 @@ struct v8_dom_runtime::implementation final {
             "gridRow", "gridRowEnd", "gridRowStart", "order", "orphans",
             "outlineColor", "outlineWidth", "outlineStyle",
             "overflow", "overflowX", "overflowY", "color",
-            "font", "fontSize", "fontFamily", "fontStretch", "fontWeight", "lineHeight",
+            "font", "fontSize", "fontFamily", "webkitFontSmoothing", "fontStretch",
+            "fontWeight", "lineHeight",
             "letterSpacing", "wordSpacing", "resize", "tableLayout", "textAlign",
             "textDecoration", "textOverflow", "verticalAlign", "whiteSpace", "widows", "zoom",
             "visibility", "direction", "pointerEvents", "cursor"

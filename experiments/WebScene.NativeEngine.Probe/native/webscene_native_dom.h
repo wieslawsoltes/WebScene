@@ -515,6 +515,10 @@ struct node_style final {
 
     struct textual_style_data final {
         std::string font_family;
+        // Non-standard but widely deployed on macOS. Keep the authored token
+        // so inherited text runs can select the browser-compatible glyph
+        // edging mode without making it part of the hot style record.
+        std::string font_smoothing;
         std::string text_align;
         std::string vertical_align;
         std::string text_transform;

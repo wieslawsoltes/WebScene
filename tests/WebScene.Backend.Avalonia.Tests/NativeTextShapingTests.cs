@@ -18,11 +18,65 @@ public sealed class NativeTextShapingTests
         bool expectedSubpixel,
         bool expectedBaselineSnap)
     {
-        var profile = NativeTextShaping.ResolveFontRasterizationProfile(deviceScaleFactor);
+        var profile = NativeTextShaping.ResolveFontRasterizationProfile(
+            deviceScaleFactor,
+            NativeTextShaping.NativeFontRasterizationMode.Current);
 
         Assert.Equal(expectedSubpixel, profile.Subpixel);
         Assert.Equal(expectedBaselineSnap, profile.BaselineSnap);
     }
+
+    [Fact]
+    public void ChromiumRasterizationProfilesMatchBlinkMacSettings()
+    {
+        var automatic = NativeTextShaping.ResolveFontRasterizationProfile(
+            2,
+            NativeTextShaping.NativeFontRasterizationMode.Chromium);
+        Assert.True(automatic.Subpixel);
+        Assert.False(automatic.BaselineSnap);
+        Assert.Equal(SKFontEdging.SubpixelAntialias, automatic.Edging);
+        Assert.Equal(SKFontHinting.Normal, automatic.Hinting);
+        Assert.True(automatic.LinearMetrics);
+        Assert.False(automatic.EmbeddedBitmaps);
+
+        var antialiased = NativeTextShaping.ResolveFontRasterizationProfile(
+            2,
+            NativeTextShaping.NativeFontRasterizationMode.ChromiumAntialiased);
+        Assert.Equal(SKFontEdging.Antialias, antialiased.Edging);
+        Assert.Equal(SKFontHinting.None, antialiased.Hinting);
+    }
+
+    [Theory]
+    [InlineData("chromium", "Chromium")]
+    [InlineData("chrome-grayscale", "ChromiumGrayscale")]
+    [InlineData("no-hint", "ChromiumAntialiased")]
+    [InlineData("unknown", "Current")]
+    public void RasterizationModeParsingIsStable(
+        string value,
+        string expected)
+        => Assert.Equal(
+            expected,
+            NativeTextShaping.ParseFontRasterizationMode(value).ToString());
+
+    [Theory]
+    [InlineData("antialiased", "ChromiumAntialiased")]
+    [InlineData("subpixel-antialiased", "Chromium")]
+    [InlineData("auto", null)]
+    [InlineData("inherit", null)]
+    public void CssFontSmoothingSelectsPerRunRasterization(
+        string value,
+        string? expected)
+        => Assert.Equal(
+            expected,
+            NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(value, isMacOS: true)
+                ?.ToString());
+
+    [Fact]
+    public void CssFontSmoothingDoesNotOverrideOtherPlatformProfiles()
+        => Assert.Null(
+            NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(
+                "antialiased",
+                isMacOS: false));
 
     [Fact]
     public void CanvasMiddleBaselineUsesPositionedRunOrigin()
@@ -305,6 +359,42 @@ public sealed class NativeTextShapingTests
         Assert.True(first.AdvanceWidth > 0);
         Assert.True(positioner.TryPosition(in request, out var second));
         Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void MacCoreTextPositionerPreservesDefaultPairKerning()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        const string family = "-apple-system, BlinkMacSystemFont, sans-serif";
+        var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 24 };
+        using var shaper = new SKShaper(typeface);
+        var positioner = new MacCoreTextRunPositioner();
+
+        NativePositionedTextRun Position(string text)
+        {
+            var shaped = shaper.Shape(text, 0, 0, paint);
+            var request = new NativeTextRunPositionRequest(
+                text,
+                family,
+                24,
+                400,
+                SKFontStyleSlant.Upright,
+                0,
+                shaped.Codepoints,
+                null);
+            Assert.True(positioner.TryPosition(in request, out var run));
+            return run;
+        }
+
+        var pair = Position("AV");
+        var isolatedWidth = Position("A").AdvanceWidth + Position("V").AdvanceWidth;
+
+        Assert.True(
+            pair.AdvanceWidth < isolatedWidth - .05f,
+            $"Expected the AV pair ({pair.AdvanceWidth}) to kern below isolated width "
+            + $"({isolatedWidth}).");
     }
 
     [Fact]

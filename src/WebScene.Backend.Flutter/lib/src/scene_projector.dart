@@ -411,7 +411,8 @@ final class WebSceneSceneProjector extends ChangeNotifier {
     WebSceneSceneCommand command,
   ) {
     final parts = _domString(scene, command.flags).split('\t');
-    if (parts.length != 6) return;
+    if (parts.length != 6 && parts.length != 7) return;
+    final text = parts.length == 7 ? parts[6] : parts[5];
     final fontSize = double.tryParse(parts[0]);
     if (fontSize == null || fontSize <= 0) return;
     final parsedLineHeight = double.tryParse(parts[1]) ?? 0;
@@ -420,7 +421,7 @@ final class WebSceneSceneProjector extends ChangeNotifier {
     final family = _firstFontFamily(parts[4]);
     final painter = TextPainter(
       text: TextSpan(
-        text: parts[5],
+        text: text,
         style: TextStyle(
           color: _rgba(command.rgba),
           fontFamily: family,

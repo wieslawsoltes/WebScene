@@ -56,7 +56,9 @@
         const auto custom = name.starts_with("--");
         if (custom && !valid_custom_property_name(name)) return;
         if (!custom && name.starts_with("-")
-            && name != "-moz-transform" && name != "-webkit-transform") return;
+            && name != "-moz-transform"
+            && name != "-webkit-transform"
+            && name != "-webkit-font-smoothing") return;
         if (custom && value.empty() && preserve_empty_custom_properties) value = " ";
         if (!name.empty() && !value.empty()) {
             result.push_back({std::move(name), std::move(value), important});
@@ -135,7 +137,9 @@
                 continue;
             }
             if (!custom && name.starts_with("-")
-                && name != "-moz-transform" && name != "-webkit-transform") {
+                && name != "-moz-transform"
+                && name != "-webkit-transform"
+                && name != "-webkit-font-smoothing") {
                 cursor = end + 1U;
                 continue;
             }

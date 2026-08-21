@@ -1042,13 +1042,15 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         in NativeSceneCommand command,
         Dictionary<string, SKShaper> shapers)
     {
-        var parts = StringAt(view, command.Flags).Split('\t', 6);
-        if (parts.Length != 6
+        var parts = StringAt(view, command.Flags).Split('\t', 7);
+        if (parts.Length is not (6 or 7)
             || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var size)
             || size <= 0)
         {
             return;
         }
+        var text = parts.Length == 7 ? parts[6] : parts[5];
+        var fontSmoothing = parts.Length == 7 ? parts[5] : "auto";
         var lineHeight = float.TryParse(
             parts[1],
             NumberStyles.Float,
@@ -1074,16 +1076,16 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             shaper = new SKShaper(typeface);
             shapers.Add(shaperKey, shaper);
         }
-        var featureFlags = NativeTextShaping.ResolveFeatureFlags(parts[5], parts[4], 0);
+        var featureFlags = NativeTextShaping.ResolveFeatureFlags(text, parts[4], 0);
         var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(parts[4]);
         var shapedWidth = NativeTextShaping.MeasureShapedWidth(
             shaper,
-            parts[5],
+            text,
             paint,
             featureFlags,
             tabularDigitScale);
         var widthScale = NativeTextShaping.ResolveShapedWidthScale(
-            parts[5],
+            text,
             parts[4],
             size,
             fontWeight,
@@ -1110,7 +1112,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         NativeTextShaping.DrawShapedText(
             canvas,
             shaper,
-            parts[5],
+            text,
             x,
             baseline,
             paint,
@@ -1118,7 +1120,10 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             tabularDigitScale,
             widthScale,
             shapedWidth,
-            _deviceScaleFactor);
+            _deviceScaleFactor,
+            rasterizationMode:
+                NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(
+                    fontSmoothing));
     }
 
     private static void DrawSvgPath(

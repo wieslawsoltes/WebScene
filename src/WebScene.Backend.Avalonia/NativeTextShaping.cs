@@ -50,6 +50,8 @@ public struct NativeTextMetrics
 
 public static class NativeTextShaping
 {
+    internal const string RasterizationModeEnvironmentVariable =
+        "WEBSCENE_TEXT_RASTERIZATION";
     internal const uint TabularNumerals = 1u << 0;
     internal readonly record struct CanvasFontDescription(
         float Size,
@@ -67,6 +69,36 @@ public static class NativeTextShaping
         new(StringComparer.OrdinalIgnoreCase);
     private static readonly INativeTextRunPositioner TextRunPositioner =
         DefaultNativeTextRunPositioner.Instance;
+    private static readonly string? ConfiguredRasterizationValue =
+        Environment.GetEnvironmentVariable(RasterizationModeEnvironmentVariable);
+    private static readonly NativeFontRasterizationMode ConfiguredRasterizationMode =
+        ResolveConfiguredFontRasterizationMode(ConfiguredRasterizationValue);
+
+    internal static NativeFontRasterizationMode ActiveFontRasterizationMode =>
+        ConfiguredRasterizationMode;
+
+    internal static NativeFontRasterizationMode? ResolveCssFontSmoothingRasterizationMode(
+        string? value)
+        => ResolveCssFontSmoothingRasterizationMode(value, OperatingSystem.IsMacOS());
+
+    internal static NativeFontRasterizationMode? ResolveCssFontSmoothingRasterizationMode(
+        string? value,
+        bool isMacOS)
+    {
+        // Blink applies this non-standard property through its macOS
+        // FontPlatformData path. Keep Windows and Linux on their native
+        // rasterization profiles.
+        if (!isMacOS) return null;
+        // An explicit process profile is a diagnostic/host override. Otherwise
+        // honor the inherited WebKit property per text run, as Chromium does.
+        if (!string.IsNullOrWhiteSpace(ConfiguredRasterizationValue)) return null;
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "antialiased" => NativeFontRasterizationMode.ChromiumAntialiased,
+            "subpixel-antialiased" => NativeFontRasterizationMode.Chromium,
+            _ => null
+        };
+    }
 
     internal sealed class WebTypefaceRegistry : IDisposable
     {
@@ -647,7 +679,8 @@ public static class NativeTextShaping
         float horizontalAdvanceScale = 1f,
         float measuredWidth = float.NaN,
         float deviceScaleFactor = 1f,
-        NativePositionedTextRun? positionedRun = null)
+        NativePositionedTextRun? positionedRun = null,
+        NativeFontRasterizationMode? rasterizationMode = null)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -677,7 +710,8 @@ public static class NativeTextShaping
                 baseline,
                 paint,
                 horizontalAdvanceScale,
-                deviceScaleFactor);
+                deviceScaleFactor,
+                rasterizationMode);
             return;
         }
         if ((featureFlags & TabularNumerals) == 0)
@@ -690,7 +724,8 @@ public static class NativeTextShaping
                 baseline,
                 paint,
                 horizontalAdvanceScale,
-                deviceScaleFactor);
+                deviceScaleFactor,
+                rasterizationMode);
             return;
         }
 
@@ -708,7 +743,8 @@ public static class NativeTextShaping
                     baseline,
                     paint,
                     horizontalAdvanceScale,
-                    deviceScaleFactor);
+                    deviceScaleFactor,
+                    rasterizationMode);
                 cursor += tabularDigitWidth * horizontalAdvanceScale;
                 index++;
                 continue;
@@ -724,7 +760,8 @@ public static class NativeTextShaping
                 baseline,
                 paint,
                 horizontalAdvanceScale,
-                deviceScaleFactor);
+                deviceScaleFactor,
+                rasterizationMode);
             cursor += shaper.Shape(segment, paint).Width * horizontalAdvanceScale;
         }
     }
@@ -737,13 +774,12 @@ public static class NativeTextShaping
         float baseline,
         SKPaint paint,
         float horizontalAdvanceScale,
-        float deviceScaleFactor)
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? rasterizationMode)
     {
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
-        var rasterization = ResolveFontRasterizationProfile(deviceScaleFactor);
-        font.Subpixel = rasterization.Subpixel;
-        font.BaselineSnap = rasterization.BaselineSnap;
+        ApplyFontRasterizationProfile(font, deviceScaleFactor, rasterizationMode);
         using var builder = new SKTextBlobBuilder();
         var run = builder.AllocatePositionedRun(font, positionedRun.Glyphs.Length);
         positionedRun.Glyphs.AsSpan().CopyTo(run.GetGlyphSpan());
@@ -766,7 +802,8 @@ public static class NativeTextShaping
         float baseline,
         SKPaint paint,
         float horizontalAdvanceScale,
-        float deviceScaleFactor)
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? rasterizationMode)
     {
         var result = shaper.Shape(text, 0, baseline, paint);
         if (result.Codepoints.Length == 0 || result.Points.Length == 0)
@@ -776,9 +813,7 @@ public static class NativeTextShaping
 
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
-        var rasterization = ResolveFontRasterizationProfile(deviceScaleFactor);
-        font.Subpixel = rasterization.Subpixel;
-        font.BaselineSnap = rasterization.BaselineSnap;
+        ApplyFontRasterizationProfile(font, deviceScaleFactor, rasterizationMode);
         using var builder = new SKTextBlobBuilder();
         var glyphCount = Math.Min(result.Codepoints.Length, result.Points.Length);
         var run = builder.AllocatePositionedRun(font, glyphCount);
@@ -803,13 +838,98 @@ public static class NativeTextShaping
 
     internal readonly record struct FontRasterizationProfile(
         bool Subpixel,
-        bool BaselineSnap);
+        bool BaselineSnap,
+        SKFontEdging Edging,
+        SKFontHinting Hinting,
+        bool LinearMetrics,
+        bool EmbeddedBitmaps);
+
+    internal enum NativeFontRasterizationMode
+    {
+        Current,
+        Chromium,
+        ChromiumGrayscale,
+        ChromiumAntialiased
+    }
 
     internal static FontRasterizationProfile ResolveFontRasterizationProfile(
-        float deviceScaleFactor)
-        => float.IsFinite(deviceScaleFactor) && deviceScaleFactor >= 1.5f
-            ? new(Subpixel: true, BaselineSnap: false)
-            : new(Subpixel: false, BaselineSnap: true);
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? requestedMode = null)
+    {
+        var mode = requestedMode ?? ConfiguredRasterizationMode;
+        return mode switch
+        {
+            NativeFontRasterizationMode.Chromium => new(
+                Subpixel: true,
+                BaselineSnap: false,
+                Edging: SKFontEdging.SubpixelAntialias,
+                Hinting: SKFontHinting.Normal,
+                LinearMetrics: true,
+                EmbeddedBitmaps: false),
+            NativeFontRasterizationMode.ChromiumGrayscale => new(
+                Subpixel: true,
+                BaselineSnap: false,
+                Edging: SKFontEdging.Antialias,
+                Hinting: SKFontHinting.Normal,
+                LinearMetrics: true,
+                EmbeddedBitmaps: false),
+            NativeFontRasterizationMode.ChromiumAntialiased => new(
+                Subpixel: true,
+                BaselineSnap: false,
+                Edging: SKFontEdging.Antialias,
+                Hinting: SKFontHinting.None,
+                LinearMetrics: true,
+                EmbeddedBitmaps: false),
+            _ when float.IsFinite(deviceScaleFactor) && deviceScaleFactor >= 1.5f => new(
+                Subpixel: true,
+                BaselineSnap: false,
+                Edging: SKFontEdging.Antialias,
+                Hinting: SKFontHinting.Normal,
+                LinearMetrics: false,
+                EmbeddedBitmaps: false),
+            _ => new(
+                Subpixel: false,
+                BaselineSnap: true,
+                Edging: SKFontEdging.Antialias,
+                Hinting: SKFontHinting.Normal,
+                LinearMetrics: false,
+                EmbeddedBitmaps: false)
+        };
+    }
+
+    internal static void ApplyFontRasterizationProfile(
+        SKFont font,
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? requestedMode = null)
+    {
+        var profile = ResolveFontRasterizationProfile(
+            deviceScaleFactor,
+            requestedMode);
+        font.Subpixel = profile.Subpixel;
+        font.BaselineSnap = profile.BaselineSnap;
+        font.Edging = profile.Edging;
+        font.Hinting = profile.Hinting;
+        font.LinearMetrics = profile.LinearMetrics;
+        font.EmbeddedBitmaps = profile.EmbeddedBitmaps;
+    }
+
+    internal static NativeFontRasterizationMode ParseFontRasterizationMode(
+        string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "chromium" or "chrome" => NativeFontRasterizationMode.Chromium,
+            "chromium-grayscale" or "chrome-grayscale" =>
+                NativeFontRasterizationMode.ChromiumGrayscale,
+            "chromium-antialiased" or "chrome-antialiased" or "no-hint" =>
+                NativeFontRasterizationMode.ChromiumAntialiased,
+            _ => NativeFontRasterizationMode.Current
+        };
+
+    private static NativeFontRasterizationMode ResolveConfiguredFontRasterizationMode(
+        string? value)
+        => OperatingSystem.IsMacOS() && string.IsNullOrWhiteSpace(value)
+            ? NativeFontRasterizationMode.Chromium
+            : ParseFontRasterizationMode(value);
 
     internal static uint ResolveFeatureFlags(
         string text,

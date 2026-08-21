@@ -13,7 +13,8 @@ rendering paths:
 - Skia glyph masks placed at direct CoreText run positions (the decisive control);
 - Skia glyph masks placed at Chromium prefix positions (the oracle control);
 - direct CoreText/CoreGraphics drawing;
-- Chromium canvas and DOM text at the same CSS sizes and device scale.
+- Chromium canvas and DOM text at the same CSS sizes and device scale, including a
+  separate inherited `-webkit-font-smoothing: antialiased` DOM oracle.
 
 It is product-neutral and intentionally contains no TradingView assets or selectors.
 The corpus includes isolated glyphs, normal and bold body text, punctuation, numeric
@@ -73,3 +74,13 @@ for rasterization. The next implementation experiment should therefore promote t
 managed macOS system-font positioner behind a narrow eligibility gate and cache, while
 keeping the existing HarfBuzz path for web fonts, complex or unsupported runs. It must
 continue to pass both 1x and Retina pixel-oracle profiles before becoming the default.
+
+The application that exposed the residual weight difference inherits
+`-webkit-font-smoothing: antialiased` from `body`. WebScene previously discarded that
+vendor-prefixed declaration and therefore painted those runs with its default smoothed
+profile. Carrying the inherited token through the native scene and selecting Blink's
+macOS grayscale/unhinted Skia flags reduces the Retina multi-glyph MAE against the
+matching Chrome DOM oracle from 0.01408 to 0.00625. The remaining non-zero error shows
+that identical public flags in SkiaSharp 2.88.9 do not completely reproduce current
+Chromium's macOS A8 glyph masks; it is now isolated from font selection, shaping,
+positioning, and CSS cascade.

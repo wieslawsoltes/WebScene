@@ -22,6 +22,7 @@ void declaration_syntax()
     const auto parsed = parse_css_syntax_declarations(
         "COLOR: red; content: \"a;b:c\"; background: url(data:x;y); "
         "--Case: calc(1px + var(--x, 2px)); width: 10px ! IMPORTANT; "
+        "-webkit-font-smoothing: antialiased; "
         "--vertical-tab:\vpreserved\v; broken");
     require(static_cast<bool>(parsed), parsed.error);
     if (parsed.declarations.size() != 6U) {
@@ -31,7 +32,7 @@ void declaration_syntax()
                 << (declaration.important ? " !important" : "") << '\n';
         }
     }
-    require(parsed.declarations.size() == 6U, "expected six recovered declarations");
+    require(parsed.declarations.size() == 7U, "expected seven recovered declarations");
     require(parsed.declarations[0].name == "color", "ordinary property names are ASCII-lowercase");
     require(parsed.declarations[1].value == "\"a;b:c\"", "semicolon and colon inside strings survive");
     require(parsed.declarations[2].value == "url(data:x;y)", "semicolon inside url() survives");
@@ -43,7 +44,11 @@ void declaration_syntax()
     require(parsed.declarations[4].important, "case-insensitive !important is recognized");
     require(parsed.declarations[4].value == "10px", "!important is removed from the value");
     require(
-        parsed.declarations[5].value == "\vpreserved\v",
+        parsed.declarations[5].name == "-webkit-font-smoothing"
+            && parsed.declarations[5].value == "antialiased",
+        "supported vendor-prefixed font smoothing is retained");
+    require(
+        parsed.declarations[6].value == "\vpreserved\v",
         "vertical tab is token data rather than CSS whitespace");
     require(parsed.metrics.parse_error_count == 1U, "malformed tail is recovered and counted");
 }

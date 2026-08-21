@@ -242,6 +242,13 @@
                 textual->font_family.clear();
             }
             node.style.inline_property_mask &= ~inline_font_family;
+        } else if (name == "-webkit-font-smoothing"
+            || name == "webkit-font-smoothing"
+            || name == "webkitFontSmoothing") {
+            if (auto* textual = node.style.mutable_textual_if_present()) {
+                textual->font_smoothing.clear();
+            }
+            node.style.inline_property_mask &= ~inline_font_smoothing;
         } else if (name == "fontWeight" || name == "font-weight") {
             node.style.font_weight = 0;
             node.style.inline_property_mask &= ~inline_font_weight;
@@ -743,6 +750,12 @@
                 value == "inherit" || value == "unset"
                 ? std::string{} : value;
             node->style.inline_property_mask |= inline_font_family;
+        } else if (name == "-webkit-font-smoothing"
+            || name == "webkit-font-smoothing") {
+            node->style.mutable_textual().font_smoothing =
+                value == "inherit" || value == "unset"
+                ? std::string{} : value;
+            node->style.inline_property_mask |= inline_font_smoothing;
         } else if (name == "font-weight") {
             node->style.font_weight = value == "inherit" || value == "unset" ? 0
                 : value == "bold" ? 700
@@ -1143,6 +1156,9 @@
                     ? node->style.font_size : inherited_font_size(*node)) + "px";
             } else if (name == "font-family") {
                 value = resolved_font_family(*node);
+            } else if (name == "-webkit-font-smoothing"
+                || name == "webkit-font-smoothing") {
+                value = resolved_font_smoothing(*node);
             } else if (name == "font-weight") {
                 value = std::to_string(resolved_font_weight(*node));
             } else if (name == "letter-spacing") {
@@ -1152,16 +1168,20 @@
             } else if (name == "line-height") {
                 auto line_height = node->style.line_height;
                 for (auto* ancestor = node->parent;
-                    line_height < 0 && ancestor != nullptr;
+                    line_height == -1.0F && ancestor != nullptr;
                     ancestor = ancestor->parent) {
                     line_height = ancestor->style.line_height;
                 }
-                if (line_height < 0) {
+                if (line_height == -2.0F) {
+                    value = "normal";
+                } else if (line_height < 0) {
                     const auto font_size = node->style.font_size >= 0
                         ? node->style.font_size : inherited_font_size(*node);
-                    line_height = font_size * 1.2F;
+                    line_height = font_size * 1.125F;
+                    value = serialize_css_number(line_height) + "px";
+                } else {
+                    value = serialize_css_number(line_height) + "px";
                 }
-                value = serialize_css_number(line_height) + "px";
             }
         }
         if (computed && value.empty()
@@ -1674,6 +1694,8 @@
                 ? node->style.font_size : inherited_font_size(*node)) + "px";
         } else if (name == "fontFamily") {
             value = resolved_font_family(*node);
+        } else if (name == "webkitFontSmoothing") {
+            value = resolved_font_smoothing(*node);
         } else if (name == "fontWeight") {
             value = std::to_string(resolved_font_weight(*node));
         } else if (name == "letterSpacing") {
@@ -1692,16 +1714,20 @@
             }
             auto line_height = node->style.line_height;
             for (auto* ancestor = node->parent;
-                line_height < 0 && ancestor != nullptr;
+                line_height == -1.0F && ancestor != nullptr;
                 ancestor = ancestor->parent) {
                 line_height = ancestor->style.line_height;
             }
-            if (line_height < 0) {
+            if (line_height == -2.0F) {
+                value = "normal";
+            } else if (line_height < 0) {
                 const auto font_size = node->style.font_size >= 0
                     ? node->style.font_size : inherited_font_size(*node);
-                line_height = font_size * 1.2F;
+                line_height = font_size * 1.125F;
+                value = serialize_css_number(line_height) + "px";
+            } else {
+                value = serialize_css_number(line_height) + "px";
             }
-            value = serialize_css_number(line_height) + "px";
         } else if (name == "textAlign") {
             value = node->style.textual().text_align;
         } else if (name == "whiteSpace") {
@@ -2047,6 +2073,11 @@
                 value == "inherit" || value == "unset"
                 ? std::string{} : value;
             node->style.inline_property_mask |= inline_font_family;
+        } else if (name == "webkitFontSmoothing") {
+            node->style.mutable_textual().font_smoothing =
+                value == "inherit" || value == "unset"
+                ? std::string{} : value;
+            node->style.inline_property_mask |= inline_font_smoothing;
         } else if (name == "fontWeight") {
             node->style.font_weight = value == "inherit" || value == "unset" ? 0
                 : value == "bold" ? 700

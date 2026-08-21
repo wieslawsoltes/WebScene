@@ -319,6 +319,7 @@ enum inline_style_property : uint64_t {
     inline_transition_delay = 1ULL << 51U,
     inline_transition_timing = 1ULL << 52U,
     inline_table_border_model = 1ULL << 53U,
+    inline_font_smoothing = 1ULL << 54U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };
@@ -661,6 +662,15 @@ std::string resolved_font_family(const dom_node& node)
     return "sans-serif";
 }
 
+std::string resolved_font_smoothing(const dom_node& node)
+{
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        const auto& value = current->style.textual().font_smoothing;
+        if (!value.empty() && value != "inherit" && value != "unset") return value;
+    }
+    return "auto";
+}
+
 int32_t resolved_font_weight(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
@@ -711,8 +721,10 @@ float resolved_declared_line_height(
     const std::string& value,
     float font_size)
 {
-    if (value == "normal" || value == "inherit" || value == "unset") return -1.0F;
-    if (value == "initial" || value == "revert") return -1.0F;
+    // -1 means inherit/unspecified; -2 is the specified initial `normal`
+    // value and must stop inheritance at this element.
+    if (value == "inherit" || value == "unset") return -1.0F;
+    if (value == "normal" || value == "initial" || value == "revert") return -2.0F;
     const auto parsed = native_document::parse_length(value);
     if (parsed.unit == length_unit::em) {
         return std::max(0.0F, parsed.value * font_size);
@@ -739,7 +751,7 @@ float resolved_declared_line_height(
 
 struct parsed_font_shorthand final {
     float font_size{14.0F};
-    float line_height{-1.0F};
+    float line_height{-2.0F};
     int32_t font_weight{400};
     std::string font_family;
     bool complete{true};

@@ -31,6 +31,21 @@ WEBSCENE_TEXT_POSITIONING=coretext dotnet run \
 `auto`, or `coretext` enables the platform service. Unsupported fonts, scripts,
 styles, features, or glyph identities always fall back to HarfBuzz/Skia per run.
 
+The macOS default also applies Chromium-compatible Skia font flags. Use
+`WEBSCENE_TEXT_RASTERIZATION=current` to retain the former rasterization profile or
+`WEBSCENE_TEXT_RASTERIZATION=chromium` to select the new profile explicitly. The
+positioning and rasterization controls are independent, which keeps both stages easy
+to compare and roll back.
+
+To capture the real Avalonia presenter surface and its scale, matrix, GPU, pixel
+geometry, and color-space metadata after startup, set an output directory:
+
+```bash
+WEBSCENE_TEXT_PRESENTER_DIAGNOSTICS=/tmp/webscene-presenter \
+  dotnet run --project samples/NativeTradingViewTerminal -- \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib
+```
+
 Generate repeatable headless evidence (JSON plus a PNG):
 
 ```bash

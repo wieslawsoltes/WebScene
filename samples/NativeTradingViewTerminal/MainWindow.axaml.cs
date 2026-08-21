@@ -25,6 +25,12 @@ public sealed partial class MainWindow : Window
             : OperatingSystem.IsMacOS()
                 ? " · CoreText positioning"
                 : " · Platform text fallback";
+        var rasterizationMode = Environment.GetEnvironmentVariable(
+            "WEBSCENE_TEXT_RASTERIZATION")?.Trim();
+        if (!string.IsNullOrWhiteSpace(rasterizationMode))
+        {
+            Title += $" · {rasterizationMode} raster";
+        }
         _diagnosticsTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)

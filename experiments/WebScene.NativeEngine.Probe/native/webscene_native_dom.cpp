@@ -796,9 +796,13 @@ float resolved_font_size(const dom_node& node)
 float resolved_line_height(const dom_node& node, float font_size)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (current->style.line_height == -2.0F) return font_size * 1.125F;
         if (current->style.line_height >= 0) return current->style.line_height;
     }
-    return font_size * 1.2F;
+    // CSS `normal` follows the platform font's natural line box. The system
+    // UI faces used by browser chrome resolve to an 18px line box at 16px;
+    // 1.2 produced a 19.2px box and visibly displaced centered toolbar text.
+    return font_size * 1.125F;
 }
 
 std::string resolved_font_family(const dom_node& node)
@@ -809,6 +813,15 @@ std::string resolved_font_family(const dom_node& node)
         }
     }
     return "sans-serif";
+}
+
+std::string resolved_font_smoothing(const dom_node& node)
+{
+    for (auto* current = &node; current != nullptr; current = current->parent) {
+        const auto& value = current->style.textual().font_smoothing;
+        if (!value.empty() && value != "inherit" && value != "unset") return value;
+    }
+    return "auto";
 }
 
 int32_t resolved_font_weight(const dom_node& node)
