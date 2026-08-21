@@ -5,6 +5,9 @@ struct resource_server final {
     std::atomic<int> active_documents{0};
     std::atomic<int> peak_documents{0};
     std::atomic<int> requests{0};
+    std::chrono::steady_clock::time_point observation_start{};
+    std::atomic<int64_t> first_subresource_start_ms{
+        std::numeric_limits<int64_t>::max()};
 };
 
 size_t load_test_resource(
@@ -30,6 +33,19 @@ size_t load_test_resource(
     const auto first_transfer = destination == nullptr
         || destination_capacity != required;
     if (first_transfer && !address.ends_with("index.html")) {
+        if (kind != WEBSCENE_RESOURCE_DOCUMENT
+            && server.observation_start != std::chrono::steady_clock::time_point{}) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - server.observation_start).count();
+            auto earliest = server.first_subresource_start_ms.load(
+                std::memory_order_relaxed);
+            while (elapsed < earliest
+                && !server.first_subresource_start_ms.compare_exchange_weak(
+                    earliest,
+                    elapsed,
+                    std::memory_order_relaxed)) {
+            }
+        }
         server.requests.fetch_add(1, std::memory_order_relaxed);
         const auto active = server.active.fetch_add(1, std::memory_order_relaxed) + 1;
         auto peak = server.peak.load(std::memory_order_relaxed);
@@ -1719,6 +1735,113 @@ void test_dynamic_frame_resources_use_each_document_base_url()
         "cross-origin frame messages did not expose the sender origin: "
             + message_origins);
     webscene_engine_destroy(engine);
+}
+
+int64_t measure_iframe_subresource_discovery(bool disable_preparation)
+{
+#if defined(_WIN32)
+    _putenv_s(
+        "WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION",
+        disable_preparation ? "1" : "");
+#else
+    if (disable_preparation) {
+        setenv("WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION", "1", 1);
+    } else {
+        unsetenv("WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION");
+    }
+#endif
+    const auto host = disable_preparation
+        ? std::string("https://frame-preparation-control.test")
+        : std::string("https://frame-preparation-enabled.test");
+    resource_server server{
+        .content = {
+            {host + "/index.html", R"HTML(
+                <html><body>
+                  <script>
+                    const frame = document.createElement('iframe');
+                    frame.src = 'frame.html';
+                    document.body.appendChild(frame);
+                    const stop = performance.now() + 180;
+                    while (performance.now() < stop) {}
+                  </script>
+                </body></html>)HTML"},
+            {host + "/frame.html", R"HTML(
+                <html><head><link rel="stylesheet" href="frame.css"></head>
+                <body><script src="frame.js"></script></body></html>)HTML"},
+            {host + "/frame.css", "body { color: rgb(1, 2, 3); }"},
+            {host + "/frame.js", "parent.__framePreparationLoaded = true;"}
+        }};
+    const webscene_engine_options options{
+        sizeof(webscene_engine_options),
+        64U,
+        nullptr,
+        0U,
+        load_test_resource,
+        &server};
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "iframe-preparation engine creation failed");
+    constexpr std::string_view start_source{"globalThis.__documentStartRan = true;"};
+    constexpr std::string_view start_name{"iframe-preparation-start.js"};
+    const webscene_document_script script{
+        sizeof(webscene_document_script),
+        WEBSCENE_DOCUMENT_SCRIPT_ALL_FRAMES,
+        start_source.data(), start_source.size(),
+        start_name.data(), start_name.size()};
+    const webscene_navigation_options navigation{
+        sizeof(webscene_navigation_options),
+        1U,
+        &script};
+    const auto url = host + "/index.html";
+    server.observation_start = std::chrono::steady_clock::now();
+    require(
+        webscene_engine_load_url_with_options(
+            engine,
+            url.data(),
+            url.size(),
+            &navigation) != 0U,
+        "iframe-preparation navigation failed");
+    const auto frame_result = evaluate(
+        engine,
+        "(() => { const frame = document.querySelector('iframe'); return {"
+        "count: document.querySelectorAll('iframe').length,"
+        "window: frame ? typeof frame.contentWindow : 'missing',"
+        "loaded: globalThis.__framePreparationLoaded,"
+        "error: frame && frame.getAttribute('data-webscene-frame-error')"
+        "}; })()",
+        "iframe-preparation-result.js");
+    require(
+        frame_result == R"({"count":1,"window":"object","loaded":true,"error":null})",
+        "prepared iframe resources did not preserve script execution: "
+            + frame_result + " diagnostics=" + diagnostics(engine));
+    const auto result = server.first_subresource_start_ms.load(
+        std::memory_order_relaxed);
+    webscene_engine_destroy(engine);
+    return result;
+}
+
+void test_iframe_preparation_discovers_subresources_during_outer_script()
+{
+    const auto prepared_start = measure_iframe_subresource_discovery(false);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto control_start = measure_iframe_subresource_discovery(true);
+#if defined(_WIN32)
+    _putenv_s("WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION", "");
+#else
+    unsetenv("WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION");
+#endif
+    require(
+        prepared_start != std::numeric_limits<int64_t>::max()
+            && control_start != std::numeric_limits<int64_t>::max(),
+        "iframe subresource discovery was not observed");
+    require(
+        prepared_start + 70 < control_start,
+        "iframe preparation did not overlap discovery with outer script work");
+#else
+    require(
+        prepared_start != std::numeric_limits<int64_t>::max()
+            && prepared_start < 140,
+        "iframe preparation did not discover subresources during outer script work");
+#endif
 }
 
 void test_deferred_frame_script_observes_window_dom_content_loaded()

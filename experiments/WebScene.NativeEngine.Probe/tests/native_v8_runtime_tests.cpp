@@ -150,8 +150,16 @@ int main()
             test_dynamic_frame_resources_use_each_document_base_url();
             return 0;
         }
+        if (selected == "iframe-preparation") {
+            test_iframe_preparation_discovers_subresources_during_outer_script();
+            return 0;
+        }
         if (selected == "frame-lifecycle") {
             test_deferred_frame_script_observes_window_dom_content_loaded();
+            return 0;
+        }
+        if (selected == "iframe-cooperative") {
+            test_cooperative_iframe_hydration_yields_and_isolates_cascade();
             return 0;
         }
         if (selected == "scrollspy-primitives") {
@@ -249,7 +257,9 @@ int main()
     test_resource_cache_policy_matrix();
     test_due_timer_precedes_dynamic_resource_wave();
     test_dynamic_frame_resources_use_each_document_base_url();
+    test_iframe_preparation_discovers_subresources_during_outer_script();
     test_deferred_frame_script_observes_window_dom_content_loaded();
+    test_cooperative_iframe_hydration_yields_and_isolates_cascade();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
