@@ -794,6 +794,7 @@
             compact_index(css_rules_by_id);
             compact_index(css_rules_by_tag);
             compact_index(css_rules_by_attribute);
+            compact_index(css_rules_by_variable_reference);
             css_focus_rules.shrink_to_fit();
             unindexed_css_rules.shrink_to_fit();
             hover_selector_dependencies.shrink_to_fit();

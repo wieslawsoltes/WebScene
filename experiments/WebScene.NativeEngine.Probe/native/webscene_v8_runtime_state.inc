@@ -160,6 +160,8 @@
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_id;
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_tag;
     std::unordered_map<std::string, std::vector<size_t>> css_rules_by_attribute;
+    std::unordered_map<std::string, std::vector<size_t>>
+        css_rules_by_variable_reference;
     std::vector<size_t> css_focus_rules;
     std::vector<size_t> unindexed_css_rules;
     std::unordered_set<std::string> css_attribute_dependencies;
@@ -330,6 +332,7 @@
     binding_callback_stats startup_layout{};
     binding_callback_stats startup_frame_hydrate{};
     uint64_t startup_stylesheet_recascade_nodes{0};
+    uint64_t startup_stylesheet_variable_nodes{0};
     uint64_t startup_connected_resources{0};
     uint64_t startup_raf_scheduled{0};
     uint64_t startup_raf_executed{0};

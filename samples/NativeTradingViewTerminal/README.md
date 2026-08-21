@@ -58,6 +58,23 @@ dotnet run --project samples/NativeTradingViewTerminal -c Release -- \
   --output artifacts/native-tradingview-terminal
 ```
 
+Profile desktop startup until the chart iframe has rendered at least eight canvases
+and hidden its loading indicator:
+
+```bash
+WEBSCENE_PROBE_PROFILE_STARTUP=1 dotnet run \
+  --project samples/NativeTradingViewTerminal -c Release -- \
+  --startup-profile \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --cache /tmp/webscene-tradingview-profile-cache
+```
+
+Certification builds can reproduce the former broad custom-property recascade as an
+A/B control by additionally setting
+`WEBSCENE_PROBE_DISABLE_CSS_VARIABLE_DEPENDENCY_FILTER=1`. Run the optimized and
+control processes against the same warm cache; compare `stylesheet-recascade`,
+`stylesheet-nodes`, and `stylesheet-variable-nodes` in the compact profile output.
+
 Run the Sandwich Trading Platform multi-chart geometry proof with a
 deterministic in-process market-data bridge:
 

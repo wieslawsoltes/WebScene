@@ -1714,6 +1714,7 @@
         css_rules_by_id.clear();
         css_rules_by_tag.clear();
         css_rules_by_attribute.clear();
+        css_rules_by_variable_reference.clear();
         css_focus_rules.clear();
         unindexed_css_rules.clear();
         css_attribute_dependencies.clear();

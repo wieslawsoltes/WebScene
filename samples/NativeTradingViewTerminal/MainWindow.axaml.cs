@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -46,6 +47,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var paths = SamplePaths.Resolve(_arguments);
+            var startupTimer = Stopwatch.StartNew();
             StatusText.Text = "Loading hosted TradingView terminal…";
             DiagnosticsText.Text = paths.DocumentUrl;
             await TerminalHost.LoadAsync(
@@ -53,6 +55,76 @@ public sealed partial class MainWindow : Window
                 paths.NativeLibraryPath,
                 paths.CompilationCacheDirectory);
             StatusText.Text = "TradingView terminal loaded";
+            if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
+            {
+                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+                var chartReady = false;
+                while (DateTime.UtcNow < deadline)
+                {
+                    var ready = await TerminalHost.EvaluateTextAsync("""
+                        (() => {
+                          for (const frame of document.querySelectorAll('iframe')) {
+                            try {
+                              const chart = frame.contentDocument;
+                              const loading = chart?.querySelector('.loading-indicator');
+                              if ((chart?.querySelectorAll('canvas').length ?? 0) >= 8
+                                  && loading && getComputedStyle(loading).display === 'none') {
+                                return true;
+                              }
+                            } catch {}
+                          }
+                          return false;
+                        })()
+                        """);
+                    if (ready == "true")
+                    {
+                        chartReady = true;
+                        break;
+                    }
+                    await Task.Delay(25);
+                }
+                if (!chartReady)
+                {
+                    throw new TimeoutException(
+                        "TradingView chart did not reach the startup-profile readiness gate.");
+                }
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop chart ready wall: {startupTimer.Elapsed.TotalMilliseconds:F3} ms"));
+                await TerminalHost.EvaluateTextAsync("""
+                    globalThis.__webSceneComponentReady = true;
+                    document.body.setAttribute('data-webscene-profile-ready', 'true');
+                    true
+                    """);
+                await Task.Delay(500);
+                var startupMetrics = TerminalHost.CapturePerformanceSnapshot();
+                Console.WriteLine(
+                    "TradingView desktop startup metrics: "
+                    + JsonSerializer.Serialize(new
+                    {
+                        startupMetrics.Engine.CompilationRequests,
+                        startupMetrics.Engine.CompilationMemoryHits,
+                        startupMetrics.Engine.CompilationPersistentHits,
+                        startupMetrics.Engine.CompilationPersistentMisses,
+                        CompilationTimeMilliseconds =
+                            startupMetrics.Engine.CompilationTimeNanoseconds / 1_000_000d,
+                        startupMetrics.ResourceCache.Requests,
+                        startupMetrics.ResourceCache.Hits,
+                        startupMetrics.ResourceCache.Misses,
+                        startupMetrics.ResourceCache.BytesRead
+                    }));
+                var diagnostics = TerminalHost.SceneDiagnostics;
+                var profileStart = diagnostics.IndexOf(
+                    "startup-profile=", StringComparison.Ordinal);
+                var profileEnd = profileStart < 0
+                    ? -1
+                    : diagnostics.IndexOf(" | ", profileStart, StringComparison.Ordinal);
+                Console.WriteLine(profileStart < 0
+                    ? "TradingView desktop startup profile unavailable"
+                    : "TradingView desktop " + diagnostics[profileStart..(
+                        profileEnd < 0 ? diagnostics.Length : profileEnd)]);
+                Close();
+                return;
+            }
             _diagnosticsTimer.Start();
             await RefreshDiagnosticsAsync();
         }

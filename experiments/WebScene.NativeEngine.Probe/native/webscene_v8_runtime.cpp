@@ -3822,6 +3822,8 @@ std::string v8_dom_runtime::diagnostics()
             << ",subtree-recascade=" << format(impl_->startup_subtree_recascade)
             << ",stylesheet-recascade=" << format(impl_->startup_stylesheet_recascade)
             << ",stylesheet-nodes=" << impl_->startup_stylesheet_recascade_nodes
+            << ",stylesheet-variable-nodes="
+            << impl_->startup_stylesheet_variable_nodes
             << ",css-rules=" << impl_->css_rules.size()
             << ",css-unindexed=" << impl_->unindexed_css_rules.size()
             << ",script=" << format(impl_->startup_script_execute)
@@ -4509,6 +4511,7 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         + indexed_rule_storage(impl_->css_rules_by_id)
         + indexed_rule_storage(impl_->css_rules_by_tag)
         + indexed_rule_storage(impl_->css_rules_by_attribute)
+        + indexed_rule_storage(impl_->css_rules_by_variable_reference)
         + impl_->css_focus_rules.capacity() * sizeof(size_t)
         + impl_->unindexed_css_rules.capacity() * sizeof(size_t)
         + impl_->hover_selector_dependencies.capacity()
