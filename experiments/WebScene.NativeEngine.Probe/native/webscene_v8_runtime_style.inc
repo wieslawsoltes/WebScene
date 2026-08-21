@@ -510,9 +510,23 @@
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
         auto& authored = node->mutable_authored_style();
-        authored.declarations[canonical_name] = serialize_cssom_specified_value(
+        const auto specified_value = serialize_cssom_specified_value(
             canonical_name,
             value);
+        const auto existing = authored.declarations.find(canonical_name);
+        if (existing != authored.declarations.end()
+            && existing->second == specified_value
+            && !authored.important_declarations.contains(canonical_name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            if (self->resize_profile_active) {
+                ++self->last_resize_redundant_style_writes;
+            }
+#endif
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
+            return;
+        }
+        authored.declarations[canonical_name] = specified_value;
         authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the
@@ -1815,9 +1829,23 @@
         if (!valid_cssom_declaration_value(name, value)) return;
         const auto canonical_name = canonical_css_property_name(name);
         auto& authored = node->mutable_authored_style();
-        authored.declarations[canonical_name] = serialize_cssom_specified_value(
+        const auto specified_value = serialize_cssom_specified_value(
             canonical_name,
             value);
+        const auto existing = authored.declarations.find(canonical_name);
+        if (existing != authored.declarations.end()
+            && existing->second == specified_value
+            && !authored.important_declarations.contains(canonical_name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            if (self->resize_profile_active) {
+                ++self->last_resize_redundant_style_writes;
+            }
+#endif
+            self->notify_custom_element_attribute(
+                *node, "style", old_value, node->attributes.at("style"));
+            return;
+        }
+        authored.declarations[canonical_name] = specified_value;
         authored.important_declarations.erase(canonical_name);
         if (apply_grid_placement_declaration(node->style, name, value)) {
             // Placement CSSOM is stored as computed tokens; layout consumes the

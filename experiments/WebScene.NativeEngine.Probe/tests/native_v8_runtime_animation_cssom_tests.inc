@@ -429,6 +429,95 @@ void test_cssom_paint_invalidation_does_not_force_layout(
         changed_height == "41",
         "a changed CSSOM layout declaration did not update synchronous geometry: "
             + changed_height);
+    webscene_engine_metrics after_changed_height{};
+    webscene_engine_get_metrics(engine, &after_changed_height);
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const target = document.getElementById('invalidation');
+          target.style.height = '41px';
+          target.style.setProperty('height', '41px');
+        })()
+    )JS", "cssom-unchanged-layout-value.js");
+    const auto unchanged_height = evaluate(
+        engine,
+        "document.getElementById('invalidation').offsetHeight",
+        "cssom-unchanged-layout-geometry-barrier.js");
+    webscene_engine_metrics after_unchanged_height{};
+    webscene_engine_get_metrics(engine, &after_unchanged_height);
+    require(
+        unchanged_height == "41"
+            && after_unchanged_height.layout_passes
+                == after_changed_height.layout_passes,
+        "an unchanged CSSOM layout declaration repeated document layout");
+
+    const auto custom_element_reactions = evaluate(engine, R"JS(
+        (() => {
+          const reactions = [];
+          class CssomIdempotenceObserver extends HTMLElement {
+            static observedAttributes = ['style'];
+            attributeChangedCallback(name, oldValue, newValue) {
+              reactions.push(`${name}:${oldValue}->${newValue}`);
+            }
+          }
+          customElements.define(
+            'cssom-idempotence-observer',
+            CssomIdempotenceObserver);
+          const target = document.createElement('cssom-idempotence-observer');
+          target.style.height = '41px';
+          reactions.length = 0;
+          target.style.height = '41px';
+          target.style.setProperty('height', '41px');
+          return reactions;
+        })()
+    )JS", "cssom-unchanged-custom-element-reactions.js");
+    require(
+        custom_element_reactions
+            == R"(["style:height: 41px;->height: 41px;","style:height: 41px;->height: 41px;"])",
+        "unchanged CSSOM declarations suppressed observable custom-element reactions: "
+            + custom_element_reactions);
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div id="toolbar" style="width: 300px; height: 32px"></div>
+            <div id="overlay" style="position: absolute; width: 200px">
+              <div id="overlay-child" style="width: 100px; height: 20px"></div>
+            </div>`;
+          void document.getElementById('overlay-child').offsetWidth;
+        })()
+    )JS", "cssom-positioned-subtree-invalidation-setup.js");
+    webscene_engine_metrics positioned_baseline{};
+    webscene_engine_get_metrics(engine, &positioned_baseline);
+    const auto unrelated_height = evaluate(engine, R"JS(
+        (() => {
+          document.getElementById('overlay-child').style.width = '120px';
+          return document.getElementById('toolbar').clientHeight;
+        })()
+    )JS", "cssom-positioned-subtree-unrelated-geometry.js");
+    webscene_engine_metrics after_unrelated_geometry{};
+    webscene_engine_get_metrics(engine, &after_unrelated_geometry);
+    require(
+        unrelated_height == "32"
+            && after_unrelated_geometry.layout_passes
+                == positioned_baseline.layout_passes,
+        "a positioned-subtree CSSOM mutation invalidated unrelated client geometry");
+
+    const auto changed_child_width = evaluate(
+        engine,
+        "document.getElementById('overlay-child').clientWidth",
+        "cssom-positioned-subtree-changed-geometry.js");
+    webscene_engine_metrics after_changed_child_geometry{};
+    webscene_engine_get_metrics(engine, &after_changed_child_geometry);
+    require(
+        changed_child_width == "120"
+            && after_changed_child_geometry.layout_passes
+                <= positioned_baseline.layout_passes + 1,
+        "positioned-subtree geometry exposed stale or excessive layout state: width="
+            + changed_child_width + ", baseline-passes="
+            + std::to_string(positioned_baseline.layout_passes)
+            + ", after-passes="
+            + std::to_string(after_changed_child_geometry.layout_passes));
 }
 
 void test_client_rect_reads_reuse_unrelated_out_of_flow_layout(

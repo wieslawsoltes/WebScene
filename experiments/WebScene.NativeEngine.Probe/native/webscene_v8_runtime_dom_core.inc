@@ -509,9 +509,6 @@
             document.mark_scene_changed();
             return;
         }
-        const auto isolated_out_of_flow_geometry =
-            node.style.position == position_mode::absolute
-            || node.style.position == position_mode::fixed;
         const auto changes_only_positioned_subtree =
             canonical_property_name == "width"
             || canonical_property_name == "height"
@@ -523,8 +520,23 @@
             || canonical_property_name == "top"
             || canonical_property_name == "right"
             || canonical_property_name == "bottom";
-        if (isolated_out_of_flow_geometry && changes_only_positioned_subtree) {
-            document.mark_out_of_flow_geometry_dirty(node);
+        dom_node* isolated_geometry_root = nullptr;
+        if (changes_only_positioned_subtree) {
+            for (auto* current = &node; current != nullptr;
+                 current = current->parent) {
+                if (current->style.position != position_mode::absolute
+                    && current->style.position != position_mode::fixed) {
+                    continue;
+                }
+                isolated_geometry_root = current;
+                break;
+            }
+        }
+        if (isolated_geometry_root != nullptr) {
+            // A descendant can resize an auto-sized positioned ancestor, but
+            // that subtree remains outside normal flow. Keep its pending work
+            // scoped so geometry reads elsewhere do not traverse the document.
+            document.mark_out_of_flow_geometry_dirty(*isolated_geometry_root);
         } else {
             document.mark_dirty();
         }
