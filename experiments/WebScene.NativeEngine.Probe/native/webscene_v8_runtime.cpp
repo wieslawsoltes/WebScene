@@ -3978,6 +3978,10 @@ std::string v8_dom_runtime::event_diagnostics() const
     result << ']';
     result << ", layout-client-reuses="
         << impl_->client_geometry_layout_reuse_count;
+    result << ", intrinsic-size-cache-hits="
+        << impl_->document.intrinsic_size_cache_hits();
+    result << ", intrinsic-size-cache-misses="
+        << impl_->document.intrinsic_size_cache_misses();
     if (impl_->profile_bindings) {
         uint64_t total_nanoseconds = 0;
         result << ", resize-bindings=[";

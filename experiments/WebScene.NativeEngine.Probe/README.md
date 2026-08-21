@@ -107,6 +107,14 @@ surface includes feature-use inventories, scene/canvas diagnostic snapshots,
 CSS and binding profiling maps, V8 CPU profiling, and their hot-path counters
 and timers.
 
+Certification builds also recognize two differential switches:
+
+- `WEBSCENE_DISABLE_INTRINSIC_SIZE_CACHE=1` disables the per-pass intrinsic-size cache.
+- `WEBSCENE_FORCE_LAYOUT_INVALIDATION=1` routes paint-only CSSOM changes through layout.
+
+These switches let profiling and correctness runs compare each optimized path with its
+conservative reference behavior without introducing application-specific branches.
+
 ## Canvas hot-path allocation policy
 
 Canvas commands read only the paint-state groups required by that operation.

@@ -109,6 +109,11 @@ internal static class NativeScenePublicationWakePolicy
         bool matchingResizePublication,
         long renderedSceneCount)
         => matchingResizePublication || renderedSceneCount == 0;
+
+    public static DispatcherPriority Priority(bool matchingResizePublication)
+        => matchingResizePublication
+            ? DispatcherPriority.Send
+            : DispatcherPriority.Normal;
 }
 
 public readonly record struct NativeScenePublished(
@@ -772,6 +777,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             scale,
             _renderer.PresenterDeviceScaleFactor);
         skiaSubmitTicks = Stopwatch.GetTimestamp() - skiaStarted;
+        _renderObserver.RecordPresented();
 
         if (_hasPendingRenderMetrics)
         {

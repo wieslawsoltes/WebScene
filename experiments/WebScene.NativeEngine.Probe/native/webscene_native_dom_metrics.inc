@@ -573,6 +573,18 @@ bool native_document::dirty() const noexcept
     return dirty_;
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+uint64_t native_document::intrinsic_size_cache_hits() const noexcept
+{
+    return intrinsic_size_cache_hits_;
+}
+
+uint64_t native_document::intrinsic_size_cache_misses() const noexcept
+{
+    return intrinsic_size_cache_misses_;
+}
+#endif
+
 uint64_t native_document::scene_generation() const noexcept
 {
     return scene_generation_;

@@ -1,4 +1,5 @@
 using WebScene.Backends.Avalonia.Native;
+using Avalonia.Threading;
 using Xunit;
 
 namespace WebScene.Backend.Avalonia.Tests;
@@ -78,5 +79,18 @@ public sealed class NativeScenePublicationMailboxTests
             NativeScenePublicationWakePolicy.RequiresUiWake(
                 matchingResizePublication,
                 renderedSceneCount));
+    }
+
+    [Fact]
+    public void MatchingResizePublicationUsesImmediateUiWakePriority()
+    {
+        Assert.Equal(
+            DispatcherPriority.Send,
+            NativeScenePublicationWakePolicy.Priority(
+                matchingResizePublication: true));
+        Assert.Equal(
+            DispatcherPriority.Normal,
+            NativeScenePublicationWakePolicy.Priority(
+                matchingResizePublication: false));
     }
 }

@@ -461,6 +461,36 @@
         dom_node& node,
         std::string_view canonical_property_name)
     {
+        // These properties affect painting or interaction, but never box
+        // measurement or flow. Publish the scene without synchronously
+        // traversing layout again.
+        constexpr std::array paint_only_properties{
+            std::string_view{"background"},
+            std::string_view{"background-color"},
+            std::string_view{"border-radius"},
+            std::string_view{"box-shadow"},
+            std::string_view{"color"},
+            std::string_view{"cursor"},
+            std::string_view{"opacity"},
+            std::string_view{"pointer-events"},
+            std::string_view{"transform"},
+            std::string_view{"transform-origin"},
+            std::string_view{"visibility"},
+            std::string_view{"-webkit-font-smoothing"}
+        };
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        const auto force_layout_invalidation =
+            std::getenv("WEBSCENE_FORCE_LAYOUT_INVALIDATION") != nullptr;
+#else
+        constexpr auto force_layout_invalidation = false;
+#endif
+        if (!force_layout_invalidation && std::find(
+                paint_only_properties.begin(),
+                paint_only_properties.end(),
+                canonical_property_name) != paint_only_properties.end()) {
+            document.mark_scene_changed();
+            return;
+        }
         const auto isolated_out_of_flow_geometry =
             node.style.position == position_mode::absolute
             || node.style.position == position_mode::fixed;
