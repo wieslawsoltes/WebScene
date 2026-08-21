@@ -62,6 +62,15 @@ final class WebSceneSceneProjector extends ChangeNotifier {
       );
 
   SceneApplyResult apply(Pointer<WebSceneSceneView> scenePointer) {
+    if (!isValidScene(scenePointer)) {
+      return SceneApplyResult(
+        accepted: false,
+        ready: false,
+        revision:
+            scenePointer == nullptr ? 0 : scenePointer.ref.header.revision,
+      );
+    }
+
     final scene = scenePointer.ref;
     final header = scene.header;
     final checkpoint = header.flags & _sceneCheckpoint != 0;
@@ -112,6 +121,22 @@ final class WebSceneSceneProjector extends ChangeNotifier {
       ready: header.flags & _sceneComponentReady != 0,
       revision: header.revision,
     );
+  }
+
+  @visibleForTesting
+  static bool isValidScene(Pointer<WebSceneSceneView> scenePointer) {
+    if (scenePointer == nullptr) return false;
+    final scene = scenePointer.ref;
+    return scene.structSize == sizeOf<WebSceneSceneView>() &&
+        scene.abiVersion == 2 &&
+        (scene.header.commandCount == 0 || scene.commands != nullptr) &&
+        (scene.header.canvasLayerCount == 0 || scene.canvasLayers != nullptr) &&
+        // Removal-only canvas diffs legitimately contain layer records but no
+        // canvas command payload. Validate every optional buffer against its
+        // own count rather than coupling commands to the layer count.
+        (scene.canvasCommandCount == 0 || scene.canvasCommands != nullptr) &&
+        (scene.stringCount == 0 || scene.strings != nullptr) &&
+        (scene.stringByteCount == 0 || scene.stringBytes != nullptr);
   }
 
   void paint(ui.Canvas canvas, ui.Size size) {

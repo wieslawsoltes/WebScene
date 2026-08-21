@@ -8,6 +8,84 @@ import 'package:webscene_flutter/src/native_bindings.dart';
 import 'package:webscene_flutter/src/scene_projector.dart';
 
 void main() {
+  test('accepts removal-only canvas diffs without a command buffer', () {
+    final scene = calloc<WebSceneSceneView>();
+    final removal = calloc<WebSceneCanvasLayer>();
+    final projector = WebSceneSceneProjector();
+    try {
+      removal.ref
+        ..nodeId = 42
+        ..flags = 2;
+      scene.ref
+        ..structSize = sizeOf<WebSceneSceneView>()
+        ..abiVersion = 2
+        ..commands = nullptr
+        ..canvasLayers = removal
+        ..canvasCommands = nullptr
+        ..strings = nullptr
+        ..stringBytes = nullptr
+        ..damageRects = nullptr
+        ..leaseToken = nullptr
+        ..canvasCommandCount = 0
+        ..stringCount = 0
+        ..stringByteCount = 0;
+      scene.ref.header
+        ..revision = 1
+        ..baseRevision = 0
+        ..commandCount = 0
+        ..canvasLayerCount = 1
+        ..damageRectCount = 0
+        ..flags = 1;
+
+      expect(WebSceneSceneProjector.isValidScene(scene), isTrue);
+      expect(projector.apply(scene).accepted, isTrue);
+    } finally {
+      projector.dispose();
+      calloc
+        ..free(removal)
+        ..free(scene);
+    }
+  });
+
+  test('rejects declared canvas commands without a command buffer', () {
+    final scene = calloc<WebSceneSceneView>();
+    final removal = calloc<WebSceneCanvasLayer>();
+    final projector = WebSceneSceneProjector();
+    try {
+      removal.ref
+        ..nodeId = 42
+        ..flags = 2;
+      scene.ref
+        ..structSize = sizeOf<WebSceneSceneView>()
+        ..abiVersion = 2
+        ..commands = nullptr
+        ..canvasLayers = removal
+        ..canvasCommands = nullptr
+        ..strings = nullptr
+        ..stringBytes = nullptr
+        ..damageRects = nullptr
+        ..leaseToken = nullptr
+        ..canvasCommandCount = 1
+        ..stringCount = 0
+        ..stringByteCount = 0;
+      scene.ref.header
+        ..revision = 1
+        ..baseRevision = 0
+        ..commandCount = 0
+        ..canvasLayerCount = 1
+        ..damageRectCount = 0
+        ..flags = 1;
+
+      expect(WebSceneSceneProjector.isValidScene(scene), isFalse);
+      expect(projector.apply(scene).accepted, isFalse);
+    } finally {
+      projector.dispose();
+      calloc
+        ..free(removal)
+        ..free(scene);
+    }
+  });
+
   test('DOM text does not rise above zero-height line boxes', () {
     expect(
       WebSceneSceneProjector.domTextPaintTop(
