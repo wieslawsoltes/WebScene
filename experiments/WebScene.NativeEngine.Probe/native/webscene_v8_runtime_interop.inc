@@ -237,6 +237,7 @@
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
+        activate_css_cascade(local_context);
         v8::Context::Scope context_scope(local_context);
         v8::TryCatch try_catch(isolate);
         v8::Local<v8::Script> script;
@@ -711,6 +712,7 @@
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
+        activate_css_cascade(local_context);
         v8::Context::Scope context_scope(local_context);
         v8::TryCatch try_catch(isolate);
         std::string decoding_error;

@@ -47,6 +47,7 @@
 #endif
             return true;
         }
+        activate_css_cascade(task_context);
         v8::Context::Scope task_context_scope(task_context);
         auto callback = task.callback.Get(isolate);
         if (callback.IsEmpty()) {
@@ -281,6 +282,7 @@
             || wrapper.IsEmpty()) {
             return true;
         }
+        activate_css_cascade(resource_context);
         v8::Context::Scope resource_scope(resource_context);
         // A dynamically loaded script, its load event, and the resulting
         // microtasks form one browser task. Keep style invalidations pending
@@ -346,6 +348,7 @@
             return true;
         }
 
+        activate_css_cascade(target_context);
         v8::Context::Scope target_scope(target_context);
         auto target_global = target_context->Global();
         v8::Local<v8::Value> location_value;
@@ -453,6 +456,7 @@
         auto task_context = task.context.Get(isolate);
         auto* target = document.find_by_native_id(task.target_id);
         if (target == nullptr || task_context.IsEmpty()) return true;
+        activate_css_cascade(task_context);
         v8::Context::Scope task_context_scope(task_context);
         webscene_input_event input{};
         input.sequence = task.input_sequence;
@@ -460,6 +464,41 @@
         if (dispatch_input_event_type(input, "scroll", *target)) return true;
         last_error = "Programmatic scroll dispatch failed: "
             + describe_exception(try_catch, task_context);
+        return false;
+    }
+
+    bool drain_frame_hydration_task()
+    {
+        if (pending_frame_hydrations.empty()) return true;
+        auto* frame = pending_frame_hydrations.front();
+        pending_frame_hydrations.erase(pending_frame_hydrations.begin());
+        if (frame == nullptr) return true;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        const auto started = std::chrono::steady_clock::now();
+        if (profile_startup) ++startup_frame_hydration_slices;
+#endif
+        const auto result = hydrate_frame(*frame);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        if (profile_startup) {
+            const auto elapsed = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - started).count());
+            startup_frame_hydration_max_slice_nanoseconds = std::max(
+                startup_frame_hydration_max_slice_nanoseconds,
+                elapsed);
+            if (result == frame_hydration_result::pending) {
+                ++startup_frame_hydration_yields;
+            }
+        }
+#endif
+        if (result == frame_hydration_result::pending) {
+            pending_frame_hydrations.push_back(frame);
+            return true;
+        }
+        if (result == frame_hydration_result::complete) return true;
+        frame->attributes["data-webscene-frame-error"] =
+            frame_last_error_value;
+        last_error = frame_last_error_value;
         return false;
     }
 
@@ -479,18 +518,22 @@
         if (!pending_programmatic_scroll_events.empty()) {
             return drain_programmatic_scroll_event_task();
         }
-        if (!pending_frame_hydrations.empty()) {
-            auto* frame = pending_frame_hydrations.front();
-            pending_frame_hydrations.erase(pending_frame_hydrations.begin());
-            if (frame != nullptr && !hydrate_frame(*frame)) {
-                frame->attributes["data-webscene-frame-error"] =
-                    frame_last_error_value;
-                last_error = frame_last_error_value;
-                return false;
-            }
-            return true;
-        }
         const auto timer_due = has_due_timer();
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        const auto cooperative_frames = cooperative_iframe_hydration;
+#else
+        constexpr auto cooperative_frames = true;
+#endif
+        const auto competing_task_ready = timer_due
+            || !connected_resources.empty()
+            || resize_observers_pending;
+        if (!pending_frame_hydrations.empty()
+            && (!cooperative_frames
+                || !competing_task_ready
+                || prefer_frame_hydration_task)) {
+            prefer_frame_hydration_task = false;
+            return drain_frame_hydration_task();
+        }
         // Dynamically connected resources and zero-delay timers are separate
         // browser task sources. Do not starve React/datafeed timers behind an
         // entire Webpack resource wave; alternate when both are ready.
@@ -499,10 +542,12 @@
             // Preparing a large warm-cache resource wave can itself take a few
             // milliseconds. Only do that work once this task source has won
             // the fairness decision, so an already-due timer runs promptly.
+            prefer_frame_hydration_task = true;
             return drain_connected_resource_task();
         }
         if (resize_observers_pending) {
             resize_observers_pending = false;
+            prefer_frame_hydration_task = true;
             ensure_layout();
             return dispatch_resize_observers();
         }
@@ -515,6 +560,7 @@
         auto task = std::move(*next);
         timers.erase(next);
         prefer_timer_task = false;
+        prefer_frame_hydration_task = true;
         return execute_timer_task(std::move(task), now_time);
     }
 
@@ -692,6 +738,7 @@
         auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
+        activate_css_cascade(context.Get(isolate));
         {
             auto local_context = context.Get(isolate);
             v8::Context::Scope context_scope(local_context);
@@ -757,32 +804,30 @@
                 outer_listeners_finished - resize_started).count());
 #endif
 
-        // Responsive stylesheet rules depend on the current host viewport.
-        // The compact runtime retains the active browsing context's stylesheet
-        // index. Once an iframe is hydrated, applying that index to the outer
-        // document erases its already-cascaded percentage sizing (including a
-        // host chart_container and the iframe itself). Re-cascade only the root
-        // that owns the active rules; layout below still recomputes the unified
-        // native tree against the new host viewport.
-        if (refresh_css_media_matches()) {
-            // Only a media-query truth transition changes the cascade. Relative
-            // lengths (percent, vw/vh, calc) are retained as computed terms and
-            // resolve against the new viewport during layout; recascading the
-            // entire component tree on every intermediate resize frame turns a
-            // 60 Hz drag into a 30 Hz one.
+        // Media matches and selector indexes belong to each browsing context.
+        // Recompute only contexts whose query truth changed, retaining relative
+        // lengths for layout to resolve against the new host viewport.
+        const auto refresh_context_styles = [&](v8::Local<v8::Context> css_context) {
+            if (css_context.IsEmpty()) return;
+            activate_css_cascade(css_context);
+            v8::Context::Scope css_context_scope(css_context);
+            if (!refresh_css_media_matches()) return;
             rebuild_css_rule_indexes_and_root_variables();
-            if (frame_context.IsEmpty()) {
-                apply_css_rules_subtree(document.body());
-            } else {
-                auto resize_frame_context = frame_context.Get(isolate);
-                v8::Context::Scope resize_frame_scope(resize_frame_context);
-                apply_css_rules_subtree(active_root());
+            apply_css_rules_subtree(active_root());
+        };
+        refresh_context_styles(context.Get(isolate));
+        for (auto& [id, persistent_context] : actual_frame_contexts) {
+            static_cast<void>(id);
+            if (!persistent_context.IsEmpty()) {
+                refresh_context_styles(persistent_context.Get(isolate));
             }
         }
+        activate_css_cascade(context.Get(isolate));
 
         if (frame_context.IsEmpty()) return true;
         {
             auto local_frame_context = frame_context.Get(isolate);
+            activate_css_cascade(local_frame_context);
             v8::Context::Scope frame_scope(local_frame_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             v8::Local<v8::String> cpu_profile_title;
@@ -2186,6 +2231,7 @@
         auto local_context = frame_context.IsEmpty()
             ? context.Get(isolate)
             : frame_context.Get(isolate);
+        activate_css_cascade(local_context);
         v8::Context::Scope context_scope(local_context);
         ensure_layout();
         v8::TryCatch try_catch(isolate);

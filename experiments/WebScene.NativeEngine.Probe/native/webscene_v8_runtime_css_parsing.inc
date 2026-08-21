@@ -177,19 +177,6 @@
         return true;
     }
 
-    enum class hover_invalidation_scope : uint8_t
-    {
-        subject,
-        subtree,
-        siblings
-    };
-
-    struct hover_selector_dependency final
-    {
-        std::string trigger_compound;
-        hover_invalidation_scope scope{hover_invalidation_scope::subject};
-    };
-
     static void strip_hover_state_from_trigger(std::string& trigger)
     {
         // A functional pseudo containing :hover changes truth when hover does,
@@ -1235,22 +1222,28 @@
 
     bool refresh_media_environment()
     {
-        if (!refresh_css_media_matches()) return true;
-
         auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
-        rebuild_css_rule_indexes_and_root_variables();
-        if (frame_context.IsEmpty()) {
-            auto local_context = context.Get(isolate);
+        auto changed = false;
+        const auto refresh_context = [&](v8::Local<v8::Context> local_context) {
+            if (local_context.IsEmpty()) return;
+            activate_css_cascade(local_context);
             v8::Context::Scope context_scope(local_context);
-            apply_css_rules_subtree(document.body());
-        } else {
-            auto local_frame_context = frame_context.Get(isolate);
-            v8::Context::Scope frame_scope(local_frame_context);
+            if (!refresh_css_media_matches()) return;
+            changed = true;
+            rebuild_css_rule_indexes_and_root_variables();
             apply_css_rules_subtree(active_root());
+        };
+        refresh_context(context.Get(isolate));
+        for (auto& [id, persistent_context] : actual_frame_contexts) {
+            static_cast<void>(id);
+            if (!persistent_context.IsEmpty()) {
+                refresh_context(persistent_context.Get(isolate));
+            }
         }
-        document.mark_dirty();
+        activate_css_cascade(context.Get(isolate));
+        if (changed) document.mark_dirty();
         return true;
     }
 

@@ -2,7 +2,12 @@
     std::function<v8_dom_runtime::viewport_metrics()> viewport_provider;
     resource_loader load_resource_callback;
     static constexpr size_t maximum_resource_prefetches = 16U;
-    std::unordered_map<std::string, std::future<prefetched_resource>> prefetched_resources;
+    std::mutex resource_prefetch_mutex;
+    std::unordered_map<std::string, std::shared_future<prefetched_resource>>
+        prefetched_resources;
+    static constexpr size_t maximum_frame_preparations = 16U;
+    std::unordered_map<uint32_t, pending_frame_preparation>
+        pending_frame_preparations;
     std::shared_ptr<shared_isolate_state> shared_isolate;
     v8::ArrayBuffer::Allocator* allocator{nullptr};
     v8::Isolate* isolate{nullptr};
@@ -139,6 +144,8 @@
     uint32_t next_object_url_id{1};
     std::unordered_map<std::string, std::string> object_urls;
     std::vector<dom_node*> pending_frame_hydrations;
+    std::unordered_map<uint32_t, frame_hydration_state> frame_hydration_states;
+    bool prefer_frame_hydration_task{true};
     static constexpr size_t detached_dom_gc_threshold = 512U;
     std::vector<uint32_t> detached_dom_roots;
     size_t detached_nodes_since_gc{0U};
@@ -168,6 +175,8 @@
     std::vector<hover_selector_dependency> hover_selector_dependencies;
     std::unordered_map<std::string, std::string> css_variables;
     std::unordered_set<std::string> important_css_variables;
+    const dom_node* active_css_cascade_root{nullptr};
+    std::unordered_map<const dom_node*, css_cascade_state> inactive_css_cascades;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     mutable std::mutex feature_observation_mutex;
     std::unordered_map<std::string, feature_observation> feature_observations;
@@ -231,6 +240,7 @@
     std::string compilation_cache_directory;
     std::unordered_map<std::string, compilation_cache_entry> compilation_cache;
     std::deque<std::string> compilation_cache_order;
+    std::unordered_set<std::string> pending_compilation_cache_touches;
     size_t compilation_cache_bytes{0};
     uint64_t compilation_request_count{0};
     uint64_t compilation_memory_hit_count{0};
@@ -254,13 +264,13 @@
     uint64_t process_compilation_leader_count{0};
     uint64_t process_compilation_waiter_count{0};
     uint64_t process_compilation_shared_byte_count{0};
-    uint64_t resource_cache_request_count{0};
-    uint64_t resource_cache_hit_count{0};
-    uint64_t resource_cache_miss_count{0};
-    uint64_t resource_cache_rejection_count{0};
-    uint64_t resource_cache_bytes_read_count{0};
-    uint64_t resource_cache_bytes_written_count{0};
-    uint64_t resource_cache_memory_hit_count{0};
+    std::atomic<uint64_t> resource_cache_request_count{0};
+    std::atomic<uint64_t> resource_cache_hit_count{0};
+    std::atomic<uint64_t> resource_cache_miss_count{0};
+    std::atomic<uint64_t> resource_cache_rejection_count{0};
+    std::atomic<uint64_t> resource_cache_bytes_read_count{0};
+    std::atomic<uint64_t> resource_cache_bytes_written_count{0};
+    std::atomic<uint64_t> resource_cache_memory_hit_count{0};
     std::atomic<uint64_t> process_resource_memory_hit_count{0};
     std::atomic<uint64_t> process_resource_load_leader_count{0};
     std::atomic<uint64_t> process_resource_load_waiter_count{0};
@@ -309,6 +319,9 @@
     bool batch_style_recascades{true};
     bool batch_connected_resource_style_recascades{true};
     bool prefetch_iframe_documents{true};
+    bool prepare_iframe_subresources{true};
+    bool defer_compilation_cache_touches{true};
+    bool cooperative_iframe_hydration{true};
     bool filter_stylesheet_candidates{true};
     uint32_t style_recascade_batch_depth{0};
     std::vector<pending_style_recascade> pending_style_recascades;
@@ -371,8 +384,16 @@
     binding_callback_stats startup_subtree_recascade{};
     binding_callback_stats startup_stylesheet_recascade{};
     binding_callback_stats startup_script_execute{};
+    binding_callback_stats startup_script_compile{};
+    binding_callback_stats startup_script_run{};
     binding_callback_stats startup_layout{};
     binding_callback_stats startup_frame_hydrate{};
+    binding_callback_stats startup_frame_prepare{};
+    binding_callback_stats startup_frame_prepare_wait{};
+    uint64_t startup_frame_prepare_lead_nanoseconds{0};
+    uint64_t startup_frame_hydration_slices{0};
+    uint64_t startup_frame_hydration_yields{0};
+    uint64_t startup_frame_hydration_max_slice_nanoseconds{0};
     uint64_t startup_stylesheet_recascade_nodes{0};
     uint64_t startup_stylesheet_candidate_nodes{0};
     uint64_t startup_stylesheet_variable_nodes{0};

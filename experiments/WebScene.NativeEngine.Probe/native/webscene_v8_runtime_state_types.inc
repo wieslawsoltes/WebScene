@@ -124,6 +124,63 @@
         std::vector<node_style::rotation_keyframe> rotation_stops;
     };
 
+    enum class hover_invalidation_scope : uint8_t
+    {
+        subject,
+        subtree,
+        siblings
+    };
+
+    struct hover_selector_dependency final
+    {
+        std::string trigger_compound;
+        hover_invalidation_scope scope{hover_invalidation_scope::subject};
+    };
+
+    // A browser document owns an independent cascade. Keeping this movable
+    // makes switching realms an O(1) exchange of vector/map storage, while the
+    // active realm retains the existing direct-field hot path.
+    struct css_cascade_state final {
+        std::vector<css_rule> rules;
+        uint32_t stylesheet_owner_id{0};
+        uint32_t stylesheet_shadow_scope_root_id{0};
+        std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
+        std::unordered_map<std::string, std::vector<size_t>> rules_by_class;
+        std::unordered_map<std::string, std::vector<size_t>> rules_by_id;
+        std::unordered_map<std::string, std::vector<size_t>> rules_by_tag;
+        std::unordered_map<std::string, std::vector<size_t>> rules_by_attribute;
+        std::unordered_map<std::string, std::vector<size_t>>
+            rules_by_variable_reference;
+        std::vector<size_t> focus_rules;
+        std::vector<size_t> unindexed_rules;
+        std::unordered_set<std::string> attribute_dependencies;
+        std::vector<hover_selector_dependency> hover_dependencies;
+        std::unordered_map<std::string, std::string> variables;
+        std::unordered_set<std::string> important_variables;
+    };
+
+    enum class frame_hydration_phase : uint8_t {
+        blocking_scripts,
+        deferred_scripts,
+        lifecycle
+    };
+
+    struct frame_hydration_state final {
+        dom_node* body{nullptr};
+        std::vector<frame_script> scripts;
+        std::string body_opening;
+        std::string base_address;
+        v8::Global<v8::Context> context;
+        size_t next_script{0U};
+        frame_hydration_phase phase{frame_hydration_phase::blocking_scripts};
+    };
+
+    enum class frame_hydration_result : uint8_t {
+        complete,
+        pending,
+        failed
+    };
+
     struct connected_resource_task final {
         dom_node* node;
         v8::Global<v8::Context> context;
@@ -381,6 +438,23 @@
         bool loaded{false};
         bool has_cached{false};
         bool from_fresh_cache{false};
+    };
+
+    struct prepared_frame final {
+        std::string source;
+        std::string html;
+        std::string base_address;
+        std::string html_opening;
+        std::string body_opening;
+        std::vector<std::string> stylesheets;
+        std::vector<frame_script> scripts;
+        std::chrono::steady_clock::time_point started{};
+        std::chrono::steady_clock::time_point completed{};
+    };
+
+    struct pending_frame_preparation final {
+        std::string source;
+        std::shared_future<std::shared_ptr<const prepared_frame>> future;
     };
 
     struct shared_isolate_state final {
