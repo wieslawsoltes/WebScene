@@ -1,9 +1,9 @@
 {
   "width": 720,
-  "height": 640,
+  "height": 1220,
   "background": "#202020",
   "foreground": "#d1d4dc",
-  "family": "-apple-system, BlinkMacSystemFont, sans-serif",
+  "family": "system-ui",
   "cases": [
     { "id": "capital-a", "text": "A", "size": 14, "weight": 400, "x": 24, "baseline": 38 },
     { "id": "lowercase-a", "text": "a", "size": 14, "weight": 400, "x": 24, "baseline": 88 },
@@ -16,6 +16,17 @@
     { "id": "mixed-weight-copy", "text": "It’ll open fully in 25 minutes.", "size": 14, "weight": 700, "x": 24, "baseline": 442 },
     { "id": "timeline", "text": "THU 09:30 16:00", "size": 12, "weight": 400, "x": 24, "baseline": 494 },
     { "id": "latin-shapes", "text": "Hamburgefontsiv", "size": 14, "weight": 400, "x": 24, "baseline": 546 },
-    { "id": "digits-punctuation", "text": "0123456789 .,:;’", "size": 14, "weight": 400, "x": 24, "baseline": 598 }
+    { "id": "digits-punctuation", "text": "0123456789 .,:;’", "size": 14, "weight": 400, "x": 24, "baseline": 598 },
+    { "id": "kerning-av", "text": "AV AVATAR", "size": 20, "weight": 400, "x": 24, "baseline": 650 },
+    { "id": "kerning-to", "text": "To Tomorrow", "size": 20, "weight": 400, "x": 24, "baseline": 702 },
+    { "id": "ligature-ffi", "text": "office affinity ffi", "size": 18, "weight": 400, "x": 24, "baseline": 754 },
+    { "id": "compact-price", "text": "$189.39 +0.52%", "size": 13, "weight": 600, "x": 24, "baseline": 806 },
+    { "id": "semibold-prose", "text": "Semibold system interface text", "size": 14, "weight": 600, "x": 24, "baseline": 858 },
+    { "id": "style-boundary-space", "text": "before after", "size": 14, "weight": 400, "x": 24, "baseline": 910 },
+    { "id": "complex-fallback", "text": "مرحبا दुनिया", "size": 18, "weight": 400, "x": 24, "baseline": 962 },
+    { "id": "emoji-fallback", "text": "Status ✅ 😀", "size": 18, "weight": 400, "x": 24, "baseline": 1014 },
+    { "id": "raster-size-16", "text": "AV To office ffi", "size": 16, "weight": 400, "x": 24, "baseline": 1066 },
+    { "id": "raster-size-17", "text": "AV To office ffi", "size": 17, "weight": 400, "x": 24, "baseline": 1118 },
+    { "id": "raster-size-18", "text": "AV To office ffi", "size": 18, "weight": 400, "x": 24, "baseline": 1170 }
   ]
 }

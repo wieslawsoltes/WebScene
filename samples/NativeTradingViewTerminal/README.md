@@ -13,9 +13,9 @@ dotnet run --project samples/NativeTradingViewTerminal \
   -- --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
-On macOS, platform CoreText positioning for eligible system-font runs is enabled by
-default while Skia continues to paint the glyphs. Launch separate processes with the
-following modes for a direct before/after comparison:
+Platform positioning for eligible system-font runs is enabled by default while Skia
+continues to paint the glyphs: CoreText on macOS and DirectWrite on Windows. Launch
+separate processes with the following modes for a direct before/after comparison:
 
 ```bash
 WEBSCENE_TEXT_POSITIONING=harfbuzz dotnet run \
@@ -27,9 +27,12 @@ WEBSCENE_TEXT_POSITIONING=coretext dotnet run \
   --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
-`harfbuzz`, `legacy`, `off`, or `0` selects the previous renderer. An unset value,
-`auto`, or `coretext` enables the platform service. Unsupported fonts, scripts,
-styles, features, or glyph identities always fall back to HarfBuzz/Skia per run.
+On Windows, use `WEBSCENE_TEXT_POSITIONING=directwrite` for an explicit candidate run.
+
+`harfbuzz`, `legacy`, `off`, or `0` selects the previous renderer. An unset value or
+`auto` enables the platform service; `coretext` and `directwrite` select their matching
+platform candidate explicitly. Unsupported fonts, scripts, styles, features, or glyph
+identities always fall back to HarfBuzz/Skia per run.
 
 The macOS default also applies Chromium-compatible Skia font flags. Use
 `WEBSCENE_TEXT_RASTERIZATION=current` to retain the former rasterization profile or

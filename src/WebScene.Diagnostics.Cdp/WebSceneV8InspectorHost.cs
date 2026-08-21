@@ -299,7 +299,7 @@ public sealed class WebSceneV8InspectorHost : IAsyncDisposable
         }
         var isDiscoveryRequest = path is "/json/version" or "/json" or "/json/list";
         if (isDiscoveryRequest
-            && !IPAddress.IsLoopback(_options.Address)
+            && _options.AllowRemoteConnections
             && !IsAuthorized(context.Request))
         {
             context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;

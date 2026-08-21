@@ -100,10 +100,10 @@ The discovery document includes an authenticated
 `chrome://inspect` can poll it, while every WebSocket connection requires the
 random access token. Non-loopback binding requires
 `AllowRemoteConnections = true`; supply a strong explicit token when a stable
-remote URL is needed. Remote `/json`, `/json/list`, and `/json/version` requests
-must first present that token as a `token` query parameter or
-`Authorization: Bearer` header, so unauthenticated discovery cannot disclose
-the WebSocket credential.
+remote URL is needed. When remote mode is enabled, `/json`, `/json/list`, and
+`/json/version` requests must first present that token as a `token` query
+parameter or `Authorization: Bearer` header—even if the configured address is
+loopback—so unauthenticated discovery cannot disclose the WebSocket credential.
 
 The showcase command-line launcher requires a caller-known token for a
 non-loopback endpoint. Set `WEBSCENE_INSPECT_TOKEN` to at least 32 characters

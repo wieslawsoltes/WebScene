@@ -1056,7 +1056,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
             NumberStyles.Float,
             CultureInfo.InvariantCulture,
             out var parsedLineHeight)
-            && parsedLineHeight > 0
+            && parsedLineHeight >= 0
             ? parsedLineHeight
             : size * 1.2f;
         var fontWeight = int.TryParse(
@@ -1107,8 +1107,7 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
         var baseline = command.Y
             + Math.Max(0, (command.Height - contentHeight) * 0.5f)
             + (contentHeight - glyphHeight) * 0.5f
-            - metrics.Ascent
-            + (parsedLineHeight == 0 ? 3f : 0f);
+            - metrics.Ascent;
         NativeTextShaping.DrawShapedText(
             canvas,
             shaper,

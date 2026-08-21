@@ -7,6 +7,190 @@ namespace WebScene.Backend.Avalonia.Tests;
 
 public sealed class NativeTextShapingTests
 {
+    [Fact]
+    public void WindowsGenericFamiliesKeepSystemUiAndSansSerifDistinct()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var systemUi = NativeTextShaping.ResolveTypeface("system-ui", 400);
+        var sansSerif = NativeTextShaping.ResolveTypeface("sans-serif", 400);
+        var appleFallback = NativeTextShaping.ResolveTypeface(
+            "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif",
+            400);
+
+        Assert.Equal("Segoe UI", systemUi.FamilyName, ignoreCase: true);
+        Assert.Equal("Arial", sansSerif.FamilyName, ignoreCase: true);
+        Assert.NotEqual(systemUi.FamilyName, sansSerif.FamilyName);
+        Assert.Equal("Trebuchet MS", appleFallback.FamilyName, ignoreCase: true);
+    }
+
+    [Theory]
+    [InlineData(400, SKFontStyleSlant.Upright)]
+    [InlineData(600, SKFontStyleSlant.Upright)]
+    [InlineData(700, SKFontStyleSlant.Upright)]
+    [InlineData(400, SKFontStyleSlant.Italic)]
+    public void WindowsSystemUiResolvesRequestedWeightAndStyle(
+        int weight,
+        SKFontStyleSlant slant)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var typeface = NativeTextShaping.ResolveTypeface(
+            "missing-webscene-family, system-ui",
+            weight,
+            slant,
+            null);
+
+        Assert.Equal("Segoe UI", typeface.FamilyName, ignoreCase: true);
+        Assert.Equal(slant, typeface.FontSlant);
+        Assert.InRange(typeface.FontWeight, weight - 100, weight + 100);
+    }
+
+    [Fact]
+    public void WindowsDirectWritePositionerReturnsVerifiedCachedWholeRun()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        const string family = "system-ui";
+        const string text = "AAPL data is delayed by 15 minutes.";
+        var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 14 };
+        using var shaper = new SKShaper(typeface);
+        var shaped = shaper.Shape(text, 0, 0, paint);
+        var request = new NativeTextRunPositionRequest(
+            text,
+            family,
+            14,
+            400,
+            SKFontStyleSlant.Upright,
+            0,
+            shaped.Codepoints,
+            null,
+            typeface);
+        var positioner = new WindowsDirectWriteRunPositioner();
+
+        Assert.True(positioner.TryPosition(in request, out var first));
+        Assert.Equal(shaped.Codepoints, first.Glyphs.Select(static glyph => (uint)glyph));
+        Assert.Equal(first.Glyphs.Length, first.Positions.Length);
+        Assert.Equal(first.Glyphs.Length, first.Clusters?.Length);
+        Assert.Equal(first.Glyphs.Length, first.Advances?.Length);
+        Assert.Equal("Segoe UI", first.FaceIdentity?.FamilyName, ignoreCase: true);
+        Assert.False(string.IsNullOrWhiteSpace(first.FaceIdentity?.FontTableFingerprint));
+        Assert.True(float.IsFinite(first.AdvanceWidth));
+        Assert.True(first.AdvanceWidth > 0);
+        Assert.True(positioner.TryPosition(in request, out var second));
+        Assert.Same(first, second);
+        var mismatched = request with
+        {
+            ExpectedGlyphs = request.ExpectedGlyphs
+                .Select((glyph, index) => index == 0 ? glyph + 1 : glyph)
+                .ToArray()
+        };
+        Assert.False(positioner.TryPosition(in mismatched, out _));
+    }
+
+    [Fact]
+    public void WindowsDirectWriteIsAutomaticAndHarfBuzzRemainsRollback()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        const string text = "AV To ffi";
+        var typeface = NativeTextShaping.ResolveTypeface("system-ui", 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 18 };
+        using var shaper = new SKShaper(typeface);
+        var shaped = shaper.Shape(text, 0, 0, paint);
+        var request = new NativeTextRunPositionRequest(
+            text, "system-ui", 18, 400, SKFontStyleSlant.Upright,
+            0, shaped.Codepoints, null, typeface);
+        var automatic = new DefaultNativeTextRunPositioner(null);
+        var explicitCandidate = new DefaultNativeTextRunPositioner("directwrite");
+        var rollback = new DefaultNativeTextRunPositioner("harfbuzz");
+
+        Assert.True(automatic.IsEligible(in request));
+        Assert.True(explicitCandidate.IsEligible(in request));
+        Assert.True(automatic.TryPosition(in request, out var positioned));
+        Assert.Equal(positioned.AdvanceWidth, positioned.Advances!.Sum(), precision: 4);
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(
+                NativeTextShaping.RasterizationModeEnvironmentVariable)))
+        {
+            Assert.Equal(
+                NativeTextShaping.NativeFontRasterizationMode.ChromiumGrayscale,
+                NativeTextShaping.ResolvePositionedRunRasterizationMode(
+                    positioned,
+                    1,
+                    null));
+            Assert.Null(NativeTextShaping.ResolvePositionedRunRasterizationMode(
+                positioned,
+                1.25f,
+                null));
+        }
+        Assert.Equal(
+            NativeTextShaping.NativeFontRasterizationMode.Current,
+            NativeTextShaping.ResolvePositionedRunRasterizationMode(
+                positioned,
+                1,
+                NativeTextShaping.NativeFontRasterizationMode.Current));
+        Assert.False(rollback.IsEligible(in request));
+        Assert.False(rollback.TryPosition(in request, out _));
+    }
+
+    [Fact]
+    public void WindowsDirectWritePositionerPreservesPairKerning()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var typeface = NativeTextShaping.ResolveTypeface("system-ui", 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 24 };
+        using var shaper = new SKShaper(typeface);
+        var positioner = new WindowsDirectWriteRunPositioner();
+
+        NativePositionedTextRun Position(string text)
+        {
+            var shaped = shaper.Shape(text, 0, 0, paint);
+            var request = new NativeTextRunPositionRequest(
+                text, "system-ui", 24, 400, SKFontStyleSlant.Upright,
+                0, shaped.Codepoints, null, typeface);
+            Assert.True(positioner.TryPosition(in request, out var run));
+            return run;
+        }
+
+        var pair = Position("AV");
+        var isolated = Position("A").AdvanceWidth + Position("V").AdvanceWidth;
+        var space = Position(" ");
+
+        Assert.True(pair.AdvanceWidth < isolated - .05f);
+        Assert.True(space.AdvanceWidth > 0);
+    }
+
+    [Fact]
+    public void WindowsDirectWritePositionerRejectsUnsupportedRuns()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var typeface = NativeTextShaping.ResolveTypeface("system-ui", 400);
+        var positioner = new WindowsDirectWriteRunPositioner();
+        var italic = new NativeTextRunPositionRequest(
+            "text", "system-ui", 14, 400, SKFontStyleSlant.Italic, 0, [], null, typeface);
+        var tabular = new NativeTextRunPositionRequest(
+            "123", "system-ui", 14, 400, SKFontStyleSlant.Upright,
+            NativeTextShaping.TabularNumerals, [], null, typeface);
+        var emoji = new NativeTextRunPositionRequest(
+            "emoji 😀", "system-ui", 14, 400, SKFontStyleSlant.Upright,
+            0, [], null, typeface);
+        var namedFamily = new NativeTextRunPositionRequest(
+            "text", "Arial", 14, 400, SKFontStyleSlant.Upright,
+            0, [], null, typeface);
+        var semibold = new NativeTextRunPositionRequest(
+            "text", "system-ui", 14, 600, SKFontStyleSlant.Upright,
+            0, [], null, typeface);
+
+        Assert.False(positioner.IsEligible(in italic));
+        Assert.False(positioner.IsEligible(in tabular));
+        Assert.False(positioner.IsEligible(in emoji));
+        Assert.False(positioner.IsEligible(in namedFamily));
+        Assert.False(positioner.IsEligible(in semibold));
+    }
+
     [Theory]
     [InlineData(0, false, true)]
     [InlineData(1, false, true)]

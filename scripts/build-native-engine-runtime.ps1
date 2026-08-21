@@ -5,6 +5,7 @@ param(
     [string] $Rid,
 
     [string] $Output,
+    [string] $BuildDirectory,
     [string] $PackageVersion,
     [string] $V8Root,
     [string] $V8Workspace,
@@ -190,7 +191,11 @@ if (-not $hasRequestedPartitionAlloc) {
     throw "The V8 SDK at '$v8OutputRoot' does not match requested PartitionAlloc=$partitionAllocValue."
 }
 
-$buildDir = Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buildVariant"
+$buildDir = if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
+    Join-Path $repoRoot "artifacts/native-engine-runtime-build/$Rid$buildVariant"
+} else {
+    $BuildDirectory
+}
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `

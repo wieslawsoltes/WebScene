@@ -992,6 +992,43 @@ void test_empty_inline_element_does_not_stretch_cross_size(webscene_engine* engi
         "an empty inline element stretched to its containing block: " + result);
 }
 
+void test_br_keeps_inline_block_on_its_own_line(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              div { font-size: 10px; line-height: 1; }
+              .blue {
+                display: inline-block;
+                vertical-align: bottom;
+                width: 10px;
+                height: 10px;
+              }
+            </style>
+            <div>x<span class="blue"></span></div>
+            <div>x<br><span class="blue"></span></div>`;
+          const origin = document.body.getBoundingClientRect();
+          const rect = element => {
+            const value = element.getBoundingClientRect();
+            return [
+              value.x - origin.x,
+              value.y - origin.y,
+              value.width,
+              value.height
+            ];
+          };
+          return {
+            rows: Array.from(document.querySelectorAll('div')).map(rect),
+            boxes: Array.from(document.querySelectorAll('.blue')).map(rect)
+          };
+        })()
+    )JS", "native-br-inline-block-lines.js");
+    require(
+        result == R"JSON({"rows":[[0,0,320,10],[0,10,320,20]],"boxes":[[5.5,0,10,10],[0,20,10,10]]})JSON",
+        "baseline alignment moved an inline-block across a forced line break: " + result);
+}
+
 void test_hover_invalidation_updates_functional_and_sibling_subjects(
     webscene_engine* engine)
 {

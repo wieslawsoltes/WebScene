@@ -236,11 +236,17 @@ public static class NativeTextShaping
             {
                 var family = rawFamily.Trim('"', '\'');
                 var genericFamily = family.ToLowerInvariant();
-                if (genericFamily is "-apple-system" or "blinkmacsystemfont" or "system-ui"
-                    or "sans-serif")
+                if (genericFamily is "-apple-system" or "blinkmacsystemfont")
                 {
-                    family = OperatingSystem.IsMacOS() ? ".AppleSystemUIFont" : "Arial";
+                    if (OperatingSystem.IsMacOS()) family = ".AppleSystemUIFont";
+                    else continue;
                 }
+                else if (genericFamily == "system-ui")
+                    family = OperatingSystem.IsMacOS()
+                        ? ".AppleSystemUIFont"
+                        : OperatingSystem.IsWindows() ? "Segoe UI" : "sans-serif";
+                else if (genericFamily == "sans-serif")
+                    family = OperatingSystem.IsMacOS() ? "Helvetica" : "Arial";
                 else if (genericFamily == "serif") family = "Times New Roman";
                 else if (genericFamily == "monospace") family = OperatingSystem.IsMacOS() ? "Menlo" : "Consolas";
 
@@ -542,7 +548,8 @@ public static class NativeTextShaping
             slant,
             featureFlags,
             [],
-            registry);
+            registry,
+            shaper.Typeface);
         if (!TextRunPositioner.IsEligible(in request)) return false;
         var shaped = shaper.Shape(text, 0, 0, paint);
         if (shaped.Codepoints.Length == 0
@@ -779,7 +786,13 @@ public static class NativeTextShaping
     {
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
-        ApplyFontRasterizationProfile(font, deviceScaleFactor, rasterizationMode);
+        ApplyFontRasterizationProfile(
+            font,
+            deviceScaleFactor,
+            ResolvePositionedRunRasterizationMode(
+                positionedRun,
+                deviceScaleFactor,
+                rasterizationMode));
         using var builder = new SKTextBlobBuilder();
         var run = builder.AllocatePositionedRun(font, positionedRun.Glyphs.Length);
         positionedRun.Glyphs.AsSpan().CopyTo(run.GetGlyphSpan());
@@ -1005,6 +1018,61 @@ public static class NativeTextShaping
             {
                 return false;
             }
+        }
+        return false;
+    }
+
+    internal static NativeFontRasterizationMode? ResolvePositionedRunRasterizationMode(
+        NativePositionedTextRun positionedRun,
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? requestedMode)
+    {
+        if (requestedMode is not null
+            || !OperatingSystem.IsWindows()
+            || positionedRun.FaceIdentity is null
+            || !float.IsFinite(deviceScaleFactor)
+            || deviceScaleFactor > 1f
+            || !string.IsNullOrWhiteSpace(ConfiguredRasterizationValue))
+        {
+            return requestedMode;
+        }
+        // At 100% scaling Chromium's Windows canvas/DOM oracle uses grayscale
+        // antialiasing with subpixel positioning and linear metrics. Higher
+        // scale profiles retain the host defaults demonstrated by their own
+        // oracle rows. Keep this attached to verified DirectWrite runs only;
+        // HarfBuzz fallback and explicit process settings remain authoritative.
+        return NativeFontRasterizationMode.ChromiumGrayscale;
+    }
+
+    internal static bool UsesWindowsSystemUiMetrics(
+        string familyList,
+        WebTypefaceRegistry? registry)
+    {
+        if (registry is null
+            && familyList.Equals("system-ui", StringComparison.OrdinalIgnoreCase)
+            && !WebTypefaces.ContainsKey("system-ui"))
+        {
+            return true;
+        }
+        foreach (var rawFamily in familyList.Split(
+                     ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var family = rawFamily.Trim('"', '\'');
+            if (registry?.Contains(family) == true
+                || WebTypefaces.ContainsKey(family))
+            {
+                return false;
+            }
+            if (family.Equals("system-ui", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (family.Equals("-apple-system", StringComparison.OrdinalIgnoreCase)
+                || family.Equals("BlinkMacSystemFont", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            return false;
         }
         return false;
     }
