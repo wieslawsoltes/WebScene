@@ -555,7 +555,9 @@
     static void get_bounding_client_rect(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Element.getBoundingClientRect"));
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
@@ -595,7 +597,9 @@
     static void get_client_rects(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Element.getClientRects"));
         self->ensure_layout();
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
@@ -634,7 +638,9 @@
     static void set_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Element.setAttribute"));
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 2) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);

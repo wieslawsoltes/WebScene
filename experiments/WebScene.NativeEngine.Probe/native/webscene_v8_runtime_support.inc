@@ -32,6 +32,49 @@ struct binding_callback_stats final {
     uint64_t nanoseconds{0};
 };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+struct startup_phase_snapshot final {
+    binding_callback_stats resource_read{};
+    binding_callback_stats css_parse{};
+    binding_callback_stats css_apply{};
+    binding_callback_stats css_incremental_apply{};
+    binding_callback_stats subtree_recascade{};
+    binding_callback_stats stylesheet_recascade{};
+    binding_callback_stats layout{};
+    binding_callback_stats script_execute{};
+    uint64_t stylesheet_nodes{0};
+    uint64_t stylesheet_variable_nodes{0};
+    uint64_t layout_passes{0};
+    bool document_dirty{false};
+};
+
+struct startup_nested_phase_stats final {
+    binding_callback_stats elapsed{};
+    binding_callback_stats resource_read{};
+    binding_callback_stats css_parse{};
+    binding_callback_stats css_apply{};
+    binding_callback_stats css_incremental_apply{};
+    binding_callback_stats subtree_recascade{};
+    binding_callback_stats stylesheet_recascade{};
+    binding_callback_stats layout{};
+    binding_callback_stats script_execute{};
+    uint64_t stylesheet_nodes{0};
+    uint64_t stylesheet_variable_nodes{0};
+    uint64_t layout_passes{0};
+    uint64_t clean_to_dirty_transitions{0};
+    uint64_t tasks_left_dirty{0};
+};
+
+void accumulate_callback_delta(
+    binding_callback_stats& target,
+    const binding_callback_stats& current,
+    const binding_callback_stats& before) noexcept
+{
+    target.calls += current.calls - before.calls;
+    target.nanoseconds += current.nanoseconds - before.nanoseconds;
+}
+#endif
+
 std::filesystem::path runtime_file_path(const std::filesystem::path& path)
 {
 #if defined(_WIN32)
@@ -51,23 +94,35 @@ std::filesystem::path runtime_file_path(const std::filesystem::path& path)
 
 class binding_callback_timer final {
 public:
-    explicit binding_callback_timer(binding_callback_stats* stats) noexcept
-        : stats_(stats)
+    explicit binding_callback_timer(
+        binding_callback_stats* stats,
+        binding_callback_stats* named_stats = nullptr) noexcept
+        : stats_(stats), named_stats_(named_stats)
     {
-        if (stats_ != nullptr) started_ = std::chrono::steady_clock::now();
+        if (stats_ != nullptr || named_stats_ != nullptr) {
+            started_ = std::chrono::steady_clock::now();
+        }
     }
 
     ~binding_callback_timer()
     {
-        if (stats_ == nullptr) return;
-        ++stats_->calls;
-        stats_->nanoseconds += static_cast<uint64_t>(
+        if (stats_ == nullptr && named_stats_ == nullptr) return;
+        const auto elapsed = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started_).count());
+        if (stats_ != nullptr) {
+            ++stats_->calls;
+            stats_->nanoseconds += elapsed;
+        }
+        if (named_stats_ != nullptr) {
+            ++named_stats_->calls;
+            named_stats_->nanoseconds += elapsed;
+        }
     }
 
 private:
     binding_callback_stats* stats_;
+    binding_callback_stats* named_stats_;
     std::chrono::steady_clock::time_point started_{};
 };
 

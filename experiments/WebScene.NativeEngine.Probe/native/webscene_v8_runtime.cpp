@@ -3813,6 +3813,38 @@ std::string v8_dom_runtime::diagnostics()
             result << ']';
             return std::move(result).str();
         };
+        const auto format_phase_top = [&format](const auto& profiles) {
+            std::vector<std::pair<std::string, startup_nested_phase_stats>> ordered(
+                profiles.begin(),
+                profiles.end());
+            std::sort(ordered.begin(), ordered.end(), [](const auto& left, const auto& right) {
+                return left.second.elapsed.nanoseconds > right.second.elapsed.nanoseconds;
+            });
+            std::ostringstream result;
+            result << '[';
+            const auto count = std::min<size_t>(ordered.size(), 8U);
+            for (size_t index = 0; index < count; ++index) {
+                if (index != 0U) result << ',';
+                const auto& [name, phases] = ordered[index];
+                result << name << ":{task=" << format(phases.elapsed)
+                    << ",dirty=" << phases.clean_to_dirty_transitions
+                    << '/' << phases.tasks_left_dirty
+                    << ",io=" << format(phases.resource_read)
+                    << ",css-parse=" << format(phases.css_parse)
+                    << ",layout-pass=" << phases.layout_passes
+                    << ",layout=" << format(phases.layout)
+                    << ",css-apply=" << format(phases.css_apply)
+                    << ",css-inc=" << format(phases.css_incremental_apply)
+                    << ",subtree=" << format(phases.subtree_recascade)
+                    << ",sheet=" << format(phases.stylesheet_recascade)
+                    << ",sheet-nodes=" << phases.stylesheet_nodes
+                    << ",variable-nodes=" << phases.stylesheet_variable_nodes
+                    << ",script=" << format(phases.script_execute)
+                    << '}';
+            }
+            result << ']';
+            return std::move(result).str();
+        };
         description << ", startup-profile={hydrate="
             << format(impl_->startup_frame_hydrate)
             << ",io=" << format(impl_->startup_resource_read)
@@ -3822,6 +3854,8 @@ std::string v8_dom_runtime::diagnostics()
             << ",subtree-recascade=" << format(impl_->startup_subtree_recascade)
             << ",stylesheet-recascade=" << format(impl_->startup_stylesheet_recascade)
             << ",stylesheet-nodes=" << impl_->startup_stylesheet_recascade_nodes
+            << ",stylesheet-candidate-nodes="
+            << impl_->startup_stylesheet_candidate_nodes
             << ",stylesheet-variable-nodes="
             << impl_->startup_stylesheet_variable_nodes
             << ",css-rules=" << impl_->css_rules.size()
@@ -3837,7 +3871,13 @@ std::string v8_dom_runtime::diagnostics()
             << impl_->startup_max_timer_delay_ms << "ms"
             << ",task-callbacks=" << format(impl_->startup_task_callbacks)
             << ",script-top=" << format_top(impl_->startup_script_profiles)
-            << ",task-top=" << format_top(impl_->startup_task_profiles);
+            << ",task-top=" << format_top(impl_->startup_task_profiles)
+            << ",script-phase-top="
+            << format_phase_top(impl_->startup_script_phase_profiles)
+            << ",task-phase-top="
+            << format_phase_top(impl_->startup_task_phase_profiles)
+            << ",frame-phase-top="
+            << format_phase_top(impl_->startup_frame_phase_profiles);
         const auto profile_now = std::chrono::steady_clock::now();
         if (impl_->startup_profile_started != std::chrono::steady_clock::time_point{}) {
             description << ",total=" << std::fixed << std::setprecision(1)
@@ -3865,7 +3905,8 @@ std::string v8_dom_runtime::diagnostics()
                     << "/ms" << std::fixed << std::setprecision(3)
                     << static_cast<double>(stats.nanoseconds) / 1'000'000.0;
             }
-            description << ']';
+            description << "],binding-top="
+                << format_top(impl_->startup_binding_profiles);
         }
     }
     description << " | html-parser={implementation="

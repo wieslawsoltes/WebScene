@@ -733,7 +733,9 @@
         const v8::PropertyCallbackInfo<void>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Element.innerHTML.set"));
         auto* parent = unwrap_node(info.Holder());
         if (parent == nullptr) return;
         const auto html = to_utf8(info.GetIsolate(), raw_value);

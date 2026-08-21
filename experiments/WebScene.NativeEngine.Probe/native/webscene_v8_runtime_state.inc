@@ -301,6 +301,46 @@
     double caret_blink_epoch_ms{0};
     std::string frame_last_error_value;
     const std::string empty_string;
+    struct pending_style_recascade final {
+        dom_node* root{nullptr};
+        bool subtree{false};
+        std::string reason;
+    };
+    bool batch_style_recascades{true};
+    bool batch_connected_resource_style_recascades{true};
+    bool prefetch_iframe_documents{true};
+    bool filter_stylesheet_candidates{true};
+    uint32_t style_recascade_batch_depth{0};
+    std::vector<pending_style_recascade> pending_style_recascades;
+
+    class style_recascade_batch_scope final {
+    public:
+        explicit style_recascade_batch_scope(
+            implementation& owner,
+            bool enabled = true) noexcept
+            : owner_(owner.batch_style_recascades && enabled ? &owner : nullptr)
+        {
+            if (owner_ != nullptr) ++owner_->style_recascade_batch_depth;
+        }
+
+        ~style_recascade_batch_scope()
+        {
+            finish();
+        }
+
+        void finish()
+        {
+            if (owner_ == nullptr) return;
+            auto* owner = owner_;
+            owner_ = nullptr;
+            if (--owner->style_recascade_batch_depth == 0U) {
+                owner->flush_pending_style_recascades();
+            }
+        }
+
+    private:
+        implementation* owner_;
+    };
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t last_resize_outer_listeners_ns{0};
     uint64_t last_resize_frame_listeners_ns{0};
@@ -316,6 +356,7 @@
     bool profile_css{false};
     bool resize_profile_active{false};
     std::array<binding_callback_stats, binding_category_count> binding_totals{};
+    std::unordered_map<std::string, binding_callback_stats> startup_binding_profiles;
     std::array<binding_callback_stats, binding_category_count> last_resize_binding_profile{};
     std::unordered_map<std::string, uint64_t> last_resize_style_property_counts;
     std::unordered_map<std::string, uint64_t> last_resize_style_target_counts;
@@ -332,6 +373,7 @@
     binding_callback_stats startup_layout{};
     binding_callback_stats startup_frame_hydrate{};
     uint64_t startup_stylesheet_recascade_nodes{0};
+    uint64_t startup_stylesheet_candidate_nodes{0};
     uint64_t startup_stylesheet_variable_nodes{0};
     uint64_t startup_connected_resources{0};
     uint64_t startup_raf_scheduled{0};
@@ -342,6 +384,74 @@
     binding_callback_stats startup_task_callbacks{};
     std::unordered_map<std::string, binding_callback_stats> startup_script_profiles;
     std::unordered_map<std::string, binding_callback_stats> startup_task_profiles;
+    std::unordered_map<std::string, startup_nested_phase_stats>
+        startup_script_phase_profiles;
+    std::unordered_map<std::string, startup_nested_phase_stats>
+        startup_task_phase_profiles;
+    std::unordered_map<std::string, startup_nested_phase_stats>
+        startup_frame_phase_profiles;
     std::chrono::steady_clock::time_point startup_profile_started{};
     std::chrono::steady_clock::time_point startup_frame_started{};
+
+    startup_phase_snapshot capture_startup_phase_snapshot() const noexcept
+    {
+        return startup_phase_snapshot{
+            startup_resource_read,
+            startup_css_parse,
+            startup_css_apply,
+            startup_css_incremental_apply,
+            startup_subtree_recascade,
+            startup_stylesheet_recascade,
+            startup_layout,
+            startup_script_execute,
+            startup_stylesheet_recascade_nodes,
+            startup_stylesheet_variable_nodes,
+            document.layout_passes(),
+            document.dirty()};
+    }
+
+    void record_startup_nested_phases(
+        std::unordered_map<std::string, startup_nested_phase_stats>& profiles,
+        const std::string& name,
+        const startup_phase_snapshot& before,
+        uint64_t elapsed_nanoseconds)
+    {
+        auto& profile = profiles[name];
+        ++profile.elapsed.calls;
+        profile.elapsed.nanoseconds += elapsed_nanoseconds;
+        accumulate_callback_delta(
+            profile.resource_read,
+            startup_resource_read,
+            before.resource_read);
+        accumulate_callback_delta(
+            profile.css_parse,
+            startup_css_parse,
+            before.css_parse);
+        accumulate_callback_delta(profile.css_apply, startup_css_apply, before.css_apply);
+        accumulate_callback_delta(
+            profile.css_incremental_apply,
+            startup_css_incremental_apply,
+            before.css_incremental_apply);
+        accumulate_callback_delta(
+            profile.subtree_recascade,
+            startup_subtree_recascade,
+            before.subtree_recascade);
+        accumulate_callback_delta(
+            profile.stylesheet_recascade,
+            startup_stylesheet_recascade,
+            before.stylesheet_recascade);
+        accumulate_callback_delta(profile.layout, startup_layout, before.layout);
+        accumulate_callback_delta(
+            profile.script_execute,
+            startup_script_execute,
+            before.script_execute);
+        profile.stylesheet_nodes +=
+            startup_stylesheet_recascade_nodes - before.stylesheet_nodes;
+        profile.stylesheet_variable_nodes +=
+            startup_stylesheet_variable_nodes - before.stylesheet_variable_nodes;
+        profile.layout_passes += document.layout_passes() - before.layout_passes;
+        const auto dirty = document.dirty();
+        if (!before.document_dirty && dirty) ++profile.clean_to_dirty_transitions;
+        if (dirty) ++profile.tasks_left_dirty;
+    }
 #endif

@@ -2,12 +2,14 @@ struct resource_server final {
     std::unordered_map<std::string, std::string> content;
     std::atomic<int> active{0};
     std::atomic<int> peak{0};
+    std::atomic<int> active_documents{0};
+    std::atomic<int> peak_documents{0};
     std::atomic<int> requests{0};
 };
 
 size_t load_test_resource(
     void* user_data,
-    uint32_t,
+    uint32_t kind,
     const char* url,
     size_t url_length,
     const char*,
@@ -31,7 +33,21 @@ size_t load_test_resource(
                 active,
                 std::memory_order_relaxed)) {
         }
+        if (kind == WEBSCENE_RESOURCE_DOCUMENT) {
+            const auto active_documents =
+                server.active_documents.fetch_add(1, std::memory_order_relaxed) + 1;
+            auto peak_documents = server.peak_documents.load(std::memory_order_relaxed);
+            while (active_documents > peak_documents
+                && !server.peak_documents.compare_exchange_weak(
+                    peak_documents,
+                    active_documents,
+                    std::memory_order_relaxed)) {
+            }
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        if (kind == WEBSCENE_RESOURCE_DOCUMENT) {
+            server.active_documents.fetch_sub(1, std::memory_order_relaxed);
+        }
         server.active.fetch_sub(1, std::memory_order_relaxed);
     }
     else if (destination == nullptr) {
@@ -1665,6 +1681,9 @@ void test_dynamic_frame_resources_use_each_document_base_url()
         origins == R"(["first-load","first-script","second-load","second-script"])",
         "dynamic frame resources did not resolve against their owning documents: "
             + origins);
+    require(
+        server.peak_documents.load(std::memory_order_relaxed) >= 2,
+        "dynamic iframe documents were not prefetched concurrently");
     execute(engine, R"JS(
         (() => {
           const children = Array.from(document.querySelectorAll('iframe'));
@@ -1859,10 +1878,15 @@ void test_dynamic_stylesheet_custom_properties_preserve_cascade_order()
         return std::stoull(profile.substr(value_start));
     };
     const auto visited_nodes = read_metric("stylesheet-nodes=");
+    const auto candidate_nodes = read_metric("stylesheet-candidate-nodes=");
     const auto variable_nodes = read_metric("stylesheet-variable-nodes=");
     require(
         visited_nodes >= 256U,
         "dynamic stylesheet benchmark did not visit its irrelevant-node corpus");
+    require(
+        candidate_nodes <= 5U,
+        "dynamic stylesheet candidate filtering finalized irrelevant nodes: "
+            + std::to_string(candidate_nodes));
     require(
         variable_nodes <= 4U,
         "custom-property dependency filtering revisited irrelevant nodes: "

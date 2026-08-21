@@ -1692,7 +1692,9 @@
     static void get_inner_width(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.innerWidth.get"));
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             self->viewport_provider();
         static_cast<void>(height);
@@ -1704,7 +1706,9 @@
     static void get_inner_height(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.innerHeight.get"));
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             self->viewport_provider();
         static_cast<void>(width);
@@ -1735,7 +1739,8 @@
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
-            self->profile(binding_category::dom_geometry));
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.scrollX.get"));
         const auto* frame = frame_owner_for_window(*self, info.Holder());
         const auto known = frame == nullptr
             ? self->frame_window_scroll_offsets.end()
@@ -1752,7 +1757,8 @@
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
-            self->profile(binding_category::dom_geometry));
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.scrollY.get"));
         const auto* frame = frame_owner_for_window(*self, info.Holder());
         const auto known = frame == nullptr
             ? self->frame_window_scroll_offsets.end()
@@ -1767,7 +1773,8 @@
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
-            self->profile(binding_category::dom_geometry));
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.scrollTo"));
         self->ensure_layout();
 
         auto& root = self->active_root();
@@ -1834,7 +1841,9 @@
         const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Window.devicePixelRatio.get"));
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             self->viewport_provider();
         static_cast<void>(width);
@@ -1852,7 +1861,9 @@
         const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Screen.width.get"));
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             self->viewport_provider();
         static_cast<void>(height);
@@ -1868,7 +1879,9 @@
         const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Screen.height.get"));
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             self->viewport_provider();
         static_cast<void>(width);

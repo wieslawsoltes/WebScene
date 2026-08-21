@@ -2776,19 +2776,74 @@
 #endif
     }
 
-    void apply_appended_css_rules(dom_node& node, size_t first_new_rule)
+    bool has_appended_css_rule_candidate(
+        const dom_node& node,
+        size_t first_new_rule) const
+    {
+        if (node.tag == "#text" || first_new_rule >= css_rules.size()) return false;
+        const auto contains_new_rule = [first_new_rule](
+            const std::vector<size_t>& indexes) {
+            return !indexes.empty() && indexes.back() >= first_new_rule;
+        };
+        const auto index_contains_new_rule = [&contains_new_rule](
+            const auto& index,
+            const std::string& key) {
+            const auto match = index.find(key);
+            return match != index.end() && contains_new_rule(match->second);
+        };
+        if (contains_new_rule(unindexed_css_rules)
+            || index_contains_new_rule(css_rules_by_tag, node.tag)
+            || (!node.id_attribute.empty()
+                && index_contains_new_rule(css_rules_by_id, node.id_attribute))) {
+            return true;
+        }
+        if (node.tag == "body"
+            && (node.parent == nullptr || node.parent->tag == "iframe")
+            && index_contains_new_rule(css_rules_by_tag, "html")) {
+            return true;
+        }
+        for (const auto& [name, value] : node.attributes) {
+            static_cast<void>(value);
+            if (index_contains_new_rule(css_rules_by_attribute, name)) return true;
+        }
+        if (&node == active_element && contains_new_rule(css_focus_rules)) return true;
+        const std::string_view classes(node.class_name);
+        size_t cursor = 0U;
+        while (cursor < classes.size()) {
+            while (cursor < classes.size()
+                && std::isspace(static_cast<unsigned char>(classes[cursor]))) ++cursor;
+            const auto start = cursor;
+            while (cursor < classes.size()
+                && !std::isspace(static_cast<unsigned char>(classes[cursor]))) ++cursor;
+            if (cursor > start
+                && index_contains_new_rule(
+                    css_rules_by_class,
+                    std::string(classes.substr(start, cursor - start)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool apply_appended_css_rules(dom_node& node, size_t first_new_rule)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(
             profile_startup ? &startup_css_incremental_apply : nullptr);
 #endif
-        if (node.tag == "#text" || first_new_rule >= css_rules.size()) return;
+        if (node.tag == "#text" || first_new_rule >= css_rules.size()) return false;
 
-        std::vector<size_t> candidates = unindexed_css_rules;
+        std::vector<size_t> candidates;
+        const auto append_new_candidates = [&](const std::vector<size_t>& source) {
+            const auto first = std::lower_bound(
+                source.begin(), source.end(), first_new_rule);
+            candidates.insert(candidates.end(), first, source.end());
+        };
+        append_new_candidates(unindexed_css_rules);
         const auto append_candidates = [&](const auto& index, const std::string& key) {
             const auto match = index.find(key);
             if (match != index.end()) {
-                candidates.insert(candidates.end(), match->second.begin(), match->second.end());
+                append_new_candidates(match->second);
             }
         };
         append_candidates(css_rules_by_tag, node.tag);
@@ -2802,10 +2857,7 @@
             append_candidates(css_rules_by_attribute, name);
         }
         if (&node == active_element) {
-            candidates.insert(
-                candidates.end(),
-                css_focus_rules.begin(),
-                css_focus_rules.end());
+            append_new_candidates(css_focus_rules);
         }
         const std::string_view classes(node.class_name);
         size_t class_cursor = 0;
@@ -2822,11 +2874,9 @@
             }
         }
         sort_css_candidates(candidates);
-        candidates.erase(std::remove_if(
-            candidates.begin(),
-            candidates.end(),
-            [first_new_rule](size_t index) { return index < first_new_rule; }), candidates.end());
         candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+        if (filter_stylesheet_candidates && candidates.empty()) return false;
 
         std::vector<const css_rule*> matched_rules;
         std::vector<std::pair<int, const css_rule*>> matched_pseudo_rules;
@@ -2842,6 +2892,11 @@
                 continue;
             }
             if (css_rule_matches(node, rule)) matched_rules.push_back(&rule);
+        }
+        if (filter_stylesheet_candidates
+            && matched_rules.empty()
+            && matched_pseudo_rules.empty()) {
+            return false;
         }
         for (const auto* rule : matched_rules) {
             for (const auto& declaration : rule->declarations()) {
@@ -2872,6 +2927,7 @@
         document.update_style_animations(node);
         detect_css_compositions(node);
         document.mark_dirty();
+        return true;
     }
 
     std::unordered_set<std::string> appended_css_custom_properties(
@@ -3004,11 +3060,11 @@
         return plan;
     }
 
-    void reapply_css_variable_dependent_rules(
+    bool reapply_css_variable_dependent_rules(
         dom_node& node,
         const css_variable_recascade_plan& plan)
     {
-        if (node.tag == "#text" || plan.variables.empty()) return;
+        if (node.tag == "#text" || plan.variables.empty()) return false;
 
         const auto references_affected_variable = [&](std::string_view value) {
             const auto references = css_variable_references(value);
@@ -3075,7 +3131,7 @@
                     variable_dependent_properties.insert(name);
                 }
             }
-            if (variable_dependent_properties.empty()) return;
+            if (variable_dependent_properties.empty()) return false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) ++startup_stylesheet_variable_nodes;
@@ -3151,6 +3207,7 @@
             node.style.inline_property_mask = retained_inline_mask;
         }
         document.mark_dirty();
+        return true;
     }
 
     void apply_css_rules_subtree(dom_node& node)
@@ -3180,7 +3237,7 @@
         return false;
     }
 
-    void recascade_connected_subtree(
+    void recascade_connected_subtree_now(
         dom_node& node,
         std::string_view reason = {})
     {
@@ -3259,9 +3316,86 @@
 #endif
     }
 
+    void schedule_style_recascade(
+        dom_node& root,
+        bool subtree,
+        std::string_view reason)
+    {
+        if (!is_connected(root)) return;
+        retain_connected_subtree_wrappers(root);
+        for (auto& pending : pending_style_recascades) {
+            if (pending.root != &root) continue;
+            pending.subtree = pending.subtree || subtree;
+            if (pending.reason.empty() && !reason.empty()) pending.reason = reason;
+            return;
+        }
+        if (std::any_of(
+                pending_style_recascades.begin(),
+                pending_style_recascades.end(),
+                [this, &root](const pending_style_recascade& pending) {
+                    return pending.subtree
+                        && pending.root != nullptr
+                        && subtree_contains(*pending.root, &root);
+                })) {
+            return;
+        }
+        if (subtree) {
+            std::erase_if(
+                pending_style_recascades,
+                [this, &root](const pending_style_recascade& pending) {
+                    return pending.root != nullptr
+                        && subtree_contains(root, pending.root);
+                });
+        }
+        pending_style_recascades.push_back(
+            pending_style_recascade{&root, subtree, std::string(reason)});
+    }
+
+    void flush_pending_style_recascades()
+    {
+        if (pending_style_recascades.empty()) return;
+        auto pending = std::move(pending_style_recascades);
+        pending_style_recascades.clear();
+        for (const auto& recascade : pending) {
+            if (recascade.root == nullptr || !is_connected(*recascade.root)) continue;
+            if (recascade.subtree) {
+                recascade_connected_subtree_now(*recascade.root, recascade.reason);
+            } else {
+                apply_css_rules(*recascade.root);
+            }
+        }
+    }
+
+    void recascade_connected_subtree(
+        dom_node& node,
+        std::string_view reason = {})
+    {
+        if (style_recascade_batch_depth != 0U) {
+            binding_callback_timer timer(
+                nullptr,
+                profile_named("style-recascade/subtree-scheduled"));
+            schedule_style_recascade(node, true, reason);
+            return;
+        }
+        binding_callback_timer timer(
+            nullptr,
+            profile_named("style-recascade/subtree-immediate"));
+        recascade_connected_subtree_now(node, reason);
+    }
+
     void recascade_connected_node(dom_node& node)
     {
         if (!is_connected(node)) return;
+        if (style_recascade_batch_depth != 0U) {
+            binding_callback_timer timer(
+                nullptr,
+                profile_named("style-recascade/node-scheduled"));
+            schedule_style_recascade(node, false, {});
+            return;
+        }
+        binding_callback_timer timer(
+            nullptr,
+            profile_named("style-recascade/node-immediate"));
         apply_css_rules(node);
     }
 
