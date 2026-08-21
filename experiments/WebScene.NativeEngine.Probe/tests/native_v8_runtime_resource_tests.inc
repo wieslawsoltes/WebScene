@@ -1859,10 +1859,15 @@ void test_dynamic_stylesheet_custom_properties_preserve_cascade_order()
         return std::stoull(profile.substr(value_start));
     };
     const auto visited_nodes = read_metric("stylesheet-nodes=");
+    const auto candidate_nodes = read_metric("stylesheet-candidate-nodes=");
     const auto variable_nodes = read_metric("stylesheet-variable-nodes=");
     require(
         visited_nodes >= 256U,
         "dynamic stylesheet benchmark did not visit its irrelevant-node corpus");
+    require(
+        candidate_nodes <= 5U,
+        "dynamic stylesheet candidate filtering finalized irrelevant nodes: "
+            + std::to_string(candidate_nodes));
     require(
         variable_nodes <= 4U,
         "custom-property dependency filtering revisited irrelevant nodes: "

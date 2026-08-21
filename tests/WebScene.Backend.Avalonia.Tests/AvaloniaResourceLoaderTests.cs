@@ -9,6 +9,114 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class AvaloniaResourceLoaderTests
 {
     [Fact]
+    public async Task HttpCaptureReplaysTextAndBinaryWithoutOriginFallback()
+    {
+        var fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "Fixtures");
+        var archiveDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "webscene-resource-archive-tests",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            var capture = new AvaloniaResourceLoader
+            {
+                ResourceCaptureDirectory = archiveDirectory
+            };
+            capture.MountDirectory("https://fixtures.webscene.test/", fixtureDirectory);
+            var address = "https://fixtures.webscene.test/module-mutation-observer.js";
+            var request = new WebSceneResourceRequest(
+                address,
+                null,
+                WebSceneResourceKind.Script);
+
+            var capturedText = capture.LoadText(request);
+            var capturedBinary = await capture.LoadBytesAsync(
+                address,
+                null,
+                CancellationToken.None);
+            capture.FlushResourceCapture();
+
+            var replay = new AvaloniaResourceLoader
+            {
+                ResourceReplayDirectory = archiveDirectory
+            };
+            var replayedText = replay.LoadText(request);
+            var replayedBinary = await replay.LoadBytesAsync(
+                address,
+                null,
+                CancellationToken.None);
+
+            Assert.Equal(capturedText.Content, replayedText.Content);
+            Assert.Equal(capturedText.CacheKey, replayedText.CacheKey);
+            Assert.Equal(capturedBinary.Content, replayedBinary.Content);
+            Assert.Equal(capturedBinary.CacheKey, replayedBinary.CacheKey);
+            Assert.Throws<FileNotFoundException>(() => replay.LoadText(
+                new WebSceneResourceRequest(
+                    "https://fixtures.webscene.test/not-captured.js",
+                    null,
+                    WebSceneResourceKind.Script)));
+            var replayFailure = Assert.Throws<InvalidOperationException>(
+                replay.ThrowIfResourceReplayFailed);
+            Assert.IsType<FileNotFoundException>(replayFailure.InnerException);
+        }
+        finally
+        {
+            if (Directory.Exists(archiveDirectory))
+            {
+                Directory.Delete(archiveDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ResourceCaptureAndReplayAreMutuallyExclusive()
+    {
+        var loader = new AvaloniaResourceLoader
+        {
+            ResourceCaptureDirectory = "capture",
+            ResourceReplayDirectory = "replay"
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() => loader.LoadText(
+            new WebSceneResourceRequest(
+                "https://fixtures.webscene.test/app.js",
+                null,
+                WebSceneResourceKind.Script)));
+
+        Assert.Contains("mutually exclusive", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingReplayManifestIsRememberedAcrossNativeCallbackBoundary()
+    {
+        var archiveDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "webscene-resource-archive-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(archiveDirectory);
+        try
+        {
+            var replay = new AvaloniaResourceLoader
+            {
+                ResourceReplayDirectory = archiveDirectory
+            };
+
+            Assert.Throws<FileNotFoundException>(() => replay.LoadText(
+                new WebSceneResourceRequest(
+                    "https://fixtures.webscene.test/app.js",
+                    null,
+                    WebSceneResourceKind.Script)));
+            var replayFailure = Assert.Throws<InvalidOperationException>(
+                replay.ThrowIfResourceReplayFailed);
+            Assert.IsType<FileNotFoundException>(replayFailure.InnerException);
+        }
+        finally
+        {
+            Directory.Delete(archiveDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void HttpResourceFreshnessHonorsOriginPolicyAndBoundedValidatorHeuristics()
     {
         var now = DateTimeOffset.UtcNow;

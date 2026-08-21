@@ -1015,6 +1015,9 @@
         const auto profile_started = profile_startup
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+        const auto script_phase_before = profile_startup
+            ? capture_startup_phase_snapshot()
+            : startup_phase_snapshot{};
 #endif
         v8::Context::Scope context_scope(local_context);
         v8::TryCatch try_catch(isolate);
@@ -1023,8 +1026,15 @@
                 source,
                 document_name,
                 script,
-                std::move(immutable_source))
-            || script->Run(local_context).IsEmpty()) {
+                std::move(immutable_source))) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            report_inspector_exception(try_catch, local_context);
+#endif
+            error = describe_exception(try_catch, local_context);
+            return false;
+        }
+        style_recascade_batch_scope style_batch(*this);
+        if (script->Run(local_context).IsEmpty()) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
@@ -1032,13 +1042,21 @@
             return false;
         }
         if (checkpoint_microtasks) perform_microtask_checkpoint();
+        style_batch.finish();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
-            auto& stats = startup_script_profiles[resource_leaf_name(document_name)];
-            ++stats.calls;
-            stats.nanoseconds += static_cast<uint64_t>(
+            const auto script_name = resource_leaf_name(document_name);
+            const auto elapsed_nanoseconds = static_cast<uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - profile_started).count());
+            auto& stats = startup_script_profiles[script_name];
+            ++stats.calls;
+            stats.nanoseconds += elapsed_nanoseconds;
+            record_startup_nested_phases(
+                startup_script_phase_profiles,
+                script_name,
+                script_phase_before,
+                elapsed_nanoseconds);
         }
 #endif
         return true;

@@ -5,7 +5,9 @@ namespace NativeTradingViewTerminal;
 internal sealed record SamplePaths(
     string NativeLibraryPath,
     string CompilationCacheDirectory,
-    string DocumentUrl)
+    string DocumentUrl,
+    string? ResourceCaptureDirectory,
+    string? ResourceReplayDirectory)
 {
     internal const string TerminalUrl =
         "https://trading-terminal.tradingview-widget.com/";
@@ -15,6 +17,8 @@ internal sealed record SamplePaths(
         string? configuredLibrary = null;
         string? configuredCache = null;
         string? configuredUrl = null;
+        string? resourceCaptureDirectory = null;
+        string? resourceReplayDirectory = null;
         for (var index = 0; index < arguments.Count; index++)
         {
             switch (arguments[index])
@@ -28,7 +32,19 @@ internal sealed record SamplePaths(
                 case "--url" when index + 1 < arguments.Count:
                     configuredUrl = arguments[++index];
                     break;
+                case "--capture-resources" when index + 1 < arguments.Count:
+                    resourceCaptureDirectory = Path.GetFullPath(arguments[++index]);
+                    break;
+                case "--replay-resources" when index + 1 < arguments.Count:
+                    resourceReplayDirectory = Path.GetFullPath(arguments[++index]);
+                    break;
             }
+        }
+
+        if (resourceCaptureDirectory is not null && resourceReplayDirectory is not null)
+        {
+            throw new ArgumentException(
+                "--capture-resources and --replay-resources are mutually exclusive.");
         }
 
         configuredLibrary ??=
@@ -56,7 +72,9 @@ internal sealed record SamplePaths(
             cache,
             string.IsNullOrWhiteSpace(configuredUrl)
                 ? TerminalUrl
-                : configuredUrl);
+                : configuredUrl,
+            resourceCaptureDirectory,
+            resourceReplayDirectory);
     }
 
     internal static string NativeLibraryFileName()

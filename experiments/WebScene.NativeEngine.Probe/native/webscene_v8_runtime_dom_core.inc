@@ -26,6 +26,7 @@
 
     void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
     {
+        flush_pending_style_recascades();
         if (!document.dirty()) return;
         if (reusable_client_geometry_subject != nullptr
             && document.can_reuse_client_geometry(

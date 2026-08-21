@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using WebScene.Backends.Avalonia;
+using WebScene.Backends.Native;
 
 namespace NativeTradingViewTerminal;
 
@@ -9,6 +11,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly IReadOnlyList<string> _arguments;
     private readonly DispatcherTimer _diagnosticsTimer;
+    private AvaloniaResourceLoader? _resourceLoader;
 
     public MainWindow()
         : this(Environment.GetCommandLineArgs())
@@ -47,13 +50,22 @@ public sealed partial class MainWindow : Window
         try
         {
             var paths = SamplePaths.Resolve(_arguments);
+            _resourceLoader = new AvaloniaResourceLoader
+            {
+                ResourceCaptureDirectory = paths.ResourceCaptureDirectory,
+                ResourceReplayDirectory = paths.ResourceReplayDirectory
+            };
             var startupTimer = Stopwatch.StartNew();
             StatusText.Text = "Loading hosted TradingView terminal…";
             DiagnosticsText.Text = paths.DocumentUrl;
             await TerminalHost.LoadAsync(
-                paths.DocumentUrl,
-                paths.NativeLibraryPath,
-                paths.CompilationCacheDirectory);
+                new NativeWebSceneLoadOptions
+                {
+                    Source = paths.DocumentUrl,
+                    NativeLibraryPath = paths.NativeLibraryPath,
+                    CompilationCacheDirectory = paths.CompilationCacheDirectory,
+                    ResourceLoader = _resourceLoader
+                });
             StatusText.Text = "TradingView terminal loaded";
             if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
             {
@@ -81,13 +93,16 @@ public sealed partial class MainWindow : Window
                         chartReady = true;
                         break;
                     }
+                    _resourceLoader.ThrowIfResourceReplayFailed();
                     await Task.Delay(25);
                 }
+                _resourceLoader.ThrowIfResourceReplayFailed();
                 if (!chartReady)
                 {
                     throw new TimeoutException(
                         "TradingView chart did not reach the startup-profile readiness gate.");
                 }
+                _resourceLoader.FlushResourceCapture();
                 Console.WriteLine(FormattableString.Invariant(
                     $"TradingView desktop chart ready wall: {startupTimer.Elapsed.TotalMilliseconds:F3} ms"));
                 await TerminalHost.EvaluateTextAsync("""
@@ -110,7 +125,22 @@ public sealed partial class MainWindow : Window
                         startupMetrics.ResourceCache.Requests,
                         startupMetrics.ResourceCache.Hits,
                         startupMetrics.ResourceCache.Misses,
-                        startupMetrics.ResourceCache.BytesRead
+                        startupMetrics.ResourceCache.BytesRead,
+                        startupMetrics.Engine.DomNodes,
+                        startupMetrics.Engine.LayoutPasses,
+                        startupMetrics.Engine.PublishedScenes,
+                        startupMetrics.Engine.AcquiredScenes,
+                        LastLayoutMilliseconds =
+                            startupMetrics.Engine.LastLayoutNanoseconds / 1_000_000d,
+                        LastSceneBuildMilliseconds =
+                            startupMetrics.Engine.LastSceneBuildNanoseconds / 1_000_000d,
+                        LastScenePublicationMilliseconds =
+                            startupMetrics.Engine.LastScenePublicationNanoseconds / 1_000_000d,
+                        MaximumScenePublicationMilliseconds =
+                            startupMetrics.Engine.MaximumScenePublicationNanoseconds / 1_000_000d,
+                        startupMetrics.SceneFlow.PublicationAttempts,
+                        startupMetrics.SceneFlow.BlockedPublications,
+                        startupMetrics.SceneFlow.AcknowledgedScenes
                     }));
                 var diagnostics = TerminalHost.SceneDiagnostics;
                 var profileStart = diagnostics.IndexOf(
@@ -180,6 +210,7 @@ public sealed partial class MainWindow : Window
     private async void OnClosed(object? sender, EventArgs args)
     {
         _diagnosticsTimer.Stop();
+        _resourceLoader?.FlushResourceCapture();
         await TerminalHost.DisposeAsync();
     }
 }

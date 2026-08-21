@@ -32,6 +32,43 @@ struct binding_callback_stats final {
     uint64_t nanoseconds{0};
 };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+struct startup_phase_snapshot final {
+    binding_callback_stats css_apply{};
+    binding_callback_stats css_incremental_apply{};
+    binding_callback_stats subtree_recascade{};
+    binding_callback_stats stylesheet_recascade{};
+    binding_callback_stats layout{};
+    uint64_t stylesheet_nodes{0};
+    uint64_t stylesheet_variable_nodes{0};
+    uint64_t layout_passes{0};
+    bool document_dirty{false};
+};
+
+struct startup_nested_phase_stats final {
+    binding_callback_stats elapsed{};
+    binding_callback_stats css_apply{};
+    binding_callback_stats css_incremental_apply{};
+    binding_callback_stats subtree_recascade{};
+    binding_callback_stats stylesheet_recascade{};
+    binding_callback_stats layout{};
+    uint64_t stylesheet_nodes{0};
+    uint64_t stylesheet_variable_nodes{0};
+    uint64_t layout_passes{0};
+    uint64_t clean_to_dirty_transitions{0};
+    uint64_t tasks_left_dirty{0};
+};
+
+void accumulate_callback_delta(
+    binding_callback_stats& target,
+    const binding_callback_stats& current,
+    const binding_callback_stats& before) noexcept
+{
+    target.calls += current.calls - before.calls;
+    target.nanoseconds += current.nanoseconds - before.nanoseconds;
+}
+#endif
+
 std::filesystem::path runtime_file_path(const std::filesystem::path& path)
 {
 #if defined(_WIN32)

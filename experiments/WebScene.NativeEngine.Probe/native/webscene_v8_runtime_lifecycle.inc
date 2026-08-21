@@ -15,6 +15,10 @@
         , interop_callback_sink(std::move(interop_callback_sink_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        , batch_style_recascades(
+            std::getenv("WEBSCENE_PROBE_DISABLE_STYLE_RECASCADE_BATCHING") == nullptr)
+        , filter_stylesheet_candidates(
+            std::getenv("WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER") == nullptr)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
         , profile_resize_cpu(
             std::getenv("WEBSCENE_PROBE_PROFILE_RESIZE_CPU") != nullptr)
