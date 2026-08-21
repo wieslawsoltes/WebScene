@@ -43,6 +43,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
     private readonly Dictionary<uint, RetainedLayer> s_layers = new();
     private readonly List<RetainedLayer> s_orderedLayers = [];
+    private readonly List<RetainedLayer> s_viewportLayers = [];
     private readonly Dictionary<StringKey, string> s_strings = new();
     private readonly Dictionary<string, SKTypeface> s_typefaces = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
@@ -56,6 +57,9 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private uint s_domCommandCount;
     private ulong s_revision;
     private long s_totalCommandCount;
+    private float s_cachedViewportWidth;
+    private float s_cachedViewportHeight;
+    private bool s_viewportLayersValid;
     public static long RejectedDiffCount;
 
     public long TotalCommandCount => s_totalCommandCount;
@@ -140,17 +144,37 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     {
         var header = view->Header;
         var checkpoint = (header.Flags & SceneCheckpoint) != 0;
-        if (checkpoint)
-        {
-            Reset();
-        }
-        else if (header.Revision != s_revision && header.BaseRevision != s_revision)
+        if (!checkpoint
+            && header.Revision != s_revision
+            && header.BaseRevision != s_revision)
         {
             Interlocked.Increment(ref RejectedDiffCount);
             return false;
         }
 
-        if (header.Revision != s_revision)
+        var shouldApply = checkpoint || header.Revision != s_revision;
+        var changes = shouldApply
+            ? new ReadOnlySpan<NativeCanvasLayer>(
+                view->CanvasLayers,
+                checked((int)header.CanvasLayerCount))
+            : ReadOnlySpan<NativeCanvasLayer>.Empty;
+        foreach (ref readonly var change in changes)
+        {
+            if ((change.Flags & LayerRemove) == 0
+                && ((change.Flags & LayerReplace) == 0
+                    || !ValidateLayer(view, change)))
+            {
+                Interlocked.Increment(ref RejectedDiffCount);
+                return false;
+            }
+        }
+
+        if (checkpoint)
+        {
+            Reset();
+        }
+
+        if (shouldApply)
         {
             if ((header.Flags & SceneDomReplacement) != 0)
             {
@@ -163,9 +187,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             }
 
             var layerOrderChanged = false;
-            var changes = new ReadOnlySpan<NativeCanvasLayer>(
-                view->CanvasLayers,
-                checked((int)header.CanvasLayerCount));
+            if (!changes.IsEmpty)
+            {
+                InvalidateViewportLayers();
+            }
             foreach (ref readonly var change in changes)
             {
                 if ((change.Flags & LayerRemove) != 0)
@@ -178,18 +203,13 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     }
                     continue;
                 }
-                if ((change.Flags & LayerReplace) == 0 || !ValidateLayer(view, change))
-                {
-                    Interlocked.Increment(ref RejectedDiffCount);
-                    return false;
-                }
                 var replacement = CompileLayer(view, change);
                 var orderChanged = true;
                 if (s_layers.Remove(change.NodeId, out var previous))
                 {
-                    orderChanged =
-                        previous.ZOrder != replacement.ZOrder
-                        || !ReplaceOrderedLayer(previous, replacement);
+                    orderChanged = previous.ZOrder == replacement.ZOrder
+                        ? !ReplaceOrderedLayer(previous, replacement)
+                        : !RepositionOrderedLayer(previous, replacement);
                     s_totalCommandCount -= previous.CommandCount;
                     previous.Dispose();
                 }
@@ -207,6 +227,27 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return true;
     }
 
+    internal bool HasConsistentLayerOrder()
+    {
+        if (s_orderedLayers.Count != s_layers.Count)
+        {
+            return false;
+        }
+        for (var index = 0; index < s_orderedLayers.Count; index++)
+        {
+            var layer = s_orderedLayers[index];
+            if (layer.OrderedIndex != index
+                || !s_layers.TryGetValue(layer.NodeId, out var retained)
+                || !ReferenceEquals(layer, retained)
+                || (index != 0
+                    && CompareLayerOrder(s_orderedLayers[index - 1], layer) > 0))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public void RenderRetained(
         SKCanvas canvas,
         float viewportWidth,
@@ -218,13 +259,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             canvas.DrawPicture(s_domBackdropPicture);
         }
-        foreach (var layer in s_orderedLayers)
+        foreach (var layer in ViewportLayers(viewportWidth, viewportHeight))
         {
-            if (layer.Width <= 0 || layer.Height <= 0
-                || layer.BitmapWidth == 0 || layer.BitmapHeight == 0)
-            {
-                continue;
-            }
             if (intersects is not null
                 && !intersects(new SKRect(layer.X, layer.Y, layer.X + layer.Width, layer.Y + layer.Height)))
             {
@@ -249,6 +285,74 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             canvas.DrawPicture(s_domOverlayPicture);
         }
+    }
+
+    private List<RetainedLayer> ViewportLayers(
+        float viewportWidth,
+        float viewportHeight)
+    {
+        if (s_viewportLayersValid
+            && s_cachedViewportWidth == viewportWidth
+            && s_cachedViewportHeight == viewportHeight)
+        {
+            return s_viewportLayers;
+        }
+
+        s_viewportLayers.Clear();
+        s_viewportLayers.EnsureCapacity(s_orderedLayers.Count);
+        foreach (var layer in s_orderedLayers)
+        {
+            if (layer.Width <= 0 || layer.Height <= 0
+                || layer.BitmapWidth == 0 || layer.BitmapHeight == 0
+                || !IntersectsViewport(
+                    layer.X,
+                    layer.Y,
+                    layer.Width,
+                    layer.Height,
+                    viewportWidth,
+                    viewportHeight))
+            {
+                continue;
+            }
+            s_viewportLayers.Add(layer);
+        }
+        s_cachedViewportWidth = viewportWidth;
+        s_cachedViewportHeight = viewportHeight;
+        s_viewportLayersValid = true;
+        return s_viewportLayers;
+    }
+
+    private void InvalidateViewportLayers()
+    {
+        s_viewportLayers.Clear();
+        s_viewportLayersValid = false;
+    }
+
+    internal static bool IntersectsViewport(
+        float x,
+        float y,
+        float width,
+        float height,
+        float viewportWidth,
+        float viewportHeight)
+    {
+        if (!float.IsFinite(x)
+            || !float.IsFinite(y)
+            || !float.IsFinite(width)
+            || !float.IsFinite(height)
+            || !float.IsFinite(viewportWidth)
+            || !float.IsFinite(viewportHeight))
+        {
+            // Preserve the existing Skia behavior for malformed geometry.
+            // Culling is only safe when the separation is provable.
+            return true;
+        }
+        return viewportWidth > 0
+            && viewportHeight > 0
+            && x < viewportWidth
+            && y < viewportHeight
+            && x + width > 0
+            && y + height > 0;
     }
 
     private static bool ValidateLayer(NativeSceneView* view, in NativeCanvasLayer layer)
@@ -1825,6 +1929,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         foreach (var layer in s_layers.Values) layer.Dispose();
         s_layers.Clear();
         s_orderedLayers.Clear();
+        InvalidateViewportLayers();
+        s_viewportLayers.TrimExcess();
         foreach (var typeface in s_typefaces.Values) typeface.Dispose();
         s_typefaces.Clear();
         foreach (var svg in s_svgPictures.Values) svg.Dispose();
@@ -1838,29 +1944,73 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     {
         s_orderedLayers.Clear();
         s_orderedLayers.AddRange(s_layers.Values);
-        s_orderedLayers.Sort(static (left, right) =>
+        s_orderedLayers.Sort(CompareLayerOrder);
+        for (var index = 0; index < s_orderedLayers.Count; index++)
         {
-            var zOrder = left.ZOrder.CompareTo(right.ZOrder);
-            return zOrder != 0
-                ? zOrder
-                : left.NodeId.CompareTo(right.NodeId);
-        });
+            s_orderedLayers[index].OrderedIndex = index;
+        }
     }
 
     private bool ReplaceOrderedLayer(
         RetainedLayer previous,
         RetainedLayer replacement)
     {
-        for (var index = 0; index < s_orderedLayers.Count; index++)
+        var index = previous.OrderedIndex;
+        if ((uint)index >= (uint)s_orderedLayers.Count
+            || !ReferenceEquals(s_orderedLayers[index], previous))
         {
-            if (!ReferenceEquals(s_orderedLayers[index], previous))
-            {
-                continue;
-            }
-            s_orderedLayers[index] = replacement;
-            return true;
+            return false;
         }
-        return false;
+        replacement.OrderedIndex = index;
+        s_orderedLayers[index] = replacement;
+        return true;
+    }
+
+    private bool RepositionOrderedLayer(
+        RetainedLayer previous,
+        RetainedLayer replacement)
+    {
+        var previousIndex = previous.OrderedIndex;
+        if ((uint)previousIndex >= (uint)s_orderedLayers.Count
+            || !ReferenceEquals(s_orderedLayers[previousIndex], previous))
+        {
+            return false;
+        }
+
+        s_orderedLayers.RemoveAt(previousIndex);
+        var low = 0;
+        var high = s_orderedLayers.Count;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (CompareLayerOrder(s_orderedLayers[middle], replacement) < 0)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+        var replacementIndex = low;
+        s_orderedLayers.Insert(replacementIndex, replacement);
+        var firstChangedIndex = Math.Min(previousIndex, replacementIndex);
+        var lastChangedIndex = Math.Max(previousIndex, replacementIndex);
+        for (var index = firstChangedIndex; index <= lastChangedIndex; index++)
+        {
+            s_orderedLayers[index].OrderedIndex = index;
+        }
+        return true;
+    }
+
+    private static int CompareLayerOrder(
+        RetainedLayer left,
+        RetainedLayer right)
+    {
+        var zOrder = left.ZOrder.CompareTo(right.ZOrder);
+        return zOrder != 0
+            ? zOrder
+            : left.NodeId.CompareTo(right.NodeId);
     }
 
     private readonly record struct StringKey(uint NodeId, ulong Generation, uint Index);
@@ -1905,6 +2055,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         bool RequiresIsolation,
         SKPicture Picture) : IDisposable
     {
+        public int OrderedIndex { get; set; } = -1;
+
         public void Dispose() => Picture.Dispose();
     }
 

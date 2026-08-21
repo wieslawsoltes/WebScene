@@ -24,13 +24,19 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
                 return NativeResizeCadenceProbe.Run(probeArgs);
             case "native-inspector-disabled-performance":
                 return NativeInspectorDisabledPerformanceProbe.Run(probeArgs);
+            case "native-retained-render":
+                return NativeRetainedRenderProbe.Run(probeArgs);
+            case "native-retained-apply":
+                return NativeRetainedApplyProbe.Run(probeArgs);
         }
     }
 
     Console.Error.WriteLine(
         "Unknown probe. Use one of: generated-realtime-chart, native-interop-race, " +
         "native-runtime-work, native-dom-lookup, native-context-memory, native-lifecycle, " +
-        "native-resize-cadence, native-inspector-disabled-performance.");
+        "native-resize-cadence, native-inspector-disabled-performance, " +
+        "native-retained-render, " +
+        "native-retained-apply.");
     return 2;
 }
 

@@ -96,3 +96,28 @@ WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
   --warmup-seconds 5 --seconds 10 --hz 60 \
   --chrome-reference artifacts/chrome-resize.json
 ```
+
+## Retained scene rendering
+
+The retained-render probe exercises the Avalonia Skia renderer without requiring the
+native V8 library. It clears the surface before every render, checks the sparse result
+against a visible-only pixel reference, and reports sparse and fully-visible timing so
+viewport-culling gains can be weighed against their dense-scene overhead:
+
+```bash
+dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
+  probe native-retained-render --layers 2048 --visible 32 --iterations 40 --samples 11
+```
+
+The companion apply probe measures one-layer replacement, batched replacement, and
+z-order changes independently. It is intended to catch linear identity lookup and
+unnecessary total-order rebuilds in the retained consumer:
+
+```bash
+dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
+  probe native-retained-apply --layers 4096 --batch 256 --iterations 100 --samples 11
+```
+
+The complete NativePF candidate inventory, measurements, and accepted/rejected
+decisions are recorded in
+[`docs/nativepf-render-optimization-audit.md`](../docs/nativepf-render-optimization-audit.md).
