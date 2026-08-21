@@ -19,13 +19,14 @@
   }
   .baseline-timeline { display: flex; align-items: baseline; width: 360px; }
   .baseline-day { box-sizing: content-box; font: 10px/12px sans-serif; padding-top: 3px; width: 30px; }
+  .baseline-reference { display: inline-block; width: 0; height: 0; }
   .baseline-track { flex: 1 1 auto; height: 7px; }
   .centered-inline { width: 273px; text-align: center; }
 </style>
 <p id="status-text" class="status-text"><span id="status-first" class="status-item">All's well — market is open.</span><span id="status-second" class="status-item"><b>It'll close in 3 hours.</b></span></p>
 <span id="status-reference" class="status-item status-reference">All's well — market is open.</span>
 <div id="timeline" class="timeline"><span id="timeline-day" class="timeline-day">WED</span><span id="timeline-track" class="timeline-track"><i id="timeline-marker" class="timeline-marker"></i></span></div>
-<div id="baseline-timeline" class="baseline-timeline"><span id="baseline-day" class="baseline-day">WED</span><span id="baseline-track" class="baseline-track"></span></div>
+<div id="baseline-timeline" class="baseline-timeline"><span id="baseline-day" class="baseline-day">WED<i id="baseline-reference" class="baseline-reference"></i></span><span id="baseline-track" class="baseline-track"></span></div>
 <div id="centered-inline" class="centered-inline"><span id="centered-prefix">Reference zone:</span> <span id="centered-value">Sample (UTC+0)</span></div>
 <script>
   const state = window.__webSceneWptState = {
@@ -43,6 +44,7 @@
     const timelineMarker = rect("timeline-marker");
     const baselineTimeline = rect("baseline-timeline");
     const baselineDay = rect("baseline-day");
+    const baselineReference = rect("baseline-reference");
     const baselineTrack = rect("baseline-track");
     const centeredInline = rect("centered-inline");
     const centeredPrefix = rect("centered-prefix");
@@ -69,14 +71,14 @@
     }
     close(baselineTimeline.height, 15, "baseline timeline height", .1);
     close(baselineDay.top, baselineTimeline.top, "baseline day top", .1);
-    close(baselineTrack.top, baselineTimeline.top + 6,
+    close(baselineTrack.bottom, baselineReference.bottom,
       "non-text timeline track baseline placement", .6);
     close((centeredPrefix.left + centeredValue.right) / 2,
       centeredInline.left + centeredInline.width / 2,
       "flattened inline text-align center", .6);
     state.diagnostics = [JSON.stringify({ statusFirst, statusSecond, statusReference,
       timeline, timelineDay, timelineTrack, timelineMarker,
-      baselineTimeline, baselineDay, baselineTrack,
+      baselineTimeline, baselineDay, baselineReference, baselineTrack,
       centeredInline, centeredPrefix, centeredValue })];
     if (failures.length) throw new Error(failures.join("; "));
     result.status = "PASS";

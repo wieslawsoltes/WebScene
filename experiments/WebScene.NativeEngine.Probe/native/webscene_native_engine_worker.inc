@@ -126,6 +126,19 @@
             bool resize_applied = false;
             bool host_frame_applied = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            const auto refresh_preferred_color_scheme = [&] {
+                if (!preferred_color_scheme_changed_.exchange(
+                        false,
+                        std::memory_order_acq_rel)) {
+                    return false;
+                }
+                if (runtime_ != nullptr
+                    && !runtime_->refresh_media_environment()) {
+                    script_errors_.fetch_add(1, std::memory_order_relaxed);
+                    set_last_error(runtime_->last_error());
+                }
+                return true;
+            };
             if (visibility_changed_.exchange(false, std::memory_order_acq_rel)) {
                 const auto host_visible = host_visible_.load(std::memory_order_acquire);
                 if (runtime_ != nullptr
@@ -162,14 +175,7 @@
                 update_compilation_metrics();
                 hidden_low_memory_deadline.reset();
             }
-            if (preferred_color_scheme_changed_.exchange(
-                    false,
-                    std::memory_order_acq_rel)
-                && runtime_ != nullptr) {
-                if (!runtime_->refresh_media_environment()) {
-                    script_errors_.fetch_add(1, std::memory_order_relaxed);
-                    set_last_error(runtime_->last_error());
-                }
+            if (refresh_preferred_color_scheme()) {
                 changed = true;
             }
 #endif
@@ -579,6 +585,13 @@
             for (auto iterator = script_work.begin();
                  iterator != script_work.end();
                  ++iterator) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+                // A host preference update and the script queued immediately
+                // after it can arrive after the iteration-level refresh above.
+                // Recheck at the script boundary so live matchMedia queries and
+                // the CSS cascade always observe the same environment.
+                if (refresh_preferred_color_scheme()) changed = true;
+#endif
                 auto& request = *iterator;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 if (std::holds_alternative<inspector_pump_work>(request)) {

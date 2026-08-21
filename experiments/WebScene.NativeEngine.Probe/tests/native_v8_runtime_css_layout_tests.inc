@@ -156,6 +156,23 @@ void test_preferred_color_scheme_updates_css_and_match_media(webscene_engine* en
     require(
         light == R"({"dark":false,"light":true,"css":"light"})",
         "light host preference did not restore CSS and matchMedia: " + light);
+
+    for (uint32_t iteration = 0; iteration < 32U; ++iteration) {
+        const auto scheme = iteration % 2U == 0U
+            ? WEBSCENE_PREFERRED_COLOR_SCHEME_DARK
+            : WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT;
+        require(
+            webscene_engine_set_preferred_color_scheme(engine, scheme) != 0U,
+            "native engine rejected a repeated preferred color scheme update");
+        const auto state = read_state();
+        const auto expected = scheme == WEBSCENE_PREFERRED_COLOR_SCHEME_DARK
+            ? R"({"dark":true,"light":false,"css":"dark"})"
+            : R"({"dark":false,"light":true,"css":"light"})";
+        require(
+            state == expected,
+            "queued evaluation overtook the preferred color scheme cascade: "
+                + state);
+    }
 }
 
 void test_resize_listener_receives_window_event(webscene_engine* engine)
