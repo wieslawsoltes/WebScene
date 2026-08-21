@@ -64,6 +64,7 @@ internal sealed class NativeSceneRenderObserver
     private readonly object _viewportGate = new();
     private readonly List<int> _renderedViewportHeights = [];
     private readonly Queue<NativeSceneRenderSample> _renderedScenes = new(4096);
+    private readonly Queue<long> _presentations = new(4096);
     private long _renderedSceneCount;
     private long _firstRenderedSceneTimestamp;
     private long _firstReadySceneTimestamp;
@@ -108,6 +109,29 @@ internal sealed class NativeSceneRenderObserver
             {
                 return _renderedScenes.ToArray();
             }
+        }
+    }
+
+    public long[] Presentations
+    {
+        get
+        {
+            lock (_viewportGate)
+            {
+                return _presentations.ToArray();
+            }
+        }
+    }
+
+    public void RecordPresented()
+    {
+        lock (_viewportGate)
+        {
+            if (_presentations.Count == 4096)
+            {
+                _presentations.Dequeue();
+            }
+            _presentations.Enqueue(Stopwatch.GetTimestamp());
         }
     }
 

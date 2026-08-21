@@ -379,6 +379,58 @@ void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
             + wrapped_quarter_turn);
 }
 
+void test_cssom_paint_invalidation_does_not_force_layout(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<div id="invalidation" style="height: 40px; width: 80px"></div>';
+          void document.getElementById('invalidation').offsetHeight;
+        })()
+    )JS", "cssom-invalidation-setup.js");
+    webscene_engine_metrics baseline{};
+    webscene_engine_get_metrics(engine, &baseline);
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const target = document.getElementById('invalidation');
+          target.style.transform = 'translate(2px, 3px)';
+        })()
+    )JS", "cssom-paint-only-invalidation.js");
+    static_cast<void>(evaluate(
+        engine,
+        "document.getElementById('invalidation').offsetWidth",
+        "cssom-paint-only-geometry-barrier.js"));
+    webscene_engine_metrics after_paint{};
+    webscene_engine_get_metrics(engine, &after_paint);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto force_layout_invalidation =
+        std::getenv("WEBSCENE_FORCE_LAYOUT_INVALIDATION") != nullptr;
+#else
+    constexpr auto force_layout_invalidation = false;
+#endif
+    if (!force_layout_invalidation) {
+        require(
+            after_paint.layout_passes == baseline.layout_passes,
+            "paint-only CSSOM transform forced a document layout");
+    }
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const target = document.getElementById('invalidation');
+          target.style.height = '41px';
+        })()
+    )JS", "cssom-changed-layout-value.js");
+    const auto changed_height = evaluate(
+        engine,
+        "document.getElementById('invalidation').offsetHeight",
+        "cssom-changed-layout-geometry-barrier.js");
+    require(
+        changed_height == "41",
+        "a changed CSSOM layout declaration did not update synchronous geometry: "
+            + changed_height);
+}
+
 void test_cssom_serializes_resolved_numbers_without_trailing_zeroes(webscene_engine* engine)
 {
     execute(engine, R"JS(

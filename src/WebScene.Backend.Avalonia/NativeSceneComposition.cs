@@ -103,12 +103,23 @@ internal sealed class NativeSceneUiWakeGate
         => Volatile.Write(ref _pending, 0);
 }
 
+internal enum NativeSceneUiWakePriority
+{
+    Normal,
+    Immediate
+}
+
 internal static class NativeScenePublicationWakePolicy
 {
     public static bool RequiresUiWake(
         bool matchingResizePublication,
         long renderedSceneCount)
         => matchingResizePublication || renderedSceneCount == 0;
+
+    public static NativeSceneUiWakePriority Priority(bool matchingResizePublication)
+        => matchingResizePublication
+            ? NativeSceneUiWakePriority.Immediate
+            : NativeSceneUiWakePriority.Normal;
 }
 
 public readonly record struct NativeScenePublished(
@@ -772,6 +783,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             scale,
             _renderer.PresenterDeviceScaleFactor);
         skiaSubmitTicks = Stopwatch.GetTimestamp() - skiaStarted;
+        _renderObserver.RecordPresented();
 
         if (_hasPendingRenderMetrics)
         {

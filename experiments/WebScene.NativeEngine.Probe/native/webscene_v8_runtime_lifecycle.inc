@@ -697,7 +697,7 @@
             false);
         if (match == nullptr) {
             static const std::unordered_set<std::string> known_web_api_globals{
-                "localStorage", "indexedDB", "fetch", "XMLHttpRequest",
+                "indexedDB", "fetch", "XMLHttpRequest",
                 "Worker", "SharedWorker", "ServiceWorker", "BroadcastChannel",
                 "OffscreenCanvas", "requestIdleCallback", "cancelIdleCallback"};
             if (known_web_api_globals.contains(name)) {

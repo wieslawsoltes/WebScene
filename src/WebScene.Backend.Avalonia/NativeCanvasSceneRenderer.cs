@@ -154,10 +154,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             if ((header.Flags & SceneDomReplacement) != 0)
             {
+                var compiledDom = CompileDom(view);
                 s_domBackdropPicture?.Dispose();
                 s_domOverlayPicture?.Dispose();
-                s_domBackdropPicture = CompileDom(view, foreground: false);
-                s_domOverlayPicture = CompileDom(view, foreground: true);
+                s_domBackdropPicture = compiledDom.Backdrop;
+                s_domOverlayPicture = compiledDom.Overlay;
                 s_domCommandCount = header.CommandCount;
             }
 
@@ -256,14 +257,17 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             && layer.StringOffset <= view->StringCount
             && layer.StringCount <= view->StringCount - layer.StringOffset;
 
-    private SKPicture CompileDom(NativeSceneView* view, bool foreground)
+    private (SKPicture Backdrop, SKPicture Overlay) CompileDom(NativeSceneView* view)
     {
-        using var recorder = new SKPictureRecorder();
-        var canvas = recorder.BeginRecording(new SKRect(
+        using var backdropRecorder = new SKPictureRecorder();
+        using var overlayRecorder = new SKPictureRecorder();
+        var recordingBounds = new SKRect(
             0,
             0,
             Math.Max(1, view->Header.ViewportWidth),
-            Math.Max(1, view->Header.ViewportHeight)));
+            Math.Max(1, view->Header.ViewportHeight));
+        var backdrop = backdropRecorder.BeginRecording(recordingBounds);
+        var overlay = overlayRecorder.BeginRecording(recordingBounds);
         var commands = new ReadOnlySpan<SceneCommand>(
             view->Commands,
             checked((int)view->Header.CommandCount));
@@ -290,74 +294,80 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                             255,
                             255,
                             (byte)(command.Rgba & 0xff));
-                        canvas.SaveLayer(opacity);
+                        backdrop.SaveLayer(opacity);
+                        overlay.SaveLayer(opacity);
                         break;
                     case 31:
-                        canvas.Restore();
+                        backdrop.Restore();
+                        overlay.Restore();
                         break;
                     case 15:
-                        canvas.Save();
-                        canvas.Translate(command.X, command.Y);
-                        canvas.Scale(command.Width, command.Height);
-                        canvas.Translate(-command.X, -command.Y);
+                        ApplyScale(backdrop, command);
+                        ApplyScale(overlay, command);
                         break;
                     case 16:
-                        canvas.Restore();
+                        backdrop.Restore();
+                        overlay.Restore();
                         break;
                     case 19:
-                        canvas.Save();
-                        canvas.Translate(command.X, command.Y);
-                        canvas.RotateDegrees(command.StrokeWidth);
-                        canvas.Translate(-command.X, -command.Y);
+                        ApplyRotation(backdrop, command);
+                        ApplyRotation(overlay, command);
                         break;
                     case 20:
-                        canvas.Restore();
+                        backdrop.Restore();
+                        overlay.Restore();
                         break;
-                    case 17 when !foreground:
-                    case 18 when foreground:
+                    case 17:
                         NativeSceneDrawOperation.RectCommandCount++;
                         DrawDomShadow(
-                            canvas,
+                            backdrop,
                             command,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
-                    case 1 when !foreground:
+                    case 18:
+                        NativeSceneDrawOperation.RectCommandCount++;
+                        DrawDomShadow(
+                            overlay,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
+                        break;
+                    case 1:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = false;
                         fill.Color = Rgba(command.Rgba);
-                        canvas.DrawRect(command.X, command.Y, command.Width, command.Height, fill);
+                        backdrop.DrawRect(command.X, command.Y, command.Width, command.Height, fill);
                         break;
-                    case 2 when !foreground:
+                    case 2:
                         NativeSceneDrawOperation.LineCommandCount++;
                         stroke.IsAntialias = true;
                         stroke.Color = Rgba(command.Rgba);
                         stroke.StrokeWidth = Math.Max(0.1f, command.Flags / 100f);
-                        canvas.DrawLine(command.X, command.Y, command.Width, command.Height, stroke);
+                        backdrop.DrawLine(command.X, command.Y, command.Width, command.Height, stroke);
                         break;
-                    case 3 when foreground:
+                    case 3:
                         NativeSceneDrawOperation.TextCommandCount++;
-                        DrawDomText(canvas, view, command, textPaint, textShapers);
+                        DrawDomText(overlay, view, command, textPaint, textShapers);
                         break;
-                    case 4 when foreground:
-                    case 5 when foreground:
+                    case 4:
+                    case 5:
                         NativeSceneDrawOperation.SvgCommandCount++;
-                        DrawDomSvgPath(canvas, view, command, command.Kind == 5);
+                        DrawDomSvgPath(overlay, view, command, command.Kind == 5);
                         break;
-                    case 6 when foreground:
+                    case 6:
                         NativeSceneDrawOperation.SvgCommandCount++;
-                        DrawDomSvg(canvas, view, command);
+                        DrawDomSvg(overlay, view, command);
                         break;
-                    case 7 when !foreground:
+                    case 7:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
                         fill.Color = Rgba(command.Rgba);
                         DrawDomRoundedRect(
-                            canvas,
+                            backdrop,
                             command,
                             fill,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
-                    case 8 when !foreground:
+                    case 8:
                         NativeSceneDrawOperation.RectCommandCount++;
                         stroke.IsAntialias = true;
                         stroke.Color = Rgba(command.Rgba);
@@ -367,28 +377,28 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                                 ? command.StrokeWidth
                                 : (command.Flags & 0xffff) / 100f);
                         DrawDomRoundedBorder(
-                            canvas,
+                            backdrop,
                             command,
                             stroke,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
-                    case 9 when foreground:
+                    case 9:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = false;
                         fill.Color = Rgba(command.Rgba);
-                        canvas.DrawRect(command.X, command.Y, command.Width, command.Height, fill);
+                        overlay.DrawRect(command.X, command.Y, command.Width, command.Height, fill);
                         break;
-                    case 10 when foreground:
+                    case 10:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
                         fill.Color = Rgba(command.Rgba);
                         DrawDomRoundedRect(
-                            canvas,
+                            overlay,
                             command,
                             fill,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
-                    case 11 when foreground:
+                    case 11:
                         NativeSceneDrawOperation.RectCommandCount++;
                         stroke.IsAntialias = true;
                         stroke.Color = Rgba(command.Rgba);
@@ -398,27 +408,33 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                                 ? command.StrokeWidth
                                 : (command.Flags & 0xffff) / 100f);
                         DrawDomRoundedBorder(
-                            canvas,
+                            overlay,
                             command,
                             stroke,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
-                    case 14 when foreground:
+                    case 14:
                         NativeSceneDrawOperation.LineCommandCount++;
                         stroke.IsAntialias = true;
                         stroke.Color = Rgba(command.Rgba);
                         stroke.StrokeWidth = Math.Max(0.1f, command.Flags / 100f);
-                        canvas.DrawLine(command.X, command.Y, command.Width, command.Height, stroke);
+                        overlay.DrawLine(command.X, command.Y, command.Width, command.Height, stroke);
                         break;
                     case 12:
-                        canvas.Save();
+                        backdrop.Save();
+                        overlay.Save();
                         ClipDomRoundedRect(
-                            canvas,
+                            backdrop,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
+                        ClipDomRoundedRect(
+                            overlay,
                             command,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 13:
-                        canvas.Restore();
+                        backdrop.Restore();
+                        overlay.Restore();
                         break;
                 }
             }
@@ -430,7 +446,23 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 shaper.Dispose();
             }
         }
-        return recorder.EndRecording();
+        return (backdropRecorder.EndRecording(), overlayRecorder.EndRecording());
+    }
+
+    private static void ApplyScale(SKCanvas canvas, in SceneCommand command)
+    {
+        canvas.Save();
+        canvas.Translate(command.X, command.Y);
+        canvas.Scale(command.Width, command.Height);
+        canvas.Translate(-command.X, -command.Y);
+    }
+
+    private static void ApplyRotation(SKCanvas canvas, in SceneCommand command)
+    {
+        canvas.Save();
+        canvas.Translate(command.X, command.Y);
+        canvas.RotateDegrees(command.StrokeWidth);
+        canvas.Translate(-command.X, -command.Y);
     }
 
     internal readonly record struct DomCornerRadii(

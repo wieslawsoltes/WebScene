@@ -37,3 +37,62 @@ control and an Inspector-capable candidate, and fails if ordinary work initializ
 managed Inspector registry.
 
 Run with `probe` and no recognized name to list the focused probes.
+
+## Resize cadence
+
+`native-resize-cadence` drives a real Avalonia window at a configurable cadence and
+emits machine-readable engine, publication, render, CPU, and latency metrics. Its
+default local fixture exercises generic grid, flex, text, synchronous geometry reads,
+resize listeners, and animation-frame work; `--url` can qualify any external page
+without adding page-specific behavior to the engine.
+
+```bash
+WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
+  dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
+  probe native-resize-cadence --warmup-seconds 2 --seconds 10 --hz 60
+```
+
+Add `--composition` to exercise Avalonia's composition projection and `--enforce` to
+return a failure unless p95 resize-to-render latency is at most 16.7 ms, throughput is
+at least 58 rendered frames/second, no render interval exceeds 33.4 ms, and no input is
+dropped. `--output <file>` writes the same JSON emitted on stdout. Use repeated fresh
+control/candidate processes for performance decisions, then compare paired directories
+with `scripts/compare-native-resize-cadence.py`. The comparator uses paired bootstrap
+95% intervals, rejects supported regressions above 3%, and can require both a material
+improvement and the practical-vsync gate. It also rejects pairs that mix certification
+and production runtimes.
+
+```bash
+python3 scripts/compare-native-resize-cadence.py \
+  --control-dir artifacts/resize-control \
+  --candidate-dir artifacts/resize-candidate \
+  --minimum-samples 10 \
+  --output artifacts/resize-comparison.json
+```
+
+For a browser reference, the CDP profiler launches an isolated headed Chrome process
+and applies the same 60 Hz triangular window resize. It records rAF cadence,
+resize-to-rAF latency, long tasks, Chrome performance counters, and trace-stage totals:
+
+```bash
+node scripts/profile-chrome-resize-cadence.mjs \
+  --url https://trading-terminal.tradingview-widget.com/ \
+  --warmup-seconds 5 --seconds 10 --hz 60 \
+  --output artifacts/chrome-resize.json
+```
+
+Use `--headless` only for automation smoke tests; headed Chrome is the visual smoothness
+reference.
+
+Pass that immutable Chrome result back to the native probe to report an exact matched
+cadence comparison. Add `--enforce-chrome-reference` when the native run should fail
+unless its measured presentation throughput and p95 interval equal or beat Chrome:
+
+```bash
+WEBSCENE_NATIVE_ENGINE_PATH=/absolute/path/to/libwebscene_native_engine.dylib \
+  dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
+  probe native-resize-cadence --composition \
+  --url https://trading-terminal.tradingview-widget.com/ \
+  --warmup-seconds 5 --seconds 10 --hz 60 \
+  --chrome-reference artifacts/chrome-resize.json
+```

@@ -347,6 +347,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     public NativeSceneRenderSample[] RenderedScenes
         => _renderObserver.RenderedScenes;
 
+    public long[] PresentationTimestamps
+        => _renderObserver.Presentations;
+
     public NativeScenePublicationSample[] PublishedScenes
     {
         get
@@ -525,13 +528,17 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 DispatcherPriority.Input);
         }
 
-        NotifyResizePublicationIfReady(scene);
+        var matchingResizePublication = NotifyResizePublicationIfReady(scene);
         if (Volatile.Read(ref _compositionProjectionActive) != 0)
         {
             // Projection is demand-driven. A publication must wake an idle
             // compositor, but the gate still coalesces any producer burst into
             // one UI-to-compositor message.
-            ScheduleCompositionUiWake();
+            ScheduleCompositionUiWake(
+                NativeScenePublicationWakePolicy.Priority(
+                    matchingResizePublication) == NativeSceneUiWakePriority.Immediate
+                    ? DispatcherPriority.Send
+                    : DispatcherPriority.Normal);
             return;
         }
 
@@ -579,6 +586,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     }
 
     private void ScheduleCompositionUiWake()
+        => ScheduleCompositionUiWake(DispatcherPriority.Normal);
+
+    private void ScheduleCompositionUiWake(DispatcherPriority priority)
     {
         if (!_compositionUiWakeGate.TrySchedule())
         {
@@ -621,7 +631,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                     }
                 }
             },
-            DispatcherPriority.Send);
+            priority);
     }
 
     private void ApplyCursorKind(int cursorKind)

@@ -1,5 +1,32 @@
 void native_document::layout(float viewport_width, float viewport_height)
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto intrinsic_cache_disabled =
+        std::getenv("WEBSCENE_DISABLE_INTRINSIC_SIZE_CACHE") != nullptr;
+#else
+    constexpr auto intrinsic_cache_disabled = false;
+#endif
+    intrinsic_size_cache_generation_ = 0;
+    if (!intrinsic_cache_disabled) {
+        if (intrinsic_size_cache_ == nullptr) {
+            intrinsic_size_cache_ = std::make_unique<std::unordered_map<
+                intrinsic_size_key,
+                intrinsic_size_cache_entry,
+                intrinsic_size_key_hash>>();
+        }
+        // The key is bounded to two axes per stable node. This clear is only a
+        // detached-node lifetime cap, not a viewport-dependent resize cycle.
+        if (intrinsic_size_cache_->size() >= 16'384U) intrinsic_size_cache_->clear();
+        if (intrinsic_size_cache_->empty()) {
+            intrinsic_size_cache_->reserve(
+                std::min<size_t>(nodes_.size() * 2U, 16'384U));
+        }
+        if (++intrinsic_size_cache_next_generation_ == 0) {
+            intrinsic_size_cache_->clear();
+            ++intrinsic_size_cache_next_generation_;
+        }
+        intrinsic_size_cache_generation_ = intrinsic_size_cache_next_generation_;
+    }
     if (shadow_dom_storage_ != nullptr) {
         refresh_shadow_distributions();
         // Nodes omitted by slot distribution must not retain geometry from an
@@ -53,6 +80,7 @@ void native_document::layout(float viewport_width, float viewport_height)
         *body_,
         retained_canvas_seen,
         retained_canvases_remaining);
+    intrinsic_size_cache_generation_ = 0;
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
@@ -2703,6 +2731,45 @@ void native_document::layout_children(dom_node& parent)
 }
 
 float native_document::intrinsic_size(
+    const dom_node& node,
+    bool horizontal,
+    float available)
+{
+    // Only nodes owned by this document have stable identities for the whole
+    // layout pass. Pseudo-elements and list markers are represented by
+    // short-lived stack nodes that deliberately reuse their owner's native ID.
+    const auto stable_node = node.id != 0U
+        && node.id <= native_id_index_.size()
+        && native_id_index_[node.id - 1U] == &node;
+    if (intrinsic_size_cache_ == nullptr
+        || intrinsic_size_cache_generation_ == 0
+        || !stable_node) {
+        return compute_intrinsic_size(node, horizontal, available);
+    }
+    const intrinsic_size_key key{&node, horizontal};
+    if (const auto cached = intrinsic_size_cache_->find(key);
+        cached != intrinsic_size_cache_->end()
+        && cached->second.generation == intrinsic_size_cache_generation_
+        && cached->second.available == available) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++intrinsic_size_cache_hits_;
+#endif
+        return cached->second.size;
+    }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    ++intrinsic_size_cache_misses_;
+#endif
+    const auto result = compute_intrinsic_size(node, horizontal, available);
+    intrinsic_size_cache_->insert_or_assign(
+        key,
+        intrinsic_size_cache_entry{
+            intrinsic_size_cache_generation_,
+            available,
+            result});
+    return result;
+}
+
+float native_document::compute_intrinsic_size(
     const dom_node& node,
     bool horizontal,
     float available)

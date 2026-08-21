@@ -79,4 +79,17 @@ public sealed class NativeScenePublicationMailboxTests
                 matchingResizePublication,
                 renderedSceneCount));
     }
+
+    [Fact]
+    public void MatchingResizePublicationUsesImmediateUiWakePriority()
+    {
+        Assert.Equal(
+            NativeSceneUiWakePriority.Immediate,
+            NativeScenePublicationWakePolicy.Priority(
+                matchingResizePublication: true));
+        Assert.Equal(
+            NativeSceneUiWakePriority.Normal,
+            NativeScenePublicationWakePolicy.Priority(
+                matchingResizePublication: false));
+    }
 }

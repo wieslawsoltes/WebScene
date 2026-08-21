@@ -1396,6 +1396,10 @@ public:
         std::vector<char>& string_bytes) const;
 
     uint64_t layout_passes() const noexcept;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    uint64_t intrinsic_size_cache_hits() const noexcept;
+    uint64_t intrinsic_size_cache_misses() const noexcept;
+#endif
     size_t node_count() const noexcept;
     allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
@@ -1520,6 +1524,31 @@ private:
         }
     };
 
+    struct intrinsic_size_key final {
+        const dom_node* node{nullptr};
+        bool horizontal{false};
+
+        bool operator==(const intrinsic_size_key&) const = default;
+    };
+
+    struct intrinsic_size_key_hash final {
+        size_t operator()(const intrinsic_size_key& value) const noexcept
+        {
+            auto result = std::hash<const dom_node*>{}(value.node);
+            const auto mix = [&result](size_t next) {
+                result ^= next + 0x9e3779b9U + (result << 6U) + (result >> 2U);
+            };
+            mix(std::hash<bool>{}(value.horizontal));
+            return result;
+        }
+    };
+
+    struct intrinsic_size_cache_entry final {
+        uint64_t generation{0};
+        float available{0};
+        float size{0};
+    };
+
     webscene_text_metrics measure_text(
         std::string_view value,
         const dom_node& node) const;
@@ -1542,6 +1571,10 @@ private:
     float resolve_length(css_length value, float available, float fallback) const;
     static bool is_specified(css_length value);
     float intrinsic_size(
+        const dom_node& node,
+        bool horizontal,
+        float available);
+    float compute_intrinsic_size(
         const dom_node& node,
         bool horizontal,
         float available);
@@ -1605,6 +1638,16 @@ private:
         text_measurement_key,
         webscene_text_metrics,
         text_measurement_key_hash> text_measurement_cache_;
+    std::unique_ptr<std::unordered_map<
+        intrinsic_size_key,
+        intrinsic_size_cache_entry,
+        intrinsic_size_key_hash>> intrinsic_size_cache_;
+    uint64_t intrinsic_size_cache_generation_{0};
+    uint64_t intrinsic_size_cache_next_generation_{0};
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    uint64_t intrinsic_size_cache_hits_{0};
+    uint64_t intrinsic_size_cache_misses_{0};
+#endif
     bool dirty_{true};
     bool globally_dirty_{true};
     uint64_t scene_generation_{1};
