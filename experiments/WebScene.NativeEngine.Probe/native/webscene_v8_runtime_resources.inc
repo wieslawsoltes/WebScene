@@ -565,21 +565,40 @@
                     binding_callback_timer recascade_timer(
                         profile_startup ? &startup_stylesheet_recascade : nullptr);
 #endif
-                    const auto custom_properties_changed =
-                        appended_css_rules_define_custom_properties(first_new_rule);
-                    for (auto* existing :
-                        document.query_selector_all(document.body(), "*")) {
+                    const auto variable_recascade =
+                        make_css_variable_recascade_plan(first_new_rule);
+                    const auto apply_to_existing = [&](
+                        const auto& recurse,
+                        dom_node& existing) -> void {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                         if (profile_startup) ++startup_stylesheet_recascade_nodes;
 #endif
-                        apply_appended_css_rules(*existing, first_new_rule);
-                    }
-                    if (custom_properties_changed) {
-                        for (auto* existing :
-                            document.query_selector_all(document.body(), "*")) {
-                            reapply_css_variable_dependent_rules(*existing);
+                        auto applied = false;
+                        if (!filter_stylesheet_candidates
+                            || has_appended_css_rule_candidate(
+                                existing,
+                                first_new_rule)) {
+                            applied = apply_appended_css_rules(
+                                existing,
+                                first_new_rule);
                         }
-                    }
+                        if (!variable_recascade.variables.empty()) {
+                            applied |= reapply_css_variable_dependent_rules(
+                                existing,
+                                variable_recascade);
+                        }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                        if (profile_startup && applied) {
+                            ++startup_stylesheet_candidate_nodes;
+                        }
+#else
+                        static_cast<void>(applied);
+#endif
+                        for (auto* child : existing.children) {
+                            if (child != nullptr) recurse(recurse, *child);
+                        }
+                    };
+                    apply_to_existing(apply_to_existing, document.body());
                 } else {
                     frame_last_error_value = "Unable to load connected stylesheet: " + href_iterator->second;
                     ++frame_script_error_count;

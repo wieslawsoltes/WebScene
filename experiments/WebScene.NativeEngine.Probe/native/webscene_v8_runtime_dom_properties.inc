@@ -788,7 +788,9 @@
         const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("DOMTokenList.value.set"));
         auto* node = class_list_node(info);
         if (node == nullptr || info.Length() < 1) return;
         self->record_feature(
@@ -851,7 +853,9 @@
     static void class_list_add(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("DOMTokenList.add"));
         auto* node = class_list_node(info);
         if (node == nullptr) return;
         auto changed = false;
@@ -870,7 +874,9 @@
     static void class_list_remove(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("DOMTokenList.remove"));
         auto* node = class_list_node(info);
         if (node == nullptr || info.Length() < 1) return;
         auto changed = false;
@@ -894,7 +900,9 @@
     static void class_list_toggle(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("DOMTokenList.toggle"));
         auto* node = class_list_node(info);
         if (node == nullptr || info.Length() < 1) return;
         const auto value = to_utf8(info.GetIsolate(), info[0]);
@@ -963,7 +971,9 @@
     static void get_client_width(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Element.clientWidth.get"));
         auto* node = unwrap_node(info.Holder());
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active && node != nullptr) {
@@ -1039,7 +1049,8 @@
     {
         auto* self = current(info.GetIsolate());
         binding_callback_timer binding_timer(
-            self->profile(binding_category::dom_geometry));
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("HTMLElement.offsetWidth.get"));
         auto* node = unwrap_node(info.Holder());
         self->ensure_layout(node);
         if (node == nullptr) return;
@@ -1061,7 +1072,9 @@
     static void get_client_height(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("Element.clientHeight.get"));
         auto* node = unwrap_node(info.Holder());
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active && node != nullptr) {
@@ -1315,7 +1328,9 @@
     static void get_offset_left(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("HTMLElement.offsetLeft.get"));
         self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;
@@ -1336,7 +1351,9 @@
     static void get_offset_top(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_geometry));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_geometry),
+            self->profile_named("HTMLElement.offsetTop.get"));
         self->ensure_layout();
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr) return;

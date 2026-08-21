@@ -318,8 +318,25 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
     private static readonly HttpClient s_httpClient = new();
     private readonly List<string> _resourceSearchDirectories = new();
     private readonly List<MountedResourceDirectory> _mountedDirectories = new();
+    private readonly object _archiveGate = new();
+    private AvaloniaResourceArchive? _captureArchive;
+    private AvaloniaResourceArchive? _replayArchive;
+    private Exception? _resourceReplayFailure;
 
     public string ScriptBaseDirectory { get; set; } = AppContext.BaseDirectory;
+
+    /// <summary>
+    /// Gets the directory to which resolved HTTP(S) text and binary responses
+    /// are captured. Call <see cref="FlushResourceCapture"/> after the final
+    /// resource has loaded.
+    /// </summary>
+    public string? ResourceCaptureDirectory { get; init; }
+
+    /// <summary>
+    /// Gets an existing deterministic HTTP(S) resource archive. Missing
+    /// resources fail closed and never fall back to the network.
+    /// </summary>
+    public string? ResourceReplayDirectory { get; init; }
 
     public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
     {
@@ -349,64 +366,85 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
 
         if (resolved.Scheme is "http" or "https")
         {
+            if (GetReplayArchiveTracked() is { } replayArchive)
+            {
+                try
+                {
+                    return replayArchive.ReplayText(resolved, request.Kind);
+                }
+                catch (Exception error)
+                {
+                    RememberReplayFailure(error);
+                    throw;
+                }
+            }
+
+            WebSceneTextResource resource;
             if (TryResolveMountedResource(resolved, out var mountedPath))
             {
-                return LoadFile(mountedPath);
+                resource = LoadFile(mountedPath);
             }
-
-            if (TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
+            else if (TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
             {
-                return LoadFile(packagedPath);
+                resource = LoadFile(packagedPath);
             }
-
-            using var message = new HttpRequestMessage(HttpMethod.Get, resolved);
-            message.Version = HttpVersion.Version20;
-            message.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
-            if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
-                && EntityTagHeaderValue.TryParse(request.IfNoneMatch, out var entityTag))
+            else
             {
-                message.Headers.IfNoneMatch.Add(entityTag);
-            }
-            if (request.IfModifiedSince is { } modifiedSince)
-            {
-                message.Headers.IfModifiedSince = modifiedSince;
-            }
-            using var response = s_httpClient.SendAsync(
-                    message,
-                    HttpCompletionOption.ResponseHeadersRead)
-                .GetAwaiter()
-                .GetResult();
-            var responseEntityTag = response.Headers.ETag?.ToString() ?? request.IfNoneMatch;
-            var responseLastModified = response.Content.Headers.LastModified
-                                       ?? request.IfModifiedSince;
-            var cachePolicy = ReadHttpCachePolicy(response, responseLastModified);
-            if (response.StatusCode == HttpStatusCode.NotModified)
-            {
-                return new WebSceneTextResource(
-                    resolved.ToString(),
-                    string.Empty,
-                    resolved.ToString(),
-                    null)
+                using var message = new HttpRequestMessage(HttpMethod.Get, resolved);
+                message.Version = HttpVersion.Version20;
+                message.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+                if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
+                    && EntityTagHeaderValue.TryParse(request.IfNoneMatch, out var entityTag))
                 {
-                    EntityTag = responseEntityTag,
-                    LastModified = responseLastModified,
-                    FreshUntil = cachePolicy.FreshUntil,
-                    IsCacheable = cachePolicy.IsCacheable,
-                    NotModified = true
-                };
+                    message.Headers.IfNoneMatch.Add(entityTag);
+                }
+                if (request.IfModifiedSince is { } modifiedSince)
+                {
+                    message.Headers.IfModifiedSince = modifiedSince;
+                }
+                using var response = s_httpClient.SendAsync(
+                        message,
+                        HttpCompletionOption.ResponseHeadersRead)
+                    .GetAwaiter()
+                    .GetResult();
+                var responseEntityTag = response.Headers.ETag?.ToString() ?? request.IfNoneMatch;
+                var responseLastModified = response.Content.Headers.LastModified
+                                           ?? request.IfModifiedSince;
+                var cachePolicy = ReadHttpCachePolicy(response, responseLastModified);
+                if (response.StatusCode == HttpStatusCode.NotModified)
+                {
+                    resource = new WebSceneTextResource(
+                        resolved.ToString(),
+                        string.Empty,
+                        resolved.ToString(),
+                        null)
+                    {
+                        EntityTag = responseEntityTag,
+                        LastModified = responseLastModified,
+                        FreshUntil = cachePolicy.FreshUntil,
+                        IsCacheable = cachePolicy.IsCacheable,
+                        NotModified = true
+                    };
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                    resource = new WebSceneTextResource(
+                        resolved.ToString(),
+                        response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
+                        resolved.ToString(),
+                        null)
+                    {
+                        EntityTag = responseEntityTag,
+                        LastModified = responseLastModified,
+                        FreshUntil = cachePolicy.FreshUntil,
+                        IsCacheable = cachePolicy.IsCacheable
+                    };
+                }
             }
-            response.EnsureSuccessStatusCode();
-            return new WebSceneTextResource(
-                resolved.ToString(),
-                response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
-                resolved.ToString(),
-                null)
-            {
-                EntityTag = responseEntityTag,
-                LastModified = responseLastModified,
-                FreshUntil = cachePolicy.FreshUntil,
-                IsCacheable = cachePolicy.IsCacheable
-            };
+
+            GetCaptureArchive()?.CaptureText(resolved, request.Kind, resource);
+            return resource;
         }
 
         throw new NotSupportedException($"Unsupported resource scheme '{resolved.Scheme}'.");
@@ -497,32 +535,95 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
 
         if (resolved.Scheme is "http" or "https")
         {
+            if (GetReplayArchiveTracked() is { } replayArchive)
+            {
+                try
+                {
+                    return replayArchive.ReplayBinary(resolved);
+                }
+                catch (Exception error)
+                {
+                    RememberReplayFailure(error);
+                    throw;
+                }
+            }
+
+            AvaloniaBinaryResource resource;
             if (TryResolveMountedResource(resolved, out var mountedPath))
             {
-                return new AvaloniaBinaryResource(
+                resource = new AvaloniaBinaryResource(
                     mountedPath,
                     await File.ReadAllBytesAsync(mountedPath, cancellationToken).ConfigureAwait(false),
                     new Uri(mountedPath).AbsoluteUri);
             }
-
-            if (TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
+            else if (TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
             {
-                return new AvaloniaBinaryResource(
+                resource = new AvaloniaBinaryResource(
                     packagedPath,
                     await File.ReadAllBytesAsync(packagedPath, cancellationToken).ConfigureAwait(false),
                     new Uri(packagedPath).AbsoluteUri);
             }
+            else
+            {
+                resource = new AvaloniaBinaryResource(
+                    resolved.ToString(),
+                    await s_httpClient.GetByteArrayAsync(resolved, cancellationToken).ConfigureAwait(false),
+                    resolved.ToString());
+            }
 
-            return new AvaloniaBinaryResource(
-                resolved.ToString(),
-                await s_httpClient.GetByteArrayAsync(resolved, cancellationToken).ConfigureAwait(false),
-                resolved.ToString());
+            GetCaptureArchive()?.CaptureBinary(resolved, resource);
+            return resource;
         }
 
         throw new NotSupportedException($"Unsupported resource scheme '{resolved.Scheme}'.");
     }
 
     public void ClearSearchDirectories() => _resourceSearchDirectories.Clear();
+
+    /// <summary>Writes a pending deterministic resource-capture manifest.</summary>
+    public void FlushResourceCapture()
+    {
+        lock (_archiveGate)
+        {
+            _captureArchive?.Flush();
+        }
+    }
+
+    /// <summary>
+    /// Throws when the native callback boundary observed an archive miss or
+    /// corrupt replay object. Native resource callbacks cannot propagate
+    /// managed exceptions directly, so deterministic benchmark hosts should
+    /// call this while waiting for readiness and once after the readiness gate.
+    /// </summary>
+    public void ThrowIfResourceReplayFailed()
+    {
+        if (Volatile.Read(ref _resourceReplayFailure) is not { } error)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Deterministic WebScene resource replay failed. The origin was not contacted.",
+            error);
+    }
+
+    /// <summary>
+    /// Validates and preloads every replay object. Benchmark hosts can call
+    /// this before starting their navigation timer, matching a browser whose
+    /// interception fixture is already resident in memory.
+    /// </summary>
+    public void PrepareResourceReplay()
+    {
+        try
+        {
+            GetReplayArchiveTracked()?.Preload();
+        }
+        catch (Exception error)
+        {
+            RememberReplayFailure(error);
+            throw;
+        }
+    }
 
     public void MountDirectory(string addressPrefix, string directory)
     {
@@ -665,6 +766,60 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
     }
 
     private sealed record MountedResourceDirectory(Uri Prefix, string Directory);
+
+    private AvaloniaResourceArchive? GetCaptureArchive()
+    {
+        ValidateArchiveConfiguration();
+        if (string.IsNullOrWhiteSpace(ResourceCaptureDirectory))
+        {
+            return null;
+        }
+
+        lock (_archiveGate)
+        {
+            return _captureArchive ??= AvaloniaResourceArchive.CreateCapture(ResourceCaptureDirectory);
+        }
+    }
+
+    private AvaloniaResourceArchive? GetReplayArchive()
+    {
+        ValidateArchiveConfiguration();
+        if (string.IsNullOrWhiteSpace(ResourceReplayDirectory))
+        {
+            return null;
+        }
+
+        lock (_archiveGate)
+        {
+            return _replayArchive ??= AvaloniaResourceArchive.OpenReplay(ResourceReplayDirectory);
+        }
+    }
+
+    private AvaloniaResourceArchive? GetReplayArchiveTracked()
+    {
+        try
+        {
+            return GetReplayArchive();
+        }
+        catch (Exception error)
+        {
+            RememberReplayFailure(error);
+            throw;
+        }
+    }
+
+    private void ValidateArchiveConfiguration()
+    {
+        if (!string.IsNullOrWhiteSpace(ResourceCaptureDirectory)
+            && !string.IsNullOrWhiteSpace(ResourceReplayDirectory))
+        {
+            throw new InvalidOperationException(
+                "Resource capture and replay directories are mutually exclusive.");
+        }
+    }
+
+    private void RememberReplayFailure(Exception error)
+        => Interlocked.CompareExchange(ref _resourceReplayFailure, error, null);
 
     private static string DecodeDataUri(string value)
     {

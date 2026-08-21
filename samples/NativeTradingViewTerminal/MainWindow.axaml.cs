@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using WebScene.Backends.Avalonia;
+using WebScene.Backends.Native;
 
 namespace NativeTradingViewTerminal;
 
@@ -8,6 +11,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly IReadOnlyList<string> _arguments;
     private readonly DispatcherTimer _diagnosticsTimer;
+    private AvaloniaResourceLoader? _resourceLoader;
 
     public MainWindow()
         : this(Environment.GetCommandLineArgs())
@@ -46,13 +50,127 @@ public sealed partial class MainWindow : Window
         try
         {
             var paths = SamplePaths.Resolve(_arguments);
+            _resourceLoader = new AvaloniaResourceLoader
+            {
+                ResourceCaptureDirectory = paths.ResourceCaptureDirectory,
+                ResourceReplayDirectory = paths.ResourceReplayDirectory
+            };
+            var startupTimer = Stopwatch.StartNew();
+            var replayPreparationTimer = Stopwatch.StartNew();
+            _resourceLoader.PrepareResourceReplay();
+            replayPreparationTimer.Stop();
+            Stopwatch? navigationTimer = null;
             StatusText.Text = "Loading hosted TradingView terminal…";
             DiagnosticsText.Text = paths.DocumentUrl;
             await TerminalHost.LoadAsync(
-                paths.DocumentUrl,
-                paths.NativeLibraryPath,
-                paths.CompilationCacheDirectory);
+                new NativeWebSceneLoadOptions
+                {
+                    Source = paths.DocumentUrl,
+                    NativeLibraryPath = paths.NativeLibraryPath,
+                    CompilationCacheDirectory = paths.CompilationCacheDirectory,
+                    ResourceLoader = _resourceLoader
+                },
+                (_, _) =>
+                {
+                    navigationTimer = Stopwatch.StartNew();
+                    return ValueTask.CompletedTask;
+                });
             StatusText.Text = "TradingView terminal loaded";
+            if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
+            {
+                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+                var chartReady = false;
+                while (DateTime.UtcNow < deadline)
+                {
+                    var ready = await TerminalHost.EvaluateTextAsync("""
+                        (() => {
+                          for (const frame of document.querySelectorAll('iframe')) {
+                            try {
+                              const chart = frame.contentDocument;
+                              const loading = chart?.querySelector('.loading-indicator');
+                              if ((chart?.querySelectorAll('canvas').length ?? 0) >= 8
+                                  && loading && getComputedStyle(loading).display === 'none') {
+                                return true;
+                              }
+                            } catch {}
+                          }
+                          return false;
+                        })()
+                        """);
+                    if (ready == "true")
+                    {
+                        chartReady = true;
+                        break;
+                    }
+                    _resourceLoader.ThrowIfResourceReplayFailed();
+                    await Task.Delay(25);
+                }
+                _resourceLoader.ThrowIfResourceReplayFailed();
+                if (!chartReady)
+                {
+                    throw new TimeoutException(
+                        "TradingView chart did not reach the startup-profile readiness gate.");
+                }
+                _resourceLoader.FlushResourceCapture();
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop chart ready wall: {startupTimer.Elapsed.TotalMilliseconds:F3} ms"));
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop replay preparation: {replayPreparationTimer.Elapsed.TotalMilliseconds:F3} ms"));
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop chart ready navigation: {navigationTimer?.Elapsed.TotalMilliseconds ?? double.NaN:F3} ms"));
+                await TerminalHost.EvaluateTextAsync("""
+                    globalThis.__webSceneComponentReady = true;
+                    document.body.setAttribute('data-webscene-profile-ready', 'true');
+                    true
+                    """);
+                // Conditional chunks can be requested shortly after the visual
+                // readiness gate. Give capture runs a longer observation window
+                // so later strict replays do not depend on lucky task ordering.
+                await Task.Delay(paths.ResourceCaptureDirectory is null ? 500 : 2_000);
+                var startupMetrics = TerminalHost.CapturePerformanceSnapshot();
+                Console.WriteLine(
+                    "TradingView desktop startup metrics: "
+                    + JsonSerializer.Serialize(new
+                    {
+                        startupMetrics.Engine.CompilationRequests,
+                        startupMetrics.Engine.CompilationMemoryHits,
+                        startupMetrics.Engine.CompilationPersistentHits,
+                        startupMetrics.Engine.CompilationPersistentMisses,
+                        CompilationTimeMilliseconds =
+                            startupMetrics.Engine.CompilationTimeNanoseconds / 1_000_000d,
+                        startupMetrics.ResourceCache.Requests,
+                        startupMetrics.ResourceCache.Hits,
+                        startupMetrics.ResourceCache.Misses,
+                        startupMetrics.ResourceCache.BytesRead,
+                        startupMetrics.Engine.DomNodes,
+                        startupMetrics.Engine.LayoutPasses,
+                        startupMetrics.Engine.PublishedScenes,
+                        startupMetrics.Engine.AcquiredScenes,
+                        LastLayoutMilliseconds =
+                            startupMetrics.Engine.LastLayoutNanoseconds / 1_000_000d,
+                        LastSceneBuildMilliseconds =
+                            startupMetrics.Engine.LastSceneBuildNanoseconds / 1_000_000d,
+                        LastScenePublicationMilliseconds =
+                            startupMetrics.Engine.LastScenePublicationNanoseconds / 1_000_000d,
+                        MaximumScenePublicationMilliseconds =
+                            startupMetrics.Engine.MaximumScenePublicationNanoseconds / 1_000_000d,
+                        startupMetrics.SceneFlow.PublicationAttempts,
+                        startupMetrics.SceneFlow.BlockedPublications,
+                        startupMetrics.SceneFlow.AcknowledgedScenes
+                    }));
+                var diagnostics = TerminalHost.SceneDiagnostics;
+                var profileStart = diagnostics.IndexOf(
+                    "startup-profile=", StringComparison.Ordinal);
+                var profileEnd = profileStart < 0
+                    ? -1
+                    : diagnostics.IndexOf(" | ", profileStart, StringComparison.Ordinal);
+                Console.WriteLine(profileStart < 0
+                    ? "TradingView desktop startup profile unavailable"
+                    : "TradingView desktop " + diagnostics[profileStart..(
+                        profileEnd < 0 ? diagnostics.Length : profileEnd)]);
+                Close();
+                return;
+            }
             _diagnosticsTimer.Start();
             await RefreshDiagnosticsAsync();
         }
@@ -108,6 +226,7 @@ public sealed partial class MainWindow : Window
     private async void OnClosed(object? sender, EventArgs args)
     {
         _diagnosticsTimer.Stop();
+        _resourceLoader?.FlushResourceCapture();
         await TerminalHost.DisposeAsync();
     }
 }

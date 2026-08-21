@@ -369,12 +369,48 @@
         }
     }
 
+    static std::unordered_set<std::string> css_variable_references(
+        std::string_view value)
+    {
+        std::unordered_set<std::string> references;
+        for (size_t search = 0U;
+             (search = value.find("var(", search)) != std::string_view::npos;) {
+            auto cursor = search + 4U;
+            while (cursor < value.size()
+                && std::isspace(static_cast<unsigned char>(value[cursor]))) {
+                ++cursor;
+            }
+            const auto start = cursor;
+            while (cursor < value.size()
+                && value[cursor] != ',' && value[cursor] != ')'
+                && !std::isspace(static_cast<unsigned char>(value[cursor]))) {
+                ++cursor;
+            }
+            if (cursor > start
+                && value.substr(start, cursor - start).starts_with("--")) {
+                references.emplace(value.substr(start, cursor - start));
+            }
+            search += 4U;
+        }
+        return references;
+    }
+
     void index_css_rule(size_t index)
     {
         const auto& rule = css_rules[index];
         const auto& selector = rule.selector();
         if (selector.find("::selection") != std::string::npos) {
             return;
+        }
+        std::unordered_set<std::string> variable_references;
+        for (const auto& declaration : rule.declarations()) {
+            auto declaration_references = css_variable_references(declaration.value);
+            variable_references.insert(
+                std::make_move_iterator(declaration_references.begin()),
+                std::make_move_iterator(declaration_references.end()));
+        }
+        for (auto& reference : variable_references) {
+            css_rules_by_variable_reference[std::move(reference)].push_back(index);
         }
         index_hover_selector_dependencies(rule);
         if (selector.find(":disabled") != std::string::npos

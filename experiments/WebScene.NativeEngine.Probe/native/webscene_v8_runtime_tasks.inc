@@ -73,6 +73,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         auto task_profile_name = std::string{};
         auto task_profile_started = std::chrono::steady_clock::time_point{};
+        auto task_phase_before = startup_phase_snapshot{};
         std::array<binding_callback_stats, binding_category_count>
             task_binding_profile_before{};
         if (profile_startup) {
@@ -94,6 +95,7 @@
                 }
             }
             task_profile_started = std::chrono::steady_clock::now();
+            task_phase_before = capture_startup_phase_snapshot();
         }
         if (profile_bindings) {
             task_binding_profile_before = binding_totals;
@@ -115,6 +117,7 @@
         }
         active_timer_id = task.id;
         active_timer_cancelled = false;
+        style_recascade_batch_scope style_batch(*this);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         inspector_async_task_started(task.id);
 #endif
@@ -187,16 +190,23 @@
             }
         }
         perform_microtask_checkpoint();
+        style_batch.finish();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         inspector_async_task_finished(task.id);
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
-            auto& stats = startup_task_profiles[task_profile_name];
-            ++stats.calls;
-            stats.nanoseconds += static_cast<uint64_t>(
+            const auto task_elapsed_nanoseconds = static_cast<uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - task_profile_started).count());
+            auto& stats = startup_task_profiles[task_profile_name];
+            ++stats.calls;
+            stats.nanoseconds += task_elapsed_nanoseconds;
+            record_startup_nested_phases(
+                startup_task_phase_profiles,
+                task_profile_name,
+                task_phase_before,
+                task_elapsed_nanoseconds);
             if (std::getenv("WEBSCENE_PROBE_TRACE_STARTUP_TASKS") != nullptr) {
                 std::cerr << "[Native Engine Probe] startup-task t=" << std::fixed
                     << std::setprecision(1)
@@ -272,6 +282,13 @@
             return true;
         }
         v8::Context::Scope resource_scope(resource_context);
+        // A dynamically loaded script, its load event, and the resulting
+        // microtasks form one browser task. Keep style invalidations pending
+        // across that entire boundary so Webpack/React DOM construction does
+        // not recascade synchronously between those phases.
+        style_recascade_batch_scope style_batch(
+            *this,
+            batch_connected_resource_style_recascades);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto trace_resource = profile_startup
             && std::getenv("WEBSCENE_PROBE_TRACE_STARTUP_TASKS") != nullptr;
@@ -312,6 +329,7 @@
 #endif
         }
         perform_microtask_checkpoint();
+        style_batch.finish();
         return true;
     }
 

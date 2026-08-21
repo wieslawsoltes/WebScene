@@ -1015,6 +1015,9 @@
         const auto profile_started = profile_startup
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+        const auto script_phase_before = profile_startup
+            ? capture_startup_phase_snapshot()
+            : startup_phase_snapshot{};
 #endif
         v8::Context::Scope context_scope(local_context);
         v8::TryCatch try_catch(isolate);
@@ -1023,8 +1026,15 @@
                 source,
                 document_name,
                 script,
-                std::move(immutable_source))
-            || script->Run(local_context).IsEmpty()) {
+                std::move(immutable_source))) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+            report_inspector_exception(try_catch, local_context);
+#endif
+            error = describe_exception(try_catch, local_context);
+            return false;
+        }
+        style_recascade_batch_scope style_batch(*this);
+        if (script->Run(local_context).IsEmpty()) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
@@ -1032,13 +1042,21 @@
             return false;
         }
         if (checkpoint_microtasks) perform_microtask_checkpoint();
+        style_batch.finish();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup) {
-            auto& stats = startup_script_profiles[resource_leaf_name(document_name)];
-            ++stats.calls;
-            stats.nanoseconds += static_cast<uint64_t>(
+            const auto script_name = resource_leaf_name(document_name);
+            const auto elapsed_nanoseconds = static_cast<uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - profile_started).count());
+            auto& stats = startup_script_profiles[script_name];
+            ++stats.calls;
+            stats.nanoseconds += elapsed_nanoseconds;
+            record_startup_nested_phases(
+                startup_script_phase_profiles,
+                script_name,
+                script_phase_before,
+                elapsed_nanoseconds);
         }
 #endif
         return true;
@@ -1650,7 +1668,68 @@
             startup_frame_started = std::chrono::steady_clock::now();
         }
         binding_callback_timer timer(profile_startup ? &startup_frame_hydrate : nullptr);
+        auto frame_profile_name = "iframe#" + std::to_string(frame.id);
+        if (const auto source = frame.attributes.find("src");
+            source != frame.attributes.end() && !source->second.empty()) {
+            auto source_name = resource_leaf_name(source->second);
+            constexpr size_t maximum_source_name = 80U;
+            if (source_name.size() > maximum_source_name) {
+                source_name.resize(maximum_source_name);
+            }
+            frame_profile_name += ':' + source_name;
+        }
+        const auto frame_profile_started = profile_startup
+            ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
+        const auto frame_phase_before = profile_startup
+            ? capture_startup_phase_snapshot()
+            : startup_phase_snapshot{};
+        const auto finish_frame_profile = [
+            this,
+            frame_profile_name,
+            frame_profile_started,
+            frame_phase_before](void*) {
+            if (!profile_startup) return;
+            const auto elapsed_nanoseconds = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - frame_profile_started).count());
+            record_startup_nested_phases(
+                startup_frame_phase_profiles,
+                frame_profile_name,
+                frame_phase_before,
+                elapsed_nanoseconds);
+        };
+        std::unique_ptr<void, decltype(finish_frame_profile)> frame_profile_scope(
+            profile_startup ? this : nullptr,
+            finish_frame_profile);
 #endif
+        if (!frame.attributes.contains("frame-html")
+            && !frame.attributes.contains("object-html")) {
+            const auto remote_result = frame.attributes.find(
+                "data-webscene-remote-result");
+            const auto source = frame.attributes.find("src");
+            if (remote_result != frame.attributes.end()
+                && remote_result->second == "pending"
+                && source != frame.attributes.end()) {
+                std::string html;
+                std::string resolved_name;
+                if (!load_text_resource(
+                        source->second,
+                        {},
+                        WEBSCENE_RESOURCE_DOCUMENT,
+                        html,
+                        resolved_name)) {
+                    frame.attributes["data-webscene-remote-result"] = "failed";
+                    frame_last_error_value = "Unable to load iframe document: "
+                        + source->second;
+                    ++frame_script_error_count;
+                    return false;
+                }
+                frame.attributes["src"] = std::move(resolved_name);
+                frame.attributes["object-html"] = std::move(html);
+                frame.attributes["data-webscene-remote-result"] = "loaded";
+            }
+        }
         const auto html_iterator = frame.attributes.find("frame-html");
         const auto object_iterator = frame.attributes.find("object-html");
         const auto& html = html_iterator != frame.attributes.end() && !html_iterator->second.empty()
@@ -1714,6 +1793,7 @@
         css_rules_by_id.clear();
         css_rules_by_tag.clear();
         css_rules_by_attribute.clear();
+        css_rules_by_variable_reference.clear();
         css_focus_rules.clear();
         unindexed_css_rules.clear();
         css_attribute_dependencies.clear();

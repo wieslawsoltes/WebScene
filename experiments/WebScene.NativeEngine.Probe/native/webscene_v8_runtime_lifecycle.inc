@@ -15,6 +15,14 @@
         , interop_callback_sink(std::move(interop_callback_sink_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        , batch_style_recascades(
+            std::getenv("WEBSCENE_PROBE_DISABLE_STYLE_RECASCADE_BATCHING") == nullptr)
+        , batch_connected_resource_style_recascades(
+            std::getenv("WEBSCENE_PROBE_DISABLE_CONNECTED_RESOURCE_STYLE_BATCHING") == nullptr)
+        , prefetch_iframe_documents(
+            std::getenv("WEBSCENE_PROBE_DISABLE_IFRAME_DOCUMENT_PREFETCH") == nullptr)
+        , filter_stylesheet_candidates(
+            std::getenv("WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER") == nullptr)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
         , profile_resize_cpu(
             std::getenv("WEBSCENE_PROBE_PROFILE_RESIZE_CPU") != nullptr)
@@ -745,6 +753,18 @@
 #endif
     }
 
+    binding_callback_stats* profile_named(std::string_view name)
+    {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        return profile_bindings
+            ? &startup_binding_profiles[std::string(name)]
+            : nullptr;
+#else
+        static_cast<void>(name);
+        return nullptr;
+#endif
+    }
+
     static dom_node* unwrap_node(v8::Local<v8::Object> object)
     {
         return object->InternalFieldCount() < 1
@@ -794,6 +814,7 @@
             compact_index(css_rules_by_id);
             compact_index(css_rules_by_tag);
             compact_index(css_rules_by_attribute);
+            compact_index(css_rules_by_variable_reference);
             css_focus_rules.shrink_to_fit();
             unindexed_css_rules.shrink_to_fit();
             hover_selector_dependencies.shrink_to_fit();
