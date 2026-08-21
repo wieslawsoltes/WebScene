@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using WebScene.Backends.Avalonia;
 using WebScene.Core;
 using Xunit;
@@ -57,6 +58,7 @@ public sealed class AvaloniaResourceLoaderTests
                 ResourceReplayDirectory = archiveDirectory
             };
             replay.PrepareResourceReplay();
+            Assert.True(replay.TryLoadUtf8(request, out var replayedUtf8));
             var replayedText = replay.LoadText(request);
             var replayedIncremental = replay.LoadText(
                 new WebSceneResourceRequest(
@@ -69,6 +71,9 @@ public sealed class AvaloniaResourceLoaderTests
                 CancellationToken.None);
 
             Assert.Equal(capturedText.Content, replayedText.Content);
+            Assert.Equal(
+                capturedText.Content,
+                Encoding.UTF8.GetString(replayedUtf8.Content.Span));
             Assert.Equal(incrementalResource.Content, replayedIncremental.Content);
             Assert.Equal(capturedText.CacheKey, replayedText.CacheKey);
             Assert.Equal(capturedBinary.Content, replayedBinary.Content);

@@ -114,6 +114,24 @@ internal sealed class AvaloniaResourceArchive
 
     internal WebSceneTextResource ReplayText(Uri address, WebSceneResourceKind kind)
     {
+        var resource = ReplayUtf8Text(address, kind);
+        return new WebSceneTextResource(
+            resource.CacheKey,
+            Encoding.UTF8.GetString(resource.Content.Span),
+            resource.DisplayName,
+            resource.Directory)
+        {
+            EntityTag = resource.EntityTag,
+            LastModified = resource.LastModified,
+            FreshUntil = resource.FreshUntil,
+            IsCacheable = resource.IsCacheable
+        };
+    }
+
+    internal AvaloniaUtf8Resource ReplayUtf8Text(
+        Uri address,
+        WebSceneResourceKind kind)
+    {
         ResourceArchiveEntry entry;
         lock (_gate)
         {
@@ -123,10 +141,9 @@ internal sealed class AvaloniaResourceArchive
             }
         }
 
-        var content = ReadContent(entry);
-        return new WebSceneTextResource(
+        return new AvaloniaUtf8Resource(
             entry.CacheKey ?? entry.Address,
-            Encoding.UTF8.GetString(content),
+            ReadContent(entry),
             entry.DisplayName ?? entry.Address,
             entry.Directory)
         {
@@ -311,4 +328,19 @@ internal sealed class AvaloniaResourceArchive
 
         public bool IsCacheable { get; set; } = true;
     }
+}
+
+internal readonly record struct AvaloniaUtf8Resource(
+    string CacheKey,
+    ReadOnlyMemory<byte> Content,
+    string DisplayName,
+    string? Directory)
+{
+    internal string? EntityTag { get; init; }
+
+    internal DateTimeOffset? LastModified { get; init; }
+
+    internal DateTimeOffset? FreshUntil { get; init; }
+
+    internal bool IsCacheable { get; init; } = true;
 }

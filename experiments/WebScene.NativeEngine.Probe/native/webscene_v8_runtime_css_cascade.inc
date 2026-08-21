@@ -10,6 +10,149 @@
         style.scrollbar_visibility_important = declaration.important;
     }
 
+    static bool layout_length_equal(css_length left, css_length right) noexcept
+    {
+        return left.value == right.value
+            && left.unit == right.unit
+            && left.pixel_offset == right.pixel_offset;
+    }
+
+    static bool pseudo_layout_equal(
+        const node_style::pseudo_element& left,
+        const node_style::pseudo_element& right) noexcept
+    {
+        const std::array left_lengths{
+            left.width, left.height, left.left, left.top, left.right, left.bottom,
+            left.margin_left, left.margin_top, left.margin_right, left.margin_bottom};
+        const std::array right_lengths{
+            right.width, right.height, right.left, right.top, right.right, right.bottom,
+            right.margin_left, right.margin_top, right.margin_right, right.margin_bottom};
+        for (size_t index = 0; index < left_lengths.size(); ++index) {
+            if (!layout_length_equal(left_lengths[index], right_lengths[index])) return false;
+        }
+        return left.display == right.display
+            && left.position == right.position
+            && left.align_self == right.align_self
+            && left.font_size == right.font_size
+            && left.line_height == right.line_height
+            && left.content == right.content
+            && left.generated == right.generated
+            && left.display_none == right.display_none
+            && left.align_self_specified == right.align_self_specified;
+    }
+
+    static bool grid_layout_equal(
+        const node_style::grid_data& left,
+        const node_style::grid_data& right) noexcept
+    {
+        const auto tracks_equal = [](const auto& left_tracks, const auto& right_tracks) {
+            if (left_tracks.size() != right_tracks.size()) return false;
+            for (size_t index = 0; index < left_tracks.size(); ++index) {
+                const auto& left_track = left_tracks[index];
+                const auto& right_track = right_tracks[index];
+                if (!layout_length_equal(left_track.minimum, right_track.minimum)
+                    || !layout_length_equal(left_track.maximum, right_track.maximum)
+                    || left_track.fraction != right_track.fraction
+                    || left_track.kind != right_track.kind) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        return tracks_equal(left.template_columns, right.template_columns)
+            && tracks_equal(left.template_rows, right.template_rows)
+            && left.two_columns == right.two_columns
+            && left.fractional_rows == right.fractional_rows
+            && left.span_all == right.span_all
+            && left.column_start == right.column_start
+            && left.area_value == right.area_value
+            && left.row_value == right.row_value
+            && left.row_start_value == right.row_start_value
+            && left.row_end_value == right.row_end_value
+            && left.column_value == right.column_value
+            && left.column_start_value == right.column_start_value
+            && left.column_end_value == right.column_end_value;
+    }
+
+    static bool computed_layout_style_equal(
+        const node_style& left,
+        const node_style& right) noexcept
+    {
+        const std::array left_lengths{
+            left.width, left.height, left.min_width, left.min_height,
+            left.max_width, left.max_height, left.left, left.top, left.right, left.bottom,
+            left.padding_left, left.padding_top, left.padding_right, left.padding_bottom,
+            left.margin_left, left.margin_top, left.margin_right, left.margin_bottom,
+            left.row_gap, left.column_gap,
+            left.border_left_width, left.border_top_width,
+            left.border_right_width, left.border_bottom_width,
+            left.flex_basis};
+        const std::array right_lengths{
+            right.width, right.height, right.min_width, right.min_height,
+            right.max_width, right.max_height, right.left, right.top, right.right, right.bottom,
+            right.padding_left, right.padding_top, right.padding_right, right.padding_bottom,
+            right.margin_left, right.margin_top, right.margin_right, right.margin_bottom,
+            right.row_gap, right.column_gap,
+            right.border_left_width, right.border_top_width,
+            right.border_right_width, right.border_bottom_width,
+            right.flex_basis};
+        for (size_t index = 0; index < left_lengths.size(); ++index) {
+            if (!layout_length_equal(left_lengths[index], right_lengths[index])) return false;
+        }
+        const auto& left_text = left.textual();
+        const auto& right_text = right.textual();
+        const auto& left_table = left.table();
+        const auto& right_table = right.table();
+        return left.display == right.display
+            && left.position == right.position
+            && left.floating == right.floating
+            && left.direction == right.direction
+            && left.align_items == right.align_items
+            && left.align_self == right.align_self
+            && left.justify_content == right.justify_content
+            && left.overflow_x == right.overflow_x
+            && left.overflow_y == right.overflow_y
+            && left.flex_grow == right.flex_grow
+            && left.flex_shrink == right.flex_shrink
+            && left.font_size == right.font_size
+            && left.line_height == right.line_height
+            && left.font_weight == right.font_weight
+            && left.letter_spacing == right.letter_spacing
+            && left.word_spacing == right.word_spacing
+            && left.letter_spacing_specified == right.letter_spacing_specified
+            && left.word_spacing_specified == right.word_spacing_specified
+            && left.clip == right.clip
+            && left.scroll_x_enabled == right.scroll_x_enabled
+            && left.scroll_y_enabled == right.scroll_y_enabled
+            && left.scrollbar_hidden == right.scrollbar_hidden
+            && left.flex_wrap == right.flex_wrap
+            && left.flex_reverse == right.flex_reverse
+            && left.align_self_specified == right.align_self_specified
+            && left.border_box == right.border_box
+            && left.margin_left_auto == right.margin_left_auto
+            && left.margin_top_auto == right.margin_top_auto
+            && left.margin_right_auto == right.margin_right_auto
+            && left.margin_bottom_auto == right.margin_bottom_auto
+            && left.table_layout_fixed == right.table_layout_fixed
+            && left_text.font_family == right_text.font_family
+            && left_text.text_align == right_text.text_align
+            && left_text.vertical_align == right_text.vertical_align
+            && left_text.text_transform == right_text.text_transform
+            && left_text.white_space == right_text.white_space
+            && left_text.list_style_position == right_text.list_style_position
+            && left_text.list_style_type == right_text.list_style_type
+            && layout_length_equal(
+                left_table.border_spacing_horizontal,
+                right_table.border_spacing_horizontal)
+            && layout_length_equal(
+                left_table.border_spacing_vertical,
+                right_table.border_spacing_vertical)
+            && left_table.border_collapsed == right_table.border_collapsed
+            && grid_layout_equal(left.grid(), right.grid())
+            && pseudo_layout_equal(left.before_pseudo(), right.before_pseudo())
+            && pseudo_layout_equal(left.after_pseudo(), right.after_pseudo());
+    }
+
     static void append_utf8_codepoint(std::string& result, uint32_t codepoint)
     {
         if (codepoint <= 0x7FU) {
@@ -2401,12 +2544,18 @@
         // assigned when a preserved comment was created with the default block
         // display for an unknown tag during a subtree recascade.
         if (node.kind != dom_node_kind::element) {
+            const auto display_changed = node.style.display
+                != (node.kind == dom_node_kind::text
+                    ? display_mode::inline_flow
+                    : display_mode::none);
             node.style.display = node.kind == dom_node_kind::text
                 ? display_mode::inline_flow
                 : display_mode::none;
-            document.mark_dirty();
+            if (display_changed) document.mark_dirty();
+            else document.mark_scene_changed();
             return;
         }
+        const auto previous_style = node.style;
         node.style.important_property_mask = 0;
         node.style.scrollbar_hidden = false;
         node.style.scrollbar_visibility_important = false;
@@ -2756,7 +2905,18 @@
         configure_style_keyframe_animation(node);
         document.update_style_animations(node);
         detect_css_compositions(node);
-        document.mark_dirty();
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        const auto force_layout_invalidation =
+            std::getenv("WEBSCENE_FORCE_RECASCADE_LAYOUT_INVALIDATION") != nullptr;
+#else
+        constexpr auto force_layout_invalidation = false;
+#endif
+        if (force_layout_invalidation
+            || !computed_layout_style_equal(previous_style, node.style)) {
+            document.mark_dirty();
+        } else {
+            document.mark_scene_changed();
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) {
             const auto completed = std::chrono::steady_clock::now();

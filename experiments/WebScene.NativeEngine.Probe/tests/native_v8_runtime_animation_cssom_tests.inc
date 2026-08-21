@@ -431,6 +431,92 @@ void test_cssom_paint_invalidation_does_not_force_layout(
             + changed_height);
 }
 
+void test_client_rect_reads_reuse_unrelated_out_of_flow_layout(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div id="stable" style="height: 40px; width: 80px"></div>
+            <div id="overlay" style="position: absolute; height: 20px; width: 30px"></div>`;
+          void document.getElementById('stable').getBoundingClientRect().width;
+        })()
+    )JS", "client-rect-layout-reuse-setup.js");
+    webscene_engine_metrics baseline{};
+    webscene_engine_get_metrics(engine, &baseline);
+
+    execute_and_wait(engine, R"JS(
+        document.getElementById('overlay').style.width = '60px'
+    )JS", "client-rect-layout-reuse-mutation.js");
+    const auto stable_rect = evaluate(
+        engine,
+        "document.getElementById('stable').getClientRects()[0].width",
+        "client-rect-layout-reuse-unrelated-read.js");
+    webscene_engine_metrics after_stable_read{};
+    webscene_engine_get_metrics(engine, &after_stable_read);
+    require(stable_rect == "80", "unrelated client rect geometry changed unexpectedly");
+    require(
+        after_stable_read.layout_passes == baseline.layout_passes,
+        "an unrelated getClientRects read forced isolated out-of-flow layout");
+
+    const auto overlay_rect = evaluate(
+        engine,
+        "document.getElementById('overlay').getBoundingClientRect().width",
+        "client-rect-layout-reuse-dirty-read.js");
+    require(overlay_rect == "60", "the dirty out-of-flow client rect remained stale");
+}
+
+void test_paint_only_stylesheet_recascade_does_not_force_layout(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style id="recascade-style">.recascade-target { color: red; height: 40px; width: 80px }</style>
+            <div class="recascade-target"></div>`;
+          void document.querySelector('.recascade-target').offsetHeight;
+        })()
+    )JS", "paint-only-recascade-setup.js");
+    webscene_engine_metrics baseline{};
+    webscene_engine_get_metrics(engine, &baseline);
+
+    execute_and_wait(engine, R"JS(
+        document.getElementById('recascade-style').textContent =
+          '.recascade-target { color: blue; background-color: black; height: 40px; width: 80px }'
+    )JS", "paint-only-recascade-update.js");
+    const auto stable_height = evaluate(
+        engine,
+        "document.querySelector('.recascade-target').offsetHeight",
+        "paint-only-recascade-geometry-barrier.js");
+    webscene_engine_metrics after_paint{};
+    webscene_engine_get_metrics(engine, &after_paint);
+    require(stable_height == "40", "paint-only recascade changed box geometry");
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto force_layout_invalidation =
+        std::getenv("WEBSCENE_FORCE_RECASCADE_LAYOUT_INVALIDATION") != nullptr;
+#else
+    constexpr auto force_layout_invalidation = false;
+#endif
+    if (!force_layout_invalidation) {
+        require(
+            after_paint.layout_passes == baseline.layout_passes,
+            "paint-only stylesheet recascade forced a document layout");
+    }
+
+    execute_and_wait(engine, R"JS(
+        document.getElementById('recascade-style').textContent =
+          '.recascade-target { color: blue; height: 41px; width: 80px }'
+    )JS", "layout-recascade-update.js");
+    const auto changed_height = evaluate(
+        engine,
+        "document.querySelector('.recascade-target').offsetHeight",
+        "layout-recascade-geometry-barrier.js");
+    require(
+        changed_height == "41",
+        "a layout-affecting stylesheet recascade did not update geometry: "
+            + changed_height);
+}
+
 void test_cssom_serializes_resolved_numbers_without_trailing_zeroes(webscene_engine* engine)
 {
     execute(engine, R"JS(

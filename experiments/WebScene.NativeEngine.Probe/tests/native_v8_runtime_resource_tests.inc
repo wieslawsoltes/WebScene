@@ -23,7 +23,13 @@ size_t load_test_resource(
     const auto known = server.content.find(address);
     if (known == server.content.end()) return 0U;
 
-    if (destination == nullptr && !address.ends_with("index.html")) {
+    constexpr size_t header_size = 2U + sizeof(uint32_t) + sizeof(int64_t) * 2U;
+    const auto required = header_size + known->second.size();
+    // The runtime may now supply speculative capacity on the first call. An
+    // exact-size destination identifies the retry after a short probe.
+    const auto first_transfer = destination == nullptr
+        || destination_capacity != required;
+    if (first_transfer && !address.ends_with("index.html")) {
         server.requests.fetch_add(1, std::memory_order_relaxed);
         const auto active = server.active.fetch_add(1, std::memory_order_relaxed) + 1;
         auto peak = server.peak.load(std::memory_order_relaxed);
@@ -50,12 +56,10 @@ size_t load_test_resource(
         }
         server.active.fetch_sub(1, std::memory_order_relaxed);
     }
-    else if (destination == nullptr) {
+    else if (first_transfer) {
         server.requests.fetch_add(1, std::memory_order_relaxed);
     }
 
-    constexpr size_t header_size = 2U + sizeof(uint32_t) + sizeof(int64_t) * 2U;
-    const auto required = header_size + known->second.size();
     if (destination == nullptr || destination_capacity < required) return required;
     destination[0] = 1;
     destination[1] = 1;
@@ -299,7 +303,7 @@ size_t load_navigation_barrier_resource(
     size_t destination_capacity)
 {
     auto& server = *static_cast<navigation_barrier_server*>(user_data);
-    if (destination == nullptr && kind == WEBSCENE_RESOURCE_DOCUMENT) {
+    if (kind == WEBSCENE_RESOURCE_DOCUMENT) {
         server.entered.fetch_add(1U, std::memory_order_release);
         while (!server.release.load(std::memory_order_acquire)) {
             std::this_thread::yield();
@@ -1445,11 +1449,15 @@ size_t load_cache_policy_resource(
     constexpr size_t header_size = 2U + sizeof(uint32_t) + sizeof(int64_t) * 2U;
     const auto required = header_size + server.entity_tag.size() + body.size();
     if (destination == nullptr || destination_capacity < required) {
-        if (destination == nullptr) {
+        if (destination == nullptr || destination_capacity != required) {
             ++server.requests;
             if (!request_tag.empty()) ++server.conditional_requests;
         }
         return required;
+    }
+    if (destination_capacity != required) {
+        ++server.requests;
+        if (!request_tag.empty()) ++server.conditional_requests;
     }
     destination[0] = not_modified ? 2 : 1;
     destination[1] = cacheable ? 1 : 0;

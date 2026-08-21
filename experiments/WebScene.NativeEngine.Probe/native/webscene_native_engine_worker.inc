@@ -18,6 +18,13 @@
                 int64_t last_modified_unix_seconds,
                 webscene_native::v8_dom_runtime::resource_response& response) {
                 if (resource_load_callback_ == nullptr) return false;
+                // Most web resources fit in this stack buffer. Supplying it on
+                // the first callback lets managed hosts encode directly into
+                // native-owned memory and avoids a size-probe transition plus
+                // a temporary managed response envelope. Oversized resources
+                // retain the required-size retry contract below.
+                constexpr size_t initial_resource_capacity = 64U * 1024U;
+                std::array<char, initial_resource_capacity> inline_buffer;
                 const auto required = resource_load_callback_(
                     resource_load_user_data_,
                     kind,
@@ -26,37 +33,42 @@
                     entity_tag.data(),
                     entity_tag.size(),
                     last_modified_unix_seconds,
-                    nullptr,
-                    0U);
+                    inline_buffer.data(),
+                    inline_buffer.size());
                 constexpr size_t envelope_header_size =
                     2U + sizeof(uint32_t) + sizeof(int64_t) + sizeof(int64_t);
                 if (required < envelope_header_size) return false;
-                std::vector<char> buffer(required);
-                if (resource_load_callback_(
-                        resource_load_user_data_,
-                        kind,
-                        url.data(),
-                        url.size(),
-                        entity_tag.data(),
-                        entity_tag.size(),
-                        last_modified_unix_seconds,
-                        buffer.data(),
-                        buffer.size()) != required) {
-                    return false;
+                std::vector<char> overflow_buffer;
+                auto* buffer = inline_buffer.data();
+                if (required > inline_buffer.size()) {
+                    overflow_buffer.resize(required);
+                    if (resource_load_callback_(
+                            resource_load_user_data_,
+                            kind,
+                            url.data(),
+                            url.size(),
+                            entity_tag.data(),
+                            entity_tag.size(),
+                            last_modified_unix_seconds,
+                            overflow_buffer.data(),
+                            overflow_buffer.size()) != required) {
+                        return false;
+                    }
+                    buffer = overflow_buffer.data();
                 }
                 const auto status = static_cast<uint8_t>(buffer[0]);
                 const auto cacheable = static_cast<uint8_t>(buffer[1]) != 0U;
                 uint32_t response_tag_length = 0U;
                 int64_t response_last_modified = 0;
                 int64_t response_fresh_until = 0;
-                std::memcpy(&response_tag_length, buffer.data() + 2U, sizeof(response_tag_length));
+                std::memcpy(&response_tag_length, buffer + 2U, sizeof(response_tag_length));
                 std::memcpy(
                     &response_last_modified,
-                    buffer.data() + 2U + sizeof(response_tag_length),
+                    buffer + 2U + sizeof(response_tag_length),
                     sizeof(response_last_modified));
                 std::memcpy(
                     &response_fresh_until,
-                    buffer.data() + 2U + sizeof(response_tag_length) + sizeof(response_last_modified),
+                    buffer + 2U + sizeof(response_tag_length) + sizeof(response_last_modified),
                     sizeof(response_fresh_until));
                 if (status < 1U || status > 2U
                     || response_tag_length > required - envelope_header_size) return false;
@@ -65,10 +77,10 @@
                 response.last_modified_unix_seconds = response_last_modified;
                 response.fresh_until_unix_seconds = response_fresh_until;
                 response.entity_tag.assign(
-                    buffer.data() + envelope_header_size,
+                    buffer + envelope_header_size,
                     response_tag_length);
                 response.content.assign(
-                    buffer.data() + envelope_header_size + response_tag_length,
+                    buffer + envelope_header_size + response_tag_length,
                     required - envelope_header_size - response_tag_length);
                 return true;
             },

@@ -3906,7 +3906,9 @@ std::string v8_dom_runtime::diagnostics()
                     << static_cast<double>(stats.nanoseconds) / 1'000'000.0;
             }
             description << "],binding-top="
-                << format_top(impl_->startup_binding_profiles);
+                << format_top(impl_->startup_binding_profiles)
+                << ",forced-layout-top="
+                << format_top(impl_->startup_forced_layout_profiles);
         }
     }
     description << " | html-parser={implementation="

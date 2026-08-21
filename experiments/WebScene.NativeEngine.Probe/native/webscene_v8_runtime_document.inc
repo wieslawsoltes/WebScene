@@ -558,8 +558,8 @@
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry),
             self->profile_named("Element.getBoundingClientRect"));
-        self->ensure_layout();
         auto* node = unwrap_node(info.This());
+        self->ensure_layout(node);
         if (node == nullptr) return;
         const auto has_no_box = !self->is_connected(*node) || [self](const dom_node* candidate) {
             for (auto* current = candidate; current != nullptr;
@@ -600,8 +600,8 @@
         binding_callback_timer binding_timer(
             self->profile(binding_category::dom_geometry),
             self->profile_named("Element.getClientRects"));
-        self->ensure_layout();
         auto* node = unwrap_node(info.This());
+        self->ensure_layout(node);
         if (node == nullptr) return;
         if (!self->is_connected(*node)) {
             info.GetReturnValue().Set(v8::Array::New(info.GetIsolate()));

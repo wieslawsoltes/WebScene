@@ -38,6 +38,23 @@
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_layout : nullptr);
+        auto* forced_layout_stats = static_cast<binding_callback_stats*>(nullptr);
+        if (profile_bindings) {
+            auto subject = std::string{"unscoped"};
+            if (reusable_client_geometry_subject != nullptr) {
+                subject = reusable_client_geometry_subject->tag;
+                if (!reusable_client_geometry_subject->id_attribute.empty()) {
+                    subject += '#';
+                    subject += reusable_client_geometry_subject->id_attribute;
+                }
+                if (!reusable_client_geometry_subject->class_name.empty()) {
+                    subject += '.';
+                    subject += reusable_client_geometry_subject->class_name.substr(0, 96);
+                }
+            }
+            forced_layout_stats = &startup_forced_layout_profiles[std::move(subject)];
+        }
+        binding_callback_timer forced_layout_timer(forced_layout_stats);
 #endif
         const auto [width, height, device_scale_factor, preferred_color_scheme] =
             viewport_provider();

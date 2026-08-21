@@ -188,6 +188,19 @@ DOM-mutation binding CPU fell from 90.5 ms to 22.2 ms and `Node.appendChild` fro
 (-32.1%). Navigation medians were 1,016.6 ms control and 1,044.8 ms optimized, so
 no wall-time improvement is claimed for that pass.
 
+Forced-layout attribution subsequently showed that geometry reads were the largest
+remaining native binding category. `getClientRects()` and
+`getBoundingClientRect()` now pass their subject into the scoped client-geometry
+reuse check instead of conservatively appearing as unscoped reads. More
+importantly, stylesheet recascade now compares the completed box-affecting style
+against its previous value and publishes paint-only changes without dirtying
+layout. `WEBSCENE_FORCE_RECASCADE_LAYOUT_INVALIDATION=1` restores the former
+always-dirty behavior for certification A/B runs. Across five interleaved
+strict-replay pairs, median forced-layout work fell from 72 passes / 40.5 ms to
+68 passes / 30.6 ms (-24.3% CPU). Navigation medians were 900.3 ms control and
+911.4 ms optimized, so live-data variance again prevents a chart-ready wall-time
+claim.
+
 The iframe attribution shows why parallel script execution is not the first lever: a
 representative main frame spent 80.7 ms of its 105.5 ms hydration interval executing
 application scripts, 11.8 ms reading resources, and only about 3 ms parsing/applying

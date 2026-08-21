@@ -121,3 +121,21 @@ dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
 The complete NativePF candidate inventory, measurements, and accepted/rejected
 decisions are recorded in
 [`docs/nativepf-render-optimization-audit.md`](../docs/nativepf-render-optimization-audit.md).
+
+## Native resource bridge
+
+The resource-bridge probe measures the synchronous managed response-envelope path
+independently from HTTP, archive lookup, V8 compilation, and page execution. It reports
+both the ABI's required-size probe followed by an exact copy and a speculative
+single-copy call with sufficient destination capacity:
+
+```bash
+dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
+  probe native-resource-bridge --payload-bytes 32768 --iterations 200 --samples 11
+```
+
+Pass `--archive` and `--url` to compare decoded-text replay with direct UTF-8 replay
+for a captured script. Use `--archive-iterations` to bound work for multi-megabyte
+resources. The accepted implementation and baseline/candidate measurements are
+recorded in
+[`docs/native-resource-bridge-optimization-audit.md`](../docs/native-resource-bridge-optimization-audit.md).

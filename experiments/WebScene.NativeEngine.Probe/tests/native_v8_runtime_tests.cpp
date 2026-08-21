@@ -437,6 +437,8 @@ int main()
     test_resize_and_frame_form_one_rendering_opportunity();
     test_unsupported_features_are_reported_at_native_decision_points(engine);
     test_cssom_paint_invalidation_does_not_force_layout(engine);
+    test_client_rect_reads_reuse_unrelated_out_of_flow_layout(engine);
+    test_paint_only_stylesheet_recascade_does_not_force_layout(engine);
     webscene_engine_destroy(engine);
     engine = webscene_engine_create(64);
     require(engine != nullptr, "transition regression engine creation failed");

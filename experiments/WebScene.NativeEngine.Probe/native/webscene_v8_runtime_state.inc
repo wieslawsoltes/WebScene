@@ -357,6 +357,7 @@
     bool resize_profile_active{false};
     std::array<binding_callback_stats, binding_category_count> binding_totals{};
     std::unordered_map<std::string, binding_callback_stats> startup_binding_profiles;
+    std::unordered_map<std::string, binding_callback_stats> startup_forced_layout_profiles;
     std::array<binding_callback_stats, binding_category_count> last_resize_binding_profile{};
     std::unordered_map<std::string, uint64_t> last_resize_style_property_counts;
     std::unordered_map<std::string, uint64_t> last_resize_style_target_counts;

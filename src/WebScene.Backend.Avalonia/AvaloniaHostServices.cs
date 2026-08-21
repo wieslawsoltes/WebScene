@@ -450,6 +450,37 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
         throw new NotSupportedException($"Unsupported resource scheme '{resolved.Scheme}'.");
     }
 
+    internal bool TryLoadUtf8(
+        in WebSceneResourceRequest request,
+        out AvaloniaUtf8Resource resource)
+    {
+        resource = default;
+        if (string.IsNullOrWhiteSpace(request.Specifier)
+            || request.Specifier.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(ResourceReplayDirectory))
+        {
+            return false;
+        }
+
+        var resolved = ResolveAddress(request.Specifier, request.BaseAddress);
+        if (resolved.Scheme is not ("http" or "https")
+            || GetReplayArchiveTracked() is not { } replayArchive)
+        {
+            return false;
+        }
+
+        try
+        {
+            resource = replayArchive.ReplayUtf8Text(resolved, request.Kind);
+            return true;
+        }
+        catch (Exception error)
+        {
+            RememberReplayFailure(error);
+            throw;
+        }
+    }
+
     internal static (DateTimeOffset? FreshUntil, bool IsCacheable) ReadHttpCachePolicy(
         HttpResponseMessage response,
         DateTimeOffset? lastModified)

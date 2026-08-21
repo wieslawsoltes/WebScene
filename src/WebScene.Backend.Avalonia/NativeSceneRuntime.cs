@@ -707,14 +707,16 @@ public static unsafe partial class NativeWebSceneApi
         }
     }
 
-    private sealed class ResourceBridge(
+    internal sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable,
         Action? interopCallbackAvailable,
         Action? animationFrameRequested) : IDisposable
     {
-        private readonly ConcurrentDictionary<string, byte[]> _pendingCopies = new(StringComparer.Ordinal);
+        private const int EnvelopeHeaderSize = 2 + sizeof(uint) + sizeof(long) + sizeof(long);
+        [ThreadStatic]
+        private static PendingResourceCopy? _pendingCopy;
 #if !WEBSCENE_UNO
         private readonly ConcurrentDictionary<string, byte> _registeredFontSources =
             new(StringComparer.Ordinal);
@@ -724,6 +726,10 @@ public static unsafe partial class NativeWebSceneApi
 
         public void Dispose()
         {
+            if (ReferenceEquals(_pendingCopy?.Owner, this))
+            {
+                _pendingCopy = null;
+            }
             WebTypefaces.Dispose();
         }
 
@@ -747,59 +753,211 @@ public static unsafe partial class NativeWebSceneApi
             IntPtr destination,
             nuint capacity)
         {
-            var key = $"{kind}:{address}:{entityTag}:{lastModifiedUnixSeconds}";
-            if (!_pendingCopies.TryGetValue(key, out var bytes))
+            var pending = _pendingCopy;
+            if (pending is not null
+                && pending.Matches(
+                    this,
+                    kind,
+                    address,
+                    entityTag,
+                    lastModifiedUnixSeconds))
             {
-                var resourceKind = kind switch
+                if (destination == IntPtr.Zero || capacity < pending.RequiredLength)
                 {
-                    1 => WebSceneResourceKind.Script,
-                    2 => WebSceneResourceKind.StyleSheet,
-                    3 => WebSceneResourceKind.Image,
-                    _ => WebSceneResourceKind.Markup
-                };
-                var request = new WebSceneResourceRequest(address, null, resourceKind)
+                    return pending.RequiredLength;
+                }
+                _pendingCopy = null;
+                return WriteEnvelope(
+                    pending.Resource,
+                    pending.RequestIfModifiedSince,
+                    destination);
+            }
+            if (ReferenceEquals(pending?.Owner, this))
+            {
+                _pendingCopy = null;
+            }
+
+            var resourceKind = kind switch
+            {
+                1 => WebSceneResourceKind.Script,
+                2 => WebSceneResourceKind.StyleSheet,
+                3 => WebSceneResourceKind.Image,
+                _ => WebSceneResourceKind.Markup
+            };
+            var request = new WebSceneResourceRequest(address, null, resourceKind)
+            {
+                IfNoneMatch = entityTag,
+                IfModifiedSince = lastModifiedUnixSeconds > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(lastModifiedUnixSeconds)
+                    : null
+            };
+            PreparedResource prepared;
+#if !WEBSCENE_UNO
+            if (loader is AvaloniaResourceLoader avaloniaLoader
+                && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
+            {
+                if (resourceKind == WebSceneResourceKind.StyleSheet)
                 {
-                    IfNoneMatch = entityTag,
-                    IfModifiedSince = lastModifiedUnixSeconds > 0
-                        ? DateTimeOffset.FromUnixTimeSeconds(lastModifiedUnixSeconds)
-                        : null
-                };
+                    RegisterWebFonts(
+                        Encoding.UTF8.GetString(utf8Resource.Content.Span),
+                        address,
+                        avaloniaLoader);
+                }
+                prepared = PrepareResource(utf8Resource, entityTag);
+            }
+            else
+#endif
+            {
                 var resource = loader.LoadText(request);
 #if !WEBSCENE_UNO
                 if (resourceKind == WebSceneResourceKind.StyleSheet
-                    && loader is AvaloniaResourceLoader avaloniaLoader)
+                    && loader is AvaloniaResourceLoader textAvaloniaLoader)
                 {
-                    RegisterWebFonts(resource.Content, address, avaloniaLoader);
+                    RegisterWebFonts(resource.Content, address, textAvaloniaLoader);
                 }
 #endif
-                var responseEntityTag = Encoding.UTF8.GetBytes(resource.EntityTag ?? entityTag ?? string.Empty);
-                var content = resource.NotModified
-                    ? []
-                    : Encoding.UTF8.GetBytes(resource.Content);
-                const int headerSize = 2 + sizeof(uint) + sizeof(long) + sizeof(long);
-                bytes = new byte[headerSize + responseEntityTag.Length + content.Length];
-                bytes[0] = resource.NotModified ? (byte)2 : (byte)1;
-                bytes[1] = resource.IsCacheable ? (byte)1 : (byte)0;
-                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(2), (uint)responseEntityTag.Length);
-                BinaryPrimitives.WriteInt64LittleEndian(
-                    bytes.AsSpan(2 + sizeof(uint)),
-                    (resource.LastModified ?? request.IfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
-                BinaryPrimitives.WriteInt64LittleEndian(
-                    bytes.AsSpan(2 + sizeof(uint) + sizeof(long)),
-                    resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
-                responseEntityTag.CopyTo(bytes, headerSize);
-                content.CopyTo(bytes, headerSize + responseEntityTag.Length);
-                _pendingCopies[key] = bytes;
+                prepared = PrepareResource(resource, entityTag);
             }
-
-            if (destination == IntPtr.Zero || capacity < (nuint)bytes.Length)
+            if (destination == IntPtr.Zero || capacity < prepared.RequiredLength)
             {
-                return (nuint)bytes.Length;
+                _pendingCopy = new PendingResourceCopy(
+                    this,
+                    kind,
+                    address,
+                    entityTag,
+                    lastModifiedUnixSeconds,
+                    prepared,
+                    request.IfModifiedSince,
+                    prepared.RequiredLength);
+                return prepared.RequiredLength;
             }
 
-            Marshal.Copy(bytes, 0, destination, bytes.Length);
-            _pendingCopies.TryRemove(key, out _);
-            return (nuint)bytes.Length;
+            return WriteEnvelope(
+                prepared,
+                request.IfModifiedSince,
+                destination);
+        }
+
+        private static PreparedResource PrepareResource(
+            in WebSceneTextResource resource,
+            string? requestEntityTag)
+        {
+            var responseEntityTag = resource.EntityTag ?? requestEntityTag ?? string.Empty;
+            var responseEntityTagLength = Encoding.UTF8.GetByteCount(responseEntityTag);
+            var contentLength = resource.NotModified
+                ? 0
+                : Encoding.UTF8.GetByteCount(resource.Content);
+            return new PreparedResource(
+                resource.NotModified,
+                resource.IsCacheable,
+                resource.LastModified,
+                resource.FreshUntil,
+                responseEntityTag,
+                responseEntityTagLength,
+                resource.Content,
+                default,
+                false,
+                contentLength,
+                checked((nuint)(
+                    EnvelopeHeaderSize + responseEntityTagLength + contentLength)));
+        }
+
+#if !WEBSCENE_UNO
+        private static PreparedResource PrepareResource(
+            in AvaloniaUtf8Resource resource,
+            string? requestEntityTag)
+        {
+            var responseEntityTag = resource.EntityTag ?? requestEntityTag ?? string.Empty;
+            var responseEntityTagLength = Encoding.UTF8.GetByteCount(responseEntityTag);
+            var contentLength = resource.Content.Length;
+            return new PreparedResource(
+                false,
+                resource.IsCacheable,
+                resource.LastModified,
+                resource.FreshUntil,
+                responseEntityTag,
+                responseEntityTagLength,
+                null,
+                resource.Content,
+                true,
+                contentLength,
+                checked((nuint)(
+                    EnvelopeHeaderSize + responseEntityTagLength + contentLength)));
+        }
+#endif
+
+        private static nuint WriteEnvelope(
+            in PreparedResource resource,
+            DateTimeOffset? requestIfModifiedSince,
+            IntPtr destination)
+        {
+            var length = checked((int)resource.RequiredLength);
+            var bytes = new Span<byte>((void*)destination, length);
+            bytes[0] = resource.NotModified ? (byte)2 : (byte)1;
+            bytes[1] = resource.IsCacheable ? (byte)1 : (byte)0;
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                bytes[2..],
+                checked((uint)resource.ResponseEntityTagLength));
+            BinaryPrimitives.WriteInt64LittleEndian(
+                bytes[(2 + sizeof(uint))..],
+                (resource.LastModified ?? requestIfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
+            BinaryPrimitives.WriteInt64LittleEndian(
+                bytes[(2 + sizeof(uint) + sizeof(long))..],
+                resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
+            Encoding.UTF8.GetBytes(
+                resource.ResponseEntityTag,
+                bytes.Slice(EnvelopeHeaderSize, resource.ResponseEntityTagLength));
+            if (resource.ContentLength != 0)
+            {
+                var content = bytes.Slice(
+                    EnvelopeHeaderSize + resource.ResponseEntityTagLength,
+                    resource.ContentLength);
+                if (resource.ContentIsUtf8)
+                {
+                    resource.Utf8Content.Span.CopyTo(content);
+                }
+                else
+                {
+                    Encoding.UTF8.GetBytes(resource.TextContent!, content);
+                }
+            }
+            return checked((nuint)length);
+        }
+
+        private readonly record struct PreparedResource(
+            bool NotModified,
+            bool IsCacheable,
+            DateTimeOffset? LastModified,
+            DateTimeOffset? FreshUntil,
+            string ResponseEntityTag,
+            int ResponseEntityTagLength,
+            string? TextContent,
+            ReadOnlyMemory<byte> Utf8Content,
+            bool ContentIsUtf8,
+            int ContentLength,
+            nuint RequiredLength);
+
+        private sealed record PendingResourceCopy(
+            ResourceBridge Owner,
+            uint Kind,
+            string Address,
+            string? EntityTag,
+            long LastModifiedUnixSeconds,
+            PreparedResource Resource,
+            DateTimeOffset? RequestIfModifiedSince,
+            nuint RequiredLength)
+        {
+            internal bool Matches(
+                ResourceBridge owner,
+                uint kind,
+                string address,
+                string? entityTag,
+                long lastModifiedUnixSeconds)
+                => ReferenceEquals(Owner, owner)
+                    && Kind == kind
+                    && LastModifiedUnixSeconds == lastModifiedUnixSeconds
+                    && string.Equals(Address, address, StringComparison.Ordinal)
+                    && string.Equals(EntityTag, entityTag, StringComparison.Ordinal);
         }
 
 #if !WEBSCENE_UNO

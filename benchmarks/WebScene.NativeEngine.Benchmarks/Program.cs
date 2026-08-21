@@ -28,6 +28,8 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
                 return NativeRetainedRenderProbe.Run(probeArgs);
             case "native-retained-apply":
                 return NativeRetainedApplyProbe.Run(probeArgs);
+            case "native-resource-bridge":
+                return NativeResourceBridgeProbe.Run(probeArgs);
         }
     }
 
@@ -36,7 +38,7 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
         "native-runtime-work, native-dom-lookup, native-context-memory, native-lifecycle, " +
         "native-resize-cadence, native-inspector-disabled-performance, " +
         "native-retained-render, " +
-        "native-retained-apply.");
+        "native-retained-apply, native-resource-bridge.");
     return 2;
 }
 
