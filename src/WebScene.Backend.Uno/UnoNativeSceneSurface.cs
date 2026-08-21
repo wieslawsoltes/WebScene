@@ -521,14 +521,7 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
     }
 
     private static bool ValidateView(NativeSceneView* view)
-        => view != null
-            && view->StructSize == sizeof(NativeSceneView)
-            && view->AbiVersion == 2
-            && (view->Header.CommandCount == 0 || view->Commands != null)
-            && (view->Header.CanvasLayerCount == 0
-                || (view->CanvasLayers != null && view->CanvasCommands != null))
-            && (view->StringCount == 0
-                || (view->Strings != null && view->StringBytes != null));
+        => NativeSceneViewValidation.IsValid(view);
 
     private static ulong GetPublishedSceneCount(IntPtr engine)
     {

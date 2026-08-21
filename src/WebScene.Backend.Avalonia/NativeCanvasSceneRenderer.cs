@@ -177,6 +177,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 }
                 if ((change.Flags & LayerReplace) == 0 || !ValidateLayer(view, change))
                 {
+                    Interlocked.Increment(ref RejectedDiffCount);
                     return false;
                 }
                 var replacement = CompileLayer(view, change);

@@ -182,6 +182,24 @@ internal unsafe struct NativeSceneView
     public uint Reserved;
 }
 
+internal static unsafe class NativeSceneViewValidation
+{
+    public static bool IsValid(NativeSceneView* view)
+        => view != null
+            && view->StructSize == sizeof(NativeSceneView)
+            && view->AbiVersion == 2
+            && (view->Header.CommandCount == 0 || view->Commands != null)
+            && (view->Header.CanvasLayerCount == 0
+                || view->CanvasLayers != null)
+            // Removal-only canvas diffs legitimately carry layer records but
+            // no command payload. Validate each optional ABI buffer against
+            // its own count instead of coupling commands to layer count.
+            && (view->CanvasCommandCount == 0
+                || view->CanvasCommands != null)
+            && (view->StringCount == 0 || view->Strings != null)
+            && (view->StringByteCount == 0 || view->StringBytes != null);
+}
+
 public enum NativeInteropValueKind : uint
 {
     Undefined = 0,

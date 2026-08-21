@@ -566,7 +566,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             var view = (NativeSceneView*)scene;
             _publicationMailbox.TryConsume();
-            if (!ValidateView(view)
+            if (!NativeSceneViewValidation.IsValid(view)
                 || view->Header.Revision <= _appliedRevision)
             {
                 return false;
@@ -603,6 +603,17 @@ internal sealed unsafe class NativeSceneCompositionHandler
                     _hasPendingRenderMetrics = true;
                 }
                 accepted = true;
+            }
+            else
+            {
+                // A malformed or discontinuous diff must not remain at the
+                // front of the ordered two-scene lane. Leaving it unacknowledged
+                // fills producer back-pressure permanently: input is accepted,
+                // but no later pointer, animation, or resize scene can publish.
+                // Discard the stale mailbox edges before atomically resetting
+                // the native lane and request a complete retained checkpoint.
+                _publicationMailbox.Reset();
+                NativeWebSceneApi.EngineRequestSceneCheckpoint(_engine);
             }
         }
         finally
@@ -838,16 +849,6 @@ internal sealed unsafe class NativeSceneCompositionHandler
         => _hasPendingRenderMetrics
             || _publicationMailbox.PendingCount > 0;
 
-    private static bool ValidateView(NativeSceneView* view)
-        => view != null
-            && view->StructSize == sizeof(NativeSceneView)
-            && view->AbiVersion == 2
-            && (view->Header.CommandCount == 0 || view->Commands != null)
-            && (view->Header.CanvasLayerCount == 0
-                || (view->CanvasLayers != null && view->CanvasCommands != null))
-            && (view->StringCount == 0
-                || (view->Strings != null && view->StringBytes != null));
-
 }
 
 internal sealed class NativeFrozenSceneControl :
@@ -954,7 +955,8 @@ internal sealed unsafe class NativeFrozenSceneState
             if (scene != IntPtr.Zero)
             {
                 var view = (NativeSceneView*)scene;
-                if (ValidateView(view) && _renderer.ApplyDiff(view))
+                if (NativeSceneViewValidation.IsValid(view)
+                    && _renderer.ApplyDiff(view))
                 {
                     _viewportWidth = view->Header.ViewportWidth;
                     _viewportHeight = view->Header.ViewportHeight;
@@ -998,7 +1000,7 @@ internal sealed unsafe class NativeFrozenSceneState
     internal static bool TryReadHeader(IntPtr scene, out SceneHeader header)
     {
         var view = (NativeSceneView*)scene;
-        if (!ValidateView(view))
+        if (!NativeSceneViewValidation.IsValid(view))
         {
             header = default;
             return false;
@@ -1007,15 +1009,6 @@ internal sealed unsafe class NativeFrozenSceneState
         return true;
     }
 
-    private static bool ValidateView(NativeSceneView* view)
-        => view != null
-            && view->StructSize == sizeof(NativeSceneView)
-            && view->AbiVersion == 2
-            && (view->Header.CommandCount == 0 || view->Commands != null)
-            && (view->Header.CanvasLayerCount == 0
-                || (view->CanvasLayers != null && view->CanvasCommands != null))
-            && (view->StringCount == 0
-                || (view->Strings != null && view->StringBytes != null));
 }
 
 internal sealed class NativeFrozenSceneDrawOperation :
@@ -1110,24 +1103,12 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
         {
             var scene = _scene;
             var view = (NativeSceneView*)scene;
-            if (view == null
-                || view->StructSize != sizeof(NativeSceneView)
-                || view->AbiVersion != 2)
+            if (!NativeSceneViewValidation.IsValid(view))
             {
                 return;
             }
 
             var header = view->Header;
-            if ((header.CommandCount != 0 && view->Commands == null)
-                || (header.CanvasLayerCount != 0
-                    && (view->CanvasLayers == null
-                        || view->CanvasCommands == null))
-                || (view->StringCount != 0
-                    && (view->Strings == null
-                        || view->StringBytes == null)))
-            {
-                return;
-            }
 
             if (!_sceneApplied)
             {
