@@ -33,6 +33,11 @@ selection, shaping/positioning, and rasterization.
   regresses ordinary prose. These approaches must not replace production shaping.
 - Direct CoreText rasterization differs slightly from Chromium even for isolated
   glyphs. Skia should continue painting the glyph masks.
+- The managed CoreText positioner is now promoted into the shared production presenter
+  behind a bounded macOS system-font eligibility gate. The service caches verified runs
+  and font handles, uses the same positions for measurement and painting, and falls back
+  per run to HarfBuzz/Skia. `WEBSCENE_TEXT_POSITIONING=harfbuzz` retains the previous path
+  as a before/after and rollback control.
 
 ## Architecture
 
@@ -241,11 +246,13 @@ systems and installed font versions.
 
 ### Phase 1: shared contract and macOS
 
-- Add the shared request/result contract and platform-positioner selection.
-- Move the validated managed CoreText experiment into production behind a macOS
+- [x] Add the shared request/result contract and platform-positioner selection.
+- [x] Move the validated managed CoreText experiment into production behind a macOS
   system-font eligibility gate.
-- Add cache lifetime and disposal coverage.
-- Gate the change with 1x and 2x Chromium comparisons and existing text tests.
+- [x] Add bounded cache and fallback coverage.
+- [x] Re-run the 1x and 2x Chromium pixel-oracle profiles through the production
+  service path; its images are byte-identical to the validated managed CoreText
+  candidate and retain the measured Chromium improvement.
 
 ### Phase 2: Windows
 

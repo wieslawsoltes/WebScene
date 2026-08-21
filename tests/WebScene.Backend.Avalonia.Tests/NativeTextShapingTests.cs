@@ -277,6 +277,72 @@ public sealed class NativeTextShapingTests
     }
 
     [Fact]
+    public void MacCoreTextPositionerReturnsVerifiedCachedSystemFontRun()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        const string family = "-apple-system, BlinkMacSystemFont, sans-serif";
+        const string text = "AAPL data is delayed by 15 minutes.";
+        var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 14 };
+        using var shaper = new SKShaper(typeface);
+        var shaped = shaper.Shape(text, 0, 0, paint);
+        var request = new NativeTextRunPositionRequest(
+            text,
+            family,
+            14,
+            400,
+            SKFontStyleSlant.Upright,
+            0,
+            shaped.Codepoints,
+            null);
+        var positioner = new MacCoreTextRunPositioner();
+
+        Assert.True(positioner.TryPosition(in request, out var first));
+        Assert.Equal(shaped.Codepoints.Length, first.Glyphs.Length);
+        Assert.Equal(first.Glyphs.Length, first.Positions.Length);
+        Assert.True(float.IsFinite(first.AdvanceWidth));
+        Assert.True(first.AdvanceWidth > 0);
+        Assert.True(positioner.TryPosition(in request, out var second));
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void MacCoreTextPositionerFallsBackForTabularAndUnsupportedRuns()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        const string family = "-apple-system, BlinkMacSystemFont, sans-serif";
+        var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 14 };
+        using var shaper = new SKShaper(typeface);
+        var positioner = new MacCoreTextRunPositioner();
+        var digits = shaper.Shape("189.39", 0, 0, paint);
+        var tabular = new NativeTextRunPositionRequest(
+            "189.39",
+            family,
+            14,
+            400,
+            SKFontStyleSlant.Upright,
+            NativeTextShaping.TabularNumerals,
+            digits.Codepoints,
+            null);
+        var arabic = shaper.Shape("مرحبا", 0, 0, paint);
+        var unsupported = new NativeTextRunPositionRequest(
+            "مرحبا",
+            family,
+            14,
+            400,
+            SKFontStyleSlant.Upright,
+            0,
+            arabic.Codepoints,
+            null);
+
+        Assert.False(positioner.TryPosition(in tabular, out _));
+        Assert.False(positioner.TryPosition(in unsupported, out _));
+    }
+
+    [Fact]
     public void MacSystemUiNonLatinRunDoesNotUseLatinAdvanceCalibration()
     {
         if (!OperatingSystem.IsMacOS()) return;

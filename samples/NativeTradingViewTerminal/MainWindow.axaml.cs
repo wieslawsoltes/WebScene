@@ -18,6 +18,13 @@ public sealed partial class MainWindow : Window
     {
         _arguments = arguments;
         InitializeComponent();
+        var textMode = Environment.GetEnvironmentVariable(
+            "WEBSCENE_TEXT_POSITIONING")?.Trim().ToLowerInvariant();
+        Title += textMode is "harfbuzz" or "legacy" or "off" or "0"
+            ? " · HarfBuzz baseline"
+            : OperatingSystem.IsMacOS()
+                ? " · CoreText positioning"
+                : " · Platform text fallback";
         _diagnosticsTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)

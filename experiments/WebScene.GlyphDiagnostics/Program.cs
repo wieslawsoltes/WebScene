@@ -34,6 +34,9 @@ foreach (var scale in new[] { 1f, 2f })
     RenderSkia(configuration, scale, RenderMode.Production,
         Path.Combine(outputDirectory, $"skia-production-{scale:0}x.png"),
         Path.Combine(outputDirectory, $"skia-production-{scale:0}x.metrics.json"));
+    RenderSkia(configuration, scale, RenderMode.ProductionService,
+        Path.Combine(outputDirectory, $"skia-production-service-{scale:0}x.png"),
+        Path.Combine(outputDirectory, $"skia-production-service-{scale:0}x.metrics.json"));
     RenderSkia(configuration, scale, RenderMode.ShapedDefault,
         Path.Combine(outputDirectory, $"skia-shaped-default-{scale:0}x.png"),
         Path.Combine(outputDirectory, $"skia-shaped-default-{scale:0}x.metrics.json"));
@@ -54,16 +57,31 @@ foreach (var scale in new[] { 1f, 2f })
         Path.Combine(outputDirectory, $"managed-skia-hb-variations-{scale:0}x.metrics.json"));
     var managedCoreTextMetricsPath = Path.Combine(
         outputDirectory, $"managed-coretext-{scale:0}x.metrics.json");
+    var managedCoreTextRuns = ManagedCoreTextPositioner.Shape(configuration);
     File.WriteAllText(
         managedCoreTextMetricsPath,
         JsonSerializer.Serialize(
-            ManagedCoreTextPositioner.Shape(configuration),
+            managedCoreTextRuns,
             new JsonSerializerOptions { WriteIndented = true }));
     RenderSkiaAtCoreTextPositions(
         configuration,
         scale,
         managedCoreTextMetricsPath,
         Path.Combine(outputDirectory, $"managed-coretext-skia-{scale:0}x.png"));
+    var productionCoreTextMetricsPath = Path.Combine(
+        outputDirectory, $"production-coretext-{scale:0}x.metrics.json");
+    var productionCoreTextRuns = ShapeWithProductionCoreTextService(configuration);
+    ValidateEquivalentCoreTextRuns(managedCoreTextRuns, productionCoreTextRuns);
+    File.WriteAllText(
+        productionCoreTextMetricsPath,
+        JsonSerializer.Serialize(
+            productionCoreTextRuns,
+            new JsonSerializerOptions { WriteIndented = true }));
+    RenderSkiaAtCoreTextPositions(
+        configuration,
+        scale,
+        productionCoreTextMetricsPath,
+        Path.Combine(outputDirectory, $"production-coretext-skia-{scale:0}x.png"));
 
     var coreTextMetricsPath = Path.Combine(
         outputDirectory, $"coretext-{scale:0}x.metrics.json");
@@ -201,8 +219,28 @@ static void RenderSkia(
         var features = NativeTextShaping.ResolveFeatureFlags(
             item.Text, configuration.Family, 0);
         var shaped = shaper.Shape(item.Text, 0, item.Baseline, paint);
-        var width = NativeTextShaping.MeasureShapedWidth(shaper, item.Text, paint, features);
-        var widthScale = mode == RenderMode.Production
+        NativePositionedTextRun? positionedRun = null;
+        var positioned = mode == RenderMode.ProductionService
+            && NativeTextShaping.TryPositionTextRun(
+                shaper,
+                item.Text,
+                configuration.Family,
+                item.Size,
+                item.Weight,
+                SKFontStyleSlant.Upright,
+                features,
+                paint,
+                null,
+                out positionedRun);
+        var width = positioned
+            ? positionedRun!.AdvanceWidth
+            : NativeTextShaping.MeasureShapedWidth(
+                shaper,
+                item.Text,
+                paint,
+                features);
+        var widthScale = (mode is RenderMode.Production or RenderMode.ProductionService)
+            && !positioned
             ? NativeTextShaping.ResolveShapedWidthScale(
                 item.Text,
                 configuration.Family,
@@ -212,7 +250,7 @@ static void RenderSkia(
                 width,
                 features)
             : 1f;
-        if (mode == RenderMode.Production)
+        if (mode is RenderMode.Production or RenderMode.ProductionService)
         {
             NativeTextShaping.DrawShapedText(
                 canvas,
@@ -225,7 +263,8 @@ static void RenderSkia(
                 NativeTextShaping.ResolveTabularDigitScale(configuration.Family),
                 widthScale,
                 width,
-                scale);
+                scale,
+                positioned ? positionedRun : null);
         }
         else if (mode == RenderMode.PlatformAdvances)
         {
@@ -243,8 +282,13 @@ static void RenderSkia(
         }
         metrics.Add(new SkiaRunMetrics(
             item.Id,
-            shaped.Codepoints,
-            shaped.Points.Select(point => new[] { point.X, point.Y }).ToArray(),
+            positioned
+                ? positionedRun!.Glyphs.Select(glyph => (uint)glyph).ToArray()
+                : shaped.Codepoints,
+            positioned
+                ? positionedRun!.Positions.Select(
+                    point => new[] { point.X, point.Y }).ToArray()
+                : shaped.Points.Select(point => new[] { point.X, point.Y }).ToArray(),
             width,
             widthScale,
             paint.MeasureText(item.Text)));
@@ -346,6 +390,81 @@ static void RenderManagedSkiaHarfBuzz(
     File.WriteAllText(metricsPath, JsonSerializer.Serialize(
         metrics,
         new JsonSerializerOptions { WriteIndented = true }));
+}
+
+static CoreTextRunMetrics[] ShapeWithProductionCoreTextService(
+    Configuration configuration)
+{
+    var positioner = new MacCoreTextRunPositioner();
+    var results = new List<CoreTextRunMetrics>(configuration.Cases.Length);
+    foreach (var item in configuration.Cases)
+    {
+        var typeface = NativeTextShaping.ResolveTypeface(
+            configuration.Family,
+            item.Weight);
+        using var paint = new SKPaint
+        {
+            Typeface = typeface,
+            TextSize = item.Size,
+            IsAntialias = true
+        };
+        using var shaper = new SKShaper(typeface);
+        var shaped = shaper.Shape(item.Text, 0, 0, paint);
+        var request = new NativeTextRunPositionRequest(
+            item.Text,
+            configuration.Family,
+            item.Size,
+            item.Weight,
+            SKFontStyleSlant.Upright,
+            0,
+            shaped.Codepoints,
+            null);
+        if (!positioner.TryPosition(in request, out var positioned))
+        {
+            throw new InvalidDataException(
+                $"The production CoreText service rejected diagnostic case '{item.Id}'.");
+        }
+        results.Add(new CoreTextRunMetrics(
+            item.Id,
+            positioned.Glyphs.Select(glyph => (uint)glyph).ToArray(),
+            positioned.Positions.Select(position => new[]
+            {
+                position.X,
+                position.Y
+            }).ToArray()));
+    }
+    return results.ToArray();
+}
+
+static void ValidateEquivalentCoreTextRuns(
+    IReadOnlyList<CoreTextRunMetrics> expected,
+    IReadOnlyList<CoreTextRunMetrics> actual)
+{
+    if (expected.Count != actual.Count)
+    {
+        throw new InvalidDataException(
+            "The production CoreText service returned an incomplete corpus.");
+    }
+    for (var runIndex = 0; runIndex < expected.Count; runIndex++)
+    {
+        var left = expected[runIndex];
+        var right = actual[runIndex];
+        if (left.Id != right.Id
+            || !left.Glyphs.SequenceEqual(right.Glyphs)
+            || left.Positions.Length != right.Positions.Length)
+        {
+            throw new InvalidDataException(
+                $"The production CoreText service diverged for '{left.Id}'.");
+        }
+        for (var glyphIndex = 0; glyphIndex < left.Positions.Length; glyphIndex++)
+        {
+            if (!left.Positions[glyphIndex].SequenceEqual(right.Positions[glyphIndex]))
+            {
+                throw new InvalidDataException(
+                    $"The production CoreText positions diverged for '{left.Id}'.");
+            }
+        }
+    }
 }
 
 static void DrawManagedShapedRun(
@@ -606,6 +725,11 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                 outputDirectory, $"skia-production-{scale}x.metrics.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!
             .ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var productionServiceMetrics = JsonSerializer.Deserialize<SkiaRunMetrics[]>(
+            File.ReadAllText(Path.Combine(
+                outputDirectory, $"skia-production-service-{scale}x.metrics.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!
+            .ToDictionary(item => item.Id, StringComparer.Ordinal);
         var managedMetrics = JsonSerializer.Deserialize<SkiaRunMetrics[]>(
             File.ReadAllText(Path.Combine(
                 outputDirectory, $"managed-skia-hb-{scale}x.metrics.json")),
@@ -632,6 +756,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!
             .ToDictionary(item => item.Id, StringComparer.Ordinal);
         using var production = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-{scale}x.png"));
+        using var productionService = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-production-service-{scale}x.png"));
         using var shapedDefault = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-shaped-default-{scale}x.png"));
         using var platformAdvances = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-platform-advances-{scale}x.png"));
         using var platformHarfBuzzKerning = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-platform-hb-kerning-{scale}x.png"));
@@ -639,6 +764,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         using var managedSkiaHarfBuzz = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-skia-hb-{scale}x.png"));
         using var managedSkiaHarfBuzzVariations = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-skia-hb-variations-{scale}x.png"));
         using var managedCoreTextSkia = SKBitmap.Decode(Path.Combine(outputDirectory, $"managed-coretext-skia-{scale}x.png"));
+        using var productionCoreTextSkia = SKBitmap.Decode(Path.Combine(outputDirectory, $"production-coretext-skia-{scale}x.png"));
         using var coreTextPositions = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-coretext-positions-{scale}x.png"));
         using var chromePositions = SKBitmap.Decode(Path.Combine(outputDirectory, $"skia-chrome-positions-{scale}x.png"));
         using var coreText = SKBitmap.Decode(Path.Combine(outputDirectory, $"coretext-{scale}x.png"));
@@ -646,6 +772,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         var expectedWidth = configuration.Width * scale;
         var expectedHeight = configuration.Height * scale;
         ValidateDimensions("Skia production", production, expectedWidth, expectedHeight);
+        ValidateDimensions("Skia production positioning service", productionService, expectedWidth, expectedHeight);
         ValidateDimensions("Skia shaped default", shapedDefault, expectedWidth, expectedHeight);
         ValidateDimensions("Skia platform advances", platformAdvances, expectedWidth, expectedHeight);
         ValidateDimensions("Skia platform advances with HarfBuzz kerning", platformHarfBuzzKerning, expectedWidth, expectedHeight);
@@ -653,6 +780,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         ValidateDimensions("Managed Skia-backed HarfBuzz", managedSkiaHarfBuzz, expectedWidth, expectedHeight);
         ValidateDimensions("Managed Skia-backed HarfBuzz with variations", managedSkiaHarfBuzzVariations, expectedWidth, expectedHeight);
         ValidateDimensions("Managed CoreText positions with Skia raster", managedCoreTextSkia, expectedWidth, expectedHeight);
+        ValidateDimensions("Production CoreText service with Skia raster", productionCoreTextSkia, expectedWidth, expectedHeight);
         ValidateDimensions("Skia at CoreText positions", coreTextPositions, expectedWidth, expectedHeight);
         ValidateDimensions("Skia at Chromium prefix positions", chromePositions, expectedWidth, expectedHeight);
         ValidateDimensions("CoreText", coreText, expectedWidth, expectedHeight);
@@ -666,6 +794,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
         var sources = new Dictionary<string, ImageView>
         {
             ["skia-production"] = new(production, 0, 0),
+            ["skia-production-service"] = new(productionService, 0, 0),
             ["skia-shaped-default"] = new(shapedDefault, 0, 0),
             ["skia-platform-advances"] = new(platformAdvances, 0, 0),
             ["skia-platform-hb-kerning"] = new(platformHarfBuzzKerning, 0, 0),
@@ -673,6 +802,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             ["managed-skia-hb"] = new(managedSkiaHarfBuzz, 0, 0),
             ["managed-skia-hb-variations"] = new(managedSkiaHarfBuzzVariations, 0, 0),
             ["managed-coretext-skia"] = new(managedCoreTextSkia, 0, 0),
+            ["production-coretext-skia"] = new(productionCoreTextSkia, 0, 0),
             ["skia-coretext-positions"] = new(coreTextPositions, 0, 0),
             ["skia-chrome-positions"] = new(chromePositions, 0, 0),
             ["coretext"] = new(coreText, 0, 0),
@@ -697,11 +827,13 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
             foreach (var candidate in new[]
                      {
                          "skia-production", "skia-shaped-default", "skia-platform-advances",
+                         "skia-production-service",
                          "skia-platform-hb-kerning",
                          "skia-hb-variations",
                          "managed-skia-hb",
                          "managed-skia-hb-variations",
                          "managed-coretext-skia",
+                         "production-coretext-skia",
                          "skia-coretext-positions",
                          "skia-chrome-positions",
                          "coretext", "chrome-dom"
@@ -718,6 +850,7 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                     refinementRadius: 2 * scale));
             }
             var productionRun = productionMetrics[item.Id];
+            var productionServiceRun = productionServiceMetrics[item.Id];
             var managedRun = managedMetrics[item.Id];
             var managedVariationRun = managedVariationMetrics[item.Id];
             var managedCoreTextRun = managedCoreTextMetrics[item.Id];
@@ -729,6 +862,11 @@ static DiagnosticReport Analyze(Configuration configuration, string outputDirect
                     "skia-production",
                     productionRun.Positions.Select(
                         position => position[0] * productionRun.WidthScale),
+                    chromeRun.PrefixPositions),
+                ComparePositions(
+                    "skia-production-service",
+                    productionServiceRun.Positions.Select(
+                        position => position[0] * productionServiceRun.WidthScale),
                     chromeRun.PrefixPositions),
                 ComparePositions(
                     "managed-skia-hb",
@@ -932,8 +1070,10 @@ static string FormatReport(DiagnosticReport report)
         var multiGlyph = scale.Cases.Where(item => !item.IsolatedGlyph).ToArray();
         foreach (var source in new[]
                  {
-                     "skia-production", "skia-hb-variations", "managed-skia-hb",
+                     "skia-production", "skia-production-service",
+                     "skia-hb-variations", "managed-skia-hb",
                      "managed-skia-hb-variations", "managed-coretext-skia",
+                     "production-coretext-skia",
                      "skia-coretext-positions", "skia-chrome-positions",
                      "coretext"
                  })
@@ -1069,6 +1209,7 @@ static class HarfBuzzNative
 enum RenderMode
 {
     Production,
+    ProductionService,
     ShapedDefault,
     PlatformAdvances,
     PlatformAdvancesWithHarfBuzzKerning,

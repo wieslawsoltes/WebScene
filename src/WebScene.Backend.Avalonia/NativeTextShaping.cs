@@ -65,6 +65,8 @@ public static class NativeTextShaping
     private static long _webTypefaceCacheMisses;
     private static readonly ConcurrentDictionary<string, SKTypeface> WebTypefaces =
         new(StringComparer.OrdinalIgnoreCase);
+    private static readonly INativeTextRunPositioner TextRunPositioner =
+        DefaultNativeTextRunPositioner.Instance;
 
     internal sealed class WebTypefaceRegistry : IDisposable
     {
@@ -390,7 +392,7 @@ public static class NativeTextShaping
         return Math.Clamp(platformWidth * platformCalibration / shapedWidth, 0.8f, 1.4f);
     }
 
-    private static bool UsesMacSystemUiPlatformAdvances(string text)
+    internal static bool UsesMacSystemUiPlatformAdvances(string text)
     {
         var sawCompatibleRune = false;
         foreach (var rune in text.EnumerateRunes())
@@ -486,6 +488,40 @@ public static class NativeTextShaping
         return width;
     }
 
+    internal static bool TryPositionTextRun(
+        SKShaper shaper,
+        string text,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        SKFontStyleSlant slant,
+        uint featureFlags,
+        SKPaint paint,
+        WebTypefaceRegistry? registry,
+        out NativePositionedTextRun run)
+    {
+        run = null!;
+        if (string.IsNullOrEmpty(text)) return false;
+        var request = new NativeTextRunPositionRequest(
+            text,
+            familyList,
+            fontSize,
+            fontWeight,
+            slant,
+            featureFlags,
+            [],
+            registry);
+        if (!TextRunPositioner.IsEligible(in request)) return false;
+        var shaped = shaper.Shape(text, 0, 0, paint);
+        if (shaped.Codepoints.Length == 0
+            || shaped.Codepoints.Length != shaped.Points.Length)
+        {
+            return false;
+        }
+        request = request with { ExpectedGlyphs = shaped.Codepoints };
+        return TextRunPositioner.TryPosition(in request, out run);
+    }
+
     internal static SKRect MeasureShapedInkBounds(
         SKShaper shaper,
         string text,
@@ -547,6 +583,27 @@ public static class NativeTextShaping
         return result;
     }
 
+    internal static SKRect MeasurePositionedInkBounds(
+        NativePositionedTextRun positionedRun,
+        SKPaint paint,
+        float horizontalAdvanceScale = 1f)
+    {
+        if (positionedRun.Glyphs.Length == 0) return SKRect.Empty;
+        using var font = paint.ToFont();
+        using var builder = new SKTextBlobBuilder();
+        var run = builder.AllocatePositionedRun(font, positionedRun.Glyphs.Length);
+        positionedRun.Glyphs.AsSpan().CopyTo(run.GetGlyphSpan());
+        var positions = run.GetPositionSpan();
+        for (var index = 0; index < positionedRun.Positions.Length; index++)
+        {
+            positions[index] = new SKPoint(
+                positionedRun.Positions[index].X * horizontalAdvanceScale,
+                positionedRun.Positions[index].Y);
+        }
+        using var blob = builder.Build();
+        return blob?.Bounds ?? SKRect.Empty;
+    }
+
     private static SKRect MeasureShapedTextRunBounds(
         SKShaper shaper,
         string text,
@@ -589,7 +646,8 @@ public static class NativeTextShaping
         float tabularDigitScale = 1f,
         float horizontalAdvanceScale = 1f,
         float measuredWidth = float.NaN,
-        float deviceScaleFactor = 1f)
+        float deviceScaleFactor = 1f,
+        NativePositionedTextRun? positionedRun = null)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -609,6 +667,19 @@ public static class NativeTextShaping
             SKTextAlign.Right => x - unscaledWidth * horizontalAdvanceScale,
             _ => x
         };
+        if (positionedRun is not null)
+        {
+            DrawPositionedTextRun(
+                canvas,
+                shaper,
+                positionedRun,
+                cursor,
+                baseline,
+                paint,
+                horizontalAdvanceScale,
+                deviceScaleFactor);
+            return;
+        }
         if ((featureFlags & TabularNumerals) == 0)
         {
             DrawShapedTextRun(
@@ -656,6 +727,35 @@ public static class NativeTextShaping
                 deviceScaleFactor);
             cursor += shaper.Shape(segment, paint).Width * horizontalAdvanceScale;
         }
+    }
+
+    private static void DrawPositionedTextRun(
+        SKCanvas canvas,
+        SKShaper shaper,
+        NativePositionedTextRun positionedRun,
+        float x,
+        float baseline,
+        SKPaint paint,
+        float horizontalAdvanceScale,
+        float deviceScaleFactor)
+    {
+        using var font = paint.ToFont();
+        font.Typeface = shaper.Typeface;
+        var rasterization = ResolveFontRasterizationProfile(deviceScaleFactor);
+        font.Subpixel = rasterization.Subpixel;
+        font.BaselineSnap = rasterization.BaselineSnap;
+        using var builder = new SKTextBlobBuilder();
+        var run = builder.AllocatePositionedRun(font, positionedRun.Glyphs.Length);
+        positionedRun.Glyphs.AsSpan().CopyTo(run.GetGlyphSpan());
+        var positions = run.GetPositionSpan();
+        for (var index = 0; index < positionedRun.Positions.Length; index++)
+        {
+            positions[index] = new SKPoint(
+                x + positionedRun.Positions[index].X * horizontalAdvanceScale,
+                baseline + positionedRun.Positions[index].Y);
+        }
+        using var textBlob = builder.Build();
+        if (textBlob is not null) canvas.DrawText(textBlob, 0, 0, paint);
     }
 
     private static void DrawShapedTextRun(
@@ -753,7 +853,7 @@ public static class NativeTextShaping
             ? 1.014f
             : 1f;
 
-    private static bool UsesMacSystemUiMetrics(
+    internal static bool UsesMacSystemUiMetrics(
         string familyList,
         WebTypefaceRegistry? registry)
     {
@@ -830,33 +930,51 @@ public static class NativeTextShaping
             familyList,
             featureFlags,
             registry);
-        var shapedWidth = MeasureShapedWidth(
+        var positioned = TryPositionTextRun(
             shaper,
             text,
-            paint,
+            familyList,
+            fontSize,
+            fontWeight,
+            SKFontStyleSlant.Upright,
             featureFlags,
-            ResolveTabularDigitScale(familyList, registry));
+            paint,
+            registry,
+            out var positionedRun);
+        var tabularDigitScale = ResolveTabularDigitScale(familyList, registry);
+        var shapedWidth = positioned
+            ? positionedRun.AdvanceWidth
+            : MeasureShapedWidth(
+                shaper,
+                text,
+                paint,
+                featureFlags,
+                tabularDigitScale);
         paint.GetFontMetrics(out var fontMetrics);
         var graphemes = string.IsNullOrEmpty(text)
             ? 0
             : StringInfo.ParseCombiningCharacters(text).Length;
         var spaces = text.Count(character => character == ' ');
-        var widthScale = ResolveShapedWidthScale(
-            text,
-            familyList,
-            fontSize,
-            fontWeight,
-            paint,
-            shapedWidth,
-            featureFlags,
-            registry);
-        var inkBounds = MeasureShapedInkBounds(
-            shaper,
-            text,
-            paint,
-            featureFlags,
-            ResolveTabularDigitScale(familyList, registry),
-            widthScale);
+        var widthScale = positioned
+            ? 1f
+            : ResolveShapedWidthScale(
+                text,
+                familyList,
+                fontSize,
+                fontWeight,
+                paint,
+                shapedWidth,
+                featureFlags,
+                registry);
+        var inkBounds = positioned
+            ? MeasurePositionedInkBounds(positionedRun, paint)
+            : MeasureShapedInkBounds(
+                shaper,
+                text,
+                paint,
+                featureFlags,
+                tabularDigitScale,
+                widthScale);
         var spacing = Math.Max(0, graphemes - 1) * letterSpacing
             + spaces * wordSpacing;
         return new NativeTextMetrics

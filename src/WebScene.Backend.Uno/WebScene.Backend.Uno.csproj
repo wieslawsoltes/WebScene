@@ -38,6 +38,7 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRenderingTypes.cs" Link="NativeSceneRenderingTypes.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextShaping.cs" Link="NativeTextShaping.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeTextRunPositioning.cs" Link="NativeTextRunPositioning.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropCallbacks.cs" Link="NativeInteropCallbacks.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropResult.cs" Link="NativeInteropResult.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropTransport.cs" Link="NativeInteropTransport.cs" />

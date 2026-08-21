@@ -744,21 +744,36 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
             parts[4],
             _webTypefaces);
-        var shapedWidth = NativeTextShaping.MeasureShapedWidth(
+        var positioned = NativeTextShaping.TryPositionTextRun(
             shaper,
-            parts[5],
-            paint,
-            featureFlags,
-            tabularDigitScale);
-        var widthScale = NativeTextShaping.ResolveShapedWidthScale(
             parts[5],
             parts[4],
             fontSize,
             fontWeight,
-            paint,
-            shapedWidth,
+            SKFontStyleSlant.Upright,
             featureFlags,
-            _webTypefaces);
+            paint,
+            _webTypefaces,
+            out var positionedRun);
+        var shapedWidth = positioned
+            ? positionedRun.AdvanceWidth
+            : NativeTextShaping.MeasureShapedWidth(
+                shaper,
+                parts[5],
+                paint,
+                featureFlags,
+                tabularDigitScale);
+        var widthScale = positioned
+            ? 1f
+            : NativeTextShaping.ResolveShapedWidthScale(
+                parts[5],
+                parts[4],
+                fontSize,
+                fontWeight,
+                paint,
+                shapedWidth,
+                featureFlags,
+                _webTypefaces);
         var renderedWidth = shapedWidth * widthScale;
         var x = parts[3] switch
         {
@@ -785,7 +800,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             tabularDigitScale,
             widthScale,
             shapedWidth,
-            _presenterDeviceScaleFactor);
+            _presenterDeviceScaleFactor,
+            positioned ? positionedRun : null);
     }
 
     private static void DrawDomShadow(
@@ -1443,21 +1459,36 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
             font.FamilyList,
             _webTypefaces);
-        var shapedWidth = NativeTextShaping.MeasureShapedWidth(
+        var positioned = NativeTextShaping.TryPositionTextRun(
             shaper,
-            text,
-            paint,
-            featureFlags,
-            tabularDigitScale);
-        var widthScale = NativeTextShaping.ResolveShapedWidthScale(
             text,
             font.FamilyList,
             font.Size,
             font.Weight,
-            paint,
-            shapedWidth,
+            font.Slant,
             featureFlags,
-            _webTypefaces);
+            paint,
+            _webTypefaces,
+            out var positionedRun);
+        var shapedWidth = positioned
+            ? positionedRun.AdvanceWidth
+            : NativeTextShaping.MeasureShapedWidth(
+                shaper,
+                text,
+                paint,
+                featureFlags,
+                tabularDigitScale);
+        var widthScale = positioned
+            ? 1f
+            : NativeTextShaping.ResolveShapedWidthScale(
+                text,
+                font.FamilyList,
+                font.Size,
+                font.Weight,
+                paint,
+                shapedWidth,
+                featureFlags,
+                _webTypefaces);
         widthScale = ConstrainCanvasTextWidth(
             widthScale,
             shapedWidth,
@@ -1476,7 +1507,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             tabularDigitScale,
             widthScale,
             shapedWidth,
-            _presenterDeviceScaleFactor);
+            _presenterDeviceScaleFactor,
+            positioned ? positionedRun : null);
     }
 
     internal static float ResolveCanvasTextBaselineOffset(
