@@ -1703,6 +1703,33 @@
             profile_startup ? this : nullptr,
             finish_frame_profile);
 #endif
+        if (!frame.attributes.contains("frame-html")
+            && !frame.attributes.contains("object-html")) {
+            const auto remote_result = frame.attributes.find(
+                "data-webscene-remote-result");
+            const auto source = frame.attributes.find("src");
+            if (remote_result != frame.attributes.end()
+                && remote_result->second == "pending"
+                && source != frame.attributes.end()) {
+                std::string html;
+                std::string resolved_name;
+                if (!load_text_resource(
+                        source->second,
+                        {},
+                        WEBSCENE_RESOURCE_DOCUMENT,
+                        html,
+                        resolved_name)) {
+                    frame.attributes["data-webscene-remote-result"] = "failed";
+                    frame_last_error_value = "Unable to load iframe document: "
+                        + source->second;
+                    ++frame_script_error_count;
+                    return false;
+                }
+                frame.attributes["src"] = std::move(resolved_name);
+                frame.attributes["object-html"] = std::move(html);
+                frame.attributes["data-webscene-remote-result"] = "loaded";
+            }
+        }
         const auto html_iterator = frame.attributes.find("frame-html");
         const auto object_iterator = frame.attributes.find("object-html");
         const auto& html = html_iterator != frame.attributes.end() && !html_iterator->second.empty()

@@ -19,6 +19,8 @@
             std::getenv("WEBSCENE_PROBE_DISABLE_STYLE_RECASCADE_BATCHING") == nullptr)
         , batch_connected_resource_style_recascades(
             std::getenv("WEBSCENE_PROBE_DISABLE_CONNECTED_RESOURCE_STYLE_BATCHING") == nullptr)
+        , prefetch_iframe_documents(
+            std::getenv("WEBSCENE_PROBE_DISABLE_IFRAME_DOCUMENT_PREFETCH") == nullptr)
         , filter_stylesheet_candidates(
             std::getenv("WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER") == nullptr)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)

@@ -141,6 +141,9 @@ eight hottest named DOM mutation/geometry APIs. Use
 `WEBSCENE_PROBE_DISABLE_CONNECTED_RESOURCE_STYLE_BATCHING=1` to isolate the legacy
 dynamic-resource boundary, which flushed after script evaluation and then ran its
 `load` event and microtasks with immediate recascades.
+Use `WEBSCENE_PROBE_DISABLE_IFRAME_DOCUMENT_PREFETCH=1` to restore synchronous
+remote iframe-document acquisition at `appendChild`; CSS/script execution order is
+unchanged by this control.
 
 Use `WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER=1` to restore the legacy
 connected-stylesheet path that finalizes and dirties every existing element, even
@@ -185,10 +188,16 @@ DOM-mutation binding CPU fell from 90.5 ms to 22.2 ms and `Node.appendChild` fro
 (-32.1%). Navigation medians were 1,016.6 ms control and 1,044.8 ms optimized, so
 no wall-time improvement is claimed for that pass.
 
-The iframe attribution also shows why iframe scheduling remains later work: a
+The iframe attribution shows why parallel script execution is not the first lever: a
 representative main frame spent 80.7 ms of its 105.5 ms hydration interval executing
 application scripts, 11.8 ms reading resources, and only about 3 ms parsing/applying
 CSS and laying out. The secondary frame similarly spent 17.5 ms of 22.4 ms in script.
+Remote iframe documents were nevertheless still fetched synchronously before they
+entered that hydration path. Starting sibling document requests concurrently while
+preserving ordered single-isolate hydration improved all five interleaved strict-replay
+pairs: median navigation fell from 953.4 ms to 934.4 ms (-19.0 ms, -2.0%), and cold
+host-to-ready from 1,038.5 ms to 1,016.2 ms (-22.3 ms, -2.1%). A delayed native host
+loader regression also requires two remote iframe document requests to overlap.
 
 Run the Sandwich Trading Platform multi-chart geometry proof with a
 deterministic in-process market-data bridge:

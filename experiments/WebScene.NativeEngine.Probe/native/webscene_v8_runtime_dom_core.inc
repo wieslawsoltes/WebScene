@@ -1410,25 +1410,37 @@
                 if (resolved.starts_with("http://")
                     || resolved.starts_with("https://")) {
                     node.attributes["data-webscene-remote-attempt"] = resolved;
-                    std::string html;
-                    std::string resolved_name;
-                    if (load_text_resource(
+                    node.attributes["src"] = resolved;
+                    if (prefetch_iframe_documents) {
+                        start_resource_prefetch(
                             resolved,
                             {},
-                            WEBSCENE_RESOURCE_DOCUMENT,
-                            html,
-                            resolved_name)) {
-                        node.attributes["src"] = resolved;
-                        node.attributes["object-html"] = std::move(html);
-                        node.attributes["data-webscene-remote-result"] = "loaded";
+                            WEBSCENE_RESOURCE_DOCUMENT);
+                        node.attributes["data-webscene-remote-result"] = "pending";
                     } else {
-                        node.attributes["data-webscene-remote-result"] = "failed";
+                        std::string html;
+                        std::string resolved_name;
+                        if (load_text_resource(
+                                resolved,
+                                {},
+                                WEBSCENE_RESOURCE_DOCUMENT,
+                                html,
+                                resolved_name)) {
+                            node.attributes["object-html"] = std::move(html);
+                            node.attributes["data-webscene-remote-result"] = "loaded";
+                        } else {
+                            node.attributes["data-webscene-remote-result"] = "failed";
+                        }
                     }
                 }
             }
         }
+        const auto remote_result = node.attributes.find("data-webscene-remote-result");
+        const auto remote_pending = remote_result != node.attributes.end()
+            && remote_result->second == "pending";
         if (!node.attributes.contains("object-html")
-            && !node.attributes.contains("frame-html")) return;
+            && !node.attributes.contains("frame-html")
+            && !remote_pending) return;
         if (std::find(pending_frame_hydrations.begin(), pending_frame_hydrations.end(), &node)
             == pending_frame_hydrations.end()) {
             pending_frame_hydrations.push_back(&node);

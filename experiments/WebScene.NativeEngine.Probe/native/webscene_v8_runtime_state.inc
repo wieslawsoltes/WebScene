@@ -308,6 +308,7 @@
     };
     bool batch_style_recascades{true};
     bool batch_connected_resource_style_recascades{true};
+    bool prefetch_iframe_documents{true};
     bool filter_stylesheet_candidates{true};
     uint32_t style_recascade_batch_depth{0};
     std::vector<pending_style_recascade> pending_style_recascades;
