@@ -3371,9 +3371,15 @@
         std::string_view reason = {})
     {
         if (style_recascade_batch_depth != 0U) {
+            binding_callback_timer timer(
+                nullptr,
+                profile_named("style-recascade/subtree-scheduled"));
             schedule_style_recascade(node, true, reason);
             return;
         }
+        binding_callback_timer timer(
+            nullptr,
+            profile_named("style-recascade/subtree-immediate"));
         recascade_connected_subtree_now(node, reason);
     }
 
@@ -3381,9 +3387,15 @@
     {
         if (!is_connected(node)) return;
         if (style_recascade_batch_depth != 0U) {
+            binding_callback_timer timer(
+                nullptr,
+                profile_named("style-recascade/node-scheduled"));
             schedule_style_recascade(node, false, {});
             return;
         }
+        binding_callback_timer timer(
+            nullptr,
+            profile_named("style-recascade/node-immediate"));
         apply_css_rules(node);
     }
 

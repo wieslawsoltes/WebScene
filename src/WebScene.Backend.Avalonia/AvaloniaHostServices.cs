@@ -607,6 +607,24 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
             error);
     }
 
+    /// <summary>
+    /// Validates and preloads every replay object. Benchmark hosts can call
+    /// this before starting their navigation timer, matching a browser whose
+    /// interception fixture is already resident in memory.
+    /// </summary>
+    public void PrepareResourceReplay()
+    {
+        try
+        {
+            GetReplayArchiveTracked()?.Preload();
+        }
+        catch (Exception error)
+        {
+            RememberReplayFailure(error);
+            throw;
+        }
+    }
+
     public void MountDirectory(string addressPrefix, string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(addressPrefix);

@@ -17,6 +17,8 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , batch_style_recascades(
             std::getenv("WEBSCENE_PROBE_DISABLE_STYLE_RECASCADE_BATCHING") == nullptr)
+        , batch_connected_resource_style_recascades(
+            std::getenv("WEBSCENE_PROBE_DISABLE_CONNECTED_RESOURCE_STYLE_BATCHING") == nullptr)
         , filter_stylesheet_candidates(
             std::getenv("WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER") == nullptr)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -745,6 +747,18 @@
             : nullptr;
 #else
         static_cast<void>(category);
+        return nullptr;
+#endif
+    }
+
+    binding_callback_stats* profile_named(std::string_view name)
+    {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        return profile_bindings
+            ? &startup_binding_profiles[std::string(name)]
+            : nullptr;
+#else
+        static_cast<void>(name);
         return nullptr;
 #endif
     }

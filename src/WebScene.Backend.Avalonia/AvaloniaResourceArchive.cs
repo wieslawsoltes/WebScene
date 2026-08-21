@@ -13,6 +13,7 @@ internal sealed class AvaloniaResourceArchive
     private readonly string _rootDirectory;
     private readonly string _objectsDirectory;
     private readonly Dictionary<string, ResourceArchiveEntry> _entries;
+    private readonly Dictionary<string, byte[]> _contentByFile = new(StringComparer.Ordinal);
     private bool _dirty;
 
     private AvaloniaResourceArchive(
@@ -26,6 +27,12 @@ internal sealed class AvaloniaResourceArchive
 
     internal static AvaloniaResourceArchive CreateCapture(string directory)
     {
+        var manifestPath = Path.Combine(Path.GetFullPath(directory), ManifestFileName);
+        if (File.Exists(manifestPath))
+        {
+            return OpenReplay(directory);
+        }
+
         var archive = new AvaloniaResourceArchive(
             directory,
             new Dictionary<string, ResourceArchiveEntry>(StringComparer.Ordinal));
@@ -165,6 +172,20 @@ internal sealed class AvaloniaResourceArchive
             entry.DisplayName ?? entry.Address);
     }
 
+    internal void Preload()
+    {
+        lock (_gate)
+        {
+            foreach (var entry in _entries.Values)
+            {
+                if (!_contentByFile.ContainsKey(entry.ContentFile))
+                {
+                    _contentByFile.Add(entry.ContentFile, ReadContentFromDisk(entry));
+                }
+            }
+        }
+    }
+
     internal void Flush()
     {
         lock (_gate)
@@ -207,6 +228,21 @@ internal sealed class AvaloniaResourceArchive
     }
 
     private byte[] ReadContent(ResourceArchiveEntry entry)
+    {
+        lock (_gate)
+        {
+            if (_contentByFile.TryGetValue(entry.ContentFile, out var content))
+            {
+                return content;
+            }
+
+            content = ReadContentFromDisk(entry);
+            _contentByFile.Add(entry.ContentFile, content);
+            return content;
+        }
+    }
+
+    private byte[] ReadContentFromDisk(ResourceArchiveEntry entry)
     {
         var relativePath = entry.ContentFile.Replace('/', Path.DirectorySeparatorChar);
         var fullPath = Path.GetFullPath(Path.Combine(_rootDirectory, relativePath));

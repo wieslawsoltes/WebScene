@@ -282,6 +282,13 @@
             return true;
         }
         v8::Context::Scope resource_scope(resource_context);
+        // A dynamically loaded script, its load event, and the resulting
+        // microtasks form one browser task. Keep style invalidations pending
+        // across that entire boundary so Webpack/React DOM construction does
+        // not recascade synchronously between those phases.
+        style_recascade_batch_scope style_batch(
+            *this,
+            batch_connected_resource_style_recascades);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto trace_resource = profile_startup
             && std::getenv("WEBSCENE_PROBE_TRACE_STARTUP_TASKS") != nullptr;
@@ -322,6 +329,7 @@
 #endif
         }
         perform_microtask_checkpoint();
+        style_batch.finish();
         return true;
     }
 

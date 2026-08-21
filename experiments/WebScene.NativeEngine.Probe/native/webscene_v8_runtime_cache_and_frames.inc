@@ -1668,6 +1668,40 @@
             startup_frame_started = std::chrono::steady_clock::now();
         }
         binding_callback_timer timer(profile_startup ? &startup_frame_hydrate : nullptr);
+        auto frame_profile_name = "iframe#" + std::to_string(frame.id);
+        if (const auto source = frame.attributes.find("src");
+            source != frame.attributes.end() && !source->second.empty()) {
+            auto source_name = resource_leaf_name(source->second);
+            constexpr size_t maximum_source_name = 80U;
+            if (source_name.size() > maximum_source_name) {
+                source_name.resize(maximum_source_name);
+            }
+            frame_profile_name += ':' + source_name;
+        }
+        const auto frame_profile_started = profile_startup
+            ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
+        const auto frame_phase_before = profile_startup
+            ? capture_startup_phase_snapshot()
+            : startup_phase_snapshot{};
+        const auto finish_frame_profile = [
+            this,
+            frame_profile_name,
+            frame_profile_started,
+            frame_phase_before](void*) {
+            if (!profile_startup) return;
+            const auto elapsed_nanoseconds = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - frame_profile_started).count());
+            record_startup_nested_phases(
+                startup_frame_phase_profiles,
+                frame_profile_name,
+                frame_phase_before,
+                elapsed_nanoseconds);
+        };
+        std::unique_ptr<void, decltype(finish_frame_profile)> frame_profile_scope(
+            profile_startup ? this : nullptr,
+            finish_frame_profile);
 #endif
         const auto html_iterator = frame.attributes.find("frame-html");
         const auto object_iterator = frame.attributes.find("object-html");

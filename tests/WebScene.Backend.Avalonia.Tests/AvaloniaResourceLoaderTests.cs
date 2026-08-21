@@ -36,17 +36,40 @@ public sealed class AvaloniaResourceLoaderTests
                 CancellationToken.None);
             capture.FlushResourceCapture();
 
+            var incrementalCapture = new AvaloniaResourceLoader
+            {
+                ResourceCaptureDirectory = archiveDirectory
+            };
+            incrementalCapture.MountDirectory(
+                "https://incremental.fixtures.webscene.test/",
+                fixtureDirectory);
+            var incrementalAddress =
+                "https://incremental.fixtures.webscene.test/module-mutation-observer.js";
+            var incrementalResource = incrementalCapture.LoadText(
+                new WebSceneResourceRequest(
+                    incrementalAddress,
+                    null,
+                    WebSceneResourceKind.Script));
+            incrementalCapture.FlushResourceCapture();
+
             var replay = new AvaloniaResourceLoader
             {
                 ResourceReplayDirectory = archiveDirectory
             };
+            replay.PrepareResourceReplay();
             var replayedText = replay.LoadText(request);
+            var replayedIncremental = replay.LoadText(
+                new WebSceneResourceRequest(
+                    incrementalAddress,
+                    null,
+                    WebSceneResourceKind.Script));
             var replayedBinary = await replay.LoadBytesAsync(
                 address,
                 null,
                 CancellationToken.None);
 
             Assert.Equal(capturedText.Content, replayedText.Content);
+            Assert.Equal(incrementalResource.Content, replayedIncremental.Content);
             Assert.Equal(capturedText.CacheKey, replayedText.CacheKey);
             Assert.Equal(capturedBinary.Content, replayedBinary.Content);
             Assert.Equal(capturedBinary.CacheKey, replayedBinary.CacheKey);
@@ -101,6 +124,7 @@ public sealed class AvaloniaResourceLoaderTests
                 ResourceReplayDirectory = archiveDirectory
             };
 
+            Assert.Throws<FileNotFoundException>(replay.PrepareResourceReplay);
             Assert.Throws<FileNotFoundException>(() => replay.LoadText(
                 new WebSceneResourceRequest(
                     "https://fixtures.webscene.test/app.js",

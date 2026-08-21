@@ -3823,7 +3823,9 @@
     static void append_child(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Node.appendChild"));
         auto* parent = unwrap_node(info.This());
         auto* child = info.Length() > 0 && info[0]->IsObject()
             ? unwrap_node(info[0].As<v8::Object>())
@@ -3903,7 +3905,9 @@
     static void append_nodes(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("ParentNode.append"));
         auto* parent = unwrap_node(info.This());
         if (parent == nullptr) return;
 
@@ -3979,7 +3983,9 @@
     static void remove_child(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Node.removeChild"));
         auto* parent = unwrap_node(info.This());
         auto* child = info.Length() > 0 && info[0]->IsObject()
             ? unwrap_node(info[0].As<v8::Object>())
@@ -4145,7 +4151,9 @@
     static void replace_with(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("ChildNode.replaceWith"));
         auto* replaced = unwrap_node(info.This());
         if (replaced == nullptr || replaced->parent == nullptr) return;
         auto* parent = replaced->parent;
@@ -4247,7 +4255,9 @@
     static void insert_adjacent_html(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Element.insertAdjacentHTML"));
         auto* reference = unwrap_node(info.This());
         if (reference == nullptr || info.Length() < 2) return;
         const auto position = lower_html_name(to_utf8(info.GetIsolate(), info[0]));
@@ -4303,7 +4313,9 @@
     static void insert_adjacent_element(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Element.insertAdjacentElement"));
         auto* reference = unwrap_node(info.This());
         auto* child = info.Length() > 1 && info[1]->IsObject()
             ? unwrap_node(info[1].As<v8::Object>())
@@ -4432,7 +4444,9 @@
     static void insert_before(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        binding_callback_timer binding_timer(self->profile(binding_category::dom_mutation));
+        binding_callback_timer binding_timer(
+            self->profile(binding_category::dom_mutation),
+            self->profile_named("Node.insertBefore"));
         self->record_feature(
             "dom",
             "method:Node.insertBefore",

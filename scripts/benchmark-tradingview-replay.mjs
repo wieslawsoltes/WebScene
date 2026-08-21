@@ -64,7 +64,7 @@ class CdpClient {
 }
 
 function parseArguments(arguments_) {
-  const options = { url: DEFAULT_URL, timeout: 30_000 };
+  const options = { url: DEFAULT_URL, timeout: 30_000, captureUrls: [] };
   for (let index = 0; index < arguments_.length; index++) {
     switch (arguments_[index]) {
       case "--archive":
@@ -82,6 +82,9 @@ function parseArguments(arguments_) {
       case "--capture-misses":
         options.captureMisses = true;
         break;
+      case "--capture-url":
+        options.captureUrls.push(new URL(arguments_[++index]).href);
+        break;
       default:
         throw new Error(`Unknown or incomplete argument '${arguments_[index]}'.`);
     }
@@ -93,6 +96,15 @@ function parseArguments(arguments_) {
     throw new Error("--timeout-ms must be a positive number.");
   }
   return options;
+}
+
+function inferResourceType(address) {
+  const pathname = new URL(address).pathname.toLowerCase();
+  if (/\.(?:woff2?|ttf|otf)$/.test(pathname)) return "Font";
+  if (/\.css$/.test(pathname)) return "Stylesheet";
+  if (/\.(?:js|mjs)$/.test(pathname)) return "Script";
+  if (/\.(?:svg|png|jpe?g|gif|webp|avif|ico)$/.test(pathname)) return "Image";
+  return "Document";
 }
 
 function defaultChromePath() {
@@ -294,6 +306,15 @@ function delay(milliseconds) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const archive = await loadArchive(options.archive);
+  let explicitCapturedRequests = 0;
+  for (const url of options.captureUrls) {
+    const captured = await captureFromOrigin(archive, {
+      url,
+      resourceType: inferResourceType(url)
+    });
+    if (captured.captured) explicitCapturedRequests++;
+  }
+  if (explicitCapturedRequests) await writeArchiveManifest(archive);
   const chrome = options.chrome ?? defaultChromePath();
   const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "webscene-chrome-replay-"));
   const child = spawn(chrome, [
@@ -315,7 +336,7 @@ async function main() {
     const executionContexts = new Set();
     const misses = new Set();
     const captureTasks = new Set();
-    let capturedRequests = 0;
+    let capturedRequests = explicitCapturedRequests;
     let servedRequests = 0;
     let servedBytes = 0;
 

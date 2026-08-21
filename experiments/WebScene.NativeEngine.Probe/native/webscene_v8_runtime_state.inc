@@ -307,14 +307,17 @@
         std::string reason;
     };
     bool batch_style_recascades{true};
+    bool batch_connected_resource_style_recascades{true};
     bool filter_stylesheet_candidates{true};
     uint32_t style_recascade_batch_depth{0};
     std::vector<pending_style_recascade> pending_style_recascades;
 
     class style_recascade_batch_scope final {
     public:
-        explicit style_recascade_batch_scope(implementation& owner) noexcept
-            : owner_(owner.batch_style_recascades ? &owner : nullptr)
+        explicit style_recascade_batch_scope(
+            implementation& owner,
+            bool enabled = true) noexcept
+            : owner_(owner.batch_style_recascades && enabled ? &owner : nullptr)
         {
             if (owner_ != nullptr) ++owner_->style_recascade_batch_depth;
         }
@@ -352,6 +355,7 @@
     bool profile_css{false};
     bool resize_profile_active{false};
     std::array<binding_callback_stats, binding_category_count> binding_totals{};
+    std::unordered_map<std::string, binding_callback_stats> startup_binding_profiles;
     std::array<binding_callback_stats, binding_category_count> last_resize_binding_profile{};
     std::unordered_map<std::string, uint64_t> last_resize_style_property_counts;
     std::unordered_map<std::string, uint64_t> last_resize_style_target_counts;
@@ -383,17 +387,22 @@
         startup_script_phase_profiles;
     std::unordered_map<std::string, startup_nested_phase_stats>
         startup_task_phase_profiles;
+    std::unordered_map<std::string, startup_nested_phase_stats>
+        startup_frame_phase_profiles;
     std::chrono::steady_clock::time_point startup_profile_started{};
     std::chrono::steady_clock::time_point startup_frame_started{};
 
     startup_phase_snapshot capture_startup_phase_snapshot() const noexcept
     {
         return startup_phase_snapshot{
+            startup_resource_read,
+            startup_css_parse,
             startup_css_apply,
             startup_css_incremental_apply,
             startup_subtree_recascade,
             startup_stylesheet_recascade,
             startup_layout,
+            startup_script_execute,
             startup_stylesheet_recascade_nodes,
             startup_stylesheet_variable_nodes,
             document.layout_passes(),
@@ -409,6 +418,14 @@
         auto& profile = profiles[name];
         ++profile.elapsed.calls;
         profile.elapsed.nanoseconds += elapsed_nanoseconds;
+        accumulate_callback_delta(
+            profile.resource_read,
+            startup_resource_read,
+            before.resource_read);
+        accumulate_callback_delta(
+            profile.css_parse,
+            startup_css_parse,
+            before.css_parse);
         accumulate_callback_delta(profile.css_apply, startup_css_apply, before.css_apply);
         accumulate_callback_delta(
             profile.css_incremental_apply,
@@ -423,6 +440,10 @@
             startup_stylesheet_recascade,
             before.stylesheet_recascade);
         accumulate_callback_delta(profile.layout, startup_layout, before.layout);
+        accumulate_callback_delta(
+            profile.script_execute,
+            startup_script_execute,
+            before.script_execute);
         profile.stylesheet_nodes +=
             startup_stylesheet_recascade_nodes - before.stylesheet_nodes;
         profile.stylesheet_variable_nodes +=

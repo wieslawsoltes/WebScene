@@ -56,6 +56,10 @@ public sealed partial class MainWindow : Window
                 ResourceReplayDirectory = paths.ResourceReplayDirectory
             };
             var startupTimer = Stopwatch.StartNew();
+            var replayPreparationTimer = Stopwatch.StartNew();
+            _resourceLoader.PrepareResourceReplay();
+            replayPreparationTimer.Stop();
+            Stopwatch? navigationTimer = null;
             StatusText.Text = "Loading hosted TradingView terminal…";
             DiagnosticsText.Text = paths.DocumentUrl;
             await TerminalHost.LoadAsync(
@@ -65,6 +69,11 @@ public sealed partial class MainWindow : Window
                     NativeLibraryPath = paths.NativeLibraryPath,
                     CompilationCacheDirectory = paths.CompilationCacheDirectory,
                     ResourceLoader = _resourceLoader
+                },
+                (_, _) =>
+                {
+                    navigationTimer = Stopwatch.StartNew();
+                    return ValueTask.CompletedTask;
                 });
             StatusText.Text = "TradingView terminal loaded";
             if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
@@ -105,12 +114,19 @@ public sealed partial class MainWindow : Window
                 _resourceLoader.FlushResourceCapture();
                 Console.WriteLine(FormattableString.Invariant(
                     $"TradingView desktop chart ready wall: {startupTimer.Elapsed.TotalMilliseconds:F3} ms"));
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop replay preparation: {replayPreparationTimer.Elapsed.TotalMilliseconds:F3} ms"));
+                Console.WriteLine(FormattableString.Invariant(
+                    $"TradingView desktop chart ready navigation: {navigationTimer?.Elapsed.TotalMilliseconds ?? double.NaN:F3} ms"));
                 await TerminalHost.EvaluateTextAsync("""
                     globalThis.__webSceneComponentReady = true;
                     document.body.setAttribute('data-webscene-profile-ready', 'true');
                     true
                     """);
-                await Task.Delay(500);
+                // Conditional chunks can be requested shortly after the visual
+                // readiness gate. Give capture runs a longer observation window
+                // so later strict replays do not depend on lucky task ordering.
+                await Task.Delay(paths.ResourceCaptureDirectory is null ? 500 : 2_000);
                 var startupMetrics = TerminalHost.CapturePerformanceSnapshot();
                 Console.WriteLine(
                     "TradingView desktop startup metrics: "

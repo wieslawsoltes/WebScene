@@ -3829,6 +3829,8 @@ std::string v8_dom_runtime::diagnostics()
                 result << name << ":{task=" << format(phases.elapsed)
                     << ",dirty=" << phases.clean_to_dirty_transitions
                     << '/' << phases.tasks_left_dirty
+                    << ",io=" << format(phases.resource_read)
+                    << ",css-parse=" << format(phases.css_parse)
                     << ",layout-pass=" << phases.layout_passes
                     << ",layout=" << format(phases.layout)
                     << ",css-apply=" << format(phases.css_apply)
@@ -3837,6 +3839,7 @@ std::string v8_dom_runtime::diagnostics()
                     << ",sheet=" << format(phases.stylesheet_recascade)
                     << ",sheet-nodes=" << phases.stylesheet_nodes
                     << ",variable-nodes=" << phases.stylesheet_variable_nodes
+                    << ",script=" << format(phases.script_execute)
                     << '}';
             }
             result << ']';
@@ -3872,7 +3875,9 @@ std::string v8_dom_runtime::diagnostics()
             << ",script-phase-top="
             << format_phase_top(impl_->startup_script_phase_profiles)
             << ",task-phase-top="
-            << format_phase_top(impl_->startup_task_phase_profiles);
+            << format_phase_top(impl_->startup_task_phase_profiles)
+            << ",frame-phase-top="
+            << format_phase_top(impl_->startup_frame_phase_profiles);
         const auto profile_now = std::chrono::steady_clock::now();
         if (impl_->startup_profile_started != std::chrono::steady_clock::time_point{}) {
             description << ",total=" << std::fixed << std::setprecision(1)
@@ -3900,7 +3905,8 @@ std::string v8_dom_runtime::diagnostics()
                     << "/ms" << std::fixed << std::setprecision(3)
                     << static_cast<double>(stats.nanoseconds) / 1'000'000.0;
             }
-            description << ']';
+            description << "],binding-top="
+                << format_top(impl_->startup_binding_profiles);
         }
     }
     description << " | html-parser={implementation="
