@@ -15,6 +15,17 @@ var coreTextSourcePath = Path.Combine(AppContext.BaseDirectory, "CoreTextRendere
 var outputDirectory = ResolveOutputDirectory(args);
 Directory.CreateDirectory(outputDirectory);
 
+if (OperatingSystem.IsWindows())
+{
+    WindowsGlyphDiagnostics.Run(
+        args,
+        configurationPath,
+        chromeDocumentPath,
+        chromeCapturePath,
+        outputDirectory);
+    return;
+}
+
 if (!OperatingSystem.IsMacOS())
 {
     throw new PlatformNotSupportedException(

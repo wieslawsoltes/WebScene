@@ -43,11 +43,12 @@ used. Set `Port = 0` to request an ephemeral loopback port, then log or read
 `inspector.DiscoveryUri`/`inspector.BoundPort` after `StartAsync`.
 
 Inspector hosting is disabled unless `Enabled = true`. Loopback is the default;
-non-loopback bindings require `AllowRemoteConnections = true`. Remote discovery
-requests and WebSocket clients must present the generated token as a `token`
-query parameter or `Authorization: Bearer` header; unauthenticated remote
-discovery never publishes the bearer secret. Chrome DevTools origins are the
-only non-empty origins accepted.
+non-loopback bindings require `AllowRemoteConnections = true`. Enabling that
+remote mode also protects discovery when the selected address is loopback.
+Remote-mode discovery requests and all WebSocket clients must present the
+generated token as a `token` query parameter or `Authorization: Bearer` header;
+unauthenticated discovery never publishes the bearer secret. Chrome DevTools
+origins are the only non-empty origins accepted.
 
 Inspector sessions require WebScene's normal dedicated-isolate mode. The
 opt-in `WEBSCENE_V8_SHARED_ISOLATE` lane intentionally reports the inspector as

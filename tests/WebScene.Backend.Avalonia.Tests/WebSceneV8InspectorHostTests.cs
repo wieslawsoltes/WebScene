@@ -269,9 +269,14 @@ public sealed class WebSceneV8InspectorHostTests
     }
 
     [Fact]
-    public async Task RemoteDiscoveryRequiresTokenBeforePublishingWebSocketUrl()
+    public async Task RemoteModeDiscoveryRequiresTokenBeforePublishingWebSocketUrl()
     {
-        var address = GetNonLoopbackAddress();
+        // HTTP.sys requires an elevated URL ACL for non-loopback prefixes on
+        // Windows. Exercise the same remote-mode authorization policy through
+        // loopback there; Unix hosts still cover the physical non-loopback bind.
+        var address = OperatingSystem.IsWindows()
+            ? IPAddress.Loopback
+            : GetNonLoopbackAddress();
         await using var host = new WebSceneV8InspectorHost(
             () => new FakeInspectorSession(),
             () => "webscene://remote",

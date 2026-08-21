@@ -170,6 +170,12 @@ internal sealed class ChromiumReftestOracle
 
     private string ReadIdentity()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            var version = FileVersionInfo.GetVersionInfo(_executable);
+            return $"{version.ProductName ?? Path.GetFileName(_executable)} "
+                + $"{version.ProductVersion ?? "unknown"}";
+        }
         var startInfo = new ProcessStartInfo(_executable)
         {
             RedirectStandardOutput = true,

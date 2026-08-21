@@ -307,6 +307,7 @@ int main()
     test_complex_is_specificity_ignores_non_element_siblings(engine);
     test_inline_relative_line_height_uses_cascaded_font_size(engine);
     test_empty_inline_element_does_not_stretch_cross_size(engine);
+    test_br_keeps_inline_block_on_its_own_line(engine);
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);

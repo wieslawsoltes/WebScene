@@ -1,7 +1,18 @@
 # Glyph-level text diagnostics
 
-This macOS-only experiment compares the same system-UI glyph corpus through several
-rendering paths:
+This cross-platform experiment compares the same system-UI glyph corpus through
+platform-specific positioning and shared Skia painting paths.
+
+On Windows it captures:
+
+- WebScene's HarfBuzz/Skia baseline;
+- whole-run DirectWrite positions painted with the same Skia glyph masks;
+- a normal Avalonia `TextBlock` control;
+- Chromium canvas and DOM output;
+- glyph IDs, clusters, advances, offsets, verified face identity, device scale, and
+  canvas matrix at 100%, 125%, 150%, and 200% scaling.
+
+On macOS it captures:
 
 - WebScene's production HarfBuzz/Skia text path;
 - the same shaped glyphs with Skia's default font raster settings;
@@ -26,6 +37,18 @@ Run it from the repository root on macOS:
 dotnet run --project experiments/WebScene.GlyphDiagnostics -c Release
 ```
 
+Run the Windows matrix from the repository root:
+
+```powershell
+dotnet run --project experiments/WebScene.GlyphDiagnostics -c Release -f net10.0 -- `
+  --platform windows --scales 1,1.25,1.5,2 `
+  --output TestResults/GlyphDiagnostics/windows-x64
+```
+
+Set `WEBSCENE_NODE_EXECUTABLE` when Node.js is not on `PATH`. The Windows launcher
+accepts Chrome or Edge as the Chromium oracle and records the executable's exact
+product version in the report.
+
 Set `WEBSCENE_CHROMIUM_EXECUTABLE` if Google Chrome is not installed in its standard
 application path. Generated PNGs, native/Chromium glyph metrics, `report.json`, and a
 compact `report.md` are written to `TestResults/GlyphDiagnostics` by default. Pass
@@ -39,6 +62,26 @@ glyph masks and compositing. Coverage and edge-pixel counts help distinguish a h
 glyph mask from different antialiasing.
 
 ## Current finding
+
+The Windows report validates the automatically selected DirectWrite path. Regular-weight
+Segoe UI runs use DirectWrite only after font-table fingerprints and complete glyph
+sequences match the active Skia typeface. Web fonts, named families, Apple aliases
+without a Windows fallback, non-Latin or emoji runs, authored feature flags, italic
+text, and currently unproven weights fall back per run to HarfBuzz.
+`WEBSCENE_TEXT_POSITIONING=directwrite` remains available as an explicit diagnostic
+value, while `WEBSCENE_TEXT_POSITIONING=harfbuzz` is the rollback control. At 100%
+scale verified DirectWrite runs use the Windows Chromium-oracle grayscale Skia profile;
+higher scales retain the host profile. The report computes pixel-weighted corpus error
+plus per-case and isolated-glyph regression guards at every required scale; all four
+passed together with the managed, WPT, and performance gates before automatic selection
+was enabled.
+
+The diagnostic performance gate requires cold factory/face/run creation within 50 ms,
+a warm cached shape within 10 µs and at most one managed byte per call, positioned draw
+time no more than 10% above the HarfBuzz baseline, and no increase in per-draw managed
+allocation. It also records the bounded 2,048-run and 64-face cache limits.
+
+### macOS
 
 On the reference macOS run with Chrome 151, WebScene's production Skia path was
 pixel-identical to Chromium canvas and DOM for all six isolated glyph cases at both 1x

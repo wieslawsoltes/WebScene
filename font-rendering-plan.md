@@ -46,6 +46,20 @@ selection, shaping/positioning, and rasterization.
   per run to HarfBuzz/Skia. `WEBSCENE_TEXT_POSITIONING=harfbuzz` retains the previous path
   as a before/after and rollback control. Chromium-compatible macOS font flags are the
   default; `WEBSCENE_TEXT_RASTERIZATION=current` retains the former profile.
+- The Windows x64 diagnostic now captures HarfBuzz/Skia, DirectWrite-positioned/Skia-
+  painted, Avalonia text-control, and Chromium canvas/DOM output at 100%, 125%, 150%,
+  and 200%. On the current Windows 11/Chrome-for-Testing 152 oracle, verified regular-weight
+  DirectWrite positioning plus the proven 100%-scale grayscale Skia profile improves
+  corpus pixel error at all four scales without a material per-case or isolated-glyph
+  regression. Semibold and bold showed fractional-scale regressions and remain
+  fallback-only. A current-source Windows native engine (DLL SHA-256
+  `0FD7FAA086085D88153E57FD55502DD1EB27AC785BC376D496B4CD413385C264`) passes all
+  four native tests. Its required WPT runs produce identical DirectWrite and HarfBuzz
+  results: 115/115 documents and 440/440 subtests pass, including
+  `contracts/font-shaping-and-inline-layout.html`. The complete managed solution passes
+  on both target frameworks, including the Windows-safe inspector discovery coverage.
+  Automatic Windows selection is enabled for eligible runs; explicit `harfbuzz`,
+  `legacy`, `off`, or `0` values remain the rollback control.
 
 ## Architecture
 
@@ -372,9 +386,13 @@ systems and installed font versions.
 
 ### Phase 2: Windows
 
-- Correct `system-ui` resolution without changing `sans-serif` semantics.
-- Add the DirectWrite diagnostic and scaling matrix.
-- Implement and enable DirectWrite positioning only for demonstrated wins.
+- [x] Correct `system-ui` resolution without changing `sans-serif` semantics.
+- [x] Add the DirectWrite diagnostic and 100%, 125%, 150%, and 200% scaling matrix.
+- [x] Implement bounded whole-run DirectWrite positioning with exact DirectWrite/Skia
+  face and glyph identity checks, shared measurement/painting, and per-run fallback.
+- [x] Verify pixel, fallback, WPT, managed, native, and performance gates, then enable
+  DirectWrite automatically for eligible Windows runs while preserving HarfBuzz as the
+  explicit rollback path.
 
 ### Phase 3: Linux
 

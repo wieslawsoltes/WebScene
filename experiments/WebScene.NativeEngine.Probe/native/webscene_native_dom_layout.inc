@@ -2200,7 +2200,11 @@ void native_document::layout_children(dom_node& parent)
                 assigned.height,
                 containing.height);
             const auto flex_static_main_offset = [&] {
-                if (!flex_container) return horizontal ? cursor : 0.0F;
+                // An auto-inset out-of-flow child keeps the position its
+                // margin box would have occupied in normal flow. `cursor` is
+                // the inline-axis cursor for inline formatting and the
+                // block-axis cursor for ordinary block formatting.
+                if (!flex_container) return cursor;
                 if (parent.style.justify_content == justify_mode::center) {
                     return horizontal
                         ? (content.width - assigned.width) * 0.5F
@@ -2593,24 +2597,45 @@ void native_document::layout_children(dom_node& parent)
                 }
                 return std::nullopt;
             };
-            auto target_baseline = -std::numeric_limits<float>::infinity();
-            for (const auto* child : ordered_children) {
+            struct inline_baseline_item final {
+                dom_node* node{nullptr};
+                float baseline{0};
+            };
+            struct inline_baseline_line final {
+                float y{0};
+                float target{-std::numeric_limits<float>::infinity()};
+                std::vector<inline_baseline_item> items;
+            };
+            std::vector<inline_baseline_line> baseline_lines;
+            for (auto* child : ordered_children) {
+                const auto& vertical_align = child->style.textual().vertical_align;
                 if (!participates_in_flow(child) || !child->visible
-                    || child->style.textual().vertical_align == "middle") continue;
-                if (const auto baseline = inline_item_baseline(
-                        inline_item_baseline, *child)) {
-                    target_baseline = std::max(target_baseline, *baseline);
+                    || child->tag == "br"
+                    || vertical_align == "middle"
+                    || vertical_align == "bottom") continue;
+                const auto baseline = inline_item_baseline(
+                    inline_item_baseline, *child).value_or(
+                        child->layout.y + child->layout.height);
+                auto line = std::find_if(
+                    baseline_lines.begin(),
+                    baseline_lines.end(),
+                    [&](const auto& candidate) {
+                        return std::abs(candidate.y - child->layout.y) < 0.01F;
+                    });
+                if (line == baseline_lines.end()) {
+                    baseline_lines.push_back({child->layout.y, baseline, {{child, baseline}}});
+                } else {
+                    line->target = std::max(line->target, baseline);
+                    line->items.push_back({child, baseline});
                 }
             }
-            if (std::isfinite(target_baseline)) {
-                for (auto* child : ordered_children) {
-                    if (!participates_in_flow(child) || !child->visible
-                        || child->style.textual().vertical_align == "middle") continue;
-                    const auto baseline = inline_item_baseline(
-                        inline_item_baseline, *child).value_or(
-                            child->layout.y + child->layout.height);
+            for (const auto& line : baseline_lines) {
+                if (!std::isfinite(line.target)) continue;
+                for (const auto& item : line.items) {
                     shift_subtree_y(
-                        shift_subtree_y, *child, target_baseline - baseline);
+                        shift_subtree_y,
+                        *item.node,
+                        line.target - item.baseline);
                 }
             }
         }

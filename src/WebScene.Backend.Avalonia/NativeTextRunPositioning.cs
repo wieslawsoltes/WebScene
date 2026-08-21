@@ -15,12 +15,24 @@ internal readonly record struct NativeTextRunPositionRequest(
     SKFontStyleSlant Slant,
     uint FeatureFlags,
     uint[] ExpectedGlyphs,
-    NativeTextShaping.WebTypefaceRegistry? WebTypefaces);
+    NativeTextShaping.WebTypefaceRegistry? WebTypefaces,
+    SKTypeface? Typeface = null);
+
+internal sealed record NativeTextRunFaceIdentity(
+    string FamilyName,
+    int Weight,
+    int Stretch,
+    int Style,
+    string FontTableFingerprint);
 
 internal sealed record NativePositionedTextRun(
     ushort[] Glyphs,
     SKPoint[] Positions,
-    float AdvanceWidth);
+    float AdvanceWidth,
+    uint[]? Clusters = null,
+    float[]? Advances = null,
+    SKPoint[]? Offsets = null,
+    NativeTextRunFaceIdentity? FaceIdentity = null);
 
 internal interface INativeTextRunPositioner
 {
@@ -37,13 +49,22 @@ internal sealed class DefaultNativeTextRunPositioner : INativeTextRunPositioner
     internal static readonly DefaultNativeTextRunPositioner Instance = new();
 
     private readonly bool _platformPositioningEnabled;
+    private readonly bool _windowsDirectWriteEnabled;
     private readonly MacCoreTextRunPositioner _macCoreText = new();
+    private readonly WindowsDirectWriteRunPositioner _windowsDirectWrite = new();
 
     private DefaultNativeTextRunPositioner()
+        : this(Environment.GetEnvironmentVariable(ModeEnvironmentVariable))
     {
-        var mode = Environment.GetEnvironmentVariable(ModeEnvironmentVariable);
-        _platformPositioningEnabled = mode?.Trim().ToLowerInvariant()
+    }
+
+    internal DefaultNativeTextRunPositioner(string? mode)
+    {
+        var normalizedMode = mode?.Trim().ToLowerInvariant();
+        _platformPositioningEnabled = normalizedMode
             is not ("harfbuzz" or "legacy" or "off" or "0");
+        _windowsDirectWriteEnabled = string.IsNullOrEmpty(normalizedMode)
+            || normalizedMode is "auto" or "automatic" or "directwrite";
     }
 
     public bool TryPosition(
@@ -51,7 +72,9 @@ internal sealed class DefaultNativeTextRunPositioner : INativeTextRunPositioner
         out NativePositionedTextRun run)
     {
         if (IsEligible(in request)
-            && _macCoreText.TryPosition(in request, out run))
+            && (OperatingSystem.IsWindows()
+                ? _windowsDirectWrite.TryPosition(in request, out run)
+                : _macCoreText.TryPosition(in request, out run)))
         {
             return true;
         }
@@ -64,7 +87,10 @@ internal sealed class DefaultNativeTextRunPositioner : INativeTextRunPositioner
     }
 
     public bool IsEligible(in NativeTextRunPositionRequest request)
-        => _platformPositioningEnabled && _macCoreText.IsEligible(in request);
+        => _platformPositioningEnabled
+            && (OperatingSystem.IsWindows()
+                ? _windowsDirectWriteEnabled && _windowsDirectWrite.IsEligible(in request)
+                : _macCoreText.IsEligible(in request));
 }
 
 internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
