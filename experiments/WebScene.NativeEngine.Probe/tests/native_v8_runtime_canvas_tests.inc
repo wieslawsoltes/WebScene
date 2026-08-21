@@ -270,26 +270,49 @@ void test_canvas_path_2d_add_path_does_not_fill_stale_current_path(webscene_engi
           context.clip();
           const source = new Path2D('M20 20h40v40H20z');
           const scaled = new Path2D();
-          scaled.addPath(source, new DOMMatrix().scaleSelf(0.5, 0.25));
+          const identity = new DOMMatrixReadOnly();
+          const transform = identity.translate(3, 4).scale(0.5, 0.25).translate(6, 8);
+          scaled.addPath(source, transform);
+          globalThis.__pathMatrixState = [
+            identity.a, identity.d, identity.e, identity.f,
+            transform.a, transform.d, transform.e, transform.f
+          ];
           context.fillStyle = '#1e53e5';
+          context.setTransform(transform);
+          context.fill(source);
+          context.resetTransform();
           context.fill(scaled);
         })()
     )JS", "native-canvas-path2d-add-path.js");
+    require(
+        evaluate(engine, "globalThis.__pathMatrixState", "native-canvas-path2d-matrix.js")
+            == "[1,1,0,0,0.5,0.25,6,6]",
+        "DOMMatrixReadOnly transform chaining mutated its source or lost translation");
     webscene_engine_request_scene_checkpoint(engine);
     bool observed_svg_fill = false;
     bool observed_stale_fill = false;
     bool observed_transform = false;
+    bool observed_object_set_transform = false;
     for (auto attempt = 0; attempt < 100; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
             for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
                 const auto& command = scene->canvas_commands[index];
                 if (command.kind == 21U) observed_stale_fill = true;
+                if (command.kind == 4U
+                    && std::abs(command.data.values[0] - 0.5) < 0.001
+                    && std::abs(command.data.values[3] - 0.25) < 0.001
+                    && std::abs(command.data.values[4] - 6.0) < 0.001
+                    && std::abs(command.data.values[5] - 6.0) < 0.001) {
+                    observed_object_set_transform = true;
+                }
                 if (command.kind == 28U) {
                     observed_svg_fill = true;
                     observed_transform = (command.flags & 0xFFFFU) == 6U
                         && std::abs(command.data.values[0] - 0.5) < 0.001
-                        && std::abs(command.data.values[3] - 0.25) < 0.001;
+                        && std::abs(command.data.values[3] - 0.25) < 0.001
+                        && std::abs(command.data.values[4] - 6.0) < 0.001
+                        && std::abs(command.data.values[5] - 6.0) < 0.001;
                 }
             }
             webscene_scene_acknowledge(scene);
@@ -298,10 +321,12 @@ void test_canvas_path_2d_add_path_does_not_fill_stale_current_path(webscene_engi
         if (observed_svg_fill) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    if (!observed_svg_fill || !observed_transform || observed_stale_fill) {
+    if (!observed_svg_fill || !observed_transform
+        || !observed_object_set_transform || observed_stale_fill) {
         fail("Path2D.addPath fill did not preserve its transform independently of the current path: svg="
             + std::to_string(observed_svg_fill) + ", transform="
-            + std::to_string(observed_transform) + ", stale="
+            + std::to_string(observed_transform) + ", object-set-transform="
+            + std::to_string(observed_object_set_transform) + ", stale="
             + std::to_string(observed_stale_fill));
     }
 }

@@ -316,6 +316,7 @@ int main()
     test_current_color_and_color_mix_reach_element_and_pseudo_paint(engine);
     test_adjacent_inline_spans_wrap_through_generated_whitespace(engine);
     test_flex_basis_reserves_fixed_track(engine);
+    test_flex_icon_metadata_card_and_title_geometry(engine);
     test_absolute_flex_child_uses_container_static_position(engine);
     test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
@@ -408,6 +409,7 @@ int main()
     test_font_shorthand_inherit_resets_control_metrics(engine);
     test_webkit_font_smoothing_inherits_into_text_scene(engine);
     test_all_unset_resets_modeled_control_properties(engine);
+    test_inherited_range_fill_relative_inline_and_atomic_baselines(engine);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     test_startup_profile_names_scripts_and_tasks();
 #endif

@@ -1793,9 +1793,17 @@
             return;
         }
         if (name == "width" && !is_inline(inline_width)) {
-            node.style.width = native_document::parse_length(value);
+            node.style.width = value == "inherit" && node.parent != nullptr
+                ? node.parent->style.width
+                : value == "initial" || value == "unset" || value == "revert"
+                    ? css_length{}
+                    : native_document::parse_length(value);
         } else if (name == "height" && !is_inline(inline_height)) {
-            node.style.height = native_document::parse_length(value);
+            node.style.height = value == "inherit" && node.parent != nullptr
+                ? node.parent->style.height
+                : value == "initial" || value == "unset" || value == "revert"
+                    ? css_length{}
+                    : native_document::parse_length(value);
         } else if (name == "min-width" && !is_inline(inline_min_width)) {
             node.style.min_width = native_document::parse_length(value);
         } else if (name == "min-height" && !is_inline(inline_min_height)) {

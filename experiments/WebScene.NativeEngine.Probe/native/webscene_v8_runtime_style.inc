@@ -528,10 +528,18 @@
         } else if (apply_border_declaration(node->style, name, value)) {
             node->style.inline_property_mask |= inline_border;
         } else if (name == "width") {
-            node->style.width = native_document::parse_length(value);
+            node->style.width = value == "inherit" && node->parent != nullptr
+                ? node->parent->style.width
+                : value == "initial" || value == "unset" || value == "revert"
+                    ? css_length{}
+                    : native_document::parse_length(value);
             node->style.inline_property_mask |= inline_width;
         } else if (name == "height") {
-            node->style.height = native_document::parse_length(value);
+            node->style.height = value == "inherit" && node->parent != nullptr
+                ? node->parent->style.height
+                : value == "initial" || value == "unset" || value == "revert"
+                    ? css_length{}
+                    : native_document::parse_length(value);
             node->style.inline_property_mask |= inline_height;
         } else if (name == "minWidth") {
             node->style.min_width = native_document::parse_length(value);

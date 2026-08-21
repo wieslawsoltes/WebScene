@@ -913,6 +913,19 @@ void native_document::layout_children(dom_node& parent)
                 positioned_items.push_back({&node, text_runs.size()});
                 return true;
             }
+            // Relative positioning moves an inline box's painted/CSSOM
+            // geometry without changing its normal-flow advance. Flattening
+            // the descendant text into its ancestor loses that offset (most
+            // visibly for small raised price fractions), so retain the box as
+            // an atomic inline participant and let the general path apply its
+            // relative inset after assigning the flow position.
+            if (node.style.position == position_mode::relative
+                && (is_specified(node.style.left)
+                    || is_specified(node.style.right)
+                    || is_specified(node.style.top)
+                    || is_specified(node.style.bottom))) {
+                return false;
+            }
             if (node.tag == "#text") {
                 // Whitespace-only DOM nodes still contribute one collapsed
                 // boundary between adjacent inline descendants. Retain them in
@@ -1623,6 +1636,17 @@ void native_document::layout_children(dom_node& parent)
     std::optional<dom_node> before_item;
     std::optional<dom_node> after_item;
     const auto flex_container = is_flex_container(parent.style.display);
+    const auto inline_item_contains_block_box = [&](const dom_node* child) {
+        if (child == nullptr || child->style.display != display_mode::inline_flow) return false;
+        return std::any_of(
+            composed_children(*child).begin(),
+            composed_children(*child).end(),
+            [](const dom_node* descendant) {
+                return descendant->style.display != display_mode::none
+                    && !is_out_of_flow(descendant->style.position)
+                    && !is_inline_level(descendant->style.display);
+            });
+    };
     std::vector<dom_node*> layout_items;
     layout_items.reserve(composed_children(parent).size() + 3U);
     if (has_inside_marker) {
@@ -1661,10 +1685,11 @@ void native_document::layout_children(dom_node& parent)
     const auto inline_flow = !flex_container && std::all_of(
         layout_items.begin(),
         layout_items.end(),
-        [](const dom_node* child) {
-            return child->style.display == display_mode::none
+        [&](const dom_node* child) {
+                return child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
-                || is_inline_level(child->style.display);
+                || (is_inline_level(child->style.display)
+                    && !inline_item_contains_block_box(child));
         });
     const auto horizontal = (flex_container && parent.style.direction == flex_direction::row)
         || inline_flow;
@@ -1832,6 +1857,20 @@ void native_document::layout_children(dom_node& parent)
     const auto overflow = flex_container && !parent.style.flex_wrap
         ? std::max(0.0F, fixed - main_available) : 0.0F;
     std::unordered_map<const dom_node*, float> flex_shrunk_main_sizes;
+    const auto contains_replaced_content = [&](const auto& self,
+                                                const dom_node& candidate) -> bool {
+        if (candidate.tag == "svg" || candidate.tag == "img"
+            || candidate.tag == "canvas" || candidate.tag == "input"
+            || candidate.tag == "select" || candidate.tag == "textarea") {
+            return true;
+        }
+        return std::any_of(
+            composed_children(candidate).begin(),
+            composed_children(candidate).end(),
+            [&](const dom_node* descendant) {
+                return descendant != nullptr && self(self, *descendant);
+            });
+    };
     const auto resolve_flex_shrink = [&](const std::vector<const dom_node*>& line_items,
                                          float line_overflow) {
         if (line_overflow <= 0.001F) return;
@@ -1851,6 +1890,12 @@ void native_document::layout_children(dom_node& parent)
                 ? child->style.min_width : child->style.min_height;
             const auto minimum = is_specified(minimum_length)
                 ? resolve_length(*child, minimum_length, main_available, 0)
+                : contains_replaced_content(contains_replaced_content, *child)
+                ? constrain_size(
+                    *child,
+                    horizontal,
+                    intrinsic_size(*child, horizontal, main_available),
+                    main_available)
                 : 0.0F;
             const auto weight = std::max(0.0F, child->style.flex_shrink) * base;
             items.push_back({
@@ -2505,6 +2550,70 @@ void native_document::layout_children(dom_node& parent)
         }
     }
     if (inline_flow && !flex_container) {
+        const auto has_atomic_inline = std::any_of(
+            ordered_children.begin(),
+            ordered_children.end(),
+            [&](const dom_node* child) {
+                return participates_in_flow(child) && child->visible
+                    && child->style.display == display_mode::inline_block;
+            });
+        if (has_atomic_inline) {
+            // Inline-level boxes share an alphabetic baseline by default.
+            // Atomic inline boxes without an in-flow line box synthesize that
+            // baseline at their bottom margin edge; this is the browser rule
+            // used by compact block-backed separator dots. Limit this pass to
+            // lines which actually contain an atomic inline so ordinary nested
+            // inline spans retain their established fragment geometry.
+            const auto inline_item_baseline = [&](const auto& self,
+                                                  const dom_node& node)
+                -> std::optional<float> {
+                if (node.style.display == display_mode::inline_flow
+                    && node.tag != "#text") {
+                    const auto font_size = resolved_font_size(node);
+                    const auto metrics = measure_text("Hg", node);
+                    const auto glyph_height = metrics.ascent + metrics.descent;
+                    const auto line_height = resolved_line_height(node, font_size);
+                    return node.layout.y
+                        + (line_height - glyph_height) * 0.5F
+                        + metrics.ascent;
+                }
+                if (node.tag == "#text" && has_visible_text(node.text_content)) {
+                    const auto font_size = resolved_font_size(node);
+                    const auto metrics = measure_text(node.text_content, node);
+                    const auto glyph_height = metrics.ascent + metrics.descent;
+                    const auto line_height = resolved_line_height(node, font_size);
+                    return node.layout.y
+                        + (line_height - glyph_height) * 0.5F
+                        + metrics.ascent;
+                }
+                for (auto iterator = composed_children(node).rbegin();
+                     iterator != composed_children(node).rend();
+                     ++iterator) {
+                    if (const auto baseline = self(self, **iterator)) return baseline;
+                }
+                return std::nullopt;
+            };
+            auto target_baseline = -std::numeric_limits<float>::infinity();
+            for (const auto* child : ordered_children) {
+                if (!participates_in_flow(child) || !child->visible
+                    || child->style.textual().vertical_align == "middle") continue;
+                if (const auto baseline = inline_item_baseline(
+                        inline_item_baseline, *child)) {
+                    target_baseline = std::max(target_baseline, *baseline);
+                }
+            }
+            if (std::isfinite(target_baseline)) {
+                for (auto* child : ordered_children) {
+                    if (!participates_in_flow(child) || !child->visible
+                        || child->style.textual().vertical_align == "middle") continue;
+                    const auto baseline = inline_item_baseline(
+                        inline_item_baseline, *child).value_or(
+                            child->layout.y + child->layout.height);
+                    shift_subtree_y(
+                        shift_subtree_y, *child, target_baseline - baseline);
+                }
+            }
+        }
         // Inline-level boxes participate in a line box, not a flex cross axis.
         // A full-line-height generated inline box plus smaller siblings using
         // `vertical-align: middle` is a common loader-centering composition.
@@ -2529,7 +2638,8 @@ void native_document::layout_children(dom_node& parent)
             const auto target_y = content.y + margin_top
                 + (line_box_height - margin_top - margin_bottom
                     - child->layout.height) * 0.5F;
-            shift_subtree_y(shift_subtree_y, *child, target_y - child->layout.y);
+            shift_subtree_y(
+                shift_subtree_y, *child, target_y - child->layout.y);
         }
     }
     parent.scroll_content_width = horizontal
@@ -2992,13 +3102,25 @@ float native_document::intrinsic_size(
     }
 
     const auto flex_container = is_flex_container(node.style.display);
+    const auto inline_item_contains_block_box = [&](const dom_node* child) {
+        if (child == nullptr || child->style.display != display_mode::inline_flow) return false;
+        return std::any_of(
+            composed_children(*child).begin(),
+            composed_children(*child).end(),
+            [](const dom_node* descendant) {
+                return descendant->style.display != display_mode::none
+                    && !is_out_of_flow(descendant->style.position)
+                    && !is_inline_level(descendant->style.display);
+            });
+    };
     const auto inline_flow = !flex_container && std::all_of(
         intrinsic_items.begin(),
         intrinsic_items.end(),
-        [](const dom_node* child) {
+        [&](const dom_node* child) {
             return child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
-                || is_inline_level(child->style.display);
+                || (is_inline_level(child->style.display)
+                    && !inline_item_contains_block_box(child));
         });
     const auto children_horizontal = (flex_container && node.style.direction == flex_direction::row)
         || inline_flow;

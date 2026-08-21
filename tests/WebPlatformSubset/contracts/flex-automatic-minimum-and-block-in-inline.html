@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Flex automatic minimum and block-in-inline available width</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/21px sans-serif; }
+  #control { display: flex; align-items: center; width: 80px; height: 38px; }
+  #icon { display: block; flex: 0 1 auto; width: 18px; height: 18px; }
+  #label { display: block; flex: 0 1 auto; width: 70px; white-space: nowrap; }
+  #card { width: 300px; padding: 12px 12px 16px; border-left: 4px solid transparent; }
+  .row { display: flex; }
+  .cell, .value { flex: 1 0 0; }
+  #title-shell { display: flex; align-items: center; height: 24px; }
+  #title-wrapper { display: flex; align-items: center; height: 20px; }
+  #title { display: block; border: 0; padding: 0; font: 16px/normal sans-serif; }
+</style>
+<div id="control"><span id="icon"><svg width="18" height="18" viewBox="0 0 18 18"></svg></span><span id="label">Unbreakable</span></div>
+<div id="card"><div id="content"><div><span id="subtitle">
+  <div class="row"><div class="cell"><span class="value">Heading</span></div></div>
+  <div class="row"><div class="cell"><span id="date" class="value">Date: Mon Aug 10 2026</span></div></div>
+  <div class="row"><div class="cell"><span class="value">Amount: 0.27</span></div></div>
+  <div class="row"><div class="cell"><span class="value">Ratio: 12%</span></div></div>
+</span></div></div></div>
+<div id="title-shell"><div id="title-wrapper"><button id="title">Example Inc.</button></div></div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+try {
+  const rect = id => document.getElementById(id).getBoundingClientRect();
+  const close = (actual, expected, label, tolerance = .1) => assert(
+    Math.abs(actual - expected) <= tolerance,
+    label + ": expected " + expected + ", got " + actual);
+  close(rect("icon").width, 18, "automatic flex minimum preserves the icon width");
+  close(rect("content").width, 272, "card content width");
+  close(rect("subtitle").width, 272, "inline wrapper around block rows uses available width");
+  for (const row of document.querySelectorAll(".row")) {
+    close(row.getBoundingClientRect().width, 272, "metadata row width");
+    close(row.getBoundingClientRect().height, 21, "metadata row height");
+  }
+  assert(rect("date").height <= 21,
+    "metadata value wrapped to more than one line: " + rect("date").height);
+  close(rect("card").height, 112, "card has no wrapping overflow");
+  const shell = rect("title-shell");
+  const title = rect("title");
+  close(title.top + title.height / 2, shell.top + shell.height / 2,
+    "normal-line-height title is vertically centered");
+  state.results.push({
+    name: "flex icons, block-in-inline rows, and normal-line-height titles retain browser geometry",
+    status: "PASS", message: null, stack: null
+  });
+  state.harness = { status: 0, message: null, stack: null };
+  state.diagnostics.push(JSON.stringify({
+    icon: rect("icon"), card: rect("card"), subtitle: rect("subtitle"), title
+  }));
+} catch (error) {
+  state.results.push({
+    name: "flex icons, block-in-inline rows, and normal-line-height titles retain browser geometry",
+    status: "FAIL", message: String(error && error.message || error),
+    stack: error && error.stack ? String(error.stack) : null
+  });
+  state.harness = { status: 1, message: state.results[0].message, stack: state.results[0].stack };
+}
+state.complete = true;
+</script>

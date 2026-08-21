@@ -238,6 +238,10 @@
         if (name == "cursor") return inline_cursor;
         if (name == "font-size") return inline_font_size;
         if (name == "font-family") return inline_font_family;
+        if (name == "-webkit-font-smoothing" || name == "webkit-font-smoothing"
+            || name == "webkitFontSmoothing") {
+            return inline_font_smoothing;
+        }
         if (name == "font-weight") return inline_font_weight;
         if (name == "line-height") return inline_line_height;
         if (name == "letter-spacing") return inline_letter_spacing;

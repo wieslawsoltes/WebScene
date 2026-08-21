@@ -311,7 +311,91 @@
         info.GetReturnValue().Set(info.This());
     }
 
-    static void dom_matrix_scale_self(const v8::FunctionCallbackInfo<v8::Value>& info)
+    static void set_dom_matrix_values(
+        v8::Isolate* isolate,
+        v8::Local<v8::Context> context,
+        v8::Local<v8::Object> object,
+        double a,
+        double b,
+        double c,
+        double d,
+        double e,
+        double f)
+    {
+        const std::array<std::pair<const char*, double>, 12> values{{
+            {"a", a}, {"b", b}, {"c", c}, {"d", d}, {"e", e}, {"f", f},
+            {"m11", a}, {"m12", b}, {"m21", c}, {"m22", d},
+            {"m41", e}, {"m42", f}}};
+        for (const auto& [name, value] : values) {
+            set_object_number(isolate, context, object, name, value);
+        }
+        const auto identity = std::abs(a - 1) < 0.0000001
+            && std::abs(b) < 0.0000001 && std::abs(c) < 0.0000001
+            && std::abs(d - 1) < 0.0000001
+            && std::abs(e) < 0.0000001 && std::abs(f) < 0.0000001;
+        object->Set(
+            context,
+            js_string(isolate, "isIdentity"),
+            v8::Boolean::New(isolate, identity)).Check();
+    }
+
+    static v8::Local<v8::Object> clone_dom_matrix(
+        v8::Isolate* isolate,
+        v8::Local<v8::Context> context,
+        v8::Local<v8::Object> source)
+    {
+        auto result = source->Clone(isolate);
+        set_dom_matrix_values(
+            isolate, context, result,
+            object_number(isolate, context, source, "a", 1),
+            object_number(isolate, context, source, "b", 0),
+            object_number(isolate, context, source, "c", 0),
+            object_number(isolate, context, source, "d", 1),
+            object_number(isolate, context, source, "e", 0),
+            object_number(isolate, context, source, "f", 0));
+        result->Set(context, js_string(isolate, "is2D"), v8::True(isolate)).Check();
+        return result;
+    }
+
+    static void translate_dom_matrix(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        v8::Local<v8::Object> target)
+    {
+        const auto isolate = info.GetIsolate();
+        const auto context = isolate->GetCurrentContext();
+        const auto x = info.Length() > 0
+            ? info[0]->NumberValue(context).FromMaybe(0) : 0;
+        const auto y = info.Length() > 1
+            ? info[1]->NumberValue(context).FromMaybe(0) : 0;
+        const auto a = object_number(isolate, context, target, "a", 1);
+        const auto b = object_number(isolate, context, target, "b", 0);
+        const auto c = object_number(isolate, context, target, "c", 0);
+        const auto d = object_number(isolate, context, target, "d", 1);
+        const auto e = object_number(isolate, context, target, "e", 0);
+        const auto f = object_number(isolate, context, target, "f", 0);
+        set_dom_matrix_values(
+            isolate, context, target, a, b, c, d,
+            a * x + c * y + e,
+            b * x + d * y + f);
+    }
+
+    static void dom_matrix_translate(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto result = clone_dom_matrix(
+            info.GetIsolate(), info.GetIsolate()->GetCurrentContext(), info.This());
+        translate_dom_matrix(info, result);
+        info.GetReturnValue().Set(result);
+    }
+
+    static void dom_matrix_translate_self(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        translate_dom_matrix(info, info.This());
+        info.GetReturnValue().Set(info.This());
+    }
+
+    static void scale_dom_matrix(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        v8::Local<v8::Object> target)
     {
         const auto isolate = info.GetIsolate();
         const auto context = isolate->GetCurrentContext();
@@ -321,19 +405,53 @@
         const auto scale_y = info.Length() > 1
             ? info[1]->NumberValue(context).FromMaybe(scale_x)
             : scale_x;
-        const auto a = object_number(isolate, context, info.This(), "a", 1) * scale_x;
-        const auto b = object_number(isolate, context, info.This(), "b", 0) * scale_x;
-        const auto c = object_number(isolate, context, info.This(), "c", 0) * scale_y;
-        const auto d = object_number(isolate, context, info.This(), "d", 1) * scale_y;
-        set_object_number(isolate, context, info.This(), "a", a);
-        set_object_number(isolate, context, info.This(), "b", b);
-        set_object_number(isolate, context, info.This(), "c", c);
-        set_object_number(isolate, context, info.This(), "d", d);
-        set_object_number(isolate, context, info.This(), "m11", a);
-        set_object_number(isolate, context, info.This(), "m12", b);
-        set_object_number(isolate, context, info.This(), "m21", c);
-        set_object_number(isolate, context, info.This(), "m22", d);
+        const auto a = object_number(isolate, context, target, "a", 1) * scale_x;
+        const auto b = object_number(isolate, context, target, "b", 0) * scale_x;
+        const auto c = object_number(isolate, context, target, "c", 0) * scale_y;
+        const auto d = object_number(isolate, context, target, "d", 1) * scale_y;
+        set_dom_matrix_values(
+            isolate, context, target, a, b, c, d,
+            object_number(isolate, context, target, "e", 0),
+            object_number(isolate, context, target, "f", 0));
+    }
+
+    static void dom_matrix_scale(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto result = clone_dom_matrix(
+            info.GetIsolate(), info.GetIsolate()->GetCurrentContext(), info.This());
+        scale_dom_matrix(info, result);
+        info.GetReturnValue().Set(result);
+    }
+
+    static void dom_matrix_scale_self(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        scale_dom_matrix(info, info.This());
         info.GetReturnValue().Set(info.This());
+    }
+
+    static void install_dom_matrix_methods(
+        v8::Isolate* isolate,
+        v8::Local<v8::Context> context,
+        v8::Local<v8::Object> object)
+    {
+        const char* passthrough_methods[] = {
+            "multiply", "preMultiplySelf", "multiplySelf", "scale3d",
+            "rotate", "rotateAxisAngle", "rotateSelf", "skewX", "skewY",
+            "invertSelf", "inverse"};
+        for (const auto* name : passthrough_methods) {
+            object->Set(
+                context,
+                js_string(isolate, name),
+                v8::Function::New(context, return_this).ToLocalChecked()).Check();
+        }
+        object->Set(context, js_string(isolate, "translate"),
+            v8::Function::New(context, dom_matrix_translate).ToLocalChecked()).Check();
+        object->Set(context, js_string(isolate, "translateSelf"),
+            v8::Function::New(context, dom_matrix_translate_self).ToLocalChecked()).Check();
+        object->Set(context, js_string(isolate, "scale"),
+            v8::Function::New(context, dom_matrix_scale).ToLocalChecked()).Check();
+        object->Set(context, js_string(isolate, "scaleSelf"),
+            v8::Function::New(context, dom_matrix_scale_self).ToLocalChecked()).Check();
     }
 
     static void dom_matrix_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -351,16 +469,32 @@
         }
         result->Set(local_context, js_string(isolate, "is2D"), v8::True(isolate)).Check();
         result->Set(local_context, js_string(isolate, "isIdentity"), v8::True(isolate)).Check();
-        const char* methods[] = {
-            "multiply", "preMultiplySelf", "multiplySelf", "translate", "translateSelf", "scale", "scale3d",
-            "rotate", "rotateAxisAngle", "rotateSelf", "skewX", "skewY", "invertSelf", "inverse"};
-        for (const auto* name : methods) {
-            result->Set(local_context, js_string(isolate, name), v8::Function::New(local_context, return_this).ToLocalChecked()).Check();
+        if (info.Length() > 0 && info[0]->IsArray()) {
+            const auto values = info[0].As<v8::Array>();
+            if (values->Length() >= 6) {
+                std::array<double, 6> matrix{{1, 0, 0, 1, 0, 0}};
+                for (uint32_t index = 0; index < matrix.size(); ++index) {
+                    v8::Local<v8::Value> value;
+                    if (values->Get(local_context, index).ToLocal(&value)) {
+                        matrix[index] = value->NumberValue(local_context).FromMaybe(matrix[index]);
+                    }
+                }
+                set_dom_matrix_values(
+                    isolate, local_context, result,
+                    matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]);
+            }
+        } else if (info.Length() > 0 && info[0]->IsObject()) {
+            const auto source = info[0].As<v8::Object>();
+            set_dom_matrix_values(
+                isolate, local_context, result,
+                object_number(isolate, local_context, source, "a", 1),
+                object_number(isolate, local_context, source, "b", 0),
+                object_number(isolate, local_context, source, "c", 0),
+                object_number(isolate, local_context, source, "d", 1),
+                object_number(isolate, local_context, source, "e", 0),
+                object_number(isolate, local_context, source, "f", 0));
         }
-        result->Set(
-            local_context,
-            js_string(isolate, "scaleSelf"),
-            v8::Function::New(local_context, dom_matrix_scale_self).ToLocalChecked()).Check();
+        install_dom_matrix_methods(isolate, local_context, result);
         info.GetReturnValue().Set(result);
     }
 

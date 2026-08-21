@@ -69,6 +69,13 @@
       "reason": "Required product-neutral reduction of an automatically discovered loader composition. It requires 24px consecutive row flow, an 18x4 three-dot loader, individually centered 4px dots, generated inline middle alignment, correct indefinite percentage-height behavior, and post-mutation :not(:last-child) spacing. The native runner pass: artifacts/web-platform-subset-inline-loader-alignment-final-20260722/{managed,native}/results.json."
     },
     {
+      "path": "contracts/inline-relative-baseline-and-inherited-size.html",
+      "type": "contract",
+      "capabilities": ["non-inherited-size-inherit", "relative-inline-em-offset", "atomic-inline-baseline", "four-sided-absolute-inset", "generated-inset-surface-paint"],
+      "evidence": ["automatically-discovered-range-fraction-separator-toolbar-geometry"],
+      "reason": "Required product-neutral reduction of four visual compatibility gaps. It locks a nonzero inherited-height range fill, a raised small inline fraction, a block-backed inline separator on the text baseline, and equal bottom padding on an inset toolbar surface; the native scene regression independently requires both colored surface paint commands."
+    },
+    {
       "path": "contracts/event-propagation.html",
       "type": "contract",
       "capabilities": ["event-capture", "event-at-target", "event-bubbling", "event-current-target", "event-once", "event-cancellation"],
@@ -795,6 +802,13 @@
       "capabilities": ["flex-first-baseline-alignment", "non-text-flex-baseline-synthesis", "absolute-opposing-insets", "outline-computed-longhands"],
       "evidence": ["product-neutral-padded-label", "product-neutral-outlined-current-time-marker", "native-neutral-contract"],
       "reason": "Focused product-neutral regression for a padded text label sharing a first baseline with a non-text track. It independently verifies the current-time marker's vertical center and outline longhands so unrelated generated-content failures cannot hide this geometry authority."
+    },
+    {
+      "path": "contracts/flex-automatic-minimum-and-block-in-inline.html",
+      "type": "contract",
+      "capabilities": ["flex-automatic-minimum-size", "replaced-icon-aspect-preservation", "block-in-inline-anonymous-boxes", "available-width-propagation", "normal-line-height-flex-centering"],
+      "evidence": ["product-neutral-search-control", "product-neutral-metadata-card", "product-neutral-centered-title", "direct-chrome-neutral-contract", "native-neutral-contract"],
+      "reason": "Product-neutral regression for three shared layout primitives: an auto-minimum flex icon may not be compressed by an adjacent unbreakable label; block rows nested through an inline wrapper use the containing block's available width without wrapping or overflow; and a normal-line-height title remains centered in nested flex rows."
     },
     {
       "path": "contracts/default-line-breaking-unbreakable-token.html",

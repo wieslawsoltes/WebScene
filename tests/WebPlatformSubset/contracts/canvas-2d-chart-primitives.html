@@ -82,7 +82,21 @@ try {
   const base = new Path2D();
   base.arc(70, 40, 8, 0, Math.PI * 2);
   const combined = new Path2D();
-  combined.addPath(base);
+  const identity = new DOMMatrixReadOnly();
+  const markerTransform = identity.translate(3, 4)
+    .scale(.5, .25)
+    .translate(6, 8);
+  assert(identity.a === 1 && identity.d === 1 && identity.e === 0 && identity.f === 0,
+    "DOMMatrixReadOnly transform methods do not mutate their source");
+  assert(markerTransform.a === .5 && markerTransform.d === .25
+      && markerTransform.e === 6 && markerTransform.f === 6,
+    "DOMMatrix transform chaining preserves scale and translation: "
+      + [markerTransform.a, markerTransform.d,
+        markerTransform.e, markerTransform.f].join(","));
+  context.setTransform(markerTransform);
+  context.fill(base);
+  context.resetTransform();
+  combined.addPath(base, markerTransform);
   context.fill(combined);
   state.results.push({
     name: "chart-shaped Canvas 2D and Path2D primitives execute as one stateful composition",

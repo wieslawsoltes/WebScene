@@ -46,6 +46,13 @@
       "gap": "Both product-neutral inline contracts now pass Chrome and the native runner without hosted component selectors. The market-status reduction uses a true inline child because Chrome correctly rejected the earlier inline-block trailing-whitespace formulation before promotion. The bounded claim covers generated inline advance, adjacent fragment placement, percentage-translate centering, and first-baseline alignment with a synthesized non-text baseline; it does not claim the complete CSS inline formatting context, every vertical-align value, bidi layout, or vertical writing modes. Evidence: artifacts/web-platform-subset-inline-loader-alignment-final-20260722/{managed,native}/results.json, artifacts/web-platform-inline-status-chrome-v2-20260723/results.json, artifacts/web-platform-inline-status-managed-fixed-v3-20260723/results.json, and artifacts/web-platform-inline-status-native-current-v2-20260723/results.json."
     },
     {
+      "family": "inline-relative-and-atomic-baseline-layout",
+      "required": ["height inherit on a non-inherited sizing property", "relative em inset on nested inline content", "default atomic inline baseline synthesis", "four-sided absolute inset geometry", "generated inset surface paint"],
+      "productEvidence": ["segmented range fill", "small raised numeric fraction", "block-backed metadata separator", "selected vertical-toolbar surface"],
+      "coverage": ["contracts/inline-relative-baseline-and-inherited-size.html", "test_inherited_range_fill_relative_inline_and_atomic_baselines"],
+      "gap": "The bounded contract covers the reported horizontal-writing-mode compositions: explicit parent size inherited by a child, a relative top inset on a nested inline run, the fallback bottom-edge baseline of an atomic inline separator, and an equal-inset toolbar surface. It does not claim all CSS-wide keywords on every property, the complete vertical-align grammar, vertical writing modes, or arbitrary stacking contexts."
+    },
+    {
       "family": "font-inheritance",
       "required": ["font shorthand inherit/unset", "inherited font family", "inherited font size", "inherited font weight", "inherited line height", "computed font longhands", "dynamic ancestor mutation"],
       "productEvidence": ["hosted component buttons", "dialog controls", "calendar controls", "menu text metrics"],
@@ -200,7 +207,7 @@
       "family": "flex-layout",
       "required": ["row/column sizing", "wrapping", "per-line flexible sizing", "deterministic subpixel residual allocation", "authored gap preservation", "space-around distribution", "alignment", "min-size interaction", "constrained overflow shrink with footer containment", "dynamic relayout"],
       "productEvidence": ["top toolbar", "dialog header/search/list/footer", "calendar weekday/date columns", "calendar date/time controls", "sidebar row alignment", "R5 ReactDashboard metric-card grid"],
-      "coverage": ["contracts/dialog-layout-integrity.html", "css/css-flexbox/flexbox-flex-wrap-horiz-001.html", "css/css-flexbox/flexbox-with-pseudo-elements-001.html", "css/css-flexbox/relayout-align-items.html", "CSS Flexbox 1 section 9.7 Resolving Flexible Lengths", "CssFlexWrapMarginAuthorityTests", "CssLayoutResizeSpikeTests", "CssGeneratedPseudoElementTests", "CssFractionalFlexDistributionTests", "R5ReactDashboardResponsiveVisualTests"],
+      "coverage": ["contracts/dialog-layout-integrity.html", "contracts/flex-automatic-minimum-and-block-in-inline.html", "css/css-flexbox/flexbox-flex-wrap-horiz-001.html", "css/css-flexbox/flexbox-with-pseudo-elements-001.html", "css/css-flexbox/relayout-align-items.html", "CSS Flexbox 1 section 9.7 Resolving Flexible Lengths", "CssFlexWrapMarginAuthorityTests", "CssLayoutResizeSpikeTests", "CssGeneratedPseudoElementTests", "CssFractionalFlexDistributionTests", "R5ReactDashboardResponsiveVisualTests", "test_flex_icon_metadata_card_and_title_geometry"],
       "gap": "The native runner passes the exact flexbox-with-pseudo-elements reftest, the promoted upstream horizontal flex-wrap reftest, and the candidate unchanged check-layout dynamic align-items test. Together they prove line collection before flexible-length resolution, per-line shrink, default wrapped-line cross-axis stretch, oversized flex:none overflow, margin-constrained shrink, single-authority block margins, and intrinsic border-box cross sizing for dynamically realigned empty items. Broader float formatting (text intrusion, clear, shape-outside, RTL and arbitrary mixed flow) is not claimed. Evidence: artifacts/web-platform-required-flex-float-matrix-v1-20260722/ and TestResults/WebPlatformSubset/candidate-broadened/results.json."
     },
     {
@@ -249,9 +256,9 @@
     },
     {
       "family": "canvas-2d-chart-primitives",
-      "required": ["2D context creation", "state save and restore", "path construction", "clip and fill", "line dash", "2D transforms", "text paint and width metrics", "Path2D composition"],
+      "required": ["2D context creation", "state save and restore", "path construction", "clip and fill", "line dash", "2D transforms", "text paint and width metrics", "Path2D composition", "DOMMatrixReadOnly transform chaining", "Path2D transformed composition"],
       "productEvidence": ["price and volume canvases", "axis labels", "crosshair and chart paths"],
-      "coverage": ["contracts/canvas-2d-chart-primitives.html", "test_canvas_text_metrics_use_host_font_axes", "NativeTextShapingTests.CanvasFontParserRetainsRenderingAxesAndFallbackList", "native canvas scene regression tests"],
+      "coverage": ["contracts/canvas-2d-chart-primitives.html", "test_canvas_path_2d_add_path_does_not_fill_stale_current_path", "test_canvas_text_metrics_use_host_font_axes", "NativeTextShapingTests.CanvasFontParserRetainsRenderingAxesAndFallbackList", "native canvas scene regression tests"],
       "gap": "The product-neutral contract passes Chrome and native with host-backed Canvas advances that vary by size and family, finite font ascent/descent, and DOM/Canvas metric consistency. Glyph-specific ink bounds, the complete Canvas font shorthand grammar and exact cross-engine raster identity remain outside this bounded claim."
     },
     {

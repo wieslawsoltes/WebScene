@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Inherited size, relative inline offsets, atomic baselines, and inset surfaces</title>
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; }
+  #track { width: 268px; height: 6px; background: #2e2e2e; }
+  #fill {
+    position: relative;
+    left: 10%;
+    width: 60%;
+    height: inherit;
+    border: solid #0f0f0f;
+    border-width: 0 2px;
+    background: #f23645;
+  }
+  .price-cell {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 72px;
+    height: 27px;
+    padding: 3px 8px 3px 0;
+    font-size: 14px;
+  }
+  .price-inner { display: block; overflow: hidden; }
+  .fraction sup {
+    position: relative;
+    font-size: 75%;
+    line-height: 0;
+    vertical-align: initial;
+  }
+  .shifted sup { top: -.25em; }
+  #detail { font-size: 12px; line-height: 22px; }
+  #detail-main { display: inline-block; }
+  #dot-wrap { display: inline-block; height: 5px; margin: 0 6px; }
+  #dot { width: 3px; height: 3px; border-radius: 50%; background: #888; }
+  #tool { position: relative; width: 44px; height: 44px; }
+  #surface {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    bottom: 3px;
+    left: 3px;
+    border-radius: 8px;
+    background: #3d3d3d;
+  }
+</style>
+<div id="track"><div id="fill"></div></div>
+<div id="plain" class="price-cell"><span class="price-inner">1.1700<span class="fraction"><sup>6</sup></span></span></div>
+<div id="raised" class="price-cell"><span class="price-inner">1.1700<span class="fraction shifted"><sup>6</sup></span></span></div>
+<div id="detail"><span id="detail-main">Company<div id="dot-wrap"><div id="dot"></div></div><span>Venue</span></span></div>
+<div id="tool"><div id="surface"></div></div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const result = {
+  name: "inherited fills, raised inline text, atomic separators, and inset surfaces match browser geometry"
+};
+try {
+  const rect = id => document.getElementById(id).getBoundingClientRect();
+  const close = (actual, expected, label, tolerance = .1) => {
+    if (Math.abs(actual - expected) > tolerance) {
+      throw new Error(label + ": expected " + expected + ", got " + actual);
+    }
+  };
+  const fill = rect("fill");
+  close(fill.height, 6, "height:inherit preserves the painted range height");
+  close(fill.width, 164.8, "percentage range width includes inline borders");
+
+  const plainCell = rect("plain");
+  const raisedCell = rect("raised");
+  const plainSup = document.querySelector("#plain sup").getBoundingClientRect();
+  const raisedSup = document.querySelector("#raised sup").getBoundingClientRect();
+  const relativeShift = (raisedSup.top - raisedCell.top)
+    - (plainSup.top - plainCell.top);
+  close(relativeShift, -2.625, "relative em inset raises the small inline run");
+
+  const detail = rect("detail");
+  const dotWrap = rect("dot-wrap");
+  close(dotWrap.top - detail.top, 10, "atomic separator baseline", 1);
+  close(dotWrap.height, 5, "atomic separator wrapper height");
+
+  const tool = rect("tool");
+  const surface = rect("surface");
+  close(surface.left - tool.left, 3, "inset surface left padding");
+  close(surface.top - tool.top, 3, "inset surface top padding");
+  close(tool.right - surface.right, 3, "inset surface right padding");
+  close(tool.bottom - surface.bottom, 3, "inset surface bottom padding");
+  close(surface.width, 38, "inset surface width");
+  close(surface.height, 38, "inset surface height");
+
+  result.status = "PASS";
+  result.message = null;
+  result.stack = null;
+  state.harness = { status: 0, message: null, stack: null };
+  state.diagnostics.push(JSON.stringify({
+    fill, plainCell, raisedCell, plainSup, raisedSup, relativeShift,
+    detail, dotWrap, tool, surface
+  }));
+} catch (error) {
+  result.status = "FAIL";
+  result.message = String(error && error.message || error);
+  result.stack = error && error.stack ? String(error.stack) : null;
+  state.harness = { status: 1, message: result.message, stack: result.stack };
+}
+state.results.push(result);
+state.complete = true;
+</script>

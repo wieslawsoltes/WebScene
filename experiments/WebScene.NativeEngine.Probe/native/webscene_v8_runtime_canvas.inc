@@ -715,6 +715,21 @@
                 info[4]->NumberValue(context).FromMaybe(0),
                 info[5]->NumberValue(context).FromMaybe(0)};
         }
+        if (info.Length() >= 1 && info[0]->IsObject()) {
+            const auto object = info[0].As<v8::Object>();
+            const auto number = [&](const char* name, double fallback) {
+                v8::Local<v8::Value> value;
+                if (!object->Get(
+                        context,
+                        js_string(info.GetIsolate(), name)).ToLocal(&value)
+                    || !value->IsNumber()) return fallback;
+                const auto parsed = value->NumberValue(context).FromMaybe(fallback);
+                return std::isfinite(parsed) ? parsed : fallback;
+            };
+            return {
+                number("a", 1), number("b", 0), number("c", 0),
+                number("d", 1), number("e", 0), number("f", 0)};
+        }
         return {};
     }
 

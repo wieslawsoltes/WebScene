@@ -2705,3 +2705,262 @@ void test_bounded_css_named_color_palette()
     require(webscene_native::native_document::parse_color("orange") == 0xFFA500FFU,
         "CSS orange did not resolve to its standard RGBA value");
 }
+
+void test_flex_icon_metadata_card_and_title_geometry(webscene_engine* engine)
+{
+    resize(engine, 800, 600, 7210U);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.cssText =
+            'margin:0;font-family:sans-serif;font-size:14px;line-height:21px';
+
+          const search = document.createElement('button');
+          search.style.cssText =
+            'box-sizing:border-box;display:flex;align-items:center;'
+            + 'width:100px;height:38px;padding:0 10px 0 8px;border:0';
+          const icon = document.createElement('span');
+          icon.style.cssText = 'display:block;width:18px;height:18px';
+          const glyph = document.createElement('svg');
+          glyph.setAttribute('width', '18');
+          glyph.setAttribute('height', '18');
+          glyph.setAttribute('viewBox', '0 0 18 18');
+          icon.appendChild(glyph);
+          const label = document.createElement('span');
+          label.style.cssText = 'display:block;margin:0 4px;white-space:nowrap;width:60px';
+          search.append(icon, label);
+          document.body.appendChild(search);
+
+          const card = document.createElement('div');
+          card.style.cssText =
+            'box-sizing:border-box;width:300px;padding:12px 12px 16px;'
+            + 'border-left:4px solid transparent;overflow:visible';
+          const content = document.createElement('div');
+          const inner = document.createElement('div');
+          const subtitle = document.createElement('span');
+          const rows = [];
+          for (const text of [
+            'Dividends', 'Ex Date: \tMon Aug 10 2026',
+            'Amount: 0.27', 'Payout Ratio (TTM): 12%']) {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            const cell = document.createElement('div');
+            cell.style.flex = '1 0 0px';
+            const value = document.createElement('span');
+            value.style.flex = '1 0 0px';
+            value.textContent = text;
+            cell.appendChild(value);
+            row.appendChild(cell);
+            subtitle.appendChild(row);
+            rows.push(row);
+          }
+          inner.appendChild(subtitle);
+          content.appendChild(inner);
+          card.appendChild(content);
+          document.body.appendChild(card);
+
+          const titleShell = document.createElement('div');
+          titleShell.style.cssText = 'display:flex;align-items:center;height:24px';
+          const titleWrapper = document.createElement('div');
+          titleWrapper.style.cssText = 'display:flex;align-items:center;height:20px';
+          const title = document.createElement('button');
+          title.style.cssText =
+            'display:block;border:0;padding:0;font-size:16px;font-family:sans-serif;'
+            + 'line-height:normal;'
+            + 'white-space:nowrap;overflow:hidden';
+          title.textContent = 'Example Inc.';
+          titleWrapper.appendChild(title);
+          titleShell.appendChild(titleWrapper);
+          document.body.appendChild(titleShell);
+
+          const rect = node => node.getBoundingClientRect();
+          const date = rows[1].querySelector('span');
+          const shellRect = rect(titleShell);
+          const titleRect = rect(title);
+          const result = {
+            iconWidth: rect(icon).width,
+            labelWidth: rect(label).width,
+            cardWidth: rect(card).width,
+            cardHeight: rect(card).height,
+            clientHeight: card.clientHeight,
+            scrollHeight: card.scrollHeight,
+            contentWidth: rect(content).width,
+            subtitleWidth: rect(subtitle).width,
+            rowWidths: rows.map(row => rect(row).width),
+            rowHeights: rows.map(row => rect(row).height),
+            dateHeight: rect(date).height,
+            titleFontSize: getComputedStyle(title).fontSize,
+            titleLineHeight: getComputedStyle(title).lineHeight,
+            titleHeight: titleRect.height,
+            titleTextHeight: title.firstChild.getBoundingClientRect().height,
+            titleCentered: Math.abs(
+              titleRect.top + titleRect.height / 2
+                - (shellRect.top + shellRect.height / 2)) < 0.01
+          };
+          document.body.style.cssText = '';
+          return result;
+        })()
+    )JS", "native-flex-icon-metadata-title-geometry.js");
+    require(
+        result == R"JSON({"iconWidth":18,"labelWidth":56,"cardWidth":300,"cardHeight":112,"clientHeight":112,"scrollHeight":112,"contentWidth":272,"subtitleWidth":272,"rowWidths":[272,272,272,272],"rowHeights":[21,21,21,21],"dateHeight":21,"titleFontSize":"16px","titleLineHeight":"normal","titleHeight":18,"titleTextHeight":18,"titleCentered":true})JSON",
+        "flex icon, metadata card, or centered title geometry diverged: " + result);
+}
+
+void test_inherited_range_fill_relative_inline_and_atomic_baselines(
+    webscene_engine* engine)
+{
+    resize(engine, 800, 600, 7211U);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.cssText =
+            'margin:0;font-family:Arial,sans-serif;background:#000';
+          const style = document.createElement('style');
+          style.textContent = `
+            .range-track {
+              width: 268px;
+              height: 6px;
+              background: #2e2e2e;
+              border-radius: 12px;
+            }
+            .range-fill {
+              height: inherit;
+              position: relative;
+              width: 60%;
+              left: 10%;
+              background: #f23645;
+              border-color: #0f0f0f;
+              border-style: solid;
+              border-width: 0 2px;
+            }
+            .price-cell {
+              align-items: center;
+              box-sizing: border-box;
+              color: white;
+              display: flex;
+              font-size: 14px;
+              height: 27px;
+              justify-content: flex-end;
+              padding: 3px 8px 3px 0;
+              width: 72px;
+            }
+            .price-inner { display: block; overflow: hidden; }
+            .fraction { color: red; }
+            .fraction sup {
+              font-size: 75%;
+              line-height: 0;
+              position: relative;
+              vertical-align: initial;
+            }
+            .fraction.shifted sup { top: -.25em; }
+            .detail-line { color: white; font-size: 12px; line-height: 22px; }
+            .detail-main { display: inline-block; }
+            .dot-wrap { display: inline-block; height: 5px; margin: 0 6px; }
+            .dot { background: #888; border-radius: 50%; height: 3px; width: 3px; }
+            .tool {
+              background: transparent;
+              border: 0;
+              color: white;
+              display: flex;
+              height: 44px;
+              padding: 0;
+              position: relative;
+              width: 44px;
+            }
+            .tool::before {
+              background: #3d3d3d;
+              border-radius: 8px;
+              bottom: 3px;
+              content: '';
+              left: 3px;
+              position: absolute;
+              right: 3px;
+              top: 3px;
+              z-index: -1;
+            }
+          `;
+          document.body.appendChild(style);
+
+          const track = document.createElement('div');
+          track.className = 'range-track';
+          const fill = document.createElement('div');
+          fill.className = 'range-fill';
+          track.appendChild(fill);
+          document.body.appendChild(track);
+
+          const makePrice = shifted => {
+            const cell = document.createElement('div');
+            cell.className = 'price-cell';
+            cell.innerHTML = `<span class="price-inner">1.1700<span class="fraction ${shifted ? 'shifted' : ''}"><sup>6</sup></span></span>`;
+            document.body.appendChild(cell);
+            return { cell, sup: cell.querySelector('sup') };
+          };
+          const plainPrice = makePrice(false);
+          const shiftedPrice = makePrice(true);
+
+          const detail = document.createElement('div');
+          detail.className = 'detail-line';
+          detail.innerHTML = '<span class="detail-main">Company<div class="dot-wrap"><div class="dot"></div></div><span>Venue</span></span>';
+          document.body.appendChild(detail);
+
+          const tool = document.createElement('button');
+          tool.className = 'tool';
+          tool.innerHTML = `<svg viewBox="0 0 44 44" width="44" height="44"><path fill="currentColor" d="M28 16H16v1h12v-1ZM28 20H16v1h12v-1ZM16 24h12v1H16v-1Z"></path><path fill="currentColor" fill-rule="evenodd" d="m22 30-10 4V12a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v22l-10-4Zm-9 2.52V12h18v20.52l-9-3.6-9 3.6Z"></path></svg>`;
+          document.body.appendChild(tool);
+
+          const rect = node => node.getBoundingClientRect();
+          const fillRect = rect(fill);
+          const detailRect = rect(detail);
+          const dotRect = rect(detail.querySelector('.dot-wrap'));
+          const plainRect = rect(plainPrice.sup);
+          const shiftedRect = rect(shiftedPrice.sup);
+          return {
+            fillHeight: fillRect.height,
+            fillWidth: Math.round(fillRect.width * 1000) / 1000,
+            supRelativeShift:
+              Math.round(((shiftedRect.top - rect(shiftedPrice.cell).top)
+                - (plainRect.top - rect(plainPrice.cell).top)) * 1000) / 1000,
+            dotTop: Math.round((dotRect.top - detailRect.top) * 1000) / 1000,
+            dotHeight: dotRect.height,
+            toolWidth: rect(tool).width,
+            toolHeight: rect(tool).height
+          };
+        })()
+    )JS", "native-inherited-range-inline-baselines.js");
+    require(
+        result == R"JSON({"fillHeight":6,"fillWidth":164.8,"supRelativeShift":-2.625,"dotTop":10.8,"dotHeight":5,"toolWidth":44,"toolHeight":44})JSON",
+        "range fill, relative inline, atomic baseline, or toolbar surface diverged: "
+            + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found_range_fill = false;
+    auto found_toolbar_surface = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 1U || command.kind == 7U
+                        || command.kind == 9U || command.kind == 10U)
+                    && command.rgba == 0xF23645FFU
+                    && std::abs(command.height - 6.0F) < 0.01F) {
+                    found_range_fill = true;
+                }
+                if ((command.kind == 1U || command.kind == 7U
+                        || command.kind == 9U || command.kind == 10U)
+                    && command.rgba == 0x3D3D3DFFU
+                    && std::abs(command.width - 38.0F) < 0.01F
+                    && std::abs(command.height - 38.0F) < 0.01F) {
+                    found_toolbar_surface = true;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (found_range_fill && found_toolbar_surface) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found_range_fill, "inherited-height range fill was absent from the scene");
+    require(found_toolbar_surface,
+        "four-sided inset toolbar surface was absent or missing bottom padding");
+}
