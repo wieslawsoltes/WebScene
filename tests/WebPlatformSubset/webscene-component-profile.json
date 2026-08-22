@@ -1565,7 +1565,7 @@
           "secondColor": "#0000ff",
           "axis": "horizontal",
           "minimumPixels": 5,
-          "maximumPixels": 11,
+          "maximumPixels": 15,
           "description": "generated inline whitespace remains visible between differently weighted runs"
         },
         {
@@ -1574,11 +1574,11 @@
           "axis": "vertical",
           "channelTolerance": 32,
           "minimumPixels": -8,
-          "maximumPixels": -6,
+          "maximumPixels": -4,
           "description": "compact label ink remains vertically aligned with generated timeline segments"
         }
       ],
-      "reason": "Product-neutral raster reduction for a macOS system-UI text mismatch: contextual run shaping must agree with layout, generated whitespace must remain visible across a weight boundary, and compact label ink must align with fixed-height timeline segments painted by a positioned pseudo-element after flex baseline placement. Native and Chromium captures are retained for pixel-level comparison."
+      "reason": "Product-neutral raster reduction for system-UI text across released RIDs: contextual run shaping must agree with layout, generated whitespace must remain visible across a weight boundary, and compact label ink must align with fixed-height timeline segments painted by a positioned pseudo-element after flex baseline placement. The bounded gap ranges allow the legitimate system-font metric differences between macOS, Linux, and Windows while retaining the color and geometry gates. Native and Chromium captures are retained for pixel-level comparison."
     }
   ],
   "harnessBlocked": [],
