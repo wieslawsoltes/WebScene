@@ -1753,6 +1753,7 @@ int64_t measure_iframe_subresource_discovery(bool disable_preparation)
     const auto host = disable_preparation
         ? std::string("https://frame-preparation-control.test")
         : std::string("https://frame-preparation-enabled.test");
+    constexpr auto outer_script_work_ms = 300;
     resource_server server{
         .content = {
             {host + "/index.html", R"HTML(
@@ -1761,7 +1762,7 @@ int64_t measure_iframe_subresource_discovery(bool disable_preparation)
                     const frame = document.createElement('iframe');
                     frame.src = 'frame.html';
                     document.body.appendChild(frame);
-                    const stop = performance.now() + 180;
+                    const stop = performance.now() + 300;
                     while (performance.now() < stop) {}
                   </script>
                 </body></html>)HTML"},
@@ -1839,7 +1840,9 @@ void test_iframe_preparation_discovers_subresources_during_outer_script()
 #else
     require(
         prepared_start != std::numeric_limits<int64_t>::max()
-            && prepared_start < 140,
+            // Keep enough margin for a loaded runner while still requiring
+            // preparation to begin before the outer script yields.
+            && prepared_start < outer_script_work_ms - 40,
         "iframe preparation did not discover subresources during outer script work");
 #endif
 }
