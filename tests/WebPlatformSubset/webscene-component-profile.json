@@ -1593,6 +1593,52 @@
         }
       ],
       "reason": "Product-neutral raster reduction for a macOS system-UI text mismatch: contextual run shaping must agree with layout, generated whitespace must remain visible across a weight boundary, and compact label ink must align with fixed-height timeline segments painted by a positioned pseudo-element after flex baseline placement. Native and Chromium captures are retained for pixel-level comparison."
+    },
+    {
+      "path": "html/canvas/element/path-objects/2d.path.ellipse.basics.html",
+      "type": "testharness",
+      "capabilities": ["canvas-2d-ellipse-path", "canvas-2d-index-size-errors"],
+      "evidence": ["unchanged-pinned-wpt", "native-scene-packet-regression"],
+      "expectedSubtests": 1,
+      "reason": "Unchanged generated Canvas WPT at the pinned repository revision. It accepts finite and zero radii and requires IndexSizeError for every negative radius position."
+    },
+    {
+      "path": "contracts/canvas-2d-roundrect-corners.html",
+      "type": "visual",
+      "capabilities": ["canvas-2d-roundrect-path", "elliptical-and-sequence-radii"],
+      "evidence": ["product-neutral-roundrect-reduction", "direct-chromium-color-oracle", "native-packet-and-hit-test-regression"],
+      "visualChecks": [
+        {
+          "color": "#00ff00",
+          "minimumPixels": 4000,
+          "description": "roundRect fills the retained rounded path"
+        },
+        {
+          "color": "#ff0000",
+          "minimumPixels": 80,
+          "description": "independent corner radii preserve the exposed background corners"
+        }
+      ],
+      "reason": "Self-verifying visual reduction for scalar, DOMPointInit-shaped, and four-corner roundRect radii. A no-op fails the green control and a plain rectangle fails the exposed red-corner control."
+    },
+    {
+      "path": "contracts/canvas-2d-ellipse-trendline-handles.html",
+      "type": "visual",
+      "capabilities": ["canvas-2d-ellipse-path", "selected-trendline-endpoint-handles"],
+      "evidence": ["reported-tradingview-selected-trendline-handle-reduction", "direct-chromium-color-oracle", "native-scene-packet-regression"],
+      "visualChecks": [
+        {
+          "color": "#1976d2",
+          "minimumPixels": 100,
+          "description": "the baseline trendline remains visibly rendered"
+        },
+        {
+          "color": "#2962ff",
+          "minimumPixels": 40,
+          "description": "ellipse paints the two selected endpoint handles"
+        }
+      ],
+      "reason": "Self-verifying visual reduction of the reported missing movable trendline endpoints. Chromium independently authorizes both color checks; native packet coverage verifies all ellipse parameters, and native WPT snapshots use the product retained-canvas renderer so blank canvas output cannot false-pass."
     }
   ],
   "harnessBlocked": [],

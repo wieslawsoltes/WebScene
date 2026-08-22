@@ -85,6 +85,15 @@
                 local_context, js_string(isolate, "DOMException"))
                 .ToLocal(&constructor)
             && constructor->IsFunction()) {
+            v8::Local<v8::Value> arguments[] = {
+                js_string(isolate, message),
+                js_string(isolate, name)};
+            v8::Local<v8::Object> constructed;
+            if (constructor.As<v8::Function>()->NewInstance(
+                    local_context, 2, arguments).ToLocal(&constructed)) {
+                isolate->ThrowException(constructed);
+                return;
+            }
             v8::Local<v8::Value> prototype;
             if (constructor.As<v8::Function>()->Get(
                     local_context, js_string(isolate, "prototype")).ToLocal(&prototype)

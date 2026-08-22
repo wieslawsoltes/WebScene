@@ -1486,6 +1486,9 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     DrawSvgCanvasPath(canvas, view, layer, command, state, false);
                     hasDrawn = true;
                     break;
+                case 30:
+                    AppendEllipse(path, command);
+                    break;
                 case 40: state.FillStyle = StringAt(view, layer, command.ResourceId); break;
                 case 41: state.StrokeStyle = StringAt(view, layer, command.ResourceId); break;
                 case 42: state.LineWidth = command.V0; break;
@@ -1829,6 +1832,81 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             (float)(command.V0 + radius),
             (float)(command.V1 + radius));
         path.ArcTo(oval, (float)(start * 180 / Math.PI), (float)(sweep * 180 / Math.PI), false);
+    }
+
+    internal static void AppendEllipse(SKPath path, in NativeCanvasCommand command)
+    {
+        var radiusX = Math.Max(0, command.V2);
+        var radiusY = Math.Max(0, command.V3);
+        var start = command.V5;
+        var authoredEnd = command.V6;
+        var anticlockwise = command.V7 != 0;
+        const double fullCircle = Math.PI * 2;
+        var authoredDelta = authoredEnd - start;
+        double end;
+        if (Math.Abs(authoredDelta) >= fullCircle)
+        {
+            end = start + (anticlockwise ? -fullCircle : fullCircle);
+        }
+        else
+        {
+            end = authoredEnd;
+            if (anticlockwise)
+            {
+                while (end > start) end -= fullCircle;
+            }
+            else
+            {
+                while (end < start) end += fullCircle;
+            }
+        }
+        var sweep = end - start;
+        if (sweep == 0) return;
+
+        var rotationCos = Math.Cos(command.V4);
+        var rotationSin = Math.Sin(command.V4);
+        var centerX = command.V0;
+        var centerY = command.V1;
+        SKPoint Point(double angle)
+        {
+            var localX = Math.Cos(angle) * radiusX;
+            var localY = Math.Sin(angle) * radiusY;
+            return new SKPoint(
+                (float)(centerX + localX * rotationCos - localY * rotationSin),
+                (float)(centerY + localX * rotationSin + localY * rotationCos));
+        }
+        SKPoint Derivative(double angle)
+        {
+            var localX = -Math.Sin(angle) * radiusX;
+            var localY = Math.Cos(angle) * radiusY;
+            return new SKPoint(
+                (float)(localX * rotationCos - localY * rotationSin),
+                (float)(localX * rotationSin + localY * rotationCos));
+        }
+
+        var first = Point(start);
+        if (path.IsEmpty) path.MoveTo(first);
+        else path.LineTo(first);
+        var segments = Math.Max(1, (int)Math.Ceiling(Math.Abs(sweep) / (Math.PI / 2)));
+        var segmentSweep = sweep / segments;
+        var angle = start;
+        for (var index = 0; index < segments; index++)
+        {
+            var next = angle + segmentSweep;
+            var from = Point(angle);
+            var to = Point(next);
+            var fromDerivative = Derivative(angle);
+            var toDerivative = Derivative(next);
+            var handle = 4.0 / 3.0 * Math.Tan(segmentSweep / 4.0);
+            path.CubicTo(
+                from.X + (float)(handle * fromDerivative.X),
+                from.Y + (float)(handle * fromDerivative.Y),
+                to.X - (float)(handle * toDerivative.X),
+                to.Y - (float)(handle * toDerivative.Y),
+                to.X,
+                to.Y);
+            angle = next;
+        }
     }
 
     private static SKMatrix ToMatrix(in NativeCanvasCommand command)

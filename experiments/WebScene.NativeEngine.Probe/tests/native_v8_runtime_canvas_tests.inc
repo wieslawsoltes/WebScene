@@ -348,12 +348,23 @@ void test_canvas_line_dash_and_path_2d_arc_are_native(webscene_engine* engine)
           const path = new Path2D();
           path.arc(40, 40, 20, 0, Math.PI * 2);
           context.stroke(path);
-          return { dash, retained };
+          context.beginPath();
+          context.rect(0, 0, 40, 40);
+          context.rect(10, 10, 20, 20);
+          const nonzero = context.isPointInPath(20, 20);
+          const evenodd = context.isPointInPath(20, 20, 'evenodd');
+          context.beginPath();
+          context.moveTo(5, 60);
+          context.lineTo(70, 60);
+          context.lineWidth = 6;
+          const strokeHit = context.isPointInStroke(40, 62);
+          const strokeMiss = context.isPointInStroke(40, 68);
+          return { dash, retained, nonzero, evenodd, strokeHit, strokeMiss };
         })()
     )JS", "native-canvas-line-dash-path2d-arc.js");
     require(
-        result == R"({"dash":[2,3,4,2,3,4],"retained":[2,3,4,2,3,4]})",
-        "Canvas2D line-dash normalization or invalid-value handling regressed: " + result);
+        result == R"({"dash":[2,3,4,2,3,4],"retained":[2,3,4,2,3,4],"nonzero":true,"evenodd":false,"strokeHit":true,"strokeMiss":false})",
+        "Canvas2D line-dash or current-path hit testing regressed: " + result);
 
     webscene_engine_request_scene_checkpoint(engine);
     bool observed_dash = false;
@@ -392,6 +403,101 @@ void test_canvas_line_dash_and_path_2d_arc_are_native(webscene_engine* engine)
             && report.find(R"("feature":"Path2D.arc","classification":"supported")")
                 != std::string::npos,
         "supported canvas feature decisions were absent from the feature inventory: " + report);
+#endif
+}
+
+void test_canvas_ellipse_records_complete_path_command(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const canvas = document.createElement('canvas');
+          canvas.width = 320;
+          canvas.height = 180;
+          document.body.appendChild(canvas);
+          const context = canvas.getContext('2d');
+          context.beginPath();
+          context.moveTo(52, 136);
+          context.lineTo(268, 32);
+          context.stroke();
+          context.beginPath();
+          context.ellipse(52, 136, 8, 6, 0.25, 0, Math.PI * 2, true);
+          context.stroke();
+          const path = new Path2D();
+          path.ellipse(268, 32, 8, 6, -0.25, 0, Math.PI * 2);
+          context.stroke(path);
+          let negativeRadius = false;
+          try { context.ellipse(0, 0, -1, 2, 0, 0, 1); }
+          catch (error) { negativeRadius = error instanceof DOMException && error.name === 'IndexSizeError'; }
+          context.beginPath();
+          context.roundRect(10, 10, 40, 20, [{x: 8, y: 6}, 4]);
+          const roundRectCenter = context.isPointInPath(30, 20);
+          const roundRectCorner = context.isPointInPath(10, 10);
+          let negativeRoundRect = false;
+          try { context.roundRect(0, 0, 10, 10, [2, -1]); }
+          catch (error) { negativeRoundRect = error instanceof RangeError; }
+          return { negativeRadius, negativeRoundRect, roundRectCenter, roundRectCorner };
+        })()
+    )JS", "native-canvas-ellipse-trendline.js");
+    require(
+        result == R"({"negativeRadius":true,"negativeRoundRect":true,"roundRectCenter":true,"roundRectCorner":false})",
+        "Canvas2D ellipse or roundRect validation/geometry regressed: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    bool observed_baseline_line = false;
+    bool observed_ellipse = false;
+    bool observed_path_2d_ellipse = false;
+    uint32_t observed_strokes = 0;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
+                const auto& command = scene->canvas_commands[index];
+                if (command.kind == 12U
+                    && std::abs(command.data.values[0] - 268.0) < 0.001
+                    && std::abs(command.data.values[1] - 32.0) < 0.001) {
+                    observed_baseline_line = true;
+                }
+                if (command.kind == 30U
+                    && command.flags == 8U
+                    && std::abs(command.data.values[0] - 52.0) < 0.001
+                    && std::abs(command.data.values[1] - 136.0) < 0.001
+                    && std::abs(command.data.values[2] - 8.0) < 0.001
+                    && std::abs(command.data.values[3] - 6.0) < 0.001
+                    && std::abs(command.data.values[4] - 0.25) < 0.001
+                    && std::abs(command.data.values[5]) < 0.001
+                    && std::abs(command.data.values[6] - 6.283185307179586) < 0.001
+                    && command.data.values[7] == 1.0) {
+                    observed_ellipse = true;
+                }
+                if (command.kind == 29U) observed_path_2d_ellipse = true;
+                if (command.kind == 20U) ++observed_strokes;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (observed_baseline_line && observed_ellipse
+            && observed_path_2d_ellipse && observed_strokes >= 2U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        observed_baseline_line && observed_strokes >= 2U,
+        "Canvas2D baseline trendline did not reach the scene packet");
+    require(
+        observed_ellipse,
+        "Canvas2D ellipse did not retain its complete geometry and direction");
+    require(
+        observed_path_2d_ellipse,
+        "Path2D ellipse did not reach native SVG-path replay");
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto report = feature_use(engine);
+    require(
+        report.find(R"("feature":"CanvasRenderingContext2D.ellipse","classification":"supported")")
+                != std::string::npos
+            && report.find(R"("feature":"Path2D.ellipse","classification":"partially-supported")")
+                != std::string::npos,
+        "supported ellipse path was absent from native feature telemetry: " + report);
 #endif
 }
 

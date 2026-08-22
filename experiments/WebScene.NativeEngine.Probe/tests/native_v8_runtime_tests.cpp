@@ -377,6 +377,7 @@ int main()
     test_canvas_fill_rect_emits_only_relevant_paint_state(engine);
     test_canvas_path_2d_add_path_does_not_fill_stale_current_path(engine);
     test_canvas_line_dash_and_path_2d_arc_are_native(engine);
+    test_canvas_ellipse_records_complete_path_command(engine);
     test_detached_canvas_descendants_leave_native_scene(engine);
     test_compound_root_selector_applies_dark_custom_palette(engine);
     test_adjacent_inline_runs_share_wrapped_lines(engine);

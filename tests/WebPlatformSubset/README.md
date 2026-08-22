@@ -127,7 +127,7 @@ contract.
 
 ## 2026-08-12 coverage audit
 
-The pinned profile contains 110 required, 79 candidate, 0 harness-blocked, and 5
+The pinned profile contains 115 required, 85 candidate, 0 harness-blocked, and 5
 excluded documents. A full `osx-arm64` Inspector-flavor audit started at 41/52 candidate
 documents and 222/299 candidate subtests. The first focused standards tranche moved
 that lane to 47/52 documents and 239/301 subtests. The broadened lane now passes

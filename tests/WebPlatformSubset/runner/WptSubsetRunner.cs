@@ -581,9 +581,10 @@ internal sealed partial class WptSubsetRunner
             var src = WebUtility.HtmlDecode(ReadAttributeValue(srcMatch)).Trim();
             if (string.IsNullOrWhiteSpace(src)
                 || src.StartsWith('#')
-                || src.StartsWith('/')
                 || src.StartsWith('\\')
-                || Uri.TryCreate(src, UriKind.Absolute, out _))
+                || string.Equals(src, "/resources/testharness.js", StringComparison.Ordinal)
+                || string.Equals(src, "/resources/testharnessreport.js", StringComparison.Ordinal)
+                || (!src.StartsWith('/') && Uri.TryCreate(src, UriKind.Absolute, out _)))
             {
                 return script;
             }
@@ -605,9 +606,11 @@ internal sealed partial class WptSubsetRunner
             var documentDirectory = Path.GetDirectoryName(
                                         documentPath.Replace('/', Path.DirectorySeparatorChar))
                                     ?? string.Empty;
-            var relativeResourcePath = Path.Combine(
-                documentDirectory,
-                decodedPath.Replace('/', Path.DirectorySeparatorChar));
+            var relativeResourcePath = decodedPath.StartsWith('/')
+                ? decodedPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)
+                : Path.Combine(
+                    documentDirectory,
+                    decodedPath.Replace('/', Path.DirectorySeparatorChar));
             var fullResourcePath = UpstreamPath(relativeResourcePath);
             var canonicalRelativePath = Path.GetRelativePath(_upstreamRoot, fullResourcePath)
                 .Replace(Path.DirectorySeparatorChar, '/');

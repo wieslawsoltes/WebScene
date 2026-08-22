@@ -889,7 +889,18 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
           document.body.appendChild(clip);
           const canvas = document.createElement('canvas');
           document.body.appendChild(canvas);
-          canvas.getContext('2d').ellipse(10, 10, 5, 5, 0, 0, Math.PI * 2);
+          const context = canvas.getContext('2d');
+          context.ellipse(10, 10, 5, 5, 0, 0, Math.PI * 2);
+          context.roundRect(0, 0, 10, 10, 2);
+          context.putImageData(context.createImageData(1, 1), 0, 0);
+          context.isPointInPath(0, 0);
+          context.isPointInStroke(0, 0);
+          const gradient = context.createLinearGradient(0, 0, 10, 10);
+          gradient.addColorStop(0, '#000');
+          const path = new Path2D();
+          path.moveTo(0, 0);
+          path.lineTo(10, 10);
+          path.ellipse(10, 10, 5, 5, 0, 0, Math.PI * 2);
           const input = document.createElement('input');
           input.setAttribute('autocomplete', 'off');
           input.setAttribute('placeholder', 'feature probe');
@@ -926,7 +937,17 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
                 != std::string::npos
             && report.find("canvas-supported-operations") == std::string::npos
             && report.find(R"("feature":"property:backdrop-filter")") != std::string::npos
-            && report.find(R"("feature":"CanvasRenderingContext2D.ellipse")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.ellipse","classification":"supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.roundRect","classification":"supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.putImageData","classification":"unsupported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.createImageData","classification":"partially-supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.isPointInPath","classification":"partially-supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.isPointInStroke","classification":"partially-supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasRenderingContext2D.createLinearGradient","classification":"partially-supported")") != std::string::npos
+            && report.find(R"("feature":"CanvasGradient.addColorStop","classification":"unsupported")") != std::string::npos
+            && report.find(R"("feature":"Path2D.moveTo","classification":"unsupported")") != std::string::npos
+            && report.find(R"("feature":"Path2D.lineTo","classification":"unsupported")") != std::string::npos
+            && report.find(R"("feature":"Path2D.ellipse","classification":"partially-supported")") != std::string::npos
             && report.find(R"("feature":"property:-moz-transform","classification":"supported")")
                 != std::string::npos
             && report.find(R"("feature":"property:grid-gap","classification":"supported")")

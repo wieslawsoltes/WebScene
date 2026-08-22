@@ -96,6 +96,8 @@
     "dom/events/EventTarget-this-of-listener.html": "e972d5d702242bb7219dd91476bdd9fe6aecb21c372ce88317d314b2364da086",
     "dom/nodes/ParentNode-querySelector-escapes.html": "fa1e02eec0cc18cd335c07e25a8ee83dc14e091fcfd93e99bdfc8c774001d915",
     "dom/nodes/ParentNode-querySelector-scope.html": "c4e9845879103662af728a7165ee303c1cb53ffbef9ec32d04a28084ce7773bc",
+    "html/canvas/element/path-objects/2d.path.ellipse.basics.html": "dd29db96d6c88551e1b768e385ffdf3eabc3f5e4a22e6932a60a494e346aae80",
+    "html/canvas/resources/canvas-tests.js": "719f3200c1c3b35ba8190815f84c85aec6926a608382128edbaea844d3ea434b",
     "html/semantics/selectors/pseudo-classes/checked.html": "45ce033a21137c34bf0efa6b3be594cc59e84ec55ff022fa54904c4ac8cbe704",
     "html/semantics/selectors/pseudo-classes/utils.js": "0596cbaa76db7608636c8c49c7e3ed841386e48ed8df962b1e45f338208f25d8",
     "resources/check-layout-th.js": "b15666105c99548df947b3b9182e78cbadc2871e53f51e26c7c7aa27cf0bef1c",

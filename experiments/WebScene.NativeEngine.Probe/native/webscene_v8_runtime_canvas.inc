@@ -110,6 +110,7 @@
         draw_canvas = 27,
         fill_svg_path = 28,
         stroke_svg_path = 29,
+        ellipse = 30,
         fill_style = 40,
         stroke_style = 41,
         line_width = 42,
@@ -861,6 +862,174 @@
         state->has_current = true;
     }
 
+    static void canvas_round_rect(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::canvas_path));
+        auto* state = canvas_path_state(info, "roundRect");
+        if (state == nullptr || info.Length() < 4) return;
+        const auto isolate = info.GetIsolate();
+        const auto context = isolate->GetCurrentContext();
+        const auto authored_x = info[0]->NumberValue(context).FromMaybe(0);
+        const auto authored_y = info[1]->NumberValue(context).FromMaybe(0);
+        const auto authored_width = info[2]->NumberValue(context).FromMaybe(0);
+        const auto authored_height = info[3]->NumberValue(context).FromMaybe(0);
+        if (!std::isfinite(authored_x) || !std::isfinite(authored_y)
+            || !std::isfinite(authored_width) || !std::isfinite(authored_height)) return;
+
+        struct radius final { double x; double y; };
+        std::vector<radius> supplied;
+        const auto read_radius = [&](v8::Local<v8::Value> value, radius& output) {
+            if (value->IsNumber()) {
+                const auto number = value->NumberValue(context).FromMaybe(-1);
+                output = {number, number};
+                return std::isfinite(number);
+            }
+            if (!value->IsObject()) return false;
+            const auto object = value.As<v8::Object>();
+            const auto read = [&](const char* name, double fallback) {
+                v8::Local<v8::Value> member;
+                if (!object->Get(context, js_string(isolate, name)).ToLocal(&member)
+                    || member->IsUndefined()) return fallback;
+                return member->NumberValue(context).FromMaybe(
+                    std::numeric_limits<double>::quiet_NaN());
+            };
+            output.x = read("x", 0);
+            output.y = read("y", 0);
+            return std::isfinite(output.x) && std::isfinite(output.y);
+        };
+        if (info.Length() < 5 || info[4]->IsUndefined()) {
+            supplied.push_back({0, 0});
+        } else if (info[4]->IsArray()) {
+            const auto values = info[4].As<v8::Array>();
+            if (values->Length() == 0 || values->Length() > 4) {
+                isolate->ThrowException(v8::Exception::RangeError(
+                    js_string(isolate, "roundRect requires one to four radii")));
+                return;
+            }
+            for (uint32_t index = 0; index < values->Length(); ++index) {
+                v8::Local<v8::Value> value;
+                radius parsed{};
+                if (!values->Get(context, index).ToLocal(&value)
+                    || !read_radius(value, parsed)) return;
+                supplied.push_back(parsed);
+            }
+        } else {
+            radius parsed{};
+            if (!read_radius(info[4], parsed)) return;
+            supplied.push_back(parsed);
+        }
+        if (std::any_of(supplied.begin(), supplied.end(), [](const radius& value) {
+                return value.x < 0 || value.y < 0;
+            })) {
+            isolate->ThrowException(v8::Exception::RangeError(
+                js_string(isolate, "roundRect radii must be non-negative")));
+            return;
+        }
+        radius corners[4]{};
+        if (supplied.size() == 1) {
+            std::fill(std::begin(corners), std::end(corners), supplied[0]);
+        } else if (supplied.size() == 2) {
+            corners[0] = corners[2] = supplied[0];
+            corners[1] = corners[3] = supplied[1];
+        } else if (supplied.size() == 3) {
+            corners[0] = supplied[0];
+            corners[1] = corners[3] = supplied[1];
+            corners[2] = supplied[2];
+        } else {
+            std::copy(supplied.begin(), supplied.end(), std::begin(corners));
+        }
+        if (authored_width < 0) {
+            std::swap(corners[0], corners[1]);
+            std::swap(corners[3], corners[2]);
+        }
+        if (authored_height < 0) {
+            std::swap(corners[0], corners[3]);
+            std::swap(corners[1], corners[2]);
+        }
+        const auto left = std::min(authored_x, authored_x + authored_width);
+        const auto top = std::min(authored_y, authored_y + authored_height);
+        const auto width = std::abs(authored_width);
+        const auto height = std::abs(authored_height);
+        auto scale = 1.0;
+        const auto constrain = [&](double available, double sum) {
+            if (sum > 0) scale = std::min(scale, available / sum);
+        };
+        constrain(width, corners[0].x + corners[1].x);
+        constrain(width, corners[3].x + corners[2].x);
+        constrain(height, corners[0].y + corners[3].y);
+        constrain(height, corners[1].y + corners[2].y);
+        for (auto& corner : corners) {
+            corner.x *= scale;
+            corner.y *= scale;
+        }
+
+        constexpr double handle = 0.5522847498307936;
+        const auto emit_move = [&](double x, double y) {
+            canvas_append_command(*state->node, canvas_command_kind::move_to, {x, y});
+            const auto point = canvas_transform_point(*state, x, y);
+            state->current_x = state->start_x = point.first;
+            state->current_y = state->start_y = point.second;
+            state->has_current = true;
+        };
+        const auto emit_line = [&](double x, double y) {
+            canvas_append_command(*state->node, canvas_command_kind::line_to, {x, y});
+            append_canvas_curve_point(*state, x, y);
+        };
+        const auto emit_curve = [&](double c1x, double c1y, double c2x, double c2y,
+                                    double x, double y, double center_x, double center_y,
+                                    double radius_x, double radius_y,
+                                    double start_angle, double end_angle) {
+            canvas_append_command(
+                *state->node,
+                canvas_command_kind::bezier_curve_to,
+                {c1x, c1y, c2x, c2y, x, y});
+            for (auto index = 1; index <= 8; ++index) {
+                const auto angle = start_angle
+                    + (end_angle - start_angle) * static_cast<double>(index) / 8.0;
+                append_canvas_curve_point(
+                    *state,
+                    center_x + std::cos(angle) * radius_x,
+                    center_y + std::sin(angle) * radius_y);
+            }
+        };
+
+        emit_move(left + corners[0].x, top);
+        emit_line(left + width - corners[1].x, top);
+        emit_curve(
+            left + width - corners[1].x + corners[1].x * handle, top,
+            left + width, top + corners[1].y - corners[1].y * handle,
+            left + width, top + corners[1].y,
+            left + width - corners[1].x, top + corners[1].y,
+            corners[1].x, corners[1].y, -1.5707963267948966, 0);
+        emit_line(left + width, top + height - corners[2].y);
+        emit_curve(
+            left + width, top + height - corners[2].y + corners[2].y * handle,
+            left + width - corners[2].x + corners[2].x * handle, top + height,
+            left + width - corners[2].x, top + height,
+            left + width - corners[2].x, top + height - corners[2].y,
+            corners[2].x, corners[2].y, 0, 1.5707963267948966);
+        emit_line(left + corners[3].x, top + height);
+        emit_curve(
+            left + corners[3].x - corners[3].x * handle, top + height,
+            left, top + height - corners[3].y + corners[3].y * handle,
+            left, top + height - corners[3].y,
+            left + corners[3].x, top + height - corners[3].y,
+            corners[3].x, corners[3].y, 1.5707963267948966, 3.1415926535897932);
+        emit_line(left, top + corners[0].y);
+        emit_curve(
+            left, top + corners[0].y - corners[0].y * handle,
+            left + corners[0].x - corners[0].x * handle, top,
+            left + corners[0].x, top,
+            left + corners[0].x, top + corners[0].y,
+            corners[0].x, corners[0].y, 3.1415926535897932, 4.7123889803846899);
+        canvas_append_command(*state->node, canvas_command_kind::close_path);
+        state->path.push_back({
+            state->current_x, state->current_y, state->start_x, state->start_y});
+        state->current_x = state->start_x;
+        state->current_y = state->start_y;
+    }
+
     static void append_canvas_curve_point(canvas_state& state, double x, double y)
     {
         const auto [transformed_x, transformed_y] = canvas_transform_point(state, x, y);
@@ -968,17 +1137,31 @@
         const auto context = info.GetIsolate()->GetCurrentContext();
         const auto center_x = info[0]->NumberValue(context).FromMaybe(0);
         const auto center_y = info[1]->NumberValue(context).FromMaybe(0);
-        const auto radius = std::abs(info[2]->NumberValue(context).FromMaybe(0));
+        const auto radius = info[2]->NumberValue(context).FromMaybe(0);
         auto start = info[3]->NumberValue(context).FromMaybe(0);
-        auto end = info[4]->NumberValue(context).FromMaybe(0);
+        const auto authored_end = info[4]->NumberValue(context).FromMaybe(0);
         const auto anticlockwise = info.Length() > 5 && info[5]->BooleanValue(info.GetIsolate());
+        if (!std::isfinite(center_x) || !std::isfinite(center_y)
+            || !std::isfinite(radius) || !std::isfinite(start)
+            || !std::isfinite(authored_end)) return;
+        if (radius < 0) {
+            throw_dom_exception(info, "arc radius must be non-negative", "IndexSizeError");
+            return;
+        }
         canvas_append_command(
             *state->node,
             canvas_command_kind::arc,
-            {center_x, center_y, radius, start, end, anticlockwise ? 1.0 : 0.0});
+            {center_x, center_y, radius, start, authored_end, anticlockwise ? 1.0 : 0.0});
         constexpr double full_circle = 6.28318530717958647692;
-        if (!anticlockwise && end < start) end += full_circle;
-        if (anticlockwise && end > start) end -= full_circle;
+        const auto authored_delta = authored_end - start;
+        auto end = authored_end;
+        if (std::abs(authored_delta) >= full_circle) {
+            end = start + (anticlockwise ? -full_circle : full_circle);
+        } else if (anticlockwise) {
+            while (end > start) end -= full_circle;
+        } else {
+            while (end < start) end += full_circle;
+        }
         const auto steps = std::max(4, static_cast<int>(std::ceil(std::abs(end - start) / full_circle * 32.0)));
         for (int index = 0; index <= steps; ++index) {
             const auto angle = start + (end - start) * static_cast<double>(index) / steps;
@@ -998,6 +1181,74 @@
         }
     }
 
+    static void canvas_ellipse(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        binding_callback_timer binding_timer(self->profile(binding_category::canvas_path));
+        auto* state = canvas_path_state(info, "ellipse");
+        if (state == nullptr || info.Length() < 7) return;
+        const auto context = info.GetIsolate()->GetCurrentContext();
+        const auto center_x = info[0]->NumberValue(context).FromMaybe(0);
+        const auto center_y = info[1]->NumberValue(context).FromMaybe(0);
+        const auto radius_x = info[2]->NumberValue(context).FromMaybe(0);
+        const auto radius_y = info[3]->NumberValue(context).FromMaybe(0);
+        const auto rotation = info[4]->NumberValue(context).FromMaybe(0);
+        const auto start = info[5]->NumberValue(context).FromMaybe(0);
+        const auto authored_end = info[6]->NumberValue(context).FromMaybe(0);
+        const auto anticlockwise = info.Length() > 7 && info[7]->BooleanValue(info.GetIsolate());
+        if (!std::isfinite(center_x) || !std::isfinite(center_y)
+            || !std::isfinite(radius_x) || !std::isfinite(radius_y)
+            || !std::isfinite(rotation) || !std::isfinite(start)
+            || !std::isfinite(authored_end)) return;
+        if (radius_x < 0 || radius_y < 0) {
+            throw_dom_exception(info, "ellipse radii must be non-negative", "IndexSizeError");
+            return;
+        }
+        canvas_append_command(
+            *state->node,
+            canvas_command_kind::ellipse,
+            {center_x, center_y, radius_x, radius_y, rotation,
+             start, authored_end, anticlockwise ? 1.0 : 0.0});
+
+        constexpr double full_circle = 6.28318530717958647692;
+        const auto authored_delta = authored_end - start;
+        auto end = authored_end;
+        if (std::abs(authored_delta) >= full_circle) {
+            end = start + (anticlockwise ? -full_circle : full_circle);
+        } else if (anticlockwise) {
+            while (end > start) end -= full_circle;
+        } else {
+            while (end < start) end += full_circle;
+        }
+        if (end == start) return;
+        const auto cosine = std::cos(rotation);
+        const auto sine = std::sin(rotation);
+        const auto steps = std::max(
+            4,
+            static_cast<int>(std::ceil(
+                std::abs(end - start) / full_circle * 48.0)));
+        for (int index = 0; index <= steps; ++index) {
+            const auto angle = start
+                + (end - start) * static_cast<double>(index) / steps;
+            const auto local_x = std::cos(angle) * radius_x;
+            const auto local_y = std::sin(angle) * radius_y;
+            const auto point = canvas_transform_point(
+                *state,
+                center_x + local_x * cosine - local_y * sine,
+                center_y + local_x * sine + local_y * cosine);
+            if (!state->has_current) {
+                state->current_x = state->start_x = point.first;
+                state->current_y = state->start_y = point.second;
+                state->has_current = true;
+            } else {
+                state->path.push_back({
+                    state->current_x, state->current_y, point.first, point.second});
+                state->current_x = point.first;
+                state->current_y = point.second;
+            }
+        }
+    }
+
     static void canvas_arc_to(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -1011,8 +1262,7 @@
         const auto authored_y2 = info[3]->NumberValue(context).FromMaybe(0);
         const auto authored_radius = info[4]->NumberValue(context).FromMaybe(0);
         if (authored_radius < 0) {
-            info.GetIsolate()->ThrowException(v8::Exception::RangeError(
-                js_string(info.GetIsolate(), "arcTo radius must be non-negative")));
+            throw_dom_exception(info, "arcTo radius must be non-negative", "IndexSizeError");
             return;
         }
         canvas_append_command(
@@ -1729,6 +1979,117 @@
         info.GetReturnValue().Set(v8::False(info.GetIsolate()));
     }
 
+    static bool canvas_point_on_segment(
+        double x,
+        double y,
+        const canvas_path_segment& segment,
+        double tolerance)
+    {
+        const auto dx = segment.x2 - segment.x1;
+        const auto dy = segment.y2 - segment.y1;
+        const auto length_squared = dx * dx + dy * dy;
+        if (!std::isfinite(length_squared) || length_squared == 0) {
+            return std::hypot(x - segment.x1, y - segment.y1) <= tolerance;
+        }
+        const auto projection = std::clamp(
+            ((x - segment.x1) * dx + (y - segment.y1) * dy) / length_squared,
+            0.0,
+            1.0);
+        return std::hypot(
+            x - (segment.x1 + projection * dx),
+            y - (segment.y1 + projection * dy)) <= tolerance;
+    }
+
+    static void canvas_is_point_in_path(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* state = canvas_path_state(info);
+        self->record_feature(
+            "canvas",
+            "CanvasRenderingContext2D.isPointInPath",
+            "partially-supported",
+            "current flattened path with nonzero and evenodd rules; Path2D overload absent",
+            "native-binding");
+        if (state == nullptr || info.Length() < 2 || info[0]->IsObject()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        const auto context = info.GetIsolate()->GetCurrentContext();
+        const auto x = info[0]->NumberValue(context).FromMaybe(
+            std::numeric_limits<double>::quiet_NaN());
+        const auto y = info[1]->NumberValue(context).FromMaybe(
+            std::numeric_limits<double>::quiet_NaN());
+        if (!std::isfinite(x) || !std::isfinite(y)) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        const auto even_odd = info.Length() > 2
+            && to_utf8(info.GetIsolate(), info[2]) == "evenodd";
+        auto winding = 0;
+        auto parity = false;
+        for (const auto& segment : state->path) {
+            if (canvas_point_on_segment(x, y, segment, 1e-9)) {
+                info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+                return;
+            }
+            if ((segment.y1 <= y && segment.y2 > y)
+                || (segment.y2 <= y && segment.y1 > y)) {
+                const auto crossing_x = segment.x1
+                    + (y - segment.y1) * (segment.x2 - segment.x1)
+                        / (segment.y2 - segment.y1);
+                if (crossing_x > x) {
+                    parity = !parity;
+                    winding += segment.y2 > segment.y1 ? 1 : -1;
+                }
+            }
+        }
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(), even_odd ? parity : winding != 0));
+    }
+
+    static void canvas_is_point_in_stroke(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* state = canvas_path_state(info);
+        self->record_feature(
+            "canvas",
+            "CanvasRenderingContext2D.isPointInStroke",
+            "partially-supported",
+            "current flattened path and line width; Path2D, dash, cap, and join hit geometry absent",
+            "native-binding");
+        if (state == nullptr || info.Length() < 2 || info[0]->IsObject()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        const auto context = info.GetIsolate()->GetCurrentContext();
+        const auto x = info[0]->NumberValue(context).FromMaybe(
+            std::numeric_limits<double>::quiet_NaN());
+        const auto y = info[1]->NumberValue(context).FromMaybe(
+            std::numeric_limits<double>::quiet_NaN());
+        if (!std::isfinite(x) || !std::isfinite(y)) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        v8::Local<v8::Value> width_value;
+        const auto line_width = info.This()->Get(
+                context, js_string(info.GetIsolate(), "lineWidth")).ToLocal(&width_value)
+            ? width_value->NumberValue(context).FromMaybe(1)
+            : 1;
+        const auto scale_x = std::hypot(state->transform.a, state->transform.b);
+        const auto scale_y = std::hypot(state->transform.c, state->transform.d);
+        const auto tolerance = std::max(0.0, line_width)
+            * (scale_x + scale_y) * 0.25;
+        const auto hit = std::any_of(
+            state->path.begin(),
+            state->path.end(),
+            [&](const canvas_path_segment& segment) {
+                return canvas_point_on_segment(x, y, segment, tolerance);
+            });
+        info.GetReturnValue().Set(v8::Boolean::New(info.GetIsolate(), hit));
+    }
+
     static void canvas_set_line_dash(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2018,9 +2379,7 @@
         v8::Local<v8::Object> result,
         canvas_state& state)
     {
-        const char* no_ops[] = {
-            "roundRect", "ellipse",
-            "putImageData"};
+        const char* no_ops[] = {"putImageData"};
         for (const auto* name : no_ops) {
             const auto feature_name = std::string("CanvasRenderingContext2D.") + name;
             result->Set(
@@ -2052,8 +2411,10 @@
         result->Set(local_context, js_string(isolate, "quadraticCurveTo"), v8::Function::New(local_context, canvas_quadratic_curve_to, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "bezierCurveTo"), v8::Function::New(local_context, canvas_bezier_curve_to, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "arc"), v8::Function::New(local_context, canvas_arc, path_data).ToLocalChecked()).Check();
+        result->Set(local_context, js_string(isolate, "ellipse"), v8::Function::New(local_context, canvas_ellipse, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "arcTo"), v8::Function::New(local_context, canvas_arc_to, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "rect"), v8::Function::New(local_context, canvas_path_rect, path_data).ToLocalChecked()).Check();
+        result->Set(local_context, js_string(isolate, "roundRect"), v8::Function::New(local_context, canvas_round_rect, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "closePath"), v8::Function::New(local_context, canvas_close_path, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "fill"), v8::Function::New(local_context, canvas_fill, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "stroke"), v8::Function::New(local_context, canvas_stroke, path_data).ToLocalChecked()).Check();
@@ -2064,8 +2425,8 @@
         result->Set(local_context, js_string(isolate, "createConicGradient"), v8::Function::New(local_context, canvas_gradient, js_string(isolate, "CanvasRenderingContext2D.createConicGradient")).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "setLineDash"), v8::Function::New(local_context, canvas_set_line_dash, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "getLineDash"), v8::Function::New(local_context, canvas_get_line_dash, path_data).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "isPointInPath"), v8::Function::New(local_context, canvas_true, js_string(isolate, "CanvasRenderingContext2D.isPointInPath")).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "isPointInStroke"), v8::Function::New(local_context, canvas_true, js_string(isolate, "CanvasRenderingContext2D.isPointInStroke")).ToLocalChecked()).Check();
+        result->Set(local_context, js_string(isolate, "isPointInPath"), v8::Function::New(local_context, canvas_is_point_in_path, path_data).ToLocalChecked()).Check();
+        result->Set(local_context, js_string(isolate, "isPointInStroke"), v8::Function::New(local_context, canvas_is_point_in_stroke, path_data).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "createImageData"), v8::Function::New(local_context, canvas_image_data, js_string(isolate, "CanvasRenderingContext2D.createImageData")).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "getImageData"), v8::Function::New(local_context, canvas_image_data, js_string(isolate, "CanvasRenderingContext2D.getImageData")).ToLocalChecked()).Check();
         result->Set(local_context, js_string(isolate, "canvas"), v8::Null(isolate)).Check();
@@ -2233,8 +2594,7 @@
             || !std::isfinite(radius) || !std::isfinite(start)
             || !std::isfinite(authored_end)) return;
         if (radius < 0) {
-            isolate->ThrowException(v8::Exception::RangeError(
-                js_string(isolate, "Path2D.arc radius must be non-negative")));
+            throw_dom_exception(info, "Path2D.arc radius must be non-negative", "IndexSizeError");
             return;
         }
         self->record_feature(
@@ -2296,6 +2656,95 @@
         entries->Set(context, entries->Length(), entry).Check();
     }
 
+    static void path_2d_ellipse(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (info.Length() < 7) return;
+        const auto isolate = info.GetIsolate();
+        const auto context = isolate->GetCurrentContext();
+        const auto center_x = info[0]->NumberValue(context).FromMaybe(0);
+        const auto center_y = info[1]->NumberValue(context).FromMaybe(0);
+        const auto radius_x = info[2]->NumberValue(context).FromMaybe(-1);
+        const auto radius_y = info[3]->NumberValue(context).FromMaybe(-1);
+        const auto rotation = info[4]->NumberValue(context).FromMaybe(0);
+        const auto start = info[5]->NumberValue(context).FromMaybe(0);
+        const auto authored_end = info[6]->NumberValue(context).FromMaybe(0);
+        const auto anticlockwise = info.Length() > 7 && info[7]->BooleanValue(isolate);
+        if (!std::isfinite(center_x) || !std::isfinite(center_y)
+            || !std::isfinite(radius_x) || !std::isfinite(radius_y)
+            || !std::isfinite(rotation) || !std::isfinite(start)
+            || !std::isfinite(authored_end)) return;
+        if (radius_x < 0 || radius_y < 0) {
+            throw_dom_exception(
+                info, "Path2D.ellipse radii must be non-negative", "IndexSizeError");
+            return;
+        }
+        self->record_feature(
+            "canvas",
+            "Path2D.ellipse",
+            "partially-supported",
+            "retained ellipse geometry; independent SVG subpath entry",
+            "native-binding");
+        if (radius_x == 0 || radius_y == 0) return;
+
+        v8::Local<v8::Value> entries_value;
+        if (!info.This()->Get(
+                context,
+                js_string(isolate, "__websceneSvgPathEntries")).ToLocal(&entries_value)
+            || !entries_value->IsArray()) return;
+        constexpr double full_circle = 6.28318530717958647692;
+        constexpr double half_circle = full_circle * 0.5;
+        const auto authored_delta = authored_end - start;
+        const auto full = std::abs(authored_delta) >= full_circle;
+        auto end = authored_end;
+        if (full) {
+            end = start + (anticlockwise ? -full_circle : full_circle);
+        } else if (anticlockwise) {
+            while (end > start) end -= full_circle;
+        } else {
+            while (end < start) end += full_circle;
+        }
+        if (end == start) return;
+        const auto cosine = std::cos(rotation);
+        const auto sine = std::sin(rotation);
+        const auto point = [&](double angle) {
+            const auto local_x = std::cos(angle) * radius_x;
+            const auto local_y = std::sin(angle) * radius_y;
+            return std::pair{
+                center_x + local_x * cosine - local_y * sine,
+                center_y + local_x * sine + local_y * cosine};
+        };
+        const auto start_point = point(start);
+        const auto sweep = anticlockwise ? 0 : 1;
+        const auto rotation_degrees = rotation * 180.0 / 3.14159265358979323846;
+        std::ostringstream data;
+        data << std::setprecision(std::numeric_limits<double>::max_digits10)
+             << "M " << start_point.first << ' ' << start_point.second << ' ';
+        if (full) {
+            const auto middle = point(
+                start + (anticlockwise ? -half_circle : half_circle));
+            data << "A " << radius_x << ' ' << radius_y << ' '
+                 << rotation_degrees << " 1 " << sweep << ' '
+                 << middle.first << ' ' << middle.second << ' '
+                 << "A " << radius_x << ' ' << radius_y << ' '
+                 << rotation_degrees << " 1 " << sweep << ' '
+                 << start_point.first << ' ' << start_point.second;
+        } else {
+            const auto end_point = point(end);
+            const auto large_arc = std::abs(end - start) > half_circle ? 1 : 0;
+            data << "A " << radius_x << ' ' << radius_y << ' '
+                 << rotation_degrees << ' ' << large_arc << ' ' << sweep << ' '
+                 << end_point.first << ' ' << end_point.second;
+        }
+        auto entry = v8::Object::New(isolate);
+        entry->Set(
+            context,
+            js_string(isolate, "data"),
+            js_string(isolate, data.str().c_str())).Check();
+        const auto entries = entries_value.As<v8::Array>();
+        entries->Set(context, entries->Length(), entry).Check();
+    }
+
     static void path_2d_constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         current(info.GetIsolate())->record_feature(
@@ -2309,7 +2758,7 @@
             entries).Check();
         const char* methods[] = {
             "closePath", "moveTo", "lineTo", "bezierCurveTo", "quadraticCurveTo",
-            "arcTo", "ellipse", "rect", "roundRect"};
+            "arcTo", "rect", "roundRect"};
         for (const auto* name : methods) {
             const auto feature_name = std::string("Path2D.") + name;
             result->Set(
@@ -2324,6 +2773,10 @@
             local_context,
             js_string(info.GetIsolate(), "arc"),
             v8::Function::New(local_context, path_2d_arc).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(info.GetIsolate(), "ellipse"),
+            v8::Function::New(local_context, path_2d_ellipse).ToLocalChecked()).Check();
         result->Set(
             local_context,
             js_string(info.GetIsolate(), "addPath"),
