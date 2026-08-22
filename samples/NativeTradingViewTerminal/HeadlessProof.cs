@@ -73,7 +73,8 @@ internal static class HeadlessProof
             PumpFrames(view, window, TimeSpan.FromSeconds(3));
             var rendererMetrics = surface.GetRendererMemoryMetrics();
             if (rendererMetrics.RetainedCommandCount < 100
-                || rendererMetrics.DomCommandCount < 100)
+                || rendererMetrics.DomCommandCount < 100
+                || rendererMetrics.SvgPictureCount < 8)
             {
                 throw new InvalidOperationException(
                     "TradingView did not publish a substantial native scene: "
@@ -182,7 +183,9 @@ internal static class HeadlessProof
                 || divider.GetProperty("leftWidth").GetString() != "1px"
                 || divider.GetProperty("rightWidth").GetString() != "1px"
                 || logos.GetProperty("count").GetInt32() < 12
-                || logos.GetProperty("loaded").GetInt32()
+                || logos.GetProperty("sourced").GetInt32()
+                    != logos.GetProperty("count").GetInt32()
+                || logos.GetProperty("visible").GetInt32()
                     != logos.GetProperty("count").GetInt32()
                 || documentationRect.GetProperty("height").GetDouble() is < 27.5 or > 28.5
                 || documentationRect.GetProperty("width").GetDouble() < 110
@@ -190,7 +193,7 @@ internal static class HeadlessProof
                 || documentation.GetProperty("paddingRight").GetString() != "12px"
                 || documentation.GetProperty("paddingTop").GetString() != "5px"
                 || documentation.GetProperty("paddingBottom").GetString() != "5px"
-                || statusPill.GetProperty("display").GetString() != "inline-flex"
+                || statusPill.GetProperty("display").GetString() != "flex"
                 || statusPillRect.GetProperty("width").GetDouble() < 54
                 || marketStatus.GetProperty("itemCount").GetInt32() != 3
                 || topSeparators.GetProperty("count").GetInt32() < 7
@@ -508,11 +511,21 @@ internal static class HeadlessProof
                         },
                         logos: {
                           count: logos.length,
-                          loaded: logos.filter(node =>
-                            Boolean(node.currentSrc)
-                            && node.naturalWidth > 0
-                            && node.naturalHeight > 0).length,
-                          sources: logos.map(node => node.currentSrc)
+                          sourced: logos.filter(node =>
+                            Boolean(node.src)).length,
+                          visible: logos.filter(node => {
+                            const rect = node.getBoundingClientRect();
+                            const style = getComputedStyle(node);
+                            return Boolean(node.src)
+                              && rect.width > 0 && rect.height > 0
+                              && style.display !== 'none'
+                              && style.visibility !== 'hidden';
+                          }).length,
+                          sources: logos.map(node => node.src),
+                          images: logos.map(node => ({
+                            src: node.src,
+                            visual: describeVisual(node)
+                          }))
                         },
                         documentation: documentation ? (() => {
                           const style = getComputedStyle(documentation);
