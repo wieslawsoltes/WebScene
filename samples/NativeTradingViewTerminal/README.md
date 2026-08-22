@@ -144,6 +144,26 @@ dynamic-resource boundary, which flushed after script evaluation and then ran it
 Use `WEBSCENE_PROBE_DISABLE_IFRAME_DOCUMENT_PREFETCH=1` to restore synchronous
 remote iframe-document acquisition at `appendChild`; CSS/script execution order is
 unchanged by this control.
+Use `WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION=1` to retain concurrent iframe
+document fetches but restore owner-thread HTML scanning and CSS/script discovery.
+The optimized path scans a completed remote frame document off the isolate and starts
+its subresource prefetches while the outer document is still executing; DOM creation,
+V8 context installation, script execution, and lifecycle dispatch remain ordered on
+the owner thread. Startup telemetry reports `frame-prepare`, `frame-prepare-wait`,
+and `frame-prepare-lead`.
+
+Use `WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION=1` to restore the former
+single-task iframe hydration and strict frame-before-timer/resource task ordering.
+The optimized path retains an independent cascade/index per browsing context,
+executes blocking and deferred script groups as resumable owner-thread work, and
+alternates yielded frame work with already-ready timer, resource, and resize-observer
+tasks. Startup telemetry reports `frame-slices`, `frame-yields`, and
+`frame-max-slice`. Individual JavaScript calls remain atomic inside V8.
+
+Use `WEBSCENE_PROBE_DISABLE_DEFERRED_COMPILATION_CACHE_TOUCH=1` to restore an
+immediate filesystem timestamp update on every persistent V8 code-cache hit. The
+optimized path records cache use in memory and flushes deduplicated timestamps during
+runtime teardown, while cache pruning treats pending touches as recent.
 
 Use `WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER=1` to restore the legacy
 connected-stylesheet path that finalizes and dirties every existing element, even
@@ -211,6 +231,37 @@ preserving ordered single-isolate hydration improved all five interleaved strict
 pairs: median navigation fell from 953.4 ms to 934.4 ms (-19.0 ms, -2.0%), and cold
 host-to-ready from 1,038.5 ms to 1,016.2 ms (-22.3 ms, -2.1%). A delayed native host
 loader regression also requires two remote iframe document requests to overlap.
+
+The follow-up frame-preparation path moves subresource discovery ahead of owner-thread
+hydration. A delayed-loader A/B regression observes discovery at least 70 ms earlier
+while an outer script is busy and verifies that the prepared external frame script still
+executes. Across five interleaved strict-replay pairs with warm code cache and cold
+resource cache, median iframe hydration fell from 104.6 ms to 97.5 ms (-7.1 ms,
+-6.8%). Median preparation CPU was 0.5 ms, owner-thread preparation wait was 0.002 ms,
+and preparation-to-consumption lead was 7.4 ms. Navigation medians were effectively
+flat at 929.3 ms control and 931.7 ms optimized, so this result supports earlier I/O
+overlap rather than a chart-ready wall-time claim.
+
+Separating script compilation from execution showed that persistent-cache bookkeeping,
+not V8 parsing, was the next cache-path cost. With all 129 persistent entries accepted,
+V8 compilation itself took about 4.5 ms, while `compile_script` included dozens of
+milliseconds of cache reads, validation, and per-hit timestamp writes. Deferring and
+deduplicating those timestamp writes reduced the five-run median compile phase from
+59.7 ms to 53.5 ms (-6.2 ms, -10.4%). Navigation medians favored the optimized path
+in four of five interleaved pairs, but live market-data variance remains too large for a
+wall-time claim.
+
+Cooperative iframe hydration was then measured in five interleaved warm-code-cache
+strict-replay pairs. It split the two frame hydrations from two monolithic tasks into
+six slices with four scheduler yields. Median maximum frame-task duration fell from
+65.6 ms to 59.7 ms (-5.9 ms, -9.0%), while navigation-to-ready remained flat at
+872.9 ms control versus 874.3 ms optimized. A deterministic A/B regression also
+verifies that a due outer timer runs after a long blocking frame script but before the
+frame's deferred script and lifecycle; the control runs that timer only after `load`.
+The same regression proves outer and frame stylesheets retain independent cascade
+results. The residual roughly 55 ms TradingView library script is one atomic V8 call,
+so further scheduler slicing cannot remove that long task without application-level
+code splitting or a separate isolate/worker architecture.
 
 Run the Sandwich Trading Platform multi-chart geometry proof with a
 deterministic in-process market-data bridge:

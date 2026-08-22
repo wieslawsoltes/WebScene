@@ -21,6 +21,12 @@
             std::getenv("WEBSCENE_PROBE_DISABLE_CONNECTED_RESOURCE_STYLE_BATCHING") == nullptr)
         , prefetch_iframe_documents(
             std::getenv("WEBSCENE_PROBE_DISABLE_IFRAME_DOCUMENT_PREFETCH") == nullptr)
+        , prepare_iframe_subresources(
+            std::getenv("WEBSCENE_PROBE_DISABLE_IFRAME_PREPARATION") == nullptr)
+        , defer_compilation_cache_touches(
+            std::getenv("WEBSCENE_PROBE_DISABLE_DEFERRED_COMPILATION_CACHE_TOUCH") == nullptr)
+        , cooperative_iframe_hydration(
+            std::getenv("WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION") == nullptr)
         , filter_stylesheet_candidates(
             std::getenv("WEBSCENE_PROBE_DISABLE_STYLESHEET_CANDIDATE_FILTER") == nullptr)
         , profile_bindings(std::getenv("WEBSCENE_PROBE_PROFILE_BINDINGS") != nullptr)
@@ -39,18 +45,38 @@
 
     ~implementation()
     {
+        // Preparation workers may still be waiting on a document or adding
+        // newly discovered CSS/script prefetches. Join them before taking the
+        // final snapshot of the resource prefetch table.
+        for (auto& [id, preparation] : pending_frame_preparations) {
+            static_cast<void>(id);
+            if (!preparation.future.valid()) continue;
+            try {
+                static_cast<void>(preparation.future.get());
+            } catch (...) {
+            }
+        }
+        pending_frame_preparations.clear();
         // Resource prefetch tasks capture this runtime and may still be inside
         // the host loader when teardown begins. Join them while the loader and
         // all of its bridge state are still alive.
-        for (auto& [key, future] : prefetched_resources) {
-            static_cast<void>(key);
+        std::vector<std::shared_future<prefetched_resource>> resource_futures;
+        {
+            std::lock_guard lock(resource_prefetch_mutex);
+            resource_futures.reserve(prefetched_resources.size());
+            for (const auto& [key, future] : prefetched_resources) {
+                static_cast<void>(key);
+                resource_futures.push_back(future);
+            }
+            prefetched_resources.clear();
+        }
+        for (auto& future : resource_futures) {
             if (!future.valid()) continue;
             try {
                 static_cast<void>(future.get());
             } catch (...) {
             }
         }
-        prefetched_resources.clear();
         // Stop and join every network worker before releasing persistent V8
         // handles or disposing the isolate. Socket callbacks never touch V8,
         // but they may still be appending to the native delivery queue.
@@ -73,6 +99,7 @@
                 if (generated) write_compilation_cache(entry.key_digest, *generated);
             }
         }
+        flush_compilation_cache_touches();
         resize_listeners.clear();
         timers.clear();
         pending_window_messages.clear();
@@ -88,6 +115,9 @@
 #endif
         connected_resources.clear();
         resize_observers.clear();
+        frame_hydration_states.clear();
+        inactive_css_cascades.clear();
+        active_css_cascade_root = nullptr;
         frame_documents.clear();
         frame_windows.clear();
         frame_window_scroll_offsets.clear();
@@ -171,6 +201,7 @@
                         runtime_context_embedder_slot,
                         v8::kEmbedderDataTypeTagDefault));
                 owner != nullptr) {
+                owner->activate_css_cascade(local_context);
                 return owner;
             }
         }
@@ -818,6 +849,23 @@
             css_focus_rules.shrink_to_fit();
             unindexed_css_rules.shrink_to_fit();
             hover_selector_dependencies.shrink_to_fit();
+            for (auto& [root, cascade] : inactive_css_cascades) {
+                static_cast<void>(root);
+                cascade.rules.shrink_to_fit();
+                for (auto& [name, keyframes] : cascade.opacity_keyframes) {
+                    static_cast<void>(name);
+                    keyframes.opacity_stops.shrink_to_fit();
+                    keyframes.rotation_stops.shrink_to_fit();
+                }
+                compact_index(cascade.rules_by_class);
+                compact_index(cascade.rules_by_id);
+                compact_index(cascade.rules_by_tag);
+                compact_index(cascade.rules_by_attribute);
+                compact_index(cascade.rules_by_variable_reference);
+                cascade.focus_rules.shrink_to_fit();
+                cascade.unindexed_rules.shrink_to_fit();
+                cascade.hover_dependencies.shrink_to_fit();
+            }
         } catch (...) {
             // Capacity compaction is opportunistic. A failed allocator request
             // must not suppress V8's low-memory notification or kill the

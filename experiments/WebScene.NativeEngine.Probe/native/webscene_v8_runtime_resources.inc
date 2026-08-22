@@ -236,10 +236,17 @@
         auto has_prefetched = false;
         prefetched_resource prefetched;
         const auto prefetch_key = resource_prefetch_key(kind, resolved_name);
-        if (auto known = prefetched_resources.find(prefetch_key);
-            known != prefetched_resources.end()) {
-            prefetched = known->second.get();
-            prefetched_resources.erase(known);
+        std::shared_future<prefetched_resource> prefetch_future;
+        {
+            std::lock_guard lock(resource_prefetch_mutex);
+            if (auto known = prefetched_resources.find(prefetch_key);
+                known != prefetched_resources.end()) {
+                prefetch_future = known->second;
+                prefetched_resources.erase(known);
+            }
+        }
+        if (prefetch_future.valid()) {
+            prefetched = prefetch_future.get();
             cached = std::move(prefetched.cached);
             has_cached = prefetched.has_cached;
             has_prefetched = true;
@@ -387,13 +394,15 @@
         const std::string& base,
         uint32_t kind)
     {
-        if (!load_resource_callback || prefetched_resources.size() >= maximum_resource_prefetches) {
-            return;
-        }
+        if (!load_resource_callback) return;
         const auto resolved_name = resolve_resource_url(value, base);
         if (resolved_name.empty()) return;
         const auto key = resource_prefetch_key(kind, resolved_name);
-        if (prefetched_resources.contains(key)) return;
+        {
+            std::lock_guard lock(resource_prefetch_mutex);
+            if (prefetched_resources.size() >= maximum_resource_prefetches
+                || prefetched_resources.contains(key)) return;
+        }
 
         cached_text_resource cached;
         const auto cache_key = resource_key_digest(kind, resolved_name);
@@ -406,12 +415,19 @@
             result.has_cached = true;
             result.from_fresh_cache = true;
             std::promise<prefetched_resource> promise;
-            auto future = promise.get_future();
+            auto future = promise.get_future().share();
             promise.set_value(std::move(result));
-            prefetched_resources.emplace(key, std::move(future));
+            std::lock_guard lock(resource_prefetch_mutex);
+            if (prefetched_resources.size() < maximum_resource_prefetches
+                && !prefetched_resources.contains(key)) {
+                prefetched_resources.emplace(key, std::move(future));
+            }
             return;
         }
 
+        std::lock_guard lock(resource_prefetch_mutex);
+        if (prefetched_resources.size() >= maximum_resource_prefetches
+            || prefetched_resources.contains(key)) return;
         auto entity_tag = has_cached ? cached.entity_tag : std::string{};
         const auto last_modified = has_cached ? cached.last_modified_unix_seconds : 0;
         prefetched_resources.emplace(
@@ -431,17 +447,21 @@
                         last_modified,
                         result.loaded);
                     return result;
-                }));
+                }).share());
     }
 
     void prefetch_connected_resources()
     {
         if (!load_resource_callback || connected_resources.empty()) return;
         for (auto& task : connected_resources) {
-            if (prefetched_resources.size() >= maximum_resource_prefetches) return;
+            {
+                std::lock_guard lock(resource_prefetch_mutex);
+                if (prefetched_resources.size() >= maximum_resource_prefetches) return;
+            }
             if (task.node == nullptr) continue;
             auto task_context = task.context.Get(isolate);
             if (task_context.IsEmpty()) continue;
+            activate_css_cascade(task_context);
             v8::Context::Scope task_context_scope(task_context);
             const auto& base = current_base_address();
             if (task.node->tag == "link") {

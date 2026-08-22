@@ -4,6 +4,7 @@
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
+        activate_css_cascade(local_context);
         if (!execute_in_context(local_context, source, document_name, last_error)) {
             return false;
         }
@@ -219,6 +220,9 @@
             1,
             &html_element,
             v8::kEmbedderDataTypeTagDefault);
+        frame_hydration_states.clear();
+        inactive_css_cascades.clear();
+        active_css_cascade_root = &html_element;
         css_rules.clear();
         opacity_keyframes.clear();
         css_rules_by_class.clear();

@@ -3785,7 +3785,7 @@ std::string v8_dom_runtime::diagnostics()
         description << impl_->loaded_resource_names[index];
     }
     description << "] | resource-memory-hits="
-        << impl_->resource_cache_memory_hit_count
+        << impl_->resource_cache_memory_hit_count.load(std::memory_order_relaxed)
         << ", detached-dom={pending-roots=" << impl_->detached_dom_roots.size()
         << ",pending-nodes=" << impl_->detached_nodes_since_gc
         << ",released=" << impl_->released_detached_dom_nodes << '}';
@@ -3847,6 +3847,16 @@ std::string v8_dom_runtime::diagnostics()
         };
         description << ", startup-profile={hydrate="
             << format(impl_->startup_frame_hydrate)
+            << ",frame-prepare=" << format(impl_->startup_frame_prepare)
+            << ",frame-prepare-wait=" << format(impl_->startup_frame_prepare_wait)
+            << ",frame-prepare-lead=" << std::fixed << std::setprecision(3)
+            << impl_->startup_frame_prepare_lead_nanoseconds / 1'000'000.0
+            << "ms"
+            << ",frame-slices=" << impl_->startup_frame_hydration_slices
+            << ",frame-yields=" << impl_->startup_frame_hydration_yields
+            << ",frame-max-slice=" << std::fixed << std::setprecision(3)
+            << impl_->startup_frame_hydration_max_slice_nanoseconds / 1'000'000.0
+            << "ms"
             << ",io=" << format(impl_->startup_resource_read)
             << ",css-parse=" << format(impl_->startup_css_parse)
             << ",css-apply=" << format(impl_->startup_css_apply)
@@ -3861,6 +3871,8 @@ std::string v8_dom_runtime::diagnostics()
             << ",css-rules=" << impl_->css_rules.size()
             << ",css-unindexed=" << impl_->unindexed_css_rules.size()
             << ",script=" << format(impl_->startup_script_execute)
+            << ",script-compile=" << format(impl_->startup_script_compile)
+            << ",script-run=" << format(impl_->startup_script_run)
             << ",layout=" << format(impl_->startup_layout)
             << ",resources=" << impl_->startup_connected_resources
             << ",raf=" << impl_->startup_raf_executed << '/'
@@ -4233,32 +4245,32 @@ uint64_t v8_dom_runtime::shared_isolate_peak_contexts() const noexcept
 
 uint64_t v8_dom_runtime::resource_cache_requests() const noexcept
 {
-    return impl_->resource_cache_request_count;
+    return impl_->resource_cache_request_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::resource_cache_hits() const noexcept
 {
-    return impl_->resource_cache_hit_count;
+    return impl_->resource_cache_hit_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::resource_cache_misses() const noexcept
 {
-    return impl_->resource_cache_miss_count;
+    return impl_->resource_cache_miss_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::resource_cache_rejections() const noexcept
 {
-    return impl_->resource_cache_rejection_count;
+    return impl_->resource_cache_rejection_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::resource_cache_bytes_read() const noexcept
 {
-    return impl_->resource_cache_bytes_read_count;
+    return impl_->resource_cache_bytes_read_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::resource_cache_bytes_written() const noexcept
 {
-    return impl_->resource_cache_bytes_written_count;
+    return impl_->resource_cache_bytes_written_count.load(std::memory_order_relaxed);
 }
 
 uint64_t v8_dom_runtime::input_events_dispatched() const noexcept
@@ -4490,6 +4502,12 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
     result.native_css_rule_count = impl_->css_rules.size();
     result.native_css_rule_storage_bytes =
         impl_->css_rules.capacity() * sizeof(implementation::css_rule);
+    for (const auto& [root, cascade] : impl_->inactive_css_cascades) {
+        static_cast<void>(root);
+        result.native_css_rule_count += cascade.rules.size();
+        result.native_css_rule_storage_bytes +=
+            cascade.rules.capacity() * sizeof(implementation::css_rule);
+    }
     const auto string_bytes = [](const std::string& value) {
         return value.capacity() + 1U;
     };
@@ -4500,6 +4518,17 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
                 * sizeof(node_style::opacity_keyframe)
             + keyframes.rotation_stops.capacity()
                 * sizeof(node_style::rotation_keyframe);
+    }
+    for (const auto& [root, cascade] : impl_->inactive_css_cascades) {
+        static_cast<void>(root);
+        for (const auto& [name, keyframes] : cascade.opacity_keyframes) {
+            result.native_css_rule_storage_bytes += string_bytes(name)
+                + sizeof(decltype(cascade.opacity_keyframes)::value_type)
+                + keyframes.opacity_stops.capacity()
+                    * sizeof(node_style::opacity_keyframe)
+                + keyframes.rotation_stops.capacity()
+                    * sizeof(node_style::rotation_keyframe);
+        }
     }
     {
         std::lock_guard lock(
@@ -4563,6 +4592,19 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         + impl_->unindexed_css_rules.capacity() * sizeof(size_t)
         + impl_->hover_selector_dependencies.capacity()
             * sizeof(implementation::hover_selector_dependency);
+    for (const auto& [root, cascade] : impl_->inactive_css_cascades) {
+        static_cast<void>(root);
+        result.native_css_index_storage_bytes +=
+            indexed_rule_storage(cascade.rules_by_class)
+            + indexed_rule_storage(cascade.rules_by_id)
+            + indexed_rule_storage(cascade.rules_by_tag)
+            + indexed_rule_storage(cascade.rules_by_attribute)
+            + indexed_rule_storage(cascade.rules_by_variable_reference)
+            + cascade.focus_rules.capacity() * sizeof(size_t)
+            + cascade.unindexed_rules.capacity() * sizeof(size_t)
+            + cascade.hover_dependencies.capacity()
+                * sizeof(implementation::hover_selector_dependency);
+    }
     return result;
 }
 

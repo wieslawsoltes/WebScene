@@ -261,6 +261,94 @@ void test_frame_script_dom_presence(webscene_engine* engine)
         "contentDocument queries escaped the frame document boundary: " + boundary);
 }
 
+std::string measure_cooperative_iframe_task_order(bool disable_cooperation)
+{
+#if defined(_WIN32)
+    _putenv_s(
+        "WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION",
+        disable_cooperation ? "1" : "");
+#else
+    if (disable_cooperation) {
+        setenv("WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION", "1", 1);
+    } else {
+        unsetenv("WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION");
+    }
+#endif
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "cooperative iframe engine creation failed");
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const outerStyle = document.createElement('style');
+          outerStyle.textContent = '.cascade-target { color: rgb(170, 0, 0); }';
+          document.body.appendChild(outerStyle);
+          const outer = document.createElement('div');
+          outer.className = 'cascade-target';
+          document.body.appendChild(outer);
+          globalThis.__iframeTaskOrder = [];
+          globalThis.__outerCascadeTarget = outer;
+          setTimeout(() => __iframeTaskOrder.push('timer'), 0);
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(
+            '<html><style>.cascade-target { color: rgb(0, 0, 187); }</style><body>'
+            + '<div class="cascade-target" id="inner"></div>'
+            + '<script>'
+            + 'parent.__iframeTaskOrder.push("blocking");'
+            + 'parent.__innerCascadeColor = getComputedStyle('
+            + 'document.getElementById("inner")).color;'
+            + 'addEventListener("DOMContentLoaded", () => '
+            + 'parent.__iframeTaskOrder.push("dom"));'
+            + 'addEventListener("load", () => parent.__iframeTaskOrder.push("load"));'
+            + 'const deadline = Date.now() + 20; while (Date.now() < deadline) {}'
+            + '<\/script>'
+            + '<script defer>parent.__iframeTaskOrder.push("deferred");<\/script>'
+            + '</body></html>');
+          frameDocument.close();
+        })()
+    )JS", "cooperative-iframe-order.js");
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        if (evaluate(
+                engine,
+                "globalThis.__iframeTaskOrder.length",
+                "cooperative-iframe-progress.js") == "5") {
+            result = evaluate(engine, R"JS((() => ({
+              order: globalThis.__iframeTaskOrder,
+              outer: getComputedStyle(globalThis.__outerCascadeTarget).color,
+              inner: globalThis.__innerCascadeColor
+            }))())JS", "cooperative-iframe-result.js");
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    webscene_engine_destroy(engine);
+#if defined(_WIN32)
+    _putenv_s("WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION", "");
+#else
+    unsetenv("WEBSCENE_PROBE_DISABLE_COOPERATIVE_IFRAME_HYDRATION");
+#endif
+    return result;
+}
+
+void test_cooperative_iframe_hydration_yields_and_isolates_cascade()
+{
+    const auto optimized = measure_cooperative_iframe_task_order(false);
+    require(
+        optimized == R"JSON({"order":["blocking","timer","deferred","dom","load"],"outer":"rgb(170, 0, 0)","inner":"rgb(0, 0, 187)"})JSON",
+        "cooperative iframe hydration did not yield or isolate cascade state: "
+            + optimized);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto control = measure_cooperative_iframe_task_order(true);
+    require(
+        control == R"JSON({"order":["blocking","deferred","dom","load","timer"],"outer":"rgb(170, 0, 0)","inner":"rgb(0, 0, 187)"})JSON",
+        "cooperative iframe A/B control did not restore monolithic ordering: "
+            + control);
+#endif
+}
+
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 void test_html5ever_frame_does_not_duplicate_authored_loading_indicator(
     webscene_engine* engine)

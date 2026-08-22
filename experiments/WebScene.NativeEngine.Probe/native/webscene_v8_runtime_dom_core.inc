@@ -530,13 +530,89 @@
         }
     }
 
+    css_cascade_state take_active_css_cascade()
+    {
+        css_cascade_state state;
+        state.rules = std::move(css_rules);
+        state.stylesheet_owner_id = active_stylesheet_owner_id;
+        state.stylesheet_shadow_scope_root_id = active_stylesheet_shadow_scope_root_id;
+        state.opacity_keyframes = std::move(opacity_keyframes);
+        state.rules_by_class = std::move(css_rules_by_class);
+        state.rules_by_id = std::move(css_rules_by_id);
+        state.rules_by_tag = std::move(css_rules_by_tag);
+        state.rules_by_attribute = std::move(css_rules_by_attribute);
+        state.rules_by_variable_reference = std::move(css_rules_by_variable_reference);
+        state.focus_rules = std::move(css_focus_rules);
+        state.unindexed_rules = std::move(unindexed_css_rules);
+        state.attribute_dependencies = std::move(css_attribute_dependencies);
+        state.hover_dependencies = std::move(hover_selector_dependencies);
+        state.variables = std::move(css_variables);
+        state.important_variables = std::move(important_css_variables);
+        active_stylesheet_owner_id = 0U;
+        active_stylesheet_shadow_scope_root_id = 0U;
+        return state;
+    }
+
+    void restore_active_css_cascade(css_cascade_state state)
+    {
+        css_rules = std::move(state.rules);
+        active_stylesheet_owner_id = state.stylesheet_owner_id;
+        active_stylesheet_shadow_scope_root_id =
+            state.stylesheet_shadow_scope_root_id;
+        opacity_keyframes = std::move(state.opacity_keyframes);
+        css_rules_by_class = std::move(state.rules_by_class);
+        css_rules_by_id = std::move(state.rules_by_id);
+        css_rules_by_tag = std::move(state.rules_by_tag);
+        css_rules_by_attribute = std::move(state.rules_by_attribute);
+        css_rules_by_variable_reference =
+            std::move(state.rules_by_variable_reference);
+        css_focus_rules = std::move(state.focus_rules);
+        unindexed_css_rules = std::move(state.unindexed_rules);
+        css_attribute_dependencies = std::move(state.attribute_dependencies);
+        hover_selector_dependencies = std::move(state.hover_dependencies);
+        css_variables = std::move(state.variables);
+        important_css_variables = std::move(state.important_variables);
+    }
+
+    void activate_css_cascade(dom_node* root)
+    {
+        if (root == nullptr) root = &document.body();
+        if (active_css_cascade_root == nullptr) {
+            active_css_cascade_root = &document.body();
+        }
+        if (active_css_cascade_root == root) return;
+
+        auto incoming = inactive_css_cascades.extract(root);
+        inactive_css_cascades.insert_or_assign(
+            active_css_cascade_root,
+            take_active_css_cascade());
+        if (!incoming.empty()) {
+            restore_active_css_cascade(std::move(incoming.mapped()));
+        }
+        active_css_cascade_root = root;
+    }
+
+    void activate_css_cascade(v8::Local<v8::Context> local_context)
+    {
+        if (local_context.IsEmpty()) {
+            activate_css_cascade(&document.body());
+            return;
+        }
+        activate_css_cascade(static_cast<dom_node*>(
+            local_context->GetAlignedPointerFromEmbedderData(
+                1,
+                v8::kEmbedderDataTypeTagDefault)));
+    }
+
     dom_node& active_root()
     {
         auto local_context = isolate->GetCurrentContext();
         auto* root = static_cast<dom_node*>(local_context->GetAlignedPointerFromEmbedderData(
             1,
             v8::kEmbedderDataTypeTagDefault));
-        return root == nullptr ? document.body() : *root;
+        if (root == nullptr) root = &document.body();
+        activate_css_cascade(root);
+        return *root;
     }
 
     static dom_node& exposed_body_for_root(dom_node& root)
@@ -695,6 +771,10 @@
                         1,
                         v8::kEmbedderDataTypeTagDefault));
                 frame_base_addresses.erase(frame_root);
+                if (active_css_cascade_root == frame_root) {
+                    activate_css_cascade(&document.body());
+                }
+                inactive_css_cascades.erase(frame_root);
                 detached_contexts.push_back(local_context);
                 cancel_detached_frame_context_tasks(local_context);
                 destroy_inspector_context(local_context);
@@ -705,6 +785,7 @@
                 }
             }
             actual_frame_contexts.erase(id);
+            frame_hydration_states.erase(id);
             actual_frame_windows.erase(id);
             actual_frame_documents.erase(id);
             frame_session_storage.erase(id);
@@ -1011,6 +1092,12 @@
         std::erase_if(frame_base_addresses, [&](const auto& entry) {
             return nodes.contains(const_cast<dom_node*>(entry.first));
         });
+        if (nodes.contains(const_cast<dom_node*>(active_css_cascade_root))) {
+            activate_css_cascade(&document.body());
+        }
+        std::erase_if(inactive_css_cascades, [&](const auto& entry) {
+            return nodes.contains(const_cast<dom_node*>(entry.first));
+        });
         for (auto& observer : resize_observers) {
             std::erase_if(observer->nodes, [&](const auto* node) {
                 return nodes.contains(const_cast<dom_node*>(node));
@@ -1033,6 +1120,7 @@
 #endif
             }
             actual_frame_contexts.erase(id);
+            frame_hydration_states.erase(id);
             actual_frame_documents.erase(id);
             frame_session_storage.erase(id);
             frame_load_listeners.erase(id);
@@ -1463,6 +1551,7 @@
                             resolved,
                             {},
                             WEBSCENE_RESOURCE_DOCUMENT);
+                        start_frame_preparation(node, resolved);
                         node.attributes["data-webscene-remote-result"] = "pending";
                     } else {
                         std::string html;
