@@ -10,6 +10,8 @@ struct resource_server final {
         std::numeric_limits<int64_t>::max()};
 };
 
+constexpr auto iframe_outer_script_work_ms = 300;
+
 size_t load_test_resource(
     void* user_data,
     uint32_t kind,
@@ -1753,7 +1755,6 @@ int64_t measure_iframe_subresource_discovery(bool disable_preparation)
     const auto host = disable_preparation
         ? std::string("https://frame-preparation-control.test")
         : std::string("https://frame-preparation-enabled.test");
-    constexpr auto outer_script_work_ms = 300;
     resource_server server{
         .content = {
             {host + "/index.html", R"HTML(
@@ -1842,7 +1843,7 @@ void test_iframe_preparation_discovers_subresources_during_outer_script()
         prepared_start != std::numeric_limits<int64_t>::max()
             // Keep enough margin for a loaded runner while still requiring
             // preparation to begin before the outer script yields.
-            && prepared_start < outer_script_work_ms - 40,
+            && prepared_start < iframe_outer_script_work_ms - 40,
         "iframe preparation did not discover subresources during outer script work");
 #endif
 }
