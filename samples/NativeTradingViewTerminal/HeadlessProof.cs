@@ -12,19 +12,19 @@ namespace NativeTradingViewTerminal;
 
 internal static class HeadlessProof
 {
-    private const int Width = 1440;
-    private const int Height = 900;
-
     internal static int Run(string[] arguments)
     {
         var paths = SamplePaths.Resolve(arguments);
         var output = ReadOutput(arguments);
+        var width = ReadDimension(arguments, "--width", 1440);
+        var height = ReadDimension(arguments, "--height", 900);
+        var overlay = ReadArgument(arguments, "--open-overlay");
         Directory.CreateDirectory(output);
         var view = new NativeWebSceneView(useCompositionVisual: false);
         var window = new Window
         {
-            Width = Width,
-            Height = Height,
+            Width = width,
+            Height = height,
             Content = view,
             Background = Avalonia.Media.Brushes.Black
         };
@@ -82,11 +82,22 @@ internal static class HeadlessProof
             var screenshotPath = Path.Combine(
                 output,
                 "native-tradingview-terminal.png");
-            SaveNativeFrame(surface, screenshotPath);
+            SaveNativeFrame(surface, screenshotPath, width, height);
             var evidencePath = Path.Combine(
                 output,
                 "native-tradingview-terminal-evidence.json");
             File.WriteAllText(evidencePath, evidence);
+            if (overlay is not null)
+            {
+                CaptureOverlay(
+                    view,
+                    window,
+                    surface,
+                    output,
+                    overlay,
+                    width,
+                    height);
+            }
 
             using var document = JsonDocument.Parse(evidence);
             var root = document.RootElement;
@@ -677,13 +688,17 @@ internal static class HeadlessProof
         task.GetAwaiter().GetResult();
     }
 
-    private static void SaveNativeFrame(NativeSceneSurface surface, string path)
+    private static void SaveNativeFrame(
+        NativeSceneSurface surface,
+        string path,
+        int width,
+        int height)
     {
         var png = surface.CaptureRetainedScenePng();
         File.WriteAllBytes(path, png);
         using var stream = new MemoryStream(png);
         using var frame = new Bitmap(stream);
-        if (frame.PixelSize != new PixelSize(Width, Height))
+        if (frame.PixelSize != new PixelSize(width, height))
         {
             throw new InvalidOperationException(
                 $"Unexpected TradingView capture size {frame.PixelSize}.");
@@ -704,6 +719,79 @@ internal static class HeadlessProof
             throw new InvalidOperationException(
                 $"TradingView capture was blank or uniform ({colors.Count} sampled colors).");
         }
+    }
+
+    private static void CaptureOverlay(
+        NativeWebSceneView view,
+        Window window,
+        NativeSceneSurface surface,
+        string output,
+        string overlay,
+        int width,
+        int height)
+    {
+        var selector = overlay switch
+        {
+            "layout" => """
+                candidate.getAttribute('aria-label') === 'Layout setup'
+                """,
+            "indicators" => """
+                candidate.textContent?.trim() === 'Indicators'
+                """,
+            "interval" => """
+                candidate.textContent?.trim() === '1h'
+                """,
+            "right-toolbar" => """
+                candidate === chartDocument.querySelector(
+                  '.layout__area--right [class^="toolbar-"]')
+                  ?.querySelectorAll('button')[1]
+                """,
+            _ => throw new ArgumentException(
+                $"Unknown TradingView overlay '{overlay}'.")
+        };
+        var evaluation = view.EvaluateTextAsync($$"""
+            (() => {
+              const chartDocument = Array.from(
+                document.querySelectorAll('iframe'))
+                .map(frame => frame.contentDocument)
+                .find(candidate =>
+                  candidate?.querySelectorAll('canvas').length >= 8);
+              const candidate = Array.from(
+                chartDocument?.querySelectorAll('button') ?? [])
+                .find(candidate => {
+                  const rect = candidate.getBoundingClientRect();
+                  return rect.width > 0 && rect.height > 0
+                    && getComputedStyle(candidate).visibility === 'visible'
+                    && ({{selector}});
+                });
+              if (!candidate) return null;
+              const rect = candidate.getBoundingClientRect();
+              return {
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2
+              };
+            })()
+            """);
+        PumpUntil(evaluation, TimeSpan.FromSeconds(10));
+        using var geometry = JsonDocument.Parse(evaluation.Result);
+        if (geometry.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException(
+                $"TradingView overlay control '{overlay}' was unavailable.");
+        }
+        var x = geometry.RootElement.GetProperty("x").GetDouble();
+        var y = geometry.RootElement.GetProperty("y").GetDouble();
+        surface.SubmitAvaloniaPointerMove(x, y);
+        PumpFrames(view, window, TimeSpan.FromMilliseconds(100));
+        surface.SubmitPointerButton(2, x, y, 0, pressed: true);
+        PumpFrames(view, window, TimeSpan.FromMilliseconds(50));
+        surface.SubmitPointerButton(3, x, y, 0, pressed: false);
+        PumpFrames(view, window, TimeSpan.FromSeconds(1));
+        SaveNativeFrame(
+            surface,
+            Path.Combine(output, $"native-tradingview-{overlay}.png"),
+            width,
+            height);
     }
 
     private static void ValidateSelectedToolbarBackground(
@@ -739,5 +827,36 @@ internal static class HeadlessProof
             }
         }
         return Path.GetFullPath("artifacts/native-tradingview-terminal");
+    }
+
+    private static int ReadDimension(
+        IReadOnlyList<string> arguments,
+        string name,
+        int fallback)
+    {
+        for (var index = 0; index + 1 < arguments.Count; ++index)
+        {
+            if (arguments[index] == name
+                && int.TryParse(arguments[index + 1], out var value)
+                && value > 0)
+            {
+                return value;
+            }
+        }
+        return fallback;
+    }
+
+    private static string? ReadArgument(
+        IReadOnlyList<string> arguments,
+        string name)
+    {
+        for (var index = 0; index + 1 < arguments.Count; ++index)
+        {
+            if (arguments[index] == name)
+            {
+                return arguments[index + 1];
+            }
+        }
+        return null;
     }
 }
