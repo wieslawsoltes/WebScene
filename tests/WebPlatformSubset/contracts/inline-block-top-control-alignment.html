@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Top-aligned atomic inline controls retain their line-box position</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/18px Arial, sans-serif; }
+  .status-row {
+    width: 260px;
+    height: 38px;
+    white-space: nowrap;
+  }
+  .inline-control {
+    display: inline-block;
+    height: 38px;
+    vertical-align: top;
+  }
+  .inline-control > button {
+    display: flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 6px;
+    border: 0;
+    font: inherit;
+  }
+  .button-text { display: block; }
+  .separator { width: 9px; }
+  .footer-tabs {
+    display: flex;
+    align-items: stretch;
+    height: 28px;
+    margin-top: 8px;
+  }
+  .account-button {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 8px;
+    border: 0;
+    font: inherit;
+  }
+  .trade-wrapper {
+    display: flex;
+    align-items: center;
+    height: 28px;
+  }
+  .trade-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    font: inherit;
+  }
+  .trade-content { padding: 4px 0; }
+</style>
+
+<div id="status-row" class="status-row">
+  <div id="first-inline" class="inline-control"><button id="first-button"><span id="first-text" class="button-text">RTH</span></button></div>
+  <div id="separator" class="inline-control separator"></div>
+  <div id="second-inline" class="inline-control"><button id="second-button"><span id="second-text" class="button-text">auto</span></button></div>
+</div>
+<div id="footer-tabs" class="footer-tabs">
+  <button class="account-button"><span id="account-text">Account Manager</span></button>
+  <div id="trade-wrapper" class="trade-wrapper"><button id="trade-button" class="trade-button"><span id="trade-content" class="trade-content"><span id="trade-text">Trade</span></span></button></div>
+</div>
+
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const result = { name: "top-aligned inline-block controls and their text retain authored vertical centers" };
+  try {
+    const rect = id => document.getElementById(id).getBoundingClientRect();
+    const row = rect("status-row");
+    const firstInline = rect("first-inline"), secondInline = rect("second-inline");
+    const separator = rect("separator");
+    const firstButton = rect("first-button"), secondButton = rect("second-button");
+    const firstText = rect("first-text"), secondText = rect("second-text");
+    const failures = [];
+    const close = (actual, expected, label, tolerance = .1) => {
+      if (Math.abs(actual - expected) > tolerance) {
+        failures.push(label + ": expected " + expected + ", got " + actual);
+      }
+    };
+    for (const [label, box] of [
+      ["first inline", firstInline], ["separator", separator], ["second inline", secondInline],
+      ["first button", firstButton], ["second button", secondButton]
+    ]) {
+      close(box.top, row.top, label + " top");
+      close(box.height, row.height, label + " height");
+      close(box.bottom, row.bottom, label + " bottom");
+    }
+    close(firstText.top + firstText.height / 2, row.top + row.height / 2,
+      "first text center against row");
+    close(secondText.top + secondText.height / 2, row.top + row.height / 2,
+      "second text center against row");
+    const footerTabs = rect("footer-tabs"), tradeWrapper = rect("trade-wrapper");
+    const tradeButton = rect("trade-button"), tradeContent = rect("trade-content");
+    const accountText = rect("account-text"), tradeText = rect("trade-text");
+    close(tradeWrapper.top, footerTabs.top, "trade wrapper top");
+    close(tradeWrapper.bottom, footerTabs.bottom, "trade wrapper bottom");
+    close(tradeButton.top + tradeButton.height / 2,
+      footerTabs.top + footerTabs.height / 2, "trade button center against footer");
+    close(tradeContent.height, 26, "overflowing padded trade content height");
+    close(tradeText.top + tradeText.height / 2,
+      accountText.top + accountText.height / 2, "trade and account text centers");
+    if (failures.length) throw new Error(failures.join("; "));
+    result.status = "PASS";
+    result.message = null;
+    result.stack = null;
+    state.harness = { status: 0, message: null, stack: null };
+    state.diagnostics = [JSON.stringify({ row, firstInline, separator, secondInline,
+      firstButton, secondButton, firstText, secondText, footerTabs, tradeWrapper,
+      tradeButton, tradeContent, accountText, tradeText })];
+  } catch (error) {
+    result.status = "FAIL";
+    result.message = String(error && error.message || error);
+    result.stack = error && error.stack ? String(error.stack) : null;
+    state.harness = { status: 1, message: result.message, stack: result.stack };
+  }
+  state.results.push(result);
+  state.complete = true;
+</script>

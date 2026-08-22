@@ -297,7 +297,9 @@ struct node_style final {
 
         std::vector<track> template_columns;
         std::vector<track> template_rows;
+        std::vector<track> auto_columns;
         bool two_columns{false};
+        bool auto_flow_column{false};
         bool fractional_rows{false};
         bool span_all{false};
         int32_t column_start{0};
@@ -1281,6 +1283,8 @@ struct dom_node final {
     script_execution_state script_state{script_execution_state::ready};
     bool visible{true};
 };
+
+display_mode blockified_display(const dom_node& node) noexcept;
 
 class native_document final {
 public:

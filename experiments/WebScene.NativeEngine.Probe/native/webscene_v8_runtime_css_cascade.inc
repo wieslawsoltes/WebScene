@@ -61,7 +61,9 @@
         };
         return tracks_equal(left.template_columns, right.template_columns)
             && tracks_equal(left.template_rows, right.template_rows)
+            && tracks_equal(left.auto_columns, right.auto_columns)
             && left.two_columns == right.two_columns
+            && left.auto_flow_column == right.auto_flow_column
             && left.fractional_rows == right.fractional_rows
             && left.span_all == right.span_all
             && left.column_start == right.column_start
@@ -1639,6 +1641,7 @@
             }
             if (has_inline({"flex-basis", "flex"})) reset.flex_basis = previous.flex_basis;
             if (has_inline({"grid-template-columns", "grid-template-rows",
+                    "grid-auto-columns", "grid-auto-flow",
                     "grid-area", "grid-row", "grid-row-start", "grid-row-end",
                     "grid-column", "grid-column-start", "grid-column-end"})) {
                 reset.mutable_grid() = previous.grid();
@@ -2161,6 +2164,17 @@
                 [](const auto& track) { return track.fraction > 0; });
             decision.classification = "partially-supported";
             decision.semantic_slice = "fractional component rows and explicit fixed track lengths";
+        } else if (name == "grid-auto-columns" && !is_inline(inline_grid)) {
+            auto& grid = node.style.mutable_grid();
+            grid.auto_columns = parse_simple_grid_tracks(value);
+            decision.classification = "partially-supported";
+            decision.semantic_slice =
+                "fixed, auto, fractional, and minmax implicit column track lengths";
+        } else if (name == "grid-auto-flow" && !is_inline(inline_grid)) {
+            auto& grid = node.style.mutable_grid();
+            grid.auto_flow_column = value == "column" || value == "column dense";
+            decision.classification = "partially-supported";
+            decision.semantic_slice = "row and column auto-flow without dense backfill";
         } else if (!is_inline(inline_grid)
             && apply_grid_placement_declaration(node.style, name, value)) {
             decision.classification = "supported";

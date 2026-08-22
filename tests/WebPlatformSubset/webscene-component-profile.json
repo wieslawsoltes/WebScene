@@ -967,6 +967,20 @@
       "reason": "Product-neutral reductions of the form layouts that were changed to flex during the 7GUIs port: equal fractional columns around an automatic separator, minmax fractional CRUD columns, source-order auto placement, and ordinary explicit row/column placement."
     },
     {
+      "path": "contracts/implicit-grid-and-compact-flex-controls.html",
+      "type": "contract",
+      "capabilities": ["grid-column-auto-flow", "equal-implicit-fractional-tracks", "grid-column-start-span", "flex-item-blockification", "cross-axis-stretch", "nested-nonshrinking-suffix", "nowrap-flex-summary"],
+      "evidence": ["reported-trading-ticket-layout-reduction"],
+      "reason": "Product-neutral regression coverage for the reported compact-control failures: an implicit three-column tab grid distributes equally, an inline flex item is blockified and stretched, a start-side span 2 field slot preserves its nested nonshrinking suffix, and a spaced summary retains a one-line value. Keep candidate until the repaired native layout paths are stable across released RIDs."
+    },
+    {
+      "path": "contracts/inline-block-top-control-alignment.html",
+      "type": "contract",
+      "capabilities": ["inline-block-vertical-align-top", "atomic-inline-line-box-placement", "nested-flex-cross-axis-centering", "nonstretch-flex-cross-size-overflow"],
+      "evidence": ["reported-bottom-status-control-alignment"],
+      "reason": "Product-neutral reduction of the reported status-strip and footer-label displacement. Top-aligned 38px atomic inline controls must retain the line-box top while nested flex buttons center 18px text, and a padded non-stretch flex item may exceed and center within a compact cross axis. Keep candidate until the repaired inline and flex formatting paths are stable across released RIDs."
+    },
+    {
       "path": "contracts/inline-mixed-timer-order.html",
       "type": "contract",
       "capabilities": ["mixed-inline-source-order", "mixed-font-line-box", "nowrap-inline-suffix"],

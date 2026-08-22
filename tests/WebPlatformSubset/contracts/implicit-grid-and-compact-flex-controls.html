@@ -1,0 +1,198 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Implicit grid tracks and compact flex controls preserve authored geometry</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/18px Arial, sans-serif; }
+
+  .tabs {
+    display: inline-grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    width: 300px;
+    height: 28px;
+  }
+  .tabs > button {
+    display: inline-grid;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    font: inherit;
+  }
+
+  .compact-label {
+    display: flex;
+    width: 100px;
+    height: 28px;
+  }
+  .compact-label > span { max-height: 12px; line-height: 12px; }
+
+  .field {
+    display: grid;
+    grid-template-columns: 1fr 28px 1fr;
+    align-items: center;
+    width: 283px;
+    height: 34px;
+  }
+  .field-value {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .field-swap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+  }
+  .field-end-slot {
+    display: flex;
+    grid-column: span 2;
+    justify-content: space-between;
+    min-width: 0;
+    width: 100%;
+  }
+  .field-end-button {
+    display: grid;
+    min-width: 34px;
+    height: 28px;
+    padding: 0 4px;
+    border: 0;
+  }
+  .field-end-container {
+    display: flex;
+    align-items: center;
+    height: 16px;
+    min-width: 0;
+    width: 100%;
+  }
+  .field-end-fluid {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .field-suffix {
+    flex-shrink: 0;
+    margin-left: 4px;
+    white-space: nowrap;
+  }
+
+  .summary {
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+    width: 283px;
+  }
+  .summary-label { white-space: nowrap; }
+  .summary-margin {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .summary-title-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .summary-value {
+    text-align: end;
+    word-break: break-word;
+  }
+</style>
+
+<div id="tabs" class="tabs">
+  <button id="market">Market</button><button id="limit">Limit</button><button id="stop">Stop</button>
+</div>
+<div id="compact-label" class="compact-label"><span id="compact-text">Trade</span></div>
+<div id="field" class="field">
+  <span id="field-value" class="field-value">309.35</span>
+  <span id="field-end-slot" class="field-end-slot">
+    <span id="field-swap" class="field-swap">↔</span>
+    <button id="field-end-button" class="field-end-button">
+      <span id="field-end-container" class="field-end-container">
+        <span class="field-end-fluid">309.35</span><span id="field-suffix-wrapper"><span id="field-suffix" class="field-suffix">currency</span></span>
+      </span>
+    </button>
+  </span>
+</div>
+<div id="summary" class="summary">
+  <div id="summary-margin" class="summary-margin">
+    <div class="summary-title-container"><span id="summary-label" class="summary-label">Margin used</span></div>
+  </div>
+  <div id="summary-value" class="summary-value"><span id="summary-used">309.35</span><span id="summary-available"> / 100,000.00</span></div>
+</div>
+
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const rect = id => document.getElementById(id).getBoundingClientRect();
+  const close = (actual, expected, tolerance = .1) => Math.abs(actual - expected) <= tolerance;
+  const require = (value, message) => { if (!value) throw new Error(message); };
+  const check = (name, assertion) => {
+    const result = { name };
+    try { assertion(); result.status = "PASS"; result.message = null; result.stack = null; }
+    catch (error) { result.status = "FAIL"; result.message = String(error.message || error); result.stack = error.stack || null; }
+    state.results.push(result);
+  };
+
+  check("column auto-flow creates three equal implicit fractional tracks", () => {
+    const tabs = rect("tabs"), market = rect("market"), limit = rect("limit"), stop = rect("stop");
+    require(close(tabs.width, 300), "tabs width=" + tabs.width);
+    require(close(market.width, 100) && close(limit.width, 100) && close(stop.width, 100),
+      JSON.stringify({ market, limit, stop }));
+    require(close(market.left, tabs.left) && close(limit.left, market.right) && close(stop.left, limit.right)
+      && close(stop.right, tabs.right), "implicit tracks do not fill the grid in source order");
+  });
+
+  check("an inline flex item is blockified and stretches in the cross axis", () => {
+    const wrapper = rect("compact-label"), text = rect("compact-text");
+    require(getComputedStyle(document.getElementById("compact-text")).display === "block",
+      "computed display=" + getComputedStyle(document.getElementById("compact-text")).display);
+    require(close(text.top, wrapper.top) && close(text.height, 12), JSON.stringify({ wrapper, text }));
+  });
+
+  check("a three-column fractional grid preserves a nested nonshrinking suffix", () => {
+    const field = rect("field"), value = rect("field-value"), swap = rect("field-swap"), endSlot = rect("field-end-slot");
+    const button = rect("field-end-button"), container = rect("field-end-container");
+    const suffixWrapper = rect("field-suffix-wrapper"), suffix = rect("field-suffix");
+    require(suffix.width >= 50, "suffix width=" + suffix.width);
+    require(close(value.width, 127.5) && close(swap.width, 28) && close(endSlot.width, 155.5),
+      JSON.stringify({ value, swap, endSlot }));
+    require(close(endSlot.left, value.right) && close(endSlot.right, field.right),
+      "the span 2 end slot does not cover the remaining grid tracks");
+    require(suffix.left >= endSlot.left - .1, "suffix escapes the authored end slot");
+    require(getComputedStyle(document.getElementById("field-suffix-wrapper")).display === "block",
+      "suffix wrapper display=" + getComputedStyle(document.getElementById("field-suffix-wrapper")).display);
+    require(suffix.left >= suffixWrapper.left - .1 && suffix.right <= suffixWrapper.right + .1
+      && suffixWrapper.right <= container.right + .1, JSON.stringify({ container, suffixWrapper, suffix }));
+    require(button.right <= field.right + .1 && endSlot.right <= field.right + .1,
+      JSON.stringify({ field, endSlot, button }));
+  });
+
+  check("a spaced flex summary keeps its numeric value on one line", () => {
+    const summary = rect("summary"), margin = rect("summary-margin");
+    const label = rect("summary-label"), value = rect("summary-value");
+    require(close(summary.height, 18), JSON.stringify({ summary, label, value }));
+    require(close(label.height, 18) && close(value.height, 18), JSON.stringify({ label, value }));
+    require(value.left >= margin.right + 20 - .1 && value.right <= summary.right + .1,
+      "summary children overlap or escape their container");
+  });
+
+  state.diagnostics = [JSON.stringify({
+    tabs: rect("tabs"), market: rect("market"), limit: rect("limit"), stop: rect("stop"),
+    compactLabel: rect("compact-label"), compactText: rect("compact-text"),
+    field: rect("field"), fieldValue: rect("field-value"), fieldSwap: rect("field-swap"), fieldEndSlot: rect("field-end-slot"),
+    fieldEndButton: rect("field-end-button"), fieldEndContainer: rect("field-end-container"),
+    fieldSuffixWrapper: rect("field-suffix-wrapper"),
+    fieldSuffix: rect("field-suffix"), summary: rect("summary"), summaryMargin: rect("summary-margin"),
+    summaryLabel: rect("summary-label"), summaryValue: rect("summary-value"),
+    summaryUsed: rect("summary-used"), summaryAvailable: rect("summary-available")
+  })];
+  state.harness = { status: state.results.some(result => result.status !== "PASS") ? 1 : 0, message: null, stack: null };
+  state.complete = true;
+</script>

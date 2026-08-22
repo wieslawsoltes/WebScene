@@ -1026,6 +1026,31 @@ uint32_t append_scene_string(
 
 } // namespace
 
+display_mode blockified_display(const dom_node& node) noexcept
+{
+    const auto parent_display = node.parent == nullptr
+        ? display_mode::none
+        : node.parent->style.display;
+    const auto flex_or_grid_parent = parent_display == display_mode::flex
+        || parent_display == display_mode::inline_flex
+        || parent_display == display_mode::grid
+        || parent_display == display_mode::inline_grid;
+    if (!flex_or_grid_parent) return node.style.display;
+    switch (node.style.display) {
+    case display_mode::inline_flow:
+    case display_mode::inline_block:
+        return display_mode::block;
+    case display_mode::inline_flex:
+        return display_mode::flex;
+    case display_mode::inline_grid:
+        return display_mode::grid;
+    case display_mode::inline_table:
+        return display_mode::table;
+    default:
+        return node.style.display;
+    }
+}
+
 // These responsibility-focused fragments intentionally remain one translation
 // unit so the refactor cannot alter inlining or production code generation.
 #include "webscene_native_dom_tree.inc"

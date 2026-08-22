@@ -1075,7 +1075,18 @@ void native_document::layout_children(dom_node& parent)
                     auto word_width = measure_text_width(word, *run);
                     auto space_width = pending_space && cursor_x > 0
                         ? measure_text_width(" ", *run) : 0.0F;
-                    constexpr auto inline_wrap_epsilon = 0.01F;
+                    // Intrinsic sizing and the incremental word/space shaper can
+                    // differ at styled inline boundaries. An auto-sized flex item
+                    // is using that intrinsic contribution as its main size, so it
+                    // must not wrap solely because the two measurement paths land
+                    // on opposite sides of the edge. A genuinely flex-shrunk item
+                    // still exceeds this font-relative allowance and wraps.
+                    const auto intrinsic_flex_item = parent.parent != nullptr
+                        && is_flex_container(parent.parent->style.display)
+                        && !is_specified(parent.style.width);
+                    const auto inline_wrap_epsilon = intrinsic_flex_item
+                        ? std::max(0.25F, resolved_font_size(parent) * 0.35F)
+                        : 0.25F;
                     if (allow_wrap && cursor_x > 0
                         && cursor_x + space_width + word_width
                             > content.width + inline_wrap_epsilon) {
@@ -1321,7 +1332,10 @@ void native_document::layout_children(dom_node& parent)
         }
     }
     const auto& parent_grid = parent.style.grid();
-    if (is_grid_container(parent.style.display) && parent_grid.two_columns) {
+    const auto implicit_column_grid = parent_grid.auto_flow_column
+        && !parent_grid.auto_columns.empty();
+    if (is_grid_container(parent.style.display)
+        && (parent_grid.two_columns || implicit_column_grid)) {
         using grid_track = node_style::grid_data::track;
         struct grid_item final {
             dom_node* node{nullptr};
@@ -1330,7 +1344,28 @@ void native_document::layout_children(dom_node& parent)
             size_t row_span{1};
             size_t column_span{1};
         };
-        const auto column_count = std::max<size_t>(2U, parent_grid.template_columns.size());
+        auto effective_columns = parent_grid.template_columns;
+        if (effective_columns.empty() && implicit_column_grid) {
+            const auto implicit_count = std::max<size_t>(
+                1U,
+                std::count_if(
+                    composed_children(parent).begin(),
+                    composed_children(parent).end(),
+                    [](const dom_node* child) {
+                        return child != nullptr
+                            && child->style.display != display_mode::none
+                            && !is_out_of_flow(child->style.position)
+                            && !is_collapsible_whitespace_text(*child);
+                    }));
+            effective_columns.reserve(implicit_count);
+            for (size_t index = 0; index < implicit_count; ++index) {
+                effective_columns.push_back(
+                    parent_grid.auto_columns[index % parent_grid.auto_columns.size()]);
+            }
+        }
+        const auto column_count = std::max<size_t>(
+            implicit_column_grid ? 1U : 2U,
+            effective_columns.size());
         const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
             const auto first = value.find_first_not_of(" \t\r\n");
             if (first == std::string_view::npos) return std::nullopt;
@@ -1357,14 +1392,16 @@ void native_document::layout_children(dom_node& parent)
                     : *end;
                 return static_cast<size_t>(std::max(1, normalized_end - *start));
             }
-            const auto marker = end_value.find("span");
+            const auto span_value = start_value.find("span") != std::string_view::npos
+                ? start_value : end_value;
+            const auto marker = span_value.find("span");
             if (marker != std::string_view::npos) {
-                const auto digits = end_value.find_first_of("0123456789", marker + 4U);
+                const auto digits = span_value.find_first_of("0123456789", marker + 4U);
                 if (digits != std::string_view::npos) {
                     return std::max<size_t>(
                         1U,
                         static_cast<size_t>(parse_number(
-                            std::string(end_value.substr(digits)), 1.0F)));
+                            std::string(span_value.substr(digits)), 1.0F)));
                 }
             }
             return size_t{1};
@@ -1457,8 +1494,8 @@ void native_document::layout_children(dom_node& parent)
             parent, parent.style.row_gap, content.height, 0);
         std::vector<float> column_widths(column_count, 0.0F);
         auto fractional_weight = 0.0F;
-        for (size_t column = 0; column < parent_grid.template_columns.size(); ++column) {
-            const auto& track = parent_grid.template_columns[column];
+        for (size_t column = 0; column < effective_columns.size(); ++column) {
+            const auto& track = effective_columns[column];
             if (track.kind == grid_track::sizing::fixed) {
                 column_widths[column] = resolve_length(
                     parent, track.maximum, content.width, 0);
@@ -1475,8 +1512,8 @@ void native_document::layout_children(dom_node& parent)
         }
         for (const auto& item : items) {
             if (item.column_span != 1U) continue;
-            const auto authored_track = item.column < parent_grid.template_columns.size()
-                ? &parent_grid.template_columns[item.column] : nullptr;
+            const auto authored_track = item.column < effective_columns.size()
+                ? &effective_columns[item.column] : nullptr;
             if (authored_track != nullptr
                 && authored_track->kind != grid_track::sizing::automatic) continue;
             const auto margins = resolve_length(
@@ -1492,8 +1529,8 @@ void native_document::layout_children(dom_node& parent)
             column_widths.begin(), column_widths.end(), total_gap);
         const auto fractional_space = std::max(0.0F, content.width - committed_width);
         if (fractional_weight > 0) {
-            for (size_t column = 0; column < parent_grid.template_columns.size(); ++column) {
-                const auto& track = parent_grid.template_columns[column];
+            for (size_t column = 0; column < effective_columns.size(); ++column) {
+                const auto& track = effective_columns[column];
                 if (track.fraction <= 0) continue;
                 column_widths[column] = std::max(
                     column_widths[column],
@@ -2347,9 +2384,13 @@ void native_document::layout_children(dom_node& parent)
                             : parent.style.align_items) == align_mode::stretch
                         || intrinsic_height <= 0)
                     ? std::max(0.0F, available_line_cross_size - margin_top - margin_bottom)
-                    : std::min(
-                        std::max(0.0F, available_line_cross_size - margin_top - margin_bottom),
-                        intrinsic_height);
+                    : flex_container
+                        ? intrinsic_height
+                        : std::min(
+                            std::max(
+                                0.0F,
+                                available_line_cross_size - margin_top - margin_bottom),
+                            intrinsic_height);
             height = constrain_size(*child, false, height, content.height);
             if (flex_container && parent.style.flex_wrap) {
                 wrapped_line_cross_size = std::max(
@@ -2639,6 +2680,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto& vertical_align = child->style.textual().vertical_align;
                 if (!participates_in_flow(child) || !child->visible
                     || child->tag == "br"
+                    || vertical_align == "top"
                     || vertical_align == "middle"
                     || vertical_align == "bottom") continue;
                 const auto baseline = inline_item_baseline(
@@ -3041,9 +3083,34 @@ float native_document::compute_intrinsic_size(
             : resolved_line_height(node, font_size)));
     }
 
-    if (is_grid_container(node.style.display) && node.style.grid().two_columns) {
+    const auto& node_grid = node.style.grid();
+    const auto intrinsic_implicit_column_grid = node_grid.auto_flow_column
+        && !node_grid.auto_columns.empty();
+    if (is_grid_container(node.style.display)
+        && (node_grid.two_columns || intrinsic_implicit_column_grid)) {
         const auto& grid = node.style.grid();
-        const auto column_count = std::max<size_t>(2U, grid.template_columns.size());
+        auto effective_columns = grid.template_columns;
+        if (effective_columns.empty() && intrinsic_implicit_column_grid) {
+            const auto implicit_count = std::max<size_t>(
+                1U,
+                std::count_if(
+                    composed_children(node).begin(),
+                    composed_children(node).end(),
+                    [](const dom_node* child) {
+                        return child != nullptr
+                            && child->style.display != display_mode::none
+                            && !is_out_of_flow(child->style.position)
+                            && !is_collapsible_whitespace_text(*child);
+                    }));
+            effective_columns.reserve(implicit_count);
+            for (size_t index = 0; index < implicit_count; ++index) {
+                effective_columns.push_back(
+                    grid.auto_columns[index % grid.auto_columns.size()]);
+            }
+        }
+        const auto column_count = std::max<size_t>(
+            intrinsic_implicit_column_grid ? 1U : 2U,
+            effective_columns.size());
         struct intrinsic_grid_item final {
             const dom_node* node{nullptr};
             size_t row{0};
@@ -3075,6 +3142,18 @@ float native_document::compute_intrinsic_size(
                 const auto normalized_end = *end < 0
                     ? static_cast<int32_t>(count) + *end + 2 : *end;
                 return static_cast<size_t>(std::max(1, normalized_end - *start));
+            }
+            const auto span_value = start_value.find("span") != std::string_view::npos
+                ? start_value : end_value;
+            const auto marker = span_value.find("span");
+            if (marker != std::string_view::npos) {
+                const auto digits = span_value.find_first_of("0123456789", marker + 4U);
+                if (digits != std::string_view::npos) {
+                    return std::max<size_t>(
+                        1U,
+                        static_cast<size_t>(parse_number(
+                            std::string(span_value.substr(digits)), 1.0F)));
+                }
             }
             return size_t{1};
         };
@@ -3321,9 +3400,51 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
             child.style.border_bottom_width,
             child.layout.height,
             0);
+        const auto previous_height = child.layout.height;
         child.layout.height = std::max(
             child.layout.height,
             content_bottom - child.layout.y + padding_bottom + border_bottom);
+        if (child.layout.height > previous_height + 0.01F) {
+            // layout_children() established scroll geometry from the
+            // provisional auto height. Wrapped content can then grow this box
+            // without changing its public client/scroll metrics, leaving a
+            // stale smaller viewport that paints a phantom overflow:auto rail.
+            // Refresh the final content-box viewport and range immediately.
+            const auto final_border_top = resolve_length(
+                child,
+                child.style.border_top_width,
+                child.layout.height,
+                0);
+            const auto final_border_bottom = resolve_length(
+                child,
+                child.style.border_bottom_width,
+                child.layout.height,
+                0);
+            const auto final_padding_top = resolve_length(
+                child,
+                child.style.padding_top,
+                child.layout.height,
+                0);
+            const auto final_padding_bottom = resolve_length(
+                child,
+                child.style.padding_bottom,
+                child.layout.height,
+                0);
+            child.scroll_viewport_height = std::max(
+                0.0F,
+                child.layout.height
+                    - final_border_top - final_border_bottom
+                    - final_padding_top - final_padding_bottom);
+            child.scroll_content_height = std::max(
+                child.scroll_content_height,
+                child.scroll_viewport_height);
+            child.scroll_top = std::clamp(
+                child.scroll_top,
+                0.0F,
+                std::max(
+                    0.0F,
+                    child.scroll_content_height - child.scroll_viewport_height));
+        }
 
         // A one-track auto-sized grid takes its max-content contribution from
         // the content inside transparent/scroll wrappers. Those wrappers can

@@ -775,6 +775,94 @@ void test_auto_height_flex_popup_expands_overflowing_flex_child(webscene_engine*
         "an auto-height flex popup clipped its overflowing flex child: " + result);
 }
 
+void test_auto_height_overflow_auto_does_not_paint_phantom_scrollbar(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const popup = document.createElement('div');
+          popup.style.width = '252px';
+          const scroller = document.createElement('div');
+          scroller.style.display = 'flex';
+          scroller.style.alignItems = 'flex-start';
+          scroller.style.overflow = 'auto';
+          scroller.style.padding = '8px';
+          scroller.style.background = 'rgb(1, 2, 3)';
+          const content = document.createElement('div');
+          content.style.padding = '4px 8px';
+          const wrapper = document.createElement('div');
+          const message = document.createElement('div');
+          message.style.font = '14px/21px Arial, sans-serif';
+          message.textContent = 'Press and hold to see detailed chart values';
+          const buttons = document.createElement('div');
+          buttons.style.display = 'flex';
+          buttons.style.justifyContent = 'flex-end';
+          const button = document.createElement('button');
+          button.style.display = 'flex';
+          button.style.height = '28px';
+          button.style.marginTop = '15px';
+          buttons.appendChild(button);
+          wrapper.appendChild(message);
+          wrapper.appendChild(buttons);
+          content.appendChild(wrapper);
+          scroller.appendChild(content);
+          popup.appendChild(scroller);
+          document.body.appendChild(popup);
+          globalThis.__autoHeightScroller = scroller;
+          return {
+            popupHeight: popup.getBoundingClientRect().height,
+            scrollerHeight: scroller.getBoundingClientRect().height,
+            clientHeight: scroller.clientHeight,
+            scrollHeight: scroller.scrollHeight,
+            nodeId: scroller.__websceneNativeNodeId
+          };
+        })()
+    )JS", "native-auto-height-overflow-auto.js");
+    require(
+        result.find(R"("popupHeight":109)") != std::string::npos
+            && result.find(R"("scrollerHeight":109)") != std::string::npos
+            && result.find(R"("clientHeight":109)") != std::string::npos
+            && result.find(R"("scrollHeight":109)") != std::string::npos,
+        "auto-height overflow:auto geometry did not settle without DOM overflow: " + result);
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_scroller = false;
+    auto painted_scrollbar = false;
+    for (auto attempt = 0; attempt < 100 && !observed_scroller; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            auto scroller_node_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x010203FFU) {
+                    observed_scroller = true;
+                    scroller_node_id = command.node_id;
+                    break;
+                }
+            }
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.node_id != scroller_node_id) continue;
+                if (command.kind == 10U
+                    && (command.rgba == 0x7F7F7F40U
+                        || command.rgba == 0xA0A0A0D0U)) {
+                    painted_scrollbar = true;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_scroller) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(observed_scroller, "auto-height overflow:auto scene was not published");
+    require(
+        !painted_scrollbar,
+        "auto-height overflow:auto painted a scrollbar despite equal client and scroll extents");
+}
+
 void test_constrained_column_flex_scroll_item_keeps_footer_inside(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

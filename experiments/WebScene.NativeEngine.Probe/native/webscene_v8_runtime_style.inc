@@ -10,6 +10,8 @@
             constexpr std::array grid_properties{
                 "grid-template-columns",
                 "grid-template-rows",
+                "grid-auto-columns",
+                "grid-auto-flow",
                 "grid-area",
                 "grid-row",
                 "grid-row-start",
@@ -1407,7 +1409,9 @@
                 ? "none"
                 : format_computed_length(node->style.max_height, node->layout.height);
         } else if (name == "display") {
-            value = display_mode_name(node->style.display);
+            value = display_mode_name(computed
+                ? blockified_display(*node)
+                : node->style.display);
         } else if (name == "direction") {
             value = "ltr";
         } else if (name == "position") {

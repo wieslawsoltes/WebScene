@@ -368,6 +368,7 @@ int main()
     test_fixed_table_distributes_excess_after_percentage_columns(engine);
     test_implicit_grid_contains_scrollable_table(engine);
     test_auto_height_flex_popup_expands_overflowing_flex_child(engine);
+    test_auto_height_overflow_auto_does_not_paint_phantom_scrollbar(engine);
     test_constrained_column_flex_scroll_item_keeps_footer_inside(engine);
     test_later_dom_overlay_background_paints_above_retained_canvas(engine);
     test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(engine);
