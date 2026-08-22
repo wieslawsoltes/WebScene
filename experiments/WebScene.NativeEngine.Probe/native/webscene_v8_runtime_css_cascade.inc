@@ -144,6 +144,21 @@
             && left_text.list_style_position == right_text.list_style_position
             && left_text.list_style_type == right_text.list_style_type
             && layout_length_equal(
+                left.transform_translate_x,
+                right.transform_translate_x)
+            && layout_length_equal(
+                left.transform_translate_y,
+                right.transform_translate_y)
+            && layout_length_equal(
+                left.transform_origin_x,
+                right.transform_origin_x)
+            && layout_length_equal(
+                left.transform_origin_y,
+                right.transform_origin_y)
+            && left.transform_scale_x == right.transform_scale_x
+            && left.transform_scale_y == right.transform_scale_y
+            && left.transform_rotate_degrees == right.transform_rotate_degrees
+            && layout_length_equal(
                 left_table.border_spacing_horizontal,
                 right_table.border_spacing_horizontal)
             && layout_length_equal(

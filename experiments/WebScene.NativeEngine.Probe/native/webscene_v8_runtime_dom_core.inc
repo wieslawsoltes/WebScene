@@ -491,6 +491,8 @@
         // These properties affect painting or interaction, but never box
         // measurement or flow. Publish the scene without synchronously
         // traversing layout again.
+        // Transforms are not flow-affecting, but CSSOM geometry observes
+        // their painted bounds and therefore requires a fresh layout.
         constexpr std::array paint_only_properties{
             std::string_view{"background"},
             std::string_view{"background-color"},
@@ -500,8 +502,6 @@
             std::string_view{"cursor"},
             std::string_view{"opacity"},
             std::string_view{"pointer-events"},
-            std::string_view{"transform"},
-            std::string_view{"transform-origin"},
             std::string_view{"visibility"},
             std::string_view{"-webkit-font-smoothing"}
         };
