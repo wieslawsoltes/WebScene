@@ -723,6 +723,7 @@
                     owner.last_resize_style_target_counts.clear();
                     owner.last_resize_attribute_counts.clear();
                     owner.last_resize_geometry_counts.clear();
+                    owner.last_resize_redundant_style_writes = 0;
                 }
             }
 

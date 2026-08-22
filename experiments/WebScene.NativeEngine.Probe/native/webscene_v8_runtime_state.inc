@@ -376,6 +376,7 @@
     std::unordered_map<std::string, uint64_t> last_resize_style_target_counts;
     std::unordered_map<std::string, uint64_t> last_resize_attribute_counts;
     std::unordered_map<std::string, uint64_t> last_resize_geometry_counts;
+    uint64_t last_resize_redundant_style_writes{0};
     std::string last_resize_cpu_profile;
     binding_callback_stats startup_resource_read{};
     binding_callback_stats startup_css_parse{};

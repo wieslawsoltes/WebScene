@@ -4082,6 +4082,8 @@ std::string v8_dom_runtime::event_diagnostics() const
         append_counts(
             "resize-geometry",
             impl_->last_resize_geometry_counts);
+        result << ", resize-redundant-style-writes="
+            << impl_->last_resize_redundant_style_writes;
     }
     if (!impl_->last_resize_cpu_profile.empty()) {
         result << ", resize-cpu=" << impl_->last_resize_cpu_profile;
