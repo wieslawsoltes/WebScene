@@ -130,7 +130,14 @@ void native_document::parse_transform_translate(
         return result;
     };
 
-    if (const auto arguments = parse_arguments("translate"); !arguments.empty()) {
+    if (const auto arguments = parse_arguments("translate3d");
+        arguments.size() >= 3 && parse_length(arguments[2]).value == 0.0F) {
+        // Floating UI libraries commonly emit translate3d(x, y, 0) to place
+        // fixed popovers. The zero-depth form is exactly representable by our
+        // two-dimensional scene transform, so retain its x/y translation.
+        translate_x = parse_length(arguments[0]);
+        translate_y = parse_length(arguments[1]);
+    } else if (const auto arguments = parse_arguments("translate"); !arguments.empty()) {
         translate_x = parse_length(arguments[0]);
         translate_y = arguments.size() > 1 ? parse_length(arguments[1]) : css_length{};
     } else {

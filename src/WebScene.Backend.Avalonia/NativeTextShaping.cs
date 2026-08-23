@@ -436,6 +436,16 @@ public static class NativeTextShaping
         foreach (var rune in text.EnumerateRunes())
         {
             var category = Rune.GetUnicodeCategory(rune);
+            // U+2318 is rendered by the system UI face as a keyboard shortcut
+            // glyph. Keep the surrounding run on browser-compatible platform
+            // advances without admitting arbitrary OtherSymbol glyphs (which
+            // may require a fallback or emoji typeface).
+            if (rune.Value == 0x2318)
+            {
+                sawCompatibleRune = true;
+                continue;
+            }
+
             if (IsLatinLetter(rune, category))
             {
                 sawCompatibleRune = true;

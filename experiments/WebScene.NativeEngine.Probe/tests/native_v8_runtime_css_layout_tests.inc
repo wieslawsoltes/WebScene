@@ -2553,6 +2553,34 @@ void test_transform_translate_calc_arguments_preserve_nested_functions(
             + result);
 }
 
+void test_zero_depth_translate3d_positions_fixed_coach_mark(webscene_engine* engine)
+{
+    resize(engine, 800, 600, 7187U);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const coach = document.createElement('div');
+          coach.style.cssText =
+            'position:fixed;inset:0 auto auto 0;'
+            + 'width:252px;height:109px;'
+            + 'transform:translate3d(187px,124px,0px)';
+          document.body.appendChild(coach);
+          const rect = coach.getBoundingClientRect();
+          return {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            transform: getComputedStyle(coach).transform
+          };
+        })()
+    )JS", "native-fixed-translate3d-coach.js");
+    require(
+        result == R"JSON({"x":187,"y":124,"width":252,"height":109,"transform":"matrix(1, 0, 0, 1, 187, 124)"})JSON",
+        "zero-depth translate3d did not position the fixed coach mark: " + result);
+}
+
 void test_transform_transition_uses_host_clock_for_translate_and_scale(
     webscene_engine* engine)
 {

@@ -343,6 +343,7 @@ int main()
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_translate_calc_arguments_preserve_nested_functions(engine);
+    test_zero_depth_translate3d_positions_fixed_coach_mark(engine);
     test_transform_transition_uses_host_clock_for_translate_and_scale(engine);
     test_transform_transition_interpolates_from_none(engine);
     test_cssom_serializes_resolved_numbers_without_trailing_zeroes(engine);

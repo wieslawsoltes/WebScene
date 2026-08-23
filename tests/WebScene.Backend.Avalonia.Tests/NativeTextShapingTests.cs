@@ -456,6 +456,30 @@ public sealed class NativeTextShapingTests
     }
 
     [Fact]
+    public void MacSystemUiCommandKeyShortcutUsesPlatformAdvance()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        const string family =
+            "-apple-system, system-ui, 'Trebuchet MS', Roboto, Ubuntu, sans-serif";
+        const string text =
+            "Press and hold ⌘ while zooming to maintain the chart position";
+        var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+        using var paint = new SKPaint { Typeface = typeface, TextSize = 14 };
+        var measured = NativeTextShaping.Measure(
+            text,
+            family,
+            14,
+            400,
+            0,
+            0);
+        var platformAdvance = paint.MeasureText(text);
+
+        Assert.True(NativeTextShaping.UsesMacSystemUiPlatformAdvances(text));
+        Assert.InRange(measured.AdvanceWidth / platformAdvance, .93f, 1.01f);
+    }
+
+    [Fact]
     public void MacSystemUiLatinRunWithTypographicApostropheUsesPlatformAdvance()
     {
         if (!OperatingSystem.IsMacOS()) return;

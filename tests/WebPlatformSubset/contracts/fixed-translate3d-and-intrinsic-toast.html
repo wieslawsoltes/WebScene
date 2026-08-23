@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fixed zero-depth translate3d and intrinsic flex toast geometry</title>
+<style>
+  body { margin: 0; }
+  #coach {
+    position: fixed;
+    inset: 0 auto auto 0;
+    transform: translate3d(187px, 124px, 0px);
+    width: 252px;
+    height: 109px;
+  }
+  #toast-host {
+    position: absolute;
+    left: 10px;
+    bottom: 20px;
+    display: flex;
+    justify-content: center;
+    width: 700px;
+  }
+  #toast-center { display: block; }
+  #toast {
+    display: flex;
+    min-width: 0;
+    padding: 8px;
+  }
+  #toast-content {
+    padding: 4px 8px;
+  }
+  #toast-text {
+    min-width: 0;
+    overflow-wrap: break-word;
+    font: 14px/21px -apple-system, system-ui, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  }
+  #toast-close {
+    display: block;
+    flex: 0 1 auto;
+    width: 18px;
+    height: 21px;
+  }
+</style>
+<div id="coach"></div>
+<div id="toast-host">
+  <div id="toast-center">
+    <div id="toast">
+      <div id="toast-content"><div id="toast-text">Press and hold ⌘ while zooming to maintain the chart position</div></div>
+      <span id="toast-close"></span>
+    </div>
+  </div>
+</div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const close = (actual, expected, label, tolerance = .01) => assert(
+  Math.abs(actual - expected) <= tolerance,
+  `${label}: expected ${expected}, got ${actual}`);
+try {
+  const coach = document.getElementById("coach");
+  const coachRect = coach.getBoundingClientRect();
+  close(coachRect.x, 187, "fixed coach x");
+  close(coachRect.y, 124, "fixed coach y");
+  close(coachRect.width, 252, "fixed coach width");
+  close(coachRect.height, 109, "fixed coach height");
+  const transform = getComputedStyle(coach).transform;
+  assert(transform === "matrix(1, 0, 0, 1, 187, 124)",
+    "zero-depth translate3d did not serialize as the expected 2D matrix: " + transform);
+
+  const textRect = document.getElementById("toast-text").getBoundingClientRect();
+  const toastRect = document.getElementById("toast").getBoundingClientRect();
+  assert(textRect.height <= 21.1,
+    "the intrinsic toast label wrapped: " + JSON.stringify(textRect));
+  assert(textRect.width > 380,
+    "the system-ui command-key run was intrinsically undersized: " + textRect.width);
+  assert(toastRect.width >= textRect.width + 50,
+    "the flex toast omitted content, close-control, or padding width: "
+      + JSON.stringify({ toastRect, textRect }));
+
+  state.results.push({
+    name: "fixed translate3d coach marks and intrinsic flex toasts retain browser geometry",
+    status: "PASS", message: null, stack: null
+  });
+  state.harness = { status: 0, message: null, stack: null };
+  state.diagnostics.push(JSON.stringify({ coachRect, transform, toastRect, textRect }));
+} catch (error) {
+  const message = String(error && error.message || error);
+  const stack = error && error.stack ? String(error.stack) : null;
+  state.results.push({
+    name: "fixed translate3d coach marks and intrinsic flex toasts retain browser geometry",
+    status: "FAIL", message, stack
+  });
+  state.harness = { status: 1, message, stack };
+}
+state.complete = true;
+</script>
