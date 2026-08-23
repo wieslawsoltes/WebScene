@@ -1361,7 +1361,12 @@
                 js_string(info.GetIsolate(), "eventPhase"),
                 v8::Integer::New(info.GetIsolate(), phase)).Check();
         };
-        const auto listeners = self->frame_event_listeners.find(type);
+        const auto listeners_at_dispatch_start =
+            self->frame_event_listeners.find(type);
+        const auto listener_count_at_dispatch_start =
+            listeners_at_dispatch_start == self->frame_event_listeners.end()
+                ? 0U
+                : listeners_at_dispatch_start->second.size();
         v8::Local<v8::Value> arguments[] = {event};
         const auto invoke_callback = [&](
             v8::Local<v8::Value> callback,
@@ -1397,10 +1402,15 @@
             v8::Local<v8::Object> current_target,
             bool capture,
             int phase) {
+            auto listeners = self->frame_event_listeners.find(type);
             if (listeners == self->frame_event_listeners.end()) return true;
             set_retargeted_target(self->document.find_by_native_id(target_id));
             set_phase(current_target, phase);
-            const auto listener_count = listeners->second.size();
+            // Listener eligibility is fixed when dispatch starts. A listener
+            // installed by an overlay anchor must not observe that same click.
+            const auto listener_count = std::min(
+                listener_count_at_dispatch_start,
+                listeners->second.size());
             for (size_t index = 0; index < listener_count; ++index) {
                 auto& listener = listeners->second[index];
                 if (listener.context.Get(info.GetIsolate()) != local_context
@@ -1642,7 +1652,8 @@
                 }
             }
         }
-        if (listeners != self->frame_event_listeners.end()) {
+        if (auto listeners = self->frame_event_listeners.find(type);
+            listeners != self->frame_event_listeners.end()) {
             std::erase_if(
                 listeners->second,
                 [](const auto& listener) { return listener.callback.IsEmpty(); });

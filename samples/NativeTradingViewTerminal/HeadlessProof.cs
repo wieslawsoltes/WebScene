@@ -848,6 +848,47 @@ internal static class HeadlessProof
         int width,
         int height)
     {
+        var isOrderMenu = overlay == "order-menu";
+        if (isOrderMenu)
+        {
+            var openTicket = view.EvaluateTextAsync("""
+                (() => {
+                  const chartDocument = Array.from(
+                    document.querySelectorAll('iframe'))
+                    .map(frame => frame.contentDocument)
+                    .find(candidate =>
+                      candidate?.querySelectorAll('canvas').length >= 8);
+                  const sell = Array.from(
+                    chartDocument?.querySelectorAll('*') ?? [])
+                    .find(candidate => {
+                      const rect = candidate.getBoundingClientRect();
+                      return candidate.children.length === 0
+                        && candidate.textContent?.trim().toLowerCase() === 'sell'
+                        && rect.width > 0 && rect.height > 0
+                        && rect.y < 150;
+                    });
+                  if (!sell) return null;
+                  const rect = sell.getBoundingClientRect();
+                  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+                })()
+                """);
+            PumpUntil(openTicket, TimeSpan.FromSeconds(10));
+            using var ticketGeometry = JsonDocument.Parse(openTicket.Result);
+            if (ticketGeometry.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException(
+                    "TradingView Sell control was unavailable.");
+            }
+            var ticketX = ticketGeometry.RootElement.GetProperty("x").GetDouble();
+            var ticketY = ticketGeometry.RootElement.GetProperty("y").GetDouble();
+            surface.SubmitAvaloniaPointerMove(ticketX, ticketY);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(100));
+            surface.SubmitPointerButton(2, ticketX, ticketY, 0, pressed: true);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(50));
+            surface.SubmitPointerButton(3, ticketX, ticketY, 0, pressed: false);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(750));
+        }
+
         var selector = overlay switch
         {
             "layout" => """
@@ -863,6 +904,9 @@ internal static class HeadlessProof
                 candidate === chartDocument.querySelector(
                   '.layout__area--right [class^="toolbar-"]')
                   ?.querySelectorAll('button')[1]
+                """,
+            "order-menu" => """
+                candidate.getAttribute('data-qa-id') === 'header-settings'
                 """,
             _ => throw new ArgumentException(
                 $"Unknown TradingView overlay '{overlay}'.")
@@ -905,6 +949,98 @@ internal static class HeadlessProof
         PumpFrames(view, window, TimeSpan.FromMilliseconds(50));
         surface.SubmitPointerButton(3, x, y, 0, pressed: false);
         PumpFrames(view, window, TimeSpan.FromSeconds(1));
+        if (isOrderMenu)
+        {
+            var menuEvidence = view.EvaluateTextAsync("""
+                (() => {
+                  const chartDocument = Array.from(
+                    document.querySelectorAll('iframe'))
+                    .map(frame => frame.contentDocument)
+                    .find(candidate =>
+                      candidate?.querySelectorAll('canvas').length >= 8);
+                  const undock = Array.from(
+                    chartDocument?.querySelectorAll('*') ?? [])
+                    .find(candidate => candidate.children.length === 0
+                      && candidate.textContent?.trim() === 'Undock order panel');
+                  const describe = node => {
+                    const result = [];
+                    for (let current = node;
+                         current && result.length < 18;
+                         current = current.parentElement) {
+                      const rect = current.getBoundingClientRect();
+                      const style = getComputedStyle(current);
+                      result.push({
+                        tag: current.tagName,
+                        className: current.className,
+                        role: current.getAttribute('role'),
+                        styleAttribute: current.getAttribute('style'),
+                        rect: {
+                          x: rect.x, y: rect.y,
+                          width: rect.width, height: rect.height
+                        },
+                        display: style.display,
+                        position: style.position,
+                        transform: style.transform,
+                        width: style.width,
+                        height: style.height,
+                        minWidth: style.minWidth,
+                        maxWidth: style.maxWidth,
+                        overflow: style.overflow,
+                        contain: style.contain,
+                        gridTemplateColumns: style.gridTemplateColumns,
+                        flex: style.flex,
+                        zIndex: style.zIndex,
+                        backgroundColor: style.backgroundColor
+                      });
+                    }
+                    return result;
+                  };
+                  return {
+                    found: Boolean(undock),
+                    bodyTextIncludesMenu:
+                      chartDocument?.body?.innerText?.includes(
+                        'Undock order panel') ?? false,
+                    headerSettingsCount: chartDocument?.querySelectorAll(
+                      'button[data-qa-id="header-settings"]').length ?? 0,
+                    closeButtonCount: chartDocument?.querySelectorAll(
+                      'button[data-qa-id="button-close"]').length ?? 0,
+                    chain: describe(undock)
+                  };
+                })()
+                """);
+            PumpUntil(menuEvidence, TimeSpan.FromSeconds(10));
+            File.WriteAllText(
+                Path.Combine(output, "native-tradingview-order-menu-evidence.json"),
+                menuEvidence.Result);
+            using var menuDocument = JsonDocument.Parse(menuEvidence.Result);
+            var menuRoot = menuDocument.RootElement;
+            var positionerMatches = false;
+            foreach (var item in menuRoot.GetProperty("chain").EnumerateArray())
+            {
+                var className = item.GetProperty("className").GetString() ?? "";
+                if (!className.Contains("positioner-", StringComparison.Ordinal)) continue;
+                var rect = item.GetProperty("rect");
+                var menuRight = rect.GetProperty("x").GetDouble()
+                    + rect.GetProperty("width").GetDouble();
+                positionerMatches = item.GetProperty("position").GetString() == "fixed"
+                    && rect.GetProperty("x").GetDouble() >= 0
+                    && rect.GetProperty("y").GetDouble() >= 0
+                    && rect.GetProperty("width").GetDouble() >= 200
+                    && rect.GetProperty("height").GetDouble() >= 110
+                    && menuRight <= width;
+                break;
+            }
+            if (!menuRoot.GetProperty("found").GetBoolean()
+                || !menuRoot.GetProperty("bodyTextIncludesMenu").GetBoolean()
+                || menuRoot.GetProperty("headerSettingsCount").GetInt32() != 1
+                || menuRoot.GetProperty("closeButtonCount").GetInt32() != 1
+                || !positionerMatches)
+            {
+                throw new InvalidOperationException(
+                    "TradingView order menu did not remain open with a visible, "
+                    + $"fixed-position portal: {menuEvidence.Result}");
+            }
+        }
         SaveNativeFrame(
             surface,
             Path.Combine(output, $"native-tradingview-{overlay}.png"),

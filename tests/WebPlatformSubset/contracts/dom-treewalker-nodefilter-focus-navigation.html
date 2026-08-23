@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NodeFilter and TreeWalker focus-navigation primitives</title>
+<body>
+<div id="root">
+  <button id="first">first</button>
+  <div class="skip"><button id="nested">nested</button></div>
+  <div class="reject"><button id="rejected">rejected</button></div>
+  <button id="last"><span class="skip"><span id="deep">deep</span></span></button>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL", message: String(error.message || error), stack: error.stack || null
+      });
+    }
+  }
+
+  const root = document.getElementById("root");
+  const filter = node => {
+    if (node.classList.contains("reject")) return NodeFilter.FILTER_REJECT;
+    if (node.classList.contains("skip")) return NodeFilter.FILTER_SKIP;
+    return node.matches("button, #deep")
+      ? NodeFilter.FILTER_ACCEPT
+      : NodeFilter.FILTER_SKIP;
+  };
+
+  test("NodeFilter exposes the constants used by focus navigation", () => {
+    assert(NodeFilter.SHOW_ELEMENT === 1, "SHOW_ELEMENT was not 1");
+    assert(NodeFilter.FILTER_ACCEPT === 1, "FILTER_ACCEPT was not 1");
+    assert(NodeFilter.FILTER_REJECT === 2, "FILTER_REJECT was not 2");
+    assert(NodeFilter.FILTER_SKIP === 3, "FILTER_SKIP was not 3");
+  });
+
+  test("TreeWalker applies SHOW_ELEMENT, skip, and rejected-subtree semantics", () => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, filter);
+    assert(walker instanceof TreeWalker, "createTreeWalker did not return a TreeWalker");
+    assert(walker.root === root, "TreeWalker root identity changed");
+    assert(walker.currentNode === root, "TreeWalker did not start at its root");
+    const ids = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) ids.push(node.id);
+    assert(ids.join(",") === "first,nested,last,deep",
+      `filtered traversal order was ${ids.join(",")}`);
+  });
+
+  test("lastChild and previousNode support the focus utility traversal pattern", () => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, filter);
+    walker.currentNode = root;
+    assert(walker.lastChild()?.id === "last", "lastChild did not select the last visible child");
+    assert(walker.lastChild()?.id === "deep", "lastChild did not descend through a skipped wrapper");
+    assert(walker.lastChild() === null, "leaf lastChild did not return null");
+    assert(walker.previousNode()?.id === "last", "previousNode did not return the preceding accepted node");
+    assert(walker.previousNode()?.id === "nested", "previousNode traversal order was incorrect");
+  });
+
+  test("sibling navigation crosses skipped wrappers without escaping the root", () => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, filter);
+    walker.currentNode = document.getElementById("nested");
+    assert(walker.previousSibling()?.id === "first",
+      "previousSibling did not cross the skipped parent");
+    assert(walker.nextSibling()?.id === "nested",
+      "nextSibling did not return across the skipped parent");
+    assert(walker.nextSibling()?.id === "last",
+      "nextSibling did not advance past a rejected subtree");
+    walker.currentNode = root;
+    assert(walker.parentNode() === null, "parentNode escaped the TreeWalker root");
+    assert(walker.previousSibling() === null, "previousSibling escaped the TreeWalker root");
+    assert(walker.nextSibling() === null, "nextSibling escaped the TreeWalker root");
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

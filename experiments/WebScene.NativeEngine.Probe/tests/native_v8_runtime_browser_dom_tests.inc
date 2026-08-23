@@ -942,6 +942,98 @@ void test_input_dispatch_failures_are_attributed_and_consumable(webscene_engine*
         "input-dispatch failure was not consumed exactly once");
 }
 
+void test_listener_added_during_dispatch_waits_for_next_event(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<button id="anchor">open</button>';
+          const anchor = document.getElementById('anchor');
+          const calls = [];
+          const late = event => calls.push(`late:${event.target.id}`);
+          document.addEventListener('click', event =>
+            calls.push(`early:${event.target.id}`));
+          anchor.addEventListener('click', () => {
+            calls.push('anchor');
+            document.addEventListener('click', late);
+          });
+          anchor.click();
+          const first = calls.slice();
+          document.body.click();
+          return { first, all: calls };
+        })()
+    )JS", "native-listener-added-during-dispatch.js");
+    require(
+        result == R"JSON({"first":["anchor","early:anchor"],"all":["anchor","early:anchor","early:","late:"]})JSON",
+        "a listener added during dispatch observed the active event: " + result);
+}
+
+void test_node_filter_tree_walker_focus_navigation(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <div id="root">
+              <button id="first"></button>
+              <div class="skip"><button id="nested"></button></div>
+              <div class="reject"><button id="rejected"></button></div>
+              <button id="last"><span class="skip"><span id="deep"></span></span></button>
+            </div>`;
+          const root = document.getElementById('root');
+          const filter = node => {
+            if (node.classList.contains('reject')) return NodeFilter.FILTER_REJECT;
+            if (node.classList.contains('skip')) return NodeFilter.FILTER_SKIP;
+            return node.matches('button, #deep')
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_SKIP;
+          };
+          const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_ELEMENT,
+            filter);
+          const forward = [];
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            forward.push(node.id);
+          }
+          walker.currentNode = root;
+          const last = walker.lastChild()?.id ?? null;
+          const deep = walker.lastChild()?.id ?? null;
+          const leaf = walker.lastChild();
+          const previous = walker.previousNode()?.id ?? null;
+          const siblingWalker = document.createTreeWalker(
+            root, NodeFilter.SHOW_ELEMENT, filter);
+          siblingWalker.currentNode = document.getElementById('nested');
+          const siblings = [
+            siblingWalker.previousSibling()?.id ?? null,
+            siblingWalker.nextSibling()?.id ?? null,
+            siblingWalker.nextSibling()?.id ?? null
+          ];
+          siblingWalker.currentNode = root;
+          const rootBounds = [
+            siblingWalker.parentNode(),
+            siblingWalker.previousSibling(),
+            siblingWalker.nextSibling()
+          ];
+          return {
+            constants: [
+              NodeFilter.SHOW_ELEMENT,
+              NodeFilter.FILTER_ACCEPT,
+              NodeFilter.FILTER_REJECT,
+              NodeFilter.FILTER_SKIP
+            ],
+            instance: walker instanceof TreeWalker,
+            root: walker.root === root,
+            forward,
+            reverse: [last, deep, leaf, previous],
+            siblings,
+            rootBounds
+          };
+        })()
+    )JS", "native-node-filter-tree-walker.js");
+    require(
+        result == R"JSON({"constants":[1,1,2,3],"instance":true,"root":true,"forward":["first","nested","last","deep"],"reverse":["last","deep",null,"last"],"siblings":["first","nested","last"],"rootBounds":[null,null,null]})JSON",
+        "NodeFilter/TreeWalker focus navigation regressed: " + result);
+}
+
 void test_animation_frame_dispatch_is_attributed()
 {
     auto* engine = webscene_engine_create(0);

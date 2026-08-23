@@ -1973,7 +1973,167 @@ struct v8_dom_runtime::implementation final {
                 }
                 return result;
               }
-            })JS",
+            }
+
+            const nodeFilterConstants = {
+              FILTER_ACCEPT: 1, FILTER_REJECT: 2, FILTER_SKIP: 3,
+              SHOW_ALL: 0xffffffff, SHOW_ELEMENT: 0x1, SHOW_ATTRIBUTE: 0x2,
+              SHOW_TEXT: 0x4, SHOW_CDATA_SECTION: 0x8,
+              SHOW_ENTITY_REFERENCE: 0x10, SHOW_ENTITY: 0x20,
+              SHOW_PROCESSING_INSTRUCTION: 0x40, SHOW_COMMENT: 0x80,
+              SHOW_DOCUMENT: 0x100, SHOW_DOCUMENT_TYPE: 0x200,
+              SHOW_DOCUMENT_FRAGMENT: 0x400, SHOW_NOTATION: 0x800
+            };
+            function WebSceneNodeFilter() {
+              throw new TypeError('Illegal constructor');
+            }
+            Object.assign(WebSceneNodeFilter, nodeFilterConstants);
+            Object.assign(WebSceneNodeFilter.prototype, nodeFilterConstants);
+
+            class WebSceneTreeWalker {
+              constructor(root, whatToShow = nodeFilterConstants.SHOW_ALL, filter = null) {
+                if (!root || typeof root.nodeType !== 'number') {
+                  throw new TypeError('TreeWalker root must be a Node');
+                }
+                this.root = root;
+                this.whatToShow = Number(whatToShow) >>> 0;
+                this.filter = filter ?? null;
+                this._currentNode = root;
+              }
+              get currentNode() { return this._currentNode; }
+              set currentNode(value) {
+                if (!value || typeof value.nodeType !== 'number') {
+                  throw new TypeError('TreeWalker.currentNode must be a Node');
+                }
+                this._currentNode = value;
+              }
+              _filterNode(node) {
+                const mask = node.nodeType > 0 && node.nodeType <= 32
+                  ? (1 << (node.nodeType - 1)) >>> 0
+                  : 0;
+                if ((this.whatToShow & mask) === 0) {
+                  return nodeFilterConstants.FILTER_SKIP;
+                }
+                if (this.filter == null) return nodeFilterConstants.FILTER_ACCEPT;
+                const callback = typeof this.filter === 'function'
+                  ? this.filter
+                  : this.filter.acceptNode;
+                if (typeof callback !== 'function') {
+                  throw new TypeError('TreeWalker filter must be callable');
+                }
+                return Number(callback.call(this.filter, node));
+              }
+              _visibleChildren(parent) {
+                const result = [];
+                const append = node => {
+                  for (let child = node.firstChild; child; child = child.nextSibling) {
+                    const decision = this._filterNode(child);
+                    if (decision === nodeFilterConstants.FILTER_ACCEPT) {
+                      result.push(child);
+                    } else if (decision === nodeFilterConstants.FILTER_SKIP) {
+                      append(child);
+                    }
+                  }
+                };
+                append(parent);
+                return result;
+              }
+              _acceptedNodes() {
+                const result = [];
+                const visit = node => {
+                  for (let child = node.firstChild; child; child = child.nextSibling) {
+                    const decision = this._filterNode(child);
+                    if (decision === nodeFilterConstants.FILTER_ACCEPT) {
+                      result.push(child);
+                      visit(child);
+                    } else if (decision === nodeFilterConstants.FILTER_SKIP) {
+                      visit(child);
+                    }
+                  }
+                };
+                visit(this.root);
+                return result;
+              }
+              parentNode() {
+                if (this._currentNode === this.root) return null;
+                for (let parent = this._currentNode.parentNode;
+                     parent;
+                     parent = parent.parentNode) {
+                  if (parent === this.root) {
+                    this._currentNode = parent;
+                    return parent;
+                  }
+                  if (this._filterNode(parent) === nodeFilterConstants.FILTER_ACCEPT) {
+                    this._currentNode = parent;
+                    return parent;
+                  }
+                }
+                return null;
+              }
+              firstChild() {
+                const child = this._visibleChildren(this._currentNode)[0] ?? null;
+                if (child) this._currentNode = child;
+                return child;
+              }
+              lastChild() {
+                const children = this._visibleChildren(this._currentNode);
+                const child = children[children.length - 1] ?? null;
+                if (child) this._currentNode = child;
+                return child;
+              }
+              _sibling(direction) {
+                if (this._currentNode === this.root) return null;
+                for (let parent = this._currentNode.parentNode;
+                     parent;
+                     parent = parent.parentNode) {
+                  const isVisibleParent = parent === this.root
+                    || this._filterNode(parent) === nodeFilterConstants.FILTER_ACCEPT;
+                  if (!isVisibleParent) continue;
+                  const siblings = this._visibleChildren(parent);
+                  const index = siblings.indexOf(this._currentNode);
+                  if (index >= 0) {
+                    const sibling = siblings[index + direction] ?? null;
+                    if (sibling) this._currentNode = sibling;
+                    return sibling;
+                  }
+                  if (parent === this.root) break;
+                }
+                return null;
+              }
+              previousSibling() { return this._sibling(-1); }
+              nextSibling() { return this._sibling(1); }
+              previousNode() {
+                const nodes = this._acceptedNodes();
+                const index = nodes.indexOf(this._currentNode);
+                const previous = index > 0 ? nodes[index - 1] : null;
+                if (previous) this._currentNode = previous;
+                return previous;
+              }
+              nextNode() {
+                const nodes = this._acceptedNodes();
+                const index = this._currentNode === this.root
+                  ? -1
+                  : nodes.indexOf(this._currentNode);
+                const next = index >= -1 ? nodes[index + 1] ?? null : null;
+                if (next) this._currentNode = next;
+                return next;
+              }
+            }
+
+            const installTreeWalkerPlatform = () => {
+              const createTreeWalker = function(
+                  root,
+                  whatToShow = nodeFilterConstants.SHOW_ALL,
+                  filter = null) {
+                return new WebSceneTreeWalker(root, whatToShow, filter);
+              };
+              const documentPrototype = globalThis.Document?.prototype
+                ?? Object.getPrototypeOf(document);
+              Object.defineProperty(documentPrototype, 'createTreeWalker', {
+                value: createTreeWalker, writable: true, configurable: true
+              });
+            };
+            )JS",
             R"JS(
 
             const installCustomElementsPlatform = () => {
@@ -2297,6 +2457,9 @@ struct v8_dom_runtime::implementation final {
               __webSceneInstallCustomElementsPlatform: {
                 value: installCustomElementsPlatform, configurable: true
               },
+              __webSceneInstallTreeWalkerPlatform: {
+                value: installTreeWalkerPlatform, configurable: true
+              },
               queueMicrotask: {
                 value: enqueueMicrotask, writable: true, configurable: true
               },
@@ -2305,6 +2468,12 @@ struct v8_dom_runtime::implementation final {
               },
               TextDecoder: {
                 value: WebSceneTextDecoder, writable: true, configurable: true
+              },
+              NodeFilter: {
+                value: WebSceneNodeFilter, writable: true, configurable: true
+              },
+              TreeWalker: {
+                value: WebSceneTreeWalker, writable: true, configurable: true
               }
             });
           })();
@@ -2351,6 +2520,30 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
+                + describe_exception(try_catch, local_context);
+        }
+    }
+
+    void install_tree_walker_platform(v8::Local<v8::Context> local_context)
+    {
+        auto global = local_context->Global();
+        v8::Local<v8::Value> raw_installer;
+        if (!global->Get(
+                local_context,
+                js_string(isolate, "__webSceneInstallTreeWalkerPlatform"))
+                .ToLocal(&raw_installer)
+            || !raw_installer->IsFunction()) {
+            last_error = "The TreeWalker bootstrap installer is unavailable.";
+            return;
+        }
+        v8::TryCatch try_catch(isolate);
+        static_cast<void>(raw_installer.As<v8::Function>()->Call(
+            local_context,
+            global,
+            0,
+            nullptr));
+        if (try_catch.HasCaught()) {
+            last_error = "TreeWalker bootstrap failed: "
                 + describe_exception(try_catch, local_context);
         }
     }
@@ -2842,6 +3035,7 @@ struct v8_dom_runtime::implementation final {
         crypto_script->Run(local_context).ToLocalChecked();
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
+        install_tree_walker_platform(local_context);
         install_custom_elements_platform(local_context);
         install_fetch_globals(local_context);
         install_intersection_observer_polyfill(local_context);

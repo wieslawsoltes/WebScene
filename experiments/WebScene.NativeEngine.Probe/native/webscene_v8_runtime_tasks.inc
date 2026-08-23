@@ -1405,7 +1405,11 @@
 #endif
         ++input_event_dispatch_count;
         v8::Local<v8::Value> arguments[] = {event};
-        const auto listeners = frame_event_listeners.find(type);
+        const auto listeners_at_dispatch_start = frame_event_listeners.find(type);
+        const auto listener_count_at_dispatch_start =
+            listeners_at_dispatch_start == frame_event_listeners.end()
+                ? 0U
+                : listeners_at_dispatch_start->second.size();
         const auto retargeted_node = [&](const dom_node* current_target) {
             const auto* root = document.containing_shadow_root(target);
             if (root == nullptr) return &target;
@@ -1426,11 +1430,18 @@
             v8::Local<v8::Object> current_target,
             bool capture,
             int event_phase) {
+            auto listeners = frame_event_listeners.find(type);
             if (listeners == frame_event_listeners.end()) return true;
             set_retargeted_target(document.find_by_native_id(registered_target));
             event->Set(local_context, js_string(isolate, "currentTarget"), current_target).Check();
             set_number("eventPhase", event_phase);
-            const auto listener_count = listeners->second.size();
+            // The DOM dispatch algorithm snapshots listener eligibility when
+            // dispatch starts. An overlay commonly installs its document-level
+            // dismissal listener while handling the anchor click; that listener
+            // must begin with the next event, not a later phase of this one.
+            const auto listener_count = std::min(
+                listener_count_at_dispatch_start,
+                listeners->second.size());
             for (size_t index = 0; index < listener_count; ++index) {
                 auto& listener = listeners->second[index];
                 if (listener.context.Get(isolate) != local_context
@@ -1615,7 +1626,8 @@
         // its root mouseup callback. Removal tombstones the callback so the
         // active dispatch remains stable; compact tombstones only after every
         // callback for this event has completed.
-        if (listeners != frame_event_listeners.end()) {
+        if (auto listeners = frame_event_listeners.find(type);
+            listeners != frame_event_listeners.end()) {
             std::erase_if(
                 listeners->second,
                 [](const auto& listener) { return listener.callback.IsEmpty(); });

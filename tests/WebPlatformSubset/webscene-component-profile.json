@@ -557,6 +557,20 @@
       "reason": "Required after direct Chrome authority and the native runner pass all 3/3 event assertions and the originating unchanged Bootstrap nested data-api cases pass. Evidence: artifacts/wpt-bootstrap-collapse-reductions-chrome-v1-20260723, artifacts/wpt-bootstrap-collapse-reductions-adapters-v2-20260723, and artifacts/ecosystem-consumers-matrix-v21-bootstrap-collapse-complete-20260723."
     },
     {
+      "path": "contracts/dom-listener-added-during-dispatch.html",
+      "type": "contract",
+      "capabilities": ["event-listener-dispatch-snapshot", "mid-dispatch-listener-registration", "deferred-overlay-dismissal-listener"],
+      "evidence": ["browser-authorized-order-menu-interaction", "native-event-dispatch-regression", "actual-tradingview-order-menu-proof"],
+      "reason": "Product-neutral reduction of an overlay anchor that installs its document-level dismissal listener while handling the opening click. The new listener must not observe the event currently being dispatched, but must be eligible for the next click."
+    },
+    {
+      "path": "contracts/dom-treewalker-nodefilter-focus-navigation.html",
+      "type": "contract",
+      "capabilities": ["nodefilter-constants", "document-create-tree-walker", "treewalker-filter-semantics", "focus-navigation-tree-traversal"],
+      "evidence": ["browser-authorized-order-menu-focus-management", "native-treewalker-regression", "actual-tradingview-order-menu-proof"],
+      "reason": "Product-neutral reduction of the focus-navigation primitive used by the TradingView order-menu portal. It verifies SHOW_ELEMENT filtering, FILTER_ACCEPT/SKIP/REJECT subtree semantics, currentNode/root identity and boundaries, document-order traversal, sibling navigation across skipped wrappers, and the lastChild/previousNode pattern used to locate focusable descendants."
+    },
+    {
       "path": "contracts/dom-scope-descendant-selector.html",
       "type": "contract",
       "capabilities": ["scope-pseudo-class", "scoped-descendant-selector", "scoped-child-selector", "element-query-selector"],

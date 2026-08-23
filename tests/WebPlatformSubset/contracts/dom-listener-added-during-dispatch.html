@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Listeners added during dispatch start with the next event</title>
+<body>
+<button id="anchor">Open menu</button>
+<div id="menu" hidden>Menu remains open</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL", message: String(error.message || error), stack: error.stack || null
+      });
+    }
+  }
+
+  test("a document dismissal listener added by the anchor waits for the next click", () => {
+    const anchor = document.getElementById("anchor");
+    const menu = document.getElementById("menu");
+    const calls = [];
+    const dismiss = event => {
+      calls.push(`dismiss:${event.target.id}`);
+      menu.hidden = true;
+    };
+    document.addEventListener("click", event => {
+      calls.push(`existing:${event.target.id}`);
+    });
+    anchor.addEventListener("click", () => {
+      calls.push("open");
+      menu.hidden = false;
+      document.addEventListener("click", dismiss);
+    });
+
+    anchor.click();
+    assert(!menu.hidden, "the opening click reached the newly added dismissal listener");
+    assert(calls.join(",") === "open,existing:anchor",
+      `opening listener order was ${calls.join(",")}`);
+
+    document.body.click();
+    assert(menu.hidden, "the dismissal listener did not run for the next click");
+    assert(calls.join(",") === "open,existing:anchor,existing:,dismiss:",
+      `next-event listener order was ${calls.join(",")}`);
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

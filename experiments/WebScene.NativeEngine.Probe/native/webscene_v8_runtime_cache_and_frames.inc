@@ -1692,6 +1692,7 @@
         message_channel_script->Run(local_context).ToLocalChecked();
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
+        install_tree_walker_platform(local_context);
         install_custom_elements_platform(local_context);
         install_fetch_globals(local_context);
         install_intersection_observer_polyfill(local_context);

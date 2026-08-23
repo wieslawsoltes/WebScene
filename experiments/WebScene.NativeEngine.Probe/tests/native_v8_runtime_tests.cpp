@@ -392,6 +392,8 @@ int main()
     test_secondary_click(engine);
     test_primary_click_mouse_event_detail(engine);
     test_event_listener_options_reach_native_input_and_resize(engine);
+    test_listener_added_during_dispatch_waits_for_next_event(engine);
+    test_node_filter_tree_walker_focus_navigation(engine);
     test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
     test_document_create_event_and_init_event(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
