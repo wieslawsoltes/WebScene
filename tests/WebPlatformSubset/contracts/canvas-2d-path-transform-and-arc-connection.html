@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Canvas paths retain authored transforms and full-circle connections</title>
+<style>
+  html, body { margin: 0; }
+  canvas { display: block; width: 160px; height: 100px; }
+</style>
+<canvas width="160" height="100"></canvas>
+<script>
+  const context = document.querySelector("canvas").getContext("2d");
+  context.fillStyle = "#0f0f0f";
+  context.fillRect(0, 0, 160, 100);
+
+  // These failure markers are covered only when path construction follows the
+  // browser semantics exercised below.
+  context.fillStyle = "#ff0000";
+  context.fillRect(58, 18, 5, 5);
+  context.fillRect(67, 50, 5, 5);
+
+  context.strokeStyle = "#00ff00";
+  context.lineWidth = 6;
+
+  context.setTransform(2, 0, 0, 1, 0, 0);
+  context.beginPath();
+  context.arc(20, 20, 10, 0, Math.PI * 2);
+  context.resetTransform();
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(50, 40);
+  context.arc(80, 65, 8, 0, Math.PI * 2);
+  context.stroke();
+</script>

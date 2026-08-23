@@ -58,4 +58,29 @@ public sealed class NativeCanvasEllipseTests
         Assert.InRange(path.Bounds.Right, 60 - 0.01f, 60 + 0.01f);
         Assert.InRange(path.Bounds.Bottom, 60 - 0.01f, 60 + 0.01f);
     }
+
+    [Fact]
+    public void ZeroHorizontalRadiusRetainsDegenerateVerticalPath()
+    {
+        var command = new NativeCanvasCommand
+        {
+            Kind = 30,
+            V0 = 50,
+            V1 = 40,
+            V2 = 0,
+            V3 = 10,
+            V4 = 0,
+            V5 = 0,
+            V6 = Math.PI * 2,
+            V7 = 0
+        };
+        using var path = new SKPath();
+
+        NativeCanvasSceneRenderer.AppendEllipse(path, command);
+
+        Assert.True(path.PointCount > 0);
+        Assert.InRange(path.Bounds.Left, 49.99f, 50.01f);
+        Assert.InRange(path.Bounds.Top, 29.99f, 30.01f);
+        Assert.InRange(path.Bounds.Bottom, 49.99f, 50.01f);
+    }
 }

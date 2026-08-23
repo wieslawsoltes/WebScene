@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Canvas 2D counterclockwise arcs render selected trendline handles</title>
+<style>
+  html, body { margin: 0; }
+  #stage { width: 320px; height: 180px; overflow: hidden; }
+  canvas { display: block; width: 320px; height: 180px; }
+</style>
+<div id="stage"><canvas id="chart" width="320" height="180"></canvas></div>
+<script>
+  const context = document.querySelector("#chart").getContext("2d");
+
+  context.fillStyle = "#0f0f0f";
+  context.fillRect(0, 0, 320, 180);
+
+  context.strokeStyle = "#2962ff";
+  context.lineWidth = 2;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(52, 136);
+  context.lineTo(268, 32);
+  context.stroke();
+
+  function drawSelectedHandle(x, y) {
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.fillStyle = "#0f0f0f";
+    context.strokeStyle = "#1e53e5";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(x, y, 5.5, 0, Math.PI * 2, true);
+    context.closePath();
+    context.fill();
+    context.stroke();
+    context.restore();
+  }
+
+  drawSelectedHandle(52, 136);
+  drawSelectedHandle(268, 32);
+</script>

@@ -1354,29 +1354,80 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 case 2:
                     if (states.Count != 0)
                     {
+                        var previousMatrix = canvas.TotalMatrix;
                         state = states.Pop();
                         canvas.Restore();
+                        PreservePathAcrossTransformChange(
+                            path,
+                            previousMatrix,
+                            canvas.TotalMatrix);
                     }
                     break;
                 case 3:
+                {
+                    var previousMatrix = canvas.TotalMatrix;
                     canvas.ResetMatrix();
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
                     break;
+                }
                 case 4:
+                {
+                    var previousMatrix = canvas.TotalMatrix;
                     canvas.SetMatrix(ToMatrix(command));
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
                     break;
+                }
                 case 5:
                 {
+                    var previousMatrix = canvas.TotalMatrix;
                     var matrix = ToMatrix(command);
 #if WEBSCENE_UNO
                     canvas.Concat(in matrix);
 #else
                     canvas.Concat(ref matrix);
 #endif
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
                     break;
                 }
-                case 6: canvas.Translate((float)command.V0, (float)command.V1); break;
-                case 7: canvas.Scale((float)command.V0, (float)command.V1); break;
-                case 8: canvas.RotateRadians((float)command.V0); break;
+                case 6:
+                {
+                    var previousMatrix = canvas.TotalMatrix;
+                    canvas.Translate((float)command.V0, (float)command.V1);
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
+                    break;
+                }
+                case 7:
+                {
+                    var previousMatrix = canvas.TotalMatrix;
+                    canvas.Scale((float)command.V0, (float)command.V1);
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
+                    break;
+                }
+                case 8:
+                {
+                    var previousMatrix = canvas.TotalMatrix;
+                    canvas.RotateRadians((float)command.V0);
+                    PreservePathAcrossTransformChange(
+                        path,
+                        previousMatrix,
+                        canvas.TotalMatrix);
+                    break;
+                }
                 case 9: path.Reset(); break;
                 case 10: path.Close(); break;
                 case 11: path.MoveTo((float)command.V0, (float)command.V1); break;
@@ -1798,32 +1849,51 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return parsed;
     }
 
-    private static void AppendArc(SKPath path, in NativeCanvasCommand command)
+    internal static void AppendArc(SKPath path, in NativeCanvasCommand command)
     {
         var radius = Math.Abs(command.V2);
-        if (radius <= 0) return;
+        if (radius <= 0)
+        {
+            var center = new SKPoint((float)command.V0, (float)command.V1);
+            if (path.IsEmpty) path.MoveTo(center);
+            else path.LineTo(center);
+            return;
+        }
         var start = command.V3;
         var end = command.V4;
         var anticlockwise = command.V5 != 0;
         const double Tau = Math.PI * 2;
-        var sweep = end - start;
-        if (!anticlockwise)
+        var authoredSweep = end - start;
+        double sweep;
+        if (Math.Abs(authoredSweep) >= Tau)
         {
+            sweep = anticlockwise ? -Tau : Tau;
+        }
+        else if (!anticlockwise)
+        {
+            sweep = authoredSweep;
             while (sweep < 0) sweep += Tau;
-            sweep = Math.Min(sweep, Tau);
         }
         else
         {
+            sweep = authoredSweep;
             while (sweep > 0) sweep -= Tau;
-            sweep = Math.Max(sweep, -Tau);
         }
         if (Math.Abs(Math.Abs(sweep) - Tau) < 0.000001)
         {
-            path.AddCircle(
-                (float)command.V0,
-                (float)command.V1,
-                (float)radius,
-                anticlockwise ? SKPathDirection.CounterClockwise : SKPathDirection.Clockwise);
+            var circleOval = new SKRect(
+                (float)(command.V0 - radius),
+                (float)(command.V1 - radius),
+                (float)(command.V0 + radius),
+                (float)(command.V1 + radius));
+            var startDegrees = (float)(start * 180 / Math.PI);
+            var halfSweepDegrees = (float)(sweep * 90 / Math.PI);
+            path.ArcTo(circleOval, startDegrees, halfSweepDegrees, false);
+            path.ArcTo(
+                circleOval,
+                startDegrees + halfSweepDegrees,
+                halfSweepDegrees,
+                false);
             return;
         }
         var oval = new SKRect(
@@ -1832,6 +1902,16 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             (float)(command.V0 + radius),
             (float)(command.V1 + radius));
         path.ArcTo(oval, (float)(start * 180 / Math.PI), (float)(sweep * 180 / Math.PI), false);
+    }
+
+    private static void PreservePathAcrossTransformChange(
+        SKPath path,
+        in SKMatrix previous,
+        in SKMatrix current)
+    {
+        if (path.IsEmpty || !current.TryInvert(out var inverseCurrent)) return;
+        var adjustment = SKMatrix.Concat(inverseCurrent, previous);
+        path.Transform(adjustment);
     }
 
     internal static void AppendEllipse(SKPath path, in NativeCanvasCommand command)
