@@ -19,6 +19,12 @@ internal static class HeadlessProof
         var width = ReadDimension(arguments, "--width", 1440);
         var height = ReadDimension(arguments, "--height", 900);
         var overlay = ReadArgument(arguments, "--open-overlay");
+        var drawTrendline = arguments.Contains(
+            "--draw-trendline",
+            StringComparer.Ordinal);
+        var certifyPopovers = arguments.Contains(
+            "--popover-proof",
+            StringComparer.Ordinal);
         Directory.CreateDirectory(output);
         var view = new NativeWebSceneView(useCompositionVisual: false);
         var window = new Window
@@ -69,7 +75,24 @@ internal static class HeadlessProof
                 button: 0,
                 pressed: false);
             PumpFrames(view, window, TimeSpan.FromMilliseconds(650));
+            if (certifyPopovers)
+            {
+                surface.SubmitWheel(700, 350, -100);
+                PumpFrames(view, window, TimeSpan.FromMilliseconds(500));
+            }
             var evidence = WaitForWebSocketEvidence(view, window);
+            TrendlineGeometry? trendlineGeometry = null;
+            if (drawTrendline)
+            {
+                trendlineGeometry = DrawTrendline(view, window, surface);
+                evidence = WaitForWebSocketEvidence(view, window);
+                File.WriteAllText(
+                    Path.Combine(output, "trendline-scene-diagnostics.json"),
+                    view.SceneDiagnostics);
+                File.WriteAllText(
+                    Path.Combine(output, "trendline-feature-use.json"),
+                    view.FeatureUseReport);
+            }
             PumpFrames(view, window, TimeSpan.FromSeconds(3));
             var rendererMetrics = surface.GetRendererMemoryMetrics();
             if (rendererMetrics.RetainedCommandCount < 100
@@ -88,6 +111,10 @@ internal static class HeadlessProof
                 output,
                 "native-tradingview-terminal-evidence.json");
             File.WriteAllText(evidencePath, evidence);
+            if (trendlineGeometry is not null)
+            {
+                ValidateTrendlineHandles(screenshotPath, trendlineGeometry.Value);
+            }
             if (overlay is not null)
             {
                 CaptureOverlay(
@@ -146,6 +173,7 @@ internal static class HeadlessProof
                 activeRail.GetProperty("className").GetString() ?? "";
             var chartValuesCoach = visual.GetProperty("chartValuesCoach");
             var chartValuesCoachRect = chartValuesCoach.GetProperty("rect");
+            var zoomCoach = visual.GetProperty("zoomCoach");
             var chartCanvasRect = pointerTarget.GetProperty("rect");
             var rightEdge = rightRect.GetProperty("x").GetDouble()
                 + rightRect.GetProperty("width").GetDouble();
@@ -157,6 +185,25 @@ internal static class HeadlessProof
             static double Right(JsonElement rect) =>
                 rect.GetProperty("x").GetDouble()
                 + rect.GetProperty("width").GetDouble();
+            var popoversMatch = !certifyPopovers;
+            if (certifyPopovers && zoomCoach.ValueKind == JsonValueKind.Object)
+            {
+                var zoomChain = zoomCoach.GetProperty("chain");
+                if (zoomChain.GetArrayLength() >= 3)
+                {
+                    var textRect = zoomChain[0].GetProperty("rect");
+                    var toastRect = zoomChain[2].GetProperty("rect");
+                    popoversMatch =
+                        zoomCoach.GetProperty("message").GetString()?.Contains(
+                            "while zooming to maintain the chart position",
+                            StringComparison.Ordinal) == true
+                        && textRect.GetProperty("height").GetDouble() <= 21.5
+                        && textRect.GetProperty("width").GetDouble() > 380
+                        && toastRect.GetProperty("height").GetDouble() <= 45.5
+                        && toastRect.GetProperty("width").GetDouble()
+                            >= textRect.GetProperty("width").GetDouble() + 49;
+                }
+            }
             if (!layout.GetProperty("ready").GetBoolean()
                 || loadingIndicator.GetProperty("count").GetInt32() != 1
                 || loadingIndicator.GetProperty("display").GetString() != "none"
@@ -209,8 +256,10 @@ internal static class HeadlessProof
                     < chartCanvasRect.GetProperty("y").GetDouble()
                 || Right(chartValuesCoachRect) > Right(chartCanvasRect)
                 || Bottom(chartValuesCoachRect) > Bottom(chartCanvasRect)
+                || !popoversMatch
                 || pointerTarget.GetProperty("tag").GetString() != "CANVAS"
-                || pointerTarget.GetProperty("cursor").GetString() != "crosshair"
+                || (!drawTrendline
+                    && pointerTarget.GetProperty("cursor").GetString() != "crosshair")
                 || pointerInput.GetProperty("pointermove").GetInt32() < 1
                 || pointerInput.GetProperty("mousemove").GetInt32() < 1
                 || pointerInput.GetProperty("pointerdown").GetInt32() < 1
@@ -479,6 +528,57 @@ internal static class HeadlessProof
                       }
                       return null;
                     })();
+                    const zoomMessage = Array.from(
+                      chartDocument.querySelectorAll('*'))
+                      .filter(node => {
+                        const rect = node.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0
+                          && node.children.length === 0
+                          && node.textContent?.includes(
+                            'while zooming to maintain the chart position');
+                      })
+                      .sort((left, right) =>
+                        left.getBoundingClientRect().width
+                        - right.getBoundingClientRect().width)[0];
+                    const describePopoverChain = node => {
+                      const result = [];
+                      for (let current = node;
+                           current && result.length < 8;
+                           current = current.parentElement) {
+                        const rect = current.getBoundingClientRect();
+                        const style = getComputedStyle(current);
+                        result.push({
+                          tag: current.tagName,
+                          className: current.className,
+                          styleAttribute: current.getAttribute('style'),
+                          text: current.children.length === 0
+                            ? current.textContent?.trim() : null,
+                          rect: {
+                            x: rect.x, y: rect.y,
+                            width: rect.width, height: rect.height
+                          },
+                          position: style.position,
+                          display: style.display,
+                          transform: style.transform,
+                          width: style.width,
+                          minWidth: style.minWidth,
+                          maxWidth: style.maxWidth,
+                          whiteSpace: style.whiteSpace,
+                          overflowWrap: style.overflowWrap,
+                          wordBreak: style.wordBreak,
+                          flex: style.flex,
+                          flexGrow: style.flexGrow,
+                          flexShrink: style.flexShrink,
+                          flexBasis: style.flexBasis,
+                          padding: style.padding,
+                          margin: style.margin,
+                          lineHeight: style.lineHeight,
+                          fontSize: style.fontSize,
+                          backgroundColor: style.backgroundColor
+                        });
+                      }
+                      return result;
+                    };
                     return {
                       ready: Boolean(
                         right && widgetbarWrap && widgetbarTabs
@@ -559,7 +659,12 @@ internal static class HeadlessProof
                           position:
                             getComputedStyle(chartValuesCoach).position,
                           transform:
-                            getComputedStyle(chartValuesCoach).transform
+                            getComputedStyle(chartValuesCoach).transform,
+                          chain: describePopoverChain(chartValuesMessage)
+                        } : null,
+                        zoomCoach: zoomMessage ? {
+                          message: zoomMessage.textContent?.trim(),
+                          chain: describePopoverChain(zoomMessage)
                         } : null
                       },
                       loadingIndicator: loadingIndicator ? {
@@ -807,6 +912,114 @@ internal static class HeadlessProof
             height);
     }
 
+    private static TrendlineGeometry DrawTrendline(
+        NativeWebSceneView view,
+        Window window,
+        NativeSceneSurface surface)
+    {
+        var evaluation = view.EvaluateTextAsync("""
+            (() => {
+              const chartDocument = Array.from(
+                document.querySelectorAll('iframe'))
+                .map(frame => frame.contentDocument)
+                .find(candidate =>
+                  candidate?.querySelectorAll('canvas').length >= 8);
+              const tool = Array.from(
+                chartDocument?.querySelectorAll('button') ?? [])
+                .find(node => node.getAttribute('aria-label') === 'Trendline');
+              const canvas = chartDocument?.elementFromPoint(700, 350);
+              if (!tool || canvas?.tagName !== 'CANVAS') return null;
+              const toolRect = tool.getBoundingClientRect();
+              const canvasRect = canvas.getBoundingClientRect();
+              return {
+                tool: {
+                  x: toolRect.x + toolRect.width / 2,
+                  y: toolRect.y + toolRect.height / 2
+                },
+                start: {
+                  x: canvasRect.x + canvasRect.width * 0.25,
+                  y: canvasRect.y + canvasRect.height * 0.72
+                },
+                end: {
+                  x: canvasRect.x + canvasRect.width * 0.68,
+                  y: canvasRect.y + canvasRect.height * 0.28
+                }
+              };
+            })()
+            """);
+        PumpUntil(evaluation, TimeSpan.FromSeconds(10));
+        using var geometry = JsonDocument.Parse(evaluation.Result);
+        if (geometry.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException(
+                "TradingView trendline tool or chart canvas was unavailable.");
+        }
+
+        static (double X, double Y) Point(JsonElement root, string name)
+        {
+            var point = root.GetProperty(name);
+            return (
+                point.GetProperty("x").GetDouble(),
+                point.GetProperty("y").GetDouble());
+        }
+
+        void Click((double X, double Y) point)
+        {
+            surface.SubmitAvaloniaPointerMove(point.X, point.Y);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(100));
+            surface.SubmitPointerButton(2, point.X, point.Y, 0, pressed: true);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(50));
+            surface.SubmitPointerButton(3, point.X, point.Y, 0, pressed: false);
+            PumpFrames(view, window, TimeSpan.FromMilliseconds(250));
+        }
+
+        Click(Point(geometry.RootElement, "tool"));
+        Click(Point(geometry.RootElement, "start"));
+        Click(Point(geometry.RootElement, "end"));
+        PumpFrames(view, window, TimeSpan.FromSeconds(1));
+        return new TrendlineGeometry(
+            Point(geometry.RootElement, "start"),
+            Point(geometry.RootElement, "end"));
+    }
+
+    private static void ValidateTrendlineHandles(
+        string screenshotPath,
+        TrendlineGeometry geometry)
+    {
+        using var bitmap = SKBitmap.Decode(File.ReadAllBytes(screenshotPath))
+            ?? throw new InvalidOperationException(
+                "TradingView trendline capture could not be decoded.");
+        static int HandleColorDistance(SKColor color) =>
+            Math.Abs(color.Red - 0x1e)
+            + Math.Abs(color.Green - 0x53)
+            + Math.Abs(color.Blue - 0xe5);
+        int CountHandlePixels((double X, double Y) point)
+        {
+            var centerX = (int)Math.Round(point.X);
+            var centerY = (int)Math.Round(point.Y);
+            var count = 0;
+            for (var y = centerY - 8; y <= centerY + 8; ++y)
+            {
+                for (var x = centerX - 8; x <= centerX + 8; ++x)
+                {
+                    var radiusSquared = (x - point.X) * (x - point.X)
+                        + (y - point.Y) * (y - point.Y);
+                    if (radiusSquared is < 9 or > 64) continue;
+                    if (HandleColorDistance(bitmap.GetPixel(x, y)) <= 30) ++count;
+                }
+            }
+            return count;
+        }
+        var startPixels = CountHandlePixels(geometry.Start);
+        var endPixels = CountHandlePixels(geometry.End);
+        if (startPixels < 12 || endPixels < 12)
+        {
+            throw new InvalidOperationException(
+                "TradingView selected trendline endpoint handles were not painted "
+                + $"(start={startPixels}, end={endPixels}).");
+        }
+    }
+
     private static void ValidateSelectedToolbarBackground(
         string screenshotPath,
         JsonElement activeRect,
@@ -872,4 +1085,8 @@ internal static class HeadlessProof
         }
         return null;
     }
+
+    private readonly record struct TrendlineGeometry(
+        (double X, double Y) Start,
+        (double X, double Y) End);
 }

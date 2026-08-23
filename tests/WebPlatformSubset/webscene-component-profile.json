@@ -302,6 +302,13 @@
       "reason": "Required product-neutral reduction of a checked switch thumb whose translate() target uses a nested calc() expression and custom properties. It asserts both computed matrix values and client geometry before and after synchronous class invalidation."
     },
     {
+      "path": "contracts/fixed-translate3d-and-intrinsic-toast.html",
+      "type": "contract",
+      "capabilities": ["zero-depth-translate3d", "fixed-position-transform", "computed-style-serialization", "intrinsic-flex-width", "system-ui-command-key-advance", "normal-white-space-single-line-fit"],
+      "evidence": ["browser-authorized-chart-coach-geometry", "browser-authorized-zoom-toast-geometry", "native-fixed-transform-regression", "macos-system-font-advance-regression", "actual-tradingview-popover-proof"],
+      "reason": "Product-neutral reduction of two reported TradingView popover failures. A fixed coach wrapper uses the observed translate3d(x, y, 0) form and must expose matching client geometry and a 2D computed matrix. A centered auto-width flex toast contains the observed macOS command-key shortcut in a normal-wrapping system-ui label; its intrinsic width must include the complete calibrated text run, close control, and padding so the label fits on one line without an authored nowrap workaround."
+    },
+    {
       "path": "css/css-grid/alignment/grid-gutters-001.html",
       "type": "reftest",
       "reference": "css/css-grid/reference/grid-equal-gutters-ref.html",
@@ -1639,6 +1646,44 @@
         }
       ],
       "reason": "Self-verifying visual reduction of the reported missing movable trendline endpoints. Chromium independently authorizes both color checks; native packet coverage verifies all ellipse parameters, and native WPT snapshots use the product retained-canvas renderer so blank canvas output cannot false-pass."
+    },
+    {
+      "path": "contracts/canvas-2d-arc-trendline-handles.html",
+      "type": "visual",
+      "capabilities": ["canvas-2d-arc-path", "counterclockwise-full-circle", "selected-trendline-endpoint-handles"],
+      "evidence": ["captured-tradingview-canvas-command-sequence", "native-renderer-geometry-regression", "actual-tradingview-headless-proof"],
+      "visualChecks": [
+        {
+          "color": "#2962ff",
+          "minimumPixels": 100,
+          "description": "the selected trendline remains visibly rendered"
+        },
+        {
+          "color": "#1e53e5",
+          "minimumPixels": 28,
+          "description": "counterclockwise full-circle arcs paint both endpoint handles"
+        }
+      ],
+      "reason": "Exact product-neutral reduction of TradingView's selected-handle sequence: beginPath, arc(x, y, 5.5, 0, 2π, true), closePath, fill, and stroke. The authored positive 2π delta must remain a full counterclockwise circle instead of normalizing to an empty zero sweep."
+    },
+    {
+      "path": "contracts/canvas-2d-path-transform-and-arc-connection.html",
+      "type": "visual",
+      "capabilities": ["canvas-current-path-transform-capture", "canvas-full-circle-subpath-connection"],
+      "evidence": ["native-command-replay-regressions", "direct-chromium-visual-oracle"],
+      "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "transformed paths and full-circle connections cover both failure markers"
+        },
+        {
+          "color": "#00ff00",
+          "minimumPixels": 300,
+          "description": "both retained path scenarios produce substantial visible strokes"
+        }
+      ],
+      "reason": "Self-verifying reduction for two retained-path replay boundaries: geometry keeps the transform active when each segment is authored even if the transform changes before stroke(), and a full-circle arc appended to a non-empty subpath includes the required connecting line to its start point."
     }
   ],
   "harnessBlocked": [],
