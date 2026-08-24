@@ -103,23 +103,59 @@ internal sealed class NativeSceneUiWakeGate
         => Volatile.Write(ref _pending, 0);
 }
 
+internal sealed class NativeSceneInvalidationGate
+{
+    private int _pending;
+
+    public bool TryRequest()
+        => Interlocked.CompareExchange(ref _pending, 1, 0) == 0;
+
+    public bool Complete()
+        => Interlocked.Exchange(ref _pending, 0) != 0;
+
+    public void Reset()
+        => Volatile.Write(ref _pending, 0);
+}
+
 internal enum NativeSceneUiWakePriority
 {
+    None,
     Normal,
     Immediate
 }
 
 internal static class NativeScenePublicationWakePolicy
 {
-    public static bool RequiresUiWake(
+    public static NativeSceneUiWakePriority Select(
         bool matchingResizePublication,
-        long renderedSceneCount)
-        => matchingResizePublication || renderedSceneCount == 0;
-
-    public static NativeSceneUiWakePriority Priority(bool matchingResizePublication)
-        => matchingResizePublication
+        long renderedSceneCount,
+        NativeSceneUiWakeGate wakeGate)
+    {
+        var priority = matchingResizePublication
             ? NativeSceneUiWakePriority.Immediate
-            : NativeSceneUiWakePriority.Normal;
+            : renderedSceneCount == 0
+                ? NativeSceneUiWakePriority.Normal
+                : NativeSceneUiWakePriority.None;
+
+        return priority != NativeSceneUiWakePriority.None
+            && wakeGate.TrySchedule()
+                ? priority
+                : NativeSceneUiWakePriority.None;
+    }
+}
+
+internal static class NativeSceneCompositionFramePolicy
+{
+    public static bool ShouldScheduleAnimationFrame(
+        bool running,
+        bool manualFrames,
+        bool animationFrameScheduled)
+        => running && !manualFrames && !animationFrameScheduled;
+
+    public static bool ShouldRequestRender(
+        bool manualFrames,
+        bool hasPendingPresentation)
+        => !manualFrames && hasPendingPresentation;
 }
 
 public readonly record struct NativeScenePublished(
@@ -314,6 +350,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private readonly NativeSceneRenderObserver _renderObserver;
     private readonly NativeScenePublicationMailbox _publicationMailbox;
     private readonly NativeSceneUiWakeGate _uiWakeGate;
+    private readonly NativeSceneInvalidationGate _invalidationGate = new();
     private readonly Action _scheduleUiWake;
     private ulong _appliedRevision;
     private float _viewportWidth;
@@ -321,7 +358,6 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private bool _running;
     private bool _manualFrames;
     private bool _animationFrameScheduled;
-    private int _renderRequested;
     private long _liveResizeFrameDeadlineTimestamp;
     private bool _hasPendingRenderMetrics;
     private NativeSceneDamage _pendingDamage;
@@ -388,22 +424,26 @@ internal sealed unsafe class NativeSceneCompositionHandler
             {
                 _running = true;
             }
-            if (!_manualFrames && HasPendingPresentation)
+            if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                    _manualFrames,
+                    HasPendingPresentation))
             {
                 RequestRenderIfNeeded();
             }
-            RequestAnimationFrameIfNeeded();
+            RequestCompositionFrameIfNeeded();
             return;
         }
 
         if (command == NativeSceneCompositionMessage.SceneWake)
         {
             _uiWakeGate.Complete();
-            if (!_manualFrames && HasPendingPresentation)
+            if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                    _manualFrames,
+                    HasPendingPresentation))
             {
                 RequestRenderIfNeeded();
             }
-            RequestAnimationFrameIfNeeded();
+            RequestCompositionFrameIfNeeded();
             return;
         }
 
@@ -440,7 +480,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             {
                 _running = true;
             }
-            RequestAnimationFrameIfNeeded();
+            RequestCompositionFrameIfNeeded();
             return;
         }
 
@@ -458,7 +498,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             {
                 _running = true;
             }
-            RequestAnimationFrameIfNeeded();
+            RequestCompositionFrameIfNeeded();
             return;
         }
 
@@ -476,7 +516,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         _appliedRevision = 0;
         _viewportWidth = 0;
         _viewportHeight = 0;
-        Interlocked.Exchange(ref _renderRequested, 0);
+        _invalidationGate.Reset();
         Interlocked.Exchange(ref _liveResizeFrameDeadlineTimestamp, 0);
         _hasPendingRenderMetrics = false;
         _pendingDamage = NativeSceneDamage.None;
@@ -514,19 +554,21 @@ internal sealed unsafe class NativeSceneCompositionHandler
             Interlocked.Increment(
                 ref SuppressedLiveResizeAnimationFrameCount);
         }
-        if (HasPendingPresentation)
+        if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                _manualFrames,
+                HasPendingPresentation))
         {
             RequestRenderIfNeeded();
         }
-        RequestAnimationFrameIfNeeded();
+        RequestCompositionFrameIfNeeded();
     }
 
-    private void RequestAnimationFrameIfNeeded()
+    private void RequestCompositionFrameIfNeeded()
     {
-        if (!_running
-            || _manualFrames
-            || _animationFrameScheduled
-            || NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) == 0)
+        if (!NativeSceneCompositionFramePolicy.ShouldScheduleAnimationFrame(
+                _running,
+                _manualFrames,
+                _animationFrameScheduled))
         {
             return;
         }
@@ -537,7 +579,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     private void RequestRenderIfNeeded()
     {
-        if (Interlocked.CompareExchange(ref _renderRequested, 1, 0) != 0)
+        if (!_invalidationGate.TryRequest())
         {
             return;
         }
@@ -546,7 +588,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         if (!_hasPendingRenderMetrics
             && (!TryAcquireNextDiff(out damage) || !damage.RequiresRender))
         {
-            Interlocked.Exchange(ref _renderRequested, 0);
+            _invalidationGate.Complete();
             return;
         }
 
@@ -685,8 +727,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     public override void OnRender(ImmediateDrawingContext drawingContext)
     {
-        var requestedByWebScene =
-            Interlocked.Exchange(ref _renderRequested, 0) != 0;
+        var requestedByWebScene = _invalidationGate.Complete();
         Interlocked.Increment(ref RenderCallbackCount);
         if (!requestedByWebScene)
         {

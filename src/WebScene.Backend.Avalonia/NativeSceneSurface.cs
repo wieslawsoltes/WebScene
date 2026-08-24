@@ -531,14 +531,20 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         var matchingResizePublication = NotifyResizePublicationIfReady(scene);
         if (Volatile.Read(ref _compositionProjectionActive) != 0)
         {
-            // Projection is demand-driven. A publication must wake an idle
-            // compositor, but the gate still coalesces any producer burst into
-            // one UI-to-compositor message.
-            ScheduleCompositionUiWake(
-                NativeScenePublicationWakePolicy.Priority(
-                    matchingResizePublication) == NativeSceneUiWakePriority.Immediate
-                    ? DispatcherPriority.Send
-                    : DispatcherPriority.Normal);
+            // The compositor clock consumes ordinary publications directly from
+            // the mailbox. Only first presentation and cooperative live resize
+            // need the coalesced UI-to-compositor liveness escape hatch.
+            var wakePriority = NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication,
+                _renderObserver.RenderedSceneCount,
+                _compositionUiWakeGate);
+            if (wakePriority != NativeSceneUiWakePriority.None)
+            {
+                PostCompositionUiWake(
+                    wakePriority == NativeSceneUiWakePriority.Immediate
+                        ? DispatcherPriority.Send
+                        : DispatcherPriority.Normal);
+            }
             return;
         }
 
@@ -553,7 +559,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     {
         if (Volatile.Read(ref _compositionProjectionActive) != 0)
         {
-            ScheduleCompositionUiWake();
+            // The active compositor clock observes native RAF demand at its next
+            // display boundary. Do not route that edge through Avalonia's UI queue.
             return;
         }
 
@@ -595,6 +602,11 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             return;
         }
 
+        PostCompositionUiWake(priority);
+    }
+
+    private void PostCompositionUiWake(DispatcherPriority priority)
+    {
         Interlocked.Increment(ref _compositionUiWakeCount);
         Dispatcher.UIThread.Post(
             () =>

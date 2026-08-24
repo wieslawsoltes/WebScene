@@ -63,33 +63,155 @@ public sealed class NativeScenePublicationMailboxTests
         Assert.True(gate.TrySchedule());
     }
 
-    [Theory]
-    [InlineData(false, 0, true)]
-    [InlineData(true, 10, true)]
-    [InlineData(false, 1, false)]
-    [InlineData(false, 10_000, false)]
-    public void OrdinaryScenesAfterFirstPresentationStayOffTheUiDispatcher(
-        bool matchingResizePublication,
-        long renderedSceneCount,
-        bool expectedUiWake)
+    [Fact]
+    public void FirstPublicationSelectsAtMostOneNormalWake()
     {
+        var gate = new NativeSceneUiWakeGate();
+
         Assert.Equal(
-            expectedUiWake,
-            NativeScenePublicationWakePolicy.RequiresUiWake(
-                matchingResizePublication,
-                renderedSceneCount));
+            NativeSceneUiWakePriority.Normal,
+            NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication: false,
+                renderedSceneCount: 0,
+                gate));
+        Assert.Equal(
+            NativeSceneUiWakePriority.None,
+            NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication: false,
+                renderedSceneCount: 0,
+                gate));
     }
 
     [Fact]
-    public void MatchingResizePublicationUsesImmediateUiWakePriority()
+    public void OrdinaryPublicationAfterPresentationSelectsNoWake()
     {
+        var gate = new NativeSceneUiWakeGate();
+
+        Assert.Equal(
+            NativeSceneUiWakePriority.None,
+            NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication: false,
+                renderedSceneCount: 1,
+                gate));
+        Assert.True(gate.TrySchedule());
+    }
+
+    [Fact]
+    public void MatchingLiveResizePublicationSelectsAtMostOneImmediateWake()
+    {
+        var gate = new NativeSceneUiWakeGate();
+
         Assert.Equal(
             NativeSceneUiWakePriority.Immediate,
-            NativeScenePublicationWakePolicy.Priority(
-                matchingResizePublication: true));
+            NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication: true,
+                renderedSceneCount: 10,
+                gate));
         Assert.Equal(
-            NativeSceneUiWakePriority.Normal,
-            NativeScenePublicationWakePolicy.Priority(
-                matchingResizePublication: false));
+            NativeSceneUiWakePriority.None,
+            NativeScenePublicationWakePolicy.Select(
+                matchingResizePublication: true,
+                renderedSceneCount: 10,
+                gate));
+    }
+
+    [Fact]
+    public void ConcurrentFirstPublicationsSelectOneCoalescedWake()
+    {
+        var gate = new NativeSceneUiWakeGate();
+        var selected = 0;
+
+        Parallel.For(
+            0,
+            512,
+            _ =>
+            {
+                if (NativeScenePublicationWakePolicy.Select(
+                        matchingResizePublication: false,
+                        renderedSceneCount: 0,
+                        gate) == NativeSceneUiWakePriority.Normal)
+                {
+                    Interlocked.Increment(ref selected);
+                }
+            });
+
+        Assert.Equal(1, selected);
+    }
+
+    [Fact]
+    public void ActiveCompositionClockRearmsWithoutJavaScriptRafDemand()
+    {
+        Assert.True(
+            NativeSceneCompositionFramePolicy.ShouldScheduleAnimationFrame(
+                running: true,
+                manualFrames: false,
+                animationFrameScheduled: false));
+    }
+
+    [Theory]
+    [InlineData(true, false, true, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(false, false, false, false)]
+    public void CompositionClockStopsForScheduledPauseDetachAndManualModes(
+        bool running,
+        bool manualFrames,
+        bool animationFrameScheduled,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            NativeSceneCompositionFramePolicy.ShouldScheduleAnimationFrame(
+                running,
+                manualFrames,
+                animationFrameScheduled));
+    }
+
+    [Fact]
+    public void EmptyBoundaryDoesNotRequestInvalidation()
+    {
+        var gate = new NativeSceneInvalidationGate();
+        var invalidationRequests = 0;
+
+        if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                manualFrames: false,
+                hasPendingPresentation: false)
+            && gate.TryRequest())
+        {
+            invalidationRequests++;
+        }
+
+        Assert.Equal(0, invalidationRequests);
+        Assert.False(gate.Complete());
+    }
+
+    [Fact]
+    public void PendingPublicationRequestsOneCoalescedInvalidation()
+    {
+        var gate = new NativeSceneInvalidationGate();
+        var invalidationRequests = 0;
+
+        for (var publication = 0; publication < 2; publication++)
+        {
+            if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                    manualFrames: false,
+                    hasPendingPresentation: true)
+                && gate.TryRequest())
+            {
+                invalidationRequests++;
+            }
+        }
+
+        Assert.Equal(1, invalidationRequests);
+        Assert.True(gate.Complete());
+        Assert.False(gate.Complete());
+    }
+
+    [Fact]
+    public void ManualModeSuppressesAutomaticInvalidation()
+    {
+        Assert.False(
+            NativeSceneCompositionFramePolicy.ShouldRequestRender(
+                manualFrames: true,
+                hasPendingPresentation: true));
     }
 }

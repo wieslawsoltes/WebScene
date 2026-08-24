@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using WebScene.Backends.Avalonia;
+using WebScene.Backends.Avalonia.Native;
 using WebScene.Backends.Native;
 
 namespace NativeTradingViewTerminal;
@@ -15,8 +17,7 @@ public sealed partial class MainWindow : Window
     private string _lastMonitoredError = string.Empty;
     private ulong _lastMonitoredScriptErrors;
     private ulong _lastMonitoredFrameScriptErrors;
-    private ulong _lastMonitoredPublishedScenes;
-    private long _monitorTick;
+    private NativeWebScenePerformanceSnapshot? _lastPerformanceSnapshot;
 
     public MainWindow()
         : this(Environment.GetCommandLineArgs())
@@ -39,6 +40,10 @@ public sealed partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(rasterizationMode))
         {
             Title += $" · {rasterizationMode} raster";
+        }
+        if (IsRuntimeMonitoringEnabled)
+        {
+            Title += " · cadence monitor";
         }
         _diagnosticsTimer = new DispatcherTimer
         {
@@ -272,25 +277,38 @@ public sealed partial class MainWindow : Window
             var engine = snapshot.Engine;
             var errorsChanged = engine.ScriptErrors != _lastMonitoredScriptErrors
                 || engine.FrameScriptErrors != _lastMonitoredFrameScriptErrors;
-            var publishedDelta = engine.PublishedScenes >= _lastMonitoredPublishedScenes
-                ? engine.PublishedScenes - _lastMonitoredPublishedScenes
-                : 0;
-            var heartbeat = ++_monitorTick % 5 == 0;
-            if (errorsChanged || heartbeat)
+            if (_lastPerformanceSnapshot is { } baseline)
+            {
+                var delta = snapshot.Since(baseline);
+                var elapsedSeconds = Math.Max(
+                    delta.Elapsed.TotalSeconds,
+                    double.Epsilon);
+                static double Rate(double count, double elapsed)
+                    => count / elapsed;
+                Console.WriteLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[WebScene cadence] compositor={Rate(delta.CompositionAnimationFrames, elapsedSeconds):F1} Hz, "
+                        + $"hostFrames={Rate(delta.CompositionSubmittedAnimationFrames, elapsedSeconds):F1} Hz, "
+                        + $"published={Rate(delta.PublishedScenes, elapsedSeconds):F1} Hz, "
+                        + $"invalidated={Rate(delta.CompositionInvalidations, elapsedSeconds):F1} Hz, "
+                        + $"rendered={Rate(delta.RenderedScenes, elapsedSeconds):F1} Hz, "
+                        + $"renderCallbacks={Rate(delta.CompositionRenderCallbacks, elapsedSeconds):F1} Hz, "
+                        + $"unchangedRenderCallbacks={Rate(delta.CompositionUnchangedRenderCallbacks, elapsedSeconds):F1} Hz, "
+                        + $"uiWakes={Rate(delta.CompositionUiWakes, elapsedSeconds):F1} Hz, "
+                        + $"pendingMailbox={snapshot.Surface.PendingCompositionPublications}, "
+                        + $"acceptedInputs={Rate(delta.AcceptedInputEvents, elapsedSeconds):F1} Hz"));
+            }
+            if (errorsChanged)
             {
                 Console.WriteLine(
                     $"[WebScene monitor] scripts={engine.ExecutedScripts}, "
                     + $"scriptErrors={engine.ScriptErrors}, "
-                    + $"frameScriptErrors={engine.FrameScriptErrors}, "
-                    + $"publishedScenes={engine.PublishedScenes}, "
-                    + $"publishedDelta={publishedDelta}, "
-                    + $"acquiredScenes={engine.AcquiredScenes}, "
-                    + $"renderedScenes={snapshot.Surface.RenderedScenes}, "
-                    + $"blockedPublications={snapshot.SceneFlow.BlockedPublications}");
+                    + $"frameScriptErrors={engine.FrameScriptErrors}");
             }
             _lastMonitoredScriptErrors = engine.ScriptErrors;
             _lastMonitoredFrameScriptErrors = engine.FrameScriptErrors;
-            _lastMonitoredPublishedScenes = engine.PublishedScenes;
+            _lastPerformanceSnapshot = snapshot;
         }
         catch (Exception error)
         {
