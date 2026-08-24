@@ -1783,13 +1783,27 @@
 
     void recascade_focus_subject(dom_node& subject, std::string_view reason)
     {
-        // :focus and :focus-visible can restyle the subject, its descendants,
-        // and siblings selected through +/~. They cannot restyle an ancestor
-        // without :has(), which this runtime does not advertise. Recomputing
-        // the subject's parent subtree therefore preserves all supported
-        // selector semantics without cascading the unrelated chart document.
-        auto* invalidation_root = subject.parent == nullptr ? &subject : subject.parent;
-        recascade_connected_subtree(*invalidation_root, reason);
+        // Recompute the ancestor chain for :focus-within, but never recascade
+        // an entire browsing context for an ordinary focus transition. A full
+        // root pass can cross a frame's independently activated cascade and
+        // also needlessly rewrites the application's primary scene. The local
+        // parent subtree retains the existing :focus, descendant, and sibling
+        // invalidation behavior; higher ancestors only need their own
+        // :focus-within state refreshed.
+        auto& context_root = active_root();
+        std::vector<dom_node*> ancestors;
+        for (auto* ancestor = document.dom_parent(subject);
+            ancestor != nullptr;
+            ancestor = document.dom_parent(*ancestor)) {
+            ancestors.push_back(ancestor);
+            if (ancestor == &context_root) break;
+        }
+        for (auto iterator = ancestors.rbegin(); iterator != ancestors.rend(); ++iterator) {
+            if (*iterator == ancestors.front()) continue;
+            recascade_connected_node(**iterator);
+        }
+        auto* local_root = ancestors.empty() ? &subject : ancestors.front();
+        recascade_connected_subtree(*local_root, reason);
     }
 
     bool set_active_element(dom_node* next, const webscene_input_event& input)

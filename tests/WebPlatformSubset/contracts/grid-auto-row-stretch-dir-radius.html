@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Implicit grid rows stretch and directional corners match</title>
+<link rel="match" href="grid-auto-row-stretch-dir-radius-ref.html">
+<style>
+  html, body { margin: 0; background: white; }
+  #stage { width: 320px; height: 50px; padding: 6px 10px; box-sizing: border-box; background: rgb(220, 40, 40); }
+  #footer {
+    display: grid;
+    grid-template-columns: calc(100% - 78px) 78px;
+    width: 300px;
+    height: 38px;
+  }
+  #tabs, #buttons { min-height: 28px; background: rgb(0, 128, 0); }
+  #tabs:dir(ltr) { border-start-start-radius: 8px; }
+  #buttons:dir(ltr) { border-start-end-radius: 8px; }
+</style>
+<div id="stage"><div id="footer"><div id="tabs"></div><div id="buttons"></div></div></div>

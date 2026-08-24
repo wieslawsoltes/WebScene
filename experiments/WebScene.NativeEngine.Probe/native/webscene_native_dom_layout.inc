@@ -911,6 +911,132 @@ void native_document::layout_children(dom_node& parent)
         }
         return size;
     };
+    const auto layout_positioned_grid_child = [&](dom_node& child) {
+        auto* containing_node = body_;
+        if (child.style.position == position_mode::absolute) {
+            for (auto* ancestor = composed_parent(child);
+                ancestor != nullptr && ancestor != body_;
+                ancestor = composed_parent(*ancestor)) {
+                if (ancestor->style.position != position_mode::normal) {
+                    containing_node = ancestor;
+                    break;
+                }
+            }
+        }
+        const auto containing_border_left = resolve_length(
+            *containing_node,
+            containing_node->style.border_left_width,
+            containing_node->layout.width,
+            0);
+        const auto containing_border_right = resolve_length(
+            *containing_node,
+            containing_node->style.border_right_width,
+            containing_node->layout.width,
+            0);
+        const auto containing_border_top = resolve_length(
+            *containing_node,
+            containing_node->style.border_top_width,
+            containing_node->layout.height,
+            0);
+        const auto containing_border_bottom = resolve_length(
+            *containing_node,
+            containing_node->style.border_bottom_width,
+            containing_node->layout.height,
+            0);
+        // An absolute containing block is the padding box of the nearest
+        // positioned ancestor. Grid used to return before visiting its
+        // out-of-flow children, leaving inset overlays at a stale zero rect.
+        const layout_rect containing{
+            containing_node->layout.x + containing_border_left,
+            containing_node->layout.y + containing_border_top,
+            std::max(0.0F, containing_node->layout.width
+                - containing_border_left - containing_border_right),
+            std::max(0.0F, containing_node->layout.height
+                - containing_border_top - containing_border_bottom)};
+        const auto has_left = is_specified(child.style.left);
+        const auto has_top = is_specified(child.style.top);
+        const auto has_right = is_specified(child.style.right);
+        const auto has_bottom = is_specified(child.style.bottom);
+        const auto left = has_left
+            ? resolve_length(child, child.style.left, containing.width, 0) : 0.0F;
+        const auto top = has_top
+            ? resolve_length(child, child.style.top, containing.height, 0) : 0.0F;
+        const auto right = has_right
+            ? resolve_length(child, child.style.right, containing.width, 0) : 0.0F;
+        const auto bottom = has_bottom
+            ? resolve_length(child, child.style.bottom, containing.height, 0) : 0.0F;
+        const auto margin_left = resolve_length(
+            child, child.style.margin_left, containing.width, 0);
+        const auto margin_right = resolve_length(
+            child, child.style.margin_right, containing.width, 0);
+        const auto margin_top = resolve_length(
+            child, child.style.margin_top, containing.height, 0);
+        const auto margin_bottom = resolve_length(
+            child, child.style.margin_bottom, containing.height, 0);
+        layout_rect assigned{};
+        assigned.width = is_specified(child.style.width)
+            ? outer_authored_size(child, true, containing.width)
+            : has_left && has_right
+                ? std::max(0.0F, containing.width - left - right
+                    - margin_left - margin_right)
+                : intrinsic_size(child, true, containing.width);
+        assigned.height = is_specified(child.style.height)
+            ? outer_authored_size(child, false, containing.height)
+            : has_top && has_bottom
+                ? std::max(0.0F, containing.height - top - bottom
+                    - margin_top - margin_bottom)
+                : intrinsic_size(child, false, containing.height);
+        const auto constrain_positioned_size = [&](bool horizontal, float size) {
+            const auto available = horizontal ? containing.width : containing.height;
+            const auto& minimum = horizontal
+                ? child.style.min_width : child.style.min_height;
+            const auto& maximum = horizontal
+                ? child.style.max_width : child.style.max_height;
+            const auto box_adjustment = child.style.border_box ? 0.0F
+                : horizontal
+                    ? resolve_length(child, child.style.padding_left, available, 0)
+                        + resolve_length(child, child.style.padding_right, available, 0)
+                        + resolve_length(child, child.style.border_left_width, available, 0)
+                        + resolve_length(child, child.style.border_right_width, available, 0)
+                    : resolve_length(child, child.style.padding_top, available, 0)
+                        + resolve_length(child, child.style.padding_bottom, available, 0)
+                        + resolve_length(child, child.style.border_top_width, available, 0)
+                        + resolve_length(child, child.style.border_bottom_width, available, 0);
+            if (is_specified(maximum)) {
+                size = std::min(
+                    size,
+                    resolve_length(child, maximum, available, size) + box_adjustment);
+            }
+            if (is_specified(minimum)) {
+                size = std::max(
+                    size,
+                    resolve_length(child, minimum, available, 0) + box_adjustment);
+            }
+            return std::max(0.0F, size);
+        };
+        assigned.width = constrain_positioned_size(true, assigned.width);
+        assigned.height = constrain_positioned_size(false, assigned.height);
+        assigned.x = has_left
+            ? containing.x + left + margin_left
+            : has_right
+                ? containing.x + containing.width - right - margin_right - assigned.width
+                : content.x + margin_left;
+        assigned.y = has_top
+            ? containing.y + top + margin_top
+            : has_bottom
+                ? containing.y + containing.height - bottom - margin_bottom - assigned.height
+                : content.y + margin_top;
+        if (child.style.position != position_mode::fixed) {
+            assigned.x -= parent.scroll_left;
+            assigned.y -= parent.scroll_top;
+        }
+        child.visible = parent.visible && child.style.display != display_mode::none;
+        if (!child.visible) {
+            child.layout = {};
+            return;
+        }
+        layout_child(child, containing_node->layout, assigned);
+    };
     // Generated boxes are real participants immediately inside the originating
     // element. The specialized text-run fast path only traverses DOM children,
     // so use the general item layout whenever either pseudo exists; otherwise a
@@ -1423,6 +1549,7 @@ void native_document::layout_children(dom_node& parent)
             return true;
         };
         std::vector<grid_item> items;
+        std::vector<dom_node*> positioned_items;
         auto auto_row = size_t{0};
         auto auto_column = size_t{0};
         for (auto* child : composed_children(parent)) {
@@ -1435,7 +1562,10 @@ void native_document::layout_children(dom_node& parent)
                 child->layout = {};
                 continue;
             }
-            if (is_out_of_flow(child->style.position)) continue;
+            if (is_out_of_flow(child->style.position)) {
+                positioned_items.push_back(child);
+                continue;
+            }
             const auto& placement = child->style.grid();
             auto column_span = std::min(
                 column_count,
@@ -1581,6 +1711,29 @@ void native_document::layout_children(dom_node& parent)
                     row_heights[row],
                     fractional_row_space * track.fraction / fractional_row_weight);
             }
+        } else if (row_count == 1U
+            && parent_grid.template_rows.empty()
+            && committed_height < content.height) {
+            // The common one-row implicit grid case stretches its auto row to
+            // the definite container height. Keep this compatibility path
+            // scoped until multi-row align-content distribution is modeled;
+            // distributing every multi-row auto grid here can rewrite an
+            // application's primary layout when it has other alignment rules.
+            std::vector<size_t> stretchable_rows;
+            for (size_t row = 0; row < row_count; ++row) {
+                if (row >= parent_grid.template_rows.size()
+                    || parent_grid.template_rows[row].kind
+                        == grid_track::sizing::automatic) {
+                    stretchable_rows.push_back(row);
+                }
+            }
+            if (!stretchable_rows.empty()) {
+                const auto extra = (content.height - committed_height)
+                    / static_cast<float>(stretchable_rows.size());
+                for (const auto row : stretchable_rows) {
+                    row_heights[row] += extra;
+                }
+            }
         }
 
         std::vector<float> column_offsets(column_count, content.x);
@@ -1626,6 +1779,7 @@ void native_document::layout_children(dom_node& parent)
             };
             arrange(item.node);
         }
+        for (auto* child : positioned_items) layout_positioned_grid_child(*child);
         parent.scroll_content_width = std::max(
             content.width,
             std::accumulate(column_widths.begin(), column_widths.end(), total_gap));
@@ -1636,6 +1790,7 @@ void native_document::layout_children(dom_node& parent)
     }
     if (is_grid_container(parent.style.display) && parent_grid.fractional_rows) {
         std::vector<dom_node*> flow_children;
+        std::vector<dom_node*> positioned_children;
         const auto append_grid_child = [&](const auto& self, dom_node* child) -> void {
             if (child == nullptr) return;
             child->visible = parent.visible && child->style.display != display_mode::none;
@@ -1653,7 +1808,8 @@ void native_document::layout_children(dom_node& parent)
                 }
                 return;
             }
-            if (!is_out_of_flow(child->style.position)) flow_children.push_back(child);
+            if (is_out_of_flow(child->style.position)) positioned_children.push_back(child);
+            else flow_children.push_back(child);
         };
         for (auto* child : composed_children(parent)) {
             append_grid_child(append_grid_child, child);
@@ -1694,8 +1850,11 @@ void native_document::layout_children(dom_node& parent)
                     height});
                 row_y += margin_top + child->layout.height + margin_bottom;
             }
+            for (auto* child : positioned_children) layout_positioned_grid_child(*child);
             return;
         }
+        for (auto* child : positioned_children) layout_positioned_grid_child(*child);
+        if (!positioned_children.empty()) return;
     }
     std::optional<dom_node> marker_item;
     std::optional<dom_node> before_item;

@@ -1187,6 +1187,89 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
     }
 }
 
+void test_footer_grid_direction_and_focus_within_state(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #footer {
+                display: grid;
+                grid-template-columns: calc(100% - 78px) 78px;
+                width: 300px;
+                height: 38px;
+              }
+              #tabs, #buttons { min-height: 28px; }
+              #tabs:dir(ltr) { border-start-start-radius: 4px; }
+              #buttons:dir(ltr) { border-start-end-radius: 4px; }
+              #focus-shell {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                position: relative;
+                width: 220px;
+                height: 34px;
+                border: 1px solid rgb(80, 80, 80);
+              }
+              #focus-shell:focus-within { border-color: rgb(41, 98, 255); }
+              #focus-highlight {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                inset-inline-start: 0;
+                inset-inline-end: 0;
+                margin: -1px;
+                border: 2px solid rgb(41, 98, 255);
+                visibility: hidden;
+              }
+              #focus-shell:focus-within #focus-highlight { visibility: visible; }
+            </style>
+            <div id="footer">
+              <div id="tabs"><div id="focus-shell"><input id="quantity"><span id="focus-highlight"></span></div></div>
+              <div id="buttons"></div>
+            </div>`;
+          const tabs = document.getElementById('tabs');
+          const buttons = document.getElementById('buttons');
+          const focusShell = document.getElementById('focus-shell');
+          const focusHighlight = document.getElementById('focus-highlight');
+          const quantity = document.getElementById('quantity');
+          const before = {
+            tabsHeight: tabs.getBoundingClientRect().height,
+            buttonsHeight: buttons.getBoundingClientRect().height,
+            tabsWidth: tabs.getBoundingClientRect().width,
+            buttonsWidth: buttons.getBoundingClientRect().width,
+            tabsLtr: tabs.matches(':dir(ltr)'),
+            buttonsLtr: buttons.matches(':dir(ltr)'),
+            tabsRadius: getComputedStyle(tabs).borderTopLeftRadius,
+            buttonsRadius: getComputedStyle(buttons).borderTopRightRadius,
+            focusWithin: focusShell.matches(':focus-within'),
+            border: getComputedStyle(focusShell).borderTopColor
+          };
+          quantity.focus();
+          const focused = {
+            active: document.activeElement === quantity,
+            focusWithin: focusShell.matches(':focus-within'),
+            ancestorFocusWithin: tabs.matches(':focus-within'),
+            border: getComputedStyle(focusShell).borderTopColor,
+            highlightVisibility: getComputedStyle(focusHighlight).visibility,
+            highlightWidth: focusHighlight.getBoundingClientRect().width,
+            highlightHeight: focusHighlight.getBoundingClientRect().height,
+            highlightBorder: getComputedStyle(focusHighlight).borderTopColor
+          };
+          quantity.blur();
+          const blurred = {
+            focusWithin: focusShell.matches(':focus-within'),
+            border: getComputedStyle(focusShell).borderTopColor
+          };
+          return { before, focused, blurred };
+        })()
+    )JS", "native-footer-grid-direction-focus.js");
+
+    require(
+        result == R"JSON({"before":{"tabsHeight":38,"buttonsHeight":38,"tabsWidth":222,"buttonsWidth":78,"tabsLtr":true,"buttonsLtr":true,"tabsRadius":"4px","buttonsRadius":"4px","focusWithin":false,"border":"rgb(80, 80, 80)"},"focused":{"active":true,"focusWithin":true,"ancestorFocusWithin":true,"border":"rgb(41, 98, 255)","highlightVisibility":"visible","highlightWidth":222,"highlightHeight":36,"highlightBorder":"rgb(41, 98, 255)"},"blurred":{"focusWithin":false,"border":"rgb(80, 80, 80)"}})JSON",
+        "footer grid stretch, :dir(), or :focus-within state regressed: " + result);
+}
+
 void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)
 {
     execute(engine, R"JS(

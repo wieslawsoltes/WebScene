@@ -996,6 +996,14 @@
       "reason": "Product-neutral reductions of the form layouts that were changed to flex during the 7GUIs port: equal fractional columns around an automatic separator, minmax fractional CRUD columns, source-order auto placement, and ordinary explicit row/column placement."
     },
     {
+      "path": "contracts/grid-auto-row-stretch-dir-radius.html",
+      "type": "reftest",
+      "reference": "contracts/grid-auto-row-stretch-dir-radius-ref.html",
+      "capabilities": ["grid-implicit-auto-row-stretch", "grid-calc-columns", "dir-pseudo-class", "logical-corner-radius"],
+      "evidence": ["tradingview-footer-tabbar-height-and-corners-regression", "native-footer-grid-direction-regression"],
+      "reason": "Product-neutral visual regression for a fixed-height two-column footer whose implicit auto row must stretch to the bottom edge and whose default-LTR tab groups receive logical top corner radii."
+    },
+    {
       "path": "contracts/implicit-grid-and-compact-flex-controls.html",
       "type": "contract",
       "capabilities": ["grid-column-auto-flow", "equal-implicit-fractional-tracks", "grid-column-start-span", "flex-item-blockification", "cross-axis-stretch", "nested-nonshrinking-suffix", "nowrap-flex-summary"],
@@ -1328,6 +1336,13 @@
       "capabilities": ["simple-selectors", "attribute-selectors", "selector-combinators", "structural-pseudo-classes", "control-state-pseudo-classes", "focus-invalidation"],
       "evidence": ["observed-hosted-component-css-feature-audit"],
       "reason": "Product-neutral assertions for selector families observed in the hosted-component corpus."
+    },
+    {
+      "path": "contracts/focus-within-dynamic-border.html",
+      "type": "contract",
+      "capabilities": ["focus-within-matching", "focus-ancestor-invalidation", "blur-ancestor-invalidation", "grid-absolute-positioned-child", "logical-inset-stretch"],
+      "evidence": ["tradingview-focused-control-border-regression", "native-focus-within-regression", "tradingview-grid-highlight-overlay-regression"],
+      "reason": "Product-neutral dynamic regression requiring nested text focus to apply ancestor state through :focus-within, reveal and size a blue absolute logical-inset overlay inside a positioned grid shell, and clear that state across the complete ancestor chain on blur."
     },
     {
       "path": "contracts/css-selector-parser-standards.html",

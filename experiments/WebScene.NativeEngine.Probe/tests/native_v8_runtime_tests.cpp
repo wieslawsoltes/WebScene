@@ -321,6 +321,7 @@ int main()
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
+    test_footer_grid_direction_and_focus_within_state(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
     test_calc_percent_with_pixel_offset(engine);
     test_calc_viewport_units_with_pixel_offsets_bound_fixed_boxes(engine);

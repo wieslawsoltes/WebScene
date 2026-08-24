@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebScene contract: dynamic focus-within border state</title>
+<style>
+  #outer { border: 1px solid rgb(20, 20, 20); }
+  #shell {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    position: relative;
+    width: 220px;
+    height: 34px;
+    border: 1px solid rgb(80, 80, 80);
+    border-radius: 8px;
+  }
+  #shell:focus-within { border-color: rgb(41, 98, 255); }
+  #highlight {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    margin: -1px;
+    border: 2px solid rgb(41, 98, 255);
+    border-radius: 8px;
+    visibility: hidden;
+  }
+  #shell:focus-within #highlight { visibility: visible; }
+</style>
+<div id="outer"><div id="shell"><input id="quantity" value="1"><span></span><span id="highlight"></span></div></div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false,
+  harness: null,
+  results: [],
+  errors: [],
+  diagnostics: []
+};
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+try {
+  const shell = document.getElementById("shell");
+  const outer = document.getElementById("outer");
+  const highlight = document.getElementById("highlight");
+  const quantity = document.getElementById("quantity");
+  assert(!shell.matches(":focus-within"), "shell starts unfocused");
+  quantity.focus();
+  assert(document.activeElement === quantity, "input receives programmatic focus");
+  assert(shell.matches(":focus-within"), "nested input makes its shell match :focus-within");
+  assert(outer.matches(":focus-within"), "focus-within reaches non-immediate ancestors");
+  assert(getComputedStyle(shell).borderTopColor === "rgb(41, 98, 255)",
+    "focus-within restyles the shell border");
+  const shellRect = shell.getBoundingClientRect();
+  const highlightRect = highlight.getBoundingClientRect();
+  assert(getComputedStyle(highlight).visibility === "visible",
+    "focus reveals the absolute highlight overlay");
+  assert(getComputedStyle(highlight).borderTopColor === "rgb(41, 98, 255)",
+    "highlight resolves the blue border color");
+  assert(highlightRect.width === shellRect.width && highlightRect.height === shellRect.height,
+    "absolute logical insets size the highlight to the grid shell instead of zero");
+  quantity.blur();
+  assert(!shell.matches(":focus-within") && !outer.matches(":focus-within"),
+    "blur clears focus-within on every ancestor");
+  assert(getComputedStyle(shell).borderTopColor === "rgb(80, 80, 80)",
+    "blur restores the authored border color");
+  state.results.push({
+    name: "focus-within dynamically restyles and clears an ancestor border",
+    status: "PASS",
+    message: null,
+    stack: null
+  });
+  state.harness = { status: 0, message: null, stack: null };
+} catch (error) {
+  state.results.push({
+    name: "focus-within dynamically restyles and clears an ancestor border",
+    status: "FAIL",
+    message: String(error && error.message || error),
+    stack: error && error.stack ? String(error.stack) : null
+  });
+  state.harness = { status: 1, message: state.results[0].message, stack: state.results[0].stack };
+}
+state.complete = true;
+</script>

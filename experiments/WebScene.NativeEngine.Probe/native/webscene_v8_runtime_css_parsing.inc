@@ -2478,6 +2478,27 @@
                     break;
                 }
                 if (!matched) return false;
+            } else if (name == "dir") {
+                auto wanted = lower_html_name(trim_css(argument));
+                if (wanted.size() >= 2U
+                    && (wanted.front() == '\'' || wanted.front() == '"')
+                    && wanted.back() == wanted.front()) {
+                    wanted = wanted.substr(1U, wanted.size() - 2U);
+                }
+                auto actual = std::string("ltr");
+                for (auto* direction_node = &node; direction_node != nullptr;
+                    direction_node = document.dom_parent(*direction_node)) {
+                    const auto authored = direction_node->attributes.find("dir");
+                    if (authored == direction_node->attributes.end()) continue;
+                    const auto candidate = lower_html_name(trim_css(authored->second));
+                    if (candidate == "ltr" || candidate == "rtl") {
+                        actual = candidate;
+                        break;
+                    }
+                }
+                if ((wanted != "ltr" && wanted != "rtl") || wanted != actual) {
+                    return false;
+                }
             } else if (name == "target") {
                 const auto local_context = isolate->GetCurrentContext();
                 v8::Local<v8::Value> location_value;
@@ -2521,6 +2542,16 @@
                 if (active_element != &node || (!focus_visible && !is_text_control(&node))) {
                     return false;
                 }
+            } else if (name == "focus-within") {
+                auto matches_focus_within = false;
+                for (auto* focused = active_element; focused != nullptr;
+                    focused = document.event_parent(*focused)) {
+                    if (focused == &node) {
+                        matches_focus_within = true;
+                        break;
+                    }
+                }
+                if (!matches_focus_within) return false;
             } else if (name == "not") {
                 size_t start = 0;
                 while (start <= argument.size()) {
