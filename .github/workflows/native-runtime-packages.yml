@@ -41,6 +41,7 @@ on:
     - 'third-party/v8-patches/**'
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -85,6 +86,34 @@ jobs:
         fi
         echo "package-version=$version" >> "$GITHUB_OUTPUT"
         echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  release-ci-gate:
+    name: Require successful CI for release commit
+    needs: metadata
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Require successful CI for the exact commit
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        IFS=$'\t' read -r conclusion url <<< "$(
+          gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow CI.yml \
+            --commit "$GITHUB_SHA" \
+            --event push \
+            --status completed \
+            --limit 20 \
+            --json conclusion,url,databaseId \
+            --jq '(sort_by(.databaseId) | last // {}) | [(.conclusion // "missing"), (.url // "")] | @tsv'
+        )"
+        if [[ "$conclusion" != success ]]; then
+          echo "The exact release commit '$GITHUB_SHA' has no successful completed CI push run (latest conclusion: '$conclusion')." >&2
+          exit 1
+        fi
+        echo "Release CI gate passed: $url"
 
   packages:
     name: Pack .NET packages
@@ -565,7 +594,7 @@ jobs:
 
   publish:
     name: Publish to NuGet.org
-    needs: [metadata, consumer]
+    needs: [metadata, consumer, release-ci-gate]
     if: needs.metadata.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: nuget.org

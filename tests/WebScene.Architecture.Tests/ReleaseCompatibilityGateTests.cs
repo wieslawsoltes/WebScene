@@ -205,6 +205,35 @@ public sealed class ReleaseCompatibilityGateTests
         Assert.Contains("profileSha256", verifier, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RuntimePublicationRequiresSuccessfulCiForTheExactCommit()
+    {
+        var workflow = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            ".github",
+            "workflows",
+            "native-runtime-packages.yml"));
+        var ciWorkflow = File.ReadAllText(Path.Combine(
+            s_repositoryRoot,
+            ".github",
+            "workflows",
+            "CI.yml"));
+
+        Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
+        Assert.Contains("release-ci-gate:", workflow, StringComparison.Ordinal);
+        Assert.Contains("name: Require successful CI for release commit", workflow, StringComparison.Ordinal);
+        Assert.Contains("--workflow CI.yml", workflow, StringComparison.Ordinal);
+        Assert.Contains("--commit \"$GITHUB_SHA\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("--event push", workflow, StringComparison.Ordinal);
+        Assert.Contains("--status completed", workflow, StringComparison.Ordinal);
+        Assert.Contains("if [[ \"$conclusion\" != success ]]", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "needs: [metadata, consumer, release-ci-gate]",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("fail-fast: false", ciWorkflow, StringComparison.Ordinal);
+    }
+
     private static void AssertBuilderRunsCompleteRequiredProfile(string fileName)
     {
         var builder = File.ReadAllText(Path.Combine(s_repositoryRoot, "scripts", fileName));
