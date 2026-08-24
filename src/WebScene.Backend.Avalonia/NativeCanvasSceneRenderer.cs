@@ -970,8 +970,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         bool stroke)
     {
         var resource = DomStringAt(view, command.Flags);
-        var parts = resource.Split('\t', 4);
-        if (parts.Length != 4 || command.Width <= 0 || command.Height <= 0)
+        var parts = resource.Split('\t', 5);
+        var hasAspectRatio = parts.Length == 5;
+        if ((!hasAspectRatio && parts.Length != 4)
+            || command.Width <= 0 || command.Height <= 0)
         {
             return;
         }
@@ -980,7 +982,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             return;
         }
-        using var path = SKPath.ParseSvgPathData(parts[3]);
+        var aspectRatio = hasAspectRatio ? parts[1] : "xMidYMid meet";
+        var strokeWidth = hasAspectRatio ? parts[2] : parts[1];
+        var transform = hasAspectRatio ? parts[3] : parts[2];
+        var pathData = hasAspectRatio ? parts[4] : parts[3];
+        using var path = SKPath.ParseSvgPathData(pathData);
         if (path is null)
         {
             return;
@@ -991,7 +997,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
             Color = Rgba(command.Rgba),
             StrokeWidth = stroke
-                && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var width)
+                && float.TryParse(strokeWidth, NumberStyles.Float, CultureInfo.InvariantCulture, out var width)
                     ? Math.Max(0.1f, width)
                     : 1
         };
@@ -999,10 +1005,23 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         try
         {
             ApplyDomRotation(canvas, command);
-            canvas.Translate(command.X, command.Y);
-            canvas.Scale(command.Width / viewBox[2], command.Height / viewBox[3]);
+            canvas.ClipRect(new SKRect(
+                command.X,
+                command.Y,
+                command.X + command.Width,
+                command.Y + command.Height));
+            var mapping = ResolveSvgViewportTransform(
+                command.Width,
+                command.Height,
+                viewBox[2],
+                viewBox[3],
+                aspectRatio);
+            canvas.Translate(
+                command.X + mapping.OffsetX,
+                command.Y + mapping.OffsetY);
+            canvas.Scale(mapping.ScaleX, mapping.ScaleY);
             canvas.Translate(-viewBox[0], -viewBox[1]);
-            ApplySvgTransform(canvas, parts[2]);
+            ApplySvgTransform(canvas, transform);
             canvas.DrawPath(path, paint);
         }
         finally
@@ -1017,18 +1036,28 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         in SceneCommand command)
     {
         var resource = DomStringAt(view, command.Flags);
-        var separator = resource.IndexOf('\t');
-        if (separator <= 0 || separator == resource.Length - 1
+        var firstSeparator = resource.IndexOf('\t');
+        if (firstSeparator <= 0 || firstSeparator == resource.Length - 1
             || command.Width <= 0 || command.Height <= 0)
         {
             return;
         }
-        var viewBox = ParseSvgNumbers(resource[..separator]);
+        var secondSeparator = resource.IndexOf('\t', firstSeparator + 1);
+        var candidateAspectRatio = secondSeparator > firstSeparator
+            ? resource[(firstSeparator + 1)..secondSeparator]
+            : string.Empty;
+        var hasAspectRatio = candidateAspectRatio.Length > 0
+            && !candidateAspectRatio.TrimStart().StartsWith('<');
+        var viewBox = ParseSvgNumbers(resource[..firstSeparator]);
         if (viewBox.Length < 4 || viewBox[2] == 0 || viewBox[3] == 0)
         {
             return;
         }
-        var markup = resource[(separator + 1)..];
+        var aspectRatio = hasAspectRatio
+            ? candidateAspectRatio
+            : "xMidYMid meet";
+        var markupStart = (hasAspectRatio ? secondSeparator : firstSeparator) + 1;
+        var markup = resource[markupStart..];
         if (!s_svgPictures.TryGetValue(markup, out var svg))
         {
             var acquired = SharedSvgPictureCache.Acquire(markup);
@@ -1044,8 +1073,21 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         try
         {
             ApplyDomRotation(canvas, command);
-            canvas.Translate(command.X, command.Y);
-            canvas.Scale(command.Width / viewBox[2], command.Height / viewBox[3]);
+            canvas.ClipRect(new SKRect(
+                command.X,
+                command.Y,
+                command.X + command.Width,
+                command.Y + command.Height));
+            var mapping = ResolveSvgViewportTransform(
+                command.Width,
+                command.Height,
+                viewBox[2],
+                viewBox[3],
+                aspectRatio);
+            canvas.Translate(
+                command.X + mapping.OffsetX,
+                command.Y + mapping.OffsetY);
+            canvas.Scale(mapping.ScaleX, mapping.ScaleY);
             canvas.Translate(-viewBox[0], -viewBox[1]);
             canvas.DrawPicture(svg.Picture);
         }
@@ -1080,6 +1122,58 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 : float.NaN)
             .Where(float.IsFinite)
             .ToArray();
+
+    internal static SvgViewportTransform ResolveSvgViewportTransform(
+        float viewportWidth,
+        float viewportHeight,
+        float viewBoxWidth,
+        float viewBoxHeight,
+        string preserveAspectRatio)
+    {
+        var scaleX = viewportWidth / viewBoxWidth;
+        var scaleY = viewportHeight / viewBoxHeight;
+        var tokens = preserveAspectRatio.Split(
+            [' ', '\t', '\r', '\n'],
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var tokenIndex = tokens.Length > 0
+            && string.Equals(tokens[0], "defer", StringComparison.OrdinalIgnoreCase)
+                ? 1
+                : 0;
+        var alignment = tokenIndex < tokens.Length
+            ? tokens[tokenIndex]
+            : "xMidYMid";
+        if (string.Equals(alignment, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SvgViewportTransform(scaleX, scaleY, 0, 0);
+        }
+
+        var meetOrSlice = tokenIndex + 1 < tokens.Length
+            ? tokens[tokenIndex + 1]
+            : "meet";
+        var uniformScale = string.Equals(
+            meetOrSlice,
+            "slice",
+            StringComparison.OrdinalIgnoreCase)
+                ? Math.Max(scaleX, scaleY)
+                : Math.Min(scaleX, scaleY);
+        var remainingWidth = viewportWidth - viewBoxWidth * uniformScale;
+        var remainingHeight = viewportHeight - viewBoxHeight * uniformScale;
+        var offsetX = alignment.StartsWith("xMax", StringComparison.OrdinalIgnoreCase)
+            ? remainingWidth
+            : alignment.StartsWith("xMid", StringComparison.OrdinalIgnoreCase)
+                ? remainingWidth * 0.5f
+                : 0;
+        var offsetY = alignment.EndsWith("YMax", StringComparison.OrdinalIgnoreCase)
+            ? remainingHeight
+            : alignment.EndsWith("YMid", StringComparison.OrdinalIgnoreCase)
+                ? remainingHeight * 0.5f
+                : 0;
+        return new SvgViewportTransform(
+            uniformScale,
+            uniformScale,
+            offsetX,
+            offsetY);
+    }
 
     private static void ApplySvgTransform(SKCanvas canvas, string transform)
     {
@@ -1713,10 +1807,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             "top" => -metrics.Top,
             "hanging" => -metrics.Ascent * 0.8f,
-            // Canvas commands use the positioned-run origin for the middle
-            // baseline. Applying Skia's font-bounds correction here shifts
-            // compact badges and axis labels below their authored origin.
-            "middle" => 0,
+            "middle" => -(metrics.Ascent + metrics.Descent) * 0.5f,
             "bottom" or "ideographic" => -metrics.Bottom,
             _ => 0
         };
@@ -2172,6 +2263,12 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     }
 
     private readonly record struct StringKey(uint NodeId, ulong Generation, uint Index);
+
+    internal readonly record struct SvgViewportTransform(
+        float ScaleX,
+        float ScaleY,
+        float OffsetX,
+        float OffsetY);
 
     private readonly record struct CanvasAffine(
         double A,

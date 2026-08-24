@@ -1063,11 +1063,14 @@ void native_document::append_scene(
                 ? node.attributes.at("viewBox")
                 : std::string("0 0 ") + std::to_string(std::max(1.0F, box.width))
                     + " " + std::to_string(std::max(1.0F, box.height));
+            const auto preserve_aspect_ratio = node.attributes.contains("preserveAspectRatio")
+                ? node.attributes.at("preserveAspectRatio")
+                : std::string("xMidYMid meet");
             std::string markup;
             markup.reserve(256U);
             serialize_svg_subtree(node, markup, true);
             const auto resource_index = append_scene_string(
-                view_box + '\t' + markup,
+                view_box + '\t' + preserve_aspect_ratio + '\t' + markup,
                 strings,
                 string_bytes);
             commands.push_back(webscene_scene_command{
@@ -1114,11 +1117,15 @@ void native_document::append_scene(
                 ? svg->attributes.at("viewBox")
                 : std::string("0 0 ") + std::to_string(std::max(1.0F, box.width))
                     + " " + std::to_string(std::max(1.0F, box.height));
+            const auto preserve_aspect_ratio = svg->attributes.contains("preserveAspectRatio")
+                ? svg->attributes.at("preserveAspectRatio")
+                : std::string("xMidYMid meet");
             const auto transform = node.attributes.contains("transform")
                 ? node.attributes.at("transform") : std::string{};
             const auto stroke_width = node.attributes.contains("stroke-width")
                 ? node.attributes.at("stroke-width") : std::string("1");
-            std::string resource = view_box + '\t' + stroke_width + '\t'
+            std::string resource = view_box + '\t' + preserve_aspect_ratio + '\t'
+                + stroke_width + '\t'
                 + transform + '\t' + node.attributes.at("d");
             const auto resource_index = append_scene_string(resource, strings, string_bytes);
             const auto fill = node.attributes.contains("fill")

@@ -2292,6 +2292,25 @@
             parsed_font.family,
             parsed_font.size,
             parsed_font.weight);
+        const auto text_baseline = canvas_string_property(
+            info,
+            "textBaseline",
+            "alphabetic");
+        const auto alphabetic_baseline_offset = text_baseline == "top"
+            ? static_cast<double>(metrics.ascent)
+            : text_baseline == "hanging"
+                ? static_cast<double>(metrics.ascent) * 0.8
+                : text_baseline == "middle"
+                    ? static_cast<double>(metrics.ascent - metrics.descent) * 0.5
+                    : text_baseline == "bottom" || text_baseline == "ideographic"
+                        ? -static_cast<double>(metrics.descent)
+                        : 0.0;
+        const auto baseline_ascent = [&](double ascent) {
+            return ascent - alphabetic_baseline_offset;
+        };
+        const auto baseline_descent = [&](double descent) {
+            return descent + alphabetic_baseline_offset;
+        };
         const auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Object::New(info.GetIsolate());
         const auto set_metric = [&](const char* name, double value) {
@@ -2313,15 +2332,23 @@
         set_metric(
             "actualBoundingBoxRight",
             metrics.actual_bounding_box_right - alignment_offset);
-        set_metric("fontBoundingBoxAscent", metrics.ascent);
-        set_metric("fontBoundingBoxDescent", metrics.descent);
-        set_metric("actualBoundingBoxAscent", metrics.actual_bounding_box_ascent);
-        set_metric("actualBoundingBoxDescent", metrics.actual_bounding_box_descent);
-        set_metric("emHeightAscent", metrics.ascent);
-        set_metric("emHeightDescent", metrics.descent);
-        set_metric("hangingBaseline", metrics.ascent * 0.8);
-        set_metric("alphabeticBaseline", 0.0);
-        set_metric("ideographicBaseline", metrics.descent);
+        set_metric("fontBoundingBoxAscent", baseline_ascent(metrics.ascent));
+        set_metric("fontBoundingBoxDescent", baseline_descent(metrics.descent));
+        set_metric(
+            "actualBoundingBoxAscent",
+            baseline_ascent(metrics.actual_bounding_box_ascent));
+        set_metric(
+            "actualBoundingBoxDescent",
+            baseline_descent(metrics.actual_bounding_box_descent));
+        set_metric("emHeightAscent", baseline_ascent(metrics.ascent));
+        set_metric("emHeightDescent", baseline_descent(metrics.descent));
+        set_metric(
+            "hangingBaseline",
+            metrics.ascent * 0.8 - alphabetic_baseline_offset);
+        set_metric("alphabeticBaseline", alphabetic_baseline_offset);
+        set_metric(
+            "ideographicBaseline",
+            metrics.descent + alphabetic_baseline_offset);
         info.GetReturnValue().Set(result);
     }
 

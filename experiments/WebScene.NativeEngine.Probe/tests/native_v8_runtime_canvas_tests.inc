@@ -60,6 +60,8 @@ void test_canvas_text_metrics_use_host_font_axes()
           const large = context.measureText('MMMM');
           context.font = "bold 12px -apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif";
           const bold = context.measureText('Label');
+          context.textBaseline = 'middle';
+          const middle = context.measureText('Label');
           return {
             defaultFieldsAreFinite: [
               bold.width,
@@ -72,7 +74,12 @@ void test_canvas_text_metrics_use_host_font_axes()
             ascent: bold.actualBoundingBoxAscent,
             descent: bold.actualBoundingBoxDescent,
             fontAscent: bold.fontBoundingBoxAscent,
-            fontDescent: bold.fontBoundingBoxDescent
+            fontDescent: bold.fontBoundingBoxDescent,
+            middleAscent: middle.actualBoundingBoxAscent,
+            middleDescent: middle.actualBoundingBoxDescent,
+            middleFontAscent: middle.fontBoundingBoxAscent,
+            middleFontDescent: middle.fontBoundingBoxDescent,
+            middleAlphabeticBaseline: middle.alphabeticBaseline
           };
         })()
     )JS", "native-canvas-host-text-metrics.js");
@@ -87,7 +94,17 @@ void test_canvas_text_metrics_use_host_font_axes()
             && result.find("\"fontAscent\":9") != std::string::npos
             && result.find("\"fontDescent\":3") != std::string::npos,
         "Canvas TextMetrics did not distinguish glyph ink from font bounds: " + result);
-    require(probe.calls == 3U, "Canvas measureText did not invoke the host once per distinct font");
+    require(
+        result.find("\"middleAscent\":4.2") != std::string::npos
+            && result.find("\"middleDescent\":4.8") != std::string::npos
+            && result.find("\"middleFontAscent\":6") != std::string::npos
+            && result.find("\"middleFontDescent\":6") != std::string::npos
+            && result.find("\"middleAlphabeticBaseline\":3") != std::string::npos,
+        "Canvas TextMetrics did not resolve distances from the active middle baseline: "
+            + result);
+    require(
+        probe.calls == 3U,
+        "Canvas measureText did not reuse host metrics across baseline-only changes");
     require(probe.text == "Label", "Canvas measureText changed the measured text");
     require(
         probe.family == "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif",

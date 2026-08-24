@@ -876,6 +876,14 @@
   ],
   "candidate": [
     {
+      "path": "contracts/svg-viewbox-preserve-aspect-ratio.html",
+      "type": "reftest",
+      "reference": "contracts/svg-viewbox-preserve-aspect-ratio-ref.html",
+      "capabilities": ["svg-viewbox-mapping", "svg-preserve-aspect-ratio-default-meet", "svg-preserve-aspect-ratio-none", "svg-preserve-aspect-ratio-alignment"],
+      "evidence": ["reported-menu-chevron-width-reduction", "product-neutral-svg-viewport-reftest", "native-svg-viewport-mapping-regression"],
+      "reason": "Focused product-neutral regression for a wide SVG viewport containing square-viewBox menu artwork. The default and explicit meet cases must retain uniform geometry and honor xMid/xMax alignment, while preserveAspectRatio=none remains the only intentionally stretched case. Keep candidate until the exact reftest passes every released RID and the independent Chromium oracle."
+    },
+    {
       "path": "contracts/dom-library-core-primitives.html",
       "type": "contract",
       "capabilities": ["text-content-text-child", "html-script-element-text", "form-select-indexed-access", "document-get-elements-by-name", "document-style-sheets", "detached-document-owner-document", "xml-well-formedness-cdata-parsererror", "initial-iframe-document-load"],
@@ -1299,6 +1307,13 @@
       "capabilities": ["canvas-2d-context", "canvas-state-stack", "canvas-path", "canvas-transform", "canvas-clipping", "canvas-text-metrics", "path2d-composition"],
       "evidence": ["observed-hosted-component-canvas-feature-audit", "native-host-font-metrics-regression"],
       "reason": "Product-neutral Canvas composition covering stateful 2D and Path2D operations, fillText maxWidth, and host-backed TextMetrics that vary with font size and family and expose finite font plus shaped-ink bounds."
+    },
+    {
+      "path": "contracts/canvas-text-metrics-active-baseline.html",
+      "type": "contract",
+      "capabilities": ["canvas-text-metrics", "canvas-text-baseline"],
+      "evidence": ["tradingview-canvas-label-vertical-alignment-regression", "native-active-baseline-text-metrics-regression"],
+      "reason": "Product-neutral assertions that Canvas TextMetrics ink and font distances are resolved from the active textBaseline, including the middle-to-alphabetic offset used for optical label alignment."
     },
     {
       "path": "contracts/css-media-query-primitives.html",

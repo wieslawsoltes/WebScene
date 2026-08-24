@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebScene contract: Canvas TextMetrics use the active text baseline</title>
+<canvas id="canvas" width="200" height="80"></canvas>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false,
+  harness: null,
+  results: [],
+  errors: [],
+  diagnostics: []
+};
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+function close(actual, expected, message) {
+  assert(Math.abs(actual - expected) <= 0.01,
+    message + ": expected " + expected + ", got " + actual);
+}
+try {
+  const context = document.getElementById("canvas").getContext("2d");
+  assert(!!context, "2D context is available");
+  context.font = "24px sans-serif";
+  context.textBaseline = "alphabetic";
+  const alphabetic = context.measureText("Price 310.55");
+  context.textBaseline = "middle";
+  const middle = context.measureText("Price 310.55");
+
+  const offset = (alphabetic.fontBoundingBoxAscent
+    - alphabetic.fontBoundingBoxDescent) / 2;
+  assert(offset > 0, "the fixture font has a distinct middle and alphabetic baseline");
+  close(middle.width, alphabetic.width,
+    "changing textBaseline does not change text advance");
+  close(middle.fontBoundingBoxAscent,
+    alphabetic.fontBoundingBoxAscent - offset,
+    "font ascent is measured from the middle baseline");
+  close(middle.fontBoundingBoxDescent,
+    alphabetic.fontBoundingBoxDescent + offset,
+    "font descent is measured from the middle baseline");
+  close(middle.actualBoundingBoxAscent,
+    alphabetic.actualBoundingBoxAscent - offset,
+    "ink ascent is measured from the middle baseline");
+  close(middle.actualBoundingBoxDescent,
+    alphabetic.actualBoundingBoxDescent + offset,
+    "ink descent is measured from the middle baseline");
+  close(middle.alphabeticBaseline, offset,
+    "alphabeticBaseline locates the alphabetic line from the middle baseline");
+
+  state.results.push({
+    name: "Canvas TextMetrics distances resolve from the active textBaseline",
+    status: "PASS",
+    message: null,
+    stack: null
+  });
+  state.harness = { status: 0, message: null, stack: null };
+} catch (error) {
+  state.results.push({
+    name: "Canvas TextMetrics distances resolve from the active textBaseline",
+    status: "FAIL",
+    message: String(error && error.message || error),
+    stack: error && error.stack ? String(error.stack) : null
+  });
+  state.harness = {
+    status: 1,
+    message: state.results[0].message,
+    stack: state.results[0].stack
+  };
+}
+state.complete = true;
+</script>

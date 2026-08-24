@@ -193,6 +193,45 @@ void test_svg_current_color_is_resolved_before_scene_serialization(webscene_engi
         "inherited SVG currentColor did not resolve to an explicit immutable-scene color");
 }
 
+void test_svg_preserve_aspect_ratio_reaches_scene_serialization(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <svg id="wide-icon" viewBox="0 0 18 18"
+                 preserveAspectRatio="xMaxYMid meet"
+                 style="display:block;width:36px;height:18px">
+              <path fill="currentColor" d="M5 2h2l8 7-8 7H5l8-7z"/>
+            </svg>`;
+        })()
+    )JS", "native-svg-preserve-aspect-ratio-setup.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 6U || command.flags >= scene->string_count) continue;
+                const auto resource = scene->strings[command.flags];
+                const std::string_view bytes(
+                    scene->string_bytes + resource.byte_offset,
+                    resource.byte_length);
+                found = std::abs(command.width - 36.0F) < 0.001F
+                    && std::abs(command.height - 18.0F) < 0.001F
+                    && bytes.starts_with("0 0 18 18\txMaxYMid meet\t<svg");
+                if (found) break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (found) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found,
+        "SVG preserveAspectRatio did not reach the immutable scene with its wide viewport");
+}
+
 void test_positive_z_before_paints_above_lower_z_child(webscene_engine* engine)
 {
     execute(engine, R"JS(

@@ -263,13 +263,13 @@ public sealed class NativeTextShapingTests
                 isMacOS: false));
 
     [Fact]
-    public void CanvasMiddleBaselineUsesPositionedRunOrigin()
+    public void CanvasMiddleBaselineCentersRotatedTrendlineLabelsAtTheirAuthoredOffset()
     {
         using var paint = new SKPaint { TextSize = 12, Typeface = SKTypeface.Default };
         var metrics = paint.FontMetrics;
 
         Assert.Equal(
-            0,
+            -(metrics.Ascent + metrics.Descent) * 0.5f,
             NativeCanvasSceneRenderer.ResolveCanvasTextBaselineOffset("middle", metrics));
         Assert.Equal(
             -metrics.Top,
@@ -277,6 +277,33 @@ public sealed class NativeTextShapingTests
         Assert.Equal(
             -metrics.Bottom,
             NativeCanvasSceneRenderer.ResolveCanvasTextBaselineOffset("bottom", metrics));
+    }
+
+    [Theory]
+    [InlineData("", 1, 1, 9, 0)]
+    [InlineData("xMidYMid meet", 1, 1, 9, 0)]
+    [InlineData("xMinYMin meet", 1, 1, 0, 0)]
+    [InlineData("xMaxYMax meet", 1, 1, 18, 0)]
+    [InlineData("none", 2, 1, 0, 0)]
+    [InlineData("xMidYMid slice", 2, 2, 0, -9)]
+    public void SvgViewportMappingPreservesOrExplicitlyStretchesTheViewBox(
+        string preserveAspectRatio,
+        float scaleX,
+        float scaleY,
+        float offsetX,
+        float offsetY)
+    {
+        var mapping = NativeCanvasSceneRenderer.ResolveSvgViewportTransform(
+            viewportWidth: 36,
+            viewportHeight: 18,
+            viewBoxWidth: 18,
+            viewBoxHeight: 18,
+            preserveAspectRatio);
+
+        Assert.Equal(scaleX, mapping.ScaleX);
+        Assert.Equal(scaleY, mapping.ScaleY);
+        Assert.Equal(offsetX, mapping.OffsetX);
+        Assert.Equal(offsetY, mapping.OffsetY);
     }
 
     [Theory]

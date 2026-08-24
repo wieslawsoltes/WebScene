@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Reference for SVG viewBox aspect-ratio mapping</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: white; }
+  #stage { position: relative; width: 160px; height: 100px; background: rgb(11, 24, 26); }
+  svg { position: absolute; height: 18px; color: rgb(157, 171, 174); }
+  #centered { left: 19px; top: 10px; width: 18px; }
+  #stretched { left: 10px; top: 40px; width: 36px; }
+  #trailing { left: 28px; top: 70px; width: 18px; }
+</style>
+<div id="stage">
+  <svg id="centered" viewBox="0 0 18 18" aria-hidden="true">
+    <path fill="currentColor" d="M5 2h2l8 7-8 7H5l8-7z"></path>
+  </svg>
+  <svg id="stretched" viewBox="0 0 36 18" aria-hidden="true">
+    <path fill="currentColor" d="M10 2h4l16 7-16 7h-4l16-7z"></path>
+  </svg>
+  <svg id="trailing" viewBox="0 0 18 18" aria-hidden="true">
+    <path fill="currentColor" d="M5 2h2l8 7-8 7H5l8-7z"></path>
+  </svg>
+</div>

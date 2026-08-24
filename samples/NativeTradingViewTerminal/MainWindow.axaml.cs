@@ -12,6 +12,11 @@ public sealed partial class MainWindow : Window
     private readonly IReadOnlyList<string> _arguments;
     private readonly DispatcherTimer _diagnosticsTimer;
     private AvaloniaResourceLoader? _resourceLoader;
+    private string _lastMonitoredError = string.Empty;
+    private ulong _lastMonitoredScriptErrors;
+    private ulong _lastMonitoredFrameScriptErrors;
+    private ulong _lastMonitoredPublishedScenes;
+    private long _monitorTick;
 
     public MainWindow()
         : this(Environment.GetCommandLineArgs())
@@ -183,7 +188,10 @@ public sealed partial class MainWindow : Window
     }
 
     private async void OnDiagnosticsTick(object? sender, EventArgs args)
-        => await RefreshDiagnosticsAsync();
+    {
+        await RefreshDiagnosticsAsync();
+        MonitorRuntime();
+    }
 
     private async Task RefreshDiagnosticsAsync()
     {
@@ -217,9 +225,77 @@ public sealed partial class MainWindow : Window
                 """);
             DiagnosticsText.Text = JsonSerializer.Deserialize<string>(json) ?? json;
         }
-        catch
+        catch (Exception error)
         {
-            _diagnosticsTimer.Stop();
+            if (IsRuntimeMonitoringEnabled)
+            {
+                Console.Error.WriteLine(
+                    $"[WebScene monitor] diagnostics evaluation failed: {error}");
+                MonitorRuntime();
+            }
+            else
+            {
+                _diagnosticsTimer.Stop();
+            }
+        }
+    }
+
+    private bool IsRuntimeMonitoringEnabled
+        => _arguments.Contains("--monitor-runtime", StringComparer.Ordinal);
+
+    private void MonitorRuntime()
+    {
+        if (!IsRuntimeMonitoringEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var message in TerminalHost.DrainConsoleMessages())
+            {
+                Console.WriteLine("[WebScene console] " + message);
+            }
+
+            var lastError = TerminalHost.LastError;
+            if (!string.IsNullOrWhiteSpace(lastError)
+                && !string.Equals(
+                    lastError,
+                    _lastMonitoredError,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine("[WebScene last error] " + lastError);
+                _lastMonitoredError = lastError;
+            }
+
+            var snapshot = TerminalHost.CapturePerformanceSnapshot();
+            var engine = snapshot.Engine;
+            var errorsChanged = engine.ScriptErrors != _lastMonitoredScriptErrors
+                || engine.FrameScriptErrors != _lastMonitoredFrameScriptErrors;
+            var publishedDelta = engine.PublishedScenes >= _lastMonitoredPublishedScenes
+                ? engine.PublishedScenes - _lastMonitoredPublishedScenes
+                : 0;
+            var heartbeat = ++_monitorTick % 5 == 0;
+            if (errorsChanged || heartbeat)
+            {
+                Console.WriteLine(
+                    $"[WebScene monitor] scripts={engine.ExecutedScripts}, "
+                    + $"scriptErrors={engine.ScriptErrors}, "
+                    + $"frameScriptErrors={engine.FrameScriptErrors}, "
+                    + $"publishedScenes={engine.PublishedScenes}, "
+                    + $"publishedDelta={publishedDelta}, "
+                    + $"acquiredScenes={engine.AcquiredScenes}, "
+                    + $"renderedScenes={snapshot.Surface.RenderedScenes}, "
+                    + $"blockedPublications={snapshot.SceneFlow.BlockedPublications}");
+            }
+            _lastMonitoredScriptErrors = engine.ScriptErrors;
+            _lastMonitoredFrameScriptErrors = engine.FrameScriptErrors;
+            _lastMonitoredPublishedScenes = engine.PublishedScenes;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"[WebScene monitor] runtime sampling failed: {error}");
         }
     }
 
