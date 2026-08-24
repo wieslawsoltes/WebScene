@@ -22,6 +22,10 @@
   context.lineTo(268, 32);
   context.stroke();
 
+  context.fillStyle = "#ff0000";
+  context.fillRect(50, 134, 4, 4);
+  context.fillRect(266, 30, 4, 4);
+
   function drawSelectedHandle(x, y) {
     context.save();
     context.setTransform(1, 0, 0, 1, 0, 0);

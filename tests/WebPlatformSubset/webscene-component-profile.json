@@ -1660,6 +1660,11 @@
       "evidence": ["product-neutral-roundrect-reduction", "direct-chromium-color-oracle", "native-packet-and-hit-test-regression"],
       "visualChecks": [
         {
+          "color": "#0000ff",
+          "maximumPixels": 0,
+          "description": "the retained rounded path fully covers the authored blue failure marker"
+        },
+        {
           "color": "#00ff00",
           "minimumPixels": 4000,
           "description": "roundRect fills the retained rounded path"
@@ -1679,6 +1684,11 @@
       "evidence": ["reported-tradingview-selected-trendline-handle-reduction", "direct-chromium-color-oracle", "native-scene-packet-regression"],
       "visualChecks": [
         {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "both ellipse fills fully cover their authored red failure markers"
+        },
+        {
           "color": "#1976d2",
           "minimumPixels": 100,
           "description": "the baseline trendline remains visibly rendered"
@@ -1697,6 +1707,11 @@
       "capabilities": ["canvas-2d-arc-path", "counterclockwise-full-circle", "selected-trendline-endpoint-handles"],
       "evidence": ["captured-tradingview-canvas-command-sequence", "native-renderer-geometry-regression", "actual-tradingview-headless-proof"],
       "visualChecks": [
+        {
+          "color": "#ff0000",
+          "maximumPixels": 0,
+          "description": "both counterclockwise arc fills fully cover their authored red failure markers"
+        },
         {
           "color": "#2962ff",
           "minimumPixels": 100,

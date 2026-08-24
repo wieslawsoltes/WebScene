@@ -10,6 +10,8 @@
   const context = document.querySelector("canvas").getContext("2d");
   context.fillStyle = "rgb(255, 0, 0)";
   context.fillRect(0, 0, 100, 50);
+  context.fillStyle = "rgb(0, 0, 255)";
+  context.fillRect(30, 15, 40, 20);
   context.beginPath();
   context.roundRect(0, 0, 100, 50, [{ x: 20, y: 14 }, 8, 16, 4]);
   context.fillStyle = "rgb(0, 255, 0)";
