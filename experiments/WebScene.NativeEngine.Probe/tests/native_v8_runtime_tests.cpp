@@ -437,6 +437,7 @@ int main()
     test_negative_z_after_paints_behind_svg_content(engine);
     test_svg_current_color_is_resolved_before_scene_serialization(engine);
     test_svg_preserve_aspect_ratio_reaches_scene_serialization(engine);
+    test_svg_view_box_keeps_foreign_attribute_case_and_origin(engine);
     test_positive_z_before_paints_above_lower_z_child(engine);
     test_element_opacity_emits_isolated_group(engine);
     test_svg_background_image_reaches_scene_with_position_and_size(engine);

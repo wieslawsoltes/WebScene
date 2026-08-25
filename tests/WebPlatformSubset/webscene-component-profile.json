@@ -884,6 +884,14 @@
       "reason": "Focused product-neutral regression for a wide SVG viewport containing square-viewBox menu artwork. The default and explicit meet cases must retain uniform geometry and honor xMid/xMax alignment, while preserveAspectRatio=none remains the only intentionally stretched case. Keep candidate until the exact reftest passes every released RID and the independent Chromium oracle."
     },
     {
+      "path": "contracts/svg-negative-viewbox-layout-icon-centering.html",
+      "type": "reftest",
+      "reference": "contracts/svg-negative-viewbox-layout-icon-centering-ref.html",
+      "capabilities": ["svg-foreign-attribute-case", "svg-negative-viewbox-origin", "compact-icon-centering"],
+      "evidence": ["reported-layout-menu-selected-icon", "product-neutral-negative-origin-svg-reftest", "managed-exact-raster-regression"],
+      "reason": "Product-neutral reduction of the reported selected layout icon. SVG viewBox remains case-sensitive in the foreign namespace, a dynamic negative origin reaches the scene, and the cached SVG picture applies that origin exactly once so equal padding remains visually centered."
+    },
+    {
       "path": "contracts/dom-library-core-primitives.html",
       "type": "contract",
       "capabilities": ["text-content-text-child", "html-script-element-text", "form-select-indexed-access", "document-get-elements-by-name", "document-style-sheets", "detached-document-owner-document", "xml-well-formedness-cdata-parsererror", "initial-iframe-document-load"],

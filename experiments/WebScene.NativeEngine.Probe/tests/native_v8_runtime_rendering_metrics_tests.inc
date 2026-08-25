@@ -232,6 +232,57 @@ void test_svg_preserve_aspect_ratio_reaches_scene_serialization(webscene_engine*
         "SVG preserveAspectRatio did not reach the immutable scene with its wide viewport");
 }
 
+void test_svg_view_box_keeps_foreign_attribute_case_and_origin(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <svg id="layout-icon" width="21" height="19" viewBox="-1 -1 21 19">
+              <path fill="currentColor" d="M0 0h19v17H0z"/>
+            </svg>`;
+          const svg = document.getElementById('layout-icon');
+          const parsed = svg.getAttribute('viewBox');
+          const wrongCase = svg.getAttribute('viewbox');
+          svg.setAttribute('viewBox', '-2 -3 21 19');
+          return {
+            parsed,
+            wrongCase,
+            assigned: svg.getAttribute('viewBox'),
+            hasCanonical: svg.hasAttribute('viewBox'),
+            hasWrongCase: svg.hasAttribute('viewbox'),
+          };
+        })()
+    )JS", "native-svg-foreign-attribute-case.js");
+    require(
+        result == R"({"parsed":"-1 -1 21 19","wrongCase":null,"assigned":"-2 -3 21 19","hasCanonical":true,"hasWrongCase":false})",
+        "SVG viewBox did not retain foreign-content attribute case: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 6U || command.flags >= scene->string_count) continue;
+                const auto resource = scene->strings[command.flags];
+                const std::string_view bytes(
+                    scene->string_bytes + resource.byte_offset,
+                    resource.byte_length);
+                found = bytes.starts_with("-2 -3 21 19\txMidYMid meet\t<svg")
+                    && bytes.find("viewBox=\"-2 -3 21 19\"") != std::string_view::npos;
+                if (found) break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (found) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found,
+        "negative SVG viewBox origin did not reach the immutable scene");
+}
+
 void test_positive_z_before_paints_above_lower_z_child(webscene_engine* engine)
 {
     execute(engine, R"JS(

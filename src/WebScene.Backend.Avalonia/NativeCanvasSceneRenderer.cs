@@ -1074,23 +1074,49 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         try
         {
             ApplyDomRotation(canvas, command);
-            canvas.ClipRect(new SKRect(
+            DrawSvgPictureInViewport(
+                canvas,
+                svg.Picture,
+                new SKRect(
                 command.X,
                 command.Y,
                 command.X + command.Width,
-                command.Y + command.Height));
+                command.Y + command.Height),
+                viewBox,
+                aspectRatio);
+        }
+        finally
+        {
+            canvas.RestoreToCount(save);
+        }
+    }
+
+    internal static void DrawSvgPictureInViewport(
+        SKCanvas canvas,
+        SKPicture picture,
+        SKRect viewport,
+        IReadOnlyList<float> viewBox,
+        string preserveAspectRatio)
+    {
+        var save = canvas.Save();
+        try
+        {
+            canvas.ClipRect(viewport);
             var mapping = ResolveSvgViewportTransform(
-                command.Width,
-                command.Height,
+                viewport.Width,
+                viewport.Height,
                 viewBox[2],
                 viewBox[3],
-                aspectRatio);
+                preserveAspectRatio);
             canvas.Translate(
-                command.X + mapping.OffsetX,
-                command.Y + mapping.OffsetY);
+                viewport.Left + mapping.OffsetX,
+                viewport.Top + mapping.OffsetY);
             canvas.Scale(mapping.ScaleX, mapping.ScaleY);
-            canvas.Translate(-viewBox[0], -viewBox[1]);
-            canvas.DrawPicture(svg.Picture);
+            // SKSvg has already mapped the root viewBox origin into the
+            // picture's zero-based viewport. Translating by the authored
+            // min-x/min-y again shifts negative-origin icons inside their
+            // otherwise centered CSS box.
+            canvas.DrawPicture(picture);
         }
         finally
         {
