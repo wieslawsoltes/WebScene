@@ -270,6 +270,39 @@
             *self, *result_root, local_context, "about:blank"));
     }
 
+    static void xml_serializer_serialize(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || info.Length() < 1 || !info[0]->IsObject()) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "XMLSerializer.serializeToString requires a Node")));
+            return;
+        }
+        auto* node = unwrap_node(info[0].As<v8::Object>());
+        if (node == nullptr) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(),
+                    "XMLSerializer.serializeToString requires a Node")));
+            return;
+        }
+        self->record_feature(
+            "dom",
+            "XMLSerializer.serializeToString",
+            "partially-supported",
+            "detached XML/SVG document and element serialization",
+            "native-binding");
+        std::string serialized;
+        if (node->tag.empty() || node->tag.front() == '#') {
+            for (const auto* child : node->children) {
+                if (child != nullptr) append_serialized_html(*child, serialized);
+            }
+        } else {
+            append_serialized_html(*node, serialized);
+        }
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), serialized));
+    }
+
     static void parsed_document_get_elements(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());

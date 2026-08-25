@@ -1351,6 +1351,14 @@
             js_string(isolate, "parseFromString"),
             v8::FunctionTemplate::New(isolate, dom_parser_parse));
         global->Set(local_context, js_string(isolate, "DOMParser"), dom_parser_template->GetFunction(local_context).ToLocalChecked()).Check();
+        auto xml_serializer_template = v8::FunctionTemplate::New(isolate);
+        xml_serializer_template->PrototypeTemplate()->Set(
+            js_string(isolate, "serializeToString"),
+            v8::FunctionTemplate::New(isolate, xml_serializer_serialize));
+        global->Set(
+            local_context,
+            js_string(isolate, "XMLSerializer"),
+            xml_serializer_template->GetFunction(local_context).ToLocalChecked()).Check();
         auto matrix_template = v8::FunctionTemplate::New(isolate, dom_matrix_constructor);
         global->Set(local_context, js_string(isolate, "DOMMatrix"), matrix_template->GetFunction(local_context).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "DOMMatrixReadOnly"), matrix_template->GetFunction(local_context).ToLocalChecked()).Check();
@@ -1463,10 +1471,32 @@
                 }
               }
               class WebSceneBlob {
-                constructor(parts = []) {
+                constructor(parts = [], options = {}) {
                   __webSceneRecordWebApi(
                     'Blob.constructor', 'partially-supported',
-                    'text serialization without MIME type, byte preservation, slicing, or streaming');
+                    'byte-preserving construction, type, size, object URLs, and downloads without slicing or streaming');
+                  const chunks = [];
+                  let size = 0;
+                  for (const part of parts) {
+                    let bytes;
+                    if (part instanceof ArrayBuffer) {
+                      bytes = new Uint8Array(part);
+                    } else if (ArrayBuffer.isView(part)) {
+                      bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+                    } else {
+                      bytes = new TextEncoder().encode(String(part));
+                    }
+                    chunks.push(bytes);
+                    size += bytes.byteLength;
+                  }
+                  this._bytes = new Uint8Array(size);
+                  let offset = 0;
+                  for (const chunk of chunks) {
+                    this._bytes.set(chunk, offset);
+                    offset += chunk.byteLength;
+                  }
+                  this.size = size;
+                  this.type = String(options.type || '').toLowerCase();
                   this._text = Array.from(parts, String).join('');
                 }
                 toString() { return this._text; }
@@ -1557,7 +1587,7 @@
                     + `${this.pathname}${search}${hash}`;
                 }
                 toJSON() { return this.toString(); }
-                static createObjectURL(blob) { return __webSceneCreateObjectUrl(String(blob)); }
+                static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
                 static revokeObjectURL() {}
               }
               class WebSceneDOMException extends Error {
@@ -1690,6 +1720,7 @@
             local_context,
             js_string(isolate, std::string(message_channel_source).c_str())).ToLocalChecked();
         message_channel_script->Run(local_context).ToLocalChecked();
+        install_clipboard_api(local_context);
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
         install_tree_walker_platform(local_context);

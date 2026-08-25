@@ -1677,12 +1677,124 @@
                 : v8::True(info.GetIsolate()));
     }
 
+    static std::string base64_encode_bytes(const uint8_t* bytes, size_t length)
+    {
+        static constexpr char alphabet[] =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        encoded.reserve(((length + 2U) / 3U) * 4U);
+        for (size_t index = 0; index < length; index += 3U) {
+            const auto remaining = length - index;
+            const auto value = (static_cast<uint32_t>(bytes[index]) << 16U)
+                | (remaining > 1U ? static_cast<uint32_t>(bytes[index + 1U]) << 8U : 0U)
+                | (remaining > 2U ? static_cast<uint32_t>(bytes[index + 2U]) : 0U);
+            encoded.push_back(alphabet[(value >> 18U) & 0x3FU]);
+            encoded.push_back(alphabet[(value >> 12U) & 0x3FU]);
+            encoded.push_back(remaining > 1U ? alphabet[(value >> 6U) & 0x3FU] : '=');
+            encoded.push_back(remaining > 2U ? alphabet[value & 0x3FU] : '=');
+        }
+        return encoded;
+    }
+
+    static void write_clipboard(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        if (self == nullptr || info.Length() < 2 || !info[1]->IsObject()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        const auto content_type = to_utf8(info.GetIsolate(), info[0]);
+        if (content_type.empty()) {
+            info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+            return;
+        }
+        auto payload = info[1].As<v8::Object>();
+        auto request = v8::Object::New(info.GetIsolate());
+        request->Set(
+            local_context,
+            js_string(info.GetIsolate(), "kind"),
+            js_string(info.GetIsolate(), "writeClipboard")).Check();
+        request->Set(
+            local_context,
+            js_string(info.GetIsolate(), "contentType"),
+            js_string(info.GetIsolate(), content_type.c_str())).Check();
+
+        v8::Local<v8::Value> canvas_node_id;
+        if (payload->Get(
+                local_context,
+                js_string(info.GetIsolate(), "_canvasNodeId")).ToLocal(&canvas_node_id)
+            && canvas_node_id->IsUint32()) {
+            request->Set(
+                local_context,
+                js_string(info.GetIsolate(), "canvasNodeId"),
+                canvas_node_id).Check();
+        } else {
+            v8::Local<v8::Value> bytes_value;
+            if (!payload->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "_bytes")).ToLocal(&bytes_value)
+                || !bytes_value->IsArrayBufferView()) {
+                info.GetReturnValue().Set(v8::False(info.GetIsolate()));
+                return;
+            }
+            auto view = bytes_value.As<v8::ArrayBufferView>();
+            auto backing = view->Buffer()->GetBackingStore();
+            const auto* bytes = static_cast<const uint8_t*>(backing->Data())
+                + view->ByteOffset();
+            const auto data_url = "data:" + content_type + ";base64,"
+                + base64_encode_bytes(bytes, view->ByteLength());
+            request->Set(
+                local_context,
+                js_string(info.GetIsolate(), "url"),
+                js_string(info.GetIsolate(), data_url.c_str())).Check();
+        }
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(), self->enqueue_host_request(local_context, request)));
+    }
+
     static void create_object_url(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
-        const auto html = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        auto payload = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        std::string download_payload;
+        if (info.Length() > 0 && info[0]->IsObject()) {
+            auto local_context = info.GetIsolate()->GetCurrentContext();
+            auto object = info[0].As<v8::Object>();
+            v8::Local<v8::Value> bytes_value;
+            if (object->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "_bytes")).ToLocal(&bytes_value)
+                && bytes_value->IsArrayBufferView()) {
+                auto view = bytes_value.As<v8::ArrayBufferView>();
+                auto backing = view->Buffer()->GetBackingStore();
+                const auto* bytes = static_cast<const uint8_t*>(backing->Data())
+                    + view->ByteOffset();
+                v8::Local<v8::Value> type_value;
+                const auto type = object->Get(
+                        local_context,
+                        js_string(info.GetIsolate(), "type")).ToLocal(&type_value)
+                    ? to_utf8(info.GetIsolate(), type_value)
+                    : std::string{};
+                const auto is_textual = type.starts_with("text/")
+                    || type == "application/xhtml+xml"
+                    || type == "application/xml"
+                    || type == "image/svg+xml";
+                if (is_textual) {
+                    payload.assign(
+                        reinterpret_cast<const char*>(bytes),
+                        view->ByteLength());
+                }
+                download_payload = "data:"
+                    + (type.empty() ? std::string{"application/octet-stream"} : type)
+                    + ";base64," + base64_encode_bytes(bytes, view->ByteLength());
+            }
+        }
         const auto url = "blob:webscene-native/" + std::to_string(self->next_object_url_id++);
-        self->object_urls[url] = html;
+        self->object_urls[url] = std::move(payload);
+        if (!download_payload.empty()) {
+            self->object_url_download_payloads[url] = std::move(download_payload);
+        }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), url.c_str()));
     }
 

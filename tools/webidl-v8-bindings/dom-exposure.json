@@ -270,6 +270,7 @@
         { "name": "tabIndex", "getter": "get_tab_index", "setter": "set_tab_index" },
         { "name": "src", "getter": "get_element_url", "setter": "set_element_src" },
         { "name": "href", "getter": "get_element_url", "setter": "set_element_href" },
+        { "name": "download", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "hash", "getter": "get_anchor_hash", "setter": "set_anchor_hash" },
         { "name": "contentWindow", "getter": "get_content_window" },
         { "name": "contentDocument", "getter": "get_content_document" }
@@ -277,6 +278,8 @@
       "methods": [
         { "name": "scrollIntoView", "callback": "element_scroll_into_view", "length": 0 },
         { "name": "getContext", "callback": "canvas_get_context", "length": 1 },
+        { "name": "toDataURL", "callback": "canvas_to_data_url", "length": 0 },
+        { "name": "toBlob", "callback": "canvas_to_blob", "length": 1 },
         { "name": "decode", "callback": "image_decode", "length": 0 },
         { "name": "setPointerCapture", "callback": "set_pointer_capture", "length": 1 },
         { "name": "releasePointerCapture", "callback": "release_pointer_capture", "length": 1 },

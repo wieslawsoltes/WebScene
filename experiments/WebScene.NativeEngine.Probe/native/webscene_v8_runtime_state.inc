@@ -143,6 +143,10 @@
     v8_dom_runtime::work_metrics work{};
     uint32_t next_object_url_id{1};
     std::unordered_map<std::string, std::string> object_urls;
+    // Object URLs serve two browser contracts. Frame/image navigation consumes
+    // the authored Blob text, while an <a download> activation needs the exact
+    // byte payload and MIME type. Keep both representations under the same URL.
+    std::unordered_map<std::string, std::string> object_url_download_payloads;
     std::vector<dom_node*> pending_frame_hydrations;
     std::unordered_map<uint32_t, frame_hydration_state> frame_hydration_states;
     bool prefer_frame_hydration_task{true};

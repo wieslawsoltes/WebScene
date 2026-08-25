@@ -12,6 +12,71 @@
             "native-binding");
     }
 
+    static dom_node* canvas_export_node(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.This());
+        return node != nullptr && node->tag == "canvas" ? node : nullptr;
+    }
+
+    static void canvas_to_data_url(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = canvas_export_node(info);
+        if (self == nullptr || node == nullptr) return;
+        self->record_feature(
+            "canvas",
+            "HTMLCanvasElement.toDataURL",
+            "partially-supported",
+            "opaque canvas snapshot handoff to the desktop host",
+            "native-binding");
+        const auto token = "webscene-canvas-snapshot:" + std::to_string(node->id);
+        info.GetReturnValue().Set(js_string(info.GetIsolate(), token.c_str()));
+    }
+
+    static void canvas_to_blob(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = canvas_export_node(info);
+        if (self == nullptr || node == nullptr || info.Length() < 1
+            || !info[0]->IsFunction()) {
+            return;
+        }
+        self->record_feature(
+            "canvas",
+            "HTMLCanvasElement.toBlob",
+            "partially-supported",
+            "opaque PNG canvas snapshot handoff to the desktop host",
+            "native-binding");
+        auto local_context = info.GetIsolate()->GetCurrentContext();
+        auto global = local_context->Global();
+        v8::Local<v8::Value> blob_constructor_value;
+        if (!global->Get(
+                local_context,
+                js_string(info.GetIsolate(), "Blob")).ToLocal(&blob_constructor_value)
+            || !blob_constructor_value->IsFunction()) {
+            return;
+        }
+        auto options = v8::Object::New(info.GetIsolate());
+        options->Set(
+            local_context,
+            js_string(info.GetIsolate(), "type"),
+            js_string(info.GetIsolate(), "image/png")).Check();
+        v8::Local<v8::Value> arguments[] = {
+            v8::Array::New(info.GetIsolate()), options};
+        v8::Local<v8::Object> blob;
+        if (!blob_constructor_value.As<v8::Function>()->NewInstance(
+                local_context, 2, arguments).ToLocal(&blob)) {
+            return;
+        }
+        blob->Set(
+            local_context,
+            js_string(info.GetIsolate(), "_canvasNodeId"),
+            v8::Integer::NewFromUnsigned(info.GetIsolate(), node->id)).Check();
+        v8::Local<v8::Value> callback_arguments[] = {blob};
+        static_cast<void>(info[0].As<v8::Function>()->Call(
+            local_context, global, 1, callback_arguments));
+    }
+
     static void canvas_text_no_op(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());

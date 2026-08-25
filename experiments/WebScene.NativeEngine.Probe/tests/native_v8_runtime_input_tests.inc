@@ -996,6 +996,162 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
         evaluate(engine, "true", "native-cursor-exit-barrier.js") == "true"
             && webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_DEFAULT,
         "leaving cursor:pointer did not restore the default host cursor");
+
+    const auto tradingview_download_state = evaluate(engine, R"JS(
+        (() => {
+          // TradingView's downloadFile helper uses a detached anchor, assigns
+          // the reflected IDL properties, and gives it canvas.toDataURL().
+          const download = document.createElement('a');
+          download.style.display = 'none';
+          download.href = 'data:image/png;base64,iVBORw==';
+          download.download = 'AAPL_2026-08-25_14-30-00.png';
+          download.click();
+          return {
+            connected: download.isConnected,
+            downloadProperty: download.download,
+            hasOwnDownload: Object.prototype.hasOwnProperty.call(download, 'download'),
+            hrefAttribute: download.getAttribute('href'),
+            downloadAttribute: download.getAttribute('download')
+          };
+        })()
+    )JS", "native-tradingview-download-anchor.js");
+    require(
+        tradingview_download_state
+            == R"({"connected":false,"downloadProperty":"AAPL_2026-08-25_14-30-00.png","hasOwnDownload":false,"hrefAttribute":"data:image/png;base64,iVBORw==","downloadAttribute":"AAPL_2026-08-25_14-30-00.png"})",
+        "TradingView-style anchor properties did not reflect before detached activation: "
+            + tradingview_download_state);
+    const auto download_request = take_host_request(engine);
+    require(
+        download_request.find(R"("kind":"download")") != std::string::npos
+            && download_request.find(
+                R"("suggestedFileName":"AAPL_2026-08-25_14-30-00.png")")
+                != std::string::npos
+            && download_request.find(R"("url":"data:image/png;base64,iVBORw==")")
+                != std::string::npos,
+        "TradingView-style detached data-URL download did not reach the host save request: "
+            + download_request);
+
+    execute(engine, R"JS(
+        (() => {
+          globalThis.__blobFrameLoaded = '';
+          globalThis.__sharedBlobUrl = URL.createObjectURL(new Blob(
+            ["<script>parent.__blobFrameLoaded='ok'</script>"],
+            { type: 'text/html' }));
+          const frame = document.createElement('iframe');
+          frame.setAttribute('src', globalThis.__sharedBlobUrl);
+          document.body.appendChild(frame);
+        })()
+    )JS", "native-blob-frame-setup.js");
+    auto blob_frame_loaded = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        blob_frame_loaded = evaluate(
+            engine,
+            "globalThis.__blobFrameLoaded",
+            "native-blob-frame-result.js");
+        if (blob_frame_loaded == R"("ok")") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        blob_frame_loaded == R"("ok")",
+        "Blob object URL navigation did not hydrate the iframe as HTML: "
+            + blob_frame_loaded);
+
+    execute(engine, R"JS(
+        (() => {
+          const download = document.createElement('a');
+          download.setAttribute('href', globalThis.__sharedBlobUrl);
+          download.setAttribute('download', 'frame.html');
+          document.body.appendChild(download);
+          download.click();
+        })()
+    )JS", "native-shared-blob-download.js");
+    require(
+        evaluate(engine, "true", "native-shared-blob-download-barrier.js") == "true",
+        "shared Blob download activation did not drain");
+    const auto shared_blob_download = take_host_request(engine);
+    require(
+        shared_blob_download.find(R"("kind":"download")") != std::string::npos
+            && shared_blob_download.find(R"("suggestedFileName":"frame.html")")
+                != std::string::npos
+            && shared_blob_download.find(
+                R"("url":"data:text/html;base64,PHNjcmlwdD5wYXJlbnQuX19ibG9iRnJhbWVMb2FkZWQ9J29rJzwvc2NyaXB0Pg==")")
+                != std::string::npos,
+        "one Blob object URL did not preserve its distinct navigation and download representations: "
+            + shared_blob_download);
+
+    const auto screenshot_download_state = evaluate(engine, R"JS(
+        (() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 320;
+          canvas.height = 180;
+          canvas.getContext('2d').fillRect(0, 0, 320, 180);
+          document.body.appendChild(canvas);
+          globalThis.__screenshotCanvas = canvas;
+          const download = document.createElement('a');
+          download.href = canvas.toDataURL();
+          download.download = 'AAPL_2026-08-25_14-30-01.png';
+          download.click();
+          return {
+            hasToDataURL: typeof canvas.toDataURL === 'function',
+            hasToBlob: typeof canvas.toBlob === 'function',
+            token: download.getAttribute('href')
+          };
+        })()
+    )JS", "native-tradingview-canvas-download.js");
+    require(
+        screenshot_download_state.find(R"("hasToDataURL":true)") != std::string::npos
+            && screenshot_download_state.find(R"("hasToBlob":true)") != std::string::npos
+            && screenshot_download_state.find("webscene-canvas-snapshot:")
+                != std::string::npos,
+        "canvas export methods did not expose the host snapshot token: "
+            + screenshot_download_state);
+    const auto screenshot_download_request = take_host_request(engine);
+    require(
+        screenshot_download_request.find(R"("kind":"download")") != std::string::npos
+            && screenshot_download_request.find(
+                R"("suggestedFileName":"AAPL_2026-08-25_14-30-01.png")")
+                != std::string::npos
+            && screenshot_download_request.find(R"("canvasNodeId":)")
+                != std::string::npos,
+        "TradingView canvas download did not reach the host capture request: "
+            + screenshot_download_request);
+
+    execute(engine, R"JS(
+        (() => {
+          globalThis.__screenshotCopyState = 'pending';
+          const blob = new Promise(resolve =>
+            __screenshotCanvas.toBlob(value => {
+              if (value !== null) resolve(value);
+            }));
+          navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]).then(
+            () => { globalThis.__screenshotCopyState = 'done'; },
+            error => { globalThis.__screenshotCopyState = String(error); });
+        })()
+    )JS", "native-tradingview-canvas-copy.js");
+    auto screenshot_copy_state = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        screenshot_copy_state = evaluate(
+            engine,
+            "globalThis.__screenshotCopyState",
+            "native-tradingview-canvas-copy-result.js");
+        if (screenshot_copy_state == R"("done")") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        screenshot_copy_state == R"("done")",
+        "TradingView ClipboardItem promise did not resolve: " + screenshot_copy_state);
+    const auto screenshot_clipboard_request = take_host_request(engine);
+    require(
+        screenshot_clipboard_request.find(R"("kind":"writeClipboard")")
+                != std::string::npos
+            && screenshot_clipboard_request.find(R"("contentType":"image/png")")
+                != std::string::npos
+            && screenshot_clipboard_request.find(R"("canvasNodeId":)")
+                != std::string::npos,
+        "TradingView canvas copy did not reach the typed host clipboard request: "
+            + screenshot_clipboard_request);
 }
 
 void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine)

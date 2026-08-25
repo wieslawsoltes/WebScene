@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using WebScene.Backends.Native;
@@ -23,6 +25,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private NativeInteropInvoker? _interop;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
     private CancellationTokenSource? _navigationCancellation;
+    private readonly SemaphoreSlim _hostRequestGate = new(1, 1);
+    private static readonly HttpClient HostRequestHttpClient = new();
 
     public NativeWebSceneView()
         : this(useCompositionVisual: true)
@@ -405,6 +409,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 options.CompilationCacheDirectory,
                 resourceLoader,
                 _surface.OnNativeScenePublished,
+                hostRequestAvailable: OnNativeHostRequestAvailable,
                 interopCallbackAvailable: callbackSignal.Notify,
                 animationFrameRequested: _surface.OnNativeAnimationFrameRequested);
             if (engine == IntPtr.Zero)
@@ -476,6 +481,110 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         {
             _lifecycleGate.Release();
         }
+    }
+
+    private void OnNativeHostRequestAvailable()
+    {
+        Dispatcher.UIThread.Post(
+            DrainHostRequestsAsync,
+            DispatcherPriority.Normal);
+    }
+
+    private async void DrainHostRequestsAsync()
+    {
+        await _hostRequestGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var engine = Volatile.Read(ref _engine);
+            while (engine != IntPtr.Zero
+                && NativeWebSceneApi.TryTakeHostRequest(engine, out var request))
+            {
+                try
+                {
+                    await HandleHostRequestAsync(request).ConfigureAwait(true);
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine($"[WebScene native host request] {error}");
+                }
+                if (Volatile.Read(ref _engine) != engine) break;
+            }
+        }
+        finally
+        {
+            _hostRequestGate.Release();
+        }
+    }
+
+    private async Task HandleHostRequestAsync(string request)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is null) return;
+        if (NativeHostRequest.TryGetExternalUri(request, out var externalUri))
+        {
+            await topLevel.Launcher.LaunchUriAsync(externalUri!).ConfigureAwait(true);
+            return;
+        }
+        if (NativeHostRequest.TryGetClipboardWrite(request, out var clipboardWrite))
+        {
+            var clipboardBytes = clipboardWrite.Bytes;
+            if (clipboardBytes is null && clipboardWrite.CanvasNodeId is not null)
+            {
+                clipboardBytes = _surface.CaptureRetainedScenePng();
+            }
+            if (clipboardBytes is null || topLevel.Clipboard is null) return;
+            if (string.Equals(
+                    clipboardWrite.ContentType,
+                    "image/png",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var data = new DataObject();
+                data.Set("image/png", clipboardBytes);
+                data.Set("public.png", clipboardBytes);
+                data.Set("PNG", clipboardBytes);
+                await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+            }
+            else if (clipboardWrite.ContentType.StartsWith(
+                         "text/",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                await topLevel.Clipboard.SetTextAsync(
+                    System.Text.Encoding.UTF8.GetString(clipboardBytes)).ConfigureAwait(true);
+            }
+            else
+            {
+                var data = new DataObject();
+                data.Set(clipboardWrite.ContentType, clipboardBytes);
+                await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+            }
+            return;
+        }
+        if (!NativeHostRequest.TryGetDownload(request, out var download)) return;
+        var bytes = download.Bytes;
+        if (bytes is null && download.CanvasNodeId is not null)
+        {
+            bytes = _surface.CaptureRetainedScenePng();
+        }
+        if (bytes is null && download.RemoteUri is not null)
+        {
+            bytes = await HostRequestHttpClient
+                .GetByteArrayAsync(download.RemoteUri)
+                .ConfigureAwait(true);
+        }
+        if (bytes is null) return;
+        var extension = Path.GetExtension(download.SuggestedFileName);
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(
+            new FilePickerSaveOptions
+            {
+                Title = "Save download",
+                SuggestedFileName = download.SuggestedFileName,
+                DefaultExtension = extension.Length > 1 ? extension[1..] : null,
+                ShowOverwritePrompt = true
+            }).ConfigureAwait(true);
+        if (file is null) return;
+        await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
+        stream.SetLength(0);
+        await stream.WriteAsync(bytes).ConfigureAwait(true);
     }
 
     public async Task UnloadAsync()

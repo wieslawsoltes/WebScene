@@ -620,9 +620,22 @@ void test_svg_dom_parser_preserves_fill_rule(webscene_engine* engine)
           frameDocument.write(
             '<html><body><script>'
             + 'const parsed = new DOMParser().parseFromString('
-            + '`<svg><path fill="currentColor" fill-rule="evenodd" d="M0 0h10v10H0z"/></svg>`,'
+            + '`<svg viewBox="0 0 10 10"><path fill="currentColor" fill-rule="evenodd" d="M0 0h10v10H0z"/></svg>`,'
             + '`image/svg+xml`);'
             + 'globalThis.__parsedFillRule = parsed.querySelector(`path`).getAttribute(`fill-rule`);'
+            + 'try {'
+            + '  parsed.firstElementChild.setAttribute(`color`, `#2962ff`);'
+            + '  const serialized = (new XMLSerializer).serializeToString(parsed);'
+            + '  globalThis.__serializedSvg = serialized;'
+            + '  const image = new Image();'
+            + '  globalThis.__serializedSvgImageState = `pending`;'
+            + '  image.onload = () => globalThis.__serializedSvgImageState = `loaded`;'
+            + '  image.onerror = () => globalThis.__serializedSvgImageState = `error`;'
+            + '  image.src = URL.createObjectURL(new Blob([serialized], { type: `image/svg+xml` }));'
+            + '} catch (error) {'
+            + '  globalThis.__serializedSvg = `${typeof XMLSerializer}|${error.stack || error}`;'
+            + '  globalThis.__serializedSvgImageState = `exception`;'
+            + '}'
             + '</script></body></html>');
           frameDocument.close();
           globalThis.__fillRuleFrame = frame;
@@ -633,6 +646,26 @@ void test_svg_dom_parser_preserves_fill_rule(webscene_engine* engine)
         "native-svg-fill-rule-result.js");
     if (parsed_fill_rule != "\"evenodd\"") {
         fail("DOMParser discarded an SVG fill-rule attribute: " + parsed_fill_rule);
+    }
+    const auto serialized_svg = evaluate(engine,
+        "globalThis.__fillRuleFrame.contentWindow.__serializedSvg",
+        "native-svg-serialization-result.js");
+    if (serialized_svg.find("<svg") == std::string::npos
+        || serialized_svg.find(R"(color=\"#2962ff\")") == std::string::npos
+        || serialized_svg.find(R"(fill-rule=\"evenodd\")") == std::string::npos) {
+        fail("XMLSerializer did not preserve the TradingView SVG image payload: "
+            + serialized_svg);
+    }
+    auto image_state = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        image_state = evaluate(engine,
+            "globalThis.__fillRuleFrame.contentWindow.__serializedSvgImageState",
+            "native-svg-object-url-image-result.js");
+        if (image_state != R"("pending")") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (image_state != R"("loaded")") {
+        fail("serialized SVG Blob did not dispatch Image.onload: " + image_state);
     }
 }
 

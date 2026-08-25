@@ -702,12 +702,18 @@
                 std::string markup;
                 std::string resolved_source;
                 const auto& base = current_base_address();
-                if (!load_text_resource(
+                const auto object_url = object_urls.find(source->second);
+                const auto loaded = object_url != object_urls.end()
+                    ? (markup = object_url->second,
+                        resolved_source = source->second,
+                        true)
+                    : load_text_resource(
                         source->second,
                         base,
                         WEBSCENE_RESOURCE_IMAGE,
                         markup,
-                        resolved_source)) {
+                        resolved_source);
+                if (!loaded) {
                     return mark_broken_image();
                 }
                 const auto view_box = svg_view_box(markup);

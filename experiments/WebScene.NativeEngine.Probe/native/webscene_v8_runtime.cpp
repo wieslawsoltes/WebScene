@@ -296,6 +296,10 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "tabIndex"), get_tab_index, set_tab_index);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "src"), get_element_url, set_element_src);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "href"), get_element_url, set_element_href);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "download"),
+            get_reflected_string_attribute,
+            set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "hash"), get_anchor_hash, set_anchor_hash);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "innerHTML"), get_inner_html, set_inner_html);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "contentWindow"), get_content_window);
@@ -455,6 +459,12 @@ struct v8_dom_runtime::implementation final {
         element->PrototypeTemplate()->Set(
             js_string(isolate, "getContext"),
             v8::FunctionTemplate::New(isolate, canvas_get_context));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "toDataURL"),
+            v8::FunctionTemplate::New(isolate, canvas_to_data_url));
+        element->PrototypeTemplate()->Set(
+            js_string(isolate, "toBlob"),
+            v8::FunctionTemplate::New(isolate, canvas_to_blob));
         element->PrototypeTemplate()->Set(
             js_string(isolate, "decode"),
             v8::FunctionTemplate::New(isolate, image_decode));
@@ -696,6 +706,10 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "lastChild"), get_document_boundary_child);
         document_template->SetNativeDataProperty(
             js_string(isolate, "childNodes"), get_document_child_nodes);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "firstElementChild"), get_first_element_child);
+        document_template->SetNativeDataProperty(
+            js_string(isolate, "lastElementChild"), get_last_element_child);
         document_template->SetNativeDataProperty(js_string(isolate, "defaultView"), get_default_view);
         document_template->SetNativeDataProperty(js_string(isolate, "location"), get_document_location);
         document_template->SetNativeDataProperty(
@@ -2691,6 +2705,14 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "DOMParser"),
             dom_parser_template->GetFunction(local_context).ToLocalChecked()).Check();
+        auto xml_serializer_template = v8::FunctionTemplate::New(isolate);
+        xml_serializer_template->PrototypeTemplate()->Set(
+            js_string(isolate, "serializeToString"),
+            v8::FunctionTemplate::New(isolate, xml_serializer_serialize));
+        global->Set(
+            local_context,
+            js_string(isolate, "XMLSerializer"),
+            xml_serializer_template->GetFunction(local_context).ToLocalChecked()).Check();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         install_generated_dom_constructors(local_context, global);
         global->Set(
@@ -2880,10 +2902,32 @@ struct v8_dom_runtime::implementation final {
 
         constexpr std::string_view crypto_source = R"JS(
             class WebSceneBlob {
-              constructor(parts = []) {
+              constructor(parts = [], options = {}) {
                 __webSceneRecordWebApi(
                   'Blob.constructor', 'partially-supported',
-                  'text serialization without MIME type, byte preservation, slicing, or streaming');
+                  'byte-preserving construction, type, size, object URLs, and downloads without slicing or streaming');
+                const chunks = [];
+                let size = 0;
+                for (const part of parts) {
+                  let bytes;
+                  if (part instanceof ArrayBuffer) {
+                    bytes = new Uint8Array(part);
+                  } else if (ArrayBuffer.isView(part)) {
+                    bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+                  } else {
+                    bytes = new TextEncoder().encode(String(part));
+                  }
+                  chunks.push(bytes);
+                  size += bytes.byteLength;
+                }
+                this._bytes = new Uint8Array(size);
+                let offset = 0;
+                for (const chunk of chunks) {
+                  this._bytes.set(chunk, offset);
+                  offset += chunk.byteLength;
+                }
+                this.size = size;
+                this.type = String(options.type || '').toLowerCase();
                 this._text = Array.from(parts, String).join('');
               }
               toString() { return this._text; }
@@ -2974,7 +3018,7 @@ struct v8_dom_runtime::implementation final {
                   + `${this.pathname}${search}${hash}`;
               }
               toJSON() { return this.toString(); }
-              static createObjectURL(blob) { return __webSceneCreateObjectUrl(String(blob)); }
+              static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
               static revokeObjectURL() {}
             }
             class WebSceneDOMException extends Error {
@@ -3033,6 +3077,7 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
         crypto_script->Run(local_context).ToLocalChecked();
+        install_clipboard_api(local_context);
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
         install_tree_walker_platform(local_context);
@@ -3295,6 +3340,77 @@ struct v8_dom_runtime::implementation final {
             bridge).Check();
     }
 
+    void install_clipboard_api(v8::Local<v8::Context> local_context)
+    {
+        auto global = local_context->Global();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneWriteClipboard"),
+            v8::Function::New(
+                local_context,
+                write_clipboard).ToLocalChecked()).Check();
+        constexpr std::string_view source = R"JS(
+          (() => {
+            class WebSceneClipboardItem {
+              constructor(items, options = {}) {
+                if (items === null || typeof items !== 'object') {
+                  throw new TypeError('ClipboardItem data must be an object');
+                }
+                this._items = Object.assign(Object.create(null), items);
+                this.types = Object.keys(items);
+                this.presentationStyle = String(options.presentationStyle || 'unspecified');
+              }
+              getType(type) {
+                type = String(type);
+                if (!Object.prototype.hasOwnProperty.call(this._items, type)) {
+                  return Promise.reject(new DOMException(
+                    `Clipboard item does not contain ${type}`, 'NotFoundError'));
+                }
+                return Promise.resolve(this._items[type]).then(value => {
+                  if (value instanceof Blob || value?._canvasNodeId !== undefined) {
+                    return value;
+                  }
+                  return new Blob([value], { type });
+                });
+              }
+              static supports(type) {
+                return ['image/png', 'text/plain', 'text/html'].includes(String(type));
+              }
+            }
+            const clipboard = {
+              async write(items) {
+                __webSceneRecordWebApi(
+                  'Clipboard.write', 'partially-supported',
+                  'typed image/text handoff to the desktop host without clipboard reads');
+                if (!Array.isArray(items) || items.length === 0) {
+                  throw new TypeError('Clipboard.write requires at least one item');
+                }
+                const item = items[0];
+                if (!(item instanceof WebSceneClipboardItem)) {
+                  throw new TypeError('Clipboard.write requires ClipboardItem values');
+                }
+                for (const type of item.types) {
+                  const blob = await item.getType(type);
+                  if (!__webSceneWriteClipboard(type, blob)) {
+                    throw new DOMException('The host rejected the clipboard write', 'NotAllowedError');
+                  }
+                }
+              }
+            };
+            Object.defineProperty(globalThis, 'ClipboardItem', {
+              value: WebSceneClipboardItem, configurable: true
+            });
+            Object.defineProperty(navigator, 'clipboard', {
+              value: clipboard, enumerable: true, configurable: true
+            });
+          })();
+        )JS";
+        auto script = v8::Script::Compile(
+            local_context,
+            js_string(isolate, std::string(source).c_str())).ToLocalChecked();
+        script->Run(local_context).ToLocalChecked();
+    }
+
     bool try_take_host_request(std::string& request)
     {
         std::lock_guard lock(host_request_mutex);
@@ -3340,9 +3456,69 @@ struct v8_dom_runtime::implementation final {
     {
         auto* anchor = &target;
         while (anchor != nullptr && anchor->tag != "a") anchor = anchor->parent;
-        if (anchor == nullptr || anchor->attributes.contains("download")) return true;
+        if (anchor == nullptr) return true;
         const auto authored = anchor->attributes.find("href");
         if (authored == anchor->attributes.end() || authored->second.empty()) return true;
+        if (anchor->attributes.contains("download")) {
+            auto local_context = frame_context.IsEmpty()
+                ? context.Get(isolate)
+                : frame_context.Get(isolate);
+            auto request = v8::Object::New(isolate);
+            request->Set(
+                local_context,
+                js_string(isolate, "kind"),
+                js_string(isolate, "download")).Check();
+            const auto file_name = anchor->attributes.at("download").empty()
+                ? std::string{"download"}
+                : anchor->attributes.at("download");
+            request->Set(
+                local_context,
+                js_string(isolate, "suggestedFileName"),
+                js_string(isolate, file_name.c_str())).Check();
+            constexpr std::string_view canvas_snapshot_prefix =
+                "webscene-canvas-snapshot:";
+            if (authored->second.starts_with(canvas_snapshot_prefix)) {
+                uint32_t canvas_node_id = 0;
+                const auto suffix = std::string_view(authored->second).substr(
+                    canvas_snapshot_prefix.size());
+                const auto parsed = std::from_chars(
+                    suffix.data(), suffix.data() + suffix.size(), canvas_node_id);
+                if (parsed.ec != std::errc{} || parsed.ptr != suffix.data() + suffix.size()) {
+                    return false;
+                }
+                request->Set(
+                    local_context,
+                    js_string(isolate, "canvasNodeId"),
+                    v8::Integer::NewFromUnsigned(isolate, canvas_node_id)).Check();
+                record_feature(
+                    "canvas",
+                    "HTMLCanvasElement.toDataURL",
+                    "partially-supported",
+                    "opaque canvas snapshot handoff to the desktop host",
+                    "native-binding");
+                return enqueue_host_request(local_context, request);
+            }
+            const auto download_payload =
+                object_url_download_payloads.find(authored->second);
+            const auto object_url = object_urls.find(authored->second);
+            const auto& download_url =
+                download_payload != object_url_download_payloads.end()
+                    ? download_payload->second
+                    : object_url == object_urls.end()
+                        ? authored->second
+                        : object_url->second;
+            request->Set(
+                local_context,
+                js_string(isolate, "url"),
+                js_string(isolate, download_url.c_str())).Check();
+            record_feature(
+                "html",
+                "anchor-download",
+                "supported",
+                "download activation emits a typed host save request",
+                "default-action");
+            return enqueue_host_request(local_context, request);
+        }
         return queue_external_url(authored->second);
     }
 
