@@ -702,17 +702,28 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         {
             Interlocked.Exchange(ref _frameCallbackScheduled, 0);
             if (!_frameLoopActive) return;
+            var frameTimestampMilliseconds =
+                Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+            NativeWebSceneApi.EngineObserveCompositorFrame(
+                _engine,
+                frameTimestampMilliseconds);
             if (_submitAnimationFrames
                 && NativeWebSceneApi.EngineRequiresAnimationFrame(_engine) != 0)
             {
-                NativeFrameInput.Submit(_engine, timestamp.TotalMilliseconds);
+                NativeFrameInput.Submit(_engine, frameTimestampMilliseconds);
             }
             RequestNextFrame();
         });
     }
 
+    private void ObserveHostTimeline()
+        => NativeWebSceneApi.EngineObserveCompositorFrame(
+            _engine,
+            Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
+
     private void EnqueuePointer(uint kind, PointerEventArgs args)
     {
+        ObserveHostTimeline();
         var point = args.GetCurrentPoint(this);
         var properties = point.Properties;
         var button = properties.PointerUpdateKind switch
@@ -770,6 +781,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs args)
     {
+        ObserveHostTimeline();
         var point = args.GetPosition(this);
         var input = new InputEvent
         {
@@ -801,6 +813,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void EnqueueKey(uint kind, KeyEventArgs args)
     {
+        ObserveHostTimeline();
         var input = new InputEvent
         {
             Kind = kind,
@@ -831,6 +844,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private void OnTextInput(object? sender, TextInputEventArgs args)
     {
         if (string.IsNullOrEmpty(args.Text)) return;
+        ObserveHostTimeline();
         var accepted = false;
         foreach (var rune in args.Text.EnumerateRunes())
         {

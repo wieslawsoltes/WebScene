@@ -349,6 +349,79 @@ void test_cooperative_iframe_hydration_yields_and_isolates_cascade()
 #endif
 }
 
+void test_outer_dynamic_recascade_preserves_iframe_cascade()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "iframe recascade engine creation failed");
+    resize(engine, 640, 360, 7450U);
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              .shell { display: block; color: rgb(170, 0, 0); }
+              .shell.ready { background: rgb(1, 2, 3); }
+            </style>
+            <div id="shell" class="shell"></div>`;
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(`
+            <html><head><style>
+              html, body { margin: 0; width: 100%; height: 100%; }
+              #chart { display: block; color: rgb(0, 187, 0);
+                       background: rgb(4, 5, 6); width: 320px; height: 180px; }
+            </style></head><body><div id="chart">chart-ready</div><script>
+              globalThis.__readChartStyle = () => {
+                const chart = document.getElementById('chart');
+                const style = getComputedStyle(chart);
+                return {
+                  text: chart.textContent, display: style.display,
+                  color: style.color, background: style.backgroundColor,
+                  width: style.width, height: style.height
+                };
+              };
+              parent.__recascadeFrameReady = true;
+            <\/script></body></html>`);
+          frameDocument.close();
+          globalThis.__recascadeFrame = frame;
+        })()
+    )JS", "outer-dynamic-recascade-frame-setup.js");
+    constexpr auto expected =
+        R"JSON({"text":"chart-ready","display":"block","color":"rgb(0, 187, 0)","background":"rgb(4, 5, 6)","width":"320px","height":"180px"})JSON";
+    const auto inspect =
+        "globalThis.__recascadeFrame.contentWindow.__readChartStyle()";
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        if (evaluate(
+                engine,
+                "globalThis.__recascadeFrameReady === true",
+                "outer-dynamic-recascade-frame-progress.js") != "true") {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+        result = evaluate(engine, inspect, "outer-dynamic-recascade-frame-ready.js");
+        if (result == expected) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        result == expected,
+        "iframe cascade fixture did not become ready before outer mutation: "
+            + result);
+    execute_and_wait(engine, R"JS(
+        document.getElementById('shell').classList.add('ready')
+    )JS", "outer-dynamic-recascade-class-mutation.js");
+    result = evaluate(
+        engine,
+        inspect,
+        "outer-dynamic-recascade-frame-result.js");
+    require(
+        result == expected,
+        "outer dynamic recascade crossed into and rewrote the iframe cascade: "
+            + result);
+    webscene_engine_destroy(engine);
+}
+
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 void test_html5ever_frame_does_not_duplicate_authored_loading_indicator(
     webscene_engine* engine)

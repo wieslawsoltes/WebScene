@@ -625,6 +625,21 @@
                 v8::kEmbedderDataTypeTagDefault)));
     }
 
+    dom_node* css_cascade_root_for_node(dom_node& node)
+    {
+        // A same-origin caller can mutate a node from another browsing
+        // context. V8's current context then identifies the caller, not the
+        // node's stylesheet realm. Resolve the nearest registered cascade
+        // root from the node's own ancestry before applying any recascade.
+        for (auto* current = &node; current != nullptr; current = current->parent) {
+            if (current == active_css_cascade_root
+                || inactive_css_cascades.contains(current)) {
+                return current;
+            }
+        }
+        return const_cast<dom_node*>(active_css_cascade_root);
+    }
+
     dom_node& active_root()
     {
         auto local_context = isolate->GetCurrentContext();
@@ -3029,7 +3044,11 @@
         state->owner->attributes[state->name] = text;
         if (state->name == "id") state->owner->id_attribute = text;
         else if (state->name == "class") state->owner->class_name = text;
-        self->document.mark_dirty();
+        if (state->name == "class") {
+            self->recascade_dynamic_state_subject(*state->owner, "Attr.value-class");
+        } else {
+            self->document.mark_dirty();
+        }
         self->notify_custom_element_attribute(
             *state->owner, state->name, old_value, text,
             state->namespace_uri.empty()
@@ -3095,7 +3114,11 @@
         owner->attributes[state->name] = value;
         if (state->name == "id") owner->id_attribute = value;
         else if (state->name == "class") owner->class_name = value;
-        self->document.mark_dirty();
+        if (state->name == "class") {
+            self->recascade_dynamic_state_subject(*owner, "setAttributeNode-class");
+        } else {
+            self->document.mark_dirty();
+        }
         self->notify_custom_element_attribute(
             *owner, state->name, old_value, value,
             state->namespace_uri.empty()
@@ -3131,7 +3154,11 @@
         state->value = old_value;
         state->owner = nullptr;
         self->attached_attributes.erase(attribute_attachment_key(*owner, state->name));
-        self->document.mark_dirty();
+        if (state->name == "class") {
+            self->recascade_dynamic_state_subject(*owner, "removeAttributeNode-class");
+        } else {
+            self->document.mark_dirty();
+        }
         self->notify_custom_element_attribute(
             *owner, state->name, old_value, std::nullopt,
             state->namespace_uri.empty()
@@ -3756,8 +3783,13 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.This());
         if (node == nullptr || node->attributes.contains("disabled")) return;
+        checkable_click_activation checkable_activation;
+        auto form_control_changed = false;
         if (node->tag == "input") {
-            self->apply_form_control_click_default(*node);
+            if (!self->begin_checkable_click_activation(*node, checkable_activation)) {
+                form_control_changed =
+                    self->apply_non_checkable_form_control_click_default(*node);
+            }
         } else if (node->tag == "option") {
             if (node->parent != nullptr) {
                 for (auto* sibling : node->parent->children) {
@@ -3778,9 +3810,19 @@
                 synthetic,
                 "click",
                 *node,
-                &default_prevented)
-            && !default_prevented) {
-            self->queue_external_navigation(*node);
+                &default_prevented)) {
+            if (checkable_activation.active) {
+                if (default_prevented) {
+                    self->restore_checkable_click_activation(checkable_activation);
+                } else {
+                    form_control_changed = checkable_activation.changed;
+                }
+            }
+            if (!default_prevented) self->queue_external_navigation(*node);
+            if (form_control_changed && self->is_connected(*node)) {
+                self->dispatch_input_event_type(synthetic, "input", *node);
+                self->dispatch_input_event_type(synthetic, "change", *node);
+            }
         }
     }
 

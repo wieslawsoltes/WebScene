@@ -177,6 +177,22 @@
         return current_cursor_.load(std::memory_order_acquire);
     }
 
+    void observe_compositor_frame(double timestamp_ms) noexcept
+    {
+        if (!std::isfinite(timestamp_ms) || timestamp_ms < 0) return;
+        const auto timestamp_microseconds = static_cast<uint64_t>(
+            timestamp_ms * 1000.0);
+        auto observed = observed_compositor_timestamp_microseconds_.load(
+            std::memory_order_relaxed);
+        while (timestamp_microseconds > observed
+            && !observed_compositor_timestamp_microseconds_.compare_exchange_weak(
+                observed,
+                timestamp_microseconds,
+                std::memory_order_release,
+                std::memory_order_relaxed)) {
+        }
+    }
+
     uint8_t animation_frame_demand() const noexcept
     {
         return host_animation_frame_requested_.load(

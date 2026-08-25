@@ -301,6 +301,7 @@ private:
         WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT};
     std::atomic<bool> preferred_color_scheme_changed_{false};
     std::atomic<uint8_t> host_animation_frame_requested_{0U};
+    std::atomic<uint64_t> observed_compositor_timestamp_microseconds_{0U};
     webscene_native::native_document document_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
@@ -819,6 +820,13 @@ uint8_t webscene_engine_enqueue_resize_frame(
 uint32_t webscene_engine_get_cursor(const webscene_engine* engine)
 {
     return engine == nullptr ? WEBSCENE_CURSOR_DEFAULT : engine->cursor();
+}
+
+void webscene_engine_observe_compositor_frame(
+    webscene_engine* engine,
+    double timestamp_ms)
+{
+    if (engine != nullptr) engine->observe_compositor_frame(timestamp_ms);
 }
 
 uint8_t webscene_engine_requires_animation_frame(

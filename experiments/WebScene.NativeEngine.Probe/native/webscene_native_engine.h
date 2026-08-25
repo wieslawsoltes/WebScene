@@ -907,6 +907,15 @@ WEBSCENE_API uint8_t webscene_engine_set_preferred_color_scheme(
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 WEBSCENE_API uint32_t webscene_engine_get_cursor(const webscene_engine* engine);
 /*
+ * Observes an inexpensive host compositor boundary without releasing V8 RAF
+ * callbacks or requesting a scene. This keeps the CSS document timeline
+ * current while rendering is idle, so a transition started by later input is
+ * anchored to the display clock instead of the last demanded frame.
+ */
+WEBSCENE_API void webscene_engine_observe_compositor_frame(
+    webscene_engine* engine,
+    double timestamp_ms);
+/*
  * Returns a demand bitmask for the next compositor frame: bit 0 is a pending
  * JavaScript RAF, bit 1 is a native CSS animation, and bit 2 is a focused
  * caret. Zero means a host frame would be empty.

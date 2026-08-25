@@ -532,6 +532,11 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
         Interlocked.Increment(ref AnimationFrameCount);
         var frameTimestamp = Stopwatch.GetTimestamp();
+        var frameTimestampMilliseconds =
+            frameTimestamp * 1000.0 / Stopwatch.Frequency;
+        NativeWebSceneApi.EngineObserveCompositorFrame(
+            _engine,
+            frameTimestampMilliseconds);
         if (frameTimestamp
             > Interlocked.Read(ref _liveResizeFrameDeadlineTimestamp))
         {
@@ -542,7 +547,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 Interlocked.Increment(ref SubmittedAnimationFrameCount);
                 NativeFrameInput.Submit(
                     _engine,
-                    frameTimestamp * 1000.0 / Stopwatch.Frequency);
+                    frameTimestampMilliseconds);
             }
             else
             {

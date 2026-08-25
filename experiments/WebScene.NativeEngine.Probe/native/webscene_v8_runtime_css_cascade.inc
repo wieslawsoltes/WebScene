@@ -3475,7 +3475,17 @@
     void apply_css_rules_subtree(dom_node& node)
     {
         apply_css_rules(node);
-        for (auto* child : node.children) apply_css_rules_subtree(*child);
+        for (auto* child : node.children) {
+            if (child == nullptr) continue;
+            // An iframe owns an independent stylesheet cascade. A recascade
+            // of an outer sibling or ancestor must never walk through that
+            // browsing-context boundary with the caller's active rules.
+            if (child != active_css_cascade_root
+                && inactive_css_cascades.contains(child)) {
+                continue;
+            }
+            apply_css_rules_subtree(*child);
+        }
         const auto* shadow = document.shadow_dom(node);
         if (shadow != nullptr && shadow->root != nullptr) {
             apply_css_rules_subtree(*shadow->root);
@@ -3504,6 +3514,9 @@
         std::string_view reason = {})
     {
         if (!is_connected(node)) return;
+        auto* previous_cascade_root = const_cast<dom_node*>(active_css_cascade_root);
+        auto* node_cascade_root = css_cascade_root_for_node(node);
+        if (node_cascade_root != nullptr) activate_css_cascade(node_cascade_root);
         retain_connected_subtree_wrappers(node);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto trace = profile_css;
@@ -3576,6 +3589,10 @@
             }
         }
 #endif
+        if (previous_cascade_root != nullptr
+            && previous_cascade_root != node_cascade_root) {
+            activate_css_cascade(previous_cascade_root);
+        }
     }
 
     void schedule_style_recascade(
@@ -3584,9 +3601,10 @@
         std::string_view reason)
     {
         if (!is_connected(root)) return;
+        auto* cascade_root = css_cascade_root_for_node(root);
         retain_connected_subtree_wrappers(root);
         for (auto& pending : pending_style_recascades) {
-            if (pending.root != &root) continue;
+            if (pending.root != &root || pending.cascade_root != cascade_root) continue;
             pending.subtree = pending.subtree || subtree;
             if (pending.reason.empty() && !reason.empty()) pending.reason = reason;
             return;
@@ -3594,8 +3612,9 @@
         if (std::any_of(
                 pending_style_recascades.begin(),
                 pending_style_recascades.end(),
-                [this, &root](const pending_style_recascade& pending) {
+                [this, &root, cascade_root](const pending_style_recascade& pending) {
                     return pending.subtree
+                        && pending.cascade_root == cascade_root
                         && pending.root != nullptr
                         && subtree_contains(*pending.root, &root);
                 })) {
@@ -3604,13 +3623,18 @@
         if (subtree) {
             std::erase_if(
                 pending_style_recascades,
-                [this, &root](const pending_style_recascade& pending) {
+                [this, &root, cascade_root](const pending_style_recascade& pending) {
                     return pending.root != nullptr
+                        && pending.cascade_root == cascade_root
                         && subtree_contains(root, pending.root);
                 });
         }
         pending_style_recascades.push_back(
-            pending_style_recascade{&root, subtree, std::string(reason)});
+            pending_style_recascade{
+                &root,
+                cascade_root,
+                subtree,
+                std::string(reason)});
     }
 
     void flush_pending_style_recascades()
@@ -3623,7 +3647,7 @@
             if (recascade.subtree) {
                 recascade_connected_subtree_now(*recascade.root, recascade.reason);
             } else {
-                apply_css_rules(*recascade.root);
+                recascade_connected_node(*recascade.root);
             }
         }
     }
@@ -3658,7 +3682,14 @@
         binding_callback_timer timer(
             nullptr,
             profile_named("style-recascade/node-immediate"));
+        auto* previous_cascade_root = const_cast<dom_node*>(active_css_cascade_root);
+        auto* node_cascade_root = css_cascade_root_for_node(node);
+        if (node_cascade_root != nullptr) activate_css_cascade(node_cascade_root);
         apply_css_rules(node);
+        if (previous_cascade_root != nullptr
+            && previous_cascade_root != node_cascade_root) {
+            activate_css_cascade(previous_cascade_root);
+        }
     }
 
     void recascade_hover_transition(

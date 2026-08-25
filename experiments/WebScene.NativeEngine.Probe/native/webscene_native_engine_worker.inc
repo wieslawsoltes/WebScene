@@ -127,6 +127,19 @@
             hidden_low_memory_deadline;
         uint32_t drag_moves_to_preserve = 0;
         while (!token.stop_requested()) {
+            // Avalonia observes every compositor boundary even while no V8 RAF
+            // or CSS animation is active. Import that clock without treating
+            // the observation as input or waking this worker; a later input or
+            // script mutation can then start its transition on the current
+            // document timeline rather than a stale demanded-frame timestamp.
+            const auto observed_compositor_timestamp_microseconds =
+                observed_compositor_timestamp_microseconds_.load(
+                    std::memory_order_acquire);
+            if (observed_compositor_timestamp_microseconds != 0U) {
+                document_.signal_animation_frame(
+                    static_cast<double>(
+                        observed_compositor_timestamp_microseconds) / 1000.0);
+            }
             webscene_input_event event{};
             bool changed = checkpoint_requested_.exchange(
                 false,

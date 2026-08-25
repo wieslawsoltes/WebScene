@@ -635,6 +635,20 @@
         info.GetReturnValue().Set(result);
     }
 
+    static std::string normalized_dom_attribute_name(
+        const dom_node& node,
+        std::string raw_name)
+    {
+        // The DOM lowercases attribute names only for HTML elements in an
+        // HTML document. Foreign SVG attributes remain case-sensitive, so
+        // canonical names such as viewBox must survive both lookup and
+        // mutation.
+        return !node.xml_mode
+                && node.namespace_uri() == dom_node::html_namespace_uri
+            ? lower_html_name(raw_name)
+            : std::move(raw_name);
+    }
+
     static void set_attribute(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -644,7 +658,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 2) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const auto value = to_wtf8(info.GetIsolate(), info[1]);
         const auto previous = node->attributes.find(name);
         const std::optional<std::string> old_value = previous == node->attributes.end()
@@ -701,7 +715,11 @@
                 info.GetIsolate()->GetCurrentContext());
         }
         if (self->attribute_requires_recascade(name)) {
-            self->recascade_connected_subtree(*node, "style.setProperty-clear");
+            if (name == "class") {
+                self->recascade_dynamic_state_subject(*node, "setAttribute-class");
+            } else {
+                self->recascade_connected_subtree(*node, "style.setProperty-clear");
+            }
         } else {
             self->document.mark_dirty();
         }
@@ -715,7 +733,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const std::optional<std::string> namespace_uri =
             info[0]->IsNullOrUndefined()
                 ? std::nullopt
@@ -730,7 +748,11 @@
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         if (self->attribute_requires_recascade(name)) {
-            self->recascade_connected_subtree(*node, "style.removeProperty-custom");
+            if (name == "class") {
+                self->recascade_dynamic_state_subject(*node, "setAttributeNS-class");
+            } else {
+                self->recascade_connected_subtree(*node, "style.removeProperty-custom");
+            }
         } else {
             self->document.mark_dirty();
         }
@@ -744,7 +766,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 1) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         self->record_html_attribute_feature(name, "removeAttribute");
         if (!node->attributes.contains(name)) {
             return;
@@ -763,7 +785,11 @@
             node->style.important_property_mask = 0U;
         }
         if (self->attribute_requires_recascade(name)) {
-            self->recascade_connected_subtree(*node);
+            if (name == "class") {
+                self->recascade_dynamic_state_subject(*node, "removeAttribute-class");
+            } else {
+                self->recascade_connected_subtree(*node);
+            }
         } else {
             self->document.mark_dirty();
         }
@@ -778,7 +804,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 1) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const auto match = node->attributes.find(name);
         if (match == node->attributes.end()) {
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
@@ -794,7 +820,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 2) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const auto match = node->attributes.find(name);
         if (match == node->attributes.end()) {
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
@@ -809,7 +835,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 2) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[1]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const std::optional<std::string> namespace_uri =
             info[0]->IsNullOrUndefined()
                 ? std::nullopt
@@ -829,7 +855,11 @@
             node->style.important_property_mask = 0U;
         }
         if (self->attribute_requires_recascade(name)) {
-            self->recascade_connected_subtree(*node);
+            if (name == "class") {
+                self->recascade_dynamic_state_subject(*node, "removeAttributeNS-class");
+            } else {
+                self->recascade_connected_subtree(*node);
+            }
         } else {
             self->document.mark_dirty();
         }
@@ -843,7 +873,7 @@
         auto* node = unwrap_node(info.This());
         if (node == nullptr || info.Length() < 1) return;
         const auto raw_name = to_utf8(info.GetIsolate(), info[0]);
-        const auto name = node->xml_mode ? raw_name : lower_html_name(raw_name);
+        const auto name = normalized_dom_attribute_name(*node, raw_name);
         const bool present = node->attributes.contains(name);
         const bool force_present = info.Length() < 2 || info[1]->IsUndefined()
             ? !present
@@ -867,7 +897,11 @@
                 *node, name, old_value, std::nullopt);
         }
         if (self->attribute_requires_recascade(name)) {
-            self->recascade_connected_subtree(*node);
+            if (name == "class") {
+                self->recascade_dynamic_state_subject(*node, "toggleAttribute-class");
+            } else {
+                self->recascade_connected_subtree(*node);
+            }
         } else {
             self->document.mark_dirty();
         }
@@ -882,8 +916,8 @@
         const auto raw_name = node != nullptr && info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
-        const auto name = node != nullptr && !node->xml_mode
-            ? lower_html_name(raw_name)
+        const auto name = node != nullptr
+            ? normalized_dom_attribute_name(*node, raw_name)
             : raw_name;
         info.GetReturnValue().Set(v8::Boolean::New(
             info.GetIsolate(),

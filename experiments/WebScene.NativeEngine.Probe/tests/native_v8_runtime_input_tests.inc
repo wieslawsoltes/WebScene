@@ -358,6 +358,289 @@ void test_collapsed_single_select_native_activation(webscene_engine* engine)
         "the collapsed select scene did not project exactly its selected label");
 }
 
+void test_controlled_switch_native_activation_matches_browser_semantics()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "controlled-switch engine creation failed");
+    resize(engine, 500, 240, 8100U);
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; width: 100%; height: 100%; }
+              .switcher {
+                display: inline-block; position: relative; width: 38px; height: 20px;
+                vertical-align: middle; z-index: 0;
+              }
+              .switcher input {
+                position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                opacity: 0; z-index: 1;
+              }
+              .thumb-wrapper {
+                display: block; border-radius: 20px; position: relative;
+                width: 100%; height: 100%;
+              }
+              .track {
+                position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+                border-radius: 20px; background: rgb(163, 166, 175);
+              }
+              input:checked + .thumb-wrapper .track { background: rgb(41, 98, 255); }
+              .thumb {
+                display: block; width: 14px; height: 14px; border-radius: 14px;
+                transform: translate(3px, 3px);
+                transition: transform 250ms linear;
+                background: white;
+              }
+              input:checked + .thumb-wrapper .thumb {
+                transform: translate(21px, 3px);
+              }
+              .switcher:focus-within::before {
+                content: ''; display: block; position: absolute;
+                top: -2px; right: -2px; bottom: -2px; left: -2px;
+                border-radius: 16px; outline: rgb(41, 98, 255) solid 2px;
+              }
+              #controlled-shell { position: absolute; left: 20px; top: 20px; }
+              #cancelled-shell { position: absolute; left: 100px; top: 20px; }
+              #react-shell {
+                --default-color: rgb(80, 80, 80);
+                --switch-color: var(--hover-color, var(--default-color));
+                position: absolute; left: 180px; top: 20px;
+              }
+              #react-shell.checked { --default-color: rgb(255, 255, 255); }
+              #react-shell .react-input:hover + .react-wrapper {
+                --hover-color: rgb(20, 20, 20);
+              }
+              #react-shell .react-input.checked:hover + .react-wrapper {
+                --hover-color: rgb(255, 255, 255);
+              }
+              #react-track { background-color: var(--switch-color); }
+            </style>
+            <div id="controlled-shell" class="switcher">
+              <input id="controlled" type="checkbox" role="switch" tabindex="-1">
+              <span class="thumb-wrapper"><span class="track"></span><span id="thumb" class="thumb"></span></span>
+            </div>
+            <div id="cancelled-shell" class="switcher">
+              <input id="cancelled" type="checkbox" role="switch" tabindex="-1">
+              <span class="thumb-wrapper"><span class="track"></span><span class="thumb"></span></span>
+            </div>
+            <div id="react-shell" class="switcher">
+              <input id="react-controlled" class="react-input" type="checkbox" role="switch">
+              <span class="thumb-wrapper react-wrapper">
+                <span id="react-track" class="track"></span><span class="thumb"></span>
+              </span>
+            </div>`;
+
+          const installControlledTracker = (input, cancel) => {
+            const descriptor = Object.getOwnPropertyDescriptor(
+              input.constructor.prototype, 'checked');
+            const state = {
+              tracked: String(input.checked), setterCalls: 0,
+              syntheticChanges: 0, inputEvents: 0, changeEvents: 0, events: []
+            };
+            Object.defineProperty(input, 'checked', {
+              configurable: true,
+              get() { return descriptor.get.call(this); },
+              set(value) {
+                state.setterCalls++;
+                state.tracked = String(value);
+                descriptor.set.call(this, value);
+              }
+            });
+            input.addEventListener('click', event => {
+              state.events.push(`click:${input.checked}:${state.tracked}`);
+              if (cancel) event.preventDefault();
+            });
+            input.addEventListener('input', () => {
+              state.inputEvents++;
+              state.events.push('input');
+            });
+            input.addEventListener('change', () => {
+              state.changeEvents++;
+              state.events.push('change');
+            });
+            document.addEventListener('click', event => {
+              if (event.target !== input) return;
+              const next = String(input.checked);
+              if (next !== state.tracked) {
+                state.tracked = next;
+                state.syntheticChanges++;
+                state.events.push('synthetic-change');
+              }
+            });
+            return state;
+          };
+          globalThis.__controlledState = installControlledTracker(
+            document.getElementById('controlled'), false);
+          globalThis.__cancelledState = installControlledTracker(
+            document.getElementById('cancelled'), true);
+          const reactControlled = document.getElementById('react-controlled');
+          reactControlled.addEventListener('click', () => {
+            document.getElementById('react-shell').classList.toggle(
+              'checked', reactControlled.checked);
+            reactControlled.classList.toggle(
+              'checked', reactControlled.checked);
+          });
+        })()
+    )JS", "controlled-switch-browser-semantics-setup.js");
+    animation_frame_and_wait(engine, 10000.0, 8101U);
+
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 39, 30, 8102U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 39, 30, 8103U, false);
+    const auto activated = evaluate(engine, R"JS((() => {
+      const controlled = document.getElementById('controlled');
+      const shell = document.getElementById('controlled-shell');
+      const thumb = document.getElementById('thumb');
+      const matrix = getComputedStyle(thumb).transform.slice(7, -1).split(',').map(Number);
+      return {
+        checked: controlled.checked,
+        ownDescriptor: !!Object.getOwnPropertyDescriptor(controlled, 'checked'),
+        setterCalls: __controlledState.setterCalls,
+        syntheticChanges: __controlledState.syntheticChanges,
+        tracked: __controlledState.tracked,
+        events: __controlledState.events,
+        focused: document.activeElement === controlled,
+        focusWithin: shell.matches(':focus-within'),
+        translate: [matrix[4], matrix[5]]
+      };
+    })())JS", "controlled-switch-browser-semantics-activated.js");
+    require(
+        activated == R"JSON({"checked":true,"ownDescriptor":true,"setterCalls":0,"syntheticChanges":1,"tracked":"true","events":["click:true:false","synthetic-change","input","change"],"focused":true,"focusWithin":true,"translate":[3,3]})JSON",
+        "native activation did not preserve React-controlled switch semantics: "
+            + activated);
+    require(
+        webscene_engine_requires_animation_frame(engine) != 0,
+        "controlled switch transform transition did not request a host frame");
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_rounded_focus_outline = false;
+    for (auto attempt = 0; attempt < 100 && !observed_rounded_focus_outline; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                observed_rounded_focus_outline = observed_rounded_focus_outline
+                    || ((command.kind == 8U || command.kind == 11U)
+                        && (command.rgba >> 8U) == 0x2962FFU
+                        && std::abs(command.stroke_width - 2.0F) < 0.01F
+                        && command.radius_top_left > 12.0F
+                        && command.radius_top_right > 12.0F
+                        && command.radius_bottom_right > 12.0F
+                        && command.radius_bottom_left > 12.0F);
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_rounded_focus_outline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        observed_rounded_focus_outline,
+        "focused switch did not publish its rounded blue outline");
+
+    animation_frame_and_wait(engine, 10125.0, 8104U);
+    const auto midpoint = evaluate(engine, R"JS((() => {
+      const thumb = document.getElementById('thumb');
+      const matrix = getComputedStyle(thumb).transform.slice(7, -1).split(',').map(Number);
+      return { x: matrix[4], y: matrix[5], inFlight: matrix[4] > 3 && matrix[4] < 21 };
+    })())JS", "controlled-switch-transition-midpoint.js");
+    require(
+        midpoint.find(R"("y":3)") != std::string::npos
+            && midpoint.find(R"("inFlight":true)") != std::string::npos,
+        "controlled switch thumb did not expose a smooth transition midpoint: "
+            + midpoint);
+    animation_frame_and_wait(engine, 10250.0, 8105U);
+    require(
+        evaluate(engine, R"JS((() => {
+          const thumb = document.getElementById('thumb');
+          const matrix = getComputedStyle(thumb).transform.slice(7, -1).split(',').map(Number);
+          return [matrix[4], matrix[5]];
+        })())JS", "controlled-switch-transition-complete.js") == "[21,3]",
+        "controlled switch thumb did not finish at its checked transform");
+
+    // Compositor callbacks continue while rendering is idle, but they must not
+    // submit empty V8 frames. Observe that inexpensive boundary explicitly,
+    // then activate the control after a long idle gap. Using the last demanded
+    // frame (10250) as the new transition start would make the first 20016
+    // sample jump directly to the unchecked endpoint.
+    webscene_engine_observe_compositor_frame(engine, 20000.0);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 39, 30, 8106U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 39, 30, 8107U, false);
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "idle controlled-switch transition did not request a host frame");
+    animation_frame_and_wait(engine, 20016.0, 8108U);
+    const auto idle_first_sample = evaluate(engine, R"JS((() => {
+      const matrix = getComputedStyle(document.getElementById('thumb')).transform
+        .slice(7, -1).split(',').map(Number);
+      return { x: matrix[4], inFlight: matrix[4] > 3 && matrix[4] < 21 };
+    })())JS", "controlled-switch-idle-first-sample.js");
+    require(
+        idle_first_sample.find(R"("inFlight":true)") != std::string::npos,
+        "controlled switch transition jumped after an idle compositor gap: "
+            + idle_first_sample);
+
+    std::vector<std::string> idle_transition_samples;
+    for (uint64_t index = 2U; index <= 16U; ++index) {
+        animation_frame_and_wait(
+            engine,
+            20000.0 + static_cast<double>(index * 16U),
+            8107U + index);
+        idle_transition_samples.push_back(evaluate(engine, R"JS((() => {
+          const matrix = getComputedStyle(document.getElementById('thumb')).transform
+            .slice(7, -1).split(',').map(Number);
+          return String(Math.round(matrix[4] * 1000) / 1000);
+        })())JS", "controlled-switch-idle-dense-sample.js"));
+    }
+    std::sort(idle_transition_samples.begin(), idle_transition_samples.end());
+    const auto distinct_idle_samples = std::unique(
+        idle_transition_samples.begin(), idle_transition_samples.end())
+        - idle_transition_samples.begin();
+    require(
+        distinct_idle_samples >= 10,
+        "controlled switch transition did not publish dense vsync samples after idle");
+
+    pointer_move(engine, 199, 30, 8190U);
+    require(
+        evaluate(engine,
+            "getComputedStyle(document.getElementById('react-track')).backgroundColor",
+            "controlled-switch-unchecked-hover-color.js") == "\"rgb(20, 20, 20)\"",
+        "controlled switch fixture did not enter its unchecked hover color");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 199, 30, 8191U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 199, 30, 8192U, false);
+    const auto checked_hover_background = evaluate(engine, R"JS((() => ({
+      checked: document.getElementById('react-controlled').checked,
+      background: getComputedStyle(document.getElementById('react-track')).backgroundColor
+    }))())JS", "controlled-switch-checked-hover-color.js");
+    require(
+        checked_hover_background
+            == R"JSON({"checked":true,"background":"rgb(255, 255, 255)"})JSON",
+        "checked sibling hover color remained stale until pointer exit: "
+            + checked_hover_background);
+
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 119, 30, 8200U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 119, 30, 8201U, false);
+    const auto cancelled = evaluate(engine, R"JS((() => {
+      const cancelled = document.getElementById('cancelled');
+      return ({
+      checked: cancelled.checked,
+      setterCalls: __cancelledState.setterCalls,
+      syntheticChanges: __cancelledState.syntheticChanges,
+      tracked: __cancelledState.tracked,
+      inputEvents: __cancelledState.inputEvents,
+      changeEvents: __cancelledState.changeEvents,
+      events: __cancelledState.events
+      });
+    })())JS", "controlled-switch-browser-semantics-cancelled.js");
+    require(
+        cancelled == R"JSON({"checked":false,"setterCalls":0,"syntheticChanges":1,"tracked":"true","inputEvents":0,"changeEvents":0,"events":["click:true:false","synthetic-change"]})JSON",
+        "preventDefault did not restore native checkedness without firing form events: "
+            + cancelled);
+
+    webscene_engine_destroy(engine);
+}
+
 void wheel_input(
     webscene_engine* engine,
     double x,

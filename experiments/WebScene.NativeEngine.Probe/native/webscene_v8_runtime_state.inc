@@ -313,6 +313,7 @@
     const std::string empty_string;
     struct pending_style_recascade final {
         dom_node* root{nullptr};
+        dom_node* cascade_root{nullptr};
         bool subtree{false};
         std::string reason;
     };

@@ -142,6 +142,17 @@ int main()
             test_concurrent_input_producers_remain_consumable();
             return 0;
         }
+        if (selected == "controlled-switch") {
+            test_controlled_switch_native_activation_matches_browser_semantics();
+            return 0;
+        }
+        if (selected == "active-chart-pseudo-border") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_active_chart_generated_border_tracks_active_class(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "canvas-text-metrics") {
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
@@ -160,6 +171,10 @@ int main()
         }
         if (selected == "iframe-cooperative") {
             test_cooperative_iframe_hydration_yields_and_isolates_cascade();
+            return 0;
+        }
+        if (selected == "iframe-dynamic-recascade") {
+            test_outer_dynamic_recascade_preserves_iframe_cascade();
             return 0;
         }
         if (selected == "scrollspy-primitives") {
@@ -249,6 +264,7 @@ int main()
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
+    test_controlled_switch_native_activation_matches_browser_semantics();
     test_loaded_document_keeps_html_and_body_cascade_distinct();
     test_relative_stylesheet_background_uses_stylesheet_address();
     test_resource_cache_reuse_across_engine_generations();
@@ -260,6 +276,7 @@ int main()
     test_iframe_preparation_discovers_subresources_during_outer_script();
     test_deferred_frame_script_observes_window_dom_content_loaded();
     test_cooperative_iframe_hydration_yields_and_isolates_cascade();
+    test_outer_dynamic_recascade_preserves_iframe_cascade();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();

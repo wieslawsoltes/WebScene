@@ -1781,22 +1781,21 @@
         return nullptr;
     }
 
-    void recascade_focus_subject(dom_node& subject, std::string_view reason)
+    void recascade_dynamic_state_subject(dom_node& subject, std::string_view reason)
     {
-        // Recompute the ancestor chain for :focus-within, but never recascade
-        // an entire browsing context for an ordinary focus transition. A full
-        // root pass can cross a frame's independently activated cascade and
-        // also needlessly rewrites the application's primary scene. The local
-        // parent subtree retains the existing :focus, descendant, and sibling
-        // invalidation behavior; higher ancestors only need their own
-        // :focus-within state refreshed.
-        auto& context_root = active_root();
+        // Recompute the ancestor chain for dynamic selector inputs such as
+        // focus, checkedness, and class tokens. A class mutation can change a
+        // following sibling through `+`/`~`, while ancestor state can change
+        // through :has(). Keep the work inside the subject's own browsing
+        // context: same-origin callers can mutate a frame node while another
+        // CSS cascade is active.
+        auto* context_root = css_cascade_root_for_node(subject);
         std::vector<dom_node*> ancestors;
         for (auto* ancestor = document.dom_parent(subject);
             ancestor != nullptr;
             ancestor = document.dom_parent(*ancestor)) {
             ancestors.push_back(ancestor);
-            if (ancestor == &context_root) break;
+            if (ancestor == context_root) break;
         }
         for (auto iterator = ancestors.rbegin(); iterator != ancestors.rend(); ++iterator) {
             if (*iterator == ancestors.front()) continue;
@@ -1804,6 +1803,11 @@
         }
         auto* local_root = ancestors.empty() ? &subject : ancestors.front();
         recascade_connected_subtree(*local_root, reason);
+    }
+
+    void recascade_focus_subject(dom_node& subject, std::string_view reason)
+    {
+        recascade_dynamic_state_subject(subject, reason);
     }
 
     bool set_active_element(dom_node* next, const webscene_input_event& input)
@@ -2164,17 +2168,41 @@
         return true;
     }
 
-    bool apply_form_control_click_default(dom_node& target)
+    struct checkable_click_activation final {
+        dom_node* target{nullptr};
+        dom_node* previously_checked_radio{nullptr};
+        bool target_was_checked{false};
+        bool changed{false};
+        bool active{false};
+    };
+
+    bool native_checkedness(const dom_node& target) const
     {
-        if (target.attributes.contains("disabled")) return false;
-        if (target.tag == "select" && !target.attributes.contains("multiple")) {
-            // WebScene has no operating-system popup surface. A direct native
-            // activation advances the collapsed selection, while Arrow keys
-            // retain the usual bounded navigation. This keeps ordinary two-
-            // choice component controls usable without a presenter widget.
-            return move_single_select_selection(target, 1, false, false, true);
+        return target.form_control().checkedness_initialized
+            ? target.form_control().checkedness
+            : target.attributes.contains("checked");
+    }
+
+    bool set_native_checkedness(dom_node& target, bool checked)
+    {
+        const auto previous = native_checkedness(target);
+        target.mutable_form_control().checkedness_initialized = true;
+        target.mutable_form_control().checkedness = checked;
+        if (previous != checked) {
+            if (is_connected(target)) {
+                recascade_dynamic_state_subject(target, "native-checkedness");
+            } else {
+                document.mark_dirty();
+            }
         }
-        if (target.tag != "input") return false;
+        return previous != checked;
+    }
+
+    bool begin_checkable_click_activation(
+        dom_node& target,
+        checkable_click_activation& activation)
+    {
+        if (target.tag != "input" || target.attributes.contains("disabled")) return false;
         const auto type_iterator = target.attributes.find("type");
         auto type = type_iterator == target.attributes.end()
             ? std::string("text")
@@ -2184,46 +2212,62 @@
         });
         if (type != "checkbox" && type != "radio") return false;
 
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
-        auto target_wrapper = wrap_node(target);
-        v8::Local<v8::Value> current_value;
-        const auto was_checked = target_wrapper->Get(
-                local_context,
-                js_string(isolate, "checked"))
-            .ToLocal(&current_value)
-            && current_value->BooleanValue(isolate);
-        const auto checked = type == "radio" ? true : !was_checked;
-        if (type == "radio" && checked) {
-            const auto name_iterator = target.attributes.find("name");
-            const auto name = name_iterator == target.attributes.end()
-                ? std::string{}
-                : name_iterator->second;
-            if (!name.empty()) {
-                for (auto* candidate : document.query_selector_all(active_root(), "input")) {
-                    if (candidate == &target) continue;
-                    const auto candidate_type = candidate->attributes.find("type");
-                    const auto candidate_name = candidate->attributes.find("name");
-                    if (candidate_type == candidate->attributes.end()
-                        || candidate_type->second != "radio"
-                        || candidate_name == candidate->attributes.end()
-                        || candidate_name->second != name) {
-                        continue;
-                    }
-                    wrap_node(*candidate)->Set(
-                        local_context,
-                        js_string(isolate, "checked"),
-                        v8::False(isolate)).Check();
+        activation.target = &target;
+        activation.target_was_checked = native_checkedness(target);
+        activation.active = true;
+        if (type == "checkbox") {
+            activation.changed = set_native_checkedness(
+                target, !activation.target_was_checked);
+            return true;
+        }
+
+        const auto name_iterator = target.attributes.find("name");
+        const auto name = name_iterator == target.attributes.end()
+            ? std::string{}
+            : name_iterator->second;
+        if (!name.empty()) {
+            for (auto* candidate : document.query_selector_all(active_root(), "input")) {
+                if (candidate == &target) continue;
+                const auto candidate_type = candidate->attributes.find("type");
+                const auto candidate_name = candidate->attributes.find("name");
+                if (candidate_type == candidate->attributes.end()
+                    || lower_html_name(candidate_type->second) != "radio"
+                    || candidate_name == candidate->attributes.end()
+                    || candidate_name->second != name
+                    || !native_checkedness(*candidate)) {
+                    continue;
                 }
+                if (activation.previously_checked_radio == nullptr) {
+                    activation.previously_checked_radio = candidate;
+                }
+                set_native_checkedness(*candidate, false);
             }
         }
-        target_wrapper->Set(
-            local_context,
-            js_string(isolate, "checked"),
-            checked ? v8::Local<v8::Value>(v8::True(isolate))
-                    : v8::Local<v8::Value>(v8::False(isolate))).Check();
-        return checked != was_checked;
+        activation.changed = set_native_checkedness(target, true);
+        return true;
+    }
+
+    void restore_checkable_click_activation(
+        const checkable_click_activation& activation)
+    {
+        if (!activation.active || activation.target == nullptr) return;
+        set_native_checkedness(*activation.target, activation.target_was_checked);
+        if (activation.previously_checked_radio != nullptr) {
+            set_native_checkedness(*activation.previously_checked_radio, true);
+        }
+    }
+
+    bool apply_non_checkable_form_control_click_default(dom_node& target)
+    {
+        if (target.attributes.contains("disabled")) return false;
+        if (target.tag == "select" && !target.attributes.contains("multiple")) {
+            // WebScene has no operating-system popup surface. A direct native
+            // activation advances the collapsed selection, while Arrow keys
+            // retain the usual bounded navigation. This keeps ordinary two-
+            // choice component controls usable without a presenter widget.
+            return move_single_select_selection(target, 1, false, false, true);
+        }
+        return false;
     }
 
     dom_node* label_control_for_click(dom_node& target)
@@ -2419,6 +2463,7 @@
         bool form_control_changed = false;
         dom_node* activated_form_control = nullptr;
         bool activate_label_control_after_click = false;
+        checkable_click_activation checkable_activation;
         dom_node* click_target = nullptr;
         dom_node* auxiliary_click_target = nullptr;
         dom_node* context_menu_target = nullptr;
@@ -2484,10 +2529,17 @@
                     activate_label_control_after_click = activated_form_control != nullptr
                         && activated_form_control != click_target;
                     if (activated_form_control != nullptr && !activate_label_control_after_click) {
-                        // For a direct input activation the checked state changes
-                        // before the input's click listeners run, matching HTML.
-                        form_control_changed = apply_form_control_click_default(
-                            *activated_form_control);
+                        // Browser checkable controls change their native checkedness
+                        // before click listeners run. Do not invoke the JavaScript
+                        // property setter: controlled-input libraries wrap it to
+                        // distinguish script writes from a genuine user activation.
+                        if (!begin_checkable_click_activation(
+                                *activated_form_control,
+                                checkable_activation)) {
+                            form_control_changed =
+                                apply_non_checkable_form_control_click_default(
+                                    *activated_form_control);
+                        }
                     }
                 } else {
                     auxiliary_click_target = common_target;
@@ -2605,6 +2657,13 @@
                     + describe_exception(try_catch, local_context);
                 return false;
             }
+            if (checkable_activation.active) {
+                if (click_default_prevented) {
+                    restore_checkable_click_activation(checkable_activation);
+                } else {
+                    form_control_changed = checkable_activation.changed;
+                }
+            }
             if (!click_default_prevented && !queue_external_navigation(*click_target)) {
                 last_error = "Native external navigation host request could not be queued";
                 return false;
@@ -2616,18 +2675,39 @@
                 + describe_exception(try_catch, local_context);
             return false;
         }
-        if (activate_label_control_after_click) {
+        if (activate_label_control_after_click && !click_default_prevented) {
             // A label owns the visual hit area for many custom switches;
             // their native input is intentionally zero-width. HTML label
             // activation dispatches a second click at the associated control.
-            form_control_changed = apply_form_control_click_default(*activated_form_control);
-            if (!dispatch_input_event_type(input, "click", *activated_form_control)) {
+            checkable_click_activation label_checkable_activation;
+            if (!begin_checkable_click_activation(
+                    *activated_form_control,
+                    label_checkable_activation)) {
+                form_control_changed = apply_non_checkable_form_control_click_default(
+                    *activated_form_control);
+            }
+            bool control_click_default_prevented = false;
+            if (!dispatch_input_event_type(
+                    input,
+                    "click",
+                    *activated_form_control,
+                    &control_click_default_prevented)) {
                 last_error = "Native label-control activation failed: "
                     + describe_exception(try_catch, local_context);
                 return false;
             }
+            if (label_checkable_activation.active) {
+                if (control_click_default_prevented) {
+                    restore_checkable_click_activation(label_checkable_activation);
+                    form_control_changed = false;
+                } else {
+                    form_control_changed = label_checkable_activation.changed;
+                }
+            }
         }
-        if (form_control_changed) {
+        if (form_control_changed
+            && activated_form_control != nullptr
+            && is_connected(*activated_form_control)) {
             if (!dispatch_input_event_type(input, "input", *activated_form_control)
                 || !dispatch_input_event_type(input, "change", *activated_form_control)) {
                 last_error = "Native form-control dispatch failed: "

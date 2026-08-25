@@ -607,6 +607,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             && commands[commandIndex - 1].Width == command.Width
             && commands[commandIndex - 1].Height == command.Height;
         if (!hasEllipseMetadata
+            && command.Kind is 7 or 8 or 10 or 11
             && topLeft <= 0 && topRight <= 0 && bottomRight <= 0 && bottomLeft <= 0)
         {
             var legacyRadius = (command.Flags >> 16) / 100f;

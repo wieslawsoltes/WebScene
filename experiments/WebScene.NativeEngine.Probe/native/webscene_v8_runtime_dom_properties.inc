@@ -71,7 +71,7 @@
             }
             node->class_name = class_name;
             node->attributes["class"] = node->class_name;
-            self->recascade_connected_subtree(*node, "setAttribute");
+            self->recascade_dynamic_state_subject(*node, "className-property");
             self->notify_custom_element_attribute(
                 *node, "class", old_value, node->class_name);
         }
@@ -802,7 +802,7 @@
         }
         node->class_name = value;
         node->attributes["class"] = node->class_name;
-        self->recascade_connected_subtree(*node, "classList.value");
+        self->recascade_dynamic_state_subject(*node, "classList.value");
     }
 
     static bool has_class(const dom_node& node, std::string_view value)
@@ -868,7 +868,9 @@
                 changed = true;
             }
         }
-        if (changed) self->recascade_connected_subtree(*node, "classList.add");
+        if (changed) {
+            self->recascade_dynamic_state_subject(*node, "classList.add");
+        }
     }
 
     static void class_list_remove(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -883,7 +885,9 @@
         for (int index = 0; index < info.Length(); ++index) {
             changed |= remove_class(*node, to_utf8(info.GetIsolate(), info[index]));
         }
-        if (changed) self->recascade_connected_subtree(*node, "classList.remove");
+        if (changed) {
+            self->recascade_dynamic_state_subject(*node, "classList.remove");
+        }
     }
 
     static void class_list_contains(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -917,7 +921,9 @@
         } else if (!enabled && present) {
             changed = remove_class(*node, value);
         }
-        if (changed) self->recascade_connected_subtree(*node, "classList.toggle");
+        if (changed) {
+            self->recascade_dynamic_state_subject(*node, "classList.toggle");
+        }
         info.GetReturnValue().Set(v8::Boolean::New(info.GetIsolate(), enabled));
     }
 
@@ -2173,9 +2179,18 @@
         auto* self = current(info.GetIsolate());
         auto* node = unwrap_node(info.Holder());
         if (node == nullptr || node->tag != "input") return;
+        const auto previous = node->mutable_form_control().checkedness_initialized
+            ? node->mutable_form_control().checkedness
+            : node->attributes.contains("checked");
+        const auto checked = value->BooleanValue(info.GetIsolate());
         node->mutable_form_control().checkedness_initialized = true;
-        node->mutable_form_control().checkedness = value->BooleanValue(info.GetIsolate());
-        self->document.mark_dirty();
+        node->mutable_form_control().checkedness = checked;
+        if (previous == checked) return;
+        if (self->is_connected(*node)) {
+            self->recascade_dynamic_state_subject(*node, "checked-property");
+        } else {
+            self->document.mark_dirty();
+        }
     }
 
     static void get_selected(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)

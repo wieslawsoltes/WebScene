@@ -1086,6 +1086,13 @@ public static unsafe partial class NativeWebSceneApi
 
     [DllImport(
         LibraryName,
+        EntryPoint = "webscene_engine_observe_compositor_frame")]
+    internal static extern void EngineObserveCompositorFrame(
+        IntPtr engine,
+        double timestampMilliseconds);
+
+    [DllImport(
+        LibraryName,
         EntryPoint = "webscene_engine_requires_animation_frame")]
     public static extern byte EngineRequiresAnimationFrame(IntPtr engine);
 
