@@ -1335,7 +1335,7 @@
             event->Set(local_context, js_string(isolate, "key"), js_string(isolate, key.c_str())).Check();
             event->Set(local_context, js_string(isolate, "code"), js_string(isolate, code.c_str())).Check();
             set_number("keyCode", key_code);
-            set_number("charCode", 0);
+            set_number("charCode", type_view == "keypress" ? key_code : 0);
             set_number("which", key_code);
             set_number("location", 0);
             event->Set(local_context, js_string(isolate, "repeat"), v8::Boolean::New(
@@ -1990,6 +1990,19 @@
         bool prevented = false;
         if (!dispatch_input_event_type(input, "keydown", *target, &prevented)) return false;
         const auto key_code = static_cast<int>(input.x);
+        const auto command_modifier = (input.flags
+            & (WEBSCENE_INPUT_MODIFIER_CONTROL
+                | WEBSCENE_INPUT_MODIFIER_ALT
+                | WEBSCENE_INPUT_MODIFIER_META)) != 0U;
+        const auto emits_legacy_keypress = key_code == 13
+            || (!command_modifier && key_code >= 32 && key_code <= 126);
+        if (!prevented && emits_legacy_keypress) {
+            bool keypress_prevented = false;
+            if (!dispatch_input_event_type(input, "keypress", *target, &keypress_prevented)) {
+                return false;
+            }
+            prevented = keypress_prevented;
+        }
         if (!prevented && key_code == 9) {
             const auto focus_order = sequential_focus_order();
             if (!focus_order.empty()) {

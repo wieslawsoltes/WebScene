@@ -275,6 +275,65 @@ void keyboard_input(
     require(webscene_engine_enqueue(engine, &input) != 0, "keyboard input was rejected");
 }
 
+void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '<style>body{margin:0}'
+            + '#interval{position:absolute;left:0;top:0;width:120px;height:40px}'
+            + '#cancelled{position:absolute;left:0;top:50px;width:120px;height:40px}</style>'
+            + '<input id="interval" value="1">'
+            + '<textarea id="cancelled">stable</textarea>';
+          globalThis.__interval = document.getElementById('interval');
+          globalThis.__cancelled = document.getElementById('cancelled');
+          globalThis.__intervalEvents = [];
+          globalThis.__selectedInterval = '1m';
+          for (const type of ['keydown', 'keypress', 'keyup']) {
+            __interval.addEventListener(type, event => {
+              __intervalEvents.push({
+                type,
+                key: event.key,
+                code: event.code,
+                keyCode: event.keyCode,
+                charCode: event.charCode,
+                which: event.which
+              });
+              if (type === 'keypress' && event.key === 'Enter') {
+                __selectedInterval = __interval.value + 'm';
+              }
+            });
+          }
+          __cancelled.addEventListener('keypress', event => event.preventDefault());
+        })()
+    )JS", "native-enter-keypress-setup.js");
+    require(
+        evaluate(engine, "__interval.getBoundingClientRect().width",
+            "native-enter-keypress-layout.js") == "120",
+        "interval input was not laid out before keyboard activation");
+
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 509U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 510U, false);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 13U, 511U);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 13U, 512U);
+    const auto committed = evaluate(engine, R"JS(({
+      selected: __selectedInterval,
+      events: __intervalEvents
+    }))JS", "native-enter-keypress-commit.js");
+    require(
+        committed == R"({"selected":"1m","events":[{"type":"keydown","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13},{"type":"keypress","key":"Enter","code":"Enter","keyCode":13,"charCode":13,"which":13},{"type":"keyup","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13}]})",
+        "Enter did not expose the browser keypress contract used to commit an interval: "
+            + committed);
+
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 65, 513U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 65, 514U, false);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 13U, 515U);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 13U, 516U);
+    require(
+        evaluate(engine, "__cancelled.value", "native-cancelled-enter-value.js")
+            == R"("stable")",
+        "preventDefault on keypress did not suppress the textarea Enter default action");
+}
+
 void test_collapsed_single_select_native_activation(webscene_engine* engine)
 {
     resize(engine, 320, 140, 600U);
