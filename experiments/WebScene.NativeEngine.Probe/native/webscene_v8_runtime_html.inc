@@ -228,7 +228,13 @@
         if (name == "transition-duration") return inline_transition_duration;
         if (name == "transition-delay") return inline_transition_delay;
         if (name == "transition-timing-function") return inline_transition_timing;
-        if (name == "background" || name == "background-color") return inline_background;
+        if (name == "background") return inline_background | inline_background_image;
+        if (name == "background-color" || name == "backgroundColor") {
+            return inline_background;
+        }
+        if (name == "background-image" || name == "backgroundImage") {
+            return inline_background_image;
+        }
         if (name == "overflow" || name == "overflow-x" || name == "overflow-y") return inline_overflow;
         if (name == "visibility") return inline_visibility;
         if (name == "pointer-events") return inline_pointer_events;

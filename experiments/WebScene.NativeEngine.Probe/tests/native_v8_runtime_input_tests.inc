@@ -922,3 +922,61 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
             && webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_DEFAULT,
         "leaving cursor:pointer did not restore the default host cursor");
 }
+
+void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin: 0; }
+            #swatch {
+              width: 40px;
+              height: 24px;
+              border-radius: 4px;
+            }
+          </style><div id="swatch"></div>`;
+          // TradingView's opacity control writes this exact named CSSOM
+          // property on its gradient child rather than using a stylesheet.
+          swatch.style.backgroundImage =
+            'linear-gradient(90deg, transparent, #000000)';
+        })()
+    )JS", "native-linear-gradient-setup.js");
+    require(
+        evaluate(engine, "getComputedStyle(swatch).backgroundImage",
+            "native-linear-gradient-cssom.js")
+            .find("linear-gradient") != std::string::npos,
+        "an inline backgroundImage linear-gradient did not survive the CSS cascade");
+
+    execute(engine, R"JS(
+        swatch.style.backgroundImage =
+          'linear-gradient(90deg, transparent, #112233)'
+    )JS", "native-linear-gradient-mutation.js");
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found = false;
+    for (auto attempt = 0; attempt < 100 && !found; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 21U || command.flags >= scene->string_count) continue;
+                const auto& descriptor = scene->strings[command.flags];
+                const std::string resource(
+                    scene->string_bytes + descriptor.byte_offset,
+                    descriptor.byte_length);
+                found = command.node_id != 0U
+                    && std::abs(command.width - 40.0F) < 0.1F
+                    && std::abs(command.height - 24.0F) < 0.1F
+                    && resource.find("linear-gradient") != std::string::npos
+                    && resource.find("transparent") != std::string::npos
+                    && resource.find("#112233") != std::string::npos;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!found) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found,
+        "a mutated inline backgroundImage linear-gradient was not published "
+        "as a retained gradient command");
+}

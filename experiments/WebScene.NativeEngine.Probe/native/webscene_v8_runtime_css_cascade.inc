@@ -1691,7 +1691,8 @@
 
             // These modeled properties do not yet have dedicated inline-mask
             // bits, so preserve their applied values by authored declaration.
-            if (has_inline({"background-image", "background-repeat",
+            if (is_inline(inline_background_image)
+                || has_inline({"background-image", "background-repeat",
                     "background-position", "background-size"})) {
                 reset.mutable_background_image() = previous.background_image();
             }
@@ -2384,12 +2385,19 @@
                 decision.classification = "partially-supported";
                 decision.semantic_slice = "first outer shadow with pixel lengths";
             }
-        } else if (name == "background-image") {
+        } else if (name == "background-image"
+            && !is_inline(inline_background_image)) {
             auto& background = node.style.mutable_background_image();
             background.image_value = value;
             background.image_markup.clear();
             background.image_view_box.clear();
             if (value == "none") return;
+            if (lower_html_name(value).starts_with("linear-gradient(")) {
+                decision.classification = "supported";
+                decision.semantic_slice =
+                    "linear-gradient color stops, percentages, angles, and side/corner directions";
+                return;
+            }
             const auto url = first_css_url(value);
             if (!url.has_value()) {
                 decision.classification = "unsupported";
@@ -2444,13 +2452,31 @@
             }
             decision.classification = "partially-supported";
             decision.semantic_slice = "cover, contain, auto, percentages, and pixel lengths";
-        } else if ((name == "background" || name == "background-color")
-            && !is_inline(inline_background)) {
-            node.style.background_current_color =
-                lower_html_name(value) == "currentcolor";
-            const auto parsed = parse_declared_color(value);
-            if (parsed != 0U || value == "transparent"
-                || lower_html_name(value) == "currentcolor") node.style.background_rgba = parsed;
+        } else if (name == "background" || name == "background-color") {
+            if (!is_inline(inline_background)) {
+                node.style.background_current_color =
+                    lower_html_name(value) == "currentcolor";
+                const auto parsed = parse_declared_color(value);
+                if (name == "background" || parsed != 0U || value == "transparent"
+                    || lower_html_name(value) == "currentcolor") {
+                    node.style.background_rgba = parsed;
+                }
+            }
+            if (name == "background" && !is_inline(inline_background_image)) {
+                const auto lower = lower_html_name(value);
+                const auto gradient = lower.find("linear-gradient(");
+                if (gradient != std::string::npos) {
+                    auto& background = node.style.mutable_background_image();
+                    background.image_value = value.substr(gradient);
+                    background.image_markup.clear();
+                    background.image_view_box.clear();
+                    decision.classification = "supported";
+                    decision.semantic_slice =
+                        "linear-gradient color stops, percentages, angles, and side/corner directions";
+                } else {
+                    node.style.clear_background_image();
+                }
+            }
         } else if ((name == "overflow" || name == "overflow-x" || name == "overflow-y")
             && !is_inline(inline_overflow)) {
             const auto explicit_document_element = node.tag == "html"
@@ -2776,7 +2802,9 @@
             node.style.background_rgba = 0;
             node.style.background_current_color = false;
         }
-        node.style.clear_background_image();
+        if ((node.style.inline_property_mask & inline_background_image) == 0U) {
+            node.style.clear_background_image();
+        }
         if ((node.style.inline_property_mask & inline_overflow) == 0U) {
             node.style.overflow_x = overflow_mode::visible;
             node.style.overflow_y = overflow_mode::visible;

@@ -206,6 +206,13 @@
             node.style.background_rgba = 0;
             node.style.background_current_color = false;
             node.style.inline_property_mask &= ~inline_background;
+            if (name == "background") {
+                node.style.clear_background_image();
+                node.style.inline_property_mask &= ~inline_background_image;
+            }
+        } else if (name == "backgroundImage" || name == "background-image") {
+            node.style.clear_background_image();
+            node.style.inline_property_mask &= ~inline_background_image;
         } else if (name == "overflow") {
             node.style.overflow_x = overflow_mode::visible;
             node.style.overflow_y = overflow_mode::visible;
@@ -740,12 +747,12 @@
             node->style.mutable_textual().cursor = value;
             node->style.inline_property_mask |= inline_cursor;
         }
-        else if (name == "background" || name == "background-color") {
-            node->style.background_current_color =
-                lower_html_name(value) == "currentcolor";
-            node->style.background_rgba = node->style.background_current_color
-                ? 0U : native_document::parse_color(value);
-            node->style.inline_property_mask |= inline_background;
+        else if (name == "background" || name == "background-color"
+            || name == "background-image") {
+            const auto retained_inline_mask = node->style.inline_property_mask;
+            node->style.inline_property_mask &= ~property_mask;
+            self->apply_css_declaration(*node, {canonical_name, value, false});
+            node->style.inline_property_mask = retained_inline_mask | property_mask;
         } else if (name == "color") {
             node->style.foreground_rgba = native_document::parse_color(value);
             node->style.inline_property_mask |= inline_color;
@@ -2059,12 +2066,12 @@
                 ? 1.0F
                 : std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
             node->style.inline_property_mask |= inline_opacity;
-        } else if (name == "background" || name == "backgroundColor") {
-            node->style.background_current_color =
-                lower_html_name(value) == "currentcolor";
-            node->style.background_rgba = node->style.background_current_color
-                ? 0U : native_document::parse_color(value);
-            node->style.inline_property_mask |= inline_background;
+        } else if (name == "background" || name == "backgroundColor"
+            || name == "backgroundImage") {
+            const auto retained_inline_mask = node->style.inline_property_mask;
+            node->style.inline_property_mask &= ~property_mask;
+            self->apply_css_declaration(*node, {canonical_name, value, false});
+            node->style.inline_property_mask = retained_inline_mask | property_mask;
         } else if (name == "overflow") {
             std::istringstream stream(value);
             std::string x;

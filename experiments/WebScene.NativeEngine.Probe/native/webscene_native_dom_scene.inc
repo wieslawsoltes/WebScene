@@ -675,6 +675,39 @@ void native_document::append_scene(
             0});
     }
     const auto& background_image = node.style.background_image();
+    auto background_image_value_lower = background_image.image_value;
+    std::transform(
+        background_image_value_lower.begin(),
+        background_image_value_lower.end(),
+        background_image_value_lower.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+    if (paint_self
+        && background_image_value_lower.starts_with("linear-gradient(")
+        && node.layout.width > 0
+        && node.layout.height > 0) {
+        append_ellipse_metadata(
+            radii,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height);
+        commands.push_back(webscene_scene_command{
+            paint_box_in_foreground ? 22U : 21U,
+            append_scene_string(background_image.image_value, strings, string_bytes),
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            0U,
+            node.id,
+            radii.top_left,
+            radii.top_right,
+            radii.bottom_right,
+            radii.bottom_left,
+            0});
+    }
     if (paint_self
         && !background_image.image_markup.empty()
         && !background_image.image_view_box.empty()

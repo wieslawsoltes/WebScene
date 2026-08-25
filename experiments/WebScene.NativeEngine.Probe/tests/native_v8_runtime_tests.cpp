@@ -359,6 +359,7 @@ int main()
     test_inline_block_preserves_vertical_padding(engine);
     test_pointer_hit_targets_and_related_targets_are_elements(engine);
     test_pointer_cursor_and_external_anchor_host_handoff(engine);
+    test_css_linear_gradient_reaches_the_retained_scene(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_translate_calc_arguments_preserve_nested_functions(engine);

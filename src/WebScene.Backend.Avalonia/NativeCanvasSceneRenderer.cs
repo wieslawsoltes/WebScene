@@ -461,6 +461,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         NativeSceneDrawOperation.SvgCommandCount++;
                         DrawDomSvg(overlay, view, command);
                         break;
+                    case 21:
+                    case 22:
+                        NativeSceneDrawOperation.RectCommandCount++;
+                        DrawDomLinearGradient(
+                            command.Kind == 21 ? backdrop : overlay,
+                            view,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
+                        break;
                     case 7:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
@@ -663,6 +672,268 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 command.Y + command.Height),
             cornerPoints);
         canvas.DrawRoundRect(rounded, paint);
+    }
+
+    internal readonly record struct DomLinearGradient(
+        SKPoint Start,
+        SKPoint End,
+        SKColor[] Colors,
+        float[] Positions);
+
+    internal static bool TryParseDomLinearGradient(
+        string value,
+        in SceneCommand command,
+        out DomLinearGradient gradient)
+    {
+        gradient = default;
+        var functionStart = value.IndexOf("linear-gradient(", StringComparison.OrdinalIgnoreCase);
+        if (functionStart < 0)
+        {
+            return false;
+        }
+        var contentStart = functionStart + "linear-gradient(".Length;
+        var depth = 1;
+        var close = contentStart;
+        for (; close < value.Length && depth > 0; close++)
+        {
+            if (value[close] == '(') depth++;
+            else if (value[close] == ')') depth--;
+        }
+        if (depth != 0)
+        {
+            return false;
+        }
+
+        var components = SplitTopLevel(value[contentStart..(close - 1)], ',');
+        if (components.Count < 2)
+        {
+            return false;
+        }
+
+        var directionX = 0f;
+        var directionY = 1f;
+        var stopStart = 0;
+        var first = components[0].Trim();
+        if (TryParseGradientDirection(first, out directionX, out directionY))
+        {
+            stopStart = 1;
+        }
+
+        var colors = new List<SKColor>();
+        var positions = new List<float>();
+        for (var index = stopStart; index < components.Count; index++)
+        {
+            var tokens = SplitTopLevelWhitespace(components[index]);
+            if (tokens.Count == 0
+                || !CssColorParser.TryParseColor(tokens[0], out var color))
+            {
+                continue;
+            }
+            var skColor = new SKColor(color.R, color.G, color.B, color.A);
+            var positionCount = 0;
+            for (var tokenIndex = 1; tokenIndex < tokens.Count; tokenIndex++)
+            {
+                if (!TryParseGradientPosition(tokens[tokenIndex], out var position))
+                {
+                    continue;
+                }
+                colors.Add(skColor);
+                positions.Add(position);
+                positionCount++;
+            }
+            if (positionCount == 0)
+            {
+                colors.Add(skColor);
+                positions.Add(float.NaN);
+            }
+        }
+        if (colors.Count < 2)
+        {
+            return false;
+        }
+
+        if (float.IsNaN(positions[0])) positions[0] = 0;
+        if (float.IsNaN(positions[^1])) positions[^1] = 1;
+        for (var index = 1; index < positions.Count - 1;)
+        {
+            if (!float.IsNaN(positions[index]))
+            {
+                index++;
+                continue;
+            }
+            var runStart = index - 1;
+            var runEnd = index + 1;
+            while (runEnd < positions.Count && float.IsNaN(positions[runEnd])) runEnd++;
+            var from = positions[runStart];
+            var to = runEnd < positions.Count ? positions[runEnd] : 1;
+            for (var missing = index; missing < runEnd; missing++)
+            {
+                positions[missing] = from
+                    + (to - from) * (missing - runStart) / (runEnd - runStart);
+            }
+            index = runEnd;
+        }
+        for (var index = 0; index < positions.Count; index++)
+        {
+            positions[index] = Math.Clamp(
+                positions[index],
+                index == 0 ? 0 : positions[index - 1],
+                1);
+        }
+
+        var center = new SKPoint(
+            command.X + command.Width / 2,
+            command.Y + command.Height / 2);
+        var halfProjection = (
+            Math.Abs(directionX) * command.Width
+            + Math.Abs(directionY) * command.Height) / 2;
+        var delta = new SKPoint(
+            directionX * halfProjection,
+            directionY * halfProjection);
+        gradient = new DomLinearGradient(
+            new SKPoint(center.X - delta.X, center.Y - delta.Y),
+            new SKPoint(center.X + delta.X, center.Y + delta.Y),
+            colors.ToArray(),
+            positions.ToArray());
+        return true;
+    }
+
+    private static void DrawDomLinearGradient(
+        SKCanvas canvas,
+        NativeSceneView* view,
+        in SceneCommand command,
+        in DomCornerRadii radii)
+    {
+        if (!TryParseDomLinearGradient(
+                DomStringAt(view, command.Flags),
+                command,
+                out var gradient))
+        {
+            return;
+        }
+        using var shader = SKShader.CreateLinearGradient(
+            gradient.Start,
+            gradient.End,
+            gradient.Colors,
+            gradient.Positions,
+            SKShaderTileMode.Clamp);
+        using var paint = new SKPaint
+        {
+            IsAntialias = radii.Any,
+            Style = SKPaintStyle.Fill,
+            Shader = shader
+        };
+        DrawDomRoundedRect(canvas, command, paint, radii);
+    }
+
+    private static bool TryParseGradientDirection(
+        string value,
+        out float x,
+        out float y)
+    {
+        x = 0;
+        y = 1;
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.StartsWith("to ", StringComparison.Ordinal))
+        {
+            x = normalized.Contains("right", StringComparison.Ordinal) ? 1
+                : normalized.Contains("left", StringComparison.Ordinal) ? -1 : 0;
+            y = normalized.Contains("bottom", StringComparison.Ordinal) ? 1
+                : normalized.Contains("top", StringComparison.Ordinal) ? -1 : 0;
+            var length = MathF.Sqrt(x * x + y * y);
+            if (length <= 0) return false;
+            x /= length;
+            y /= length;
+            return true;
+        }
+        float degrees;
+        if (normalized.EndsWith("deg", StringComparison.Ordinal)
+            && float.TryParse(
+                normalized[..^3],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out degrees))
+        {
+        }
+        else if (normalized.EndsWith("turn", StringComparison.Ordinal)
+            && float.TryParse(
+                normalized[..^4],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var turns))
+        {
+            degrees = turns * 360;
+        }
+        else
+        {
+            return false;
+        }
+        var radians = degrees * MathF.PI / 180;
+        x = MathF.Sin(radians);
+        y = -MathF.Cos(radians);
+        return true;
+    }
+
+    private static bool TryParseGradientPosition(string value, out float position)
+    {
+        position = 0;
+        var normalized = value.Trim();
+        if (!normalized.EndsWith('%')
+            || !float.TryParse(
+                normalized[..^1],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var percentage))
+        {
+            return false;
+        }
+        position = percentage / 100;
+        return true;
+    }
+
+    private static List<string> SplitTopLevel(string value, char separator)
+    {
+        var result = new List<string>();
+        var start = 0;
+        var depth = 0;
+        for (var index = 0; index <= value.Length; index++)
+        {
+            var character = index < value.Length ? value[index] : separator;
+            if (character == '(') depth++;
+            else if (character == ')' && depth > 0) depth--;
+            if (character == separator && depth == 0)
+            {
+                result.Add(value[start..index].Trim());
+                start = index + 1;
+            }
+        }
+        return result;
+    }
+
+    private static List<string> SplitTopLevelWhitespace(string value)
+    {
+        var result = new List<string>();
+        var start = -1;
+        var depth = 0;
+        for (var index = 0; index <= value.Length; index++)
+        {
+            var character = index < value.Length ? value[index] : ' ';
+            if (character == '(') depth++;
+            else if (character == ')' && depth > 0) depth--;
+            if (char.IsWhiteSpace(character) && depth == 0)
+            {
+                if (start >= 0)
+                {
+                    result.Add(value[start..index]);
+                    start = -1;
+                }
+            }
+            else if (start < 0)
+            {
+                start = index;
+            }
+        }
+        return result;
     }
 
     private const uint DomBorderTop = 1u << 28;
