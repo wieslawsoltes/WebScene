@@ -470,6 +470,14 @@
             || value == "all-scroll") return WEBSCENE_CURSOR_MOVE;
         if (value == "not-allowed" || value == "no-drop") return WEBSCENE_CURSOR_NOT_ALLOWED;
         if (value == "help") return WEBSCENE_CURSOR_HELP;
+        if (value == "e-resize" || value == "w-resize"
+            || value == "ew-resize" || value == "col-resize") {
+            return WEBSCENE_CURSOR_EW_RESIZE;
+        }
+        if (value == "n-resize" || value == "s-resize"
+            || value == "ns-resize" || value == "row-resize") {
+            return WEBSCENE_CURSOR_NS_RESIZE;
+        }
         return WEBSCENE_CURSOR_DEFAULT;
     }
 

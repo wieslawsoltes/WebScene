@@ -56,7 +56,9 @@ typedef enum webscene_cursor_kind {
     WEBSCENE_CURSOR_WAIT = 4,
     WEBSCENE_CURSOR_MOVE = 5,
     WEBSCENE_CURSOR_NOT_ALLOWED = 6,
-    WEBSCENE_CURSOR_HELP = 7
+    WEBSCENE_CURSOR_HELP = 7,
+    WEBSCENE_CURSOR_EW_RESIZE = 8,
+    WEBSCENE_CURSOR_NS_RESIZE = 9
 } webscene_cursor_kind;
 
 typedef enum webscene_preferred_color_scheme {

@@ -648,7 +648,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void ApplyCursorKind(int cursorKind)
     {
-        var type = cursorKind switch
+        Cursor = new Cursor(CursorTypeForKind(cursorKind));
+    }
+
+    internal static StandardCursorType CursorTypeForKind(int cursorKind)
+    {
+        return cursorKind switch
         {
             1 => StandardCursorType.Hand,
             2 => StandardCursorType.Ibeam,
@@ -657,9 +662,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             5 => StandardCursorType.SizeAll,
             6 => StandardCursorType.No,
             7 => StandardCursorType.Help,
+            8 => StandardCursorType.SizeWestEast,
+            9 => StandardCursorType.SizeNorthSouth,
             _ => StandardCursorType.Arrow
         };
-        Cursor = new Cursor(type);
     }
 
     private void RequestPublishedScenePaint()

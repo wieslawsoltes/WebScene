@@ -852,11 +852,15 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
             <style>
               html, body { margin: 0; width: 100%; height: 100%; }
               .badge { display: block; width: 180px; height: 48px; cursor: pointer; }
+              .horizontal-resize { display:block;width:180px;height:48px;cursor:ew-resize; }
+              .vertical-resize { display:block;width:180px;height:48px;cursor:ns-resize; }
             </style>
             <a id="badge" class="badge" href="https://example.com/?source=webscene">
               <span>Hosted chart</span>
             </a>
-            <a id="cancelled" class="badge" href="https://example.invalid/blocked">blocked</a>`;
+            <a id="cancelled" class="badge" href="https://example.invalid/blocked">blocked</a>
+            <div id="horizontal" class="horizontal-resize"></div>
+            <div id="vertical" class="vertical-resize"></div>`;
           document.getElementById('cancelled').addEventListener('click', event => event.preventDefault());
         })()
     )JS", "native-external-link-setup.js");
@@ -916,7 +920,19 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
             && take_host_request(engine).empty(),
         "preventDefault did not suppress external navigation handoff");
 
-    pointer_move(engine, 400, 300, 506U);
+    pointer_move(engine, 20, 110, 506U);
+    require(
+        evaluate(engine, "true", "native-horizontal-resize-cursor-barrier.js") == "true"
+            && webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_EW_RESIZE,
+        "cursor:ew-resize was not projected to the host horizontal resize cursor");
+
+    pointer_move(engine, 20, 155, 507U);
+    require(
+        evaluate(engine, "true", "native-vertical-resize-cursor-barrier.js") == "true"
+            && webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_NS_RESIZE,
+        "cursor:ns-resize was not projected to the host vertical resize cursor");
+
+    pointer_move(engine, 400, 300, 508U);
     require(
         evaluate(engine, "true", "native-cursor-exit-barrier.js") == "true"
             && webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_DEFAULT,
