@@ -1270,6 +1270,127 @@ void test_footer_grid_direction_and_focus_within_state(webscene_engine* engine)
         "footer grid stretch, :dir(), or :focus-within state regressed: " + result);
 }
 
+void test_active_chart_generated_border_tracks_active_class(webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .chart-page {
+                --chart-widget-border-color: rgb(41, 98, 255);
+                position: relative;
+                width: 320px;
+                height: 120px;
+              }
+              .chart-container {
+                position: absolute;
+                top: 0;
+                width: 160px;
+                height: 120px;
+              }
+              canvas { display: block; width: 160px; height: 120px; }
+              #left-chart { left: 0; }
+              #right-chart { left: 160px; }
+              .chart-page .chart-container.multiple.active:after {
+                border: 2px solid;
+                border-color: var(--chart-widget-border-color, rgb(80, 80, 80));
+                bottom: 0;
+                box-sizing: border-box;
+                content: "";
+                display: block;
+                inset-inline-end: 0;
+                inset-inline-start: 0;
+                pointer-events: none;
+                position: absolute;
+                top: 0;
+              }
+              .layout-with-border-radius .chart-container.multiple.active:after {
+                border-radius: 6px;
+              }
+            </style>
+            <div class="chart-page layout-with-border-radius">
+              <div id="left-chart" class="chart-container multiple active">
+                <canvas id="left-canvas" width="160" height="120"></canvas>
+              </div>
+              <div id="right-chart" class="chart-container multiple">
+                <canvas id="right-canvas" width="160" height="120"></canvas>
+              </div>
+            </div>`;
+          for (const canvas of document.querySelectorAll('canvas')) {
+            const context = canvas.getContext('2d');
+            context.fillStyle = 'rgb(20, 20, 20)';
+            context.fillRect(0, 0, 160, 120);
+          }
+        })()
+    )JS", "native-active-chart-pseudo-border-setup.js");
+    resize(engine, 320, 120, 109U);
+    wait_for_consumed_inputs(
+        engine,
+        1U,
+        "active-chart generated-border fixture did not consume its resize");
+
+    struct observed_border final {
+        uint64_t revision{0};
+        float x{-1};
+        float width{0};
+        float stroke{0};
+        float radius{0};
+        uint32_t canvas_layers{0};
+    };
+    const auto observe_border = [&](uint64_t minimum_revision) {
+        observed_border observed{};
+        webscene_engine_request_scene_checkpoint(engine);
+        for (auto attempt = 0; attempt < 100 && observed.x < 0; ++attempt) {
+            if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+                scene != nullptr) {
+                if (scene->header.revision > minimum_revision) {
+                    observed.revision = scene->header.revision;
+                    observed.canvas_layers = scene->header.canvas_layer_count;
+                    for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                        const auto& command = scene->commands[index];
+                        if (command.kind == 11U
+                            && command.rgba == 0x2962FFFFU
+                            && std::abs(command.stroke_width - 2.0F) < 0.01F) {
+                            observed.x = command.x;
+                            observed.width = command.width;
+                            observed.stroke = command.stroke_width;
+                            observed.radius = command.radius_top_left;
+                            break;
+                        }
+                    }
+                }
+                webscene_scene_acknowledge(scene);
+                webscene_scene_release(scene);
+            }
+            if (observed.x < 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        }
+        return observed;
+    };
+
+    const auto left = observe_border(0);
+    require(
+        left.x >= 0 && left.x < 10
+            && std::abs(left.width - 158.0F) < 0.01F
+            && left.radius > 4.0F
+            && left.canvas_layers == 2U,
+        "the active left chart's ::after border did not paint above its retained canvas");
+
+    execute_and_wait(engine, R"JS(
+        document.getElementById('left-chart').classList.remove('active');
+        document.getElementById('right-chart').classList.add('active');
+    )JS", "native-active-chart-pseudo-border-switch.js");
+    const auto right = observe_border(left.revision);
+    require(
+        right.x > 160 && right.x < 170
+            && std::abs(right.width - 158.0F) < 0.01F
+            && right.radius > 4.0F
+            && right.canvas_layers == 2U,
+        "the generated selection border did not move above the active chart canvas");
+}
+
 void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)
 {
     execute(engine, R"JS(

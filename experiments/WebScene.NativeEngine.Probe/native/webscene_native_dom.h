@@ -354,6 +354,10 @@ struct node_style final {
         css_length margin_top{};
         css_length margin_right{};
         css_length margin_bottom{};
+        css_length border_left_width{};
+        css_length border_top_width{};
+        css_length border_right_width{};
+        css_length border_bottom_width{};
         css_length border_top_left_radius{};
         css_length border_top_right_radius{};
         css_length border_bottom_right_radius{};
@@ -362,6 +366,7 @@ struct node_style final {
         css_length border_top_right_radius_y{};
         css_length border_bottom_right_radius_y{};
         css_length border_bottom_left_radius_y{};
+        css_length outline_width{};
         layout_rect layout{};
         display_mode display{display_mode::inline_flow};
         position_mode position{position_mode::normal};
@@ -372,12 +377,18 @@ struct node_style final {
         float opacity{1};
         uint32_t background_rgba{0};
         uint32_t foreground_rgba{0};
+        uint32_t border_left_rgba{0};
+        uint32_t border_top_rgba{0};
+        uint32_t border_right_rgba{0};
+        uint32_t border_bottom_rgba{0};
+        uint32_t outline_rgba{0};
         bool background_current_color{false};
         std::string content;
         bool generated{false};
         bool display_none{false};
         bool visibility_hidden{false};
         bool align_self_specified{false};
+        bool border_box{false};
         bool elliptical_border_radius{false};
     };
 
@@ -1084,6 +1095,7 @@ struct dom_node final {
     // wrappers inherit the highest positive descendant for scene ordering.
     int32_t paint_z_index{0};
     bool paints_after_retained_canvas{false};
+    bool contains_retained_canvas{false};
     std::vector<text_layout_fragment> text_layout_fragments;
     // Resolved table geometry is projected onto the semantic table boxes so
     // row groups and rows can arrange against one shared column grid. Ordinary

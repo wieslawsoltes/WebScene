@@ -23,10 +23,14 @@
     {
         const std::array left_lengths{
             left.width, left.height, left.left, left.top, left.right, left.bottom,
-            left.margin_left, left.margin_top, left.margin_right, left.margin_bottom};
+            left.margin_left, left.margin_top, left.margin_right, left.margin_bottom,
+            left.border_left_width, left.border_top_width,
+            left.border_right_width, left.border_bottom_width};
         const std::array right_lengths{
             right.width, right.height, right.left, right.top, right.right, right.bottom,
-            right.margin_left, right.margin_top, right.margin_right, right.margin_bottom};
+            right.margin_left, right.margin_top, right.margin_right, right.margin_bottom,
+            right.border_left_width, right.border_top_width,
+            right.border_right_width, right.border_bottom_width};
         for (size_t index = 0; index < left_lengths.size(); ++index) {
             if (!layout_length_equal(left_lengths[index], right_lengths[index])) return false;
         }
@@ -38,7 +42,8 @@
             && left.content == right.content
             && left.generated == right.generated
             && left.display_none == right.display_none
-            && left.align_self_specified == right.align_self_specified;
+            && left.align_self_specified == right.align_self_specified
+            && left.border_box == right.border_box;
     }
 
     static bool grid_layout_equal(
@@ -557,10 +562,78 @@
             pseudo.margin_top = native_document::parse_length(value);
         } else if (name == "margin-bottom" || name == "margin-block-end") {
             pseudo.margin_bottom = native_document::parse_length(value);
+        } else if (name == "box-sizing") {
+            pseudo.border_box = value == "border-box";
+        } else if (canonical_css_property_name(name).starts_with("border")
+            && name.find("radius") == std::string::npos) {
+            node_style border_style{};
+            border_style.foreground_rgba = (pseudo.foreground_rgba & 0xFFU) != 0U
+                ? pseudo.foreground_rgba : node.style.foreground_rgba;
+            border_style.border_left_width = pseudo.border_left_width;
+            border_style.border_top_width = pseudo.border_top_width;
+            border_style.border_right_width = pseudo.border_right_width;
+            border_style.border_bottom_width = pseudo.border_bottom_width;
+            border_style.border_left_rgba = pseudo.border_left_rgba;
+            border_style.border_top_rgba = pseudo.border_top_rgba;
+            border_style.border_right_rgba = pseudo.border_right_rgba;
+            border_style.border_bottom_rgba = pseudo.border_bottom_rgba;
+            if (apply_border_declaration(border_style, name, value)) {
+                pseudo.border_left_width = border_style.border_left_width;
+                pseudo.border_top_width = border_style.border_top_width;
+                pseudo.border_right_width = border_style.border_right_width;
+                pseudo.border_bottom_width = border_style.border_bottom_width;
+                pseudo.border_left_rgba = border_style.border_left_rgba;
+                pseudo.border_top_rgba = border_style.border_top_rgba;
+                pseudo.border_right_rgba = border_style.border_right_rgba;
+                pseudo.border_bottom_rgba = border_style.border_bottom_rgba;
+            } else {
+                decision.classification = "unsupported";
+            }
         } else if (apply_corner_radius_declaration(
             name,
             value,
             pseudo)) {
+        } else if (name == "outline") {
+            pseudo.outline_width = {};
+            pseudo.outline_rgba = 0;
+            auto remaining = value;
+            auto color_start = remaining.find("rgba(");
+            if (color_start == std::string::npos) color_start = remaining.find("rgb(");
+            if (color_start != std::string::npos) {
+                const auto color_end = remaining.find(')', color_start);
+                if (color_end != std::string::npos) {
+                    pseudo.outline_rgba = native_document::parse_color(
+                        remaining.substr(color_start, color_end - color_start + 1U));
+                    remaining.erase(color_start, color_end - color_start + 1U);
+                }
+            }
+            std::istringstream stream(remaining);
+            for (std::string token; stream >> token;) {
+                const auto lower = lower_html_name(token);
+                if (lower == "none") {
+                    pseudo.outline_width = {};
+                    pseudo.outline_rgba = 0;
+                } else if (lower == "thin") {
+                    pseudo.outline_width = {1, length_unit::pixels};
+                } else if (lower == "medium") {
+                    pseudo.outline_width = {3, length_unit::pixels};
+                } else if (lower == "thick") {
+                    pseudo.outline_width = {5, length_unit::pixels};
+                } else if (!token.empty()
+                    && (std::isdigit(static_cast<unsigned char>(token.front()))
+                        || token.front() == '.' || token.front() == '-')) {
+                    pseudo.outline_width = native_document::parse_length(token);
+                } else {
+                    const auto color = native_document::parse_color(token);
+                    if (color != 0U || lower == "transparent") {
+                        pseudo.outline_rgba = color;
+                    }
+                }
+            }
+        } else if (name == "outline-width") {
+            pseudo.outline_width = native_document::parse_length(value);
+        } else if (name == "outline-color") {
+            pseudo.outline_rgba = native_document::parse_color(value);
         } else if (name == "background" || name == "background-color") {
             pseudo.background_current_color = value == "currentcolor" || value == "currentColor";
             pseudo.background_rgba = pseudo.background_current_color

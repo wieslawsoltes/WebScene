@@ -131,6 +131,11 @@ dom_node make_pseudo_layout_node(
     result.style.margin_top = pseudo.margin_top;
     result.style.margin_right = pseudo.margin_right;
     result.style.margin_bottom = pseudo.margin_bottom;
+    result.style.border_left_width = pseudo.border_left_width;
+    result.style.border_top_width = pseudo.border_top_width;
+    result.style.border_right_width = pseudo.border_right_width;
+    result.style.border_bottom_width = pseudo.border_bottom_width;
+    result.style.border_box = pseudo.border_box;
     result.style.display = pseudo.display_none ? display_mode::none : pseudo.display;
     result.style.position = pseudo.position;
     result.style.align_self = pseudo.align_self;
@@ -201,6 +206,7 @@ paint_z_index_update update_paint_z_index(
         // chart above later overlay DOM.
         : node.style.position == position_mode::normal && !contains_retained_canvas
             ? descendant_z_index : 0;
+    node.contains_retained_canvas = contains_retained_canvas;
     return {node.paint_z_index, contains_retained_canvas};
 }
 

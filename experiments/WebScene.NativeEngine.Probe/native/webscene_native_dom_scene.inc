@@ -328,9 +328,20 @@ void native_document::append_scene(
             radii.bottom_left_y,
             0});
     };
+    const auto pack_round_rect = [](float packed_radius, float stroke_width) {
+        const auto radius_bits = static_cast<uint32_t>(std::clamp(
+            std::lround(packed_radius * 100.0F), 0L, 65535L));
+        const auto width_bits = static_cast<uint32_t>(std::clamp(
+            std::lround(stroke_width * 100.0F), 0L, 65535L));
+        return (radius_bits << 16U) | width_bits;
+    };
     const auto append_pseudo = [&](const node_style::pseudo_element& pseudo) {
         if (!paint_self || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
+        const auto after_retained_canvas = &pseudo == &node.style.after_pseudo()
+            && node.contains_retained_canvas
+            && !(pseudo.z_index < 0 && pseudo.position != position_mode::normal);
         const auto pseudo_paints_in_foreground = paint_box_in_foreground
+            || after_retained_canvas
             || (pseudo.z_index > 0 && pseudo.position != position_mode::normal);
         const auto pseudo_opacity = std::clamp(pseudo.opacity, 0.0F, 1.0F);
         if (pseudo_opacity <= 0.001F) return;
@@ -390,6 +401,182 @@ void native_document::append_scene(
                 radii.bottom_left,
                 0});
         }
+        if (width > 0 && height > 0) {
+            const auto top = std::clamp(
+                resolve_length(node, pseudo.border_top_width, height, 0),
+                0.0F,
+                height);
+            const auto right = std::clamp(
+                resolve_length(node, pseudo.border_right_width, width, 0),
+                0.0F,
+                width);
+            const auto bottom = std::clamp(
+                resolve_length(node, pseudo.border_bottom_width, height, 0),
+                0.0F,
+                height);
+            const auto left = std::clamp(
+                resolve_length(node, pseudo.border_left_width, width, 0),
+                0.0F,
+                width);
+            const auto uniform_width = top > 0
+                && std::abs(top - right) < 0.01F
+                && std::abs(top - bottom) < 0.01F
+                && std::abs(top - left) < 0.01F;
+            const auto uniform_color = pseudo.border_top_rgba == pseudo.border_right_rgba
+                && pseudo.border_top_rgba == pseudo.border_bottom_rgba
+                && pseudo.border_top_rgba == pseudo.border_left_rgba;
+            const auto border_radii = resolve_radii(
+                pseudo.border_top_left_radius,
+                pseudo.border_top_right_radius,
+                pseudo.border_bottom_right_radius,
+                pseudo.border_bottom_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
+                width,
+                height);
+            if (border_radii.any() && uniform_width && uniform_color
+                && (pseudo.border_top_rgba & 0xFFU) != 0U) {
+                const auto inset = top * 0.5F;
+                const auto stroke_x = x + inset;
+                const auto stroke_y = y + inset;
+                const auto stroke_width = std::max(0.0F, width - top);
+                const auto stroke_height = std::max(0.0F, height - top);
+                const auto stroke_radii = resolved_radii{
+                    std::max(0.0F, border_radii.top_left - inset),
+                    std::max(0.0F, border_radii.top_right - inset),
+                    std::max(0.0F, border_radii.bottom_right - inset),
+                    std::max(0.0F, border_radii.bottom_left - inset),
+                    std::max(0.0F, border_radii.top_left_y - inset),
+                    std::max(0.0F, border_radii.top_right_y - inset),
+                    std::max(0.0F, border_radii.bottom_right_y - inset),
+                    std::max(0.0F, border_radii.bottom_left_y - inset)};
+                append_ellipse_metadata(
+                    stroke_radii,
+                    stroke_x,
+                    stroke_y,
+                    stroke_width,
+                    stroke_height);
+                commands.push_back(webscene_scene_command{
+                    pseudo_paints_in_foreground ? 11U : 8U,
+                    pack_round_rect(0, top),
+                    stroke_x,
+                    stroke_y,
+                    stroke_width,
+                    stroke_height,
+                    with_pseudo_opacity(pseudo.border_top_rgba),
+                    node.id,
+                    stroke_radii.top_left,
+                    stroke_radii.top_right,
+                    stroke_radii.bottom_right,
+                    stroke_radii.bottom_left,
+                    top});
+            } else {
+                const auto append_pseudo_border_rect = [&] (
+                    float rect_x,
+                    float rect_y,
+                    float rect_width,
+                    float rect_height,
+                    uint32_t rgba) {
+                    if ((rgba & 0xFFU) == 0U || rect_width <= 0 || rect_height <= 0) return;
+                    commands.push_back(webscene_scene_command{
+                        pseudo_paints_in_foreground ? 9U : 1U,
+                        0U,
+                        rect_x,
+                        rect_y,
+                        rect_width,
+                        rect_height,
+                        with_pseudo_opacity(rgba),
+                        node.id});
+                };
+                append_pseudo_border_rect(x, y, width, top, pseudo.border_top_rgba);
+                append_pseudo_border_rect(
+                    x + width - right, y, right, height, pseudo.border_right_rgba);
+                append_pseudo_border_rect(
+                    x, y + height - bottom, width, bottom, pseudo.border_bottom_rgba);
+                append_pseudo_border_rect(x, y, left, height, pseudo.border_left_rgba);
+            }
+        }
+        const auto outline = std::max(
+            0.0F,
+            resolve_length(node, pseudo.outline_width, width, 0));
+        if ((pseudo.outline_rgba & 0xFFU) != 0U
+            && outline > 0 && width > 0 && height > 0) {
+            const auto radii = resolve_radii(
+                pseudo.border_top_left_radius,
+                pseudo.border_top_right_radius,
+                pseudo.border_bottom_right_radius,
+                pseudo.border_bottom_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
+                pseudo.elliptical_border_radius
+                    ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
+                width,
+                height);
+            if (radii.any()) {
+                const auto half_outline = outline * 0.5F;
+                const auto outline_x = x - half_outline;
+                const auto outline_y = y - half_outline;
+                const auto outline_width = width + outline;
+                const auto outline_height = height + outline;
+                const auto outline_radii = resolved_radii{
+                    radii.top_left + half_outline,
+                    radii.top_right + half_outline,
+                    radii.bottom_right + half_outline,
+                    radii.bottom_left + half_outline,
+                    radii.top_left_y + half_outline,
+                    radii.top_right_y + half_outline,
+                    radii.bottom_right_y + half_outline,
+                    radii.bottom_left_y + half_outline};
+                append_ellipse_metadata(
+                    outline_radii,
+                    outline_x,
+                    outline_y,
+                    outline_width,
+                    outline_height);
+                commands.push_back(webscene_scene_command{
+                    pseudo_paints_in_foreground ? 11U : 8U,
+                    pack_round_rect(0, outline),
+                    outline_x,
+                    outline_y,
+                    outline_width,
+                    outline_height,
+                    with_pseudo_opacity(pseudo.outline_rgba),
+                    node.id,
+                    outline_radii.top_left,
+                    outline_radii.top_right,
+                    outline_radii.bottom_right,
+                    outline_radii.bottom_left,
+                    outline});
+            } else {
+                const auto append_outline_rect = [&](float rect_x, float rect_y,
+                                                     float rect_width, float rect_height) {
+                    if (rect_width <= 0 || rect_height <= 0) return;
+                    commands.push_back(webscene_scene_command{
+                        pseudo_paints_in_foreground ? 9U : 1U,
+                        0U,
+                        rect_x,
+                        rect_y,
+                        rect_width,
+                        rect_height,
+                        with_pseudo_opacity(pseudo.outline_rgba),
+                        node.id});
+                };
+                append_outline_rect(x - outline, y - outline, width + outline * 2.0F, outline);
+                append_outline_rect(x + width, y, outline, height);
+                append_outline_rect(x - outline, y + height, width + outline * 2.0F, outline);
+                append_outline_rect(x - outline, y, outline, height);
+            }
+        }
         if (has_visible_text(pseudo.content)) {
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
@@ -420,13 +607,6 @@ void native_document::append_scene(
         node.style.border_bottom_left_radius_y(),
         node.layout.width,
         node.layout.height);
-    const auto pack_round_rect = [](float packed_radius, float stroke_width) {
-        const auto radius_bits = static_cast<uint32_t>(std::clamp(
-            std::lround(packed_radius * 100.0F), 0L, 65535L));
-        const auto width_bits = static_cast<uint32_t>(std::clamp(
-            std::lround(stroke_width * 100.0F), 0L, 65535L));
-        return (radius_bits << 16U) | width_bits;
-    };
     if (paint_self
         && node.style.box_shadow_present
         && node.layout.width > 0
