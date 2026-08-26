@@ -253,6 +253,7 @@ int main()
     test_document_start_ordering_storage_and_fail_closed_errors();
     test_four_navigation_workers_enter_startup_concurrently();
     test_parallel_resource_prefetch();
+    test_fetch_carries_document_origin_to_resource_host();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     test_inspector_navigation_resets_context_group();
 #endif

@@ -1032,6 +1032,12 @@ struct v8_dom_runtime::implementation final {
             "web-api-binding");
         const auto specifier = to_utf8(info.GetIsolate(), info[0]);
         const auto& base = self->current_base_address();
+        const resource_request_context request_context{
+            WEBSCENE_RESOURCE_INITIATOR_FETCH,
+            resource_origin(base),
+            base,
+            WEBSCENE_FETCH_MODE_CORS,
+            WEBSCENE_REQUEST_DESTINATION_NONE};
         std::string content;
         std::string resolved;
         if (!self->load_text_resource(
@@ -1039,7 +1045,9 @@ struct v8_dom_runtime::implementation final {
                 base,
                 WEBSCENE_RESOURCE_DOCUMENT,
                 content,
-                resolved)) {
+                resolved,
+                nullptr,
+                request_context)) {
             const auto message = "Unable to fetch WebScene resource: " + specifier;
             info.GetIsolate()->ThrowException(v8::Exception::Error(
                 js_string(info.GetIsolate(), message.c_str())));

@@ -370,7 +370,7 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
             {
                 try
                 {
-                    return replayArchive.ReplayText(resolved, request.Kind);
+                    return replayArchive.ReplayText(resolved, request.Kind, request.Context);
                 }
                 catch (Exception error)
                 {
@@ -393,6 +393,14 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 using var message = new HttpRequestMessage(HttpMethod.Get, resolved);
                 message.Version = HttpVersion.Version20;
                 message.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+                if (!string.IsNullOrWhiteSpace(request.Context.Origin))
+                {
+                    message.Headers.TryAddWithoutValidation("Origin", request.Context.Origin);
+                }
+                if (Uri.TryCreate(request.Context.Referrer, UriKind.Absolute, out var referrer))
+                {
+                    message.Headers.Referrer = referrer;
+                }
                 if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
                     && EntityTagHeaderValue.TryParse(request.IfNoneMatch, out var entityTag))
                 {
@@ -443,7 +451,7 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 }
             }
 
-            GetCaptureArchive()?.CaptureText(resolved, request.Kind, resource);
+            GetCaptureArchive()?.CaptureText(resolved, request.Kind, request.Context, resource);
             return resource;
         }
 
@@ -471,7 +479,7 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
 
         try
         {
-            resource = replayArchive.ReplayUtf8Text(resolved, request.Kind);
+            resource = replayArchive.ReplayUtf8Text(resolved, request.Kind, request.Context);
             return true;
         }
         catch (Exception error)

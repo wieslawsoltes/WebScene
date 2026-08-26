@@ -641,6 +641,21 @@ internal struct EngineOptions
     public IntPtr InteropCallbackAvailableUserData;
     public IntPtr AnimationFrameRequestedCallback;
     public IntPtr AnimationFrameRequestedUserData;
+    public IntPtr ResourceLoadCallbackV2;
+    public IntPtr ResourceLoadV2UserData;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeResourceRequestContext
+{
+    public uint StructSize;
+    public uint Initiator;
+    public IntPtr Origin;
+    public nuint OriginLength;
+    public IntPtr Referrer;
+    public nuint ReferrerLength;
+    public uint Mode;
+    public uint Destination;
 }
 
 [Flags]

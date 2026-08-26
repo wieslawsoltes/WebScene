@@ -87,11 +87,45 @@ public enum WebSceneResourceKind
     Data
 }
 
+public enum WebSceneResourceInitiator
+{
+    Navigation,
+    Subresource,
+    Fetch
+}
+
+public enum WebSceneFetchMode
+{
+    None,
+    SameOrigin,
+    Cors,
+    NoCors
+}
+
+public enum WebSceneRequestDestination
+{
+    None,
+    Document,
+    Script,
+    Style,
+    Image,
+    Font
+}
+
+public readonly record struct WebSceneRequestContext(
+    WebSceneResourceInitiator Initiator,
+    string? Origin,
+    string? Referrer,
+    WebSceneFetchMode Mode,
+    WebSceneRequestDestination Destination);
+
 public readonly record struct WebSceneResourceRequest(
     string Specifier,
     string? BaseAddress,
     WebSceneResourceKind Kind)
 {
+    public WebSceneRequestContext Context { get; init; }
+
     public string? IfNoneMatch { get; init; }
 
     public DateTimeOffset? IfModifiedSince { get; init; }

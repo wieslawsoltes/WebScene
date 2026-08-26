@@ -483,6 +483,55 @@ typedef size_t (*webscene_resource_load_callback)(
     char* destination,
     size_t destination_capacity);
 
+typedef enum webscene_resource_initiator {
+    WEBSCENE_RESOURCE_INITIATOR_NAVIGATION = 0,
+    WEBSCENE_RESOURCE_INITIATOR_SUBRESOURCE = 1,
+    WEBSCENE_RESOURCE_INITIATOR_FETCH = 2
+} webscene_resource_initiator;
+
+typedef enum webscene_fetch_mode {
+    WEBSCENE_FETCH_MODE_NONE = 0,
+    WEBSCENE_FETCH_MODE_SAME_ORIGIN = 1,
+    WEBSCENE_FETCH_MODE_CORS = 2,
+    WEBSCENE_FETCH_MODE_NO_CORS = 3
+} webscene_fetch_mode;
+
+typedef enum webscene_request_destination {
+    WEBSCENE_REQUEST_DESTINATION_NONE = 0,
+    WEBSCENE_REQUEST_DESTINATION_DOCUMENT = 1,
+    WEBSCENE_REQUEST_DESTINATION_SCRIPT = 2,
+    WEBSCENE_REQUEST_DESTINATION_STYLE = 3,
+    WEBSCENE_REQUEST_DESTINATION_IMAGE = 4,
+    WEBSCENE_REQUEST_DESTINATION_FONT = 5
+} webscene_request_destination;
+
+typedef struct webscene_resource_request_context {
+    uint32_t struct_size;
+    uint32_t initiator;
+    const char* origin;
+    size_t origin_length;
+    const char* referrer;
+    size_t referrer_length;
+    uint32_t mode;
+    uint32_t destination;
+} webscene_resource_request_context;
+
+/*
+ * Versioned resource callback carrying browser request context. Hosts that do
+ * not provide it retain the original callback contract above.
+ */
+typedef size_t (*webscene_resource_load_callback_v2)(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified_unix_seconds,
+    const webscene_resource_request_context* request_context,
+    char* destination,
+    size_t destination_capacity);
+
 /*
  * Asynchronous notification emitted after an immutable scene has been
  * published. Consumers use this edge to schedule a compositor paint; they
@@ -566,6 +615,8 @@ typedef struct webscene_engine_options {
     void* interop_callback_available_user_data;
     webscene_animation_frame_requested_callback animation_frame_requested_callback;
     void* animation_frame_requested_user_data;
+    webscene_resource_load_callback_v2 resource_load_callback_v2;
+    void* resource_load_v2_user_data;
 } webscene_engine_options;
 
 enum {

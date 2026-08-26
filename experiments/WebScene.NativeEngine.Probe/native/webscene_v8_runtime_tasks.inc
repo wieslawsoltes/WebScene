@@ -1209,7 +1209,8 @@
         const webscene_input_event& input,
         const char* type,
         dom_node& target,
-        bool* default_prevented = nullptr)
+        bool* default_prevented = nullptr,
+        dom_node* submitter = nullptr)
     {
         record_feature(
             "event",
@@ -1255,6 +1256,14 @@
         event->Set(local_context, js_string(isolate, "bubbles"), v8::Boolean::New(isolate, bubbles)).Check();
         event->Set(local_context, js_string(isolate, "cancelable"), v8::Boolean::New(isolate, cancelable)).Check();
         event->Set(local_context, js_string(isolate, "defaultPrevented"), v8::False(isolate)).Check();
+        if (type_view == "submit") {
+            event->Set(
+                local_context,
+                js_string(isolate, "submitter"),
+                submitter == nullptr
+                    ? v8::Local<v8::Value>(v8::Null(isolate))
+                    : v8::Local<v8::Value>(wrap_node(*submitter))).Check();
+        }
         event->Set(local_context, js_string(isolate, "pointerType"), js_string(isolate, "mouse")).Check();
         event->Set(local_context, js_string(isolate, "isPrimary"), v8::True(isolate)).Check();
         event->Set(
@@ -1651,6 +1660,94 @@
             && type->second != "color";
     }
 
+    dom_node* form_owner(dom_node& control)
+    {
+        const auto explicit_owner = control.attributes.find("form");
+        if (explicit_owner != control.attributes.end()) {
+            if (explicit_owner->second.empty()) return nullptr;
+            auto* candidate = document.find_by_id(explicit_owner->second);
+            return candidate != nullptr && candidate->tag == "form" ? candidate : nullptr;
+        }
+        for (auto* ancestor = control.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor->tag == "form") return ancestor;
+        }
+        return nullptr;
+    }
+
+    static bool is_submit_button(const dom_node* node)
+    {
+        if (node == nullptr || node->attributes.contains("disabled")) return false;
+        const auto authored_type = node->attributes.find("type");
+        const auto type = authored_type == node->attributes.end()
+            ? std::string{}
+            : lower_html_name(authored_type->second);
+        if (node->tag == "button") return type.empty() || type == "submit";
+        return node->tag == "input" && (type == "submit" || type == "image");
+    }
+
+    void collect_form_controls(dom_node& node, dom_node& form, std::vector<dom_node*>& controls)
+    {
+        for (auto& child : node.children) {
+            if (child->kind != dom_node_kind::element) continue;
+            if (form_owner(*child) == &form) controls.push_back(child);
+            collect_form_controls(*child, form, controls);
+        }
+    }
+
+    dom_node* default_submitter(dom_node& form)
+    {
+        std::vector<dom_node*> controls;
+        collect_form_controls(active_root(), form, controls);
+        const auto match = std::find_if(controls.begin(), controls.end(), is_submit_button);
+        return match == controls.end() ? nullptr : *match;
+    }
+
+    bool dispatch_form_submit(
+        const webscene_input_event& input,
+        dom_node& form,
+        dom_node* submitter)
+    {
+        bool submit_prevented = false;
+        return dispatch_input_event_type(
+            input,
+            "submit",
+            form,
+            &submit_prevented,
+            submitter);
+    }
+
+    bool perform_implicit_submission(
+        const webscene_input_event& input,
+        dom_node& control)
+    {
+        auto* form = form_owner(control);
+        if (form == nullptr) return true;
+
+        if (auto* submitter = default_submitter(*form); submitter != nullptr) {
+            bool click_prevented = false;
+            if (!dispatch_input_event_type(
+                    input,
+                    "click",
+                    *submitter,
+                    &click_prevented)) {
+                return false;
+            }
+            return click_prevented || dispatch_form_submit(input, *form, submitter);
+        }
+
+        // HTML suppresses implicit submission for a form with more than one
+        // blocking text control when it has no submit button. TradingView's
+        // interval form contains exactly one input and therefore takes this path.
+        std::vector<dom_node*> controls;
+        collect_form_controls(active_root(), *form, controls);
+        const auto blocking_controls = std::count_if(
+            controls.begin(),
+            controls.end(),
+            [](const auto* candidate) { return is_text_control(candidate); });
+        return blocking_controls > 1
+            || dispatch_form_submit(input, *form, nullptr);
+    }
+
     static bool is_natively_focusable(const dom_node* node)
     {
         if (node == nullptr || node->attributes.contains("disabled")) return false;
@@ -2019,6 +2116,9 @@
                 focus_visible = true;
                 return set_active_element(next, input);
             }
+        }
+        if (!prevented && key_code == 13 && target->tag == "input") {
+            return perform_implicit_submission(input, *target);
         }
         if (!prevented && target->tag == "select"
             && !target->attributes.contains("multiple")

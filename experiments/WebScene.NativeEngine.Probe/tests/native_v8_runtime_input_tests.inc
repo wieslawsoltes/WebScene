@@ -282,9 +282,10 @@ void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine*
           document.body.innerHTML = '<style>body{margin:0}'
             + '#interval{position:absolute;left:0;top:0;width:120px;height:40px}'
             + '#cancelled{position:absolute;left:0;top:50px;width:120px;height:40px}</style>'
-            + '<input id="interval" value="1">'
+            + '<form id="intervalForm"><input id="interval" value="1"></form>'
             + '<textarea id="cancelled">stable</textarea>';
           globalThis.__interval = document.getElementById('interval');
+          globalThis.__intervalForm = document.getElementById('intervalForm');
           globalThis.__cancelled = document.getElementById('cancelled');
           globalThis.__intervalEvents = [];
           globalThis.__selectedInterval = '1m';
@@ -298,11 +299,13 @@ void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine*
                 charCode: event.charCode,
                 which: event.which
               });
-              if (type === 'keypress' && event.key === 'Enter') {
-                __selectedInterval = __interval.value + 'm';
-              }
             });
           }
+          __intervalForm.addEventListener('submit', event => {
+            event.preventDefault();
+            __selectedInterval = __interval.value + 'm';
+            globalThis.__submitterWasNull = event.submitter === null;
+          });
           __cancelled.addEventListener('keypress', event => event.preventDefault());
         })()
     )JS", "native-enter-keypress-setup.js");
@@ -317,11 +320,12 @@ void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine*
     keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 13U, 512U);
     const auto committed = evaluate(engine, R"JS(({
       selected: __selectedInterval,
+      submitterWasNull: __submitterWasNull,
       events: __intervalEvents
     }))JS", "native-enter-keypress-commit.js");
     require(
-        committed == R"({"selected":"1m","events":[{"type":"keydown","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13},{"type":"keypress","key":"Enter","code":"Enter","keyCode":13,"charCode":13,"which":13},{"type":"keyup","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13}]})",
-        "Enter did not expose the browser keypress contract used to commit an interval: "
+        committed == R"({"selected":"1m","submitterWasNull":true,"events":[{"type":"keydown","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13},{"type":"keypress","key":"Enter","code":"Enter","keyCode":13,"charCode":13,"which":13},{"type":"keyup","key":"Enter","code":"Enter","keyCode":13,"charCode":0,"which":13}]})",
+        "Enter did not perform the form submission used to commit an interval: "
             + committed);
 
     pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 65, 513U, true);

@@ -93,9 +93,24 @@
             : lower_html_name(address.substr(0U, separator));
     }
 
+    static std::string resource_origin(const std::string& address)
+    {
+        const auto scheme_end = address.find("://");
+        if (scheme_end == std::string::npos) return {};
+        const auto authority_end = address.find_first_of("/?#", scheme_end + 3U);
+        const auto authority = address.substr(
+            scheme_end + 3U,
+            authority_end == std::string::npos
+                ? std::string::npos
+                : authority_end - scheme_end - 3U);
+        if (authority.empty()) return {};
+        return lower_html_name(address.substr(0U, scheme_end)) + "://" + authority;
+    }
+
     std::shared_ptr<const resource_response> load_resource_single_flight(
         uint32_t kind,
         const std::string& resolved_name,
+        const resource_request_context& request_context,
         const std::string& entity_tag,
         int64_t last_modified_unix_seconds,
         bool& loaded)
@@ -106,6 +121,7 @@
         const auto key = compilation_cache_directory
             + '\n' + std::to_string(kind)
             + '\n' + resolved_name
+            + '\n' + request_context.origin
             + '\n' + entity_tag
             + '\n' + std::to_string(last_modified_unix_seconds);
         std::shared_ptr<process_resource_load_entry> entry;
@@ -151,6 +167,7 @@
             loaded = load_resource_callback(
                 kind,
                 resolved_name,
+                request_context,
                 entity_tag,
                 last_modified_unix_seconds,
                 response);
@@ -201,7 +218,8 @@
         uint32_t kind,
         std::string& content,
         std::string& resolved_name,
-        std::shared_ptr<const immutable_text_source>* immutable_content = nullptr)
+        std::shared_ptr<const immutable_text_source>* immutable_content = nullptr,
+        const resource_request_context& request_context = {})
     {
         if (immutable_content != nullptr) immutable_content->reset();
         const auto assign_content = [&](std::shared_ptr<const immutable_text_source> value) {
@@ -230,12 +248,18 @@
             {},
             "resource-loader");
         ++resource_cache_request_count;
-        const auto cache_key = resource_key_digest(kind, resolved_name);
+        const auto representation_name = request_context.origin.empty()
+            ? resolved_name
+            : resolved_name + "\norigin:" + request_context.origin;
+        const auto cache_key = resource_key_digest(kind, representation_name);
         cached_text_resource cached;
         auto has_cached = false;
         auto has_prefetched = false;
         prefetched_resource prefetched;
-        const auto prefetch_key = resource_prefetch_key(kind, resolved_name);
+        const auto prefetch_key = resource_prefetch_key(
+            kind,
+            resolved_name,
+            request_context.origin);
         std::shared_future<prefetched_resource> prefetch_future;
         {
             std::lock_guard lock(resource_prefetch_mutex);
@@ -290,6 +314,7 @@
                 response = load_resource_single_flight(
                     kind,
                     resolved_name,
+                    request_context,
                     has_cached ? cached.entity_tag : std::string{},
                     has_cached ? cached.last_modified_unix_seconds : 0,
                     loaded);
@@ -384,9 +409,12 @@
         return true;
     }
 
-    static std::string resource_prefetch_key(uint32_t kind, const std::string& resolved_name)
+    static std::string resource_prefetch_key(
+        uint32_t kind,
+        const std::string& resolved_name,
+        const std::string& origin = {})
     {
-        return std::to_string(kind) + ':' + resolved_name;
+        return std::to_string(kind) + ':' + resolved_name + "\norigin:" + origin;
     }
 
     void start_resource_prefetch(
@@ -443,6 +471,7 @@
                     result.response = load_resource_single_flight(
                         kind,
                         resolved_name,
+                        {},
                         entity_tag,
                         last_modified,
                         result.loaded);

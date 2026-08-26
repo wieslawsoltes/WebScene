@@ -7,7 +7,7 @@ namespace WebScene.Backends.Avalonia;
 
 internal sealed class AvaloniaResourceArchive
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private const string ManifestFileName = "manifest.json";
     private readonly object _gate = new();
     private readonly string _rootDirectory;
@@ -55,7 +55,7 @@ internal sealed class AvaloniaResourceArchive
                            File.ReadAllText(manifestPath))
                        ?? throw new InvalidDataException(
                            $"WebScene resource replay manifest '{manifestPath}' is empty.");
-        if (manifest.SchemaVersion != CurrentSchemaVersion)
+        if (manifest.SchemaVersion is < 1 or > CurrentSchemaVersion)
         {
             throw new InvalidDataException(
                 $"WebScene resource replay manifest schema {manifest.SchemaVersion} is not supported; "
@@ -80,6 +80,7 @@ internal sealed class AvaloniaResourceArchive
     internal void CaptureText(
         Uri address,
         WebSceneResourceKind kind,
+        WebSceneRequestContext context,
         in WebSceneTextResource resource)
     {
         if (resource.NotModified)
@@ -92,10 +93,12 @@ internal sealed class AvaloniaResourceArchive
         var content = Encoding.UTF8.GetBytes(resource.Content);
         lock (_gate)
         {
-            _entries[TextKey(address, kind)] = new ResourceArchiveEntry
+            var key = TextKey(address, kind, context.Origin);
+            _entries[key] = new ResourceArchiveEntry
             {
-                Key = TextKey(address, kind),
+                Key = key,
                 Address = address.ToString(),
+                Origin = context.Origin,
                 ResourceType = "text",
                 Kind = kind,
                 ContentFile = StoreContent(content),
@@ -112,9 +115,12 @@ internal sealed class AvaloniaResourceArchive
         }
     }
 
-    internal WebSceneTextResource ReplayText(Uri address, WebSceneResourceKind kind)
+    internal WebSceneTextResource ReplayText(
+        Uri address,
+        WebSceneResourceKind kind,
+        WebSceneRequestContext context)
     {
-        var resource = ReplayUtf8Text(address, kind);
+        var resource = ReplayUtf8Text(address, kind, context);
         return new WebSceneTextResource(
             resource.CacheKey,
             Encoding.UTF8.GetString(resource.Content.Span),
@@ -130,12 +136,14 @@ internal sealed class AvaloniaResourceArchive
 
     internal AvaloniaUtf8Resource ReplayUtf8Text(
         Uri address,
-        WebSceneResourceKind kind)
+        WebSceneResourceKind kind,
+        WebSceneRequestContext context)
     {
         ResourceArchiveEntry entry;
         lock (_gate)
         {
-            if (!_entries.TryGetValue(TextKey(address, kind), out entry!))
+            if (!_entries.TryGetValue(TextKey(address, kind, context.Origin), out entry!)
+                && !_entries.TryGetValue(LegacyTextKey(address, kind), out entry!))
             {
                 throw MissingResource(address, $"text/{kind}");
             }
@@ -288,7 +296,13 @@ internal sealed class AvaloniaResourceArchive
             $"Resource '{address}' ({type}) is not present in the deterministic WebScene replay archive. "
             + "Replay never falls back to the network.");
 
-    private static string TextKey(Uri address, WebSceneResourceKind kind)
+    private static string TextKey(
+        Uri address,
+        WebSceneResourceKind kind,
+        string? origin)
+        => $"text:{(int)kind}:origin={origin ?? string.Empty}:{address}";
+
+    private static string LegacyTextKey(Uri address, WebSceneResourceKind kind)
         => $"text:{(int)kind}:{address}";
 
     private static string BinaryKey(Uri address) => $"binary:{address}";
@@ -305,6 +319,8 @@ internal sealed class AvaloniaResourceArchive
         public string Key { get; set; } = string.Empty;
 
         public string Address { get; set; } = string.Empty;
+
+        public string? Origin { get; set; }
 
         public string ResourceType { get; set; } = string.Empty;
 

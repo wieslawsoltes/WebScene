@@ -98,6 +98,97 @@ size_t load_test_resource(
     return required;
 }
 
+struct contextual_resource_server final {
+    resource_server resources;
+    std::string fetched_url;
+    std::string origin;
+    std::string referrer;
+    uint32_t initiator{0U};
+    uint32_t mode{0U};
+};
+
+size_t load_contextual_test_resource(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified,
+    const webscene_resource_request_context* context,
+    char* destination,
+    size_t destination_capacity)
+{
+    auto& server = *static_cast<contextual_resource_server*>(user_data);
+    const auto address = std::string(url, url_length);
+    if (address.starts_with("https://symbol-search.test/")) {
+        server.fetched_url = address;
+        if (context != nullptr) {
+            server.origin.assign(context->origin, context->origin_length);
+            server.referrer.assign(context->referrer, context->referrer_length);
+            server.initiator = context->initiator;
+            server.mode = context->mode;
+        }
+    }
+    return load_test_resource(
+        &server.resources,
+        kind,
+        url,
+        url_length,
+        entity_tag,
+        entity_tag_length,
+        last_modified,
+        destination,
+        destination_capacity);
+}
+
+void test_fetch_carries_document_origin_to_resource_host()
+{
+    contextual_resource_server server{
+        .resources = resource_server{.content = {
+            {"https://www.tradingview-widget.test/embed/index.html", R"HTML(
+                <main>symbol search fixture</main>
+            )HTML"},
+            {"https://symbol-search.test/symbol_search/?text=AAPL",
+                R"JSON([{"symbol":"AAPL","description":"Apple Inc."}])JSON"}
+        }}
+    };
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.resource_load_callback_v2 = load_contextual_test_resource;
+    options.resource_load_v2_user_data = &server;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "contextual resource engine creation failed");
+    constexpr std::string_view address{
+        "https://www.tradingview-widget.test/embed/index.html"};
+    require(
+        webscene_engine_load_url(engine, address.data(), address.size()) != 0U,
+        "contextual resource navigation failed");
+    execute_and_wait(
+        engine,
+        "fetch('https://symbol-search.test/symbol_search/?text=AAPL')"
+        ".then(response => response.json())"
+        ".then(symbols => globalThis.__symbols = symbols)",
+        "fetch-origin-fixture.js");
+
+    require(
+        server.origin == "https://www.tradingview-widget.test",
+        "fetch did not carry the document origin: " + server.origin);
+    require(
+        server.referrer == "https://www.tradingview-widget.test/embed/index.html",
+        "fetch did not carry the document referrer: " + server.referrer);
+    require(
+        server.initiator == WEBSCENE_RESOURCE_INITIATOR_FETCH
+            && server.mode == WEBSCENE_FETCH_MODE_CORS,
+        "fetch request context did not identify a CORS fetch");
+    const auto result = evaluate(
+        engine,
+        "globalThis.__symbols?.[0]?.symbol ?? ''",
+        "iframe-fetch-origin-result.js");
+    require(result == R"("AAPL")", "symbol fetch did not populate results: " + result);
+    webscene_engine_destroy(engine);
+}
+
 void test_document_start_ordering_storage_and_fail_closed_errors()
 {
     resource_server server{

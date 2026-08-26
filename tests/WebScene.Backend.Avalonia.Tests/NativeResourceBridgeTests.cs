@@ -109,6 +109,47 @@ public sealed unsafe class NativeResourceBridgeTests
         }
     }
 
+    [Fact]
+    public void VersionedBridgePreservesFetchRequestContextAcrossCopyRetry()
+    {
+        var loader = new FixedResourceLoader("[]");
+        using var bridge = CreateBridge(loader);
+        var context = new WebSceneRequestContext(
+            WebSceneResourceInitiator.Fetch,
+            "https://www.tradingview-widget.com",
+            "https://www.tradingview-widget.com/embed/",
+            WebSceneFetchMode.Cors,
+            WebSceneRequestDestination.None);
+
+        var required = bridge.Copy(
+            0,
+            "https://symbol-search.tradingview.com/symbol_search/?text=AAPL",
+            null,
+            0,
+            context,
+            IntPtr.Zero,
+            0);
+        var destination = NativeMemory.Alloc(required);
+        try
+        {
+            bridge.Copy(
+                0,
+                "https://symbol-search.tradingview.com/symbol_search/?text=AAPL",
+                null,
+                0,
+                context,
+                (IntPtr)destination,
+                required);
+        }
+        finally
+        {
+            NativeMemory.Free(destination);
+        }
+
+        Assert.Equal(1, loader.LoadCount);
+        Assert.Equal(context, loader.LastRequest.Context);
+    }
+
     private static NativeWebSceneApi.ResourceBridge CreateBridge(IWebSceneResourceLoader loader)
         => new(loader, _ => { }, null, null, null);
 
@@ -131,9 +172,12 @@ public sealed unsafe class NativeResourceBridgeTests
     {
         internal int LoadCount { get; private set; }
 
+        internal WebSceneResourceRequest LastRequest { get; private set; }
+
         public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
         {
             LoadCount++;
+            LastRequest = request;
             return new WebSceneTextResource(
                 request.Specifier,
                 content,

@@ -272,6 +272,8 @@ private:
     std::string compilation_cache_directory_;
     webscene_resource_load_callback resource_load_callback_{nullptr};
     void* resource_load_user_data_{nullptr};
+    webscene_resource_load_callback_v2 resource_load_callback_v2_{nullptr};
+    void* resource_load_v2_user_data_{nullptr};
     webscene_scene_published_callback scene_published_callback_{nullptr};
     void* scene_published_user_data_{nullptr};
     webscene_host_request_available_callback
@@ -730,12 +732,18 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
         const auto has_interop_callback_available_callback =
             options->struct_size >= interop_callback_available_options_size;
         const auto has_animation_frame_requested_callback =
+            options->struct_size >= offsetof(
+                webscene_engine_options,
+                resource_load_callback_v2);
+        const auto has_resource_callback_v2 =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
             std::move(cache_directory),
             has_resource_callback ? options->resource_load_callback : nullptr,
             has_resource_callback ? options->resource_load_user_data : nullptr,
+            has_resource_callback_v2 ? options->resource_load_callback_v2 : nullptr,
+            has_resource_callback_v2 ? options->resource_load_v2_user_data : nullptr,
             has_scene_published_callback ? options->scene_published_callback : nullptr,
             has_scene_published_callback ? options->scene_published_user_data : nullptr,
             has_text_measure_callback ? options->text_measure_callback : nullptr,

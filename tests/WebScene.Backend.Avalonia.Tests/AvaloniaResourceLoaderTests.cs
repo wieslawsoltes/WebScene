@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using WebScene.Backends.Avalonia;
 using WebScene.Core;
@@ -9,6 +10,63 @@ namespace WebScene.Backend.Avalonia.Tests;
 
 public sealed class AvaloniaResourceLoaderTests
 {
+    [Fact]
+    public async Task CrossOriginFetchSendsFrameOriginAndReferrer()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var endpoint = (IPEndPoint)listener.LocalEndpoint;
+        var receivedHeaders = new TaskCompletionSource<Dictionary<string, string>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            await using var stream = client.GetStream();
+            using var reader = new StreamReader(
+                stream,
+                Encoding.ASCII,
+                detectEncodingFromByteOrderMarks: false,
+                leaveOpen: true);
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            await reader.ReadLineAsync();
+            while (await reader.ReadLineAsync() is { Length: > 0 } line)
+            {
+                var separator = line.IndexOf(':');
+                if (separator > 0)
+                {
+                    headers[line[..separator]] = line[(separator + 1)..].Trim();
+                }
+            }
+            receivedHeaders.SetResult(headers);
+            var body = Encoding.UTF8.GetBytes("[]");
+            var response = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(response);
+            await stream.WriteAsync(body);
+        });
+
+        var loader = new AvaloniaResourceLoader();
+        var context = new WebSceneRequestContext(
+            WebSceneResourceInitiator.Fetch,
+            "https://www.tradingview-widget.com",
+            "https://www.tradingview-widget.com/embed/",
+            WebSceneFetchMode.Cors,
+            WebSceneRequestDestination.None);
+        var resource = loader.LoadText(new WebSceneResourceRequest(
+            $"http://127.0.0.1:{endpoint.Port}/symbols?text=AAPL",
+            null,
+            WebSceneResourceKind.Data)
+        {
+            Context = context
+        });
+        var headers = await receivedHeaders.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await server.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("[]", resource.Content);
+        Assert.Equal(context.Origin, headers["Origin"]);
+        Assert.Equal(context.Referrer, headers["Referer"]);
+    }
+
     [Fact]
     public async Task HttpCaptureReplaysTextAndBinaryWithoutOriginFallback()
     {

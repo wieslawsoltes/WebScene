@@ -14,10 +14,12 @@
             [this](
                 uint32_t kind,
                 const std::string& url,
+                const webscene_native::v8_dom_runtime::resource_request_context& request_context,
                 const std::string& entity_tag,
                 int64_t last_modified_unix_seconds,
                 webscene_native::v8_dom_runtime::resource_response& response) {
-                if (resource_load_callback_ == nullptr) return false;
+                if (resource_load_callback_v2_ == nullptr
+                    && resource_load_callback_ == nullptr) return false;
                 // Most web resources fit in this stack buffer. Supplying it on
                 // the first callback lets managed hosts encode directly into
                 // native-owned memory and avoids a size-probe transition plus
@@ -25,16 +27,28 @@
                 // retain the required-size retry contract below.
                 constexpr size_t initial_resource_capacity = 64U * 1024U;
                 std::array<char, initial_resource_capacity> inline_buffer;
-                const auto required = resource_load_callback_(
-                    resource_load_user_data_,
-                    kind,
-                    url.data(),
-                    url.size(),
-                    entity_tag.data(),
-                    entity_tag.size(),
-                    last_modified_unix_seconds,
-                    inline_buffer.data(),
-                    inline_buffer.size());
+                const webscene_resource_request_context native_context{
+                    sizeof(webscene_resource_request_context),
+                    request_context.initiator,
+                    request_context.origin.data(),
+                    request_context.origin.size(),
+                    request_context.referrer.data(),
+                    request_context.referrer.size(),
+                    request_context.mode,
+                    request_context.destination};
+                const auto invoke = [&](char* destination, size_t capacity) {
+                    return resource_load_callback_v2_ != nullptr
+                        ? resource_load_callback_v2_(
+                            resource_load_v2_user_data_, kind, url.data(), url.size(),
+                            entity_tag.data(), entity_tag.size(),
+                            last_modified_unix_seconds, &native_context,
+                            destination, capacity)
+                        : resource_load_callback_(
+                            resource_load_user_data_, kind, url.data(), url.size(),
+                            entity_tag.data(), entity_tag.size(),
+                            last_modified_unix_seconds, destination, capacity);
+                };
+                const auto required = invoke(inline_buffer.data(), inline_buffer.size());
                 constexpr size_t envelope_header_size =
                     2U + sizeof(uint32_t) + sizeof(int64_t) + sizeof(int64_t);
                 if (required < envelope_header_size) return false;
@@ -42,16 +56,7 @@
                 auto* buffer = inline_buffer.data();
                 if (required > inline_buffer.size()) {
                     overflow_buffer.resize(required);
-                    if (resource_load_callback_(
-                            resource_load_user_data_,
-                            kind,
-                            url.data(),
-                            url.size(),
-                            entity_tag.data(),
-                            entity_tag.size(),
-                            last_modified_unix_seconds,
-                            overflow_buffer.data(),
-                            overflow_buffer.size()) != required) {
+                    if (invoke(overflow_buffer.data(), overflow_buffer.size()) != required) {
                         return false;
                     }
                     buffer = overflow_buffer.data();

@@ -184,9 +184,18 @@ public:
         bool not_modified{false};
     };
 
+    struct resource_request_context final {
+        uint32_t initiator{WEBSCENE_RESOURCE_INITIATOR_NAVIGATION};
+        std::string origin;
+        std::string referrer;
+        uint32_t mode{WEBSCENE_FETCH_MODE_NONE};
+        uint32_t destination{WEBSCENE_REQUEST_DESTINATION_NONE};
+    };
+
     using resource_loader = std::function<bool(
         uint32_t kind,
         const std::string& url,
+        const resource_request_context& request_context,
         const std::string& entity_tag,
         int64_t last_modified_unix_seconds,
         resource_response& response)>;

@@ -58,6 +58,37 @@ public interface INativeWebSceneFrozenPresentation : IDisposable
 }
 #endif
 
+internal sealed class NativePerformanceInstrumentation
+{
+    private int _enabled;
+    private readonly object _rendererMetricsGate = new();
+    private NativeRendererMemoryMetrics _rendererMetrics;
+
+    internal bool IsEnabled => Volatile.Read(ref _enabled) != 0;
+
+    internal void Enable() => Volatile.Write(ref _enabled, 1);
+
+    internal void UpdateRendererMetrics(NativeRendererMemoryMetrics metrics)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+        lock (_rendererMetricsGate)
+        {
+            _rendererMetrics = metrics;
+        }
+    }
+
+    internal NativeRendererMemoryMetrics ReadRendererMetrics()
+    {
+        lock (_rendererMetricsGate)
+        {
+            return _rendererMetrics;
+        }
+    }
+}
+
 internal sealed class NativeSceneRenderObserver
 {
     private const uint SceneComponentReady = 4;
@@ -65,9 +96,16 @@ internal sealed class NativeSceneRenderObserver
     private readonly List<int> _renderedViewportHeights = [];
     private readonly Queue<NativeSceneRenderSample> _renderedScenes = new(4096);
     private readonly Queue<long> _presentations = new(4096);
+    private readonly NativePerformanceInstrumentation _instrumentation;
     private long _renderedSceneCount;
     private long _firstRenderedSceneTimestamp;
     private long _firstReadySceneTimestamp;
+
+    internal NativeSceneRenderObserver(
+        NativePerformanceInstrumentation? instrumentation = null)
+    {
+        _instrumentation = instrumentation ?? new NativePerformanceInstrumentation();
+    }
 
     public long RenderedSceneCount => Volatile.Read(ref _renderedSceneCount);
 
@@ -125,6 +163,10 @@ internal sealed class NativeSceneRenderObserver
 
     public void RecordPresented()
     {
+        if (!_instrumentation.IsEnabled)
+        {
+            return;
+        }
         lock (_viewportGate)
         {
             if (_presentations.Count == 4096)
@@ -137,11 +179,26 @@ internal sealed class NativeSceneRenderObserver
 
     public void RecordRendered(in SceneHeader header)
     {
-        var timestamp = Stopwatch.GetTimestamp();
-        Interlocked.CompareExchange(ref _firstRenderedSceneTimestamp, timestamp, 0);
-        if ((header.Flags & SceneComponentReady) != 0)
+        var monitoring = _instrumentation.IsEnabled;
+        var needsFirstRenderTimestamp =
+            Volatile.Read(ref _firstRenderedSceneTimestamp) == 0;
+        var needsReadyTimestamp = (header.Flags & SceneComponentReady) != 0
+            && Volatile.Read(ref _firstReadySceneTimestamp) == 0;
+        var timestamp = monitoring || needsFirstRenderTimestamp || needsReadyTimestamp
+            ? Stopwatch.GetTimestamp()
+            : 0;
+        if (needsFirstRenderTimestamp)
+        {
+            Interlocked.CompareExchange(ref _firstRenderedSceneTimestamp, timestamp, 0);
+        }
+        if (needsReadyTimestamp)
         {
             Interlocked.CompareExchange(ref _firstReadySceneTimestamp, timestamp, 0);
+        }
+        Interlocked.Increment(ref _renderedSceneCount);
+        if (!monitoring)
+        {
+            return;
         }
         var viewportHeight = (int)Math.Round(header.ViewportHeight);
         lock (_viewportGate)
@@ -160,7 +217,6 @@ internal sealed class NativeSceneRenderObserver
                 _renderedViewportHeights.Add(viewportHeight);
             }
         }
-        Interlocked.Increment(ref _renderedSceneCount);
     }
 }
 
@@ -172,6 +228,9 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly ConcurrentDictionary<IntPtr, GCHandle> EngineResourceBridges = new();
     private static readonly ResourceLoadCallback ResourceLoad = LoadResource;
     private static readonly IntPtr ResourceLoadAddress = Marshal.GetFunctionPointerForDelegate(ResourceLoad);
+    private static readonly ResourceLoadCallbackV2 ResourceLoadV2 = LoadResourceV2;
+    private static readonly IntPtr ResourceLoadV2Address =
+        Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
     private static readonly ScenePublishedCallback ScenePublished = NotifyScenePublished;
     private static readonly IntPtr ScenePublishedAddress =
         Marshal.GetFunctionPointerForDelegate(ScenePublished);
@@ -289,7 +348,9 @@ public static unsafe partial class NativeWebSceneApi
                         : AnimationFrameRequestedAddress,
                     AnimationFrameRequestedUserData = animationFrameRequested is null
                         ? IntPtr.Zero
-                        : GCHandle.ToIntPtr(bridgeHandle)
+                        : GCHandle.ToIntPtr(bridgeHandle),
+                    ResourceLoadCallbackV2 = ResourceLoadV2Address,
+                    ResourceLoadV2UserData = GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -482,6 +543,19 @@ public static unsafe partial class NativeWebSceneApi
         IntPtr entityTag,
         nuint entityTagLength,
         long lastModifiedUnixSeconds,
+        IntPtr destination,
+        nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate nuint ResourceLoadCallbackV2(
+        IntPtr userData,
+        uint kind,
+        IntPtr url,
+        nuint urlLength,
+        IntPtr entityTag,
+        nuint entityTagLength,
+        long lastModifiedUnixSeconds,
+        in NativeResourceRequestContext requestContext,
         IntPtr destination,
         nuint destinationCapacity);
 
@@ -697,12 +771,64 @@ public static unsafe partial class NativeWebSceneApi
                     address,
                     validator,
                     lastModifiedUnixSeconds,
+                    default,
                     destination,
                     destinationCapacity);
         }
         catch (Exception error)
         {
             Console.Error.WriteLine($"[WebScene native resource loader] {error}");
+            return 0;
+        }
+    }
+
+    private static nuint LoadResourceV2(
+        IntPtr userData,
+        uint kind,
+        IntPtr url,
+        nuint urlLength,
+        IntPtr entityTag,
+        nuint entityTagLength,
+        long lastModifiedUnixSeconds,
+        in NativeResourceRequestContext requestContext,
+        IntPtr destination,
+        nuint destinationCapacity)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            var address = Marshal.PtrToStringUTF8(url, checked((int)urlLength));
+            var validator = entityTagLength == 0
+                ? null
+                : Marshal.PtrToStringUTF8(entityTag, checked((int)entityTagLength));
+            var context = new WebSceneRequestContext(
+                (WebSceneResourceInitiator)requestContext.Initiator,
+                requestContext.OriginLength == 0
+                    ? null
+                    : Marshal.PtrToStringUTF8(
+                        requestContext.Origin,
+                        checked((int)requestContext.OriginLength)),
+                requestContext.ReferrerLength == 0
+                    ? null
+                    : Marshal.PtrToStringUTF8(
+                        requestContext.Referrer,
+                        checked((int)requestContext.ReferrerLength)),
+                (WebSceneFetchMode)requestContext.Mode,
+                (WebSceneRequestDestination)requestContext.Destination);
+            return bridge is null || string.IsNullOrWhiteSpace(address)
+                ? 0
+                : bridge.Copy(
+                    kind,
+                    address,
+                    validator,
+                    lastModifiedUnixSeconds,
+                    context,
+                    destination,
+                    destinationCapacity);
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[WebScene native resource loader v2] {error}");
             return 0;
         }
     }
@@ -752,6 +878,23 @@ public static unsafe partial class NativeWebSceneApi
             long lastModifiedUnixSeconds,
             IntPtr destination,
             nuint capacity)
+            => Copy(
+                kind,
+                address,
+                entityTag,
+                lastModifiedUnixSeconds,
+                default,
+                destination,
+                capacity);
+
+        public nuint Copy(
+            uint kind,
+            string address,
+            string? entityTag,
+            long lastModifiedUnixSeconds,
+            WebSceneRequestContext requestContext,
+            IntPtr destination,
+            nuint capacity)
         {
             var pending = _pendingCopy;
             if (pending is not null
@@ -760,7 +903,8 @@ public static unsafe partial class NativeWebSceneApi
                     kind,
                     address,
                     entityTag,
-                    lastModifiedUnixSeconds))
+                    lastModifiedUnixSeconds,
+                    requestContext))
             {
                 if (destination == IntPtr.Zero || capacity < pending.RequiredLength)
                 {
@@ -786,6 +930,7 @@ public static unsafe partial class NativeWebSceneApi
             };
             var request = new WebSceneResourceRequest(address, null, resourceKind)
             {
+                Context = requestContext,
                 IfNoneMatch = entityTag,
                 IfModifiedSince = lastModifiedUnixSeconds > 0
                     ? DateTimeOffset.FromUnixTimeSeconds(lastModifiedUnixSeconds)
@@ -826,6 +971,7 @@ public static unsafe partial class NativeWebSceneApi
                     address,
                     entityTag,
                     lastModifiedUnixSeconds,
+                    requestContext,
                     prepared,
                     request.IfModifiedSince,
                     prepared.RequiredLength);
@@ -943,6 +1089,7 @@ public static unsafe partial class NativeWebSceneApi
             string Address,
             string? EntityTag,
             long LastModifiedUnixSeconds,
+            WebSceneRequestContext RequestContext,
             PreparedResource Resource,
             DateTimeOffset? RequestIfModifiedSince,
             nuint RequiredLength)
@@ -952,10 +1099,12 @@ public static unsafe partial class NativeWebSceneApi
                 uint kind,
                 string address,
                 string? entityTag,
-                long lastModifiedUnixSeconds)
+                long lastModifiedUnixSeconds,
+                WebSceneRequestContext requestContext)
                 => ReferenceEquals(Owner, owner)
                     && Kind == kind
                     && LastModifiedUnixSeconds == lastModifiedUnixSeconds
+                    && RequestContext == requestContext
                     && string.Equals(Address, address, StringComparison.Ordinal)
                     && string.Equals(EntityTag, entityTag, StringComparison.Ordinal);
         }
