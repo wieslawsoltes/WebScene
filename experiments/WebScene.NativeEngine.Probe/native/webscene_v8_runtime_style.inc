@@ -747,8 +747,12 @@
             node->style.mutable_textual().cursor = value;
             node->style.inline_property_mask |= inline_cursor;
         }
-        else if (name == "background" || name == "background-color"
-            || name == "background-image") {
+        else if (canonical_name == "background"
+            || canonical_name == "background-color"
+            || canonical_name == "background-image"
+            || canonical_name == "background-repeat"
+            || canonical_name == "background-position"
+            || canonical_name == "background-size") {
             const auto retained_inline_mask = node->style.inline_property_mask;
             node->style.inline_property_mask &= ~property_mask;
             self->apply_css_declaration(*node, {canonical_name, value, false});
@@ -1040,11 +1044,9 @@
             } else if (name == "background-repeat") {
                 value = node->style.background_image().repeat;
             } else if (name == "background-position") {
-                value = node->style.background_image().position_x + " "
-                    + node->style.background_image().position_y;
+                value = node->style.background_image().position_value;
             } else if (name == "background-size") {
-                value = node->style.background_image().size_x + " "
-                    + node->style.background_image().size_y;
+                value = node->style.background_image().size_value;
             } else if (name == "box-shadow") {
                 if (!node->style.box_shadow_present) {
                     value = "none";
@@ -1666,11 +1668,9 @@
         } else if (name == "backgroundRepeat") {
             value = node->style.background_image().repeat;
         } else if (name == "backgroundPosition") {
-            value = node->style.background_image().position_x + " "
-                + node->style.background_image().position_y;
+            value = node->style.background_image().position_value;
         } else if (name == "backgroundSize") {
-            value = node->style.background_image().size_x + " "
-                + node->style.background_image().size_y;
+            value = node->style.background_image().size_value;
         } else if (name == "background" || name == "backgroundColor") {
             auto background = node->style.background_rgba;
             if (node->style.background_current_color) {
@@ -2066,8 +2066,12 @@
                 ? 1.0F
                 : std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
             node->style.inline_property_mask |= inline_opacity;
-        } else if (name == "background" || name == "backgroundColor"
-            || name == "backgroundImage") {
+        } else if (canonical_name == "background"
+            || canonical_name == "background-color"
+            || canonical_name == "background-image"
+            || canonical_name == "background-repeat"
+            || canonical_name == "background-position"
+            || canonical_name == "background-size") {
             const auto retained_inline_mask = node->style.inline_property_mask;
             node->style.inline_property_mask &= ~property_mask;
             self->apply_css_declaration(*node, {canonical_name, value, false});

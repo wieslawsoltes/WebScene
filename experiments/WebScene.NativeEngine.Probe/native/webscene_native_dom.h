@@ -242,8 +242,10 @@ struct node_style final {
         std::string repeat{"repeat"};
         std::string position_x{"0%"};
         std::string position_y{"0%"};
+        std::string position_value{"0% 0%"};
         std::string size_x{"auto"};
         std::string size_y{"auto"};
+        std::string size_value{"auto"};
     };
 
     const background_image_data& background_image() const noexcept

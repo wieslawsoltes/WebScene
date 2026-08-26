@@ -693,6 +693,14 @@ void native_document::append_scene(
         && background_image_value_lower.starts_with("linear-gradient(")
         && node.layout.width > 0
         && node.layout.height > 0) {
+        auto gradient_resource = std::string{"webscene-bg-v2\t"};
+        gradient_resource += background_image.image_value;
+        gradient_resource += '\t';
+        gradient_resource += background_image.repeat;
+        gradient_resource += '\t';
+        gradient_resource += background_image.position_value;
+        gradient_resource += '\t';
+        gradient_resource += background_image.size_value;
         append_ellipse_metadata(
             radii,
             node.layout.x,
@@ -701,7 +709,7 @@ void native_document::append_scene(
             node.layout.height);
         commands.push_back(webscene_scene_command{
             paint_box_in_foreground ? 22U : 21U,
-            append_scene_string(background_image.image_value, strings, string_bytes),
+            append_scene_string(gradient_resource, strings, string_bytes),
             node.layout.x,
             node.layout.y,
             node.layout.width,

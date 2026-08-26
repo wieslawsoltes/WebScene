@@ -2437,11 +2437,13 @@
                 decision.semantic_slice = "no-repeat";
             }
         } else if (name == "background-position") {
+            node.style.mutable_background_image().position_value = value;
             apply_background_position(node.style, value);
             decision.classification = "partially-supported";
             decision.semantic_slice = "two-value keywords, percentages, and pixel lengths";
         } else if (name == "background-size") {
             auto& background = node.style.mutable_background_image();
+            background.size_value = value;
             std::istringstream stream(value);
             stream >> background.size_x >> background.size_y;
             if (background.size_x.empty()) background.size_x = "auto";

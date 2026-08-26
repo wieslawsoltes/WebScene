@@ -680,6 +680,12 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         SKColor[] Colors,
         float[] Positions);
 
+    private readonly record struct DomBackgroundResource(
+        string Image,
+        string Repeat,
+        string Position,
+        string Size);
+
     internal static bool TryParseDomLinearGradient(
         string value,
         in SceneCommand command,
@@ -804,26 +810,245 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         in SceneCommand command,
         in DomCornerRadii radii)
     {
-        if (!TryParseDomLinearGradient(
-                DomStringAt(view, command.Flags),
-                command,
-                out var gradient))
+        DrawDomBackgroundLayers(
+            canvas,
+            DomStringAt(view, command.Flags),
+            command,
+            radii);
+    }
+
+    internal static void DrawDomBackgroundForTest(
+        SKCanvas canvas,
+        string resource,
+        in SceneCommand command)
+        => DrawDomBackgroundLayers(canvas, resource, command, default);
+
+    private static void DrawDomBackgroundLayers(
+        SKCanvas canvas,
+        string value,
+        in SceneCommand command,
+        in DomCornerRadii radii)
+    {
+        var resource = DecodeDomBackgroundResource(value);
+        var layers = SplitTopLevel(resource.Image, ',');
+        var repeats = SplitTopLevel(resource.Repeat, ',');
+        var positions = SplitTopLevel(resource.Position, ',');
+        var sizes = SplitTopLevel(resource.Size, ',');
+        if (layers.Count == 0)
         {
             return;
         }
-        using var shader = SKShader.CreateLinearGradient(
-            gradient.Start,
-            gradient.End,
-            gradient.Colors,
-            gradient.Positions,
-            SKShaderTileMode.Clamp);
-        using var paint = new SKPaint
+
+        var restore = canvas.Save();
+        try
         {
-            IsAntialias = radii.Any,
-            Style = SKPaintStyle.Fill,
-            Shader = shader
-        };
-        DrawDomRoundedRect(canvas, command, paint, radii);
+            ClipDomBackground(canvas, command, radii);
+            // CSS lists the topmost image first.
+            for (var layerIndex = layers.Count - 1; layerIndex >= 0; layerIndex--)
+            {
+                var layer = layers[layerIndex];
+                if (!layer.TrimStart().StartsWith(
+                        "linear-gradient(",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var repeat = LayerValue(repeats, layerIndex, "repeat");
+                var position = LayerValue(positions, layerIndex, "0% 0%");
+                var size = LayerValue(sizes, layerIndex, "auto");
+                DrawDomGradientTiles(canvas, layer, command, repeat, position, size);
+            }
+        }
+        finally
+        {
+            canvas.RestoreToCount(restore);
+        }
+    }
+
+    private static DomBackgroundResource DecodeDomBackgroundResource(string value)
+    {
+        const string prefix = "webscene-bg-v2\t";
+        if (!value.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return new DomBackgroundResource(value, "no-repeat", "0% 0%", "auto");
+        }
+        var fields = value[prefix.Length..].Split('\t');
+        return new DomBackgroundResource(
+            fields.Length > 0 ? fields[0] : string.Empty,
+            fields.Length > 1 ? fields[1] : "repeat",
+            fields.Length > 2 ? fields[2] : "0% 0%",
+            fields.Length > 3 ? fields[3] : "auto");
+    }
+
+    private static string LayerValue(List<string> values, int layerIndex, string fallback)
+        => values.Count == 0
+            ? fallback
+            : values[Math.Min(layerIndex, values.Count - 1)];
+
+    private static void ClipDomBackground(
+        SKCanvas canvas,
+        in SceneCommand command,
+        in DomCornerRadii radii)
+    {
+        var bounds = new SKRect(
+            command.X,
+            command.Y,
+            command.X + command.Width,
+            command.Y + command.Height);
+        if (!radii.Any)
+        {
+            canvas.ClipRect(bounds);
+            return;
+        }
+        using var rounded = new SKRoundRect();
+        rounded.SetRectRadii(bounds,
+        [
+            radii.TopLeft,
+            radii.TopRight,
+            radii.BottomRight,
+            radii.BottomLeft
+        ]);
+        canvas.ClipRoundRect(rounded, antialias: true);
+    }
+
+    private static void DrawDomGradientTiles(
+        SKCanvas canvas,
+        string layer,
+        in SceneCommand command,
+        string repeatValue,
+        string positionValue,
+        string sizeValue)
+    {
+        ResolveDomBackgroundSize(sizeValue, command.Width, command.Height,
+            out var tileWidth, out var tileHeight);
+        if (tileWidth <= 0 || tileHeight <= 0) return;
+        ResolveDomBackgroundPosition(positionValue, command.Width, command.Height,
+            tileWidth, tileHeight, out var offsetX, out var offsetY);
+
+        var normalizedRepeat = repeatValue.Trim().ToLowerInvariant();
+        var repeatX = normalizedRepeat != "no-repeat"
+            && normalizedRepeat != "repeat-y";
+        var repeatY = normalizedRepeat != "no-repeat"
+            && normalizedRepeat != "repeat-x";
+        var firstX = command.X + offsetX;
+        var firstY = command.Y + offsetY;
+        if (repeatX)
+        {
+            while (firstX > command.X) firstX -= tileWidth;
+            while (firstX + tileWidth <= command.X) firstX += tileWidth;
+        }
+        if (repeatY)
+        {
+            while (firstY > command.Y) firstY -= tileHeight;
+            while (firstY + tileHeight <= command.Y) firstY += tileHeight;
+        }
+
+        var endX = repeatX ? command.X + command.Width : firstX + tileWidth;
+        var endY = repeatY ? command.Y + command.Height : firstY + tileHeight;
+        for (var y = firstY; y < endY; y += tileHeight)
+        {
+            for (var x = firstX; x < endX; x += tileWidth)
+            {
+                var tile = command;
+                tile.X = x;
+                tile.Y = y;
+                tile.Width = tileWidth;
+                tile.Height = tileHeight;
+                if (!TryParseDomLinearGradient(layer, tile, out var gradient)) continue;
+                using var shader = SKShader.CreateLinearGradient(
+                    gradient.Start,
+                    gradient.End,
+                    gradient.Colors,
+                    gradient.Positions,
+                    SKShaderTileMode.Clamp);
+                using var paint = new SKPaint
+                {
+                    IsAntialias = false,
+                    Style = SKPaintStyle.Fill,
+                    Shader = shader
+                };
+                canvas.DrawRect(x, y, tileWidth, tileHeight, paint);
+                if (!repeatX) break;
+            }
+            if (!repeatY) break;
+        }
+    }
+
+    private static void ResolveDomBackgroundSize(
+        string value,
+        float width,
+        float height,
+        out float tileWidth,
+        out float tileHeight)
+    {
+        var tokens = SplitTopLevelWhitespace(value);
+        if (tokens.Count == 0 || tokens[0] is "auto" or "cover" or "contain")
+        {
+            tileWidth = width;
+            tileHeight = height;
+            return;
+        }
+        tileWidth = ResolveDomBackgroundLength(tokens[0], width, width);
+        tileHeight = tokens.Count > 1
+            ? ResolveDomBackgroundLength(tokens[1], height, height)
+            : tileWidth;
+    }
+
+    private static void ResolveDomBackgroundPosition(
+        string value,
+        float width,
+        float height,
+        float tileWidth,
+        float tileHeight,
+        out float x,
+        out float y)
+    {
+        var tokens = SplitTopLevelWhitespace(value);
+        var xValue = tokens.Count > 0 ? tokens[0] : "0%";
+        var yValue = tokens.Count > 1 ? tokens[1] : "0%";
+        x = ResolveDomBackgroundPositionValue(xValue, width - tileWidth, true);
+        y = ResolveDomBackgroundPositionValue(yValue, height - tileHeight, false);
+    }
+
+    private static float ResolveDomBackgroundPositionValue(
+        string value,
+        float available,
+        bool horizontal)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized == "center") return available * 0.5f;
+        if (normalized == (horizontal ? "right" : "bottom")) return available;
+        if (normalized == (horizontal ? "left" : "top")) return 0;
+        if (normalized.EndsWith('%')
+            && float.TryParse(normalized[..^1], NumberStyles.Float,
+                CultureInfo.InvariantCulture, out var percentage))
+        {
+            return available * percentage / 100f;
+        }
+        return ResolveDomBackgroundLength(normalized, available, 0);
+    }
+
+    private static float ResolveDomBackgroundLength(
+        string value,
+        float percentageBasis,
+        float fallback)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized == "auto") return fallback;
+        if (normalized.EndsWith('%')
+            && float.TryParse(normalized[..^1], NumberStyles.Float,
+                CultureInfo.InvariantCulture, out var percentage))
+        {
+            return percentageBasis * percentage / 100f;
+        }
+        if (normalized.EndsWith("px", StringComparison.Ordinal))
+        {
+            normalized = normalized[..^2];
+        }
+        return float.TryParse(normalized, NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var pixels)
+            ? pixels
+            : fallback;
     }
 
     private static bool TryParseGradientDirection(

@@ -1184,11 +1184,14 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
 
     execute(engine, R"JS(
         swatch.style.backgroundImage =
-          'linear-gradient(90deg, transparent, #112233)'
+          'linear-gradient(90deg, transparent, #112233), '
+          + 'linear-gradient(135deg, #707070 50%, #121212 50%)';
+        swatch.style.backgroundSize = 'auto, 8px 8px';
     )JS", "native-linear-gradient-mutation.js");
 
     webscene_engine_request_scene_checkpoint(engine);
     auto found = false;
+    auto observed_resource = std::string{};
     for (auto attempt = 0; attempt < 100 && !found; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
@@ -1199,12 +1202,16 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
                 const std::string resource(
                     scene->string_bytes + descriptor.byte_offset,
                     descriptor.byte_length);
+                observed_resource = resource;
                 found = command.node_id != 0U
                     && std::abs(command.width - 40.0F) < 0.1F
                     && std::abs(command.height - 24.0F) < 0.1F
                     && resource.find("linear-gradient") != std::string::npos
                     && resource.find("transparent") != std::string::npos
-                    && resource.find("#112233") != std::string::npos;
+                    && resource.find("#112233") != std::string::npos
+                    && resource.find("#707070") != std::string::npos
+                    && resource.starts_with("webscene-bg-v2\t")
+                    && resource.ends_with("\tauto, 8px 8px");
             }
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
@@ -1213,5 +1220,5 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
     }
     require(found,
         "a mutated inline backgroundImage linear-gradient was not published "
-        "as a retained gradient command");
+        "as a retained gradient command: " + observed_resource);
 }

@@ -200,8 +200,10 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
             + background->repeat.capacity() + 1U
             + background->position_x.capacity() + 1U
             + background->position_y.capacity() + 1U
+            + background->position_value.capacity() + 1U
             + background->size_x.capacity() + 1U
-            + background->size_y.capacity() + 1U;
+            + background->size_y.capacity() + 1U
+            + background->size_value.capacity() + 1U;
     }
     result.grid_data_count = grid_allocations.size();
     for (const auto* grid : grid_allocations) {
