@@ -2166,6 +2166,9 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         (float)(command.V1 + command.V3)));
                     break;
                 case 18:
+                    path.FillType = (command.Flags & CanvasCommandEvenOdd) != 0
+                        ? SKPathFillType.EvenOdd
+                        : SKPathFillType.Winding;
                     canvas.ClipPath(path, SKClipOperation.Intersect, true);
                     break;
                 case 19:

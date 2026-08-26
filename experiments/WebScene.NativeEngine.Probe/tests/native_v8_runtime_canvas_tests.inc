@@ -207,6 +207,52 @@ void test_canvas_path_even_odd_fill_rule_reaches_scene(webscene_engine* engine)
     require(observed_even_odd, "canvas even-odd fill rule was lost before the native scene");
 }
 
+void test_canvas_path_even_odd_clip_rule_reaches_scene(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const canvas = document.createElement('canvas');
+          canvas.width = 200;
+          canvas.height = 80;
+          document.body.appendChild(canvas);
+          const context = canvas.getContext('2d');
+          context.beginPath();
+          context.rect(0, 0, 200, 80);
+          context.rect(70, 20, 60, 40);
+          context.clip('evenodd');
+          context.beginPath();
+          context.moveTo(0, 40);
+          context.lineTo(200, 40);
+          context.stroke();
+        })()
+    )JS", "native-canvas-even-odd-clip-setup.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_clip = false;
+    auto observed_even_odd = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
+                const auto& command = scene->canvas_commands[index];
+                if (command.kind != 18U) continue;
+                observed_clip = true;
+                observed_even_odd =
+                    (command.flags & WEBSCENE_CANVAS_COMMAND_FLAG_EVEN_ODD) != 0U;
+                break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (observed_even_odd) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(observed_clip, "canvas clip was not emitted to the native scene");
+    require(
+        observed_even_odd,
+        "canvas even-odd clip rule was lost before the native scene");
+}
+
 void test_canvas_fill_rect_emits_only_relevant_paint_state(webscene_engine* engine)
 {
     execute(engine, R"JS(

@@ -1836,7 +1836,18 @@
         binding_callback_timer binding_timer(self->profile(binding_category::canvas_path));
         auto* state = canvas_path_state(info, "clip");
         if (state == nullptr || state->node == nullptr) return;
+        // clip(fillRule) applies the rule to the current path. TradingView uses
+        // a full-canvas outer contour plus a label contour with "evenodd" to
+        // punch a text-shaped gap through horizontal drawing lines.
+        const auto fill_rule_index = info.Length() > 0 && info[0]->IsObject() ? 1 : 0;
+        const auto even_odd = info.Length() > fill_rule_index
+            && info[fill_rule_index]->IsString()
+            && to_utf8(info.GetIsolate(), info[fill_rule_index]) == "evenodd";
         canvas_append_command(*state->node, canvas_command_kind::clip);
+        if (even_odd) {
+            state->node->mutable_canvas().commands.back().flags |=
+                WEBSCENE_CANVAS_COMMAND_FLAG_EVEN_ODD;
+        }
         state->has_clip = true;
     }
 

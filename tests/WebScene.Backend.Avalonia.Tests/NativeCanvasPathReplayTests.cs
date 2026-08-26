@@ -141,6 +141,30 @@ public sealed unsafe class NativeCanvasPathReplayTests
         Assert.Equal(0, bitmap.GetPixel(35, 35).Alpha);
     }
 
+    [Fact]
+    public void EvenOddClipPunchesLabelGapThroughHorizontalLine()
+    {
+        const uint evenOdd = 1u << 16;
+        var commands = new[]
+        {
+            new NativeCanvasCommand { Kind = 9 },
+            new NativeCanvasCommand { Kind = 17, V0 = 0, V1 = 0, V2 = 100, V3 = 100 },
+            new NativeCanvasCommand { Kind = 17, V0 = 30, V1 = 35, V2 = 40, V3 = 30 },
+            new NativeCanvasCommand { Kind = 18, Flags = evenOdd },
+            new NativeCanvasCommand { Kind = 9 },
+            new NativeCanvasCommand { Kind = 11, V0 = 0, V1 = 50 },
+            new NativeCanvasCommand { Kind = 12, V0 = 100, V1 = 50 },
+            new NativeCanvasCommand { Kind = 42, V0 = 4 },
+            new NativeCanvasCommand { Kind = 20 }
+        };
+
+        using var bitmap = Render(commands);
+
+        Assert.NotEqual(0, bitmap.GetPixel(15, 50).Alpha);
+        Assert.Equal(0, bitmap.GetPixel(50, 50).Alpha);
+        Assert.NotEqual(0, bitmap.GetPixel(85, 50).Alpha);
+    }
+
     private static SKBitmap Render(NativeCanvasCommand[] commands)
     {
         var renderer = new NativeCanvasSceneRenderer();

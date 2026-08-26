@@ -400,6 +400,7 @@ int main()
     test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(engine);
     test_canvas_text_max_width_is_preserved_in_scene(engine);
     test_canvas_path_even_odd_fill_rule_reaches_scene(engine);
+    test_canvas_path_even_odd_clip_rule_reaches_scene(engine);
     test_canvas_fill_rect_emits_only_relevant_paint_state(engine);
     test_canvas_path_2d_add_path_does_not_fill_stale_current_path(engine);
     test_canvas_line_dash_and_path_2d_arc_are_native(engine);
