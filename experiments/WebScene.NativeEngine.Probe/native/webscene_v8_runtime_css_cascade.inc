@@ -955,7 +955,24 @@
         std::string_view raw_name,
         const std::string& value)
     {
-        const auto name = canonical_css_property_name(raw_name);
+        auto name = canonical_css_property_name(raw_name);
+        // The retained box model stores physical sides. Resolve the logical
+        // side spellings accepted by the ordinary element cascade before
+        // applying generated-element declarations as well. TradingView uses
+        // border-inline-start on a zero-sized ::after box to construct its
+        // diagonal split-colour swatch.
+        if (name == "border-block-start") name = "border-top";
+        else if (name == "border-block-end") name = "border-bottom";
+        else if (name == "border-inline-start") name = "border-left";
+        else if (name == "border-inline-end") name = "border-right";
+        else if (name == "border-block-start-width") name = "border-top-width";
+        else if (name == "border-block-end-width") name = "border-bottom-width";
+        else if (name == "border-inline-start-width") name = "border-left-width";
+        else if (name == "border-inline-end-width") name = "border-right-width";
+        else if (name == "border-block-start-color") name = "border-top-color";
+        else if (name == "border-block-end-color") name = "border-bottom-color";
+        else if (name == "border-inline-start-color") name = "border-left-color";
+        else if (name == "border-inline-end-color") name = "border-right-color";
         const auto parse_color = [&](const std::string& token) {
             return lower_html_name(token) == "currentcolor"
                 ? style.foreground_rgba

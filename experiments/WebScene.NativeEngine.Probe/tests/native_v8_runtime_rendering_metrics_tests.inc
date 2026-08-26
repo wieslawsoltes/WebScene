@@ -59,6 +59,98 @@ void test_generated_pseudo_element_opacity(webscene_engine* engine)
     }
 }
 
+void test_tradingview_split_color_swatch_uses_pseudo_border_triangle(
+    webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = `
+            .placeholderContainer-Sw_a4qpB {
+              --_8-3A-s: rgb(53, 132, 120);
+              --_9-3A-s: rgb(180, 67, 83);
+              border-radius: 3px;
+              height: 24px;
+              overflow: hidden;
+              position: relative;
+              width: 24px;
+            }
+            .placeholderContainer-Sw_a4qpB .placeholder-Sw_a4qpB {
+              background-color: var(--_9-3A-s);
+              height: 24px;
+              width: 24px;
+            }
+            .placeholderContainer-Sw_a4qpB .placeholder-Sw_a4qpB::after {
+              border-inline-start: 24px solid transparent;
+              border-top: 24px solid var(--_8-3A-s);
+              content: ' ';
+              position: absolute;
+              width: 0;
+            }
+          `;
+          document.body.appendChild(style);
+          const container = document.createElement('div');
+          container.className = 'placeholderContainer-Sw_a4qpB';
+          container.innerHTML = '<div class="placeholder-Sw_a4qpB"></div>';
+          document.body.appendChild(container);
+        })()
+    )JS", "native-tradingview-split-swatch-setup.js");
+    require(
+        evaluate(engine,
+            "document.querySelector('.placeholderContainer-Sw_a4qpB').offsetWidth",
+            "native-tradingview-split-swatch-ready.js") == "24",
+        "TradingView split swatch fixture did not lay out");
+    const auto pseudo_metrics = evaluate(engine, R"JS(
+        (() => {
+          const item = document.querySelector('.placeholder-Sw_a4qpB');
+          const style = getComputedStyle(item, '::after');
+          return [style.width, style.height, style.borderTopWidth,
+            style.borderInlineStartWidth, style.borderTopColor,
+            style.borderInlineStartColor].join('|');
+        })()
+    )JS", "native-tradingview-split-swatch-style.js");
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found_base = false;
+    auto found_triangle = false;
+    auto triangle_colour_commands = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 1U || command.kind == 7U
+                        || command.kind == 9U || command.kind == 10U)
+                    && command.rgba == 0xB44353FFU) {
+                    found_base = true;
+                }
+                if ((command.kind == 33U || command.kind == 34U)
+                    && command.rgba == 0x358478FFU) {
+                    found_triangle = true;
+                }
+                if (command.rgba == 0x358478FFU) {
+                    triangle_colour_commands += " kind=" + std::to_string(command.kind)
+                        + " rect=" + std::to_string(command.x) + ","
+                        + std::to_string(command.y) + ","
+                        + std::to_string(command.width) + ","
+                        + std::to_string(command.height);
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (found_base && found_triangle) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found_base, "TradingView split swatch lost its solid base colour");
+    require(
+        found_triangle,
+        "TradingView split swatch did not serialize its generated border triangle; "
+            + pseudo_metrics + triangle_colour_commands);
+}
+
 void test_negative_z_after_paints_behind_svg_content(webscene_engine* engine)
 {
     execute(engine, R"JS(

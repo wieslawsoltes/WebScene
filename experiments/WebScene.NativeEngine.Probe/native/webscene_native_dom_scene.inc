@@ -483,29 +483,36 @@ void native_document::append_scene(
                     stroke_radii.bottom_left,
                     top});
             } else {
-                const auto append_pseudo_border_rect = [&] (
-                    float rect_x,
-                    float rect_y,
-                    float rect_width,
-                    float rect_height,
+                // CSS joins adjacent border sides along the diagonal between
+                // the outer and inner corners.  This is observable when a
+                // zero-sized generated box uses two wide borders to form a
+                // triangle (TradingView's split-colour swatch), but it also
+                // matters for ordinary non-uniform side colours.  Preserve the
+                // full outer bounds in the command and let the presenter form
+                // the appropriate side polygon from the four border widths.
+                const auto append_pseudo_border_side = [&] (
+                    uint32_t side,
                     uint32_t rgba) {
-                    if ((rgba & 0xFFU) == 0U || rect_width <= 0 || rect_height <= 0) return;
+                    if ((rgba & 0xFFU) == 0U) return;
                     commands.push_back(webscene_scene_command{
-                        pseudo_paints_in_foreground ? 9U : 1U,
-                        0U,
-                        rect_x,
-                        rect_y,
-                        rect_width,
-                        rect_height,
+                        pseudo_paints_in_foreground ? 34U : 33U,
+                        side,
+                        x,
+                        y,
+                        width,
+                        height,
                         with_pseudo_opacity(rgba),
-                        node.id});
+                        node.id,
+                        top,
+                        right,
+                        bottom,
+                        left,
+                        0});
                 };
-                append_pseudo_border_rect(x, y, width, top, pseudo.border_top_rgba);
-                append_pseudo_border_rect(
-                    x + width - right, y, right, height, pseudo.border_right_rgba);
-                append_pseudo_border_rect(
-                    x, y + height - bottom, width, bottom, pseudo.border_bottom_rgba);
-                append_pseudo_border_rect(x, y, left, height, pseudo.border_left_rgba);
+                append_pseudo_border_side(1U, pseudo.border_top_rgba);
+                append_pseudo_border_side(2U, pseudo.border_right_rgba);
+                append_pseudo_border_side(4U, pseudo.border_bottom_rgba);
+                append_pseudo_border_side(8U, pseudo.border_left_rgba);
             }
         }
         const auto outline = std::max(

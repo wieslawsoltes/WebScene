@@ -470,6 +470,14 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                             command,
                             ResolveDomCornerRadii(commands, commandIndex));
                         break;
+                    case 33:
+                    case 34:
+                        NativeSceneDrawOperation.RectCommandCount++;
+                        DrawDomBorderSidePolygon(
+                            command.Kind == 33 ? backdrop : overlay,
+                            command,
+                            fill);
+                        break;
                     case 7:
                         NativeSceneDrawOperation.RectCommandCount++;
                         fill.IsAntialias = true;
@@ -1218,6 +1226,69 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             DrawDomRoundedRect(canvas, roundedCommand, paint, cornerRadii);
             canvas.Restore();
         }
+    }
+
+    private static void DrawDomBorderSidePolygon(
+        SKCanvas canvas,
+        in SceneCommand command,
+        SKPaint paint)
+    {
+        var outerLeft = command.X;
+        var outerTop = command.Y;
+        var outerRight = command.X + command.Width;
+        var outerBottom = command.Y + command.Height;
+        var top = Math.Clamp(command.RadiusTopLeft, 0, command.Height);
+        var right = Math.Clamp(command.RadiusTopRight, 0, command.Width);
+        var bottom = Math.Clamp(command.RadiusBottomRight, 0, command.Height);
+        var left = Math.Clamp(command.RadiusBottomLeft, 0, command.Width);
+        var innerLeft = outerLeft + left;
+        var innerTop = outerTop + top;
+        var innerRight = outerRight - right;
+        var innerBottom = outerBottom - bottom;
+
+        using var path = new SKPath();
+        switch (command.Flags)
+        {
+            case 1:
+                path.MoveTo(outerLeft, outerTop);
+                path.LineTo(outerRight, outerTop);
+                path.LineTo(innerRight, innerTop);
+                path.LineTo(innerLeft, innerTop);
+                break;
+            case 2:
+                path.MoveTo(outerRight, outerTop);
+                path.LineTo(outerRight, outerBottom);
+                path.LineTo(innerRight, innerBottom);
+                path.LineTo(innerRight, innerTop);
+                break;
+            case 4:
+                path.MoveTo(outerRight, outerBottom);
+                path.LineTo(outerLeft, outerBottom);
+                path.LineTo(innerLeft, innerBottom);
+                path.LineTo(innerRight, innerBottom);
+                break;
+            case 8:
+                path.MoveTo(outerLeft, outerBottom);
+                path.LineTo(outerLeft, outerTop);
+                path.LineTo(innerLeft, innerTop);
+                path.LineTo(innerLeft, innerBottom);
+                break;
+            default:
+                return;
+        }
+        path.Close();
+        paint.IsAntialias = true;
+        paint.Style = SKPaintStyle.Fill;
+        paint.Color = Rgba(command.Rgba);
+        canvas.DrawPath(path, paint);
+    }
+
+    internal static void DrawDomBorderSidePolygonForTest(
+        SKCanvas canvas,
+        in SceneCommand command)
+    {
+        using var paint = new SKPaint();
+        DrawDomBorderSidePolygon(canvas, command, paint);
     }
 
     private static void DrawDomRoundedBorderSides(

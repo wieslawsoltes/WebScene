@@ -442,6 +442,7 @@ int main()
     test_navigator_platform_and_wheel_modifiers(engine);
     test_resize_precedes_new_viewport_pointer_input(engine);
     test_generated_pseudo_element_opacity(engine);
+    test_tradingview_split_color_swatch_uses_pseudo_border_triangle(engine);
     test_negative_z_after_paints_behind_svg_content(engine);
     test_svg_current_color_is_resolved_before_scene_serialization(engine);
     test_svg_preserve_aspect_ratio_reaches_scene_serialization(engine);
