@@ -901,6 +901,149 @@ void test_constrained_column_flex_scroll_item_keeps_footer_inside(webscene_engin
         "a constrained column flex scroller expanded through its footer: " + result);
 }
 
+void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin: 0; }
+            #dialog { display:flex; flex-direction:column; width:750px; height:420px;
+              overflow:hidden; background:rgb(7,8,9); }
+            #header, #footer { flex:0 0 50px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; }
+            #sidebar { flex:0 0 160px; overflow:auto; }
+            #main { display:flex; flex:1 1 auto; height:100%; overflow:hidden; }
+            #tab { display:flex; flex:1 1 auto; flex-direction:column; height:100%;
+              overflow:hidden; }
+            #settings { flex:1 1 auto; min-height:145px; overflow-x:hidden;
+              overflow-y:auto; background:rgb(11,22,33); }
+            #tall { height:720px; background:rgb(220,1,2); }
+          </style>
+          <div id="dialog"><div id="header"></div><div id="frame">
+            <div id="sidebar"><div style="height:600px"></div></div>
+            <div id="main"><div id="tab"><div id="settings"><div id="tall"></div>
+            </div></div></div></div><div id="footer"></div></div>`;
+          const dialog = document.getElementById('dialog');
+          const frame = document.getElementById('frame');
+          const main = document.getElementById('main');
+          const tab = document.getElementById('tab');
+          const settings = document.getElementById('settings');
+          const footer = document.getElementById('footer');
+          const rect = element => element.getBoundingClientRect();
+          return {
+            dialogHeight: rect(dialog).height,
+            frameHeight: rect(frame).height,
+            mainHeight: rect(main).height,
+            tabHeight: rect(tab).height,
+            settingsHeight: rect(settings).height,
+            clientHeight: settings.clientHeight,
+            scrollHeight: settings.scrollHeight,
+            footerInside: rect(footer).bottom <= rect(dialog).bottom,
+            tallEscapesViewport: rect(document.getElementById('tall')).bottom
+              > rect(settings).bottom
+          };
+        })()
+    )JS", "tradingview-settings-dialog-overflow.js");
+    require(
+        result == R"JSON({"dialogHeight":420,"frameHeight":320,"mainHeight":320,"tabHeight":320,"settingsHeight":320,"clientHeight":320,"scrollHeight":720,"footerInside":true,"tallEscapesViewport":true})JSON",
+        "TradingView settings hierarchy escaped its bounded dialog: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found_settings_clip = false;
+    for (auto attempt = 0; attempt < 100 && !found_settings_clip; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            auto settings_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x0B1621FFU) settings_id = command.node_id;
+            }
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                found_settings_clip = found_settings_clip
+                    || (command.kind == 12U && command.node_id == settings_id
+                        && std::abs(command.height - 320.0F) < 0.1F);
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!found_settings_clip) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(found_settings_clip,
+        "TradingView settings scroller did not emit its bounded overflow clip");
+}
+
+void test_tradingview_symbol_info_auto_height_has_no_scrollbar(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #popup { width:480px; background:rgb(2,3,4); }
+            #scrollWrap { overflow-x:hidden; overflow-y:scroll; padding:14px 20px 20px;
+              background:rgb(5,6,7); }
+            #wrapper { display:flex; flex-direction:column; height:100%; }
+            #title { font:20px/24px Arial; }
+            #description { margin-top:12px; font:14px/21px Arial; }
+            #rows { display:flex; flex-direction:column; margin-top:8px; }
+            .row { height:28px; }
+          </style><div id="popup"><div id="scrollWrap"><div id="wrapper">
+            <div id="title">Apple Inc.</div><div id="description">Electronic Technology · Telecommunications Equipment</div>
+            <div id="rows"><div class="row"></div><div class="row"></div></div>
+          </div></div></div>`;
+          const popup = document.getElementById('popup');
+          const scrollWrap = document.getElementById('scrollWrap');
+          const wrapper = document.getElementById('wrapper');
+          return {
+            popupHeight: popup.getBoundingClientRect().height,
+            scrollHeight: scrollWrap.getBoundingClientRect().height,
+            wrapperHeight: wrapper.getBoundingClientRect().height,
+            clientHeight: scrollWrap.clientHeight,
+            contentScrollHeight: scrollWrap.scrollHeight,
+            overflowY: getComputedStyle(scrollWrap).overflowY
+          };
+        })()
+    )JS", "tradingview-symbol-info-overflow.js");
+    require(
+        result == R"JSON({"popupHeight":155,"scrollHeight":155,"wrapperHeight":121,"clientHeight":155,"contentScrollHeight":155,"overflowY":"scroll"})JSON",
+        "TradingView Symbol Info hierarchy retained stale overflow geometry: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_wrap = false;
+    auto painted_scrollbar = false;
+    for (auto attempt = 0; attempt < 100 && !observed_wrap; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            auto wrap_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x050607FFU) {
+                    observed_wrap = true;
+                    wrap_id = command.node_id;
+                }
+            }
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.node_id == wrap_id && command.kind == 10U
+                    && (command.rgba == 0x7F7F7F40U
+                        || command.rgba == 0xA0A0A0D0U)) {
+                    painted_scrollbar = true;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_wrap) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(observed_wrap, "TradingView Symbol Info scroll wrapper was not painted");
+    require(!painted_scrollbar,
+        "TradingView Symbol Info painted a scrollbar with equal final extents");
+}
+
 void test_later_dom_overlay_background_paints_above_retained_canvas(webscene_engine* engine)
 {
     execute(engine, R"JS(

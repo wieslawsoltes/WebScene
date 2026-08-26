@@ -394,6 +394,8 @@ int main()
     test_auto_height_flex_popup_expands_overflowing_flex_child(engine);
     test_auto_height_overflow_auto_does_not_paint_phantom_scrollbar(engine);
     test_constrained_column_flex_scroll_item_keeps_footer_inside(engine);
+    test_tradingview_settings_dialog_clips_and_scrolls_middle_region(engine);
+    test_tradingview_symbol_info_auto_height_has_no_scrollbar(engine);
     test_later_dom_overlay_background_paints_above_retained_canvas(engine);
     test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(engine);
     test_canvas_text_max_width_is_preserved_in_scene(engine);
