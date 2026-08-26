@@ -12,7 +12,8 @@ namespace NativeTradingViewTerminal;
 public sealed partial class MainWindow : Window
 {
     private readonly IReadOnlyList<string> _arguments;
-    private readonly DispatcherTimer _diagnosticsTimer;
+    private readonly bool _runtimeMonitoringEnabled;
+    private readonly DispatcherTimer? _diagnosticsTimer;
     private AvaloniaResourceLoader? _resourceLoader;
     private string _lastMonitoredError = string.Empty;
     private ulong _lastMonitoredScriptErrors;
@@ -27,6 +28,9 @@ public sealed partial class MainWindow : Window
     internal MainWindow(IReadOnlyList<string> arguments)
     {
         _arguments = arguments;
+        _runtimeMonitoringEnabled = arguments.Contains(
+            "--monitor-runtime",
+            StringComparer.Ordinal);
         InitializeComponent();
         var textMode = Environment.GetEnvironmentVariable(
             "WEBSCENE_TEXT_POSITIONING")?.Trim().ToLowerInvariant();
@@ -41,15 +45,15 @@ public sealed partial class MainWindow : Window
         {
             Title += $" · {rasterizationMode} raster";
         }
-        if (IsRuntimeMonitoringEnabled)
+        if (_runtimeMonitoringEnabled)
         {
             Title += " · cadence monitor";
+            _diagnosticsTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _diagnosticsTimer.Tick += OnDiagnosticsTick;
         }
-        _diagnosticsTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(1)
-        };
-        _diagnosticsTimer.Tick += OnDiagnosticsTick;
         Opened += OnOpened;
         Closed += OnClosed;
     }
@@ -60,6 +64,14 @@ public sealed partial class MainWindow : Window
         try
         {
             var paths = SamplePaths.Resolve(_arguments);
+            if (_runtimeMonitoringEnabled
+                || _arguments.Contains("--startup-profile", StringComparer.Ordinal))
+            {
+                // Opt in before navigation so enabled captures include startup
+                // work. An ordinary Release run never enables managed or native
+                // detailed counters.
+                TerminalHost.EnablePerformanceMonitoring();
+            }
             _resourceLoader = new AvaloniaResourceLoader
             {
                 ResourceCaptureDirectory = paths.ResourceCaptureDirectory,
@@ -181,8 +193,12 @@ public sealed partial class MainWindow : Window
                 Close();
                 return;
             }
-            _diagnosticsTimer.Start();
-            await RefreshDiagnosticsAsync();
+            if (_diagnosticsTimer is not null)
+            {
+                _diagnosticsTimer.Start();
+                await RefreshDiagnosticsAsync();
+                MonitorRuntime();
+            }
         }
         catch (Exception error)
         {
@@ -232,7 +248,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            if (IsRuntimeMonitoringEnabled)
+            if (_runtimeMonitoringEnabled)
             {
                 Console.Error.WriteLine(
                     $"[WebScene monitor] diagnostics evaluation failed: {error}");
@@ -240,17 +256,14 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                _diagnosticsTimer.Stop();
+                _diagnosticsTimer?.Stop();
             }
         }
     }
 
-    private bool IsRuntimeMonitoringEnabled
-        => _arguments.Contains("--monitor-runtime", StringComparer.Ordinal);
-
     private void MonitorRuntime()
     {
-        if (!IsRuntimeMonitoringEnabled)
+        if (!_runtimeMonitoringEnabled)
         {
             return;
         }
@@ -285,6 +298,12 @@ public sealed partial class MainWindow : Window
                     double.Epsilon);
                 static double Rate(double count, double elapsed)
                     => count / elapsed;
+                static ulong CounterDelta(ulong current, ulong previous)
+                    => current >= previous ? current - previous : 0;
+                static long LongCounterDelta(long current, long previous)
+                    => current >= previous ? current - previous : 0;
+                static double Milliseconds(ulong nanoseconds)
+                    => nanoseconds / 1_000_000d;
                 Console.WriteLine(
                     string.Create(
                         CultureInfo.InvariantCulture,
@@ -298,6 +317,86 @@ public sealed partial class MainWindow : Window
                         + $"uiWakes={Rate(delta.CompositionUiWakes, elapsedSeconds):F1} Hz, "
                         + $"pendingMailbox={snapshot.Surface.PendingCompositionPublications}, "
                         + $"acceptedInputs={Rate(delta.AcceptedInputEvents, elapsedSeconds):F1} Hz"));
+                Console.WriteLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[WebScene input] routed={Rate(delta.RoutedInputEvents, elapsedSeconds):F1}/s, "
+                        + $"accepted={Rate(delta.AcceptedInputEvents, elapsedSeconds):F1}/s, "
+                        + $"enqueued={Rate(delta.EnqueuedInputs, elapsedSeconds):F1}/s, "
+                        + $"consumed={Rate(delta.ConsumedInputs, elapsedSeconds):F1}/s, "
+                        + $"dropped={delta.DroppedInputs}, "
+                        + $"coalescedMove={CounterDelta(engine.CoalescedPointerMoveInputs, baseline.Engine.CoalescedPointerMoveInputs)}, "
+                        + $"coalescedWheel={CounterDelta(engine.CoalescedWheelInputs, baseline.Engine.CoalescedWheelInputs)}, "
+                        + $"callbacks={Rate(CounterDelta(engine.InputCallbacksInvoked, baseline.Engine.InputCallbacksInvoked), elapsedSeconds):F1}/s, "
+                        + $"dispatchLast={Milliseconds(snapshot.InputDispatch.LastDispatchNanoseconds):F3} ms, "
+                        + $"dispatchMax={Milliseconds(snapshot.InputDispatch.MaximumDispatchNanoseconds):F3} ms"));
+                Console.WriteLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[WebScene work] layouts={Rate(delta.LayoutPasses, elapsedSeconds):F1}/s, "
+                        + $"sceneBuilds={Rate(delta.SceneBuilds, elapsedSeconds):F1}/s "
+                        + $"(noDamage={delta.NoDamageSceneBuilds}, checkpoints={delta.FullCheckpointSceneBuilds}), "
+                        + $"raf={delta.AnimationFramesInvoked}/{delta.AnimationFramesRequested}, "
+                        + $"timers={delta.TimersFired} fired/{delta.TimersScheduled} scheduled "
+                        + $"(late={delta.LateTimers}), "
+                        + $"workerWakes={delta.WorkerSignalledWakes} signal/{delta.WorkerTimeoutWakes} timeout, "
+                        + $"lastLayout={Milliseconds(engine.LastLayoutNanoseconds):F3} ms, "
+                        + $"lastBuild={Milliseconds(engine.LastSceneBuildNanoseconds):F3} ms, "
+                        + $"lastPublish={Milliseconds(engine.LastScenePublicationNanoseconds):F3} ms, "
+                        + $"maxPublish={Milliseconds(engine.MaximumScenePublicationNanoseconds):F3} ms"));
+                if (delta.SceneBuilds > 0 || delta.PublishedScenes > 0)
+                {
+                    var causes = new List<string>(8);
+                    if (delta.AcceptedInputEvents > 0) causes.Add("input");
+                    if (delta.AnimationFramesInvoked > 0) causes.Add("animation");
+                    if (delta.TimersFired > 0) causes.Add("timer");
+                    if (delta.ResourceRequests > 0) causes.Add("resource");
+                    if (delta.ExecutedScripts > 0) causes.Add("script");
+                    if (delta.LayoutPasses > 0) causes.Add("layout");
+                    if (delta.FullCheckpointSceneBuilds > 0) causes.Add("checkpoint");
+                    if (causes.Count == 0) causes.Add("async-dom-or-host");
+                    Console.WriteLine(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"[WebScene causes] codes={string.Join(',', causes)}, "
+                            + $"sceneBuilds={delta.SceneBuilds}, publications={delta.PublishedScenes}, "
+                            + $"resource={delta.ResourceRequests} requests/{delta.ResourceHits} hits/{delta.ResourceMisses} misses, "
+                            + $"scripts={delta.ExecutedScripts}, layouts={delta.LayoutPasses}"));
+                }
+                var timing = NativeSceneSurface.LastCompositionTiming;
+                Console.WriteLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"[WebScene render] appliedDiffs={delta.CompositionAppliedDiffs}, "
+                        + $"changedLayers={LongCounterDelta(snapshot.ProcessComposition.ChangedLayers, baseline.ProcessComposition.ChangedLayers)}, "
+                        + $"damageRects={LongCounterDelta(snapshot.ProcessComposition.DamageRectangles, baseline.ProcessComposition.DamageRectangles)}, "
+                        + $"damageDiffs={LongCounterDelta(snapshot.ProcessComposition.PartialDamageDiffs, baseline.ProcessComposition.PartialDamageDiffs)} partial/"
+                        + $"{LongCounterDelta(snapshot.ProcessComposition.EmptyDamageDiffs, baseline.ProcessComposition.EmptyDamageDiffs)} empty, "
+                        + $"fullInvalidations={delta.CompositionFullInvalidations}, "
+                        + $"skippedEmptyFrames={delta.CompositionSkippedEmptyAnimationFrames}, "
+                        + $"lastDemand={snapshot.ProcessComposition.LastAnimationFrameDemand}, "
+                        + $"diffApply={timing.DiffApplyMilliseconds:F3} ms, "
+                        + $"retainedDraw={timing.RetainedDrawMilliseconds:F3} ms, "
+                        + $"skiaSubmit={timing.SkiaSubmitMilliseconds:F3} ms, "
+                        + $"renderCallback={timing.RenderCallbackMilliseconds:F3} ms"));
+                var renderer = snapshot.RendererMemory;
+                if (snapshot.Memory is { } memory)
+                {
+                    Console.WriteLine(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"[WebScene memory] domNodes={memory.NativeDomNodeCount}, "
+                            + $"cssRules={memory.NativeCssRuleCount}, "
+                            + $"cssIndex={memory.NativeCssIndexStorageBytes / 1024d:F1} KiB, "
+                            + $"authoredStyles={memory.NativeDomAuthoredStyleEntryCount}, "
+                            + $"customProperties={memory.NativeDomCustomPropertyEntryCount}, "
+                            + $"animations={memory.NativeDomAnimationCount}, "
+                            + $"v8Used={memory.V8UsedHeapBytes / 1_048_576d:F1} MiB, "
+                            + $"scene={memory.LatestSceneBytes / 1_048_576d:F1} MiB, "
+                            + $"retainedLayers={renderer.RetainedLayerCount}, "
+                            + $"retainedCommands={renderer.RetainedCommandCount}, "
+                            + $"canvas={renderer.LogicalBitmapBytes / 1_048_576d:F1} MiB"));
+                }
             }
             if (errorsChanged)
             {
@@ -319,7 +418,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnClosed(object? sender, EventArgs args)
     {
-        _diagnosticsTimer.Stop();
+        _diagnosticsTimer?.Stop();
         _resourceLoader?.FlushResourceCapture();
         await TerminalHost.DisposeAsync();
     }

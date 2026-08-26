@@ -41,7 +41,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private readonly bool _submitAnimationFrames;
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private readonly object _rendererGate = new();
-    private readonly NativeSceneRenderObserver _renderObserver = new();
+    private readonly NativePerformanceInstrumentation _performanceInstrumentation;
+    private readonly NativeSceneRenderObserver _renderObserver;
     private long _sequence = DateTime.UtcNow.Ticks;
     private long _lastResizeSequence;
     private long _lastResizeTimestamp;
@@ -73,6 +74,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         bool useCompositionVisual = false,
         bool submitAnimationFrames = true)
     {
+        _performanceInstrumentation = new NativePerformanceInstrumentation();
+        _renderObserver = new NativeSceneRenderObserver(_performanceInstrumentation);
         _engine = engine;
         _useCompositionVisual = useCompositionVisual
             && !string.Equals(
@@ -199,6 +202,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                         _renderObserver,
                         _compositionMailbox,
                         _compositionUiWakeGate,
+                        _performanceInstrumentation,
                         ScheduleCompositionUiWake,
                         TopLevel.GetTopLevel(this)?.RenderScaling ?? 1));
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
@@ -375,6 +379,17 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     public long RenderedSceneCount
         => _renderObserver.RenderedSceneCount;
 
+    /// <summary>
+    /// Enables detailed managed presenter counters and bounded event traces for
+    /// this surface. Until enabled, the render and input hot paths retain only
+    /// state required for correct scheduling and first-presentation readiness.
+    /// </summary>
+    public void EnablePerformanceMonitoring()
+        => _performanceInstrumentation.Enable();
+
+    public bool IsPerformanceMonitoringEnabled
+        => _performanceInstrumentation.IsEnabled;
+
     public NativeSurfacePerformanceMetrics CapturePerformanceMetrics()
         => new(
             RenderedScenes: RenderedSceneCount,
@@ -386,6 +401,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     public NativeRendererMemoryMetrics GetRendererMemoryMetrics()
     {
+        if (Volatile.Read(ref _compositionProjectionActive) != 0)
+        {
+            return _performanceInstrumentation.ReadRendererMetrics();
+        }
         lock (_rendererGate)
         {
             return _renderer.ReadMemoryMetrics();
@@ -502,22 +521,26 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         // publication: several active documents would otherwise contend with the
         // application's input and layout work.
         _compositionMailbox.Publish();
+        var monitoring = _performanceInstrumentation.IsEnabled;
         lock (_scenePublicationGate)
         {
             if (scene.Revision > _lastPublishedScene.Revision)
             {
                 _lastPublishedScene = scene;
             }
-            if (_publishedScenes.Count == 4096)
+            if (monitoring && _publishedScenes.Count == 4096)
             {
                 _publishedScenes.Dequeue();
             }
-            _publishedScenes.Enqueue(new NativeScenePublicationSample(
-                Stopwatch.GetTimestamp(),
-                scene.Revision,
-                scene.ConsumedInputSequence,
-                scene.ViewportWidth,
-                scene.ViewportHeight));
+            if (monitoring)
+            {
+                _publishedScenes.Enqueue(new NativeScenePublicationSample(
+                    Stopwatch.GetTimestamp(),
+                    scene.Revision,
+                    scene.ConsumedInputSequence,
+                    scene.ViewportWidth,
+                    scene.ViewportHeight));
+            }
         }
 
         var cursorKind = unchecked((int)NativeWebSceneApi.EngineGetCursor(_engine));
@@ -583,7 +606,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 notifiedResizeSequence);
             if (observed == notifiedResizeSequence)
             {
-                Interlocked.Increment(ref _resizePublicationNotificationCount);
+                if (_performanceInstrumentation.IsEnabled)
+                {
+                    Interlocked.Increment(ref _resizePublicationNotificationCount);
+                }
                 return true;
             }
             notifiedResizeSequence = observed;
@@ -607,7 +633,10 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void PostCompositionUiWake(DispatcherPriority priority)
     {
-        Interlocked.Increment(ref _compositionUiWakeCount);
+        if (_performanceInstrumentation.IsEnabled)
+        {
+            Interlocked.Increment(ref _compositionUiWakeCount);
+        }
         Dispatcher.UIThread.Post(
             () =>
             {
@@ -756,10 +785,14 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         };
         _lastPointerX = input.X;
         _lastPointerY = input.Y;
-        Interlocked.Increment(ref _routedInputEvents);
-        if (NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0)
+        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        if (_performanceInstrumentation.IsEnabled)
         {
-            Interlocked.Increment(ref _acceptedInputEvents);
+            Interlocked.Increment(ref _routedInputEvents);
+            if (accepted)
+            {
+                Interlocked.Increment(ref _acceptedInputEvents);
+            }
         }
         args.Handled = true;
     }
@@ -803,10 +836,14 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             DeltaX = -args.Delta.X * 100,
             DeltaY = -args.Delta.Y * 100
         };
-        Interlocked.Increment(ref _routedInputEvents);
-        if (NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0)
+        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        if (_performanceInstrumentation.IsEnabled)
         {
-            Interlocked.Increment(ref _acceptedInputEvents);
+            Interlocked.Increment(ref _routedInputEvents);
+            if (accepted)
+            {
+                Interlocked.Increment(ref _acceptedInputEvents);
+            }
         }
         args.Handled = true;
     }
@@ -827,10 +864,17 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             Sequence = NextSequence(),
             X = DomKeyCode(args.Key)
         };
-        Interlocked.Increment(ref _routedInputEvents);
-        if (NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0)
+        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        if (_performanceInstrumentation.IsEnabled)
         {
-            Interlocked.Increment(ref _acceptedInputEvents);
+            Interlocked.Increment(ref _routedInputEvents);
+            if (accepted)
+            {
+                Interlocked.Increment(ref _acceptedInputEvents);
+            }
+        }
+        if (accepted)
+        {
             // Avalonia Native on macOS synthesizes RawTextInput only after an
             // unhandled printable KeyDown when no IME client is installed. The
             // native DOM still receives keydown here, but consuming it would
@@ -860,10 +904,17 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 Sequence = NextSequence(),
                 X = rune.Value
             };
-            Interlocked.Increment(ref _routedInputEvents);
-            if (NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0)
+            var runeAccepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+            if (_performanceInstrumentation.IsEnabled)
             {
-                Interlocked.Increment(ref _acceptedInputEvents);
+                Interlocked.Increment(ref _routedInputEvents);
+                if (runeAccepted)
+                {
+                    Interlocked.Increment(ref _acceptedInputEvents);
+                }
+            }
+            if (runeAccepted)
+            {
                 accepted = true;
             }
         }
@@ -929,10 +980,17 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             X = _lastPointerX,
             Y = _lastPointerY
         };
-        Interlocked.Increment(ref _routedInputEvents);
-        if (NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0)
+        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        if (_performanceInstrumentation.IsEnabled)
         {
-            Interlocked.Increment(ref _acceptedInputEvents);
+            Interlocked.Increment(ref _routedInputEvents);
+            if (accepted)
+            {
+                Interlocked.Increment(ref _acceptedInputEvents);
+            }
+        }
+        if (accepted)
+        {
             return input.Sequence;
         }
         return 0;
@@ -940,7 +998,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void OnSurfaceSizeChanged(object? sender, SizeChangedEventArgs args)
     {
-        var started = Stopwatch.GetTimestamp();
+        var monitoring = _performanceInstrumentation.IsEnabled;
+        var started = monitoring ? Stopwatch.GetTimestamp() : 0;
         try
         {
             var resizeSequence = SubmitResize(
@@ -976,9 +1035,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         }
         finally
         {
-            Interlocked.Exchange(
-                ref _lastSurfaceResizeHandlerTicks,
-                Stopwatch.GetTimestamp() - started);
+            if (monitoring)
+            {
+                Interlocked.Exchange(
+                    ref _lastSurfaceResizeHandlerTicks,
+                    Stopwatch.GetTimestamp() - started);
+            }
         }
     }
 
@@ -1042,19 +1104,22 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (accepted == 0) return 0;
         Interlocked.Exchange(ref _lastResizeTimestamp, submittedAt);
         Interlocked.Exchange(ref _lastResizeSequence, unchecked((long)sequence));
-        lock (_scenePublicationGate)
+        if (_performanceInstrumentation.IsEnabled)
         {
-            if (_submittedResizes.Count == 4096)
+            lock (_scenePublicationGate)
             {
-                _submittedResizes.Dequeue();
+                if (_submittedResizes.Count == 4096)
+                {
+                    _submittedResizes.Dequeue();
+                }
+                _submittedResizes.Enqueue(new NativeResizeSubmissionSample(
+                    submittedAt,
+                    sequence,
+                    width,
+                    height));
             }
-            _submittedResizes.Enqueue(new NativeResizeSubmissionSample(
-                submittedAt,
-                sequence,
-                width,
-                height));
+            NativeSceneDrawOperation.RecordResizeSubmitted(sequence, submittedAt);
         }
-        NativeSceneDrawOperation.RecordResizeSubmitted(sequence, submittedAt);
 
         // A very fast worker can publish the resize-matching scene between
         // EngineEnqueue returning and the host recording _lastResizeSequence.
@@ -1351,6 +1416,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 ref NativeSceneCompositionHandler.InvalidationCallCount),
             DamageRectangles: Volatile.Read(
                 ref NativeSceneCompositionHandler.DamageRectangleCount),
+            ChangedLayers: Volatile.Read(
+                ref NativeSceneCompositionHandler.ChangedLayerCount),
+            EmptyDamageDiffs: Volatile.Read(
+                ref NativeSceneCompositionHandler.EmptyDamageDiffCount),
+            PartialDamageDiffs: Volatile.Read(
+                ref NativeSceneCompositionHandler.PartialDamageDiffCount),
             FullInvalidations: Volatile.Read(
                 ref NativeSceneCompositionHandler.FullInvalidationCount),
             SuppressedLiveResizeAnimationFrames: Volatile.Read(
@@ -1413,7 +1484,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                 new Rect(Bounds.Size),
                 _renderer,
                 _rendererGate,
-                _renderObserver));
+                _renderObserver,
+                _performanceInstrumentation));
         }
     }
 }
@@ -1424,6 +1496,9 @@ public readonly record struct NativeCompositionFlowMetrics(
     long AppliedDiffs,
     long InvalidationCalls,
     long DamageRectangles,
+    long ChangedLayers,
+    long EmptyDamageDiffs,
+    long PartialDamageDiffs,
     long FullInvalidations,
     long SuppressedLiveResizeAnimationFrames,
     long SubmittedAnimationFrames,
@@ -1450,6 +1525,7 @@ internal sealed class LivePerformanceHud : Border
     {
         _engine = engine;
         _surface = surface;
+        _surface.EnablePerformanceMonitoring();
         IsHitTestVisible = false;
         HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left;
         VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top;

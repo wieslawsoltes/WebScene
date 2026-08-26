@@ -23,6 +23,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     private IntPtr _engine;
     private long _contextId;
     private NativeInteropInvoker? _interop;
+    private int _performanceMonitoringEnabled;
     private JavaScriptCallbackSignal? _interopCallbackSignal;
     private CancellationTokenSource? _navigationCancellation;
     private readonly SemaphoreSlim _hostRequestGate = new(1, 1);
@@ -43,6 +44,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     public string? Source { get; private set; }
 
     public INativeWebSceneRenderDiagnostics RenderDiagnostics => _surface;
+
+    public bool IsPerformanceMonitoringEnabled
+        => _surface.IsPerformanceMonitoringEnabled;
 
     public string LastError
         => _engine == IntPtr.Zero
@@ -254,6 +258,17 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     /// with an earlier snapshot from this loaded context to establish a baseline
     /// without resetting counters.
     /// </summary>
+    public void EnablePerformanceMonitoring()
+    {
+        Volatile.Write(ref _performanceMonitoringEnabled, 1);
+        _surface.EnablePerformanceMonitoring();
+        var engine = Volatile.Read(ref _engine);
+        if (engine != IntPtr.Zero)
+        {
+            NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine);
+        }
+    }
+
     public NativeWebScenePerformanceSnapshot CapturePerformanceSnapshot()
     {
         var engine = Volatile.Read(ref _engine);
@@ -264,7 +279,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 "The WebScene native document is not loaded.");
         }
 
-        NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine);
+        EnablePerformanceMonitoring();
         NativeWebSceneApi.EngineGetMetrics(engine, out var engineMetrics);
         return new NativeWebScenePerformanceSnapshot(
             ContextId: contextId,
@@ -419,6 +434,10 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            if (Volatile.Read(ref _performanceMonitoringEnabled) != 0)
+            {
+                NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine);
+            }
             Volatile.Write(
                 ref _contextId,
                 Interlocked.Increment(ref s_nextContextId));

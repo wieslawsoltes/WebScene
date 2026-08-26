@@ -348,6 +348,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private readonly IntPtr _engine;
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private readonly NativeSceneRenderObserver _renderObserver;
+    private readonly NativePerformanceInstrumentation _performanceInstrumentation;
     private readonly NativeScenePublicationMailbox _publicationMailbox;
     private readonly NativeSceneUiWakeGate _uiWakeGate;
     private readonly NativeSceneInvalidationGate _invalidationGate = new();
@@ -364,21 +365,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private SceneHeader _pendingRenderHeader;
     private long _pendingDiffApplyTicks;
     private long _pendingDiffCanvasCommandCount;
-    private long _appliedDiffs;
-    private long _changedLayers;
-    private long _damageRectangles;
-    private long _damageEvaluations;
-    private long _emptyDamageDiffs;
-    private long _partialDamageDiffs;
-    private long _fullDamageDiffs;
-    private double _damageArea;
-    private double _damageUnionArea;
-    private double _viewportArea;
+    private long _lastRendererMetricsTimestamp;
     public static long AnimationFrameCount;
     public static long SynchronousRenderAcquisitionCount;
     public static long AppliedDiffCount;
     public static long InvalidationCallCount;
     public static long DamageRectangleCount;
+    public static long ChangedLayerCount;
+    public static long EmptyDamageDiffCount;
+    public static long PartialDamageDiffCount;
     public static long FullInvalidationCount;
     public static long SuppressedLiveResizeAnimationFrameCount;
     public static long SubmittedAnimationFrameCount;
@@ -392,6 +387,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         NativeSceneRenderObserver renderObserver,
         NativeScenePublicationMailbox publicationMailbox,
         NativeSceneUiWakeGate uiWakeGate,
+        NativePerformanceInstrumentation performanceInstrumentation,
         Action scheduleUiWake,
         double deviceScaleFactor)
     {
@@ -399,6 +395,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         _renderObserver = renderObserver;
         _publicationMailbox = publicationMailbox;
         _uiWakeGate = uiWakeGate;
+        _performanceInstrumentation = performanceInstrumentation;
         _scheduleUiWake = scheduleUiWake;
         _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
     }
@@ -530,7 +527,11 @@ internal sealed unsafe class NativeSceneCompositionHandler
             return;
         }
 
-        Interlocked.Increment(ref AnimationFrameCount);
+        var monitoring = _performanceInstrumentation.IsEnabled;
+        if (monitoring)
+        {
+            Interlocked.Increment(ref AnimationFrameCount);
+        }
         var frameTimestamp = Stopwatch.GetTimestamp();
         var frameTimestampMilliseconds =
             frameTimestamp * 1000.0 / Stopwatch.Frequency;
@@ -541,23 +542,35 @@ internal sealed unsafe class NativeSceneCompositionHandler
             > Interlocked.Read(ref _liveResizeFrameDeadlineTimestamp))
         {
             var demand = NativeWebSceneApi.EngineRequiresAnimationFrame(_engine);
-            Volatile.Write(ref LastAnimationFrameDemand, demand);
+            if (monitoring)
+            {
+                Volatile.Write(ref LastAnimationFrameDemand, demand);
+            }
             if (demand != 0)
             {
-                Interlocked.Increment(ref SubmittedAnimationFrameCount);
+                if (monitoring)
+                {
+                    Interlocked.Increment(ref SubmittedAnimationFrameCount);
+                }
                 NativeFrameInput.Submit(
                     _engine,
                     frameTimestampMilliseconds);
             }
             else
             {
-                Interlocked.Increment(ref SkippedEmptyAnimationFrameCount);
+                if (monitoring)
+                {
+                    Interlocked.Increment(ref SkippedEmptyAnimationFrameCount);
+                }
             }
         }
         else
         {
-            Interlocked.Increment(
-                ref SuppressedLiveResizeAnimationFrameCount);
+            if (monitoring)
+            {
+                Interlocked.Increment(
+                    ref SuppressedLiveResizeAnimationFrameCount);
+            }
         }
         if (NativeSceneCompositionFramePolicy.ShouldRequestRender(
                 _manualFrames,
@@ -597,7 +610,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
             return;
         }
 
-        Interlocked.Increment(ref InvalidationCallCount);
+        if (_performanceInstrumentation.IsEnabled)
+        {
+            Interlocked.Increment(ref InvalidationCallCount);
+        }
         // This only bounds Avalonia's root dirty region. OnRender still replays
         // the retained scene whenever Avalonia visits the custom visual, which
         // is required when the window target loses or exposes prior contents.
@@ -637,9 +653,12 @@ internal sealed unsafe class NativeSceneCompositionHandler
             // publication signal is consumed with this scene; an additional
             // publication is drained on the next host frame.
             var header = view->Header;
-            var applyStarted = Stopwatch.GetTimestamp();
+            var monitoring = _performanceInstrumentation.IsEnabled;
+            var applyStarted = monitoring ? Stopwatch.GetTimestamp() : 0;
             var applied = _renderer.ApplyDiff(view);
-            var diffApplyTicks = Stopwatch.GetTimestamp() - applyStarted;
+            var diffApplyTicks = monitoring
+                ? Stopwatch.GetTimestamp() - applyStarted
+                : 0;
             if (applied)
             {
                 var viewportChanged =
@@ -650,14 +669,19 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 damage = EvaluateDamage(view, viewportChanged);
                 NativeWebSceneApi.SceneAcknowledge(scene);
                 _appliedRevision = header.Revision;
-                _appliedDiffs++;
-                Interlocked.Increment(ref AppliedDiffCount);
+                if (monitoring)
+                {
+                    Interlocked.Increment(ref AppliedDiffCount);
+                }
                 if (damage.RequiresRender)
                 {
                     _pendingDamage = damage;
                     _pendingRenderHeader = header;
-                    _pendingDiffApplyTicks += diffApplyTicks;
-                    _pendingDiffCanvasCommandCount += view->CanvasCommandCount;
+                    if (monitoring)
+                    {
+                        _pendingDiffApplyTicks += diffApplyTicks;
+                        _pendingDiffCanvasCommandCount += view->CanvasCommandCount;
+                    }
                     _hasPendingRenderMetrics = true;
                 }
                 accepted = true;
@@ -687,10 +711,11 @@ internal sealed unsafe class NativeSceneCompositionHandler
     {
         var header = view->Header;
         var effective = EffectiveSize;
-        var fullArea =
-            (double)Math.Max(0, effective.X) * Math.Max(0, effective.Y);
-        _viewportArea += fullArea;
-        _changedLayers += header.CanvasLayerCount;
+        var monitoring = _performanceInstrumentation.IsEnabled;
+        if (monitoring)
+        {
+            Interlocked.Add(ref ChangedLayerCount, header.CanvasLayerCount);
+        }
 
         var damageBufferValid =
             header.DamageRectCount <= int.MaxValue
@@ -707,25 +732,24 @@ internal sealed unsafe class NativeSceneCompositionHandler
             viewportChanged,
             new Size(effective.X, effective.Y));
 
-        _damageRectangles += damage.RectangleCount;
-        _damageEvaluations++;
-        _damageArea += damage.SummedArea;
-        _damageUnionArea += damage.RequiresRender
-            ? damage.Bounds.Width * damage.Bounds.Height
-            : 0;
         if (damage.IsFull && damage.RequiresRender)
         {
-            _fullDamageDiffs++;
-            Interlocked.Increment(ref FullInvalidationCount);
+            if (monitoring)
+            {
+                Interlocked.Increment(ref FullInvalidationCount);
+            }
         }
         else if (damage.RequiresRender)
         {
-            _partialDamageDiffs++;
-            Interlocked.Add(ref DamageRectangleCount, damage.RectangleCount);
+            if (monitoring)
+            {
+                Interlocked.Increment(ref PartialDamageDiffCount);
+                Interlocked.Add(ref DamageRectangleCount, damage.RectangleCount);
+            }
         }
-        else
+        else if (monitoring)
         {
-            _emptyDamageDiffs++;
+            Interlocked.Increment(ref EmptyDamageDiffCount);
         }
         return damage;
     }
@@ -733,10 +757,14 @@ internal sealed unsafe class NativeSceneCompositionHandler
     public override void OnRender(ImmediateDrawingContext drawingContext)
     {
         var requestedByWebScene = _invalidationGate.Complete();
-        Interlocked.Increment(ref RenderCallbackCount);
-        if (!requestedByWebScene)
+        var monitoring = _performanceInstrumentation.IsEnabled;
+        if (monitoring)
         {
-            Interlocked.Increment(ref UnchangedRenderCallbackCount);
+            Interlocked.Increment(ref RenderCallbackCount);
+            if (!requestedByWebScene)
+            {
+                Interlocked.Increment(ref UnchangedRenderCallbackCount);
+            }
         }
         var mayAcquireDuringSynchronousRender =
             !requestedByWebScene
@@ -748,7 +776,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         // whose composition backing was discarded. Returning without drawing
         // in that case exposes a cleared region, so every callback must replay
         // the retained scene even when WebScene did not publish a new diff.
-        var renderStarted = Stopwatch.GetTimestamp();
+        var renderStarted = monitoring ? Stopwatch.GetTimestamp() : 0;
         long retainedDrawTicks = 0;
         long skiaSubmitTicks = 0;
 
@@ -776,7 +804,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
         if (mayAcquireDuringSynchronousRender
             && TryAcquireNextDiff(out _))
         {
-            Interlocked.Increment(ref SynchronousRenderAcquisitionCount);
+            if (monitoring)
+            {
+                Interlocked.Increment(ref SynchronousRenderAcquisitionCount);
+            }
         }
 
         if (_viewportWidth <= 0 || _viewportHeight <= 0)
@@ -785,7 +816,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
 
         using var lease = feature.Lease();
-        var skiaStarted = Stopwatch.GetTimestamp();
+        var skiaStarted = monitoring ? Stopwatch.GetTimestamp() : 0;
         var canvas = lease.SkCanvas;
         var effective = EffectiveSize;
         var scale = NativeSceneResizeProjection.GetScale(
@@ -807,13 +838,16 @@ internal sealed unsafe class NativeSceneCompositionHandler
             canvas.DrawRect(0, 0, (float)effective.X, (float)effective.Y, background);
             canvas.Scale(scale.X, scale.Y);
             contentMatrix = canvas.TotalMatrix;
-            var retainedStarted = Stopwatch.GetTimestamp();
+            var retainedStarted = monitoring ? Stopwatch.GetTimestamp() : 0;
             _renderer.RenderRetained(
                 canvas,
                 _viewportWidth,
                 _viewportHeight,
                 null);
-            retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
+            if (monitoring)
+            {
+                retainedDrawTicks = Stopwatch.GetTimestamp() - retainedStarted;
+            }
         }
         finally
         {
@@ -828,50 +862,38 @@ internal sealed unsafe class NativeSceneCompositionHandler
             _viewportHeight,
             scale,
             _renderer.PresenterDeviceScaleFactor);
-        skiaSubmitTicks = Stopwatch.GetTimestamp() - skiaStarted;
+        if (monitoring)
+        {
+            skiaSubmitTicks = Stopwatch.GetTimestamp() - skiaStarted;
+        }
         _renderObserver.RecordPresented();
 
         if (_hasPendingRenderMetrics)
         {
-            NativeSceneDrawOperation.RecordRendered(
-                _pendingRenderHeader,
-                _pendingDiffApplyTicks,
-                retainedDrawTicks,
-                skiaSubmitTicks,
-                Stopwatch.GetTimestamp() - renderStarted,
-                _pendingDiffCanvasCommandCount,
-                _renderer.TotalCommandCount);
+            if (monitoring)
+            {
+                NativeSceneDrawOperation.RecordRendered(
+                    _pendingRenderHeader,
+                    _pendingDiffApplyTicks,
+                    retainedDrawTicks,
+                    skiaSubmitTicks,
+                    Stopwatch.GetTimestamp() - renderStarted,
+                    _pendingDiffCanvasCommandCount,
+                    _renderer.TotalCommandCount);
+            }
             _renderObserver.RecordRendered(_pendingRenderHeader);
+            if (monitoring
+                && renderStarted - _lastRendererMetricsTimestamp
+                    >= Stopwatch.Frequency)
+            {
+                _performanceInstrumentation.UpdateRendererMetrics(
+                    _renderer.ReadMemoryMetrics());
+                _lastRendererMetricsTimestamp = renderStarted;
+            }
             _hasPendingRenderMetrics = false;
             _pendingDamage = NativeSceneDamage.None;
             _pendingDiffApplyTicks = 0;
             _pendingDiffCanvasCommandCount = 0;
-            if (_damageEvaluations >= 300)
-            {
-                var summedDamagePercent = _viewportArea > 0
-                    ? _damageArea * 100 / _viewportArea
-                    : 0;
-                var unionDamagePercent = _viewportArea > 0
-                    ? _damageUnionArea * 100 / _viewportArea
-                    : 0;
-                Console.WriteLine(
-                    $"Composition scene diffs: {_appliedDiffs:N0}, " +
-                    $"sample={_damageEvaluations:N0}, changed layers={_changedLayers:N0}, " +
-                    $"damage rects={_damageRectangles:N0}, " +
-                    $"empty={_emptyDamageDiffs:N0}, partial={_partialDamageDiffs:N0}, " +
-                    $"full={_fullDamageDiffs:N0}, " +
-                    $"summed damage={summedDamagePercent:F1}%, " +
-                    $"union damage={unionDamagePercent:F1}% of frame area");
-                _changedLayers = 0;
-                _damageRectangles = 0;
-                _damageEvaluations = 0;
-                _emptyDamageDiffs = 0;
-                _partialDamageDiffs = 0;
-                _fullDamageDiffs = 0;
-                _damageArea = 0;
-                _damageUnionArea = 0;
-                _viewportArea = 0;
-            }
         }
 
         // An ordered producer may publish two diffs before Avalonia processes
@@ -1125,6 +1147,7 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
     private readonly NativeCanvasSceneRenderer _renderer;
     private readonly object _rendererGate;
     private readonly NativeSceneRenderObserver _renderObserver;
+    private readonly NativePerformanceInstrumentation _performanceInstrumentation;
     private IntPtr _scene;
     private bool _sceneApplied;
 
@@ -1133,13 +1156,15 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
         Rect bounds,
         NativeCanvasSceneRenderer renderer,
         object rendererGate,
-        NativeSceneRenderObserver renderObserver)
+        NativeSceneRenderObserver renderObserver,
+        NativePerformanceInstrumentation performanceInstrumentation)
     {
         _scene = scene;
         Bounds = bounds;
         _renderer = renderer;
         _rendererGate = rendererGate;
         _renderObserver = renderObserver;
+        _performanceInstrumentation = performanceInstrumentation;
     }
 
     public static int RenderCount;
@@ -1222,7 +1247,10 @@ internal sealed class NativeSceneDrawOperation : ICustomDrawOperation
                     header.ViewportWidth,
                     header.ViewportHeight,
                     null);
-                RecordRendered(header);
+                if (_performanceInstrumentation.IsEnabled)
+                {
+                    RecordRendered(header);
+                }
                 _renderObserver.RecordRendered(header);
             }
             finally

@@ -13,6 +13,24 @@ dotnet run --project samples/NativeTradingViewTerminal \
   -- --native-library /absolute/path/to/libwebscene_native_engine.dylib
 ```
 
+Runtime monitoring is opt-in. A normal Release launch creates no diagnostic timer,
+does not evaluate WebSocket diagnostic JavaScript, and leaves native runtime-work and
+managed presenter tracing disabled. It retains only the mailbox, scene acknowledgement,
+first-presentation state, and other counters required for correct scheduling.
+
+Enable one-second correlated cadence, input, engine-work, damage/timing, DOM/CSS,
+V8-memory, and retained-renderer reports with:
+
+```bash
+dotnet run --project samples/NativeTradingViewTerminal -c Release -- \
+  --monitor-runtime \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib
+```
+
+Calling `NativeWebSceneView.EnablePerformanceMonitoring()` provides the same explicit
+opt-in for another Avalonia host. `CapturePerformanceSnapshot()` also enables future
+detailed samples before returning its baseline snapshot.
+
 Platform positioning for eligible system-font runs is enabled by default while Skia
 continues to paint the glyphs: CoreText on macOS and DirectWrite on Windows. Launch
 separate processes with the following modes for a direct before/after comparison:

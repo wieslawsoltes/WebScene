@@ -1083,6 +1083,26 @@ void test_runtime_work_is_attributed()
         "runtime-work metrics accepted an undersized ABI structure");
     webscene_runtime_work_metrics before{
         sizeof(webscene_runtime_work_metrics)};
+    execute_and_wait(
+        engine,
+        R"JS(
+          setTimeout(() => { globalThis.__disabledMetricsTimer = true; }, 0);
+          requestAnimationFrame(() => { globalThis.__disabledMetricsFrame = true; });
+        )JS",
+        "disabled-runtime-work-metrics.js");
+    animation_frame_and_wait(engine, 1'000.0, 103U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        webscene_engine_get_runtime_work_metrics(engine, &before) != 0
+            && before.timers_scheduled == 0U
+            && before.timers_fired == 0U
+            && before.animation_frames_requested == 0U
+            && before.animation_frames_invoked == 0U
+            && before.microtask_checkpoints == 0U
+            && before.worker_waits == 0U
+            && before.scene_builds == 0U
+            && before.arbitrary_evaluation_calls == 0U,
+        "disabled Release runtime work path updated diagnostic counters");
     require(
         webscene_engine_set_runtime_work_metrics_enabled(engine, 1U) != 0
             && webscene_engine_get_runtime_work_metrics(engine, &before) != 0,
