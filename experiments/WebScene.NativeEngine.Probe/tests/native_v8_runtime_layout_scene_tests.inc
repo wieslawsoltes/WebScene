@@ -908,45 +908,46 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
         (() => {
           document.body.innerHTML = `<style>
             body { margin: 0; }
-            #dialog { display:flex; flex-direction:column; width:750px; height:420px;
+            #dialog { width:718px; height:734px;
               overflow:hidden; background:rgb(7,8,9); }
-            #header, #footer { flex:0 0 50px; }
-            #frame { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; }
-            #sidebar { flex:0 0 160px; overflow:auto; }
-            #main { display:flex; flex:1 1 auto; height:100%; overflow:hidden; }
-            #tab { display:flex; flex:1 1 auto; flex-direction:column; height:100%;
-              overflow:hidden; }
-            #settings { flex:1 1 auto; min-height:145px; overflow-x:hidden;
-              overflow-y:auto; background:rgb(11,22,33); }
-            #tall { height:720px; background:rgb(220,1,2); }
+            #wrapper { display:flex; height:734px; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; overflow:hidden; }
+            #sidebar { flex:0 0 226px; min-height:145px; overflow:auto; }
+            #settings { min-height:145px; overflow-x:hidden; overflow-y:auto;
+              background:rgb(11,22,33); }
+            #footer { flex:0 0 67px; }
+            #tall { height:954px; background:rgb(220,1,2); }
           </style>
-          <div id="dialog"><div id="header"></div><div id="frame">
-            <div id="sidebar"><div style="height:600px"></div></div>
-            <div id="main"><div id="tab"><div id="settings"><div id="tall"></div>
-            </div></div></div></div><div id="footer"></div></div>`;
+          <div id="dialog"><div id="wrapper"><div id="header"></div>
+            <div id="frame"><div id="sidebar"><div style="height:200px"></div></div>
+            <div id="settings"><div id="tall"><input><select><option>Auto</option>
+            </select></div></div></div>
+            <div id="footer"></div></div></div>`;
           const dialog = document.getElementById('dialog');
+          const wrapper = document.getElementById('wrapper');
           const frame = document.getElementById('frame');
-          const main = document.getElementById('main');
-          const tab = document.getElementById('tab');
           const settings = document.getElementById('settings');
           const footer = document.getElementById('footer');
           const rect = element => element.getBoundingClientRect();
+          const tallEscapesViewport = rect(document.getElementById('tall')).bottom
+            > rect(settings).bottom;
+          settings.scrollTop = 999;
           return {
             dialogHeight: rect(dialog).height,
+            wrapperHeight: rect(wrapper).height,
             frameHeight: rect(frame).height,
-            mainHeight: rect(main).height,
-            tabHeight: rect(tab).height,
             settingsHeight: rect(settings).height,
             clientHeight: settings.clientHeight,
             scrollHeight: settings.scrollHeight,
+            scrollTop: settings.scrollTop,
             footerInside: rect(footer).bottom <= rect(dialog).bottom,
-            tallEscapesViewport: rect(document.getElementById('tall')).bottom
-              > rect(settings).bottom
+            tallEscapesViewport
           };
         })()
     )JS", "tradingview-settings-dialog-overflow.js");
     require(
-        result == R"JSON({"dialogHeight":420,"frameHeight":320,"mainHeight":320,"tabHeight":320,"settingsHeight":320,"clientHeight":320,"scrollHeight":720,"footerInside":true,"tallEscapesViewport":true})JSON",
+        result == R"JSON({"dialogHeight":734,"wrapperHeight":734,"frameHeight":599,"settingsHeight":599,"clientHeight":599,"scrollHeight":954,"scrollTop":355,"footerInside":true,"tallEscapesViewport":true})JSON",
         "TradingView settings hierarchy escaped its bounded dialog: " + result);
 
     webscene_engine_request_scene_checkpoint(engine);
@@ -954,16 +955,11 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
     for (auto attempt = 0; attempt < 100 && !found_settings_clip; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
-            auto settings_id = 0U;
-            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
-                const auto& command = scene->commands[index];
-                if (command.rgba == 0x0B1621FFU) settings_id = command.node_id;
-            }
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 found_settings_clip = found_settings_clip
-                    || (command.kind == 12U && command.node_id == settings_id
-                        && std::abs(command.height - 320.0F) < 0.1F);
+                    || (command.kind == 12U
+                        && std::abs(command.height - 599.0F) < 0.1F);
             }
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);

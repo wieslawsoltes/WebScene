@@ -71,6 +71,7 @@ void native_document::layout(float viewport_width, float viewport_height)
         std::max(1.0F, viewport_width),
         std::max(1.0F, viewport_height)};
     body_->visible = true;
+    body_->used_height_is_definite = true;
     layout_children(*body_);
     update_paint_z_index(*this, *body_);
     auto retained_canvas_seen = false;
@@ -2112,8 +2113,20 @@ void native_document::layout_children(dom_node& parent)
             const auto base = known == flex_base_main_sizes.end() ? 0.0F : known->second;
             const auto& minimum_length = horizontal
                 ? child->style.min_width : child->style.min_height;
+            const auto main_axis_overflow = horizontal
+                ? child->style.overflow_x : child->style.overflow_y;
+            // `hidden`, `auto`, and `scroll` establish a scroll container.
+            // Its automatic flex minimum is zero; only `visible` and `clip`
+            // retain the content-based automatic minimum. In particular, a
+            // form control anywhere below an overflow:hidden flex item must
+            // not freeze that item at its max-content height.
+            const auto scroll_container_automatic_minimum =
+                main_axis_overflow != overflow_mode::visible
+                && main_axis_overflow != overflow_mode::clip;
             const auto minimum = is_specified(minimum_length)
                 ? resolve_length(*child, minimum_length, main_available, 0)
+                : scroll_container_automatic_minimum
+                ? 0.0F
                 : contains_replaced_content(contains_replaced_content, *child)
                 ? constrain_size(
                     *child,
@@ -2468,6 +2481,7 @@ void native_document::layout_children(dom_node& parent)
             cursor += main_gap;
         }
         layout_rect assigned{};
+        auto assigned_height_is_definite = false;
         auto vertical_margin_bottom = 0.0F;
         if (horizontal) {
             if (flex_container && parent.style.flex_wrap) {
@@ -2529,6 +2543,7 @@ void native_document::layout_children(dom_node& parent)
             }
             const auto definite_authored_height = is_specified(child->style.height)
                 && (child->style.height.unit != length_unit::percent
+                    || parent.used_height_is_definite
                     || is_specified(parent.style.height));
             const auto available_line_cross_size = wrapped_has_definite_cross_size
                 ? stretched_wrapped_line_cross_size : content.height;
@@ -2551,6 +2566,12 @@ void native_document::layout_children(dom_node& parent)
                                 available_line_cross_size - margin_top - margin_bottom),
                             intrinsic_height);
             height = constrain_size(*child, false, height, content.height);
+            assigned_height_is_definite = definite_authored_height
+                || (flex_container
+                    && (child->style.align_self_specified
+                            ? child->style.align_self
+                            : parent.style.align_items) == align_mode::stretch
+                    && parent.used_height_is_definite);
             if (flex_container && parent.style.flex_wrap) {
                 wrapped_line_cross_size = std::max(
                     wrapped_line_cross_size,
@@ -2612,6 +2633,7 @@ void native_document::layout_children(dom_node& parent)
             if (const auto shrunk = flex_shrunk_main_sizes.find(child);
                 shrunk != flex_shrunk_main_sizes.end()) {
                 height = constrain_size(*child, false, shrunk->second, content.height);
+                assigned_height_is_definite = true;
             }
             const auto alignment = child->style.align_self_specified
                 ? child->style.align_self : parent.style.align_items;
@@ -2687,7 +2709,11 @@ void native_document::layout_children(dom_node& parent)
         }
         positioned.x -= parent.scroll_left;
         positioned.y -= parent.scroll_top;
-        layout_child(*child, parent.layout, positioned);
+        layout_child(
+            *child,
+            parent.layout,
+            positioned,
+            assigned_height_is_definite);
         // The retained native viewport owns scrolling while a loaded document
         // exposes HTML and BODY structural boxes beneath it. Those boxes remain
         // viewport-sized, but descendants can establish a larger scrollable
@@ -3499,7 +3525,11 @@ float native_document::compute_intrinsic_size(
     return constrain(result + padding);
 }
 
-void native_document::layout_child(dom_node& child, const layout_rect&, layout_rect assigned)
+void native_document::layout_child(
+    dom_node& child,
+    const layout_rect&,
+    layout_rect assigned,
+    bool assigned_height_is_definite)
 {
     // A CSS transform changes the painted and hit-test box, not the space the
     // element occupies in its parent's flow. Percentage translations resolve
@@ -3521,6 +3551,11 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
         assigned.y,
         std::max(0.0F, assigned.width),
         std::max(0.0F, assigned.height)};
+    const auto* parent = composed_parent(child);
+    child.used_height_is_definite = assigned_height_is_definite
+        || (is_specified(child.style.height)
+            && (child.style.height.unit != length_unit::percent
+                || (parent != nullptr && parent->used_height_is_definite)));
     const auto automatic_height = !is_specified(child.style.height);
     if (automatic_height && child.tag == "#text" && has_visible_text(child.text_content)) {
         const auto font_size = resolved_font_size(child);
@@ -3535,19 +3570,20 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
             static_cast<float>(lines.size()) * line_height);
     }
     layout_children(child);
-    const auto* parent = composed_parent(child);
     const auto parent_constrains_height = parent != nullptr
-        && (is_specified(parent->style.height)
+        && (parent->used_height_is_definite
+            || is_specified(parent->style.height)
             || is_specified(parent->style.max_height));
     const auto constrained_overflow_height = child.style.overflow_y != overflow_mode::visible
         && (is_specified(child.style.max_height)
             || (parent != nullptr
                 && is_flex_container(parent->style.display)
                 && parent_constrains_height));
-    const auto constrained_column_flex_item = parent != nullptr
-        && is_flex_container(parent->style.display)
-        && parent->style.direction == flex_direction::column
-        && parent_constrains_height;
+    const auto constrained_column_flex_item = child.used_height_is_definite
+        || (parent != nullptr
+            && is_flex_container(parent->style.display)
+            && parent->style.direction == flex_direction::column
+            && parent_constrains_height);
     const auto table_track_sized = is_table_row_group(child.style.display)
         || child.style.display == display_mode::table_row
         || child.style.display == display_mode::table_cell;
@@ -3666,6 +3702,7 @@ void native_document::layout_child(dom_node& child, const layout_rect&, layout_r
                 child.layout.height));
         if (capped_height + 0.01F < child.layout.height) {
             child.layout.height = capped_height;
+            child.used_height_is_definite = true;
             // Descendant percentages and stretch alignment were resolved
             // against the pre-clamp intrinsic height. Reflow once against the
             // final used max-height so the principal box and its grid/flex

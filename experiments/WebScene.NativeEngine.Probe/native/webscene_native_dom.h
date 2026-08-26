@@ -1291,6 +1291,11 @@ struct dom_node final {
     float scroll_content_height{0};
     float scroll_viewport_width{0};
     float scroll_viewport_height{0};
+    // Records that the current used block size came from a definite
+    // containing-block/flex constraint rather than max-content expansion.
+    // Descendant percentage and overflow sizing must follow the used size
+    // even when this node's authored height remains `auto`.
+    bool used_height_is_definite{false};
     // Script execution history is intrinsic DOM state. Keeping the byte in
     // existing tail padding preserves the fixed dom_node footprint while
     // preventing a connected script from executing again after a reparent.
@@ -1597,7 +1602,11 @@ private:
         bool horizontal,
         float available);
     void layout_children(dom_node& parent);
-    void layout_child(dom_node& child, const layout_rect& available, layout_rect assigned);
+    void layout_child(
+        dom_node& child,
+        const layout_rect& available,
+        layout_rect assigned,
+        bool assigned_height_is_definite = false);
     void append_scene(
         const dom_node& node,
         std::vector<webscene_scene_command>& commands,
