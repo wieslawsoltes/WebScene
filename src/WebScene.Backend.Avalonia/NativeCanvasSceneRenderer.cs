@@ -1367,17 +1367,39 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         paint.Color = Rgba(command.Rgba);
         paint.TextSize = fontSize;
         paint.Typeface = typeface;
+        var featureFlags = NativeTextShaping.ResolveFeatureFlags(
+            text,
+            parts[4],
+            0,
+            _webTypefaces);
+        if (NativeTextShaping.TryResolveFallbackTextRuns(
+                text,
+                parts[4],
+                fontWeight,
+                SKFontStyleSlant.Upright,
+                _webTypefaces,
+                out var fallbackRuns))
+        {
+            DrawDomFallbackText(
+                canvas,
+                command,
+                paint,
+                fallbackRuns,
+                parts[4],
+                fontSize,
+                fontWeight,
+                lineHeight,
+                parts[3],
+                fontSmoothing,
+                featureFlags);
+            return;
+        }
         var shaperKey = parts[4] + '\t' + fontWeight.ToString(CultureInfo.InvariantCulture);
         if (!shapers.TryGetValue(shaperKey, out var shaper))
         {
             shaper = new SKShaper(typeface);
             shapers.Add(shaperKey, shaper);
         }
-        var featureFlags = NativeTextShaping.ResolveFeatureFlags(
-            text,
-            parts[4],
-            0,
-            _webTypefaces);
         var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
             parts[4],
             _webTypefaces);
@@ -1440,6 +1462,73 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             positioned ? positionedRun : null,
             NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(
                 fontSmoothing));
+    }
+
+    private void DrawDomFallbackText(
+        SKCanvas canvas,
+        in SceneCommand command,
+        SKPaint paint,
+        NativeTextShaping.FallbackTextRun[] runs,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        float lineHeight,
+        string textAlign,
+        string fontSmoothing,
+        uint featureFlags)
+    {
+        var layout = NativeTextShaping.LayoutFallbackTextRuns(
+            runs,
+            familyList,
+            fontSize,
+            fontWeight,
+            featureFlags,
+            paint,
+            _webTypefaces);
+        var x = textAlign switch
+        {
+            "center" => command.X + (command.Width - layout.AdvanceWidth) * 0.5f,
+            "right" or "end" => command.X + command.Width - layout.AdvanceWidth,
+            _ => command.X,
+        };
+        var glyphHeight = layout.Ascent + layout.Descent;
+        var contentHeight = Math.Min(
+            Math.Max(lineHeight, glyphHeight),
+            Math.Max(lineHeight, command.Height));
+        var baseline = command.Y
+            + Math.Max(0, (command.Height - contentHeight) * 0.5f)
+            + (contentHeight - glyphHeight) * 0.5f
+            + layout.Ascent;
+        var rasterizationMode = NativeTextShaping
+            .ResolveCssFontSmoothingRasterizationMode(fontSmoothing);
+        foreach (var run in layout.Runs)
+        {
+            paint.Typeface = run.Typeface;
+            using var shaper = new SKShaper(run.Typeface);
+            var runFeatures = NativeTextShaping.ResolveFeatureFlags(
+                run.Text,
+                familyList,
+                featureFlags,
+                _webTypefaces);
+            var unscaledWidth = run.WidthScale > 0
+                ? run.AdvanceWidth / run.WidthScale
+                : run.AdvanceWidth;
+            NativeTextShaping.DrawShapedText(
+                canvas,
+                shaper,
+                run.Text,
+                x,
+                baseline,
+                paint,
+                runFeatures,
+                1f,
+                run.WidthScale,
+                unscaledWidth,
+                _presenterDeviceScaleFactor,
+                positionedRun: null,
+                rasterizationMode);
+            x += run.AdvanceWidth;
+        }
     }
 
     private static void DrawDomShadow(

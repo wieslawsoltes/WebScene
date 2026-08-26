@@ -726,6 +726,85 @@ public sealed class NativeTextShapingTests
     }
 
     [Fact]
+    public void ClipboardToastEmojiUsesCoveredFallbackRunForMeasureAndPaint()
+    {
+        const string text = "Chart image copied to clipboard 👍";
+        const string family = "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', sans-serif";
+        Assert.True(NativeTextShaping.TryResolveFallbackTextRuns(
+            text,
+            family,
+            400,
+            SKFontStyleSlant.Upright,
+            null,
+            out var runs));
+        Assert.Equal(text, string.Concat(runs.Select(static run => run.Text)));
+        var emojiRun = Assert.Single(runs.Where(static run =>
+            run.Text.Contains("👍", StringComparison.Ordinal)));
+        Assert.True(emojiRun.Typeface.ContainsGlyphs("👍"));
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.Contains("Emoji", emojiRun.Typeface.FamilyName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        using var paint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.White,
+            TextSize = 24
+        };
+        var layout = NativeTextShaping.LayoutFallbackTextRuns(
+            runs,
+            family,
+            24,
+            400,
+            0,
+            paint,
+            null);
+        var measured = NativeTextShaping.Measure(text, family, 24, 400, 0, 0);
+        Assert.Equal(measured.AdvanceWidth, layout.AdvanceWidth, precision: 2);
+
+        using var bitmap = new SKBitmap(420, 52, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        var cursor = 2f;
+        var emojiLeft = 0f;
+        var emojiRight = 0f;
+        foreach (var run in layout.Runs)
+        {
+            if (run.Text.Contains("👍", StringComparison.Ordinal))
+            {
+                emojiLeft = cursor;
+                emojiRight = cursor + run.AdvanceWidth;
+            }
+            paint.Typeface = run.Typeface;
+            using var shaper = new SKShaper(run.Typeface);
+            NativeTextShaping.DrawShapedText(
+                canvas,
+                shaper,
+                run.Text,
+                cursor,
+                36,
+                paint,
+                0,
+                horizontalAdvanceScale: run.WidthScale,
+                measuredWidth: run.AdvanceWidth / run.WidthScale);
+            cursor += run.AdvanceWidth;
+        }
+        canvas.Flush();
+        var paintedEmojiPixels = 0;
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var x = Math.Max(0, (int)MathF.Floor(emojiLeft));
+                 x < Math.Min(bitmap.Width, (int)MathF.Ceiling(emojiRight)); x++)
+            {
+                if (bitmap.GetPixel(x, y).Alpha > 0) paintedEmojiPixels++;
+            }
+        }
+        Assert.True(paintedEmojiPixels > 20,
+            $"emoji fallback run painted only {paintedEmojiPixels} pixels");
+    }
+
+    [Fact]
     public void CanvasTextMaxWidthCondensesOnlyOversizedRuns()
     {
         const uint textMaxWidthFlag = 1u << 17;

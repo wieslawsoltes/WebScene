@@ -60,6 +60,8 @@ public static class NativeTextShaping
         string FamilyList);
     private static readonly ConcurrentDictionary<string, SKTypeface> Typefaces =
         new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, SKTypeface> FallbackTypefaces =
+        new(StringComparer.Ordinal);
     private static readonly object WebTypefaceCacheGate = new();
     private static readonly Dictionary<string, SharedWebTypeface> WebTypefaceCache =
         new(StringComparer.Ordinal);
@@ -266,6 +268,185 @@ public static class NativeTextShaping
             }
             return SKTypeface.Default;
         });
+    }
+
+    internal readonly record struct FallbackTextRun(
+        string Text,
+        SKTypeface Typeface);
+
+    internal readonly record struct FallbackLayoutRun(
+        string Text,
+        SKTypeface Typeface,
+        float AdvanceWidth,
+        float WidthScale);
+
+    internal sealed record FallbackTextLayout(
+        FallbackLayoutRun[] Runs,
+        float AdvanceWidth,
+        float Ascent,
+        float Descent,
+        float Leading,
+        SKRect InkBounds);
+
+    internal static bool TryResolveFallbackTextRuns(
+        string text,
+        string familyList,
+        int fontWeight,
+        SKFontStyleSlant slant,
+        WebTypefaceRegistry? registry,
+        out FallbackTextRun[] runs)
+    {
+        runs = [];
+        if (string.IsNullOrEmpty(text)) return false;
+        var primary = ResolveTypeface(familyList, fontWeight, slant, registry);
+        if (primary.ContainsGlyphs(text)) return false;
+
+        var starts = StringInfo.ParseCombiningCharacters(text);
+        var resolved = new List<FallbackTextRun>(starts.Length);
+        var builder = new StringBuilder();
+        SKTypeface? activeTypeface = null;
+        for (var index = 0; index < starts.Length; index++)
+        {
+            var start = starts[index];
+            var end = index + 1 < starts.Length ? starts[index + 1] : text.Length;
+            var element = text[start..end];
+            var typeface = primary.ContainsGlyphs(element)
+                ? primary
+                : ResolveFallbackTypeface(
+                    element,
+                    familyList,
+                    fontWeight,
+                    slant);
+            if (!ReferenceEquals(activeTypeface, typeface) && builder.Length > 0)
+            {
+                resolved.Add(new FallbackTextRun(builder.ToString(), activeTypeface!));
+                builder.Clear();
+            }
+            activeTypeface = typeface;
+            builder.Append(element);
+        }
+        if (builder.Length > 0)
+        {
+            resolved.Add(new FallbackTextRun(builder.ToString(), activeTypeface!));
+        }
+        if (resolved.Count == 1 && ReferenceEquals(resolved[0].Typeface, primary))
+        {
+            return false;
+        }
+        runs = resolved.ToArray();
+        return true;
+    }
+
+    private static SKTypeface ResolveFallbackTypeface(
+        string textElement,
+        string familyList,
+        int fontWeight,
+        SKFontStyleSlant slant)
+    {
+        var codepoint = textElement.EnumerateRunes()
+            .FirstOrDefault(static rune => rune.Value is not 0x200D
+                and not 0xFE0E and not 0xFE0F).Value;
+        if (codepoint == 0) return SKTypeface.Default;
+        var key = $"{familyList}\u001f{fontWeight}\u001f{(int)slant}\u001f{codepoint:X}";
+        return FallbackTypefaces.GetOrAdd(key, _ =>
+        {
+            if (OperatingSystem.IsMacOS() && IsEmojiCodepoint(codepoint))
+            {
+                var emoji = SKTypeface.FromFamilyName("Apple Color Emoji");
+                if (emoji is not null && emoji.ContainsGlyph(codepoint)) return emoji;
+                emoji?.Dispose();
+            }
+            var family = familyList.Split(',', StringSplitOptions.TrimEntries
+                    | StringSplitOptions.RemoveEmptyEntries)
+                .Select(static value => value.Trim('"', '\''))
+                .FirstOrDefault();
+            var matched = SKFontManager.Default.MatchCharacter(
+                family,
+                Math.Clamp(fontWeight, 1, 1000),
+                (int)SKFontStyleWidth.Normal,
+                slant,
+                [CultureInfo.CurrentUICulture.TwoLetterISOLanguageName],
+                codepoint);
+            return matched ?? SKTypeface.Default;
+        });
+    }
+
+    private static bool IsEmojiCodepoint(int value)
+        => value is >= 0x1F000 and <= 0x1FAFF
+            or >= 0x2600 and <= 0x27BF
+            or >= 0x2300 and <= 0x23FF;
+
+    internal static FallbackTextLayout LayoutFallbackTextRuns(
+        FallbackTextRun[] runs,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        uint featureFlags,
+        SKPaint paint,
+        WebTypefaceRegistry? registry)
+    {
+        var layoutRuns = new FallbackLayoutRun[runs.Length];
+        var advance = 0f;
+        var ascent = 0f;
+        var descent = 0f;
+        var leading = 0f;
+        var inkBounds = SKRect.Empty;
+        var hasInk = false;
+        for (var index = 0; index < runs.Length; index++)
+        {
+            var run = runs[index];
+            paint.Typeface = run.Typeface;
+            using var shaper = new SKShaper(run.Typeface);
+            var runFeatures = ResolveFeatureFlags(
+                run.Text,
+                familyList,
+                featureFlags,
+                registry);
+            var shapedWidth = MeasureShapedWidth(shaper, run.Text, paint, runFeatures);
+            var widthScale = ResolveShapedWidthScale(
+                run.Text,
+                familyList,
+                fontSize,
+                fontWeight,
+                paint,
+                shapedWidth,
+                runFeatures,
+                registry);
+            var runInk = MeasureShapedInkBounds(
+                shaper,
+                run.Text,
+                paint,
+                runFeatures,
+                horizontalAdvanceScale: widthScale);
+            if (!runInk.IsEmpty)
+            {
+                runInk.Offset(advance, 0);
+                if (hasInk) inkBounds.Union(runInk);
+                else
+                {
+                    inkBounds = runInk;
+                    hasInk = true;
+                }
+            }
+            paint.GetFontMetrics(out var metrics);
+            ascent = Math.Max(ascent, -metrics.Ascent);
+            descent = Math.Max(descent, metrics.Descent);
+            leading = Math.Max(leading, metrics.Leading);
+            var renderedAdvance = shapedWidth * widthScale;
+            layoutRuns[index] = new FallbackLayoutRun(
+                run.Text,
+                run.Typeface,
+                renderedAdvance,
+                widthScale);
+            advance += renderedAdvance;
+        }
+        return new FallbackTextLayout(
+            layoutRuns,
+            advance,
+            ascent,
+            descent,
+            leading,
+            inkBounds);
     }
 
     internal static bool TryParseCanvasFont(
@@ -1122,12 +1303,44 @@ public static class NativeTextShaping
             TextSize = fontSize,
             Typeface = typeface
         };
-        using var shaper = new SKShaper(typeface);
         featureFlags = ResolveFeatureFlags(
             text,
             familyList,
             featureFlags,
             registry);
+        if (TryResolveFallbackTextRuns(
+                text,
+                familyList,
+                fontWeight,
+                SKFontStyleSlant.Upright,
+                registry,
+                out var fallbackRuns))
+        {
+            var layout = LayoutFallbackTextRuns(
+                fallbackRuns,
+                familyList,
+                fontSize,
+                fontWeight,
+                featureFlags,
+                paint,
+                registry);
+            var fallbackGraphemes = StringInfo.ParseCombiningCharacters(text).Length;
+            var fallbackSpacing = Math.Max(0, fallbackGraphemes - 1) * letterSpacing
+                + text.Count(character => character == ' ') * wordSpacing;
+            return new NativeTextMetrics
+            {
+                StructSize = (uint)Marshal.SizeOf<NativeTextMetrics>(),
+                AdvanceWidth = layout.AdvanceWidth + fallbackSpacing,
+                Ascent = layout.Ascent,
+                Descent = layout.Descent,
+                Leading = layout.Leading,
+                ActualBoundingBoxLeft = -layout.InkBounds.Left,
+                ActualBoundingBoxRight = layout.InkBounds.Right + fallbackSpacing,
+                ActualBoundingBoxAscent = -layout.InkBounds.Top,
+                ActualBoundingBoxDescent = layout.InkBounds.Bottom
+            };
+        }
+        using var shaper = new SKShaper(typeface);
         var positioned = TryPositionTextRun(
             shaper,
             text,
