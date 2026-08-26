@@ -549,7 +549,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             var clipboardBytes = clipboardWrite.Bytes;
             if (clipboardBytes is null && clipboardWrite.CanvasNodeId is not null)
             {
-                clipboardBytes = _surface.CaptureRetainedScenePng();
+                clipboardBytes = await _surface
+                    .CaptureRetainedScenePngAsync()
+                    .ConfigureAwait(true);
             }
             if (clipboardBytes is null || topLevel.Clipboard is null) return;
             if (string.Equals(
@@ -582,7 +584,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         var bytes = download.Bytes;
         if (bytes is null && download.CanvasNodeId is not null)
         {
-            bytes = _surface.CaptureRetainedScenePng();
+            bytes = await _surface
+                .CaptureRetainedScenePngAsync()
+                .ConfigureAwait(true);
         }
         if (bytes is null && download.RemoteUri is not null)
         {

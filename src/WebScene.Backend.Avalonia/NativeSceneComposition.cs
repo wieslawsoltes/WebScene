@@ -342,6 +342,72 @@ internal static class NativeSceneDamagePolicy
     }
 }
 
+internal sealed class NativeSceneCaptureRequest
+{
+    private readonly TaskCompletionSource<byte[]?> _completion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public NativeSceneCaptureRequest(int width, int height)
+    {
+        Width = Math.Max(1, width);
+        Height = Math.Max(1, height);
+    }
+
+    public int Width { get; }
+
+    public int Height { get; }
+
+    public Task<byte[]?> Completion => _completion.Task;
+
+    public bool TrySetResult(byte[]? bytes)
+        => _completion.TrySetResult(bytes);
+
+    public bool TrySetException(Exception error)
+        => _completion.TrySetException(error);
+
+    public bool TryCancel()
+        => _completion.TrySetCanceled();
+}
+
+internal static class NativeRetainedScenePngEncoder
+{
+    public static byte[] Encode(
+        NativeCanvasSceneRenderer renderer,
+        int width,
+        int height,
+        float viewportWidth,
+        float viewportHeight)
+    {
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+        using var bitmap = new SKBitmap(
+            width,
+            height,
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(19, 23, 34, 255));
+        if (viewportWidth > 0 && viewportHeight > 0)
+        {
+            var scale = NativeSceneResizeProjection.GetScale(
+                width,
+                height,
+                viewportWidth,
+                viewportHeight);
+            canvas.Scale(scale.X, scale.Y);
+            renderer.RenderRetained(
+                canvas,
+                viewportWidth,
+                viewportHeight,
+                null);
+        }
+        canvas.Flush();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
+    }
+}
+
 internal sealed unsafe class NativeSceneCompositionHandler
     : CompositionCustomVisualHandler
 {
@@ -402,6 +468,24 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     public override void OnMessage(object message)
     {
+        if (message is NativeSceneCaptureRequest capture)
+        {
+            try
+            {
+                capture.TrySetResult(NativeRetainedScenePngEncoder.Encode(
+                    _renderer,
+                    capture.Width,
+                    capture.Height,
+                    _viewportWidth,
+                    _viewportHeight));
+            }
+            catch (Exception error)
+            {
+                capture.TrySetException(error);
+            }
+            return;
+        }
+
         if (message is not NativeSceneCompositionMessage command)
         {
             return;

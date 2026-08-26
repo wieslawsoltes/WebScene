@@ -1289,96 +1289,61 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     public void RequestRender() => InvalidateVisual();
 
-    public unsafe byte[] CaptureRetainedScenePng()
+    public Task<byte[]?> CaptureRetainedScenePngAsync(
+        CancellationToken cancellationToken = default)
     {
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            return Dispatcher.UIThread.Invoke(
-                CaptureRetainedScenePng,
-                DispatcherPriority.Send);
-        }
-
-        RefreshRetainedSceneForCapture();
+        Dispatcher.UIThread.VerifyAccess();
         var width = Math.Max(1, (int)Math.Ceiling(Bounds.Width));
         var height = Math.Max(1, (int)Math.Ceiling(Bounds.Height));
-        using var bitmap = new SKBitmap(
-            width,
-            height,
-            SKColorType.Bgra8888,
-            SKAlphaType.Premul);
-        using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(new SKColor(19, 23, 34, 255));
+        if (_customVisual is not null)
+        {
+            var request = new NativeSceneCaptureRequest(width, height);
+            _customVisual.SendHandlerMessage(request);
+            return AwaitCompositionCaptureAsync(request, cancellationToken);
+        }
+
+        byte[] bytes;
         lock (_rendererGate)
         {
-            _renderer.RenderRetained(
-                canvas,
+            bytes = NativeRetainedScenePngEncoder.Encode(
+                _renderer,
+                width,
+                height,
                 (float)Math.Max(1, Bounds.Width),
-                (float)Math.Max(1, Bounds.Height),
-                null);
+                (float)Math.Max(1, Bounds.Height));
         }
-        canvas.Flush();
-        using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-        return encoded.ToArray();
+        return Task.FromResult<byte[]?>(bytes);
     }
 
-    private unsafe void RefreshRetainedSceneForCapture()
+    public byte[] CaptureRetainedScenePng()
     {
-        var engine = Volatile.Read(ref _engine);
-        if (engine == IntPtr.Zero)
+        Dispatcher.UIThread.VerifyAccess();
+        if (_customVisual is not null)
         {
-            return;
+            throw new InvalidOperationException(
+                "Synchronous capture cannot wait on the active compositor. "
+                + "Use CaptureRetainedScenePngAsync instead.");
         }
+        return CaptureRetainedScenePngAsync()
+            .GetAwaiter()
+            .GetResult()
+            ?? [];
+    }
 
-        bool ApplyAvailableScenes()
+    private static async Task<byte[]?> AwaitCompositionCaptureAsync(
+        NativeSceneCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
         {
-            var applied = false;
-            while (true)
-            {
-                var scene = NativeWebSceneApi.EngineAcquireNextScene(engine);
-                if (scene == IntPtr.Zero)
-                {
-                    return applied;
-                }
-                try
-                {
-                    var view = (NativeSceneView*)scene;
-                    if (view != null
-                        && view->StructSize == sizeof(NativeSceneView)
-                        && view->AbiVersion == 2)
-                    {
-                        lock (_rendererGate)
-                        {
-                            _renderer.ApplyDiff(view);
-                        }
-                        applied = true;
-                    }
-                    NativeWebSceneApi.SceneAcknowledge(scene);
-                }
-                finally
-                {
-                    NativeWebSceneApi.SceneRelease(scene);
-                }
-            }
+            return await request.Completion
+                .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)
+                .ConfigureAwait(true);
         }
-
-        ApplyAvailableScenes();
-        if (NativeWebSceneApi.EngineRequestSceneCheckpoint(engine) == 0)
+        catch (TimeoutException)
         {
-            return;
-        }
-        NativeFrameInput.Submit(
-            engine,
-            Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
-
-        var deadline = Stopwatch.GetTimestamp() + 2 * Stopwatch.Frequency;
-        while (Stopwatch.GetTimestamp() < deadline)
-        {
-            if (ApplyAvailableScenes())
-            {
-                return;
-            }
-            Thread.Sleep(2);
+            request.TryCancel();
+            return null;
         }
     }
 
