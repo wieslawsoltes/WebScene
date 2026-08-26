@@ -196,15 +196,20 @@ paint_z_index_update update_paint_z_index(
         contains_retained_canvas =
             contains_retained_canvas || child_update.contains_retained_canvas;
     }
+    const auto establishes_atomic_stacking_context =
+        node.style.position == position_mode::fixed
+        || node.style.opacity < 0.999F
+        || node.style.transform_rotate_degrees != 0
+        || node.style.transform_scale_x != 1.0F
+        || node.style.transform_scale_y != 1.0F;
     node.paint_z_index = node.style.z_index != 0
         ? node.style.z_index
-        // A positioned layout area is painted atomically among its siblings.
-        // Descendant levels still order content inside that area, but must not
-        // lift the entire area above a later positioned sibling. A retained
-        // canvas subtree is likewise a bounded host composition: its elevated
-        // legend remains above its own canvas without lifting the complete
-        // chart above later overlay DOM.
-        : node.style.position == position_mode::normal && !contains_retained_canvas
+        // Relative/absolute positioning with z-index:auto does not establish a
+        // stacking context. Portal wrappers commonly use that shape, so their
+        // positioned tooltip descendants still participate in the ancestor
+        // context. Fixed/transform/opacity contexts and retained canvases remain
+        // atomic composition boundaries.
+        : !establishes_atomic_stacking_context && !contains_retained_canvas
             ? descendant_z_index : 0;
     node.contains_retained_canvas = contains_retained_canvas;
     return {node.paint_z_index, contains_retained_canvas};
@@ -277,7 +282,7 @@ void update_retained_canvas_paint_phase(
             [](const auto* left, const auto* right) {
                 // A descendant stacking level is scoped to its ancestor; it
                 // must not reorder the ancestor among its own siblings.
-                return left->style.z_index < right->style.z_index;
+                return left->paint_z_index < right->paint_z_index;
             });
     }
     for (auto* child : paint_order) {

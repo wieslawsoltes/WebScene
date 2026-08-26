@@ -686,18 +686,14 @@ dom_node* native_document::hit_test_node(
             auto next_z = std::numeric_limits<int32_t>::min();
             const auto& children = composed_children(node);
             for (const auto* child : children) {
-                const auto z_index = node.style.z_index != 0
-                    ? child->paint_z_index
-                    : child->style.z_index;
+                const auto z_index = child->paint_z_index;
                 if (z_index < upper_bound) {
                     next_z = std::max(next_z, z_index);
                 }
             }
             if (next_z == std::numeric_limits<int32_t>::min()) break;
             for (auto iterator = children.rbegin(); iterator != children.rend(); ++iterator) {
-                const auto z_index = node.style.z_index != 0
-                    ? (*iterator)->paint_z_index
-                    : (*iterator)->style.z_index;
+                const auto z_index = (*iterator)->paint_z_index;
                 if (z_index != next_z) continue;
                 if (auto* hit = hit_test_node(
                         **iterator,

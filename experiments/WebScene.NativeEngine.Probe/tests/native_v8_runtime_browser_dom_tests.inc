@@ -1290,6 +1290,131 @@ void test_read_only_evaluation_does_not_publish_scene()
     webscene_engine_destroy(engine);
 }
 
+void test_async_save_acknowledgement_publishes_without_pointer_input()
+{
+    auto* engine = webscene_engine_create(64);
+    require(engine != nullptr, "async-save engine creation failed");
+    resize(engine, 320, 180, 9100U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; background: #111; color: white; }
+              button { width: 120px; height: 40px; }
+            </style>
+            <button id="save" type="button"><span id="label">Save</span></button>`;
+          const button = document.getElementById('save');
+          const label = document.getElementById('label');
+          globalThis.__saveState = {
+            activations: 0,
+            requests: 0,
+            acknowledgements: 0,
+            pending: false,
+            failNext: false,
+            lastShouldFail: false
+          };
+          button.addEventListener('click', () => {
+            const state = globalThis.__saveState;
+            state.activations++;
+            if (state.pending) return;
+            state.pending = true;
+            state.requests++;
+            const shouldFail = state.failNext;
+            state.failNext = false;
+            state.lastShouldFail = shouldFail;
+            setTimeout(() => {
+              state.pending = false;
+              state.acknowledgements++;
+              if (!shouldFail) label.textContent = '';
+            }, 100);
+          });
+        })()
+    )JS", "async-save-publication-setup.js");
+    animation_frame_and_wait(engine, 0.0, 9101U);
+
+    const auto consumed_before = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 30, 20, 9102U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 30, 20, 9103U, false);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 30, 20, 9104U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 30, 20, 9105U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 4U,
+        "async-save activations were not consumed");
+    const auto coalesced_state = evaluate(engine, R"JS(({
+          activations: __saveState.activations,
+          requests: __saveState.requests,
+          pending: __saveState.pending,
+          label: document.getElementById('label').textContent
+        }))JS", "async-save-coalescing.js");
+    require(
+        coalesced_state
+            == R"JSON({"activations":2,"requests":1,"pending":true,"label":"Save"})JSON",
+        "duplicate activation was not coalesced while save was pending: "
+            + coalesced_state);
+
+    webscene_engine_metrics after_activation{};
+    webscene_engine_get_metrics(engine, &after_activation);
+    webscene_engine_metrics after_ack{};
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        webscene_engine_get_metrics(engine, &after_ack);
+        if (after_ack.published_scenes > after_activation.published_scenes
+            && evaluate(engine, "__saveState.acknowledgements",
+                   "async-save-success-acknowledgement.js") == "1") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        after_ack.published_scenes > after_activation.published_scenes,
+        "successful save acknowledgement did not publish a scene without pointer movement");
+    require(
+        evaluate(engine, R"JS(({
+          requests: __saveState.requests,
+          acknowledgements: __saveState.acknowledgements,
+          pending: __saveState.pending,
+          label: document.getElementById('label').textContent
+        }))JS", "async-save-success.js")
+            == R"JSON({"requests":1,"acknowledgements":1,"pending":false,"label":""})JSON",
+        "successful save acknowledgement did not clear the dirty label");
+
+    execute(engine, R"JS(
+      document.getElementById('label').textContent = 'Save';
+      __saveState.failNext = true;
+    )JS", "async-save-failure-setup.js");
+    require(
+        evaluate(engine, "__saveState.failNext", "async-save-failure-armed.js")
+            == "true",
+        "failing save fixture did not arm its failure result");
+    const auto failure_consumed_before = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 30, 20, 9106U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 30, 20, 9107U, false);
+    wait_for_consumed_inputs(
+        engine,
+        failure_consumed_before + 2U,
+        "failing save activation was not consumed");
+    for (auto attempt = 0; attempt < 200; ++attempt) {
+        if (evaluate(engine, "__saveState.acknowledgements",
+                "async-save-failure-wait.js") == "2") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    const auto failed_state = evaluate(engine, R"JS(({
+          requests: __saveState.requests,
+          acknowledgements: __saveState.acknowledgements,
+          pending: __saveState.pending,
+          lastShouldFail: __saveState.lastShouldFail,
+          label: document.getElementById('label').textContent
+        }))JS", "async-save-failure.js");
+    require(
+        failed_state
+            == R"JSON({"requests":2,"acknowledgements":2,"pending":false,"lastShouldFail":true,"label":"Save"})JSON",
+        "failed save acknowledgement incorrectly cleared the dirty label: "
+            + failed_state);
+    webscene_engine_destroy(engine);
+}
+
 void test_ordered_scene_consumer_preserves_two_diff_chain()
 {
     auto* engine = webscene_engine_create(64);

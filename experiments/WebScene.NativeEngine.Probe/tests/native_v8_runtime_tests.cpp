@@ -363,6 +363,7 @@ int main()
     test_enter_dispatches_browser_keypress_for_interval_commit(engine);
     test_css_linear_gradient_reaches_the_retained_scene(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
+    test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_translate_calc_arguments_preserve_nested_functions(engine);
     test_zero_depth_translate3d_positions_fixed_coach_mark(engine);
@@ -432,6 +433,7 @@ int main()
     test_runtime_work_is_attributed();
     test_scene_flow_is_attributed();
     test_read_only_evaluation_does_not_publish_scene();
+    test_async_save_acknowledgement_publishes_without_pointer_input();
     test_ordered_scene_consumer_preserves_two_diff_chain();
     test_keyboard_and_pointer_focus_modality();
     test_navigator_platform_and_wheel_modifiers(engine);

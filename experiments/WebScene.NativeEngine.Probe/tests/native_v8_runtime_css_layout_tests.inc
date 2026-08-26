@@ -1378,17 +1378,96 @@ void test_active_chart_generated_border_tracks_active_class(webscene_engine* eng
             && left.canvas_layers == 2U,
         "the active left chart's ::after border did not paint above its retained canvas");
 
+    auto stable_revision = left.revision;
+    for (auto index = 0U; index < 24U; ++index) {
+        const auto consumed_before = consumed_input_count(engine);
+        pointer_move(
+            engine,
+            8.0 + static_cast<double>((index * 19U) % 145U),
+            20.0 + static_cast<double>((index % 3U) * 24U),
+            120U + index);
+        wait_for_consumed_inputs(
+            engine,
+            consumed_before + 1U,
+            "active-chart pointer stress input was not consumed");
+        const auto during_pointer_motion = observe_border(stable_revision);
+        require(
+            during_pointer_motion.x >= 0 && during_pointer_motion.x < 10
+                && std::abs(during_pointer_motion.width - 158.0F) < 0.01F
+                && during_pointer_motion.canvas_layers == 2U,
+            "the active chart border disappeared or moved during pointer-driven scene publication");
+        stable_revision = during_pointer_motion.revision;
+    }
+
     execute_and_wait(engine, R"JS(
         document.getElementById('left-chart').classList.remove('active');
         document.getElementById('right-chart').classList.add('active');
     )JS", "native-active-chart-pseudo-border-switch.js");
-    const auto right = observe_border(left.revision);
+    const auto right = observe_border(stable_revision);
     require(
         right.x > 160 && right.x < 170
             && std::abs(right.width - 158.0F) < 0.01F
             && right.radius > 4.0F
             && right.canvas_layers == 2U,
         "the generated selection border did not move above the active chart canvas");
+}
+
+void test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin:0; width:320px; height:180px; }
+              #chart { width:320px; height:180px; }
+              #portal-wrapper { position:relative; }
+              #tooltip { position:fixed; z-index:1000; left:90px; top:55px;
+                width:150px; height:44px; background:rgb(68,85,102); }
+              #popup { position:fixed; z-index:100; left:60px; top:30px;
+                width:220px; height:120px; background:rgb(34,34,34); }
+            </style>
+            <canvas id="chart" width="320" height="180"></canvas>
+            <div id="portal-wrapper"><div id="tooltip">Crosshair is synced</div></div>
+            <div id="popup">Layout popup</div>`;
+          const context = document.getElementById('chart').getContext('2d');
+          context.fillStyle = 'rgb(5, 10, 15)';
+          context.fillRect(0, 0, 320, 180);
+        })()
+    )JS", "native-popup-tooltip-stacking-setup.js");
+
+    const auto hit = evaluate(
+        engine,
+        "document.elementFromPoint(110, 70)?.id",
+        "native-popup-tooltip-hit.js");
+    require(
+        hit == R"("tooltip")",
+        "a portal tooltip inside a positioned z-index:auto wrapper did not hit above its popup: "
+            + hit);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto popup_index = -1;
+    auto tooltip_index = -1;
+    for (auto attempt = 0; attempt < 100 && tooltip_index < 0; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind == 9U && (command.rgba >> 8U) == 0x222222U) {
+                    popup_index = static_cast<int>(index);
+                }
+                if (command.kind == 9U && (command.rgba >> 8U) == 0x445566U) {
+                    tooltip_index = static_cast<int>(index);
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (tooltip_index < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        popup_index >= 0 && tooltip_index > popup_index,
+        "the popup-owned tooltip was retained behind the popup surface");
 }
 
 void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)

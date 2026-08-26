@@ -12,6 +12,12 @@ void native_document::build_scene(
     for (auto* child : composed_children(*body_)) {
         collect_fixed_positioned_nodes(*this, *child, fixed);
     }
+    std::stable_sort(
+        fixed.begin(),
+        fixed.end(),
+        [](const auto* left, const auto* right) {
+            return left->paint_z_index < right->paint_z_index;
+        });
     for (const auto* fixed_node : fixed) {
         if (!display_tree_allows_render(*this, *fixed_node)) continue;
         auto inherited_visibility_hidden = false;
