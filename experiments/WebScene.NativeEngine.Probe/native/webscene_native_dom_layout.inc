@@ -2908,6 +2908,23 @@ void native_document::layout_children(dom_node& parent)
         : std::max(
             content.height,
             std::max(cursor, maximum_float_bottom - content.y));
+    // Blink determines the exposed scroll dimensions from pixel-snapped
+    // layout sizes. A fractional descendant edge that remains inside the same
+    // snapped CSS pixel as the scrollport therefore creates no usable scroll
+    // range. Keep the retained range in step with that contract; otherwise a
+    // 0.15px line-box remainder paints a permanent overlay rail even though
+    // clientHeight and scrollHeight are equal in the browser.
+    const auto snap_size_to_css_pixel = [](float size, float origin) {
+        return std::round(origin + size) - std::round(origin);
+    };
+    if (snap_size_to_css_pixel(parent.scroll_content_width, content.x)
+        <= snap_size_to_css_pixel(parent.scroll_viewport_width, content.x)) {
+        parent.scroll_content_width = parent.scroll_viewport_width;
+    }
+    if (snap_size_to_css_pixel(parent.scroll_content_height, content.y)
+        <= snap_size_to_css_pixel(parent.scroll_viewport_height, content.y)) {
+        parent.scroll_content_height = parent.scroll_viewport_height;
+    }
     // Content can shrink while the user is already scrolled. Re-clamp against
     // the freshly computed extent in the same layout pass; clamping only at
     // the start used the previous extent and left a stale, apparently endless

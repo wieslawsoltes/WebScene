@@ -1012,6 +1012,79 @@ void test_tradingview_symbol_info_auto_height_has_no_scrollbar(
         result == R"JSON({"popupHeight":155,"scrollHeight":155,"wrapperHeight":121,"clientHeight":155,"contentScrollHeight":155,"overflowY":"scroll"})JSON",
         "TradingView Symbol Info hierarchy retained stale overflow geometry: " + result);
 
+    const auto definite_result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            * { box-sizing:border-box; }
+            body { margin:0; }
+            #popup { width:480px; height:856px; display:flex; flex-direction:column; }
+            #header { height:138px; flex:0 0 auto; }
+            #scrollWrap { flex:1 1 auto; min-height:0; overflow-x:hidden;
+              overflow-y:scroll; padding:14px 20px 20px; background:rgb(5,6,7); }
+            #wrapper { display:flex; flex-direction:column; height:100%; }
+            #content { height:640px; flex:0 0 auto; }
+          </style><div id="popup"><div id="header"></div><div id="scrollWrap">
+            <div id="wrapper"><div id="content"></div></div>
+          </div></div>`;
+          const rect = node => node.getBoundingClientRect();
+          const scrollWrap = document.getElementById('scrollWrap');
+          return {
+            popupHeight: rect(document.getElementById('popup')).height,
+            headerHeight: rect(document.getElementById('header')).height,
+            scrollHeight: rect(scrollWrap).height,
+            wrapperHeight: rect(document.getElementById('wrapper')).height,
+            clientHeight: scrollWrap.clientHeight,
+            contentScrollHeight: scrollWrap.scrollHeight
+          };
+        })()
+    )JS", "tradingview-symbol-info-definite-overflow.js");
+    require(
+        definite_result == R"JSON({"popupHeight":856,"headerHeight":138,"scrollHeight":718,"wrapperHeight":684,"clientHeight":718,"contentScrollHeight":718})JSON",
+        "TradingView Symbol Info definite padded viewport created phantom overflow: "
+            + definite_result);
+
+    const auto production_result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { width:480px; height:428.25px; display:flex;
+              flex-direction:column; }
+            #header { height:71px; flex:0 0 auto; }
+            #scrollWrap { flex:1 1 auto; min-height:0; overflow-x:hidden;
+              overflow-y:scroll; padding:14px 20px 20px; background:rgb(5,6,7); }
+            #firstGroup { height:52px; margin-top:-16px; }
+            .groupSeparator { height:1px; margin-top:16px; }
+            #group { height:156px; }
+            .widgetSeparator { height:1px; margin:16px 0; }
+            #sessionHeader { height:18px; display:flex; }
+            #sessionWidget { height:53.4043px; margin-top:10px; display:flex; }
+          </style><div id="dialog"><div id="header"></div><div id="scrollWrap">
+            <div id="firstGroup"></div><div class="groupSeparator"></div>
+            <div id="group"></div><div class="widgetSeparator"></div>
+            <div id="sessionHeader"></div><div id="sessionWidget"></div>
+          </div></div>`;
+          const wrap = document.getElementById('scrollWrap');
+          const last = document.getElementById('sessionWidget');
+          const wrapRect = wrap.getBoundingClientRect();
+          const lastRect = last.getBoundingClientRect();
+          const paddingBottom = parseFloat(getComputedStyle(wrap).paddingBottom);
+          return {
+            dialogHeight: document.getElementById('dialog').getBoundingClientRect().height,
+            wrapHeight: wrapRect.height,
+            clientHeight: wrap.clientHeight,
+            scrollHeight: wrap.scrollHeight,
+            roundedClientHeight: Math.round(wrap.clientHeight),
+            roundedScrollHeight: Math.round(wrap.scrollHeight),
+            subpixelOverflow: Math.round(
+              (lastRect.bottom - (wrapRect.bottom - paddingBottom)) * 10000) / 10000
+          };
+        })()
+    )JS", "tradingview-symbol-info-production-overflow.js");
+    require(
+        production_result == R"JSON({"dialogHeight":428.25,"wrapHeight":357.25,"clientHeight":357.25,"scrollHeight":357.25,"roundedClientHeight":357,"roundedScrollHeight":357,"subpixelOverflow":0.1543})JSON",
+        "TradingView Symbol Info production geometry changed unexpectedly: "
+            + production_result);
+
     webscene_engine_request_scene_checkpoint(engine);
     auto observed_wrap = false;
     auto painted_scrollbar = false;

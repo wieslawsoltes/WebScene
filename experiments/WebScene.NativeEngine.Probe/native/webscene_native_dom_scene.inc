@@ -1531,10 +1531,21 @@ void native_document::append_scene(
         const auto viewport_height = std::max(
             0.0F,
             node.layout.height - border_top - border_bottom - padding_top - padding_bottom);
+        const auto snap_size_to_css_pixel = [](float size, float origin) {
+            return std::round(origin + size) - std::round(origin);
+        };
+        const auto snapped_viewport_width = snap_size_to_css_pixel(
+            node.scroll_viewport_width, viewport_x);
+        const auto snapped_viewport_height = snap_size_to_css_pixel(
+            node.scroll_viewport_height, viewport_y);
+        const auto snapped_content_width = snap_size_to_css_pixel(
+            node.scroll_content_width, viewport_x);
+        const auto snapped_content_height = snap_size_to_css_pixel(
+            node.scroll_content_height, viewport_y);
         const auto maximum_x = std::max(
-            0.0F, node.scroll_content_width - node.scroll_viewport_width);
+            0.0F, snapped_content_width - snapped_viewport_width);
         const auto maximum_y = std::max(
-            0.0F, node.scroll_content_height - node.scroll_viewport_height);
+            0.0F, snapped_content_height - snapped_viewport_height);
         constexpr auto rail_rgba = 0x7F7F7F40U;
         constexpr auto thumb_rgba = 0xA0A0A0D0U;
         constexpr auto thickness = 6.0F;
@@ -1572,8 +1583,8 @@ void native_document::append_scene(
                 rail_height,
                 std::max(
                     minimum_thumb,
-                    rail_height * viewport_height
-                        / std::max(viewport_height, node.scroll_content_height)));
+                    rail_height * snapped_viewport_height
+                        / std::max(snapped_viewport_height, snapped_content_height)));
             const auto thumb_travel = std::max(0.0F, rail_height - thumb_height);
             const auto thumb_y = rail_y + thumb_travel
                 * std::clamp(node.scroll_top / maximum_y, 0.0F, 1.0F);
@@ -1592,8 +1603,8 @@ void native_document::append_scene(
                 rail_width,
                 std::max(
                     minimum_thumb,
-                    rail_width * viewport_width
-                        / std::max(viewport_width, node.scroll_content_width)));
+                    rail_width * snapped_viewport_width
+                        / std::max(snapped_viewport_width, snapped_content_width)));
             const auto thumb_travel = std::max(0.0F, rail_width - thumb_width);
             const auto thumb_x = rail_x + thumb_travel
                 * std::clamp(node.scroll_left / maximum_x, 0.0F, 1.0F);
