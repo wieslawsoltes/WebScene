@@ -1004,6 +1004,13 @@
       "reason": "Product-neutral reductions of the form layouts that were changed to flex during the 7GUIs port: equal fractional columns around an automatic separator, minmax fractional CRUD columns, source-order auto placement, and ordinary explicit row/column placement."
     },
     {
+      "path": "contracts/css-grid-column-subgrid-form-row.html",
+      "type": "contract",
+      "capabilities": ["grid-column-subgrid", "grid-spanning-subgrid", "inherited-grid-track-sizing", "paired-form-control-alignment"],
+      "evidence": ["reported-trading-settings-paired-control-layout"],
+      "reason": "Production-shaped reduction of the Trading settings rows: a nested grid spanning both parent columns inherits their used column geometry so each checkbox label and select remain aligned on one row."
+    },
+    {
       "path": "contracts/grid-auto-row-stretch-dir-radius.html",
       "type": "reftest",
       "reference": "contracts/grid-auto-row-stretch-dir-radius-ref.html",

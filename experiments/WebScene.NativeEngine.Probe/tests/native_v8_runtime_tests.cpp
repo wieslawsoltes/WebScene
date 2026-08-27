@@ -150,6 +150,22 @@ int main()
             test_tradingview_switch_repeated_transitions_publish_dense_scenes();
             return 0;
         }
+        if (selected == "tradingview-settings-scroll") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-svg-checker") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_repeating_svg_checker_background_reaches_scene(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "active-chart-pseudo-border") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -344,6 +360,7 @@ int main()
     test_hover_invalidation_updates_functional_and_sibling_subjects(engine);
     test_hover_moves_between_block_and_display_contents_child(engine);
     test_single_fractional_grid_track_stays_one_column(engine);
+    test_tradingview_settings_subgrid_keeps_controls_on_their_rows(engine);
     test_footer_grid_direction_and_focus_within_state(engine);
     test_active_chart_generated_border_tracks_active_class(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
@@ -455,6 +472,7 @@ int main()
     test_positive_z_before_paints_above_lower_z_child(engine);
     test_element_opacity_emits_isolated_group(engine);
     test_svg_background_image_reaches_scene_with_position_and_size(engine);
+    test_tradingview_repeating_svg_checker_background_reaches_scene(engine);
     test_svg_img_element_loads_and_reaches_scene(engine);
     test_virtual_html_root_inherits_font_metrics(engine);
     test_font_shorthand_inherit_resets_control_metrics(engine);

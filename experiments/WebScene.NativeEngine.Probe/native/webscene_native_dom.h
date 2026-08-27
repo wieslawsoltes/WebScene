@@ -300,6 +300,7 @@ struct node_style final {
         std::vector<track> template_columns;
         std::vector<track> template_rows;
         std::vector<track> auto_columns;
+        bool subgrid_columns{false};
         bool two_columns{false};
         bool auto_flow_column{false};
         bool fractional_rows{false};
@@ -925,6 +926,11 @@ struct dom_node final {
         float row_spacing{0};
     };
 
+    struct grid_layout_data final {
+        std::vector<float> column_widths;
+        float column_gap{0};
+    };
+
     struct form_control_data final {
         std::string value;
         size_t selection_start{0};
@@ -1122,6 +1128,31 @@ struct dom_node final {
     }
 
     std::unique_ptr<table_layout_data> table_layout_state;
+    const grid_layout_data& grid_layout() const noexcept
+    {
+        static const grid_layout_data empty;
+        return grid_layout_state == nullptr ? empty : *grid_layout_state;
+    }
+
+    grid_layout_data& mutable_grid_layout()
+    {
+        if (grid_layout_state == nullptr) {
+            grid_layout_state = std::make_unique<grid_layout_data>();
+        }
+        return *grid_layout_state;
+    }
+
+    bool has_grid_layout() const noexcept
+    {
+        return grid_layout_state != nullptr;
+    }
+
+    void clear_grid_layout() noexcept
+    {
+        grid_layout_state.reset();
+    }
+
+    std::unique_ptr<grid_layout_data> grid_layout_state;
     // Live value/selection/checked/focus state is absent from ordinary DOM
     // nodes. Option selectedness and checkedness remain separate from their
     // authored attributes inside this cold record.

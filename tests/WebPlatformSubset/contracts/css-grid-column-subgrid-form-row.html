@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A column subgrid keeps paired form controls on inherited tracks</title>
+<style>
+  body { margin: 0; font: 14px/18px Arial, sans-serif; }
+  #settings {
+    box-sizing: border-box;
+    display: inline-grid;
+    grid-template-columns: auto 1fr;
+    padding: 16px 20px;
+    width: 500px;
+  }
+  .cell { align-items: center; display: flex; }
+  .cell .inner { align-items: center; display: flex; padding: 8px 0; }
+  .cell.first { min-width: 0; }
+  .cell.first .inner {
+    display: block;
+    min-width: 0;
+    padding-inline-end: 20px;
+  }
+  .cell.offset { padding-inline-start: 26px; }
+  #reference-title { width: 260px; }
+  .control { box-sizing: border-box; display: block; height: 34px; width: 160px; }
+  #paired-row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    margin-top: -8px;
+  }
+</style>
+<div id="settings">
+  <div class="cell first" id="reference-title"><div class="inner">Profit and loss value</div></div>
+  <div class="cell"><button class="control" id="reference-control">Money</button></div>
+  <div id="paired-row">
+    <div class="cell first offset"><div class="inner">Positions</div></div>
+    <div class="cell"><button class="control" id="paired-control">Money</button></div>
+  </div>
+</div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const rect = id => document.getElementById(id).getBoundingClientRect();
+const close = (left, right) => Math.abs(left - right) <= .01;
+try {
+  const settings = rect("settings");
+  const row = rect("paired-row");
+  const reference = rect("reference-control");
+  const paired = rect("paired-control");
+  if (!close(row.left, 20) || !close(row.width, 460)) {
+    throw new Error("the spanning subgrid did not retain the parent content area: "
+      + JSON.stringify(row));
+  }
+  if (!close(reference.left, paired.left)) {
+    throw new Error("the nested control did not inherit the parent second column: "
+      + JSON.stringify({ reference, paired }));
+  }
+  if (!close(row.height, 34) || !close(reference.top + 26, paired.top)) {
+    throw new Error("the paired control wrapped below its label: "
+      + JSON.stringify({ row, reference, paired }));
+  }
+  if (!close(settings.width, 500) || !close(paired.width, 160)) {
+    throw new Error("the form or paired control used size changed: "
+      + JSON.stringify({ settings, paired }));
+  }
+  state.results.push({
+    name: "a spanning column subgrid inherits the parent form tracks",
+    status: "PASS", message: null, stack: null
+  });
+  state.harness = { status: 0, message: null, stack: null };
+  state.diagnostics.push(JSON.stringify({ settings, row, reference, paired }));
+} catch (error) {
+  state.results.push({
+    name: "a spanning column subgrid inherits the parent form tracks",
+    status: "FAIL", message: String(error && error.message || error),
+    stack: error && error.stack ? String(error.stack) : null
+  });
+  state.harness = { status: 1, message: state.results[0].message, stack: state.results[0].stack };
+}
+state.complete = true;
+</script>

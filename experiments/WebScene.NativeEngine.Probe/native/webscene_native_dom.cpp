@@ -186,8 +186,14 @@ paint_z_index_update update_paint_z_index(
     dom_node& node) noexcept
 {
     auto descendant_z_index = 0;
-    auto contains_retained_canvas =
-        node.tag == "canvas" && !node.canvas().commands.empty();
+    // Canvas paint order is structural. A width/height reset clears its
+    // display list before the application redraws, but it does not move the
+    // element or an authored ::after overlay to a different CSS paint phase.
+    // Basing this bit on the current command list made the cached layout state
+    // alternate between backdrop and overlay across ordinary chart redraws.
+    auto contains_retained_canvas = node.tag == "canvas"
+        && node.visible
+        && node.style.display != display_mode::none;
     for (auto* child : document.composed_children(node)) {
         const auto child_update = update_paint_z_index(document, *child);
         descendant_z_index = std::max(
@@ -245,7 +251,12 @@ size_t count_retained_canvases(
     const native_document& document,
     const dom_node& node)
 {
-    auto count = node.tag == "canvas" && !node.canvas().commands.empty()
+    // Count visible canvas elements rather than non-empty display lists. The
+    // latter can be transiently empty between reset and redraw and must not
+    // change the stable backdrop/canvas/overlay partition.
+    auto count = node.tag == "canvas"
+        && node.visible
+        && node.style.display != display_mode::none
         ? size_t{1U}
         : size_t{0U};
     for (const auto* child : document.composed_children(node)) {
@@ -266,7 +277,9 @@ void update_retained_canvas_paint_phase(
     // the final canvas can safely use the global overlay by document order.
     node.paints_after_retained_canvas =
         retained_canvas_seen && retained_canvases_remaining == 0U;
-    if (node.tag == "canvas" && !node.canvas().commands.empty()) {
+    if (node.tag == "canvas"
+        && node.visible
+        && node.style.display != display_mode::none) {
         retained_canvas_seen = true;
         if (retained_canvases_remaining != 0U) {
             --retained_canvases_remaining;

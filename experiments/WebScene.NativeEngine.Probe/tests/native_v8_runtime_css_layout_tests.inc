@@ -1187,6 +1187,67 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
     }
 }
 
+void test_tradingview_settings_subgrid_keeps_controls_on_their_rows(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              .content {
+                box-sizing: border-box;
+                display: inline-grid;
+                grid-template-columns: auto 1fr;
+                padding: 16px 20px;
+                width: 300px;
+              }
+              .cell { align-items: center; display: flex; }
+              .cell .inner { align-items: center; display: flex; padding: 8px 0; }
+              .cell.first { min-width: 0; }
+              .cell.first .inner {
+                display: block;
+                min-width: 0;
+                padding-inline-end: 20px;
+              }
+              .cell.offset { padding-inline-start: 26px; }
+              .reference-title { width: 120px; }
+              .control { box-sizing: border-box; display: block; height: 34px; width: 100px; }
+              .wrap-row {
+                display: grid;
+                grid-column: 1 / -1;
+                grid-template-columns: subgrid;
+                margin-top: -8px;
+              }
+            </style>
+            <div class="content" id="content">
+              <div class="cell first reference-title"><div class="inner">Profit and loss value</div></div>
+              <div class="cell"><button class="control" id="reference">Money</button></div>
+              <div class="wrap-row" id="row">
+                <div class="cell first offset"><div class="inner">Positions</div></div>
+                <div class="cell"><button class="control" id="positions">Money</button></div>
+              </div>
+            </div>`;
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const content = rect('content');
+          const row = rect('row');
+          const reference = rect('reference');
+          const positions = rect('positions');
+          const near = (left, right) => Math.abs(left - right) < 0.01;
+          return {
+            oneRow: near(row.height, 34) && near(reference.top + 26, positions.top),
+            inheritedColumn: near(reference.left, positions.left),
+            row: [row.left, row.width],
+            content: [content.left, content.width],
+            controlWidth: positions.width
+          };
+        })()
+    )JS", "native-tradingview-settings-subgrid.js");
+    require(
+        result == R"JSON({"oneRow":true,"inheritedColumn":true,"row":[20,260],"content":[0,300],"controlWidth":100})JSON",
+        "TradingView settings subgrid stacked its checkbox/select row: " + result);
+}
+
 void test_footer_grid_direction_and_focus_within_state(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -1308,6 +1369,9 @@ void test_active_chart_generated_border_tracks_active_class(webscene_engine* eng
               .layout-with-border-radius .chart-container.multiple.active:after {
                 border-radius: 6px;
               }
+              .chart-container:hover {
+                color: rgb(210, 210, 210);
+              }
             </style>
             <div class="chart-page layout-with-border-radius">
               <div id="left-chart" class="chart-container multiple active">
@@ -1337,6 +1401,7 @@ void test_active_chart_generated_border_tracks_active_class(webscene_engine* eng
         float stroke{0};
         float radius{0};
         uint32_t canvas_layers{0};
+        bool foreground{false};
     };
     const auto observe_border = [&](uint64_t minimum_revision) {
         observed_border observed{};
@@ -1349,13 +1414,14 @@ void test_active_chart_generated_border_tracks_active_class(webscene_engine* eng
                     observed.canvas_layers = scene->header.canvas_layer_count;
                     for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                         const auto& command = scene->commands[index];
-                        if (command.kind == 11U
+                        if ((command.kind == 11U || command.kind == 8U)
                             && command.rgba == 0x2962FFFFU
                             && std::abs(command.stroke_width - 2.0F) < 0.01F) {
                             observed.x = command.x;
                             observed.width = command.width;
                             observed.stroke = command.stroke_width;
                             observed.radius = command.radius_top_left;
+                            observed.foreground = command.kind == 11U;
                             break;
                         }
                     }
@@ -1375,10 +1441,40 @@ void test_active_chart_generated_border_tracks_active_class(webscene_engine* eng
         left.x >= 0 && left.x < 10
             && std::abs(left.width - 158.0F) < 0.01F
             && left.radius > 4.0F
+            && left.foreground
             && left.canvas_layers == 2U,
         "the active left chart's ::after border did not paint above its retained canvas");
 
-    auto stable_revision = left.revision;
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const canvas = document.getElementById('left-canvas');
+          canvas.width = canvas.width;
+          const chart = document.getElementById('left-chart');
+          chart.style.width = '160px';
+          chart.getBoundingClientRect();
+        })()
+    )JS", "native-active-chart-canvas-reset.js");
+    const auto reset_canvas = observe_border(left.revision);
+    require(
+        reset_canvas.x >= 0 && reset_canvas.foreground
+            && reset_canvas.canvas_layers == 1U,
+        "resetting an active chart canvas demoted its selection border into the backdrop");
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const canvas = document.getElementById('left-canvas');
+          const context = canvas.getContext('2d');
+          context.fillStyle = 'rgb(20, 20, 20)';
+          context.fillRect(0, 0, 160, 120);
+        })()
+    )JS", "native-active-chart-canvas-redraw.js");
+    const auto redrawn_canvas = observe_border(reset_canvas.revision);
+    require(
+        redrawn_canvas.x >= 0 && redrawn_canvas.foreground
+            && redrawn_canvas.canvas_layers == 2U,
+        "redrawing an active chart canvas left its selection border in the backdrop");
+
+    auto stable_revision = redrawn_canvas.revision;
     for (auto index = 0U; index < 24U; ++index) {
         const auto consumed_before = consumed_input_count(engine);
         pointer_move(

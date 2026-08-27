@@ -75,6 +75,35 @@ public sealed class SvgPictureRenderingTests
         Assert.True(hasBrightForeground, "The SVG foreground path was absent from the rendered picture.");
     }
 
+    [Fact]
+    public void TradingViewOpacityPatternRepeatsAcrossTheEntireSwatch()
+    {
+        const string markup = """
+            <svg width="8" height="8" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="#2A2E39" fill-opacity="0.4" d="M0 0h4v4H0zM4 4h4v4H4z"/></svg>
+            """;
+        const string resource = "webscene-bg-svg-v1\t0 0 8 8\trepeat\t0% 0%\t50%\t"
+            + markup;
+        var command = new SceneCommand { Width = 24, Height = 24 };
+        var baseColor = new SKColor(5, 7, 12);
+        using var bitmap = new SKBitmap(24, 24, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(baseColor);
+        var renderer = new NativeCanvasSceneRenderer();
+
+        renderer.DrawDomSvgBackgroundForTest(canvas, resource, command);
+        canvas.Flush();
+
+        var firstDarkSquare = bitmap.GetPixel(2, 2);
+        var firstClearSquare = bitmap.GetPixel(8, 2);
+        Assert.NotEqual(baseColor, firstDarkSquare);
+        Assert.Equal(baseColor, firstClearSquare);
+        Assert.Equal(firstDarkSquare, bitmap.GetPixel(14, 2));
+        Assert.Equal(firstClearSquare, bitmap.GetPixel(20, 2));
+        Assert.Equal(firstClearSquare, bitmap.GetPixel(2, 8));
+        Assert.Equal(firstDarkSquare, bitmap.GetPixel(8, 8));
+        Assert.Equal(firstDarkSquare, bitmap.GetPixel(20, 20));
+    }
+
     private static SKBitmap RenderLayoutIcon(SKPicture picture, float[] viewBox)
     {
         var bitmap = new SKBitmap(29, 27);

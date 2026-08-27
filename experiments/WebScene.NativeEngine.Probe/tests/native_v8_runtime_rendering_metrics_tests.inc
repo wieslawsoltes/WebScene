@@ -589,16 +589,18 @@ void test_svg_background_image_reaches_scene_with_position_and_size(webscene_eng
                 const auto& command = scene->commands[index];
                 if (command.kind == 6U
                     && std::abs(command.x) < 0.01F
-                    && std::abs(command.y - 2.0F) < 0.01F
-                    && std::abs(command.width - 48.0F) < 0.01F
-                    && std::abs(command.height - 24.0F) < 0.01F
+                    && std::abs(command.y) < 0.01F
+                    && std::abs(command.width - 100.0F) < 0.01F
+                    && std::abs(command.height - 60.0F) < 0.01F
                     && command.flags < scene->string_count) {
                     const auto resource = scene->strings[command.flags];
                     const std::string_view bytes(
                         scene->string_bytes + resource.byte_offset,
                         resource.byte_length);
-                    found = bytes.find("<svg") != std::string_view::npos
-                        && bytes.find("0 0 2 1") != std::string_view::npos;
+                    found = bytes.starts_with("webscene-bg-svg-v1\t0 0 2 1\t")
+                        && bytes.find("\tno-repeat\t0 2px\t48px auto\t")
+                            != std::string_view::npos
+                        && bytes.find("<svg") != std::string_view::npos;
                     break;
                 }
             }
@@ -610,7 +612,92 @@ void test_svg_background_image_reaches_scene_with_position_and_size(webscene_eng
     }
     std::error_code cleanup_error;
     std::filesystem::remove_all(resource_directory, cleanup_error);
-    require(found, "URL-backed SVG background did not reach the scene at 0,2 48x24");
+    require(
+        found,
+        "URL-backed SVG background did not retain its 100x60 paint box and longhands");
+}
+
+void test_tradingview_repeating_svg_checker_background_reaches_scene(
+    webscene_engine* engine)
+{
+    const auto resource_directory = std::filesystem::temp_directory_path()
+        / ("webscene-tradingview-opacity-pattern-"
+            + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(resource_directory);
+    const auto svg_path = resource_directory / "opacity-pattern.svg";
+    {
+        std::ofstream svg(svg_path, std::ios::binary);
+        // This is the production TradingView opacity-pattern SVG used by the
+        // Canvas/Grid lines color controls.
+        svg << R"(<svg width="8" height="8" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="#2A2E39" fill-opacity="0.4" d="M0 0h4v4H0zM4 4h4v4H4z"/></svg>)";
+    }
+    const auto root = resource_directory.string();
+    require(
+        webscene_engine_set_resource_root(engine, root.data(), root.size()) != 0,
+        "TradingView checker fixture resource root was rejected");
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin: 0; }
+            .opacitySwatch {
+              background-image: url("opacity-pattern.svg");
+              background-size: 50%;
+              border-radius: 3px;
+              height: 24px;
+              width: 24px;
+            }
+          </style><div class="opacitySwatch"></div>`;
+        })()
+    )JS", "tradingview-repeating-svg-checker-setup.js");
+    const auto computed = evaluate(engine, R"JS((() => {
+      const style = getComputedStyle(document.querySelector('.opacitySwatch'));
+      return {
+        image: style.backgroundImage,
+        repeat: style.backgroundRepeat,
+        size: style.backgroundSize
+      };
+    })())JS", "tradingview-repeating-svg-checker-cssom.js");
+    require(
+        computed.find(R"("repeat":"repeat")") != std::string::npos
+            && computed.find(R"("size":"50%")") != std::string::npos,
+        "TradingView checker background longhands were not preserved: " + computed);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found = false;
+    auto observed_resource = std::string{};
+    for (auto attempt = 0; attempt < 100 && !found; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 6U
+                    || command.flags >= scene->string_count
+                    || std::abs(command.width - 24.0F) >= 0.01F
+                    || std::abs(command.height - 24.0F) >= 0.01F) {
+                    continue;
+                }
+                const auto& descriptor = scene->strings[command.flags];
+                observed_resource.assign(
+                    scene->string_bytes + descriptor.byte_offset,
+                    descriptor.byte_length);
+                found = observed_resource.starts_with("webscene-bg-svg-v1\t0 0 8 8\t")
+                    && observed_resource.find("\trepeat\t0% 0%\t50%\t")
+                        != std::string::npos
+                    && observed_resource.find("M0 0h4v4H0zM4 4h4v4H4z")
+                        != std::string::npos;
+                if (found) break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!found) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(resource_directory, cleanup_error);
+    require(
+        found,
+        "TradingView checker was not retained as a repeating SVG background brush: "
+            + observed_resource);
 }
 
 void test_svg_img_element_loads_and_reaches_scene(webscene_engine* engine)

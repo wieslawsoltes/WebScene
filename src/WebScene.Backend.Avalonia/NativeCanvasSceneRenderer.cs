@@ -459,7 +459,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         break;
                     case 6:
                         NativeSceneDrawOperation.SvgCommandCount++;
-                        DrawDomSvg(overlay, view, command);
+                        DrawDomSvg(
+                            overlay,
+                            view,
+                            command,
+                            ResolveDomCornerRadii(commands, commandIndex));
                         break;
                     case 21:
                     case 22:
@@ -693,6 +697,13 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         string Repeat,
         string Position,
         string Size);
+
+    private readonly record struct DomSvgBackgroundResource(
+        string ViewBox,
+        string Repeat,
+        string Position,
+        string Size,
+        string Markup);
 
     internal static bool TryParseDomLinearGradient(
         string value,
@@ -1690,9 +1701,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private void DrawDomSvg(
         SKCanvas canvas,
         NativeSceneView* view,
-        in SceneCommand command)
+        in SceneCommand command,
+        in DomCornerRadii radii)
     {
         var resource = DomStringAt(view, command.Flags);
+        if (TryDecodeDomSvgBackgroundResource(resource, out var background))
+        {
+            DrawDomSvgBackground(canvas, background, command, radii);
+            return;
+        }
         var firstSeparator = resource.IndexOf('\t');
         if (firstSeparator <= 0 || firstSeparator == resource.Length - 1
             || command.Width <= 0 || command.Height <= 0)
@@ -1745,6 +1762,208 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             canvas.RestoreToCount(save);
         }
+    }
+
+    internal void DrawDomSvgBackgroundForTest(
+        SKCanvas canvas,
+        string resource,
+        in SceneCommand command)
+    {
+        if (TryDecodeDomSvgBackgroundResource(resource, out var background))
+        {
+            DrawDomSvgBackground(canvas, background, command, default);
+        }
+    }
+
+    private static bool TryDecodeDomSvgBackgroundResource(
+        string value,
+        out DomSvgBackgroundResource resource)
+    {
+        const string prefix = "webscene-bg-svg-v1\t";
+        resource = default;
+        if (!value.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        var fields = value[prefix.Length..].Split('\t', 5);
+        if (fields.Length != 5)
+        {
+            return false;
+        }
+        resource = new DomSvgBackgroundResource(
+            fields[0],
+            fields[1],
+            fields[2],
+            fields[3],
+            fields[4]);
+        return true;
+    }
+
+    private void DrawDomSvgBackground(
+        SKCanvas canvas,
+        in DomSvgBackgroundResource resource,
+        in SceneCommand command,
+        in DomCornerRadii radii)
+    {
+        var viewBox = ParseSvgNumbers(resource.ViewBox);
+        if (viewBox.Length < 4
+            || viewBox[2] <= 0
+            || viewBox[3] <= 0
+            || command.Width <= 0
+            || command.Height <= 0)
+        {
+            return;
+        }
+        if (!s_svgPictures.TryGetValue(resource.Markup, out var svg))
+        {
+            var acquired = SharedSvgPictureCache.Acquire(resource.Markup);
+            if (acquired is null)
+            {
+                return;
+            }
+            svg = acquired;
+            s_svgPictures.Add(svg.Markup, svg);
+        }
+
+        ResolveDomSvgBackgroundSize(
+            resource.Size,
+            command.Width,
+            command.Height,
+            viewBox[2],
+            viewBox[3],
+            out var tileWidth,
+            out var tileHeight);
+        if (tileWidth <= 0 || tileHeight <= 0)
+        {
+            return;
+        }
+        ResolveDomBackgroundPosition(
+            resource.Position,
+            command.Width,
+            command.Height,
+            tileWidth,
+            tileHeight,
+            out var offsetX,
+            out var offsetY);
+        ResolveDomBackgroundRepeat(
+            resource.Repeat,
+            out var repeatX,
+            out var repeatY);
+
+        var firstX = command.X + offsetX;
+        var firstY = command.Y + offsetY;
+        if (repeatX)
+        {
+            while (firstX > command.X) firstX -= tileWidth;
+            while (firstX + tileWidth <= command.X) firstX += tileWidth;
+        }
+        if (repeatY)
+        {
+            while (firstY > command.Y) firstY -= tileHeight;
+            while (firstY + tileHeight <= command.Y) firstY += tileHeight;
+        }
+
+        var restore = canvas.Save();
+        try
+        {
+            ClipDomBackground(canvas, command, radii);
+            var endX = repeatX ? command.X + command.Width : firstX + tileWidth;
+            var endY = repeatY ? command.Y + command.Height : firstY + tileHeight;
+            for (var y = firstY; y < endY; y += tileHeight)
+            {
+                for (var x = firstX; x < endX; x += tileWidth)
+                {
+                    DrawSvgPictureInViewport(
+                        canvas,
+                        svg.Picture,
+                        new SKRect(x, y, x + tileWidth, y + tileHeight),
+                        viewBox,
+                        "xMidYMid meet");
+                    if (!repeatX) break;
+                }
+                if (!repeatY) break;
+            }
+        }
+        finally
+        {
+            canvas.RestoreToCount(restore);
+        }
+    }
+
+    private static void ResolveDomSvgBackgroundSize(
+        string value,
+        float width,
+        float height,
+        float intrinsicWidth,
+        float intrinsicHeight,
+        out float tileWidth,
+        out float tileHeight)
+    {
+        var tokens = SplitTopLevelWhitespace(value);
+        var first = tokens.Count > 0 ? tokens[0].Trim().ToLowerInvariant() : "auto";
+        var second = tokens.Count > 1 ? tokens[1].Trim().ToLowerInvariant() : "auto";
+        if (first is "cover" or "contain")
+        {
+            var scaleX = width / intrinsicWidth;
+            var scaleY = height / intrinsicHeight;
+            var scale = first == "cover"
+                ? Math.Max(scaleX, scaleY)
+                : Math.Min(scaleX, scaleY);
+            tileWidth = intrinsicWidth * scale;
+            tileHeight = intrinsicHeight * scale;
+            return;
+        }
+
+        var resolvedWidth = first == "auto"
+            ? float.NaN
+            : ResolveDomBackgroundLength(first, width, float.NaN);
+        var resolvedHeight = second == "auto"
+            ? float.NaN
+            : ResolveDomBackgroundLength(second, height, float.NaN);
+        if (float.IsFinite(resolvedWidth) && float.IsFinite(resolvedHeight))
+        {
+            tileWidth = resolvedWidth;
+            tileHeight = resolvedHeight;
+        }
+        else if (float.IsFinite(resolvedWidth))
+        {
+            tileWidth = resolvedWidth;
+            tileHeight = intrinsicHeight * resolvedWidth / intrinsicWidth;
+        }
+        else if (float.IsFinite(resolvedHeight))
+        {
+            tileHeight = resolvedHeight;
+            tileWidth = intrinsicWidth * resolvedHeight / intrinsicHeight;
+        }
+        else
+        {
+            tileWidth = intrinsicWidth;
+            tileHeight = intrinsicHeight;
+        }
+    }
+
+    private static void ResolveDomBackgroundRepeat(
+        string value,
+        out bool repeatX,
+        out bool repeatY)
+    {
+        var tokens = SplitTopLevelWhitespace(value.Trim().ToLowerInvariant());
+        if (tokens.Count == 1 && tokens[0] == "repeat-x")
+        {
+            repeatX = true;
+            repeatY = false;
+            return;
+        }
+        if (tokens.Count == 1 && tokens[0] == "repeat-y")
+        {
+            repeatX = false;
+            repeatY = true;
+            return;
+        }
+        var x = tokens.Count > 0 ? tokens[0] : "repeat";
+        var y = tokens.Count > 1 ? tokens[1] : x;
+        repeatX = x != "no-repeat";
+        repeatY = y != "no-repeat";
     }
 
     internal static void DrawSvgPictureInViewport(

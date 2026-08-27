@@ -914,15 +914,17 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
             #header { flex:0 0 68px; }
             #frame { display:flex; flex:1 1 auto; overflow:hidden; }
             #sidebar { flex:0 0 226px; min-height:145px; overflow:auto; }
-            #settings { min-height:145px; overflow-x:hidden; overflow-y:auto;
+            #settings { flex:1 1 auto; min-height:145px;
+              overflow-x:hidden; overflow-y:auto;
               background:rgb(11,22,33); }
+            #settings-viewport { height:100%; overflow:visible; }
             #footer { flex:0 0 67px; }
             #tall { height:954px; background:rgb(220,1,2); }
           </style>
           <div id="dialog"><div id="wrapper"><div id="header"></div>
             <div id="frame"><div id="sidebar"><div style="height:200px"></div></div>
-            <div id="settings"><div id="tall"><input><select><option>Auto</option>
-            </select></div></div></div>
+            <div id="settings"><div id="settings-viewport"><div id="tall">
+            <input><select><option>Auto</option></select></div></div></div></div>
             <div id="footer"></div></div></div>`;
           const dialog = document.getElementById('dialog');
           const wrapper = document.getElementById('wrapper');
@@ -933,43 +935,45 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
           const tallEscapesViewport = rect(document.getElementById('tall')).bottom
             > rect(settings).bottom;
           settings.scrollTop = 999;
+          const maximumScrollTop = settings.scrollTop;
+          settings.scrollTop = 0;
+          globalThis.__tradingViewSettingsScroller = settings;
           return {
             dialogHeight: rect(dialog).height,
             wrapperHeight: rect(wrapper).height,
             frameHeight: rect(frame).height,
             settingsHeight: rect(settings).height,
+            viewportHeight: rect(document.getElementById('settings-viewport')).height,
+            viewportScrollHeight:
+              document.getElementById('settings-viewport').scrollHeight,
             clientHeight: settings.clientHeight,
             scrollHeight: settings.scrollHeight,
-            scrollTop: settings.scrollTop,
+            scrollTop: maximumScrollTop,
             footerInside: rect(footer).bottom <= rect(dialog).bottom,
             tallEscapesViewport
           };
         })()
     )JS", "tradingview-settings-dialog-overflow.js");
     require(
-        result == R"JSON({"dialogHeight":734,"wrapperHeight":734,"frameHeight":599,"settingsHeight":599,"clientHeight":599,"scrollHeight":954,"scrollTop":355,"footerInside":true,"tallEscapesViewport":true})JSON",
+        result == R"JSON({"dialogHeight":734,"wrapperHeight":734,"frameHeight":599,"settingsHeight":599,"viewportHeight":599,"viewportScrollHeight":954,"clientHeight":599,"scrollHeight":954,"scrollTop":355,"footerInside":true,"tallEscapesViewport":true})JSON",
         "TradingView settings hierarchy escaped its bounded dialog: " + result);
 
-    webscene_engine_request_scene_checkpoint(engine);
-    auto found_settings_clip = false;
-    for (auto attempt = 0; attempt < 100 && !found_settings_clip; ++attempt) {
-        const auto* scene = webscene_engine_acquire_latest_scene(engine);
-        if (scene != nullptr) {
-            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
-                const auto& command = scene->commands[index];
-                found_settings_clip = found_settings_clip
-                    || (command.kind == 12U
-                        && std::abs(command.height - 599.0F) < 0.1F);
-            }
-            webscene_scene_acknowledge(scene);
-            webscene_scene_release(scene);
-        }
-        if (!found_settings_clip) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-    }
-    require(found_settings_clip,
-        "TradingView settings scroller did not emit its bounded overflow clip");
+    const auto consumed_before_wheel = consumed_input_count(engine);
+    wheel_input(engine, 400, 200, 60, 9201U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_wheel + 1,
+        "TradingView settings wheel input was not consumed");
+    const auto scrolled = evaluate(engine, R"JS(
+        (() => ({
+          scrollTop: __tradingViewSettingsScroller.scrollTop,
+          childTop: __tradingViewSettingsScroller.firstElementChild
+            .getBoundingClientRect().top
+        }))()
+    )JS", "tradingview-settings-dialog-wheel.js");
+    require(
+        scrolled == R"JSON({"scrollTop":60,"childTop":8})JSON",
+        "TradingView settings pane did not scroll its nested viewport: " + scrolled);
 }
 
 void test_tradingview_symbol_info_auto_height_has_no_scrollbar(

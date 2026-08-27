@@ -1239,11 +1239,18 @@ void test_relative_stylesheet_background_uses_stylesheet_address()
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 if (command.kind == 6U
-                    && std::abs(command.y - 2.0F) < 0.01F
-                    && std::abs(command.width - 48.0F) < 0.01F
-                    && std::abs(command.height - 24.0F) < 0.01F) {
-                    found = true;
-                    break;
+                    && std::abs(command.y) < 0.01F
+                    && std::abs(command.width - 100.0F) < 0.01F
+                    && std::abs(command.height - 60.0F) < 0.01F
+                    && command.flags < scene->string_count) {
+                    const auto& descriptor = scene->strings[command.flags];
+                    const std::string_view resource(
+                        scene->string_bytes + descriptor.byte_offset,
+                        descriptor.byte_length);
+                    found = resource.starts_with("webscene-bg-svg-v1\t0 0 8 4\t")
+                        && resource.find("\tno-repeat\t0 2px\t48px auto\t")
+                            != std::string_view::npos;
+                    if (found) break;
                 }
             }
             webscene_scene_acknowledge(scene);

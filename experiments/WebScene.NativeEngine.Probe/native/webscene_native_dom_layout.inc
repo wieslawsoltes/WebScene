@@ -1471,6 +1471,9 @@ void native_document::layout_children(dom_node& parent)
             size_t row_span{1};
             size_t column_span{1};
         };
+        const auto inherited_subgrid_columns = parent_grid.subgrid_columns
+            && parent.has_grid_layout()
+            && !parent.grid_layout().column_widths.empty();
         auto effective_columns = parent_grid.template_columns;
         if (effective_columns.empty() && implicit_column_grid) {
             const auto implicit_count = std::max<size_t>(
@@ -1490,9 +1493,11 @@ void native_document::layout_children(dom_node& parent)
                     parent_grid.auto_columns[index % parent_grid.auto_columns.size()]);
             }
         }
-        const auto column_count = std::max<size_t>(
-            implicit_column_grid ? 1U : 2U,
-            effective_columns.size());
+        const auto column_count = inherited_subgrid_columns
+            ? parent.grid_layout().column_widths.size()
+            : std::max<size_t>(
+                implicit_column_grid ? 1U : 2U,
+                effective_columns.size());
         const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
             const auto first = value.find_first_not_of(" \t\r\n");
             if (first == std::string_view::npos) return std::nullopt;
@@ -1619,56 +1624,63 @@ void native_document::layout_children(dom_node& parent)
             }
         }
 
-        const auto column_gap = resolve_length(
-            parent, parent.style.column_gap, content.width, 0);
+        const auto column_gap = inherited_subgrid_columns
+            ? parent.grid_layout().column_gap
+            : resolve_length(parent, parent.style.column_gap, content.width, 0);
         const auto row_gap = resolve_length(
             parent, parent.style.row_gap, content.height, 0);
-        std::vector<float> column_widths(column_count, 0.0F);
+        std::vector<float> column_widths = inherited_subgrid_columns
+            ? parent.grid_layout().column_widths
+            : std::vector<float>(column_count, 0.0F);
         auto fractional_weight = 0.0F;
-        for (size_t column = 0; column < effective_columns.size(); ++column) {
-            const auto& track = effective_columns[column];
-            if (track.kind == grid_track::sizing::fixed) {
-                column_widths[column] = resolve_length(
-                    parent, track.maximum, content.width, 0);
-            } else if (track.kind == grid_track::sizing::minmax) {
-                column_widths[column] = resolve_length(
-                    parent, track.minimum, content.width, 0);
-                if (track.fraction <= 0 && is_specified(track.maximum)) {
-                    column_widths[column] = std::max(
-                        column_widths[column],
-                        resolve_length(parent, track.maximum, content.width, 0));
-                }
-            }
-            fractional_weight += track.fraction;
-        }
-        for (const auto& item : items) {
-            if (item.column_span != 1U) continue;
-            const auto authored_track = item.column < effective_columns.size()
-                ? &effective_columns[item.column] : nullptr;
-            if (authored_track != nullptr
-                && authored_track->kind != grid_track::sizing::automatic) continue;
-            const auto margins = resolve_length(
-                    *item.node, item.node->style.margin_left, content.width, 0)
-                + resolve_length(
-                    *item.node, item.node->style.margin_right, content.width, 0);
-            column_widths[item.column] = std::max(
-                column_widths[item.column],
-                intrinsic_size(*item.node, true, content.width) + margins);
-        }
-        const auto total_gap = column_gap * static_cast<float>(column_count - 1U);
-        const auto committed_width = std::accumulate(
-            column_widths.begin(), column_widths.end(), total_gap);
-        const auto fractional_space = std::max(0.0F, content.width - committed_width);
-        if (fractional_weight > 0) {
+        if (!inherited_subgrid_columns) {
             for (size_t column = 0; column < effective_columns.size(); ++column) {
                 const auto& track = effective_columns[column];
-                if (track.fraction <= 0) continue;
-                column_widths[column] = std::max(
-                    column_widths[column],
-                    fractional_space * track.fraction / fractional_weight);
+                if (track.kind == grid_track::sizing::fixed) {
+                    column_widths[column] = resolve_length(
+                        parent, track.maximum, content.width, 0);
+                } else if (track.kind == grid_track::sizing::minmax) {
+                    column_widths[column] = resolve_length(
+                        parent, track.minimum, content.width, 0);
+                    if (track.fraction <= 0 && is_specified(track.maximum)) {
+                        column_widths[column] = std::max(
+                            column_widths[column],
+                            resolve_length(parent, track.maximum, content.width, 0));
+                    }
+                }
+                fractional_weight += track.fraction;
             }
-        } else if (committed_width < content.width && !column_widths.empty()) {
-            column_widths.back() += content.width - committed_width;
+            for (const auto& item : items) {
+                if (item.column_span != 1U) continue;
+                const auto authored_track = item.column < effective_columns.size()
+                    ? &effective_columns[item.column] : nullptr;
+                if (authored_track != nullptr
+                    && authored_track->kind != grid_track::sizing::automatic) continue;
+                const auto margins = resolve_length(
+                        *item.node, item.node->style.margin_left, content.width, 0)
+                    + resolve_length(
+                        *item.node, item.node->style.margin_right, content.width, 0);
+                column_widths[item.column] = std::max(
+                    column_widths[item.column],
+                    intrinsic_size(*item.node, true, content.width) + margins);
+            }
+        }
+        const auto total_gap = column_gap * static_cast<float>(column_count - 1U);
+        if (!inherited_subgrid_columns) {
+            const auto committed_width = std::accumulate(
+                column_widths.begin(), column_widths.end(), total_gap);
+            const auto fractional_space = std::max(0.0F, content.width - committed_width);
+            if (fractional_weight > 0) {
+                for (size_t column = 0; column < effective_columns.size(); ++column) {
+                    const auto& track = effective_columns[column];
+                    if (track.fraction <= 0) continue;
+                    column_widths[column] = std::max(
+                        column_widths[column],
+                        fractional_space * track.fraction / fractional_weight);
+                }
+            } else if (committed_width < content.width && !column_widths.empty()) {
+                column_widths.back() += content.width - committed_width;
+            }
         }
 
         const auto row_count = std::max<size_t>(
@@ -1772,6 +1784,16 @@ void native_document::layout_children(dom_node& parent)
                 auto height = is_specified(child->style.height)
                     ? outer_authored_size(*child, false, available_height)
                     : std::max(0.0F, available_height - margin_top - margin_bottom);
+                if (child->style.grid().subgrid_columns) {
+                    auto& inherited = child->mutable_grid_layout();
+                    inherited.column_widths.assign(
+                        column_widths.begin() + static_cast<std::ptrdiff_t>(item.column),
+                        column_widths.begin() + static_cast<std::ptrdiff_t>(
+                            item.column + item.column_span));
+                    inherited.column_gap = column_gap;
+                } else {
+                    child->clear_grid_layout();
+                }
                 layout_child(*child, parent.layout, {
                     column_offsets[item.column] + margin_left,
                     row_offsets[item.row] + margin_top,
@@ -2723,10 +2745,21 @@ void native_document::layout_children(dom_node& parent)
         const auto propagates_document_overflow =
             (&parent == body_ && child->tag == "html")
             || (parent.tag == "html" && child->tag == "body");
-        const auto flow_width = propagates_document_overflow
+        // A scroll container includes descendant overflow that reaches it
+        // through an overflow-visible child. The child's principal box still
+        // participates in normal flow at its own used size: descendant
+        // overflow must enlarge scrollWidth/scrollHeight without moving the
+        // next sibling or making an auto-height ancestor grow. TradingView's
+        // settings panes use exactly this shape: overflow:auto on the pane,
+        // then a height:100% wrapper whose visible descendants are taller.
+        const auto propagates_child_overflow_x = propagates_document_overflow
+            || child->style.overflow_x == overflow_mode::visible;
+        const auto propagates_child_overflow_y = propagates_document_overflow
+            || child->style.overflow_y == overflow_mode::visible;
+        const auto scrollable_flow_width = propagates_child_overflow_x
             ? std::max(child->layout.width, child->scroll_content_width)
             : child->layout.width;
-        const auto flow_height = propagates_document_overflow
+        const auto scrollable_flow_height = propagates_child_overflow_y
             ? std::max(child->layout.height, child->scroll_content_height)
             : child->layout.height;
         // Scroll translation is applied to `positioned`; `assigned` remains in
@@ -2735,13 +2768,13 @@ void native_document::layout_children(dom_node& parent)
         // or scrollHeight grow on every relayout and creates an endless range.
         maximum_flow_right = std::max(
             maximum_flow_right,
-            assigned.x + flow_width);
+            assigned.x + scrollable_flow_width);
         maximum_flow_bottom = std::max(
             maximum_flow_bottom,
-            assigned.y + flow_height);
+            assigned.y + scrollable_flow_height);
         if (!horizontal) {
             cursor = assigned.y - content.y
-                + flow_height
+                + child->layout.height
                 + vertical_margin_bottom
                 + justify_gap;
         }
@@ -2923,7 +2956,9 @@ void native_document::layout_children(dom_node& parent)
         }
     }
     parent.scroll_content_width = horizontal
-        ? std::max(content.width, cursor)
+        ? std::max(
+            content.width,
+            std::max(cursor, maximum_flow_right - content.x))
         : std::max(content.width, maximum_flow_right - content.x);
     parent.scroll_content_height = horizontal
         ? std::max(
@@ -2933,7 +2968,11 @@ void native_document::layout_children(dom_node& parent)
                 : maximum_flow_bottom - content.y)
         : std::max(
             content.height,
-            std::max(cursor, maximum_float_bottom - content.y));
+            std::max(
+                cursor,
+                std::max(
+                    maximum_flow_bottom - content.y,
+                    maximum_float_bottom - content.y)));
     // Blink determines the exposed scroll dimensions from pixel-snapped
     // layout sizes. A fractional descendant edge that remains inside the same
     // snapped CSS pixel as the scrollport therefore creates no usable scroll
@@ -3552,6 +3591,13 @@ void native_document::layout_child(
         std::max(0.0F, assigned.width),
         std::max(0.0F, assigned.height)};
     const auto* parent = composed_parent(child);
+    const auto inherits_parent_grid_columns = child.style.grid().subgrid_columns
+        && parent != nullptr
+        && is_grid_container(parent->style.display)
+        && (parent->style.grid().two_columns
+            || (parent->style.grid().auto_flow_column
+                && !parent->style.grid().auto_columns.empty()));
+    if (!inherits_parent_grid_columns) child.clear_grid_layout();
     child.used_height_is_definite = assigned_height_is_definite
         || (is_specified(child.style.height)
             && (child.style.height.unit != length_unit::percent

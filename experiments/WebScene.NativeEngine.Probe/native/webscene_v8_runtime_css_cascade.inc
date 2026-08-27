@@ -67,6 +67,7 @@
         return tracks_equal(left.template_columns, right.template_columns)
             && tracks_equal(left.template_rows, right.template_rows)
             && tracks_equal(left.auto_columns, right.auto_columns)
+            && left.subgrid_columns == right.subgrid_columns
             && left.two_columns == right.two_columns
             && left.auto_flow_column == right.auto_flow_column
             && left.fractional_rows == right.fractional_rows
@@ -2255,12 +2256,22 @@
             }
         } else if (name == "grid-template-columns" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
-            grid.template_columns = parse_simple_grid_tracks(value);
-            grid.two_columns = grid.template_columns.size() > 1U
+            const auto first = value.find_first_not_of(" \t\r\n");
+            const auto last = value.find_last_not_of(" \t\r\n");
+            const auto trimmed = first == std::string::npos
+                ? std::string_view{}
+                : std::string_view(value).substr(first, last - first + 1U);
+            grid.subgrid_columns = trimmed == "subgrid"
+                || trimmed.starts_with("subgrid ");
+            grid.template_columns = grid.subgrid_columns
+                ? std::vector<node_style::grid_data::track>{}
+                : parse_simple_grid_tracks(value);
+            grid.two_columns = grid.subgrid_columns
+                || grid.template_columns.size() > 1U
                 || (grid.template_columns.empty() && has_multiple_grid_columns(value));
             decision.classification = "partially-supported";
             decision.semantic_slice =
-                "component grids with fixed, auto, fractional, and minmax track lengths";
+                "component grids with fixed, auto, fractional, minmax, and column subgrid tracks";
         } else if (name == "grid-template-rows" && !is_inline(inline_grid)) {
             auto& grid = node.style.mutable_grid();
             grid.template_rows = parse_simple_grid_tracks(value);
@@ -3045,6 +3056,21 @@
             for (const auto& declaration : rule->declarations()) {
                 apply_pseudo_css_declaration(node, pseudo, declaration);
             }
+        }
+        // The pseudo-element's used rectangle is layout state, not computed
+        // style. A paint-only recascade rebuilds the computed pseudo style but
+        // does not schedule layout, so retain the last used rectangle until a
+        // layout-affecting change below marks the document dirty. The ensuing
+        // layout pass will replace it with newly resolved geometry.
+        if (node.style.before_pseudo().generated
+            && previous_style.before_pseudo().generated) {
+            node.style.mutable_before_pseudo().layout =
+                previous_style.before_pseudo().layout;
+        }
+        if (node.style.after_pseudo().generated
+            && previous_style.after_pseudo().generated) {
+            node.style.mutable_after_pseudo().layout =
+                previous_style.after_pseudo().layout;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto declarations_completed = trace_css

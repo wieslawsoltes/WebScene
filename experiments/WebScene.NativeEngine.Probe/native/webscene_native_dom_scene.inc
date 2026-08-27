@@ -734,87 +734,45 @@ void native_document::append_scene(
         && !background_image.image_view_box.empty()
         && node.layout.width > 0
         && node.layout.height > 0) {
-        std::istringstream view_box_stream(background_image.image_view_box);
-        float view_x = 0;
-        float view_y = 0;
-        float view_width = 0;
-        float view_height = 0;
-        if (view_box_stream >> view_x >> view_y >> view_width >> view_height
-            && view_width > 0 && view_height > 0) {
-            const auto resolve_size = [](const std::string& token, float available) {
-                if (token.empty() || token == "auto" || token == "cover" || token == "contain") {
-                    return -1.0F;
-                }
-                if (token.ends_with('%')) {
-                    return available * std::strtof(token.c_str(), nullptr) / 100.0F;
-                }
-                return std::max(0.0F, native_document::parse_length(token).value);
-            };
-            auto image_width = view_width;
-            auto image_height = view_height;
-            if (background_image.size_x == "cover"
-                || background_image.size_x == "contain") {
-                const auto scale_x = node.layout.width / view_width;
-                const auto scale_y = node.layout.height / view_height;
-                const auto scale = background_image.size_x == "cover"
-                    ? std::max(scale_x, scale_y)
-                    : std::min(scale_x, scale_y);
-                image_width = view_width * scale;
-                image_height = view_height * scale;
-            } else {
-                const auto declared_width = resolve_size(
-                    background_image.size_x, node.layout.width);
-                const auto declared_height = resolve_size(
-                    background_image.size_y, node.layout.height);
-                if (declared_width >= 0 && declared_height >= 0) {
-                    image_width = declared_width;
-                    image_height = declared_height;
-                } else if (declared_width >= 0) {
-                    image_width = declared_width;
-                    image_height = view_height * declared_width / view_width;
-                } else if (declared_height >= 0) {
-                    image_height = declared_height;
-                    image_width = view_width * declared_height / view_height;
-                }
-            }
-            const auto resolve_position = [](const std::string& token,
-                                             float available,
-                                             float image_size,
-                                             bool horizontal) {
-                if (token == "center") return (available - image_size) * 0.5F;
-                if (token == (horizontal ? "right" : "bottom")) return available - image_size;
-                if (token == (horizontal ? "left" : "top")) return 0.0F;
-                if (token.ends_with('%')) {
-                    return (available - image_size)
-                        * std::strtof(token.c_str(), nullptr) / 100.0F;
-                }
-                return native_document::parse_length(token).value;
-            };
-            const auto image_x = node.layout.x + resolve_position(
-                background_image.position_x,
-                node.layout.width,
-                image_width,
-                true);
-            const auto image_y = node.layout.y + resolve_position(
-                background_image.position_y,
-                node.layout.height,
-                image_height,
-                false);
-            const auto resource_index = append_scene_string(
-                background_image.image_view_box + '\t'
-                    + background_image.image_markup,
-                strings,
-                string_bytes);
-            commands.push_back(webscene_scene_command{
-                6U,
-                resource_index,
-                image_x,
-                image_y,
-                image_width,
-                image_height,
-                0U,
-                node.id});
-        }
+        // A CSS background image owns the element's paint box, not only the
+        // first resolved image tile. Preserve its longhands in the retained
+        // resource so the backend can clip and repeat the SVG exactly like a
+        // browser background brush. Replaced <img> elements continue to use
+        // the legacy viewBox/markup resource below.
+        auto background_resource = std::string{"webscene-bg-svg-v1\t"};
+        background_resource += background_image.image_view_box;
+        background_resource += '\t';
+        background_resource += background_image.repeat;
+        background_resource += '\t';
+        background_resource += background_image.position_value;
+        background_resource += '\t';
+        background_resource += background_image.size_value;
+        background_resource += '\t';
+        background_resource += background_image.image_markup;
+        const auto resource_index = append_scene_string(
+            background_resource,
+            strings,
+            string_bytes);
+        append_ellipse_metadata(
+            radii,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height);
+        commands.push_back(webscene_scene_command{
+            6U,
+            resource_index,
+            node.layout.x,
+            node.layout.y,
+            node.layout.width,
+            node.layout.height,
+            0U,
+            node.id,
+            radii.top_left,
+            radii.top_right,
+            radii.bottom_right,
+            radii.bottom_left,
+            0});
     }
     const auto& replaced_image = node.replaced_image();
     if (paint_self
