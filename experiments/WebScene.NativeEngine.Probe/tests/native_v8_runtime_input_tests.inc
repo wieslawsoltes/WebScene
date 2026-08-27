@@ -704,6 +704,141 @@ void test_controlled_switch_native_activation_matches_browser_semantics()
     webscene_engine_destroy(engine);
 }
 
+void test_tradingview_switch_repeated_transitions_publish_dense_scenes()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "repeated-switch engine creation failed");
+    resize(engine, 240, 120, 8300U);
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; width: 100%; height: 100%; }
+              .switcher { position: absolute; left: 20px; top: 20px; }
+              .input {
+                cursor: default; height: 100%; left: 0; opacity: 0;
+                position: absolute; top: 0; width: 100%; z-index: 1;
+              }
+              .switchView {
+                --switch-height: 20px;
+                --switch-width: 38px;
+                --switch-padding: 3px;
+                --switch-thumb: calc(var(--switch-height) - var(--switch-padding) * 2);
+                display: block; height: var(--switch-height);
+                position: relative; width: var(--switch-width);
+              }
+              .track {
+                background-color: rgb(80, 80, 80); border-radius: 20px;
+                display: block; height: 100%; left: 0;
+                position: absolute; top: 0; width: 100%;
+              }
+              .thumb {
+                background: rgb(255, 255, 255); border-radius: 50%; display: block;
+                height: var(--switch-thumb);
+                transform: translate(var(--switch-padding), var(--switch-padding));
+                transition-duration: .25s;
+                transition-property: transform;
+                transition-timing-function: ease-out;
+                width: var(--switch-thumb);
+              }
+              .checked .thumb {
+                transform: translate(
+                  calc(var(--switch-width) - var(--switch-thumb) - var(--switch-padding)),
+                  var(--switch-padding));
+              }
+            </style>
+            <label class="switcher">
+              <input id="input" class="input" type="checkbox" role="switch">
+              <span id="view" class="switchView">
+                <span class="track"></span><span id="thumb" class="thumb"></span>
+              </span>
+            </label>`;
+          const input = document.getElementById('input');
+          input.addEventListener('click', () =>
+            document.getElementById('view').classList.toggle('checked', input.checked));
+        })()
+    )JS", "tradingview-repeated-switch-setup.js");
+    animation_frame_and_wait(engine, 1000.0, 8301U);
+
+    const auto acquire_thumb_x = [&](uint64_t minimum_sequence) {
+        auto thumb_x = -1.0F;
+        for (auto attempt = 0; attempt < 200 && thumb_x < 0; ++attempt) {
+            const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            if (scene != nullptr) {
+                if (scene->header.consumed_input_sequence >= minimum_sequence) {
+                    for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                        const auto& command = scene->commands[index];
+                        if ((command.kind == 7U || command.kind == 10U)
+                            && command.rgba == 0xFFFFFFFFU
+                            && std::abs(command.width - 14.0F) < 0.1F
+                            && std::abs(command.height - 14.0F) < 0.1F) {
+                            thumb_x = command.x;
+                            break;
+                        }
+                    }
+                }
+                webscene_scene_acknowledge(scene);
+                webscene_scene_release(scene);
+            }
+            if (thumb_x < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return thumb_x;
+    };
+
+    webscene_engine_request_scene_checkpoint(engine);
+    require(acquire_thumb_x(8301U) >= 22.9F,
+        "initial TradingView-shaped switch scene did not contain its thumb");
+
+    auto timestamp = 2000.0;
+    uint64_t sequence = 8310U;
+    for (auto cycle = 0; cycle < 4; ++cycle) {
+        webscene_engine_observe_compositor_frame(engine, timestamp);
+        pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 39, 30, sequence++, true);
+        pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 39, 30, sequence++, false);
+        wait_for_animation_frame_demand(
+            engine,
+            true,
+            "repeated TradingView switch activation did not request host frames");
+
+        std::vector<float> painted_samples;
+        for (auto sample = 1; sample <= 16; ++sample) {
+            const auto frame_sequence = sequence++;
+            animation_frame_and_wait(
+                engine,
+                timestamp + static_cast<double>(sample * 16),
+                frame_sequence);
+            const auto thumb_x = acquire_thumb_x(frame_sequence);
+            require(thumb_x >= 0,
+                "repeated TradingView switch frame did not publish a thumb scene");
+            painted_samples.push_back(thumb_x);
+        }
+
+        auto distinct_samples = painted_samples;
+        std::sort(distinct_samples.begin(), distinct_samples.end());
+        const auto distinct_count = std::unique(
+            distinct_samples.begin(), distinct_samples.end(),
+            [](float left, float right) { return std::abs(left - right) < 0.01F; })
+            - distinct_samples.begin();
+        require(
+            distinct_count >= 10,
+            "repeated TradingView switch transition did not publish dense retained scenes");
+        for (size_t index = 1; index < painted_samples.size(); ++index) {
+            const auto monotonic = cycle % 2 == 0
+                ? painted_samples[index] + 0.01F >= painted_samples[index - 1]
+                : painted_samples[index] <= painted_samples[index - 1] + 0.01F;
+            require(monotonic,
+                "repeated TradingView switch transition reversed between compositor frames");
+        }
+        wait_for_animation_frame_demand(
+            engine,
+            false,
+            "completed TradingView switch transition retained host-frame demand");
+        timestamp += 1000.0;
+    }
+
+    webscene_engine_destroy(engine);
+}
+
 void wheel_input(
     webscene_engine* engine,
     double x,

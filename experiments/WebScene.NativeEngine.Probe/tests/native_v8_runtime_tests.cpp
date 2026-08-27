@@ -146,6 +146,10 @@ int main()
             test_controlled_switch_native_activation_matches_browser_semantics();
             return 0;
         }
+        if (selected == "repeated-switch-scenes") {
+            test_tradingview_switch_repeated_transitions_publish_dense_scenes();
+            return 0;
+        }
         if (selected == "active-chart-pseudo-border") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -266,6 +270,7 @@ int main()
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
     test_controlled_switch_native_activation_matches_browser_semantics();
+    test_tradingview_switch_repeated_transitions_publish_dense_scenes();
     test_loaded_document_keeps_html_and_body_cascade_distinct();
     test_relative_stylesheet_background_uses_stylesheet_address();
     test_resource_cache_reuse_across_engine_generations();
