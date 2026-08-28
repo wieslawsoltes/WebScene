@@ -1608,6 +1608,8 @@
                     `${encode(name)}=${encode(value)}`).join('&');
                 }
               }
+        )JS";
+        constexpr std::string_view message_channel_source_suffix = R"JS(
               class WebSceneFormData {
                 constructor(form = undefined) {
                   __webSceneRecordWebApi(
@@ -1835,9 +1837,14 @@
               });
             })();
         )JS";
+        std::string message_channel_bootstrap;
+        message_channel_bootstrap.reserve(
+            message_channel_source.size() + message_channel_source_suffix.size());
+        message_channel_bootstrap.append(message_channel_source);
+        message_channel_bootstrap.append(message_channel_source_suffix);
         auto message_channel_script = v8::Script::Compile(
             local_context,
-            js_string(isolate, std::string(message_channel_source).c_str())).ToLocalChecked();
+            js_string(isolate, message_channel_bootstrap.c_str())).ToLocalChecked();
         message_channel_script->Run(local_context).ToLocalChecked();
         install_clipboard_api(local_context);
         install_websocket_globals(local_context);
