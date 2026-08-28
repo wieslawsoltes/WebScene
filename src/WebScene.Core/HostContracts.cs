@@ -126,6 +126,23 @@ public readonly record struct WebSceneResourceRequest(
 {
     public WebSceneRequestContext Context { get; init; }
 
+    /// <summary>
+    /// HTTP method requested by script. Navigation and subresource requests
+    /// leave this unset and are treated as <c>GET</c> by resource loaders.
+    /// </summary>
+    public string? Method { get; init; }
+
+    /// <summary>
+    /// UTF-8 request entity produced by browser APIs such as <c>fetch</c>.
+    /// </summary>
+    public string? Body { get; init; }
+
+    /// <summary>
+    /// Media type of <see cref="Body"/>, including a generated multipart
+    /// boundary when the authored body is a <c>FormData</c> object.
+    /// </summary>
+    public string? ContentType { get; init; }
+
     public string? IfNoneMatch { get; init; }
 
     public DateTimeOffset? IfModifiedSince { get; init; }

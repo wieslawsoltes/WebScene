@@ -322,6 +322,7 @@ bool native_document::advance_animations() noexcept
             continue;
         }
         auto& animation = *animation_pointer;
+        const auto keyframe_paint_visible = intersects_visible_paint_area(node);
         if (animation.transform_animation_active) {
             const auto previous_translate_x = animation.painted_transform_translate_x;
             const auto previous_translate_y = animation.painted_transform_translate_y;
@@ -468,7 +469,7 @@ bool native_document::advance_animations() noexcept
                 - node.style.animations().opacity_keyframe_delay_ms);
             if (elapsed_ms < 0) {
                 animation.painted_opacity = node.style.opacity;
-                advanced = true;
+                advanced = advanced || keyframe_paint_visible;
             } else {
                 const auto duration = std::max(
                     0.001F, node.style.animations().opacity_keyframe_duration_ms);
@@ -481,7 +482,7 @@ bool native_document::advance_animations() noexcept
                     // The bounded slice implements the initial fill-mode (`none`).
                     animation.painted_opacity = node.style.opacity;
                     animation.opacity_keyframe_animation_active = false;
-                    advanced = true;
+                    advanced = advanced || keyframe_paint_visible;
                 } else {
                     auto cycle_progress = std::fmod(elapsed_ms, duration) / duration;
                     if (cycle_progress < 0) cycle_progress += 1.0F;
@@ -510,7 +511,7 @@ bool native_document::advance_animations() noexcept
                         animation.painted_opacity = from.opacity
                             + (right->opacity - from.opacity) * eased;
                     }
-                    advanced = true;
+                    advanced = advanced || keyframe_paint_visible;
                 }
             }
         }
@@ -523,7 +524,7 @@ bool native_document::advance_animations() noexcept
             if (elapsed_ms < 0) {
                 animation.painted_transform_rotate_degrees =
                     node.style.transform_rotate_degrees;
-                advanced = true;
+                advanced = advanced || keyframe_paint_visible;
             } else {
                 const auto duration = std::max(
                     0.001F, node.style.animations().opacity_keyframe_duration_ms);
@@ -536,7 +537,7 @@ bool native_document::advance_animations() noexcept
                     animation.painted_transform_rotate_degrees =
                         node.style.transform_rotate_degrees;
                     animation.rotation_keyframe_animation_active = false;
-                    advanced = true;
+                    advanced = advanced || keyframe_paint_visible;
                 } else {
                     auto cycle_progress = std::fmod(elapsed_ms, duration) / duration;
                     if (cycle_progress < 0) cycle_progress += 1.0F;
@@ -565,7 +566,7 @@ bool native_document::advance_animations() noexcept
                         animation.painted_transform_rotate_degrees = from.degrees
                             + (right->degrees - from.degrees) * eased;
                     }
-                    advanced = true;
+                    advanced = advanced || keyframe_paint_visible;
                 }
             }
         }
@@ -588,13 +589,16 @@ bool native_document::has_active_animations() const noexcept
     active_animation_demand_cache_ =
         std::any_of(nodes_.begin(), nodes_.end(), [this](const auto& node) {
         const auto* animation = node->animation_runtime();
-        return participates_in_animation_frame(*node)
-            && animation != nullptr
-            && (animation->transform_animation_active
-                || animation->opacity_animation_active
-                || animation->color_animation_active
-                || animation->opacity_keyframe_animation_active
-                || animation->rotation_keyframe_animation_active);
+        if (!participates_in_animation_frame(*node) || animation == nullptr) {
+            return false;
+        }
+        const auto transition_active = animation->transform_animation_active
+            || animation->opacity_animation_active
+            || animation->color_animation_active;
+        const auto keyframe_active = animation->opacity_keyframe_animation_active
+            || animation->rotation_keyframe_animation_active;
+        return transition_active
+            || (keyframe_active && intersects_visible_paint_area(*node));
     });
     active_animation_demand_cache_valid_ = true;
     return active_animation_demand_cache_;

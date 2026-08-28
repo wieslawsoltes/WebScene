@@ -1187,6 +1187,147 @@ void test_single_fractional_grid_track_stays_one_column(webscene_engine* engine)
     }
 }
 
+void test_tradingview_symbol_search_display_contents_rows_join_parent_grid(
+    webscene_engine* engine)
+{
+    // A focused test engine starts without an active native scene until its
+    // first ordinary script/navigation. Activate it before the binary DOM
+    // evaluation below so the resulting product-shaped fixture is published.
+    execute_and_wait(engine, "void 0", "native-symbol-search-grid-activate.js");
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #results {
+                display: grid;
+                grid-template-columns: 0fr min-content 1fr min-content min-content;
+                width: 600px;
+              }
+              .result-row { display: contents; }
+              .header { display: contents; }
+              .header-cell { height: 40px; }
+              .header-cell:first-child { grid-column-end: 3; }
+              .header-cell:last-child { grid-column-start: span 3; }
+              .overlap { height: 100%; position: relative; width: 0; }
+              .cell {
+                box-sizing: border-box;
+                height: 39px;
+                border-bottom: 1px solid #444;
+                white-space: nowrap;
+                position: relative;
+              }
+              .item-info {
+                display: flex;
+                max-width: 240px;
+                overflow: hidden;
+                padding-inline-end: 24px;
+              }
+              .handle { display: flex; width: 28px; }
+              .item-description { display: flex; flex-direction: column; overflow: hidden; }
+              .symbol-title { font-size: 16px; line-height: 24px; }
+              .description { display: flex; min-width: 0; }
+              .symbol-description { font-size: 14px; line-height: 39px; overflow: hidden; }
+              .exchange {
+                align-items: center;
+                display: flex;
+                justify-content: flex-end;
+                max-width: 124px;
+                overflow: hidden;
+                padding-inline-end: 20px;
+              }
+              .exchange-description { display: flex; }
+              .actions { width: 0; }
+              .result-row.active > .cell.item-info[data-symbol="AAPL"]:not(.disabled) .symbol-title {
+                color: rgb(1, 2, 3);
+              }
+            </style>
+            <div id="results">
+              <div class="header">
+                <div class="header-cell" id="symbol-header">SYMBOL</div>
+                <div class="header-cell" id="description-header">DESCRIPTION</div>
+              </div>
+              <div class="result-row active" id="row-a">
+                <div class="overlap"></div>
+                <div class="cell item-info" data-symbol="AAPL" id="info-a"><div class="handle"></div><div class="item-description"><div class="symbol-title" id="title-a">AAPL</div></div></div>
+                <div class="cell description" id="description-a"><div class="symbol-description">Apple Inc.</div></div>
+                <div class="cell exchange" id="exchange-a"><div class="exchange-description">stock NASDAQ</div></div>
+                <div class="cell actions" id="actions-a"></div>
+              </div>
+              <div class="result-row" id="row-b">
+                <div class="overlap"></div>
+                <div class="cell item-info" id="info-b"><div class="handle"></div><div class="item-description"><div class="symbol-title">AAPL</div></div></div>
+                <div class="cell description" id="description-b"><div class="symbol-description">Apple Inc.</div></div>
+                <div class="cell exchange" id="exchange-b"><div class="exchange-description">dr TSX</div></div>
+                <div class="cell actions" id="actions-b"></div>
+              </div>
+            </div>`;
+          const rect = id => {
+            const value = document.getElementById(id).getBoundingClientRect();
+            return [value.left, value.top, value.width, value.height];
+          };
+          const sameRow = ids => ids.map(id => rect(id)[1]).every(
+            top => Math.abs(top - rect(ids[0])[1]) < 0.01);
+          const info = document.getElementById('info-a');
+          for (let index = 0; index < 200; index++) {
+            info.classList.toggle('disabled', (index & 1) === 0);
+            getComputedStyle(document.getElementById('title-a')).color;
+          }
+          info.classList.remove('disabled');
+          return {
+            rowA: rect('row-a'),
+            rowB: rect('row-b'),
+            firstLine: sameRow(['info-a', 'description-a', 'exchange-a', 'actions-a']),
+            secondLine: sameRow(['info-b', 'description-b', 'exchange-b', 'actions-b']),
+            rowDelta: rect('info-b')[1] - rect('info-a')[1],
+            tracksBounded: rect('info-a')[2] > 60
+              && rect('description-a')[2] > 300
+              && rect('exchange-a')[2] > 80
+              && Math.abs(rect('actions-a')[0] + rect('actions-a')[2] - 600) < 0.01,
+            headerAligned: Math.abs(rect('symbol-header')[0] - rect('info-a')[0]) < 0.01
+              && Math.abs(rect('description-header')[0] - rect('description-a')[0]) < 0.01,
+            hotSelector: getComputedStyle(document.getElementById('title-a')).color
+          };
+        })()
+    )JS", "native-tradingview-symbol-search-grid.js");
+    require(
+        result == R"JSON({"rowA":[0,0,0,0],"rowB":[0,0,0,0],"firstLine":true,"secondLine":true,"rowDelta":39,"tracksBounded":true,"headerAligned":true,"hotSelector":"rgb(1, 2, 3)"})JSON",
+        "TradingView display:contents result wrappers did not expose their cells to the parent grid: "
+            + result);
+
+    auto observed_symbol = false;
+    auto observed_description = false;
+    auto observed_exchange = false;
+    auto observed_text = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 3U || command.flags >= scene->string_count) continue;
+                const auto resource = scene->strings[command.flags];
+                const std::string_view text(
+                    scene->string_bytes + resource.byte_offset,
+                    resource.byte_length);
+                observed_text.append(text);
+                observed_text.push_back('\n');
+                observed_symbol = observed_symbol || text.ends_with("AAPL");
+                observed_description = observed_description || text.ends_with("Apple Inc.");
+                observed_exchange = observed_exchange
+                    || text.ends_with("stock NASDAQ") || text.ends_with("dr TSX");
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (observed_symbol && observed_description && observed_exchange) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        observed_symbol && observed_description && observed_exchange,
+        "TradingView display:contents result cells disappeared during scene publication: "
+            + observed_text);
+}
+
 void test_tradingview_settings_subgrid_keeps_controls_on_their_rows(
     webscene_engine* engine)
 {

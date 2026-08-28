@@ -62,6 +62,18 @@
     assert(element.getClientRects().length === 0, "reattached hidden element exposed a rectangle");
   });
 
+  test("custom and unknown elements use the CSS initial inline display", () => {
+    const custom = document.createElement("time-format");
+    const unknown = document.createElement("futurehtmltag");
+    custom.textContent = "custom";
+    unknown.textContent = "unknown";
+    host.append(custom, unknown);
+    assert(getComputedStyle(custom).display === "inline",
+      `custom element display was ${getComputedStyle(custom).display}`);
+    assert(getComputedStyle(unknown).display === "inline",
+      `unknown element display was ${getComputedStyle(unknown).display}`);
+  });
+
   test("a one-pixel block remains rendered for offset and client geometry", () => {
     const element = document.createElement("div");
     element.className = "tiny-rendered";

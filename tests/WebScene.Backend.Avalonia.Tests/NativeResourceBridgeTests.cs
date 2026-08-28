@@ -150,6 +150,58 @@ public sealed unsafe class NativeResourceBridgeTests
         Assert.Equal(context, loader.LastRequest.Context);
     }
 
+    [Fact]
+    public void VersionedBridgePreservesMultipartPostAcrossCopyRetry()
+    {
+        var loader = new FixedResourceLoader("{\"status\":\"ok\"}");
+        using var bridge = CreateBridge(loader);
+        var context = new WebSceneRequestContext(
+            WebSceneResourceInitiator.Fetch,
+            "https://terminal.test",
+            "https://terminal.test/index.html",
+            WebSceneFetchMode.Cors,
+            WebSceneRequestDestination.None);
+        const string body = "--boundary\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\nDefault\r\n--boundary--\r\n";
+        const string contentType = "multipart/form-data; boundary=boundary";
+
+        var required = bridge.Copy(
+            4,
+            "https://saveload.test/1.1/charts",
+            null,
+            0,
+            context,
+            "POST",
+            body,
+            contentType,
+            IntPtr.Zero,
+            0);
+        var destination = NativeMemory.Alloc(required);
+        try
+        {
+            bridge.Copy(
+                4,
+                "https://saveload.test/1.1/charts",
+                null,
+                0,
+                context,
+                "POST",
+                body,
+                contentType,
+                (IntPtr)destination,
+                required);
+        }
+        finally
+        {
+            NativeMemory.Free(destination);
+        }
+
+        Assert.Equal(1, loader.LoadCount);
+        Assert.Equal(WebSceneResourceKind.Data, loader.LastRequest.Kind);
+        Assert.Equal("POST", loader.LastRequest.Method);
+        Assert.Equal(body, loader.LastRequest.Body);
+        Assert.Equal(contentType, loader.LastRequest.ContentType);
+    }
+
     private static NativeWebSceneApi.ResourceBridge CreateBridge(IWebSceneResourceLoader loader)
         => new(loader, _ => { }, null, null, null);
 

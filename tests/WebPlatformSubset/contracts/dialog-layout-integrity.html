@@ -23,6 +23,51 @@
   #time-shell { display: flex; }
   #time-input { font-size: inherit; line-height: inherit; width: 100%; }
   #time-icon { flex: 0 0 18px; width: 18px; }
+  #overlap-root { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+  #portal-root { position: fixed; left: 0; top: 0; width: 0; height: 0; }
+  #save-dialog {
+    position: fixed;
+    left: 400px;
+    top: 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 20px);
+    min-width: 280px;
+    max-width: 480px;
+    max-height: calc(100% - 20px);
+    background: rgb(31, 31, 31);
+  }
+  #save-wrap { display: flex; overflow: hidden; }
+  #save-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    margin: 40px 0 40px 40px;
+  }
+  #save-title {
+    display: flex;
+    flex: none;
+    font-family: Arial;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 24px;
+    margin-bottom: 8px;
+  }
+  #save-content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: auto;
+    margin: 0 -40px;
+    padding: 8px 40px;
+  }
+  #save-label { font-family: Arial; font-size: 14px; line-height: 21px; }
+  #save-input, #save-actions { height: 34px; }
+  #save-actions { display: flex; flex: none; margin-top: 16px; }
+  #save-close { flex: none; width: 34px; height: 34px; margin: 8px 8px 0 -2px; }
 </style>
 <body>
 <div id="dialog">
@@ -36,6 +81,14 @@
 <div id="time-control">
   <div id="time-shell"><input id="time-input" value="00:00"><span id="time-icon"></span></div>
 </div>
+<div id="overlap-root"><div id="portal-root"><div><div id="save-dialog">
+  <div id="save-wrap"><div id="save-main">
+    <div id="save-title">Save New Chart Layout</div>
+    <div id="save-content"><div id="save-label">Enter a new chart layout name:</div>
+      <input id="save-input"><div id="save-actions"></div>
+    </div>
+  </div><button id="save-close"></button></div>
+</div></div></div></div>
 <script>
   const state = window.__webSceneWptState = {
     complete: false,
@@ -65,6 +118,11 @@
     const gaps = centers.slice(1).map((center, index) => center - centers[index]);
     const inputStyle = getComputedStyle(input);
     const inputRect = input.getBoundingClientRect();
+    const saveDialog = document.getElementById("save-dialog");
+    const saveDialogRect = saveDialog.getBoundingClientRect();
+    const saveWrapRect = document.getElementById("save-wrap").getBoundingClientRect();
+    const saveMainRect = document.getElementById("save-main").getBoundingClientRect();
+    const saveActionsRect = document.getElementById("save-actions").getBoundingClientRect();
 
     assert(contentRect.height === 80,
       "the scrollable flex body did not shrink to leave room for the footer: " + contentRect.height);
@@ -82,6 +140,14 @@
       "line-height:inherit did not resolve from the control: " + inputStyle.lineHeight);
     assert(getComputedStyle(dialog).boxShadow !== "none",
       "the dialog has no computed outer box shadow");
+    assert(saveDialogRect.height >= 220 && saveDialogRect.height <= 260,
+      "the fixed auto-height portal dialog did not shrink-wrap its content: " + saveDialogRect.height);
+    assert(saveWrapRect.height === saveDialogRect.height && saveMainRect.height > 0,
+      "the portal dialog flex wrappers collapsed inside a zero-size mount");
+    assert(saveActionsRect.bottom <= saveDialogRect.bottom,
+      "the portal dialog background does not contain its action row");
+    assert(getComputedStyle(saveDialog).backgroundColor === "rgb(31, 31, 31)",
+      "the portal dialog lost its opaque background");
 
     state.results.push({
       name: "dialog footer, calendar distribution, input typography, and elevation remain intact",

@@ -461,6 +461,40 @@ void test_document_clear_releases_and_reinitializes_node_pool()
     }
 }
 
+void test_detached_node_pool_reuses_swept_blocks_without_growing()
+{
+    webscene_native::native_document document;
+    std::vector<webscene_native::dom_node*> detached;
+    detached.reserve(256);
+    std::unordered_set<const webscene_native::dom_node*> first_addresses;
+    for (auto index = 0; index < 256; ++index) {
+        auto& node = document.create_element("div");
+        detached.push_back(&node);
+        first_addresses.insert(&node);
+    }
+    const auto populated = document.read_allocation_metrics();
+    require(
+        document.erase_detached_subtrees(detached) == detached.size()
+            && document.node_count() == 1,
+        "detached node-pool fixture did not sweep every unreachable block");
+    const auto swept = document.read_allocation_metrics();
+    require(
+        swept.node_pool_reserved_bytes == populated.node_pool_reserved_bytes,
+        "sweeping fixed-size nodes unexpectedly returned individual pages");
+
+    size_t reused = 0;
+    for (auto index = 0; index < 256; ++index) {
+        auto& node = document.create_element("span");
+        if (first_addresses.contains(&node)) ++reused;
+    }
+    const auto reused_metrics = document.read_allocation_metrics();
+    require(
+        reused == 256
+            && reused_metrics.node_pool_reserved_bytes
+                == populated.node_pool_reserved_bytes,
+        "swept fixed-size DOM blocks were not reused from the page free list");
+}
+
 void test_native_id_lookup_tracks_creation_erasure_and_clear()
 {
     webscene_native::native_document document;

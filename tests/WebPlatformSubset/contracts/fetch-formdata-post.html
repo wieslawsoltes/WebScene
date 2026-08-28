@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fetch serializes FormData for non-GET requests</title>
+<body>
+<span id="dirty">Save</span>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  (async () => {
+    const form = new FormData();
+    form.append("name", "Default");
+    form.append("content", '{"layout":1}');
+    assert([...form.keys()].join(",") === "name,content",
+      "FormData did not retain insertion order");
+    assert(form.get("name") === "Default",
+      "FormData did not retain its string field");
+
+    const response = await fetch(
+      "data:application/json,%7B%22status%22%3A%22ok%22%7D",
+      { method: "POST", body: form });
+    const result = await response.json();
+    if (response.ok && result.status === "ok") {
+      document.getElementById("dirty").textContent = "";
+    }
+    assert(document.getElementById("dirty").textContent === "",
+      "the asynchronous successful acknowledgement did not clear dirty state");
+  })().then(() => {
+    state.results.push({
+      name: "multipart POST resolves before successful save state is cleared",
+      status: "PASS",
+      message: null,
+      stack: null
+    });
+    state.harness = { status: 0, message: null, stack: null };
+    state.complete = true;
+  }, error => {
+    state.results.push({
+      name: "multipart POST resolves before successful save state is cleared",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = {
+      status: 1,
+      message: state.results[0].message,
+      stack: state.results[0].stack
+    };
+    state.complete = true;
+  });
+</script>
+</body>

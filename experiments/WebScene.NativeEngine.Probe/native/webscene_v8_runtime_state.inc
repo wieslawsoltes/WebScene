@@ -1,6 +1,8 @@
     native_document& document;
     std::function<v8_dom_runtime::viewport_metrics()> viewport_provider;
     resource_loader load_resource_callback;
+    static constexpr size_t maximum_pending_fetches = 64U;
+    std::vector<pending_fetch_task> pending_fetches;
     static constexpr size_t maximum_resource_prefetches = 16U;
     std::mutex resource_prefetch_mutex;
     std::unordered_map<std::string, std::shared_future<prefetched_resource>>
@@ -125,6 +127,7 @@
     std::function<void()> host_request_available;
     std::function<void()> interop_callback_available;
     v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
+    std::function<void()> runtime_work_available;
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -151,10 +154,26 @@
     std::unordered_map<uint32_t, frame_hydration_state> frame_hydration_states;
     bool prefer_frame_hydration_task{true};
     static constexpr size_t detached_dom_gc_threshold = 512U;
+    static constexpr size_t maximum_detached_dom_release_roots_per_slice = 16U;
     std::vector<uint32_t> detached_dom_roots;
+    std::vector<uint32_t> detached_dom_gc_scan_roots;
+    size_t detached_dom_gc_scan_index{0U};
     size_t detached_nodes_since_gc{0U};
+    int64_t external_dom_memory_accounted_bytes{0};
     uint64_t released_detached_dom_nodes{0U};
     bool detached_dom_gc_requested{false};
+    bool detached_dom_gc_deferred_once{false};
+    size_t detached_dom_gc_cycle_retained_roots{0U};
+    uint8_t detached_dom_gc_retry_count{0U};
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    uint64_t reconnected_wrapper_retention_subtrees{0U};
+    uint64_t reconnected_wrapper_retention_nodes{0U};
+    uint64_t detached_dom_release_batches{0U};
+    uint64_t detached_dom_release_roots{0U};
+    uint64_t detached_dom_release_slices{0U};
+    uint64_t detached_dom_release_max_roots_per_slice{0U};
+    uint64_t detached_dom_idle_gc_notifications{0U};
+#endif
     std::string last_error;
     std::vector<pending_promise_rejection> pending_promise_rejections;
     std::filesystem::path resource_root;
@@ -162,8 +181,15 @@
     std::string frame_base_address;
     std::vector<css_rule> css_rules;
     static constexpr size_t maximum_compiled_css_selector_lists = 512U;
-    mutable std::unordered_map<std::string, compiled_css_selector_list>
+    mutable std::unordered_map<
+        std::string,
+        compiled_css_selector_list,
+        transparent_string_hash,
+        transparent_string_equal>
         compiled_css_selector_lists;
+    static constexpr size_t maximum_compiled_class_token_lists = 4096U;
+    mutable std::unordered_map<std::string, std::vector<std::string>>
+        compiled_class_token_lists;
     uint32_t active_stylesheet_owner_id{0};
     uint32_t active_stylesheet_shadow_scope_root_id{0};
     std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
@@ -176,6 +202,7 @@
     std::vector<size_t> css_focus_rules;
     std::vector<size_t> unindexed_css_rules;
     std::unordered_set<std::string> css_attribute_dependencies;
+    std::unordered_set<std::string> css_descendant_attribute_dependencies;
     std::vector<hover_selector_dependency> hover_selector_dependencies;
     std::unordered_map<std::string, std::string> css_variables;
     std::unordered_set<std::string> important_css_variables;
@@ -308,6 +335,8 @@
     double current_movement_y{0};
     bool has_pointer_position{false};
     uint64_t current_input_sequence{0};
+    uint32_t pending_text_input_target_id{0U};
+    bool pending_text_input_from_keydown{false};
     dom_node* active_element{nullptr};
     bool focus_visible{false};
     bool document_visible{true};
@@ -330,6 +359,15 @@
     bool filter_stylesheet_candidates{true};
     uint32_t style_recascade_batch_depth{0};
     std::vector<pending_style_recascade> pending_style_recascades;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    uint64_t style_recascade_schedule_requests{0U};
+    uint64_t style_recascade_coalesced_requests{0U};
+    uint64_t style_recascade_flush_batches{0U};
+    uint64_t style_recascade_flush_roots{0U};
+    uint64_t style_recascade_flush_node_roots{0U};
+    uint64_t style_recascade_flush_subtree_roots{0U};
+    uint64_t style_recascade_noop_removals{0U};
+#endif
 
     class style_recascade_batch_scope final {
     public:

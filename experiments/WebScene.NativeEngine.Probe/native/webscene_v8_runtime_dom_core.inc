@@ -566,6 +566,8 @@
         state.focus_rules = std::move(css_focus_rules);
         state.unindexed_rules = std::move(unindexed_css_rules);
         state.attribute_dependencies = std::move(css_attribute_dependencies);
+        state.descendant_attribute_dependencies =
+            std::move(css_descendant_attribute_dependencies);
         state.hover_dependencies = std::move(hover_selector_dependencies);
         state.variables = std::move(css_variables);
         state.important_variables = std::move(important_css_variables);
@@ -590,6 +592,8 @@
         css_focus_rules = std::move(state.focus_rules);
         unindexed_css_rules = std::move(state.unindexed_rules);
         css_attribute_dependencies = std::move(state.attribute_dependencies);
+        css_descendant_attribute_dependencies =
+            std::move(state.descendant_attribute_dependencies);
         hover_selector_dependencies = std::move(state.hover_dependencies);
         css_variables = std::move(state.variables);
         important_css_variables = std::move(state.important_variables);
@@ -918,8 +922,55 @@
         register_detached_subtree(root);
     }
 
-    void retain_connected_subtree_wrappers(dom_node& root)
+    bool root_has_weak_wrapper(const dom_node& root) const
     {
+        const auto weak = [](const auto& cache, uint64_t key) {
+            const auto known = cache.find(key);
+            return known != cache.end()
+                && !known->second.IsEmpty()
+                && known->second.IsWeak();
+        };
+        for (const auto frame_realm : {false, true}) {
+            const auto key = static_cast<uint64_t>(root.id)
+                | (frame_realm ? (1ULL << 63U) : 0ULL);
+            if (weak(node_wrappers, key)
+                || weak(class_list_wrappers, key)
+                || weak(style_wrappers, key)
+                || weak(computed_style_wrappers, key)
+                || weak(canvas_contexts, key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool retain_reconnected_subtree_wrappers(dom_node& root)
+    {
+        if (!is_connected(root)) return false;
+
+        // A style recascade is also used to initialize newly inserted DOM, so
+        // it is the common connection boundary for every mutation API. Most
+        // recascades, however, are ordinary class/style changes on an already
+        // connected tree. Do not walk that tree unless it contains a root that
+        // was actually weakened while detached (or its own wrapper is weak
+        // because it was extracted from a tracked detached ancestor).
+        auto reconnects_tracked_root = root_has_weak_wrapper(root);
+        if (!reconnects_tracked_root) {
+            for (const auto root_id : detached_dom_roots) {
+                const auto* detached_root = document.find_by_native_id(root_id);
+                if (detached_root != nullptr
+                    && (detached_root == &root
+                        || subtree_contains(root, detached_root))) {
+                    reconnects_tracked_root = true;
+                    break;
+                }
+            }
+        }
+        if (!reconnects_tracked_root) return false;
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++reconnected_wrapper_retention_subtrees;
+#endif
         for (const auto frame_realm : {false, true}) {
             if (frame_realm && frame_context.IsEmpty()) continue;
             auto local_context = frame_realm ? frame_context.Get(isolate) : context.Get(isolate);
@@ -935,6 +986,9 @@
                 known->second.Get(isolate)->DeletePrivate(local_context, anchor_key).Check();
             };
             visit_subtree(root, [&](dom_node& node) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                if (!frame_realm) ++reconnected_wrapper_retention_nodes;
+#endif
                 const auto key = static_cast<uint64_t>(node.id)
                     | (frame_realm ? (1ULL << 63U) : 0ULL);
                 retain(node_wrappers, key);
@@ -944,6 +998,13 @@
                 retain(canvas_contexts, key);
             });
         }
+        std::erase_if(detached_dom_roots, [&](const auto root_id) {
+            const auto* candidate = document.find_by_native_id(root_id);
+            return candidate == nullptr
+                || (is_connected(*candidate)
+                    && (candidate == &root || subtree_contains(root, candidate)));
+        });
+        return true;
     }
 
     void notify_custom_elements_subtree(dom_node& root, const char* phase)
@@ -1065,6 +1126,11 @@
         detached_dom_roots = std::move(retained_roots);
         detached_nodes_since_gc += count;
         if (detached_nodes_since_gc >= detached_dom_gc_threshold) {
+            if (!detached_dom_gc_requested
+                && detached_dom_gc_scan_index
+                    >= detached_dom_gc_scan_roots.size()) {
+                detached_dom_gc_retry_count = 0U;
+            }
             detached_dom_gc_requested = true;
         }
     }
@@ -1092,14 +1158,22 @@
         return live;
     }
 
-    void release_detached_subtree(dom_node& root)
+    void release_detached_subtrees(const std::vector<dom_node*>& roots)
     {
         std::unordered_set<dom_node*> nodes;
         std::unordered_set<uint32_t> node_ids;
-        visit_subtree(root, [&](dom_node& node) {
-            nodes.insert(&node);
-            node_ids.insert(node.id);
-        });
+        for (auto* root : roots) {
+            if (root == nullptr) continue;
+            visit_subtree(*root, [&](dom_node& node) {
+                nodes.insert(&node);
+                node_ids.insert(node.id);
+            });
+        }
+        if (nodes.empty()) return;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++detached_dom_release_batches;
+        detached_dom_release_roots += roots.size();
+#endif
         const auto erase_wrappers = [&](auto& cache) {
             std::erase_if(cache, [&](const auto& entry) {
                 return node_ids.contains(static_cast<uint32_t>(entry.first));
@@ -1183,50 +1257,143 @@
         if (nodes.contains(pointer_down_target)) pointer_down_target = nullptr;
         if (nodes.contains(hover_target)) hover_target = nullptr;
         if (nodes.contains(current_related_target)) current_related_target = nullptr;
-        released_detached_dom_nodes += document.erase_detached_subtree(root);
+        released_detached_dom_nodes += document.erase_detached_subtrees(roots);
+        synchronize_external_dom_memory_accounting();
+    }
+
+    void synchronize_external_dom_memory_accounting()
+    {
+        if (isolate == nullptr) return;
+        const auto node_bytes = document.node_count() * sizeof(dom_node);
+        const auto bounded_bytes = static_cast<int64_t>(std::min<size_t>(
+            node_bytes,
+            static_cast<size_t>(std::numeric_limits<int64_t>::max())));
+        const auto delta = bounded_bytes - external_dom_memory_accounted_bytes;
+        if (delta == 0) return;
+        isolate->AdjustAmountOfExternalAllocatedMemory(delta);
+        external_dom_memory_accounted_bytes = bounded_bytes;
+    }
+
+    void release_external_dom_memory_accounting()
+    {
+        if (isolate == nullptr || external_dom_memory_accounted_bytes == 0) return;
+        isolate->AdjustAmountOfExternalAllocatedMemory(
+            -external_dom_memory_accounted_bytes);
+        external_dom_memory_accounted_bytes = 0;
     }
 
     void collect_detached_dom_if_requested()
     {
-        if (!detached_dom_gc_requested) return;
-        detached_dom_gc_requested = false;
-        detached_nodes_since_gc = 0U;
-        std::vector<uint32_t> disconnected_roots;
-        std::vector<uint32_t> reconnected_roots;
-        disconnected_roots.reserve(detached_dom_roots.size());
-        reconnected_roots.reserve(detached_dom_roots.size());
-        for (const auto root_id : detached_dom_roots) {
-            auto* root = document.find_by_native_id(root_id);
-            if (root == nullptr) continue;
-            if (is_connected(*root)) reconnected_roots.push_back(root_id);
-            else disconnected_roots.push_back(root_id);
-        }
-        detached_dom_roots = std::move(disconnected_roots);
-        for (const auto root_id : reconnected_roots) {
-            if (auto* root = document.find_by_native_id(root_id); root != nullptr) {
-                retain_connected_subtree_wrappers(*root);
+        if (detached_dom_gc_scan_index >= detached_dom_gc_scan_roots.size()) {
+            detached_dom_gc_scan_roots.clear();
+            detached_dom_gc_scan_index = 0U;
+            if (!detached_dom_gc_requested) return;
+
+            // A mutation can request collection while its V8 HandleScope is
+            // still alive. Defer the first collection attempt to the next
+            // pump so ephemeral wrappers from that completed JavaScript turn
+            // are no longer conservatively retained.
+            if (!detached_dom_gc_deferred_once) {
+                detached_dom_gc_deferred_once = true;
+                return;
             }
+            detached_dom_gc_deferred_once = false;
+
+            // Account the C++ DOM as external memory so V8's normal allocation
+            // pressure participates in deciding when weak wrappers are
+            // collected. At a genuinely idle boundary, offer a short deadline
+            // for incremental GC work. LowMemoryNotification is deliberately
+            // not used here: it means system memory pressure and performs an
+            // aggressive collect-all pass rather than browser-style idle work.
+            detached_dom_gc_requested = false;
+            detached_nodes_since_gc = 0U;
+            detached_dom_gc_cycle_retained_roots = 0U;
+            detached_dom_gc_scan_roots = detached_dom_roots;
+            synchronize_external_dom_memory_accounting();
+            constexpr auto idle_gc_budget_seconds = 0.001;
+            v8::platform::RunIdleTasks(
+                v8_platform.get(),
+                isolate,
+                idle_gc_budget_seconds);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            ++detached_dom_idle_gc_notifications;
+#endif
         }
-        isolate->LowMemoryNotification();
-        size_t index = 0U;
-        while (index < detached_dom_roots.size()) {
-            auto* root = document.find_by_native_id(detached_dom_roots[index]);
-            if (root == nullptr || is_connected(*root)) {
-                detached_dom_roots.erase(
-                    detached_dom_roots.begin() + static_cast<std::ptrdiff_t>(index));
+
+        const auto slice_started = std::chrono::steady_clock::now();
+        constexpr auto maximum_slice_scan_time = std::chrono::milliseconds(1);
+        std::vector<uint32_t> removed_root_ids;
+        std::vector<dom_node*> released_roots;
+        removed_root_ids.reserve(maximum_detached_dom_release_roots_per_slice);
+        released_roots.reserve(maximum_detached_dom_release_roots_per_slice);
+        size_t inspected_roots = 0U;
+        while (detached_dom_gc_scan_index < detached_dom_gc_scan_roots.size()
+            && inspected_roots < maximum_detached_dom_release_roots_per_slice) {
+            const auto root_id =
+                detached_dom_gc_scan_roots[detached_dom_gc_scan_index++];
+            ++inspected_roots;
+            auto* root = document.find_by_native_id(root_id);
+            if (root == nullptr) {
+                removed_root_ids.push_back(root_id);
+                continue;
+            }
+            if (is_connected(*root)) {
+                retain_reconnected_subtree_wrappers(*root);
+                removed_root_ids.push_back(root_id);
                 continue;
             }
             if (subtree_has_live_wrappers(*root)) {
-                ++index;
+                ++detached_dom_gc_cycle_retained_roots;
+                if (std::chrono::steady_clock::now() - slice_started
+                    >= maximum_slice_scan_time) {
+                    break;
+                }
                 continue;
             }
-            std::unordered_set<dom_node*> released;
-            visit_subtree(*root, [&](dom_node& node) { released.insert(&node); });
-            std::erase_if(detached_dom_roots, [&](const auto candidate_id) {
-                return released.contains(document.find_by_native_id(candidate_id));
-            });
-            release_detached_subtree(*root);
+            removed_root_ids.push_back(root_id);
+            released_roots.push_back(root);
+            if (std::chrono::steady_clock::now() - slice_started
+                >= maximum_slice_scan_time) {
+                break;
+            }
         }
+        if (!removed_root_ids.empty()) {
+            std::erase_if(detached_dom_roots, [&](const auto root_id) {
+                return std::find(
+                    removed_root_ids.begin(),
+                    removed_root_ids.end(),
+                    root_id) != removed_root_ids.end();
+            });
+        }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++detached_dom_release_slices;
+        detached_dom_release_max_roots_per_slice = std::max<uint64_t>(
+            detached_dom_release_max_roots_per_slice,
+            released_roots.size());
+#endif
+        release_detached_subtrees(released_roots);
+
+        if (detached_dom_gc_scan_index >= detached_dom_gc_scan_roots.size()) {
+            detached_dom_gc_scan_roots.clear();
+            detached_dom_gc_scan_index = 0U;
+            // V8 can conservatively retain weak handles during the first
+            // collection immediately following a large script turn. Retry one
+            // later idle cycle when that happened at scale; a genuinely live
+            // detached wrapper is then retained without creating a GC loop.
+            if (detached_dom_gc_cycle_retained_roots > 1U
+                && detached_dom_gc_retry_count == 0U
+                && !detached_dom_gc_requested) {
+                detached_dom_gc_retry_count = 1U;
+                detached_dom_gc_deferred_once = false;
+                detached_dom_gc_requested = true;
+            }
+        }
+    }
+
+    bool has_pending_detached_dom_collection() const noexcept
+    {
+        return detached_dom_gc_requested
+            || detached_dom_gc_scan_index < detached_dom_gc_scan_roots.size();
     }
 
     v8::Local<v8::Object> wrap_node(dom_node& node)
@@ -2011,9 +2178,9 @@
         std::istringstream stream(names);
         for (std::string name; stream >> name;) required.push_back(std::move(name));
         auto matches = document.query_selector_all(root, "*");
-        std::erase_if(matches, [&required](const auto* node) {
+        std::erase_if(matches, [this, &required](const auto* node) {
             return node == nullptr || required.empty()
-                || !std::all_of(required.begin(), required.end(), [node](const auto& name) {
+                || !std::all_of(required.begin(), required.end(), [this, node](const auto& name) {
                     return has_class(*node, name);
                 });
         });

@@ -643,6 +643,8 @@ internal struct EngineOptions
     public IntPtr AnimationFrameRequestedUserData;
     public IntPtr ResourceLoadCallbackV2;
     public IntPtr ResourceLoadV2UserData;
+    public IntPtr ResourceLoadCallbackV3;
+    public IntPtr ResourceLoadV3UserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -656,6 +658,25 @@ internal struct NativeResourceRequestContext
     public nuint ReferrerLength;
     public uint Mode;
     public uint Destination;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeResourceRequestContextV3
+{
+    public uint StructSize;
+    public uint Initiator;
+    public IntPtr Origin;
+    public nuint OriginLength;
+    public IntPtr Referrer;
+    public nuint ReferrerLength;
+    public uint Mode;
+    public uint Destination;
+    public IntPtr Method;
+    public nuint MethodLength;
+    public IntPtr Body;
+    public nuint BodyLength;
+    public IntPtr ContentType;
+    public nuint ContentTypeLength;
 }
 
 [Flags]

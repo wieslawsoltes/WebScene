@@ -231,6 +231,9 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly ResourceLoadCallbackV2 ResourceLoadV2 = LoadResourceV2;
     private static readonly IntPtr ResourceLoadV2Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
+    private static readonly ResourceLoadCallbackV3 ResourceLoadV3 = LoadResourceV3;
+    private static readonly IntPtr ResourceLoadV3Address =
+        Marshal.GetFunctionPointerForDelegate(ResourceLoadV3);
     private static readonly ScenePublishedCallback ScenePublished = NotifyScenePublished;
     private static readonly IntPtr ScenePublishedAddress =
         Marshal.GetFunctionPointerForDelegate(ScenePublished);
@@ -350,7 +353,9 @@ public static unsafe partial class NativeWebSceneApi
                         ? IntPtr.Zero
                         : GCHandle.ToIntPtr(bridgeHandle),
                     ResourceLoadCallbackV2 = ResourceLoadV2Address,
-                    ResourceLoadV2UserData = GCHandle.ToIntPtr(bridgeHandle)
+                    ResourceLoadV2UserData = GCHandle.ToIntPtr(bridgeHandle),
+                    ResourceLoadCallbackV3 = ResourceLoadV3Address,
+                    ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -556,6 +561,19 @@ public static unsafe partial class NativeWebSceneApi
         nuint entityTagLength,
         long lastModifiedUnixSeconds,
         in NativeResourceRequestContext requestContext,
+        IntPtr destination,
+        nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate nuint ResourceLoadCallbackV3(
+        IntPtr userData,
+        uint kind,
+        IntPtr url,
+        nuint urlLength,
+        IntPtr entityTag,
+        nuint entityTagLength,
+        long lastModifiedUnixSeconds,
+        in NativeResourceRequestContextV3 requestContext,
         IntPtr destination,
         nuint destinationCapacity);
 
@@ -833,6 +851,57 @@ public static unsafe partial class NativeWebSceneApi
         }
     }
 
+    private static nuint LoadResourceV3(
+        IntPtr userData,
+        uint kind,
+        IntPtr url,
+        nuint urlLength,
+        IntPtr entityTag,
+        nuint entityTagLength,
+        long lastModifiedUnixSeconds,
+        in NativeResourceRequestContextV3 requestContext,
+        IntPtr destination,
+        nuint destinationCapacity)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            var address = Marshal.PtrToStringUTF8(url, checked((int)urlLength));
+            var validator = entityTagLength == 0
+                ? null
+                : Marshal.PtrToStringUTF8(entityTag, checked((int)entityTagLength));
+            var context = new WebSceneRequestContext(
+                (WebSceneResourceInitiator)requestContext.Initiator,
+                ReadUtf8(requestContext.Origin, requestContext.OriginLength),
+                ReadUtf8(requestContext.Referrer, requestContext.ReferrerLength),
+                (WebSceneFetchMode)requestContext.Mode,
+                (WebSceneRequestDestination)requestContext.Destination);
+            return bridge is null || string.IsNullOrWhiteSpace(address)
+                ? 0
+                : bridge.Copy(
+                    kind,
+                    address,
+                    validator,
+                    lastModifiedUnixSeconds,
+                    context,
+                    ReadUtf8(requestContext.Method, requestContext.MethodLength),
+                    ReadUtf8(requestContext.Body, requestContext.BodyLength),
+                    ReadUtf8(requestContext.ContentType, requestContext.ContentTypeLength),
+                    destination,
+                    destinationCapacity);
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine($"[WebScene native resource loader v3] {error}");
+            return 0;
+        }
+
+        static string? ReadUtf8(IntPtr value, nuint length)
+            => length == 0
+                ? null
+                : Marshal.PtrToStringUTF8(value, checked((int)length));
+    }
+
     internal sealed class ResourceBridge(
         IWebSceneResourceLoader loader,
         Action<NativeScenePublished> scenePublished,
@@ -895,6 +964,29 @@ public static unsafe partial class NativeWebSceneApi
             WebSceneRequestContext requestContext,
             IntPtr destination,
             nuint capacity)
+            => Copy(
+                kind,
+                address,
+                entityTag,
+                lastModifiedUnixSeconds,
+                requestContext,
+                null,
+                null,
+                null,
+                destination,
+                capacity);
+
+        public nuint Copy(
+            uint kind,
+            string address,
+            string? entityTag,
+            long lastModifiedUnixSeconds,
+            WebSceneRequestContext requestContext,
+            string? method,
+            string? body,
+            string? contentType,
+            IntPtr destination,
+            nuint capacity)
         {
             var pending = _pendingCopy;
             if (pending is not null
@@ -904,7 +996,10 @@ public static unsafe partial class NativeWebSceneApi
                     address,
                     entityTag,
                     lastModifiedUnixSeconds,
-                    requestContext))
+                    requestContext,
+                    method,
+                    body,
+                    contentType))
             {
                 if (destination == IntPtr.Zero || capacity < pending.RequiredLength)
                 {
@@ -926,11 +1021,15 @@ public static unsafe partial class NativeWebSceneApi
                 1 => WebSceneResourceKind.Script,
                 2 => WebSceneResourceKind.StyleSheet,
                 3 => WebSceneResourceKind.Image,
+                4 => WebSceneResourceKind.Data,
                 _ => WebSceneResourceKind.Markup
             };
             var request = new WebSceneResourceRequest(address, null, resourceKind)
             {
                 Context = requestContext,
+                Method = method,
+                Body = body,
+                ContentType = contentType,
                 IfNoneMatch = entityTag,
                 IfModifiedSince = lastModifiedUnixSeconds > 0
                     ? DateTimeOffset.FromUnixTimeSeconds(lastModifiedUnixSeconds)
@@ -972,6 +1071,9 @@ public static unsafe partial class NativeWebSceneApi
                     entityTag,
                     lastModifiedUnixSeconds,
                     requestContext,
+                    method,
+                    body,
+                    contentType,
                     prepared,
                     request.IfModifiedSince,
                     prepared.RequiredLength);
@@ -1090,6 +1192,9 @@ public static unsafe partial class NativeWebSceneApi
             string? EntityTag,
             long LastModifiedUnixSeconds,
             WebSceneRequestContext RequestContext,
+            string? Method,
+            string? Body,
+            string? ContentType,
             PreparedResource Resource,
             DateTimeOffset? RequestIfModifiedSince,
             nuint RequiredLength)
@@ -1100,11 +1205,17 @@ public static unsafe partial class NativeWebSceneApi
                 string address,
                 string? entityTag,
                 long lastModifiedUnixSeconds,
-                WebSceneRequestContext requestContext)
+                WebSceneRequestContext requestContext,
+                string? method,
+                string? body,
+                string? contentType)
                 => ReferenceEquals(Owner, owner)
                     && Kind == kind
                     && LastModifiedUnixSeconds == lastModifiedUnixSeconds
                     && RequestContext == requestContext
+                    && string.Equals(Method, method, StringComparison.Ordinal)
+                    && string.Equals(Body, body, StringComparison.Ordinal)
+                    && string.Equals(ContentType, contentType, StringComparison.Ordinal)
                     && string.Equals(Address, address, StringComparison.Ordinal)
                     && string.Equals(EntityTag, entityTag, StringComparison.Ordinal);
         }

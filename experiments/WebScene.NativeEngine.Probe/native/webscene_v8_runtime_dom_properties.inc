@@ -805,13 +805,21 @@
         self->recascade_dynamic_state_subject(*node, "classList.value");
     }
 
-    static bool has_class(const dom_node& node, std::string_view value)
+    bool has_class(const dom_node& node, std::string_view value) const
     {
+        auto known = compiled_class_token_lists.find(node.class_name);
+        if (known != compiled_class_token_lists.end()) {
+            return std::find(
+                known->second.begin(),
+                known->second.end(),
+                value) != known->second.end();
+        }
         const std::string_view classes(node.class_name);
         const auto html_whitespace = [](unsigned char character) {
             return character == ' ' || character == '\t' || character == '\n'
                 || character == '\f' || character == '\r';
         };
+        std::vector<std::string> tokens;
         size_t cursor = 0;
         while (cursor < classes.size()) {
             while (cursor < classes.size()
@@ -819,12 +827,22 @@
             const auto start = cursor;
             while (cursor < classes.size()
                 && !html_whitespace(static_cast<unsigned char>(classes[cursor]))) ++cursor;
-            if (classes.substr(start, cursor - start) == value) return true;
+            if (cursor > start) {
+                tokens.emplace_back(classes.substr(start, cursor - start));
+            }
         }
-        return false;
+        if (compiled_class_token_lists.size()
+            >= maximum_compiled_class_token_lists) {
+            compiled_class_token_lists.clear();
+        }
+        known = compiled_class_token_lists.emplace(node.class_name, std::move(tokens)).first;
+        return std::find(
+            known->second.begin(),
+            known->second.end(),
+            value) != known->second.end();
     }
 
-    static bool remove_class(dom_node& node, const std::string& removed)
+    bool remove_class(dom_node& node, const std::string& removed)
     {
         if (!has_class(node, removed)) return false;
         const auto html_whitespace = [](unsigned char character) {
@@ -861,7 +879,7 @@
         auto changed = false;
         for (int index = 0; index < info.Length(); ++index) {
             const auto value = to_utf8(info.GetIsolate(), info[index]);
-            if (!value.empty() && !has_class(*node, value)) {
+            if (!value.empty() && !self->has_class(*node, value)) {
                 if (!node->class_name.empty()) node->class_name.push_back(' ');
                 node->class_name += value;
                 node->attributes["class"] = node->class_name;
@@ -883,7 +901,7 @@
         if (node == nullptr || info.Length() < 1) return;
         auto changed = false;
         for (int index = 0; index < info.Length(); ++index) {
-            changed |= remove_class(*node, to_utf8(info.GetIsolate(), info[index]));
+            changed |= self->remove_class(*node, to_utf8(info.GetIsolate(), info[index]));
         }
         if (changed) {
             self->recascade_dynamic_state_subject(*node, "classList.remove");
@@ -898,7 +916,7 @@
         const auto value = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         info.GetReturnValue().Set(v8::Boolean::New(
             info.GetIsolate(),
-            node != nullptr && has_class(*node, value)));
+            node != nullptr && self->has_class(*node, value)));
     }
 
     static void class_list_toggle(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -910,7 +928,7 @@
         auto* node = class_list_node(info);
         if (node == nullptr || info.Length() < 1) return;
         const auto value = to_utf8(info.GetIsolate(), info[0]);
-        const auto present = has_class(*node, value);
+        const auto present = self->has_class(*node, value);
         const auto enabled = info.Length() > 1 ? info[1]->BooleanValue(info.GetIsolate()) : !present;
         auto changed = false;
         if (enabled && !present) {
@@ -919,7 +937,7 @@
             node->attributes["class"] = node->class_name;
             changed = true;
         } else if (!enabled && present) {
-            changed = remove_class(*node, value);
+            changed = self->remove_class(*node, value);
         }
         if (changed) {
             self->recascade_dynamic_state_subject(*node, "classList.toggle");
@@ -2071,6 +2089,7 @@
         const auto index = value->Int32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0);
         node->mutable_form_control().selection_start = std::min<size_t>(std::max(0, index), node->mutable_form_control().value.size());
         node->mutable_form_control().selection_end = std::max(node->mutable_form_control().selection_end, node->mutable_form_control().selection_start);
+        node->mutable_form_control().selection_explicitly_set = true;
         if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
             node->mutable_form_control().selection_direction = text_selection_direction::none;
         }
@@ -2097,6 +2116,7 @@
         const auto index = value->Int32Value(info.GetIsolate()->GetCurrentContext()).FromMaybe(0);
         node->mutable_form_control().selection_end = std::min<size_t>(std::max(0, index), node->mutable_form_control().value.size());
         node->mutable_form_control().selection_start = std::min(node->mutable_form_control().selection_start, node->mutable_form_control().selection_end);
+        node->mutable_form_control().selection_explicitly_set = true;
         if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
             node->mutable_form_control().selection_direction = text_selection_direction::none;
         }
@@ -2132,6 +2152,7 @@
             : direction == "backward"
                 ? text_selection_direction::backward
                 : text_selection_direction::none;
+        node->mutable_form_control().selection_explicitly_set = true;
         if (node->mutable_form_control().selection_start == node->mutable_form_control().selection_end) {
             node->mutable_form_control().selection_direction = text_selection_direction::none;
         }

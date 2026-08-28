@@ -878,7 +878,9 @@ public static class NativeTextShaping
         float measuredWidth = float.NaN,
         float deviceScaleFactor = 1f,
         NativePositionedTextRun? positionedRun = null,
-        NativeFontRasterizationMode? rasterizationMode = null)
+        NativeFontRasterizationMode? rasterizationMode = null,
+        float letterSpacing = 0,
+        float wordSpacing = 0)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -909,7 +911,10 @@ public static class NativeTextShaping
                 paint,
                 horizontalAdvanceScale,
                 deviceScaleFactor,
-                rasterizationMode);
+                rasterizationMode,
+                text,
+                letterSpacing,
+                wordSpacing);
             return;
         }
         if ((featureFlags & TabularNumerals) == 0)
@@ -923,7 +928,9 @@ public static class NativeTextShaping
                 paint,
                 horizontalAdvanceScale,
                 deviceScaleFactor,
-                rasterizationMode);
+                rasterizationMode,
+                letterSpacing,
+                wordSpacing);
             return;
         }
 
@@ -964,6 +971,229 @@ public static class NativeTextShaping
         }
     }
 
+    internal static float DrawCssSpacedText(
+        SKCanvas canvas,
+        string text,
+        float x,
+        float baseline,
+        string familyList,
+        float fontSize,
+        int fontWeight,
+        float letterSpacing,
+        float wordSpacing,
+        uint featureFlags,
+        SKPaint paint,
+        WebTypefaceRegistry? registry,
+        float deviceScaleFactor,
+        NativeFontRasterizationMode? rasterizationMode)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+
+        var primaryTypeface = ResolveTypeface(familyList, fontWeight, registry);
+        paint.Typeface = primaryTypeface;
+        var hasFallback = TryResolveFallbackTextRuns(
+            text,
+            familyList,
+            fontWeight,
+            SKFontStyleSlant.Upright,
+            registry,
+            out _);
+        if (!hasFallback)
+        {
+            using var primaryShaper = new SKShaper(primaryTypeface);
+            var resolvedFeatures = ResolveFeatureFlags(
+                text,
+                familyList,
+                featureFlags,
+                registry);
+            var positioned = TryPositionTextRun(
+                primaryShaper,
+                text,
+                familyList,
+                fontSize,
+                fontWeight,
+                SKFontStyleSlant.Upright,
+                resolvedFeatures,
+                paint,
+                registry,
+                out var positionedRun);
+            var tabularDigitScale = ResolveTabularDigitScale(familyList, registry);
+            var shapedWidth = positioned
+                ? positionedRun.AdvanceWidth
+                : MeasureShapedWidth(
+                    primaryShaper,
+                    text,
+                    paint,
+                    resolvedFeatures,
+                    tabularDigitScale);
+            var widthScale = positioned
+                ? 1f
+                : ResolveShapedWidthScale(
+                    text,
+                    familyList,
+                    fontSize,
+                    fontWeight,
+                    paint,
+                    shapedWidth,
+                    resolvedFeatures,
+                    registry);
+            DrawShapedText(
+                canvas,
+                primaryShaper,
+                text,
+                x,
+                baseline,
+                paint,
+                resolvedFeatures,
+                tabularDigitScale,
+                widthScale,
+                shapedWidth,
+                deviceScaleFactor,
+                positioned ? positionedRun : null,
+                rasterizationMode,
+                letterSpacing,
+                wordSpacing);
+            return shapedWidth * widthScale + ResolveCssAdvanceSpacing(
+                text,
+                letterSpacing,
+                wordSpacing);
+        }
+
+        var elementStarts = StringInfo.ParseCombiningCharacters(text);
+        var cursor = x;
+        for (var elementIndex = 0; elementIndex < elementStarts.Length; elementIndex++)
+        {
+            var start = elementStarts[elementIndex];
+            var end = elementIndex + 1 < elementStarts.Length
+                ? elementStarts[elementIndex + 1]
+                : text.Length;
+            var element = text[start..end];
+            var elementAdvance = 0f;
+            if (TryResolveFallbackTextRuns(
+                    element,
+                    familyList,
+                    fontWeight,
+                    SKFontStyleSlant.Upright,
+                    registry,
+                    out var fallbackRuns))
+            {
+                var layout = LayoutFallbackTextRuns(
+                    fallbackRuns,
+                    familyList,
+                    fontSize,
+                    fontWeight,
+                    featureFlags,
+                    paint,
+                    registry);
+                foreach (var run in layout.Runs)
+                {
+                    paint.Typeface = run.Typeface;
+                    using var fallbackShaper = new SKShaper(run.Typeface);
+                    var runFeatures = ResolveFeatureFlags(
+                        run.Text,
+                        familyList,
+                        featureFlags,
+                        registry);
+                    var unscaledWidth = run.WidthScale > 0
+                        ? run.AdvanceWidth / run.WidthScale
+                        : run.AdvanceWidth;
+                    DrawShapedText(
+                        canvas,
+                        fallbackShaper,
+                        run.Text,
+                        cursor + elementAdvance,
+                        baseline,
+                        paint,
+                        runFeatures,
+                        1f,
+                        run.WidthScale,
+                        unscaledWidth,
+                        deviceScaleFactor,
+                        positionedRun: null,
+                        rasterizationMode);
+                    elementAdvance += run.AdvanceWidth;
+                }
+            }
+            else
+            {
+                var typeface = ResolveTypeface(familyList, fontWeight, registry);
+                paint.Typeface = typeface;
+                using var shaper = new SKShaper(typeface);
+                var elementFeatures = ResolveFeatureFlags(
+                    element,
+                    familyList,
+                    featureFlags,
+                    registry);
+                var positioned = TryPositionTextRun(
+                    shaper,
+                    element,
+                    familyList,
+                    fontSize,
+                    fontWeight,
+                    SKFontStyleSlant.Upright,
+                    elementFeatures,
+                    paint,
+                    registry,
+                    out var positionedRun);
+                var tabularDigitScale = ResolveTabularDigitScale(familyList, registry);
+                var shapedWidth = positioned
+                    ? positionedRun.AdvanceWidth
+                    : MeasureShapedWidth(
+                        shaper,
+                        element,
+                        paint,
+                        elementFeatures,
+                        tabularDigitScale);
+                var widthScale = positioned
+                    ? 1f
+                    : ResolveShapedWidthScale(
+                        element,
+                        familyList,
+                        fontSize,
+                        fontWeight,
+                        paint,
+                        shapedWidth,
+                        elementFeatures,
+                        registry);
+                DrawShapedText(
+                    canvas,
+                    shaper,
+                    element,
+                    cursor,
+                    baseline,
+                    paint,
+                    elementFeatures,
+                    tabularDigitScale,
+                    widthScale,
+                    shapedWidth,
+                    deviceScaleFactor,
+                    positioned ? positionedRun : null,
+                    rasterizationMode);
+                elementAdvance = shapedWidth * widthScale;
+            }
+
+            cursor += elementAdvance;
+            if (elementIndex + 1 < elementStarts.Length) cursor += letterSpacing;
+            if (element.Contains(' ')) cursor += wordSpacing;
+        }
+        return cursor - x;
+    }
+
+    private static float ResolveCssAdvanceSpacing(
+        string text,
+        float letterSpacing,
+        float wordSpacing)
+    {
+        var elementCount = StringInfo.ParseCombiningCharacters(text).Length;
+        var spaceCount = 0;
+        foreach (var character in text)
+        {
+            if (character == ' ') spaceCount++;
+        }
+        return Math.Max(0, elementCount - 1) * letterSpacing
+            + spaceCount * wordSpacing;
+    }
+
     private static void DrawPositionedTextRun(
         SKCanvas canvas,
         SKShaper shaper,
@@ -973,7 +1203,10 @@ public static class NativeTextShaping
         SKPaint paint,
         float horizontalAdvanceScale,
         float deviceScaleFactor,
-        NativeFontRasterizationMode? rasterizationMode)
+        NativeFontRasterizationMode? rasterizationMode,
+        string text,
+        float letterSpacing,
+        float wordSpacing)
     {
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
@@ -988,10 +1221,17 @@ public static class NativeTextShaping
         var run = builder.AllocatePositionedRun(font, positionedRun.Glyphs.Length);
         positionedRun.Glyphs.AsSpan().CopyTo(run.GetGlyphSpan());
         var positions = run.GetPositionSpan();
+        var spacingOffsets = ResolveCssGlyphSpacingOffsets(
+            text,
+            positionedRun.Glyphs.Length,
+            positionedRun.Clusters,
+            letterSpacing,
+            wordSpacing);
         for (var index = 0; index < positionedRun.Positions.Length; index++)
         {
             positions[index] = new SKPoint(
-                x + positionedRun.Positions[index].X * horizontalAdvanceScale,
+                x + positionedRun.Positions[index].X * horizontalAdvanceScale
+                    + spacingOffsets[index],
                 baseline + positionedRun.Positions[index].Y);
         }
         using var textBlob = builder.Build();
@@ -1007,7 +1247,9 @@ public static class NativeTextShaping
         SKPaint paint,
         float horizontalAdvanceScale,
         float deviceScaleFactor,
-        NativeFontRasterizationMode? rasterizationMode)
+        NativeFontRasterizationMode? rasterizationMode,
+        float letterSpacing = 0,
+        float wordSpacing = 0)
     {
         var result = shaper.Shape(text, 0, baseline, paint);
         if (result.Codepoints.Length == 0 || result.Points.Length == 0)
@@ -1023,11 +1265,18 @@ public static class NativeTextShaping
         var run = builder.AllocatePositionedRun(font, glyphCount);
         var glyphs = run.GetGlyphSpan();
         var positions = run.GetPositionSpan();
+        var spacingOffsets = ResolveCssGlyphSpacingOffsets(
+            text,
+            glyphCount,
+            clusters: null,
+            letterSpacing,
+            wordSpacing);
         for (var index = 0; index < glyphCount; index++)
         {
             glyphs[index] = (ushort)result.Codepoints[index];
             positions[index] = new SKPoint(
-                x + result.Points[index].X * horizontalAdvanceScale,
+                x + result.Points[index].X * horizontalAdvanceScale
+                    + spacingOffsets[index],
                 result.Points[index].Y);
         }
 
@@ -1038,6 +1287,36 @@ public static class NativeTextShaping
         }
 
         canvas.DrawText(textBlob, 0, 0, paint);
+    }
+
+    private static float[] ResolveCssGlyphSpacingOffsets(
+        string text,
+        int glyphCount,
+        uint[]? clusters,
+        float letterSpacing,
+        float wordSpacing)
+    {
+        var offsets = new float[glyphCount];
+        if (glyphCount == 0 || (letterSpacing == 0 && wordSpacing == 0)) return offsets;
+        var elementStarts = StringInfo.ParseCombiningCharacters(text);
+        if (clusters is null && elementStarts.Length != glyphCount) return offsets;
+        for (var glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++)
+        {
+            var cluster = clusters is not null && glyphIndex < clusters.Length
+                ? checked((int)clusters[glyphIndex])
+                : elementStarts[glyphIndex];
+            var precedingElements = 0;
+            var precedingSpaces = 0;
+            foreach (var elementStart in elementStarts)
+            {
+                if (elementStart >= cluster) break;
+                precedingElements++;
+                if (text[elementStart] == ' ') precedingSpaces++;
+            }
+            offsets[glyphIndex] = precedingElements * letterSpacing
+                + precedingSpaces * wordSpacing;
+        }
+        return offsets;
     }
 
     internal readonly record struct FontRasterizationProfile(

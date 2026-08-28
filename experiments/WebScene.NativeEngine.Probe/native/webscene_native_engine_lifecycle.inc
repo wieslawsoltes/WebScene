@@ -5,6 +5,8 @@
         void* resource_load_user_data = nullptr,
         webscene_resource_load_callback_v2 resource_load_callback_v2 = nullptr,
         void* resource_load_v2_user_data = nullptr,
+        webscene_resource_load_callback_v3 resource_load_callback_v3 = nullptr,
+        void* resource_load_v3_user_data = nullptr,
         webscene_scene_published_callback scene_published_callback = nullptr,
         void* scene_published_user_data = nullptr,
         webscene_text_measure_callback text_measure_callback = nullptr,
@@ -28,6 +30,8 @@
         , resource_load_user_data_(resource_load_user_data)
         , resource_load_callback_v2_(resource_load_callback_v2)
         , resource_load_v2_user_data_(resource_load_v2_user_data)
+        , resource_load_callback_v3_(resource_load_callback_v3)
+        , resource_load_v3_user_data_(resource_load_v3_user_data)
         , scene_published_callback_(scene_published_callback)
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)

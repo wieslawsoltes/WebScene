@@ -1069,19 +1069,35 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 $"Unsupported WebScene resource scheme '{uri.Scheme}'.");
         }
 
-        using var message = new HttpRequestMessage(HttpMethod.Get, uri)
+        var method = string.IsNullOrWhiteSpace(request.Method)
+            ? HttpMethod.Get
+            : new HttpMethod(request.Method);
+        var isSafeRead = method == HttpMethod.Get || method == HttpMethod.Head;
+        using var message = new HttpRequestMessage(method, uri)
         {
             Version = HttpVersion.Version20,
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower
         };
-        if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
+        if (request.Body is not null && !isSafeRead)
+        {
+            message.Content = new ByteArrayContent(
+                System.Text.Encoding.UTF8.GetBytes(request.Body));
+            if (!string.IsNullOrWhiteSpace(request.ContentType))
+            {
+                message.Content.Headers.TryAddWithoutValidation(
+                    "Content-Type",
+                    request.ContentType);
+            }
+        }
+        if (isSafeRead
+            && !string.IsNullOrWhiteSpace(request.IfNoneMatch)
             && EntityTagHeaderValue.TryParse(
                 request.IfNoneMatch,
                 out var entityTag))
         {
             message.Headers.IfNoneMatch.Add(entityTag);
         }
-        if (request.IfModifiedSince is { } modifiedSince)
+        if (isSafeRead && request.IfModifiedSince is { } modifiedSince)
         {
             message.Headers.IfModifiedSince = modifiedSince;
         }
@@ -1095,9 +1111,9 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
             response.Headers.ETag?.ToString() ?? request.IfNoneMatch;
         var responseLastModified =
             response.Content.Headers.LastModified ?? request.IfModifiedSince;
-        var cachePolicy = ReadHttpCachePolicy(
-            response,
-            responseLastModified);
+        var cachePolicy = isSafeRead
+            ? ReadHttpCachePolicy(response, responseLastModified)
+            : (FreshUntil: (DateTimeOffset?)null, IsCacheable: false);
         if (response.StatusCode == HttpStatusCode.NotModified)
         {
             return new WebSceneTextResource(

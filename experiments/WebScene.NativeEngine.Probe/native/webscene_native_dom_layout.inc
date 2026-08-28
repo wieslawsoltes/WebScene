@@ -85,6 +85,7 @@ void native_document::layout(float viewport_width, float viewport_height)
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
+    active_animation_demand_cache_valid_ = false;
     out_of_flow_geometry_dirty_roots_.clear();
 }
 
@@ -1471,6 +1472,32 @@ void native_document::layout_children(dom_node& parent)
             size_t row_span{1};
             size_t column_span{1};
         };
+        std::vector<dom_node*> grid_layout_items;
+        grid_layout_items.reserve(composed_children(parent).size());
+        const auto append_grid_layout_item = [&](const auto& self, dom_node* child) -> void {
+            if (child == nullptr) return;
+            if (child->style.display == display_mode::contents
+                && !is_out_of_flow(child->style.position)) {
+                // A display:contents element generates no principal box. Its
+                // children participate directly in the nearest grid formatting
+                // context. TradingView's symbol-search table uses one such
+                // wrapper per logical row; treating the wrapper as a grid item
+                // places each row in one cell and expands it to the grid's
+                // available block size.
+                child->visible = parent.visible;
+                child->layout = {};
+                child->scroll_content_width = 0;
+                child->scroll_content_height = 0;
+                for (auto* descendant : composed_children(*child)) {
+                    self(self, descendant);
+                }
+                return;
+            }
+            grid_layout_items.push_back(child);
+        };
+        for (auto* child : composed_children(parent)) {
+            append_grid_layout_item(append_grid_layout_item, child);
+        }
         const auto inherited_subgrid_columns = parent_grid.subgrid_columns
             && parent.has_grid_layout()
             && !parent.grid_layout().column_widths.empty();
@@ -1479,8 +1506,8 @@ void native_document::layout_children(dom_node& parent)
             const auto implicit_count = std::max<size_t>(
                 1U,
                 std::count_if(
-                    composed_children(parent).begin(),
-                    composed_children(parent).end(),
+                    grid_layout_items.begin(),
+                    grid_layout_items.end(),
                     [](const dom_node* child) {
                         return child != nullptr
                             && child->style.display != display_mode::none
@@ -1558,7 +1585,7 @@ void native_document::layout_children(dom_node& parent)
         std::vector<dom_node*> positioned_items;
         auto auto_row = size_t{0};
         auto auto_column = size_t{0};
-        for (auto* child : composed_children(parent)) {
+        for (auto* child : grid_layout_items) {
             child->visible = parent.visible && child->style.display != display_mode::none;
             // CSS Grid does not generate anonymous grid items for
             // whitespace-only text. Counting indentation here creates extra
@@ -1583,21 +1610,45 @@ void native_document::layout_children(dom_node& parent)
                 placement.row_start_value,
                 placement.row_end_value,
                 std::max<size_t>(parent_grid.template_rows.size(), 1U));
-            const auto authored_column = parse_line(placement.column_start_value);
+            const auto authored_column_start = parse_line(
+                placement.column_start_value);
+            const auto authored_column_end = parse_line(
+                placement.column_end_value);
             const auto authored_row = parse_line(placement.row_start_value);
             auto row = authored_row.has_value() && *authored_row > 0
                 ? static_cast<size_t>(*authored_row - 1) : auto_row;
-            auto column = authored_column.has_value() && *authored_column > 0
-                ? static_cast<size_t>(*authored_column - 1) : auto_column;
-            if (authored_column.has_value() && *authored_column < 0) {
+            auto column = authored_column_start.has_value()
+                    && *authored_column_start > 0
+                ? static_cast<size_t>(*authored_column_start - 1)
+                : auto_column;
+            if (authored_column_start.has_value()
+                && *authored_column_start < 0) {
                 column = static_cast<size_t>(std::max<int32_t>(
-                    0, static_cast<int32_t>(column_count) + *authored_column + 1));
+                    0,
+                    static_cast<int32_t>(column_count)
+                        + *authored_column_start + 1));
+            } else if (!authored_column_start.has_value()
+                && authored_column_end.has_value()) {
+                // A definite end line with an automatic start still fixes the
+                // item's column. Its default/span width extends backward from
+                // that line. TradingView's symbol-search header uses
+                // grid-column-end:3 so the first label occupies the same
+                // min-content track as the result symbols.
+                const auto normalized_end = *authored_column_end < 0
+                    ? static_cast<int32_t>(column_count)
+                        + *authored_column_end + 2
+                    : *authored_column_end;
+                column = static_cast<size_t>(std::max<int32_t>(
+                    0,
+                    normalized_end - 1
+                        - static_cast<int32_t>(column_span)));
             }
             if (column + column_span > column_count) {
                 column = column_count - column_span;
             }
             while (!fits(row, column, row_span, column_span)) {
-                if (!authored_column.has_value()) {
+                if (!authored_column_start.has_value()
+                    && !authored_column_end.has_value()) {
                     ++column;
                     if (column + column_span > column_count) {
                         column = 0;
@@ -1706,7 +1757,19 @@ void native_document::layout_children(dom_node& parent)
                     *item.node, item.node->style.margin_top, content.height, 0)
                 + resolve_length(
                     *item.node, item.node->style.margin_bottom, content.height, 0);
+            // A percentage block size in an implicit/auto grid track is
+            // cyclic during intrinsic track sizing and therefore contributes
+            // as auto. Resolve it only later, when arrange() has the final
+            // track height. Treating `height:100%` as a percentage of the
+            // grid container makes every implicit row viewport-height tall;
+            // TradingView's zero-width nested-border item uses exactly this
+            // pattern in every symbol-search result row.
+            const auto cyclic_percentage_height =
+                item.node->style.height.unit == length_unit::percent
+                && (authored_track == nullptr
+                    || authored_track->kind == grid_track::sizing::automatic);
             const auto authored = is_specified(item.node->style.height)
+                    && !cyclic_percentage_height
                 ? outer_authored_size(*item.node, false, content.height)
                 : intrinsic_size(*item.node, false, content.height);
             row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
@@ -2491,8 +2554,18 @@ void native_document::layout_children(dom_node& parent)
                         + (horizontal ? 0.0F : flex_static_main_offset)
                         + margin_top);
             if (child->style.position != position_mode::fixed) {
-                assigned.x -= parent.scroll_left;
-                assigned.y -= parent.scroll_top;
+                // A virtualized absolute row is commonly nested below a static
+                // spacer while its containing block is the positioned scroll
+                // viewport. Its visual position follows every scroller between
+                // that DOM parent and the containing block, not just its direct
+                // parent's (usually zero) scroll offset.
+                for (auto* scroll_ancestor = &parent;
+                    scroll_ancestor != nullptr;
+                    scroll_ancestor = composed_parent(*scroll_ancestor)) {
+                    assigned.x -= scroll_ancestor->scroll_left;
+                    assigned.y -= scroll_ancestor->scroll_top;
+                    if (scroll_ancestor == containing_node) break;
+                }
             }
             layout_child(*child, containing, assigned);
             continue;
@@ -3566,7 +3639,7 @@ float native_document::compute_intrinsic_size(
 
 void native_document::layout_child(
     dom_node& child,
-    const layout_rect&,
+    const layout_rect& containing_block,
     layout_rect assigned,
     bool assigned_height_is_definite)
 {
@@ -3737,8 +3810,12 @@ void native_document::layout_child(
     // max-height, but the final used principal box must remain capped even
     // when overflow is visible.
     if (is_specified(child.style.max_height)) {
-        const auto available_height = parent != nullptr
-            ? parent->layout.height : viewport_height_;
+        // Percent max-height resolves against the box that established layout.
+        // For fixed/absolute portal content this can be the viewport or a
+        // positioned ancestor even when the immediate DOM parent is a zero-size
+        // mount node. Re-resolving against that mount collapses an otherwise
+        // valid auto-height dialog after its descendants have been laid out.
+        const auto available_height = containing_block.height;
         const auto capped_height = std::min(
             child.layout.height,
             resolve_length(

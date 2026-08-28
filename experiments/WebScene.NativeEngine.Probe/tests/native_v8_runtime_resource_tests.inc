@@ -100,11 +100,16 @@ size_t load_test_resource(
 
 struct contextual_resource_server final {
     resource_server resources;
+    std::mutex request_mutex;
+    std::vector<std::string> requested_urls;
     std::string fetched_url;
     std::string origin;
     std::string referrer;
     uint32_t initiator{0U};
     uint32_t mode{0U};
+    std::string method;
+    std::string body;
+    std::string content_type;
 };
 
 size_t load_contextual_test_resource(
@@ -121,6 +126,10 @@ size_t load_contextual_test_resource(
 {
     auto& server = *static_cast<contextual_resource_server*>(user_data);
     const auto address = std::string(url, url_length);
+    {
+        const std::scoped_lock lock(server.request_mutex);
+        server.requested_urls.push_back(address);
+    }
     if (address.starts_with("https://symbol-search.test/")) {
         server.fetched_url = address;
         if (context != nullptr) {
@@ -129,6 +138,46 @@ size_t load_contextual_test_resource(
             server.initiator = context->initiator;
             server.mode = context->mode;
         }
+    }
+    return load_test_resource(
+        &server.resources,
+        kind,
+        url,
+        url_length,
+        entity_tag,
+        entity_tag_length,
+        last_modified,
+        destination,
+        destination_capacity);
+}
+
+size_t load_contextual_test_resource_v3(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified,
+    const webscene_resource_request_context_v3* context,
+    char* destination,
+    size_t destination_capacity)
+{
+    auto& server = *static_cast<contextual_resource_server*>(user_data);
+    const auto address = std::string(url, url_length);
+    {
+        const std::scoped_lock lock(server.request_mutex);
+        server.requested_urls.push_back(address);
+    }
+    if (context != nullptr && context->initiator == WEBSCENE_RESOURCE_INITIATOR_FETCH) {
+        server.fetched_url = address;
+        server.origin.assign(context->origin, context->origin_length);
+        server.referrer.assign(context->referrer, context->referrer_length);
+        server.initiator = context->initiator;
+        server.mode = context->mode;
+        server.method.assign(context->method, context->method_length);
+        server.body.assign(context->body, context->body_length);
+        server.content_type.assign(context->content_type, context->content_type_length);
     }
     return load_test_resource(
         &server.resources,
@@ -181,11 +230,370 @@ void test_fetch_carries_document_origin_to_resource_host()
         server.initiator == WEBSCENE_RESOURCE_INITIATOR_FETCH
             && server.mode == WEBSCENE_FETCH_MODE_CORS,
         "fetch request context did not identify a CORS fetch");
-    const auto result = evaluate(
+    const auto result = evaluate_until_equals(
         engine,
         "globalThis.__symbols?.[0]?.symbol ?? ''",
-        "iframe-fetch-origin-result.js");
+        "iframe-fetch-origin-result.js",
+        R"("AAPL")");
     require(result == R"("AAPL")", "symbol fetch did not populate results: " + result);
+    webscene_engine_destroy(engine);
+}
+
+struct slow_fetch_boundary_server final {
+    resource_server resources;
+    std::atomic<bool> entered{false};
+    std::atomic<bool> release{false};
+};
+
+size_t load_slow_fetch_boundary_resource(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified,
+    char* destination,
+    size_t destination_capacity)
+{
+    auto& server = *static_cast<slow_fetch_boundary_server*>(user_data);
+    const auto address = std::string_view(url, url_length);
+    if (kind == WEBSCENE_RESOURCE_DATA
+        && address == "https://symbol-search.test/search?q=T") {
+        server.entered.store(true, std::memory_order_release);
+        while (!server.release.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+    return load_test_resource(
+        &server.resources,
+        kind,
+        url,
+        url_length,
+        entity_tag,
+        entity_tag_length,
+        last_modified,
+        destination,
+        destination_capacity);
+}
+
+void test_slow_fetch_does_not_block_loading_state_publication()
+{
+    slow_fetch_boundary_server server{
+        .resources = resource_server{.content = {
+            {"https://symbol-search.test/index.html", "<main>ready</main>"},
+            {"https://symbol-search.test/search?q=T", R"JSON([{"symbol":"TSLA"}])JSON"}
+        }}};
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.resource_load_callback = load_slow_fetch_boundary_resource;
+    options.resource_load_user_data = &server;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "slow-fetch boundary engine creation failed");
+    constexpr std::string_view address{"https://symbol-search.test/index.html"};
+    require(
+        webscene_engine_load_url(engine, address.data(), address.size()) != 0U,
+        "slow-fetch boundary navigation failed");
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    execute_and_wait(
+        engine,
+        R"JS(
+          document.body.innerHTML = '<div id="loading">Loading symbols</div>';
+          globalThis.__slowFetchResult = '';
+          fetch('https://symbol-search.test/search?q=T')
+            .then(response => response.json())
+            .then(rows => { globalThis.__slowFetchResult = rows[0].symbol; });
+        )JS",
+        "slow-fetch-loading-state.js");
+
+    auto entered = false;
+    auto published_while_blocked = false;
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        entered = server.entered.load(std::memory_order_acquire);
+        webscene_engine_metrics after{};
+        webscene_engine_get_metrics(engine, &after);
+        published_while_blocked = after.published_scenes > before.published_scenes;
+        if (entered && published_while_blocked) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    const auto loading_text = evaluate(
+        engine,
+        "document.getElementById('loading')?.textContent ?? ''",
+        "slow-fetch-loading-state-result.js");
+    server.release.store(true, std::memory_order_release);
+
+    require(entered, "slow fetch did not reach the host resource loader");
+    require(
+        published_while_blocked,
+        "loading state was not published while the fetch remained blocked");
+    require(
+        loading_text == R"("Loading symbols")",
+        "V8 became unresponsive while the host fetch was blocked: " + loading_text);
+    require(
+        evaluate_until_equals(
+            engine,
+            "globalThis.__slowFetchResult",
+            "slow-fetch-completion-result.js",
+            R"("TSLA")",
+            500) == R"("TSLA")",
+        "slow fetch did not settle its Promise after host completion");
+    webscene_engine_destroy(engine);
+}
+
+void test_tradingview_datafeed_iframe_symbol_search_round_trip()
+{
+    contextual_resource_server server{
+        .resources = resource_server{.content = {
+            {"https://terminal.test/index.html", R"HTML(
+                <html><body>
+                <script>
+                  globalThis.__searchResult = null;
+                  globalThis.__searchError = null;
+                  globalThis.__messageLog = [];
+                  addEventListener('message', event => {
+                    globalThis.__messageLog.push([event.origin, event.data?.uid ?? null]);
+                    if (event.origin !== 'https://datafeed.test') return;
+                    if (event.data?.uid === 'READY') {
+                      document.querySelector('iframe').contentWindow.postMessage(
+                        { name: 'searchSymbols', args: ['AAPL'], uid: 'search-1' },
+                        'https://datafeed.test');
+                    } else if (event.data?.uid === 'search-1') {
+                      globalThis.__searchResult = event.data.data.args;
+                    }
+                  });
+                  const frame = document.createElement('iframe');
+                  frame.src = 'https://datafeed.test/embed-widget/tradingview-datafeed/';
+                  document.body.appendChild(frame);
+                </script>
+                </body></html>
+            )HTML"},
+            {"https://datafeed.test/embed-widget/tradingview-datafeed/", R"HTML(
+                <html><head><script defer src="/datafeed.js"></script></head><body></body></html>
+            )HTML"},
+            {"https://datafeed.test/datafeed.js", R"JS(
+                  parent.__frameScript = 'ran';
+                  addEventListener('DOMContentLoaded', () => {
+                    parent.__frameDomReady = 'ran';
+                    const parentOrigin = 'https://terminal.test';
+                    addEventListener('message', async event => {
+                      if (event.origin !== parentOrigin
+                          || event.data?.name !== 'searchSymbols') return;
+                      try {
+                        const controller = new AbortController();
+                        const query = new URLSearchParams({
+                          text: event.data.args[0],
+                          exchange: '',
+                          type: ''
+                        });
+                        const response = await fetch(
+                          `https://symbol-search.test/symbol_search/?${query}`,
+                          { signal: controller.signal });
+                        const symbols = await response.json();
+                        parent.postMessage({
+                          uid: event.data.uid,
+                          data: { status: 'ok', args: [symbols] }
+                        }, parentOrigin);
+                      } catch (error) {
+                        parent.postMessage({
+                          uid: event.data.uid,
+                          data: { status: 'error', args: [String(error)] }
+                        }, parentOrigin);
+                      }
+                    });
+                    parent.postMessage({
+                      uid: 'READY',
+                      data: { status: 'ok', args: [] }
+                    }, parentOrigin);
+                  });
+            )JS"},
+            {"https://symbol-search.test/symbol_search/?text=AAPL&exchange=&type=",
+                R"JSON([{"symbol":"AAPL","description":"Apple Inc."}])JSON"}
+        }}
+    };
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.simulated_chart_command_count = 64U;
+    options.resource_load_callback_v3 = load_contextual_test_resource_v3;
+    options.resource_load_v3_user_data = &server;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "datafeed symbol-search engine creation failed");
+    constexpr std::string_view address{"https://terminal.test/index.html"};
+    require(
+        webscene_engine_load_url(engine, address.data(), address.size()) != 0U,
+        "datafeed symbol-search navigation failed");
+
+    auto result = std::string{};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        result = evaluate(
+            engine,
+            "JSON.stringify({result:globalThis.__searchResult,error:globalThis.__searchError,messages:globalThis.__messageLog,frameScript:globalThis.__frameScript,frameDomReady:globalThis.__frameDomReady,frameCount:document.querySelectorAll('iframe').length,frameReady:document.querySelector('iframe')?.contentDocument?.readyState,frameWindowScript:document.querySelector('iframe')?.contentWindow?.__frameScript,frameWindowDomReady:document.querySelector('iframe')?.contentWindow?.__frameDomReady,scriptCount:document.querySelector('iframe')?.contentDocument?.querySelectorAll('script').length,scriptSrc:document.querySelector('iframe')?.contentDocument?.querySelector('script')?.getAttribute('src')})",
+            "datafeed-symbol-search-result.js");
+        if (result.find("AAPL") != std::string::npos) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    webscene_engine_metrics metrics{};
+    webscene_engine_get_metrics(engine, &metrics);
+    auto requested_urls = std::string{};
+    {
+        const std::scoped_lock lock(server.request_mutex);
+        for (const auto& requested : server.requested_urls) {
+            if (!requested_urls.empty()) requested_urls += ", ";
+            requested_urls += requested;
+        }
+    }
+    require(
+        result.find("AAPL") != std::string::npos,
+        "TradingView-shaped datafeed iframe search did not round-trip: " + result
+            + "; last error: " + last_error(engine)
+            + "; requests: " + std::to_string(
+                server.resources.requests.load(std::memory_order_relaxed))
+            + "; frame script errors: " + std::to_string(metrics.frame_script_errors)
+            + "; URLs: " + requested_urls);
+    require(
+        server.origin == "https://datafeed.test",
+        "datafeed fetch did not carry the iframe origin: " + server.origin);
+    require(
+        server.referrer
+            == "https://datafeed.test/embed-widget/tradingview-datafeed/",
+        "datafeed fetch did not carry the iframe referrer: " + server.referrer);
+    webscene_engine_destroy(engine);
+}
+
+void test_tradingview_save_acknowledgement_uses_multipart_post()
+{
+    constexpr std::string_view page_url{"https://host.test/index.html"};
+    constexpr std::string_view save_url{
+        "https://saveload.test/1.1/charts?client=terminal&user=public"};
+    contextual_resource_server server{
+        .resources = resource_server{.content = {
+            {std::string(page_url), R"HTML(
+                <script>
+                  const frame = document.createElement('iframe');
+                  document.body.appendChild(frame);
+                  frame.contentDocument.open();
+                  frame.contentDocument.write(`<button id="save">Default <span id="dirty">Save</span></button><script>
+                    let saveInProgress = false;
+                    document.getElementById('save').addEventListener('click', async () => {
+                      if (saveInProgress) return;
+                      saveInProgress = true;
+                      const payload = new FormData();
+                      payload.append('name', 'Default');
+                      payload.append('content', '{"layout":1}');
+                      try {
+                        const response = await fetch(
+                          'https://saveload.test/1.1/charts?client=terminal&user=public',
+                          { method: 'POST', body: payload, credentials: 'same-origin' });
+                        const result = await response.json();
+                        if (response.ok && result.status === 'ok') {
+                          document.getElementById('dirty').textContent = '';
+                        }
+                      } finally {
+                        saveInProgress = false;
+                      }
+                    });
+                  <\/script>`);
+                  frame.contentDocument.close();
+                </script>)HTML"},
+            {std::string(save_url), R"JSON({"status":"ok","id":"layout-42"})JSON"}
+        }}
+    };
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.resource_load_callback_v3 = load_contextual_test_resource_v3;
+    options.resource_load_v3_user_data = &server;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "save acknowledgement engine creation failed");
+    require(
+        webscene_engine_load_url(engine, page_url.data(), page_url.size()) != 0U,
+        "save acknowledgement fixture navigation failed");
+    auto frame_ready = false;
+    for (auto attempt = 0; attempt < 400; ++attempt) {
+        frame_ready = evaluate(
+            engine,
+            "Boolean(document.querySelector('iframe')?.contentDocument?.getElementById('save'))",
+            "tradingview-save-frame-ready.js") == "true";
+        if (frame_ready) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(frame_ready, "TradingView-shaped save iframe did not finish loading");
+    execute_and_wait(
+        engine,
+        "document.querySelector('iframe').contentDocument.getElementById('save').click()",
+        "tradingview-save-activation.js");
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        if (evaluate(
+                engine,
+                "document.querySelector('iframe').contentDocument.getElementById('dirty').textContent",
+                "tradingview-save-dirty-result.js") == R"("")") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    require(server.method == "POST", "TradingView-shaped save did not reach the host as POST");
+    require(
+        server.content_type.starts_with("multipart/form-data; boundary="),
+        "TradingView-shaped save did not carry a multipart boundary");
+    require(
+        server.body.find("name=\"name\"\r\n\r\nDefault") != std::string::npos
+            && server.body.find("name=\"content\"\r\n\r\n{\"layout\":1}") != std::string::npos,
+        "TradingView-shaped save multipart fields were not preserved");
+    require(
+        evaluate(
+            engine,
+            "document.querySelector('iframe').contentDocument.getElementById('dirty').textContent",
+            "tradingview-save-final-dirty-result.js") == R"("")",
+        "successful asynchronous save acknowledgement did not clear the dirty label");
+    webscene_engine_destroy(engine);
+}
+
+void test_failed_tradingview_save_keeps_dirty_label()
+{
+    constexpr std::string_view page_url{"https://terminal.test/failing-save.html"};
+    constexpr std::string_view save_url{"https://saveload.test/failing"};
+    contextual_resource_server server{
+        .resources = resource_server{.content = {
+            {std::string(page_url), R"HTML(
+                <button id="save"><span id="dirty">Save</span></button>
+                <script>
+                  document.getElementById('save').addEventListener('click', async () => {
+                    const form = new FormData();
+                    form.append('content', '{}');
+                    const response = await fetch(
+                      'https://saveload.test/failing',
+                      { method: 'POST', body: form });
+                    const result = await response.json();
+                    if (response.ok && result.status === 'ok') {
+                      document.getElementById('dirty').textContent = '';
+                    }
+                  });
+                </script>)HTML"},
+            {std::string(save_url), R"JSON({"status":"error","message":"rejected"})JSON"}
+        }}
+    };
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.resource_load_callback_v3 = load_contextual_test_resource_v3;
+    options.resource_load_v3_user_data = &server;
+    auto* engine = webscene_engine_create_with_options(&options);
+    require(engine != nullptr, "failed-save engine creation failed");
+    require(
+        webscene_engine_load_url(engine, page_url.data(), page_url.size()) != 0U,
+        "failed-save fixture navigation failed");
+    execute_and_wait(
+        engine,
+        "document.getElementById('save').click()",
+        "tradingview-failed-save-activation.js");
+    require(
+        evaluate(
+            engine,
+            "document.getElementById('dirty').textContent",
+            "tradingview-failed-save-dirty-result.js") == R"("Save")",
+        "failed save incorrectly cleared the dirty label");
     webscene_engine_destroy(engine);
 }
 
@@ -664,10 +1072,11 @@ void test_parallel_resource_prefetch()
         )JS",
         "native-fetch-resource.js");
     require(
-        evaluate(
+        evaluate_until_equals(
             engine,
             "globalThis.__fetchResult",
-            "native-fetch-resource-result.js")
+            "native-fetch-resource-result.js",
+            R"({"ok":true,"status":200,"answer":42})")
             == R"({"ok":true,"status":200,"answer":42})",
         "fetch did not resolve a relative URL through the host resource loader");
     require(

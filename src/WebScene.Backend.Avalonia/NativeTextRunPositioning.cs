@@ -208,6 +208,7 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
 
             var glyphs = new List<ushort>();
             var positions = new List<SKPoint>();
+            var clusters = new List<uint>();
             var runs = CoreText.CTLineGetGlyphRuns(line);
             var runCount = checked((int)CoreFoundation.CFArrayGetCount(runs));
             for (var runIndex = 0; runIndex < runCount; runIndex++)
@@ -216,11 +217,14 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
                 var count = checked((int)CoreText.CTRunGetGlyphCount(nativeRun));
                 var runGlyphs = new ushort[count];
                 var runPositions = new CGPoint[count];
+                var runStringIndices = new nint[count];
                 CoreText.CTRunGetGlyphs(nativeRun, default, runGlyphs);
                 CoreText.CTRunGetPositions(nativeRun, default, runPositions);
+                CoreText.CTRunGetStringIndices(nativeRun, default, runStringIndices);
                 for (var index = 0; index < count; index++)
                 {
                     glyphs.Add(runGlyphs[index]);
+                    clusters.Add(checked((uint)runStringIndices[index]));
                     positions.Add(new SKPoint(
                         checked((float)runPositions[index].X),
                         checked((float)runPositions[index].Y)));
@@ -239,7 +243,8 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
             return new NativePositionedTextRun(
                 glyphs.ToArray(),
                 positions.ToArray(),
-                width);
+                width,
+                clusters.ToArray());
         }
         finally
         {
@@ -408,6 +413,12 @@ internal sealed class MacCoreTextRunPositioner : INativeTextRunPositioner
             IntPtr run,
             CFRange range,
             [Out] CGPoint[] positions);
+
+        [DllImport(Library)]
+        internal static extern void CTRunGetStringIndices(
+            IntPtr run,
+            CFRange range,
+            [Out] nint[] indices);
 
         [DllImport(Library)]
         internal static extern double CTLineGetTypographicBounds(

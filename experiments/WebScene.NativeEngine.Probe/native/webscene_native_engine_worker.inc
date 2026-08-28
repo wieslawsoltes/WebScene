@@ -18,7 +18,8 @@
                 const std::string& entity_tag,
                 int64_t last_modified_unix_seconds,
                 webscene_native::v8_dom_runtime::resource_response& response) {
-                if (resource_load_callback_v2_ == nullptr
+                if (resource_load_callback_v3_ == nullptr
+                    && resource_load_callback_v2_ == nullptr
                     && resource_load_callback_ == nullptr) return false;
                 // Most web resources fit in this stack buffer. Supplying it on
                 // the first callback lets managed hosts encode directly into
@@ -36,8 +37,29 @@
                     request_context.referrer.size(),
                     request_context.mode,
                     request_context.destination};
+                const webscene_resource_request_context_v3 native_context_v3{
+                    sizeof(webscene_resource_request_context_v3),
+                    request_context.initiator,
+                    request_context.origin.data(),
+                    request_context.origin.size(),
+                    request_context.referrer.data(),
+                    request_context.referrer.size(),
+                    request_context.mode,
+                    request_context.destination,
+                    request_context.method.data(),
+                    request_context.method.size(),
+                    request_context.body.data(),
+                    request_context.body.size(),
+                    request_context.content_type.data(),
+                    request_context.content_type.size()};
                 const auto invoke = [&](char* destination, size_t capacity) {
-                    return resource_load_callback_v2_ != nullptr
+                    return resource_load_callback_v3_ != nullptr
+                        ? resource_load_callback_v3_(
+                            resource_load_v3_user_data_, kind, url.data(), url.size(),
+                            entity_tag.data(), entity_tag.size(),
+                            last_modified_unix_seconds, &native_context_v3,
+                            destination, capacity)
+                        : resource_load_callback_v2_ != nullptr
                         ? resource_load_callback_v2_(
                             resource_load_v2_user_data_, kind, url.data(), url.size(),
                             entity_tag.data(), entity_tag.size(),
@@ -105,6 +127,9 @@
                     webscene_native::interop_callback_request_data_v3&&
                         callback) {
                 return enqueue_callback_v3(std::move(callback));
+            },
+            [this] {
+                wake_.notify_all();
             });
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));

@@ -196,6 +196,35 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_absolute_virtualized_rows_follow_ancestor_scroll_container(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #scroller { position:relative; width:240px; height:100px;
+              overflow:auto; }
+            #spacer { height:300px; }
+            #row { position:absolute; left:0; top:120px; width:200px; height:20px; }
+          </style>
+          <div id="scroller"><div id="spacer"><div id="row"></div></div></div>`;
+          const scroller = document.getElementById('scroller');
+          const row = document.getElementById('row');
+          const before = row.getBoundingClientRect().top;
+          scroller.scrollTop = 80;
+          return {
+            scrollTop: scroller.scrollTop,
+            before,
+            after: row.getBoundingClientRect().top
+          };
+        })()
+    )JS", "native-absolute-virtual-row-ancestor-scroll.js");
+    require(
+        result == R"JSON({"scrollTop":80,"before":120,"after":40})JSON",
+        "an absolutely positioned virtual row ignored its ancestor scroller: " + result);
+}
+
 void test_rounded_overflow_visual_fixture_geometry(webscene_engine* engine)
 {
     resize(engine, 800, 600, 43U);
@@ -773,6 +802,109 @@ void test_auto_height_flex_popup_expands_overflowing_flex_child(webscene_engine*
     require(
         result == "[136,136,true]",
         "an auto-height flex popup clipped its overflowing flex child: " + result);
+}
+
+void test_fixed_auto_height_dialog_with_max_height_expands_flex_content(
+    webscene_engine* engine)
+{
+    resize(engine, 1414, 774, 9301U);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; overflow:hidden; }
+            #overlap-root { position:absolute; left:0; top:0; width:0; height:0; }
+            #portal { position:fixed; left:0; top:0; width:0; height:0; }
+            #dialog { position:fixed; left:100px; top:80px; display:flex;
+              flex-direction:column; min-width:280px; width:calc(100% - 20px);
+              max-width:480px; max-height:calc(100% - 20px);
+              box-sizing:border-box; }
+            #wrap { display:flex; overflow:hidden; }
+            #main { display:flex; flex:1 1 auto; flex-direction:column;
+              min-width:0; margin:40px 0 40px 40px; }
+            #title { align-items:center; display:flex; flex:none;
+              font-family:Arial; font-size:20px; font-weight:600;
+              line-height:24px; margin-bottom:8px; }
+            #content { display:flex; flex:1 1 auto; flex-direction:column;
+              min-height:0; overflow-x:hidden; overflow-y:auto;
+              margin:0 -40px; padding:8px 40px; }
+            #label { font-family:Arial; font-size:14px; line-height:21px; }
+            #input { height:34px; }
+            #actions { display:flex; flex:none; height:34px; margin-top:16px; }
+            #close { flex:none; width:34px; height:34px; margin:8px 8px 0 -2px; }
+          </style>
+          <div id="overlap-root"><div id="portal"><div><div id="dialog">
+            <div id="wrap"><div id="main">
+              <div id="title">Save New Chart Layout</div><div id="content">
+                <div id="label">Enter a new chart layout name:</div>
+                <input id="input"><div id="actions"></div>
+              </div></div><button id="close"></button>
+            </div></div></div></div></div>`;
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          return {
+            dialog: rect('dialog').height,
+            wrap: rect('wrap').height,
+            main: rect('main').height,
+            content: rect('content').height,
+            actionsInside: rect('actions').bottom <= rect('dialog').bottom
+          };
+        })()
+    )JS", "native-fixed-auto-height-max-height-flex-dialog.js");
+    require(
+        result == R"JSON({"dialog":233,"wrap":233,"main":153,"content":121,"actionsInside":true})JSON",
+        "a fixed auto-height dialog collapsed because its flex parent only had max-height: "
+            + result);
+}
+
+void test_custom_time_element_keeps_layout_dialog_metadata_inline(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #row {
+                align-items: center;
+                display: flex;
+                height: 48px;
+                position: relative;
+                width: 440px;
+              }
+              .action { flex: 0 0 22px; height: 22px; }
+              #favorite { margin: 0 4px 0 8px; }
+              #info {
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                padding-right: 20px;
+              }
+              #title { height: 18px; line-height: 18px; margin-bottom: 2px; }
+              #details { line-height: 16px; white-space: nowrap; }
+              #remove { margin-left: auto; margin-right: 8px; }
+            </style>
+            <div id="row">
+              <span id="favorite" class="action"></span>
+              <div id="info">
+                <div id="title">GOLD</div>
+                <div id="details">XAUUSD, 5m (<time><time-format>Aug 27, 2026 at 12:35</time-format></time>)</div>
+              </div>
+              <span id="remove" class="action"></span>
+            </div>`;
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const custom = document.querySelector('time-format');
+          return {
+            customDisplay: getComputedStyle(custom).display,
+            rowHeight: rect('row').height,
+            infoHeight: rect('info').height,
+            detailsHeight: rect('details').height,
+            customTop: custom.getBoundingClientRect().top,
+            detailsTop: rect('details').top
+          };
+        })()
+    )JS", "native-layout-dialog-inline-custom-time.js");
+    require(
+        result == R"JSON({"customDisplay":"inline","rowHeight":48,"infoHeight":36,"detailsHeight":16,"customTop":26,"detailsTop":26})JSON",
+        "a custom time element stacked and overlapped fixed-height layout rows: " + result);
 }
 
 void test_auto_height_overflow_auto_does_not_paint_phantom_scrollbar(

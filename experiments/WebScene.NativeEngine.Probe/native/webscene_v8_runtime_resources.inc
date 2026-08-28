@@ -81,6 +81,7 @@
         case WEBSCENE_RESOURCE_SCRIPT: return "script";
         case WEBSCENE_RESOURCE_STYLESHEET: return "stylesheet";
         case WEBSCENE_RESOURCE_IMAGE: return "image";
+        case WEBSCENE_RESOURCE_DATA: return "data";
         default: return "kind-" + std::to_string(kind);
         }
     }
@@ -210,6 +211,71 @@
             }
         }
         return shared_response;
+    }
+
+    bool has_ready_fetch_task() const noexcept
+    {
+        return std::any_of(
+            pending_fetches.begin(),
+            pending_fetches.end(),
+            [](const auto& task) {
+                return task.future.valid()
+                    && task.future.wait_for(std::chrono::milliseconds::zero())
+                        == std::future_status::ready;
+            });
+    }
+
+    bool drain_fetch_task()
+    {
+        const auto ready = std::find_if(
+            pending_fetches.begin(),
+            pending_fetches.end(),
+            [](const auto& task) {
+                return task.future.valid()
+                    && task.future.wait_for(std::chrono::milliseconds::zero())
+                        == std::future_status::ready;
+            });
+        if (ready == pending_fetches.end()) return true;
+        auto task = std::move(*ready);
+        pending_fetches.erase(ready);
+        auto task_context = task.context.Get(isolate);
+        auto resolver = task.resolver.Get(isolate);
+        if (task_context.IsEmpty() || resolver.IsEmpty()) return true;
+        activate_css_cascade(task_context);
+        v8::Context::Scope task_context_scope(task_context);
+        style_recascade_batch_scope style_batch(*this, batch_style_recascades);
+        async_fetch_result result;
+        try {
+            result = task.future.get();
+        } catch (const std::exception& error) {
+            result.error = error.what();
+        } catch (...) {
+            result.error = "WebScene fetch worker failed";
+        }
+        bool settled = false;
+        if (result.loaded) {
+            auto value = v8::Object::New(isolate);
+            value->Set(
+                task_context,
+                js_string(isolate, "body"),
+                js_dom_string(isolate, result.body)).Check();
+            value->Set(
+                task_context,
+                js_string(isolate, "url"),
+                js_dom_string(isolate, result.resolved_url)).Check();
+            settled = resolver->Resolve(task_context, value).FromMaybe(false);
+        } else {
+            const auto message = result.error.empty()
+                ? std::string{"Unable to fetch WebScene resource"}
+                : result.error;
+            settled = resolver->Reject(
+                task_context,
+                v8::Exception::Error(js_string(isolate, message.c_str())))
+                    .FromMaybe(false);
+        }
+        perform_microtask_checkpoint();
+        style_batch.finish();
+        return settled;
     }
 
     bool load_text_resource(

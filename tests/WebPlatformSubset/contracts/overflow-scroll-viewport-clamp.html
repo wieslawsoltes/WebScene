@@ -37,9 +37,24 @@
     width: 100px;
     height: 160px;
   }
+  #virtualScroller {
+    position: relative;
+    width: 120px;
+    height: 60px;
+    overflow: auto;
+  }
+  #virtualSpacer { height: 200px; }
+  #virtualRow {
+    position: absolute;
+    left: 0;
+    top: 120px;
+    width: 100px;
+    height: 20px;
+  }
 </style>
 <div id="scroller"><div id="content"><div id="tail"></div></div></div>
 <div id="rowFlexScroller"><div id="rowFlexContent"></div></div>
+<div id="virtualScroller"><div id="virtualSpacer"><div id="virtualRow"></div></div></div>
 <script>
   const state = window.__webSceneWptState = {
     complete: false, harness: null, results: [], errors: [], diagnostics: []
@@ -53,6 +68,8 @@
     const content = document.getElementById("content");
     const tail = document.getElementById("tail");
     const rowFlexScroller = document.getElementById("rowFlexScroller");
+    const virtualScroller = document.getElementById("virtualScroller");
+    const virtualRow = document.getElementById("virtualRow");
     const failures = [];
     const equal = (actual, expected, label) => {
       if (actual !== expected) failures.push(label + ": expected " + expected + ", got " + actual);
@@ -86,6 +103,13 @@
     equal(rowFlexScroller.scrollTop, 100, "repeated row-flex overflow remains bounded");
     equal(rowFlexScroller.scrollHeight, 160,
       "repeated row-flex scrolling does not grow its extent");
+
+    equal(virtualRow.getBoundingClientRect().top - virtualScroller.getBoundingClientRect().top,
+      120, "absolute virtual row starts at its authored offset");
+    virtualScroller.scrollTop = 80;
+    equal(virtualScroller.scrollTop, 80, "virtualized viewport accepts an in-range offset");
+    equal(virtualRow.getBoundingClientRect().top - virtualScroller.getBoundingClientRect().top,
+      40, "absolute virtual row follows its positioned ancestor scroller");
 
     scroller.scrollTop = 1e6;
     await renderingOpportunity();

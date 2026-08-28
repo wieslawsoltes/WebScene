@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CSSOM reads synchronously flush pending style recalculation</title>
+<style>
+  #target { display: block; color: rgb(255, 0, 0); width: 73px; }
+  #target span { color: inherit; }
+  #dependency[style] span { color: rgb(0, 128, 0); }
+</style>
+<div id="target"><span>result</span></div>
+<div id="dependency"><span>dependent result</span></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+  }
+
+  const target = document.getElementById("target");
+
+  test("getComputedStyle observes inline declaration removal synchronously", () => {
+    target.style.display = "none";
+    target.style.removeProperty("display");
+    assert(getComputedStyle(target).display === "block",
+      `computed display became ${JSON.stringify(getComputedStyle(target).display)}`);
+  });
+
+  test("geometry observes the restored stylesheet declaration synchronously", () => {
+    target.style.width = "11px";
+    target.style.removeProperty("width");
+    assert(target.getBoundingClientRect().width === 73,
+      `restored width became ${target.getBoundingClientRect().width}`);
+  });
+
+  test("inherited style resumes after inline removal in the same task", () => {
+    target.style.color = "blue";
+    target.style.removeProperty("color");
+    const childColor = getComputedStyle(target.firstElementChild).color;
+    assert(childColor === "rgb(255, 0, 0)",
+      `inherited color became ${JSON.stringify(childColor)}`);
+  });
+
+  test("ancestor style-attribute selectors invalidate descendants", () => {
+    const dependency = document.getElementById("dependency");
+    const child = dependency.firstElementChild;
+    dependency.setAttribute("style", "display: block");
+    assert(getComputedStyle(child).color === "rgb(0, 128, 0)",
+      "descendant did not observe matching ancestor style attribute");
+    dependency.removeAttribute("style");
+    assert(getComputedStyle(child).color !== "rgb(0, 128, 0)",
+      "descendant retained a selector whose ancestor style attribute stopped matching");
+  });
+
+  state.diagnostics.push(JSON.stringify({
+    display: getComputedStyle(target).display,
+    width: target.getBoundingClientRect().width,
+    color: getComputedStyle(target.firstElementChild).color
+  }));
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>

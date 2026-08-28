@@ -233,6 +233,7 @@
         css_focus_rules.clear();
         unindexed_css_rules.clear();
         css_attribute_dependencies.clear();
+        css_descendant_attribute_dependencies.clear();
         hover_selector_dependencies.clear();
         css_variables.clear();
         important_css_variables.clear();

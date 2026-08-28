@@ -1454,6 +1454,52 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             parts[4],
             0,
             _webTypefaces);
+        var letterSpacing = command.RadiusTopLeft;
+        var wordSpacing = command.RadiusTopRight;
+        if (letterSpacing != 0 || wordSpacing != 0)
+        {
+            var spacedTextX = command.X;
+            if (parts[3] is "center" or "right" or "end")
+            {
+                var spacedTextWidth = NativeTextShaping.Measure(
+                    text,
+                    parts[4],
+                    fontSize,
+                    fontWeight,
+                    letterSpacing,
+                    wordSpacing,
+                    featureFlags,
+                    _webTypefaces).AdvanceWidth;
+                spacedTextX = parts[3] == "center"
+                    ? command.X + (command.Width - spacedTextWidth) * 0.5f
+                    : command.X + command.Width - spacedTextWidth;
+            }
+            paint.GetFontMetrics(out var spacedMetrics);
+            var spacedGlyphHeight = spacedMetrics.Descent - spacedMetrics.Ascent;
+            var spacedContentHeight = Math.Min(
+                Math.Max(lineHeight, spacedGlyphHeight),
+                Math.Max(lineHeight, command.Height));
+            var spacedBaseline = command.Y
+                + Math.Max(0, (command.Height - spacedContentHeight) * 0.5f)
+                + (spacedContentHeight - spacedGlyphHeight) * 0.5f
+                - spacedMetrics.Ascent;
+            NativeTextShaping.DrawCssSpacedText(
+                canvas,
+                text,
+                spacedTextX,
+                spacedBaseline,
+                parts[4],
+                fontSize,
+                fontWeight,
+                letterSpacing,
+                wordSpacing,
+                featureFlags,
+                paint,
+                _webTypefaces,
+                _presenterDeviceScaleFactor,
+                NativeTextShaping.ResolveCssFontSmoothingRasterizationMode(fontSmoothing));
+            return;
+        }
         if (NativeTextShaping.TryResolveFallbackTextRuns(
                 text,
                 parts[4],

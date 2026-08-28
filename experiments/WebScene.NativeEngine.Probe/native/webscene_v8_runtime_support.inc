@@ -532,23 +532,29 @@ display_mode default_display_for_tag(std::string_view tag)
     if (tag == "colgroup") return display_mode::table_column_group;
     if (tag == "col") return display_mode::table_column;
     if (tag == "caption") return display_mode::table_caption;
-    if (tag == "li") return display_mode::list_item;
-    // Compact HTML UA defaults. Component libraries rely on phrasing elements (most
-    // visibly the dialog submit-button span) remaining inline when no author
-    // display declaration is present.
-    constexpr std::array<std::string_view, 26> inline_tags{
-        "a", "abbr", "b", "cite", "code", "em", "i", "kbd", "label",
-        "mark", "q", "s", "samp", "small", "span", "strong", "sub", "sup",
-        "svg", "time", "u", "var", "path", "use", "circle", "br"};
-    constexpr std::array<std::string_view, 6> inline_block_tags{
-        "button", "img", "input", "rect", "select", "textarea"};
+    if (tag == "li" || tag == "summary") return display_mode::list_item;
+    // CSS starts elements at `display:inline`; the HTML UA stylesheet then
+    // promotes only known structural elements. In particular autonomous
+    // custom elements and HTMLUnknownElement remain inline. Treating every
+    // unlisted tag as a block made consumer helpers such as <time-format>
+    // split a single metadata line into several overlapping flex rows.
+    constexpr std::array<std::string_view, 38> block_tags{
+        "address", "article", "aside", "blockquote", "body", "center",
+        "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset",
+        "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4",
+        "h5", "h6", "header", "hgroup", "html", "hr", "main", "menu",
+        "nav", "ol", "p", "pre", "search", "section", "ul", "legend"};
+    if (std::find(block_tags.begin(), block_tags.end(), tag) != block_tags.end()) {
+        return display_mode::block;
+    }
+    constexpr std::array<std::string_view, 9> inline_block_tags{
+        "button", "img", "input", "meter", "progress", "rect", "select",
+        "textarea", "object"};
     if (std::find(inline_block_tags.begin(), inline_block_tags.end(), tag)
         != inline_block_tags.end()) {
         return display_mode::inline_block;
     }
-    return std::find(inline_tags.begin(), inline_tags.end(), tag) != inline_tags.end()
-        ? display_mode::inline_flow
-        : display_mode::block;
+    return display_mode::inline_flow;
 }
 
 display_mode parse_display_mode(std::string_view value)
@@ -1288,9 +1294,14 @@ void initialize_v8_process()
         const auto thread_pool_size = static_cast<int>(std::min<uint64_t>(
             unsigned_environment_value("WEBSCENE_V8_PLATFORM_THREADS").value_or(0),
             16));
-        const auto idle_tasks = std::getenv("WEBSCENE_V8_IDLE_TASKS") != nullptr
-            ? v8::platform::IdleTaskSupport::kEnabled
-            : v8::platform::IdleTaskSupport::kDisabled;
+        // Chromium exposes idle deadlines to V8 as part of its normal event
+        // loop. Keep the default platform's idle queue enabled so WebScene can
+        // do the same at true idle boundaries; accepting an idle task does not
+        // itself execute work or add per-node instrumentation overhead.
+        const auto idle_tasks =
+            std::getenv("WEBSCENE_V8_DISABLE_IDLE_TASKS") == nullptr
+                ? v8::platform::IdleTaskSupport::kEnabled
+                : v8::platform::IdleTaskSupport::kDisabled;
         v8_platform = v8::platform::NewDefaultPlatform(
             thread_pool_size,
             idle_tasks);

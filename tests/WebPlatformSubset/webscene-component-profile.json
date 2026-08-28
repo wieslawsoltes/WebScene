@@ -9,6 +9,25 @@
   },
   "required": [
     {
+      "path": "contracts/css-form-control-text-transform.html",
+      "type": "reftest",
+      "reference": "contracts/css-form-control-text-transform-ref.html",
+      "capabilities": ["form-control-text-transform", "text-transform-uppercase", "input-value-preservation", "caret-transformed-advance"],
+      "evidence": ["tradingview-symbol-search-uppercase-input"]
+    },
+    {
+      "path": "contracts/urlsearchparams-constructor.html",
+      "type": "contract",
+      "capabilities": ["urlsearchparams-string-constructor", "urlsearchparams-record-constructor", "urlsearchparams-iterable-constructor", "form-url-encoding"],
+      "evidence": ["tradingview-datafeed-symbol-search"]
+    },
+    {
+      "path": "contracts/fetch-formdata-post.html",
+      "type": "contract",
+      "capabilities": ["formdata", "fetch-post", "multipart-form-data", "asynchronous-save-acknowledgement"],
+      "evidence": ["hosted-component-chart-layout-save"]
+    },
+    {
       "path": "contracts/responsive-release-list.html",
       "type": "contract",
       "capabilities": ["flex-shrink-redistribution", "right-alignment", "text-wrapping", "intrinsic-block-growth", "resize-back-stability"],
@@ -23,8 +42,8 @@
     {
       "path": "contracts/dialog-layout-integrity.html",
       "type": "contract",
-      "capabilities": ["column-flex-shrink", "overflow-scroll-extent", "footer-containment", "justify-content-space-around", "replaced-input-intrinsic-width", "inherited-font-size", "inherited-line-height", "outer-box-shadow"],
-      "evidence": ["hosted-component-settings-dialog", "hosted-component-go-to-date-dialog", "hosted-component-go-to-time-popup"]
+      "capabilities": ["column-flex-shrink", "overflow-scroll-extent", "footer-containment", "fixed-portal-auto-height", "percentage-max-height-containing-block", "justify-content-space-around", "replaced-input-intrinsic-width", "inherited-font-size", "inherited-line-height", "outer-box-shadow"],
+      "evidence": ["hosted-component-settings-dialog", "hosted-component-save-layout-dialog", "hosted-component-go-to-date-dialog", "hosted-component-go-to-time-popup"]
     },
     {
       "path": "contracts/segmented-transform-origin.html",
@@ -657,9 +676,9 @@
     {
       "path": "contracts/css-display-restoration-lifecycle.html",
       "type": "contract",
-      "capabilities": ["default-display-restoration", "detached-reattachment-cascade", "tiny-rendered-box-geometry", "synchronous-display-invalidation", "ancestor-display-box-suppression"],
+      "capabilities": ["default-display-restoration", "custom-and-unknown-initial-inline-display", "detached-reattachment-cascade", "tiny-rendered-box-geometry", "synchronous-display-invalidation", "ancestor-display-box-suppression"],
       "evidence": ["jquery-4.0.0-css-show-hide-toggle-visible-reduction", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract"],
-      "reason": "Required after the same 5/5 product-neutral lifecycle assertions pass direct Chrome and rebuilt native and the native C++ suite remains green. The native fix represents inline, inline-block, and list-item distinctly and makes offset geometry respect hidden ancestors; it closes eight unchanged jQuery CSS assertions without framework-specific runtime code. Evidence: artifacts/web-platform-display-restoration-chrome-v1-20260723/results.json, artifacts/web-platform-display-restoration-webscene-v1-20260723/managed/results.json, artifacts/web-platform-display-restoration-native-v3-20260723/results.json, and artifacts/ecosystem-consumers-display-restoration-v1-20260723/ecosystem-results.json."
+      "reason": "Required after the same product-neutral lifecycle assertions pass direct Chrome and rebuilt native and the native C++ suite remains green. The native fix represents inline, inline-block, and list-item distinctly, preserves the CSS initial inline display for custom and unknown elements, and makes offset geometry respect hidden ancestors; it closes unchanged consumer layout assertions without framework-specific runtime code. Evidence: artifacts/web-platform-display-restoration-chrome-v1-20260723/results.json, artifacts/web-platform-display-restoration-webscene-v1-20260723/managed/results.json, artifacts/web-platform-display-restoration-native-v3-20260723/results.json, and artifacts/ecosystem-consumers-display-restoration-v1-20260723/ecosystem-results.json."
     },
     {
       "path": "contracts/html-script-raw-text-inertness.html",
@@ -744,6 +763,13 @@
       "capabilities": ["cssom-z-index-idl-assignment", "cssom-z-index-integer-serialization", "inline-cascade-connection-lifecycle", "inline-declaration-removal"],
       "evidence": ["jquery-4.0.0-css-z-index-upstream-source", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract"],
       "reason": "Required after Chrome and the native runner pass all 3/3 product-neutral assertions and the unchanged jQuery css(String|Hash) test advances to completion in native. Numeric zIndex IDL assignment serializes as a string integer, survives connection and stylesheet recascade, accepts kebab-case negative-integer mutation, and restores the lower stylesheet declaration after inline removal. Native paint retains the established retained-canvas overlay invariant while preserving the observable inline z-index. Evidence: artifacts/web-platform-hidden-subtree-z-index-chrome-final-v1-20260723/results.json, artifacts/web-platform-required-hidden-subtree-z-index-promoted-v1-20260723/{managed,native}/results.json, and artifacts/ecosystem-consumers-hidden-subtree-z-index-final-v1-20260723/ecosystem-results.json."
+    },
+    {
+      "path": "contracts/cssom-style-recalculation-barrier.html",
+      "type": "contract",
+      "capabilities": ["cssom-synchronous-style-recalculation", "cssom-synchronous-geometry-recalculation", "inherited-style-recalculation"],
+      "evidence": ["web-platform-cssom-semantics", "tradingview-symbol-search-regression"],
+      "reason": "CSSOM computed-style and geometry reads are synchronous style-recalculation barriers. WebScene may coalesce repeated invalidations within one browser task, but declaration removal must restore stylesheet and inherited values before any observable read in that task."
     },
     {
       "path": "contracts/cssom-computed-style-named-properties.html",
@@ -848,7 +874,7 @@
     {
       "path": "contracts/overflow-scroll-viewport-clamp.html",
       "type": "contract",
-      "capabilities": ["finite-scroll-extent", "scroll-offset-clamping", "dynamic-scroll-range-clamping", "overflow-hit-test-clipping", "scroll-event-idempotence", "row-flex-scroll-extent-invariance", "webkit-scrollbar-display-none"],
+      "capabilities": ["finite-scroll-extent", "scroll-offset-clamping", "dynamic-scroll-range-clamping", "overflow-hit-test-clipping", "scroll-event-idempotence", "row-flex-scroll-extent-invariance", "absolute-virtual-row-scroll-translation", "webkit-scrollbar-display-none"],
       "evidence": ["bounded-component-scroll-viewports", "release-page-and-hosted-component-overflow-containers", "direct-chrome-neutral-contract", "managed-and-native-neutral-contract", "managed-and-native-overlay-scrollbar-paint"],
       "reason": "Required after corrected unchanged bytes pass Chrome and the native runner. The browser-authorized contract requires a finite scroll range, queued scroll events at changed boundaries, saturation at both ends, no duplicate event at an unchanged boundary, overflow hit-test clipping, row-flex extent invariance across repeated boundary scrolling, synchronous extent/offset re-clamping after content shrink and re-expansion, and preservation of that geometry when the author hides the scrollbar with ::-webkit-scrollbar { display:none }. Chrome rejected the earlier candidate because a layout-taking scrollbar induced a horizontal scrollbar, an absolutely positioned tail legitimately preserved overflow after the nominal parent height shrank, and scroll events were asserted synchronously. The corrected contract removes those false assumptions. Managed raster authority and native scene tests require a proportional default overlay thumb that moves with the bounded offset, then require the host thumb to disappear without changing scroll position or extent when the pseudo-element display winner is none. Evidence: artifacts/web-platform-overflow-scroll-chrome-v1-20260723/results.json (rejected formulation), artifacts/web-platform-overflow-scroll-chrome-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-managed-fixed-v2-20260723/results.json, artifacts/web-platform-overflow-scroll-native-current-v2-20260723/results.json, OverflowViewportClipsHitTestingAndReclampsAfterExtentMutation, test_native_overflow_scrolling_and_nowrap, and test_row_flex_vertical_scroll_extent_remains_bounded."
     },
@@ -1009,6 +1035,13 @@
       "capabilities": ["grid-column-subgrid", "grid-spanning-subgrid", "inherited-grid-track-sizing", "paired-form-control-alignment"],
       "evidence": ["reported-trading-settings-paired-control-layout"],
       "reason": "Production-shaped reduction of the Trading settings rows: a nested grid spanning both parent columns inherits their used column geometry so each checkbox label and select remain aligned on one row."
+    },
+    {
+      "path": "contracts/css-grid-display-contents-items.html",
+      "type": "contract",
+      "capabilities": ["grid-display-contents-item-flattening", "grid-in-flow-descendant-placement", "compact-result-row-layout"],
+      "evidence": ["tradingview-symbol-search-result-grid"],
+      "reason": "Production-shaped reduction of TradingView's five-track symbol-search results: display:contents row wrappers generate no box and their cells participate directly in the parent grid as compact 39px rows."
     },
     {
       "path": "contracts/grid-auto-row-stretch-dir-radius.html",

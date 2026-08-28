@@ -3590,7 +3590,7 @@
         auto* previous_cascade_root = const_cast<dom_node*>(active_css_cascade_root);
         auto* node_cascade_root = css_cascade_root_for_node(node);
         if (node_cascade_root != nullptr) activate_css_cascade(node_cascade_root);
-        retain_connected_subtree_wrappers(node);
+        retain_reconnected_subtree_wrappers(node);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         const auto trace = profile_css;
         const auto candidate_checks_before = css_profile_candidate_checks;
@@ -3674,12 +3674,17 @@
         std::string_view reason)
     {
         if (!is_connected(root)) return;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++style_recascade_schedule_requests;
+#endif
         auto* cascade_root = css_cascade_root_for_node(root);
-        retain_connected_subtree_wrappers(root);
         for (auto& pending : pending_style_recascades) {
             if (pending.root != &root || pending.cascade_root != cascade_root) continue;
             pending.subtree = pending.subtree || subtree;
             if (pending.reason.empty() && !reason.empty()) pending.reason = reason;
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            ++style_recascade_coalesced_requests;
+#endif
             return;
         }
         if (std::any_of(
@@ -3691,9 +3696,15 @@
                         && pending.root != nullptr
                         && subtree_contains(*pending.root, &root);
                 })) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            ++style_recascade_coalesced_requests;
+#endif
             return;
         }
         if (subtree) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            const auto pending_before = pending_style_recascades.size();
+#endif
             std::erase_if(
                 pending_style_recascades,
                 [this, &root, cascade_root](const pending_style_recascade& pending) {
@@ -3701,6 +3712,10 @@
                         && pending.cascade_root == cascade_root
                         && subtree_contains(root, pending.root);
                 });
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            style_recascade_coalesced_requests +=
+                pending_before - pending_style_recascades.size();
+#endif
         }
         pending_style_recascades.push_back(
             pending_style_recascade{
@@ -3715,11 +3730,21 @@
         if (pending_style_recascades.empty()) return;
         auto pending = std::move(pending_style_recascades);
         pending_style_recascades.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++style_recascade_flush_batches;
+        style_recascade_flush_roots += pending.size();
+#endif
         for (const auto& recascade : pending) {
             if (recascade.root == nullptr || !is_connected(*recascade.root)) continue;
             if (recascade.subtree) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                ++style_recascade_flush_subtree_roots;
+#endif
                 recascade_connected_subtree_now(*recascade.root, recascade.reason);
             } else {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                ++style_recascade_flush_node_roots;
+#endif
                 recascade_connected_node(*recascade.root);
             }
         }
@@ -3897,6 +3922,7 @@
         css_focus_rules.clear();
         unindexed_css_rules.clear();
         css_attribute_dependencies.clear();
+        css_descendant_attribute_dependencies.clear();
         css_variables.clear();
         important_css_variables.clear();
         for (size_t index = 0; index < css_rules.size(); ++index) {

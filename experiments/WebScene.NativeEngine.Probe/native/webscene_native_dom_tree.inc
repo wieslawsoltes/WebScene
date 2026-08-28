@@ -43,14 +43,27 @@ webscene_text_metrics native_document::measure_text(
     if (text_measurement_cache_.size() >= 16'384U) {
         text_measurement_cache_.clear();
     }
+    size_t character_count = 0U;
+    size_t space_count = 0U;
+    for (const auto character : value) {
+        const auto byte = static_cast<unsigned char>(character);
+        if ((byte & 0xC0U) == 0x80U) continue;
+        ++character_count;
+        if (character == ' ') ++space_count;
+    }
+    const auto fallback_spacing = static_cast<float>(
+        character_count > 0U ? character_count - 1U : 0U) * letter_spacing
+        + static_cast<float>(space_count) * word_spacing;
+    const auto fallback_advance = fallback_text_width(value, font_size)
+        + fallback_spacing;
     webscene_text_metrics measured{
         sizeof(webscene_text_metrics),
-        fallback_text_width(value, font_size),
+        fallback_advance,
         font_size * 0.9F,
         font_size * 0.1F,
         0.0F,
         0.0F,
-        fallback_text_width(value, font_size),
+        fallback_advance,
         font_size * 0.9F,
         font_size * 0.1F};
     if (text_measure_callback_ != nullptr) {
@@ -493,7 +506,12 @@ void native_document::remove_all_children(dom_node& parent)
 
 size_t native_document::erase_detached_subtree(dom_node& root)
 {
-    if (&root == body_ || root.parent != nullptr) return 0U;
+    return erase_detached_subtrees(std::vector<dom_node*>{&root});
+}
+
+size_t native_document::erase_detached_subtrees(
+    const std::vector<dom_node*>& roots)
+{
     std::unordered_set<dom_node*> removed;
     const auto collect = [&](const auto& self, dom_node& node) -> void {
         if (!removed.insert(&node).second) return;
@@ -506,7 +524,11 @@ size_t native_document::erase_detached_subtree(dom_node& root)
             if (child != nullptr) self(self, *child);
         }
     };
-    collect(collect, root);
+    for (auto* root : roots) {
+        if (root == nullptr || root == body_ || root->parent != nullptr) continue;
+        collect(collect, *root);
+    }
+    if (removed.empty()) return 0U;
     const auto before = nodes_.size();
     for (const auto* node : removed) {
         if (node->id == 0U || node->id > native_id_index_.size()) continue;

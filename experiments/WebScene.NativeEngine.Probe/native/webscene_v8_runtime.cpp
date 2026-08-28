@@ -1037,7 +1037,10 @@ struct v8_dom_runtime::implementation final {
             resource_origin(base),
             base,
             WEBSCENE_FETCH_MODE_CORS,
-            WEBSCENE_REQUEST_DESTINATION_NONE};
+            WEBSCENE_REQUEST_DESTINATION_NONE,
+            "GET",
+            {},
+            {}};
         std::string content;
         std::string resolved;
         if (!self->load_text_resource(
@@ -1054,6 +1057,117 @@ struct v8_dom_runtime::implementation final {
             return;
         }
         info.GetReturnValue().Set(js_dom_string(info.GetIsolate(), content));
+    }
+
+    static void fetch_resource(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        if (self == nullptr || info.Length() == 0) {
+            info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                js_string(info.GetIsolate(), "fetch requires a URL")));
+            return;
+        }
+        const auto specifier = to_utf8(info.GetIsolate(), info[0]);
+        auto method = info.Length() > 1
+            ? to_utf8(info.GetIsolate(), info[1])
+            : std::string{"GET"};
+        std::transform(method.begin(), method.end(), method.begin(), [](unsigned char value) {
+            return static_cast<char>(std::toupper(value));
+        });
+        const auto body = info.Length() > 2
+            ? to_utf8(info.GetIsolate(), info[2])
+            : std::string{};
+        const auto content_type = info.Length() > 3
+            ? to_utf8(info.GetIsolate(), info[3])
+            : std::string{};
+        const auto& base = self->current_base_address();
+        auto resolved = resolve_resource_url(specifier, base);
+        resource_request_context request_context{
+            WEBSCENE_RESOURCE_INITIATOR_FETCH,
+            resource_origin(base),
+            base,
+            WEBSCENE_FETCH_MODE_CORS,
+            WEBSCENE_REQUEST_DESTINATION_NONE,
+            method,
+            body,
+            content_type};
+        const auto local_context = info.GetIsolate()->GetCurrentContext();
+        if (self->pending_fetches.size() >= maximum_pending_fetches) {
+            info.GetIsolate()->ThrowException(v8::Exception::Error(
+                js_string(info.GetIsolate(), "Too many pending fetch requests")));
+            return;
+        }
+        auto resolver = v8::Promise::Resolver::New(local_context).ToLocalChecked();
+        pending_fetch_task pending;
+        pending.context.Reset(info.GetIsolate(), local_context);
+        pending.resolver.Reset(info.GetIsolate(), resolver);
+        const auto notify = self->runtime_work_available;
+        pending.future = std::async(
+            std::launch::async,
+            [self,
+                specifier,
+                resolved = std::move(resolved),
+                method,
+                request_context = std::move(request_context),
+                notify]() mutable {
+                async_fetch_result result;
+                result.resolved_url = resolved;
+                try {
+                    resource_response response;
+                    auto loaded = false;
+                    if (self->load_resource_callback) {
+                        if (method == "GET" || method == "HEAD") {
+                            auto shared = self->load_resource_single_flight(
+                                WEBSCENE_RESOURCE_DATA,
+                                result.resolved_url,
+                                request_context,
+                                {},
+                                0,
+                                loaded);
+                            if (loaded && shared != nullptr) response = *shared;
+                        } else {
+                            loaded = self->load_resource_callback(
+                                WEBSCENE_RESOURCE_DATA,
+                                result.resolved_url,
+                                request_context,
+                                {},
+                                0,
+                                response);
+                        }
+                    } else {
+                        auto path = self->resolve_resource_path(specifier);
+                        std::ifstream stream(path, std::ios::binary);
+                        if (stream) {
+                            response.content.assign(
+                                std::istreambuf_iterator<char>(stream),
+                                std::istreambuf_iterator<char>());
+                            result.resolved_url = path.string();
+                            loaded = true;
+                        }
+                    }
+                    result.loaded = loaded;
+                    if (loaded && method != "HEAD") {
+                        result.body = std::move(response.content);
+                    } else if (!loaded) {
+                        result.error = "Unable to fetch WebScene resource: " + specifier;
+                    }
+                } catch (const std::exception& error) {
+                    result.error = error.what();
+                } catch (...) {
+                    result.error = "Unable to fetch WebScene resource: " + specifier;
+                }
+                if (notify) notify();
+                return result;
+            }).share();
+        self->pending_fetches.push_back(std::move(pending));
+        self->record_feature(
+            "web-api",
+            "Window.fetch",
+            "supported",
+            "host resource I/O completes off the rendering worker and resolves as a later task",
+            "web-api-binding");
+        info.GetReturnValue().Set(resolver->GetPromise());
     }
 
     void install_document_constructor(
@@ -2945,13 +3059,32 @@ struct v8_dom_runtime::implementation final {
                 this._owner = init && typeof init === 'object'
                   && 'href' in init ? init : null;
                 this._pairs = [];
-                const query = String(
-                  this._owner ? this._owner.search : init || '')
+                if (!this._owner && init !== null && typeof init === 'object') {
+                  if (typeof init[Symbol.iterator] === 'function') {
+                    for (const entry of init) {
+                      const pair = Array.from(entry);
+                      if (pair.length !== 2) {
+                        throw new TypeError(
+                          'URLSearchParams sequence entries must contain exactly two items');
+                      }
+                      this._pairs.push([String(pair[0]), String(pair[1])]);
+                    }
+                  } else {
+                    for (const name of Object.keys(init)) {
+                      this._pairs.push([String(name), String(init[name])]);
+                    }
+                  }
+                  return;
+                }
+                const query = String(this._owner ? this._owner.search : init ?? '')
                   .replace(/^\?/, '');
                 for (const item of query ? query.split('&') : []) {
                   const separator = item.indexOf('=');
-                  const decode = value => decodeURIComponent(
-                    String(value).replace(/\+/g, ' '));
+                  const decode = value => {
+                    value = String(value).replace(/\+/g, ' ');
+                    try { return decodeURIComponent(value); }
+                    catch { return value; }
+                  };
                   this._pairs.push(separator < 0
                     ? [decode(item), '']
                     : [decode(item.slice(0, separator)),
@@ -2977,6 +3110,12 @@ struct v8_dom_runtime::implementation final {
                 const pair = this._pairs.find(entry => entry[0] === name);
                 return pair ? pair[1] : null;
               }
+              getAll(name) {
+                name = String(name);
+                return this._pairs
+                  .filter(entry => entry[0] === name)
+                  .map(entry => entry[1]);
+              }
               has(name) {
                 name = String(name);
                 return this._pairs.some(entry => entry[0] === name);
@@ -2994,9 +3133,102 @@ struct v8_dom_runtime::implementation final {
                 this._pairs = this._pairs.filter(entry => entry[0] !== name);
                 this._updateOwner();
               }
+              sort() {
+                this._pairs = this._pairs
+                  .map((entry, index) => ({ entry, index }))
+                  .sort((left, right) => left.entry[0] < right.entry[0] ? -1
+                    : left.entry[0] > right.entry[0] ? 1
+                    : left.index - right.index)
+                  .map(item => item.entry);
+                this._updateOwner();
+              }
+              entries() { return this._pairs.map(entry => [...entry])[Symbol.iterator](); }
+              keys() { return this._pairs.map(entry => entry[0])[Symbol.iterator](); }
+              values() { return this._pairs.map(entry => entry[1])[Symbol.iterator](); }
+              forEach(callback, thisArg = undefined) {
+                for (const [name, value] of this._pairs) {
+                  callback.call(thisArg, value, name, this);
+                }
+              }
+              [Symbol.iterator]() { return this.entries(); }
+              get size() { return this._pairs.length; }
               toString() {
+                const encode = value => encodeURIComponent(String(value))
+                  .replace(/%20/g, '+')
+                  .replace(/[!'()~]/g, character =>
+                    `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
                 return this._pairs.map(([name, value]) =>
-                  `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).join('&');
+                  `${encode(name)}=${encode(value)}`).join('&');
+              }
+            }
+            class WebSceneFormData {
+              constructor(form = undefined) {
+                __webSceneRecordWebApi(
+                  'FormData.constructor', 'partially-supported',
+                  'ordered string and Blob fields with multipart fetch serialization');
+                this._entries = [];
+                if (form !== undefined && form !== null) {
+                  throw new TypeError('Constructing FormData from a form is not yet supported');
+                }
+              }
+              append(name, value, filename = undefined) {
+                this._entries.push([
+                  String(name), value instanceof Blob ? value : String(value),
+                  filename === undefined ? undefined : String(filename)
+                ]);
+              }
+              delete(name) {
+                name = String(name);
+                this._entries = this._entries.filter(entry => entry[0] !== name);
+              }
+              get(name) {
+                name = String(name);
+                const entry = this._entries.find(item => item[0] === name);
+                return entry ? entry[1] : null;
+              }
+              getAll(name) {
+                name = String(name);
+                return this._entries.filter(item => item[0] === name).map(item => item[1]);
+              }
+              has(name) {
+                name = String(name);
+                return this._entries.some(item => item[0] === name);
+              }
+              set(name, value, filename = undefined) {
+                name = String(name);
+                const index = this._entries.findIndex(item => item[0] === name);
+                this.delete(name);
+                const entry = [
+                  name, value instanceof Blob ? value : String(value),
+                  filename === undefined ? undefined : String(filename)
+                ];
+                this._entries.splice(index < 0 ? this._entries.length : index, 0, entry);
+              }
+              entries() { return this._entries.map(entry => [entry[0], entry[1]])[Symbol.iterator](); }
+              keys() { return this._entries.map(entry => entry[0])[Symbol.iterator](); }
+              values() { return this._entries.map(entry => entry[1])[Symbol.iterator](); }
+              forEach(callback, thisArg = undefined) {
+                for (const [name, value] of this._entries) {
+                  callback.call(thisArg, value, name, this);
+                }
+              }
+              [Symbol.iterator]() { return this.entries(); }
+              _encode(boundary) {
+                const escape = value => String(value)
+                  .replace(/\r|\n/g, ' ')
+                  .replace(/"/g, '%22');
+                let result = '';
+                for (const [name, value, filename] of this._entries) {
+                  result += `--${boundary}\r\nContent-Disposition: form-data; name="${escape(name)}"`;
+                  if (value instanceof Blob) {
+                    result += `; filename="${escape(filename ?? 'blob')}"\r\n`;
+                    if (value.type) result += `Content-Type: ${value.type}\r\n`;
+                    result += `\r\n${value.toString()}\r\n`;
+                  } else {
+                    result += `\r\n\r\n${value}\r\n`;
+                  }
+                }
+                return `${result}--${boundary}--\r\n`;
               }
             }
             class WebSceneURL {
@@ -3064,6 +3296,7 @@ struct v8_dom_runtime::implementation final {
               Blob: { value: WebSceneBlob, configurable: true },
               URL: { value: WebSceneURL, configurable: true },
               URLSearchParams: { value: WebSceneURLSearchParams, configurable: true },
+              FormData: { value: WebSceneFormData, configurable: true },
               DOMException: { value: WebSceneDOMException, configurable: true },
               crypto: { value: {
                 getRandomValues(array) {
@@ -3101,6 +3334,10 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneFetchText"),
             v8::Function::New(local_context, fetch_text).ToLocalChecked()).Check();
+        global->Set(
+            local_context,
+            js_string(isolate, "__webSceneFetchResource"),
+            v8::Function::New(local_context, fetch_resource).ToLocalChecked()).Check();
         if constexpr (bootstrap_snapshot_enabled) return;
         constexpr std::string_view source = R"JS(
           (() => {
@@ -3191,27 +3428,74 @@ struct v8_dom_runtime::implementation final {
                   .toUpperCase();
                 this.headers = new WebSceneHeaders(
                   options.headers ?? input?.headers);
+                this.body = options.body ?? input?.body ?? null;
               }
             }
 
             function webSceneFetch(input, options = {}) {
               const request = new WebSceneRequest(input, options);
-              if (request.method !== 'GET' && request.method !== 'HEAD') {
+              if ((request.method === 'GET' || request.method === 'HEAD')
+                  && request.body !== null) {
                 return Promise.reject(new TypeError(
-                  `WebScene fetch does not support ${request.method}`));
+                  'Request with GET/HEAD method cannot have body'));
               }
-              return new Promise((resolve, reject) => {
-                queueMicrotask(() => {
-                  try {
-                    const body = __webSceneFetchText(request.url);
-                    resolve(new WebSceneResponse(
-                      request.method === 'HEAD' ? '' : body,
-                      { status: 200, url: request.url }));
-                  } catch (error) {
-                    reject(error);
-                  }
-                });
-              });
+              try {
+                    let body = '';
+                    if (request.body instanceof FormData) {
+                      const boundary = `----WebSceneFormBoundary${Math.floor(
+                        Math.random() * Number.MAX_SAFE_INTEGER).toString(16)}`;
+                      body = request.body._encode(boundary);
+                      if (!request.headers.has('content-type')) {
+                        request.headers.set(
+                          'content-type',
+                          `multipart/form-data; boundary=${boundary}`);
+                      }
+                    } else if (request.body instanceof URLSearchParams) {
+                      body = request.body.toString();
+                      if (!request.headers.has('content-type')) {
+                        request.headers.set(
+                          'content-type',
+                          'application/x-www-form-urlencoded;charset=UTF-8');
+                      }
+                    } else if (request.body instanceof Blob) {
+                      body = request.body.toString();
+                      if (request.body.type && !request.headers.has('content-type')) {
+                        request.headers.set('content-type', request.body.type);
+                      }
+                    } else if (request.body !== null) {
+                      body = String(request.body);
+                      if (!request.headers.has('content-type')) {
+                        request.headers.set('content-type', 'text/plain;charset=UTF-8');
+                      }
+                    }
+                    if (request.url.startsWith('data:')) {
+                      const separator = request.url.indexOf(',');
+                      if (separator < 0) throw new TypeError('Malformed data URL');
+                      const metadata = request.url.slice(5, separator);
+                      const payload = request.url.slice(separator + 1);
+                      if (/;base64(?:;|$)/i.test(metadata)) {
+                        throw new TypeError('Base64 data fetch is not yet supported');
+                      }
+                      const result = {
+                        body: decodeURIComponent(payload),
+                        url: request.url
+                      };
+                      return Promise.resolve(new WebSceneResponse(
+                        result.body,
+                        { status: 200, url: result.url }));
+                    } else {
+                      return __webSceneFetchResource(
+                        request.url,
+                        request.method,
+                        body,
+                        request.headers.get('content-type') ?? '')
+                        .then(result => new WebSceneResponse(
+                          result.body,
+                          { status: 200, url: result.url }));
+                    }
+              } catch (error) {
+                return Promise.reject(error);
+              }
             }
 
             class WebSceneXMLHttpRequest {
@@ -3766,7 +4050,8 @@ v8_dom_runtime::v8_dom_runtime(
     resource_loader load_resource,
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
-    interop_callback_sink_v3 interop_callback_sink)
+    interop_callback_sink_v3 interop_callback_sink,
+    std::function<void()> runtime_work_available)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -3774,7 +4059,8 @@ v8_dom_runtime::v8_dom_runtime(
         std::move(load_resource),
           std::move(host_request_available),
           std::move(interop_callback_available),
-          std::move(interop_callback_sink)))
+          std::move(interop_callback_sink),
+          std::move(runtime_work_available)))
 {
 }
 
@@ -4093,8 +4379,10 @@ bool v8_dom_runtime::pump_task()
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
-    return impl_->websocket_transport.has_pending_events()
+    return impl_->has_pending_detached_dom_collection()
+        || impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
+        || impl_->has_ready_fetch_task()
         || !impl_->pending_programmatic_scroll_events.empty()
         || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()
@@ -4165,6 +4453,9 @@ std::string v8_dom_runtime::diagnostics()
     description << "] | resource-memory-hits="
         << impl_->resource_cache_memory_hit_count.load(std::memory_order_relaxed)
         << ", detached-dom={pending-roots=" << impl_->detached_dom_roots.size()
+        << ",scan-roots="
+        << (impl_->detached_dom_gc_scan_roots.size()
+            - impl_->detached_dom_gc_scan_index)
         << ",pending-nodes=" << impl_->detached_nodes_since_gc
         << ",released=" << impl_->released_detached_dom_nodes << '}';
     if (impl_->profile_startup) {
@@ -4417,6 +4708,34 @@ std::string v8_dom_runtime::event_diagnostics() const
         << impl_->document.intrinsic_size_cache_hits();
     result << ", intrinsic-size-cache-misses="
         << impl_->document.intrinsic_size_cache_misses();
+    result << ", wrapper-retention-subtrees="
+        << impl_->reconnected_wrapper_retention_subtrees;
+    result << ", wrapper-retention-nodes="
+        << impl_->reconnected_wrapper_retention_nodes;
+    result << ", detached-dom-release-batches="
+        << impl_->detached_dom_release_batches;
+    result << ", detached-dom-release-roots="
+        << impl_->detached_dom_release_roots;
+    result << ", detached-dom-release-slices="
+        << impl_->detached_dom_release_slices;
+    result << ", detached-dom-release-max-roots-per-slice="
+        << impl_->detached_dom_release_max_roots_per_slice;
+    result << ", detached-dom-idle-gc-notifications="
+        << impl_->detached_dom_idle_gc_notifications;
+    result << ", style-recascade-schedule-requests="
+        << impl_->style_recascade_schedule_requests;
+    result << ", style-recascade-coalesced-requests="
+        << impl_->style_recascade_coalesced_requests;
+    result << ", style-recascade-flush-batches="
+        << impl_->style_recascade_flush_batches;
+    result << ", style-recascade-flush-roots="
+        << impl_->style_recascade_flush_roots;
+    result << ", style-recascade-flush-node-roots="
+        << impl_->style_recascade_flush_node_roots;
+    result << ", style-recascade-flush-subtree-roots="
+        << impl_->style_recascade_flush_subtree_roots;
+    result << ", style-recascade-noop-removals="
+        << impl_->style_recascade_noop_removals;
     if (impl_->profile_bindings) {
         uint64_t total_nanoseconds = 0;
         result << ", resize-bindings=[";
@@ -4932,6 +5251,8 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
                         * sizeof(std::string)
                     + payload->compiled_selector.combinators.capacity()
                         * sizeof(char)
+                    + payload->compiled_selector.compiled_compounds.capacity()
+                        * sizeof(implementation::compiled_css_compound)
                     + payload->declarations.capacity()
                         * sizeof(implementation::css_declaration)
                     + payload->media_queries.capacity() * sizeof(std::string);
@@ -4939,6 +5260,30 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
                     payload->compiled_selector.compounds) {
                     result.process_shared_css_rule_storage_bytes +=
                         string_bytes(compound);
+                }
+                for (const auto& compound :
+                    payload->compiled_selector.compiled_compounds) {
+                    result.process_shared_css_rule_storage_bytes +=
+                        string_bytes(compound.tag)
+                        + compound.identities.capacity()
+                            * sizeof(std::pair<char, std::string>)
+                        + compound.attributes.capacity() * sizeof(std::string)
+                        + compound.pseudos.capacity()
+                            * sizeof(implementation::compiled_css_pseudo);
+                    for (const auto& [marker, identity] : compound.identities) {
+                        static_cast<void>(marker);
+                        result.process_shared_css_rule_storage_bytes +=
+                            string_bytes(identity);
+                    }
+                    for (const auto& attribute : compound.attributes) {
+                        result.process_shared_css_rule_storage_bytes +=
+                            string_bytes(attribute);
+                    }
+                    for (const auto& pseudo : compound.pseudos) {
+                        result.process_shared_css_rule_storage_bytes +=
+                            string_bytes(pseudo.name)
+                            + string_bytes(pseudo.argument);
+                    }
                 }
                 for (const auto& declaration : payload->declarations) {
                     result.process_shared_css_rule_storage_bytes +=
@@ -4972,6 +5317,57 @@ v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexc
         + impl_->unindexed_css_rules.capacity() * sizeof(size_t)
         + impl_->hover_selector_dependencies.capacity()
             * sizeof(implementation::hover_selector_dependency);
+    result.native_css_index_storage_bytes +=
+        impl_->compiled_class_token_lists.bucket_count() * sizeof(void*)
+        + impl_->compiled_css_selector_lists.bucket_count() * sizeof(void*);
+    for (const auto& [class_name, tokens] : impl_->compiled_class_token_lists) {
+        result.native_css_index_storage_bytes +=
+            sizeof(decltype(impl_->compiled_class_token_lists)::value_type)
+            + 2U * sizeof(void*) + string_bytes(class_name)
+            + tokens.capacity() * sizeof(std::string);
+        for (const auto& token : tokens) {
+            result.native_css_index_storage_bytes += string_bytes(token);
+        }
+    }
+    for (const auto& [source, selector_list] :
+        impl_->compiled_css_selector_lists) {
+        result.native_css_index_storage_bytes +=
+            sizeof(decltype(impl_->compiled_css_selector_lists)::value_type)
+            + 2U * sizeof(void*) + string_bytes(source)
+            + selector_list.selectors.capacity()
+                * sizeof(implementation::compiled_css_selector);
+        for (const auto& selector : selector_list.selectors) {
+            result.native_css_index_storage_bytes +=
+                selector.compounds.capacity() * sizeof(std::string)
+                + selector.combinators.capacity() * sizeof(char)
+                + selector.compiled_compounds.capacity()
+                    * sizeof(implementation::compiled_css_compound);
+            for (const auto& compound_source : selector.compounds) {
+                result.native_css_index_storage_bytes +=
+                    string_bytes(compound_source);
+            }
+            for (const auto& compound : selector.compiled_compounds) {
+                result.native_css_index_storage_bytes +=
+                    string_bytes(compound.tag)
+                    + compound.identities.capacity()
+                        * sizeof(std::pair<char, std::string>)
+                    + compound.attributes.capacity() * sizeof(std::string)
+                    + compound.pseudos.capacity()
+                        * sizeof(implementation::compiled_css_pseudo);
+                for (const auto& [marker, identity] : compound.identities) {
+                    static_cast<void>(marker);
+                    result.native_css_index_storage_bytes += string_bytes(identity);
+                }
+                for (const auto& attribute : compound.attributes) {
+                    result.native_css_index_storage_bytes += string_bytes(attribute);
+                }
+                for (const auto& pseudo : compound.pseudos) {
+                    result.native_css_index_storage_bytes +=
+                        string_bytes(pseudo.name) + string_bytes(pseudo.argument);
+                }
+            }
+        }
+    }
     for (const auto& [root, cascade] : impl_->inactive_css_cascades) {
         static_cast<void>(root);
         result.native_css_index_storage_bytes +=

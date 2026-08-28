@@ -275,6 +275,62 @@ void keyboard_input(
     require(webscene_engine_enqueue(engine, &input) != 0, "keyboard input was rejected");
 }
 
+void test_chart_printable_key_does_not_duplicate_into_newly_focused_search_input(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+      (() => {
+        document.body.innerHTML = '<main id="chart" tabindex="0">Chart</main>';
+        chart.focus();
+        globalThis.__chartSearchEvents = [];
+        chart.addEventListener('keydown', event => {
+          if (event.key !== 'T') return;
+          const input = document.createElement('input');
+          input.id = 'symbol-search';
+          input.value = event.key;
+          document.body.appendChild(input);
+          input.focus();
+          for (const type of ['beforeinput', 'input']) {
+            input.addEventListener(type, () => __chartSearchEvents.push(type));
+          }
+        });
+      })()
+    )JS", "chart-type-to-search-setup.js");
+    const auto consumed_before = consumed_input_count(engine);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 'T', 680U);
+    keyboard_input(engine, WEBSCENE_INPUT_TEXT, 'T', 681U);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 'T', 682U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before + 3U,
+        "chart type-to-search key sequence was not consumed");
+    const auto result = evaluate(
+        engine,
+        R"JS(({
+          value: document.getElementById('symbol-search')?.value,
+          start: document.getElementById('symbol-search')?.selectionStart,
+          end: document.getElementById('symbol-search')?.selectionEnd,
+          events: __chartSearchEvents
+        }))JS",
+        "chart-type-to-search-result.js");
+    require(
+        result == R"({"value":"T","start":1,"end":1,"events":[]})",
+        "chart key text was retargeted into the newly focused search input: " + result);
+    require(
+        evaluate(
+            engine,
+            R"JS((() => {
+              const input = document.createElement('input');
+              input.value = 'T';
+              input.setSelectionRange(0, 0);
+              document.body.appendChild(input);
+              input.focus();
+              return [input.selectionStart, input.selectionEnd];
+            })())JS",
+            "explicit-selection-before-focus-result.js") == R"([0,0])",
+        "focus overwrote an explicitly authored text selection");
+}
+
 void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine* engine)
 {
     execute(engine, R"JS(

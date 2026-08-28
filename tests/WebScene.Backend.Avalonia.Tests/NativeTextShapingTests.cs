@@ -1,3 +1,4 @@
+using System.Globalization;
 using WebScene.Backends.Avalonia.Native;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
@@ -358,6 +359,107 @@ public sealed class NativeTextShapingTests
             baseline: 16,
             paint,
             featureFlags: 0);
+    }
+
+    [Theory]
+    [InlineData("II")]
+    [InlineData("TSLA")]
+    [InlineData("tsla")]
+    public void CssLetterSpacingMovesWholeShapedRunAndMatchesMeasuredAdvance(string text)
+    {
+        const string family = "-apple-system, BlinkMacSystemFont, sans-serif";
+        const float fontSize = 24;
+        const float letterSpacing = 12;
+        using var normalBitmap = new SKBitmap(160, 40);
+        using var spacedBitmap = new SKBitmap(160, 40);
+        using var normalCanvas = new SKCanvas(normalBitmap);
+        using var spacedCanvas = new SKCanvas(spacedBitmap);
+        using var paint = new SKPaint
+        {
+            IsAntialias = true,
+            Color = SKColors.White,
+            TextSize = fontSize
+        };
+
+        normalCanvas.Clear(SKColors.Transparent);
+        var normalAdvance = NativeTextShaping.DrawCssSpacedText(
+            normalCanvas,
+            text,
+            4,
+            30,
+            family,
+            fontSize,
+            400,
+            0,
+            0,
+            0,
+            paint,
+            registry: null,
+            deviceScaleFactor: 1,
+            rasterizationMode: null);
+        spacedCanvas.Clear(SKColors.Transparent);
+        var spacedAdvance = NativeTextShaping.DrawCssSpacedText(
+            spacedCanvas,
+            text,
+            4,
+            30,
+            family,
+            fontSize,
+            400,
+            letterSpacing,
+            0,
+            0,
+            paint,
+            registry: null,
+            deviceScaleFactor: 1,
+            rasterizationMode: null);
+        var measured = NativeTextShaping.Measure(
+            text,
+            family,
+            fontSize,
+            400,
+            letterSpacing,
+            0);
+
+        var expectedPaintShift = letterSpacing
+            * (StringInfo.ParseCombiningCharacters(text).Length - 1);
+        Assert.Equal(expectedPaintShift, spacedAdvance - normalAdvance, precision: 3);
+        Assert.Equal(measured.AdvanceWidth, spacedAdvance, precision: 3);
+        Assert.True(
+            RightmostInk(spacedBitmap) - RightmostInk(normalBitmap)
+                >= expectedPaintShift - 4,
+            $"letter-spacing did not move the whole shaped '{text}' run");
+        if (OperatingSystem.IsMacOS())
+        {
+            var typeface = NativeTextShaping.ResolveTypeface(family, 400);
+            using var shaper = new SKShaper(typeface);
+            paint.Typeface = typeface;
+            Assert.True(NativeTextShaping.TryPositionTextRun(
+                shaper,
+                text,
+                family,
+                fontSize,
+                400,
+                SKFontStyleSlant.Upright,
+                0,
+                paint,
+                registry: null,
+                out var positioned));
+            Assert.NotNull(positioned.Clusters);
+            Assert.Equal(positioned.Glyphs.Length, positioned.Clusters!.Length);
+        }
+
+        static int RightmostInk(SKBitmap bitmap)
+        {
+            for (var x = bitmap.Width - 1; x >= 0; x--)
+            {
+                for (var y = 0; y < bitmap.Height; y++)
+                {
+                    if (bitmap.GetPixel(x, y).Alpha != 0) return x;
+                }
+            }
+            return -1;
+        }
     }
 
     [Theory]

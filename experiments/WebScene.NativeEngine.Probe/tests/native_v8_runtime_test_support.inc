@@ -519,6 +519,22 @@ std::string evaluate(
     return json;
 }
 
+std::string evaluate_until_equals(
+    webscene_engine* engine,
+    std::string_view source,
+    std::string_view name,
+    std::string_view expected,
+    int maximum_attempts = 250)
+{
+    std::string result;
+    for (auto attempt = 0; attempt < maximum_attempts; ++attempt) {
+        result = evaluate(engine, source, name);
+        if (result == expected) return result;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return result;
+}
+
 const webscene_interop_result_view_v3* invoke_generated(
     webscene_engine* engine,
     const webscene_interop_invoke_request_v3& request)

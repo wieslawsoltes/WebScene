@@ -5,6 +5,9 @@ void test_native_text_input_focus_events_and_caret(webscene_engine* engine)
         (() => {
           document.body.innerHTML = '';
           document.body.style.margin = '0';
+          const style = document.createElement('style');
+          style.textContent = 'input[type="search"] { text-transform: uppercase; }';
+          document.head.appendChild(style);
           const input = document.createElement('input');
           input.type = 'search';
           input.style.position = 'absolute';
@@ -14,6 +17,8 @@ void test_native_text_input_focus_events_and_caret(webscene_engine* engine)
           input.style.height = '32px';
           input.style.paddingLeft = '4px';
           input.style.fontSize = '16px';
+          input.style.letterSpacing = '2px';
+          input.style.wordSpacing = '3px';
           input.style.color = 'rgb(18, 52, 86)';
           const form = document.createElement('form');
           document.body.appendChild(form);
@@ -78,17 +83,36 @@ void test_native_text_input_focus_events_and_caret(webscene_engine* engine)
         "native text input caret reset did not drain");
     webscene_engine_request_scene_checkpoint(engine);
     bool observed_caret = false;
+    bool observed_text_spacing = false;
+    bool observed_transformed_text = false;
+    float observed_text_x = 0.0F;
+    float observed_caret_x = 0.0F;
     uint64_t caret_scene_revision = 0U;
     for (auto attempt = 0; attempt < 100; ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
+                if (command.kind == 3U
+                    && (command.rgba >> 8U) == 0x123456U
+                    && std::abs(command.radius_top_left - 2.0F) < 0.01F
+                    && std::abs(command.radius_top_right - 3.0F) < 0.01F) {
+                    observed_text_spacing = true;
+                    observed_text_x = command.x;
+                    if (command.flags < scene->string_count) {
+                        const auto& descriptor = scene->strings[command.flags];
+                        const std::string_view resource(
+                            scene->string_bytes + descriptor.byte_offset,
+                            descriptor.byte_length);
+                        observed_transformed_text = resource.ends_with("\tTREND");
+                    }
+                }
                 if (command.kind == 14U
                     && (command.rgba >> 8U) == 0x123456U
                     && command.x >= 20.0F && command.x <= 200.0F
                     && command.y >= 20.0F && command.y <= 52.0F) {
                     observed_caret = true;
+                    observed_caret_x = command.x;
                     caret_scene_revision = scene->header.revision;
                     break;
                 }
@@ -100,6 +124,15 @@ void test_native_text_input_focus_events_and_caret(webscene_engine* engine)
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     require(observed_caret, "focused native input did not publish a visible caret");
+    require(
+        observed_text_spacing,
+        "native input text did not publish CSS letter/word spacing metadata");
+    require(
+        observed_transformed_text,
+        "native input painted its raw value instead of its CSS-transformed text");
+    require(
+        std::abs((observed_caret_x - observed_text_x) - 57.6F) < 0.05F,
+        "native input caret did not use the same CSS-spaced advance as its text");
 
     animation_frame(engine, 600.0, 30U);
     require(
@@ -582,6 +615,33 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
 {
     webscene_engine_metrics before{};
     webscene_engine_get_metrics(engine, &before);
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto diagnostic_value = [&](std::string_view name) {
+        const auto report = diagnostics(engine);
+        const auto prefix = std::string{name} + '=';
+        const auto position = report.find(prefix);
+        require(position != std::string::npos,
+            "detached DOM diagnostic was unavailable: " + report);
+        const auto first = position + prefix.size();
+        const auto last = report.find_first_not_of("0123456789", first);
+        uint64_t value = 0U;
+        const auto parsed = std::from_chars(
+            report.data() + first,
+            report.data() + (last == std::string::npos ? report.size() : last),
+            value);
+        require(parsed.ec == std::errc{},
+            "detached DOM diagnostic was not numeric: " + report);
+        return value;
+    };
+    const auto release_batches_before = diagnostic_value(
+        "detached-dom-release-batches");
+    const auto release_roots_before = diagnostic_value(
+        "detached-dom-release-roots");
+    const auto release_slices_before = diagnostic_value(
+        "detached-dom-release-slices");
+    const auto idle_gc_notifications_before = diagnostic_value(
+        "detached-dom-idle-gc-notifications");
+#endif
     const auto detached_event = evaluate(engine, R"JS(
         (() => {
           const target = document.createElement('div');
@@ -606,7 +666,7 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
           document.body.appendChild(retained);
           retained.remove();
           globalThis.__webSceneRetainedDetachedNode = retained;
-          for (let index = 0; index < 700; index++) {
+          for (let index = 0; index < 2048; index++) {
             const node = document.createElement('div');
             node.__webSceneDetachedIndex = index;
             document.body.appendChild(node);
@@ -629,16 +689,200 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
             == R"({"expando":42,"identity":true,"connected":true})",
         "a reachable detached wrapper lost identity or expando state across native DOM collection");
     webscene_engine_metrics after{};
-    webscene_engine_get_metrics(engine, &after);
+    // Collection is deliberately lower priority than observable task sources
+    // and releases only a bounded root batch per pump. Leave the worker idle
+    // rather than queueing artificial scripts, then prove that a
+    // TradingView-sized replacement eventually drains.
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_metrics(engine, &after);
+        if (after.dom_nodes <= before.dom_nodes + 8U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
     require(
         after.dom_nodes <= before.dom_nodes + 8U,
-        "unreachable detached DOM nodes remained permanently owned after V8 collection");
+        "unreachable detached DOM nodes remained permanently owned after V8 collection (before="
+            + std::to_string(before.dom_nodes)
+            + ", after=" + std::to_string(after.dom_nodes) + ")");
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    require(
+        diagnostic_value("detached-dom-release-batches")
+            > release_batches_before + 1U,
+        "large detached DOM replacement was not amortized across release batches");
+    require(
+        diagnostic_value("detached-dom-release-roots")
+            >= release_roots_before + 2048U,
+        "detached DOM release did not coalesce the individual removed roots");
+    require(
+        diagnostic_value("detached-dom-release-slices")
+            > release_slices_before + 1U,
+        "large detached DOM replacement was not drained over multiple idle slices");
+    require(
+        diagnostic_value("detached-dom-release-max-roots-per-slice") <= 16U,
+        "a detached DOM release slice exceeded the input-latency root budget");
+    require(
+        diagnostic_value("detached-dom-idle-gc-notifications")
+            > idle_gc_notifications_before,
+        "detached DOM cleanup did not use the browser-style V8 idle queue");
+#endif
     execute(engine, R"JS(
         (() => {
           globalThis.__webSceneRetainedDetachedNode.remove();
           delete globalThis.__webSceneRetainedDetachedNode;
         })()
     )JS", "native-detached-dom-cleanup.js");
+}
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+uint64_t runtime_counter_diagnostic(
+    webscene_engine* engine,
+    std::string_view name)
+{
+    auto report = std::string{};
+    const auto prefix = std::string{name} + '=';
+    auto position = std::string::npos;
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        report = diagnostics(engine);
+        position = report.find(prefix);
+        if (position != std::string::npos) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        position != std::string::npos,
+        "runtime counter diagnostics were unavailable: " + report);
+    const auto first = position + prefix.size();
+    const auto last = report.find_first_not_of("0123456789", first);
+    uint64_t value = 0U;
+    const auto parsed = std::from_chars(
+        report.data() + first,
+        report.data() + (last == std::string::npos ? report.size() : last),
+        value);
+    require(
+        parsed.ec == std::errc{},
+        "runtime counter diagnostic was not numeric: " + report);
+    return value;
+}
+
+uint64_t wrapper_retention_diagnostic(
+    webscene_engine* engine,
+    std::string_view name)
+{
+    return runtime_counter_diagnostic(
+        engine, "wrapper-retention-" + std::string{name});
+}
+
+void execute_and_wait_for_wrapper_retention_scene(
+    webscene_engine* engine,
+    std::string_view source,
+    std::string_view name)
+{
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    execute(engine, source, name);
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        webscene_engine_metrics after{};
+        webscene_engine_get_metrics(engine, &after);
+        if (after.published_scenes > before.published_scenes) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    fail("wrapper-retention diagnostic scene was not published: "
+        + std::string(name));
+}
+#endif
+
+void test_connected_style_recascade_skips_detached_wrapper_retention(
+    webscene_engine* engine)
+{
+    constexpr std::string_view setup = R"JS(
+        (() => {
+          const root = document.createElement('div');
+          root.id = 'wrapper-retention-root';
+          const wrappers = [];
+          for (let index = 0; index < 640; ++index) {
+            const child = document.createElement('span');
+            child.__webSceneWrapperIndex = index;
+            wrappers.push(child);
+            root.appendChild(child);
+          }
+          document.body.appendChild(root);
+          globalThis.__webSceneWrapperRetentionRoot = root;
+          globalThis.__webSceneWrapperRetentionFirst = wrappers[0];
+          globalThis.__webSceneWrapperRetentionLast = wrappers[wrappers.length - 1];
+        })()
+    )JS";
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    execute_and_wait_for_wrapper_retention_scene(
+        engine, setup, "native-connected-recascade-wrapper-setup.js");
+#else
+    execute(engine, setup, "native-connected-recascade-wrapper-setup.js");
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto subtrees_before = wrapper_retention_diagnostic(engine, "subtrees");
+    const auto nodes_before = wrapper_retention_diagnostic(engine, "nodes");
+#endif
+
+    execute(engine, R"JS(
+        (() => {
+          const root = globalThis.__webSceneWrapperRetentionRoot;
+          for (let index = 0; index < 100; ++index) {
+            root.classList.toggle('active', (index & 1) !== 0);
+          }
+        })()
+    )JS", "native-connected-recascade-wrapper-mutations.js");
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    // Scene diagnostics are deliberately rate-limited. Advance beyond that
+    // boundary and wait for a new scene so this assertion cannot pass against
+    // a stale diagnostic snapshot.
+    std::this_thread::sleep_for(std::chrono::milliseconds(275));
+    execute_and_wait_for_wrapper_retention_scene(engine, R"JS(
+        document.body.setAttribute('data-wrapper-retention-probe', '1');
+    )JS", "native-connected-recascade-wrapper-diagnostic.js");
+    require(
+        wrapper_retention_diagnostic(engine, "subtrees") == subtrees_before
+            && wrapper_retention_diagnostic(engine, "nodes") == nodes_before,
+        "ordinary connected class mutations traversed wrapper-retention bookkeeping");
+#endif
+
+    const auto reconnected = evaluate(engine, R"JS(
+        (() => {
+          const root = globalThis.__webSceneWrapperRetentionRoot;
+          root.remove();
+          document.body.appendChild(root);
+          return {
+            connected: root.isConnected,
+            rootIdentity: document.getElementById('wrapper-retention-root') === root,
+            firstIdentity: root.firstChild === globalThis.__webSceneWrapperRetentionFirst,
+            firstExpando: root.firstChild.__webSceneWrapperIndex,
+            lastIdentity: root.lastChild === globalThis.__webSceneWrapperRetentionLast,
+            lastExpando: root.lastChild.__webSceneWrapperIndex
+          };
+        })()
+    )JS", "native-reconnected-subtree-wrapper-retention.js");
+    require(
+        reconnected == R"({"connected":true,"rootIdentity":true,"firstIdentity":true,"firstExpando":0,"lastIdentity":true,"lastExpando":639})",
+        "reconnected subtree lost wrapper identity or expando state: " + reconnected);
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    std::this_thread::sleep_for(std::chrono::milliseconds(275));
+    execute_and_wait_for_wrapper_retention_scene(engine, R"JS(
+        document.body.setAttribute('data-wrapper-retention-probe', '2');
+    )JS", "native-reconnected-wrapper-diagnostic.js");
+    require(
+        wrapper_retention_diagnostic(engine, "subtrees") == subtrees_before + 1U
+            && wrapper_retention_diagnostic(engine, "nodes")
+                == nodes_before + 641U,
+        "an actual subtree reconnection did not retain exactly its wrapper subtree");
+#endif
+
+    execute(engine, R"JS(
+        (() => {
+          globalThis.__webSceneWrapperRetentionRoot.remove();
+          delete globalThis.__webSceneWrapperRetentionRoot;
+          delete globalThis.__webSceneWrapperRetentionFirst;
+          delete globalThis.__webSceneWrapperRetentionLast;
+        })()
+    )JS", "native-connected-recascade-wrapper-cleanup.js");
 }
 
 void test_session_storage_in_outer_and_frame_contexts(webscene_engine* engine)
@@ -779,6 +1023,109 @@ void test_window_post_message_is_queued(webscene_engine* engine)
     require(
         result == R"({"synchronous":"initial","final":"delivered"})",
         "Window.postMessage delivered synchronously or missed its queued task: " + result);
+}
+
+void test_window_post_message_coalesces_style_recascade(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        (() => {
+          const style = document.createElement('style');
+          style.textContent = `
+            #message-style-root { display: block; color: rgb(255, 0, 0); }
+            #message-style-root span { color: inherit; }
+          `;
+          document.body.appendChild(style);
+          const root = document.createElement('div');
+          root.id = 'message-style-root';
+          for (let index = 0; index < 400; ++index) {
+            root.appendChild(document.createElement('span'));
+          }
+          document.body.appendChild(root);
+          addEventListener('message', event => {
+            if (event.data !== 'style-reconcile') return;
+            for (let index = 0; index < 160; ++index) {
+              root.style.display = 'none';
+              root.style.display = '';
+            }
+            const synchronousDisplay = getComputedStyle(root).display;
+            for (let index = 0; index < 160; ++index) {
+              root.style.color = 'blue';
+              root.style.color = '';
+            }
+            for (let index = 0; index < 160; ++index) {
+              root.style.color = '';
+            }
+            globalThis.__messageStyleResult = {
+              synchronousDisplay,
+              childCount: root.children.length
+            };
+          }, { once: true });
+          globalThis.__messageStyleRoot = root;
+        })()
+    )JS", "native-window-post-message-style-setup.js");
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    const auto requests_before = runtime_counter_diagnostic(
+        engine, "style-recascade-schedule-requests");
+    const auto coalesced_before = runtime_counter_diagnostic(
+        engine, "style-recascade-coalesced-requests");
+    const auto roots_before = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-roots");
+    const auto node_roots_before = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-node-roots");
+    const auto subtree_roots_before = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-subtree-roots");
+    const auto noops_before = runtime_counter_diagnostic(
+        engine, "style-recascade-noop-removals");
+#endif
+
+    execute(engine, "postMessage('style-reconcile', '*')",
+        "native-window-post-message-style-send.js");
+    const auto result = evaluate(engine, R"JS(
+        ({
+          synchronousDisplay: globalThis.__messageStyleResult.synchronousDisplay,
+          finalDisplay: getComputedStyle(globalThis.__messageStyleRoot).display,
+          finalColor: getComputedStyle(globalThis.__messageStyleRoot).color,
+          childCount: globalThis.__messageStyleResult.childCount
+        })
+    )JS", "native-window-post-message-style-result.js");
+    require(
+        result == R"JSON({"synchronousDisplay":"block","finalDisplay":"block","finalColor":"rgb(255, 0, 0)","childCount":400})JSON",
+        "message-task style batching changed synchronous CSSOM semantics: " + result);
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    std::this_thread::sleep_for(std::chrono::milliseconds(275));
+    execute_and_wait_for_wrapper_retention_scene(engine, R"JS(
+        document.body.setAttribute('data-message-style-diagnostic', '1');
+    )JS", "native-window-post-message-style-diagnostic.js");
+    const auto request_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-schedule-requests") - requests_before;
+    const auto coalesced_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-coalesced-requests") - coalesced_before;
+    const auto root_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-roots") - roots_before;
+    const auto node_root_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-node-roots") - node_roots_before;
+    const auto subtree_root_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-flush-subtree-roots") - subtree_roots_before;
+    const auto noop_delta = runtime_counter_diagnostic(
+        engine, "style-recascade-noop-removals") - noops_before;
+    require(
+        request_delta >= 320U && coalesced_delta >= 318U && root_delta <= 4U,
+        "message-task style removals were not coalesced at the task boundary");
+    require(
+        node_root_delta == 0U && subtree_root_delta >= 1U,
+        "actual inline style removals did not retain subtree cascade semantics");
+    require(
+        noop_delta >= 160U,
+        "absent inherited inline style removals scheduled redundant recascades");
+#endif
+
+    execute(engine, R"JS(
+        globalThis.__messageStyleRoot.remove();
+        delete globalThis.__messageStyleRoot;
+        delete globalThis.__messageStyleResult;
+    )JS", "native-window-post-message-style-cleanup.js");
 }
 
 void test_cross_frame_post_message_and_window_frames(webscene_engine* engine)

@@ -439,6 +439,30 @@
                 break;
             }
         }
+        // An attribute in an ancestor compound can change which descendants
+        // match. Attribute selectors in the rightmost compound only require
+        // recascading the mutated subject.
+        for (size_t open = 0;
+             (open = selector.find('[', open)) != std::string_view::npos;) {
+            auto cursor = open + 1U;
+            while (cursor < selector.size()
+                && std::isspace(static_cast<unsigned char>(selector[cursor]))) {
+                ++cursor;
+            }
+            const auto start = cursor;
+            while (cursor < selector.size()
+                && (std::isalnum(static_cast<unsigned char>(selector[cursor]))
+                    || selector[cursor] == '-' || selector[cursor] == '_')) {
+                ++cursor;
+            }
+            if (cursor > start
+                && (open < compound_begin
+                    || selector.find(":has(") != std::string_view::npos)) {
+                css_descendant_attribute_dependencies.emplace(
+                    selector.substr(start, cursor - start));
+            }
+            open = cursor;
+        }
         auto compound = std::string_view(selector).substr(compound_begin);
         while (!compound.empty()
             && std::isspace(static_cast<unsigned char>(compound.front()))) {
@@ -523,6 +547,11 @@
         if (name == "id" || name == "class" || name == "style"
             || name == "type" || name == "hidden") return true;
         return css_attribute_dependencies.contains(std::string(name));
+    }
+
+    bool attribute_may_affect_descendants(std::string_view name) const
+    {
+        return css_descendant_attribute_dependencies.contains(std::string(name));
     }
 
     bool media_query_matches(std::string query) const
@@ -667,6 +696,9 @@
 #endif
         )
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        static_cast<void>(parsed_selector);
+#endif
         const auto hash = css_rule_payload_hash(
             selector,
             declarations,
@@ -691,12 +723,9 @@
         auto payload = std::make_shared<css_rule_payload>();
         payload->selector = std::move(selector);
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        payload->compiled_selector = parsed_selector == nullptr
-            ? compile_css_selector(payload->selector)
-            : compiled_css_selector{
-                parsed_selector->compounds,
-                parsed_selector->combinators,
-                parsed_selector->specificity};
+        // The syntax parser's output is used for validation and indexing, but
+        // matching also needs the native pre-tokenized compound representation.
+        payload->compiled_selector = compile_css_selector(payload->selector);
 #else
         payload->compiled_selector = compile_css_selector(payload->selector);
 #endif
@@ -2234,13 +2263,89 @@
         return false;
     }
 
+    static compiled_css_compound compile_css_compound_selector(
+        std::string_view selector)
+    {
+        compiled_css_compound result;
+        selector = trim_css_view(selector);
+        if (selector.empty()) return result;
+
+        size_t cursor = 0U;
+        if (selector.empty()) {
+            // A bare structural pseudo-class has an implicit universal selector.
+        } else if (selector[cursor] == '*') {
+            ++cursor;
+        } else if (std::isalpha(static_cast<unsigned char>(selector[cursor]))
+            || selector[cursor] == '\\') {
+            result.tag = read_css_identifier(selector, cursor);
+        }
+        while (cursor < selector.size()) {
+            const auto marker = selector[cursor++];
+            if (marker == '.' || marker == '#') {
+                auto wanted = read_css_identifier(selector, cursor);
+                if (wanted.empty()) return result;
+                result.identities.emplace_back(marker, std::move(wanted));
+            } else if (marker == '[') {
+                const auto close = find_css_attribute_close(selector, cursor);
+                if (close == std::string::npos) return result;
+                result.attributes.emplace_back(selector.substr(cursor, close - cursor));
+                cursor = close + 1U;
+            } else if (marker == ':') {
+                if (cursor < selector.size() && selector[cursor] == ':') {
+                    result.pseudo_element = true;
+                    ++cursor;
+                }
+                auto name = read_css_identifier(selector, cursor);
+                if (name.empty()) return result;
+                if (name == "before" || name == "after"
+                    || name == "first-letter" || name == "first-line") {
+                    result.pseudo_element = true;
+                }
+                auto argument = std::string{};
+                if (cursor < selector.size() && selector[cursor] == '(') {
+                    const auto argument_start = ++cursor;
+                    auto depth = 1;
+                    char quote = 0;
+                    while (cursor < selector.size() && depth > 0) {
+                        const auto value = selector[cursor];
+                        if (quote != 0) {
+                            if (value == quote
+                                && (cursor == argument_start
+                                    || selector[cursor - 1U] != '\\')) {
+                                quote = 0;
+                            }
+                        } else if (value == '\'' || value == '"') {
+                            quote = value;
+                        } else if (value == '\\') {
+                            cursor = skip_css_escape_sequence(selector, cursor) - 1U;
+                        } else if (value == '(') {
+                            ++depth;
+                        } else if (value == ')') {
+                            --depth;
+                        }
+                        if (depth > 0) ++cursor;
+                    }
+                    if (depth != 0) return result;
+                    argument.assign(
+                        selector.substr(argument_start, cursor - argument_start));
+                    ++cursor;
+                }
+                result.pseudos.push_back(
+                    compiled_css_pseudo{std::move(name), std::move(argument)});
+            } else {
+                return result;
+            }
+        }
+        result.valid = true;
+        return result;
+    }
+
     bool css_compound_selector_matches(
         const dom_node& node,
-        std::string_view selector,
+        const compiled_css_compound& selector,
         const dom_node* scope_root = nullptr) const
     {
-        selector = trim_css_view(selector);
-        if (selector.empty()) return false;
+        if (!selector.valid) return false;
         // The probe intentionally collapses each browsing context's HTML and
         // BODY boxes into a single native root node.  Browser CSS still targets
         // that box with selectors such as `html.theme-dark`, so let the virtual
@@ -2257,73 +2362,30 @@
             || (node.tag == "body"
                 && (node.parent == nullptr || node.parent->tag == "iframe")
                 && !has_explicit_document_element);
-        if (selector == ":root") return is_document_root;
         // A pseudo-element is a different CSS box, not the originating DOM
         // element.  Treating it as the element makes rules such as
         // `.scroller::-webkit-scrollbar { display: none }` hide the scroller
         // itself, which is catastrophic for toolbar layout.
-        if (selector.find("::") != std::string::npos
-            || selector.find(":before") != std::string::npos
-            || selector.find(":after") != std::string::npos
-            || selector.find(":first-letter") != std::string::npos
-            || selector.find(":first-line") != std::string::npos) {
+        if (selector.pseudo_element) {
             return false;
         }
 
-        size_t pseudo = std::string::npos;
-        int bracket_depth = 0;
-        for (size_t index = 0; index < selector.size(); ++index) {
-            if (selector[index] == '\\') {
-                index = skip_css_escape_sequence(selector, index) - 1U;
-            } else if (selector[index] == '[') ++bracket_depth;
-            else if (selector[index] == ']') --bracket_depth;
-            else if (selector[index] == ':' && bracket_depth == 0) {
-                pseudo = index;
-                break;
-            }
-        }
-        const auto pseudo_suffix = pseudo == std::string::npos
-            ? std::string_view{}
-            : selector.substr(pseudo);
-        if (pseudo != std::string::npos) selector = selector.substr(0, pseudo);
-
-        size_t cursor = 0;
-        if (selector.empty()) {
-            // A bare structural pseudo-class has an implicit universal
-            // selector.
-        } else if (selector[cursor] == '*') {
-            ++cursor;
-        } else if (std::isalpha(static_cast<unsigned char>(selector[cursor]))
-            || selector[cursor] == '\\') {
-            auto wanted_tag = read_css_identifier(selector, cursor);
+        if (!selector.tag.empty()) {
+            auto wanted_tag = selector.tag;
             if (!node.xml_mode) wanted_tag = lower_html_name(wanted_tag);
             if (wanted_tag != node.tag
                 && !(wanted_tag == "html" && is_document_root && node.tag == "body")) return false;
         }
-        while (cursor < selector.size()) {
-            const auto marker = selector[cursor++];
-            if (marker == '.' || marker == '#') {
-                const auto wanted = read_css_identifier(selector, cursor);
-                if (marker == '#') {
-                    if (node.id_attribute != wanted) return false;
-                } else if (!has_class(node, wanted)) {
-                    return false;
-                }
-            } else if (marker == '[') {
-                const auto close = find_css_attribute_close(selector, cursor);
-                if (close == std::string::npos) return false;
-                if (!css_attribute_selector_matches(
-                        node, selector.substr(cursor, close - cursor))) return false;
-                cursor = close + 1U;
-            } else {
-                break;
+        for (const auto& [marker, wanted] : selector.identities) {
+            if (marker == '#') {
+                if (node.id_attribute != wanted) return false;
+            } else if (!has_class(node, wanted)) {
+                return false;
             }
         }
-        // A partially consumed compound selector is not a match. Silently
-        // accepting an unsupported suffix broadens malformed or generated
-        // selectors (for example `[data-role=statuses-pill]_hidden`) to the
-        // valid prefix and can incorrectly hide the element.
-        if (cursor != selector.size()) return false;
+        for (const auto& attribute : selector.attributes) {
+            if (!css_attribute_selector_matches(node, attribute)) return false;
+        }
 
         const auto is_element = [](const dom_node* candidate) {
             return candidate != nullptr && !candidate->tag.starts_with('#');
@@ -2342,49 +2404,9 @@
             return element_siblings;
         };
 
-        cursor = 0;
-        while (cursor < pseudo_suffix.size()) {
-            if (pseudo_suffix[cursor] == '.' || pseudo_suffix[cursor] == '#') {
-                const auto marker = pseudo_suffix[cursor++];
-                const auto wanted = read_css_identifier(pseudo_suffix, cursor);
-                if (marker == '#') {
-                    if (node.id_attribute != wanted) return false;
-                } else if (!has_class(node, wanted)) {
-                    return false;
-                }
-                continue;
-            }
-            if (pseudo_suffix[cursor] == '[') {
-                const auto close = find_css_attribute_close(pseudo_suffix, cursor + 1U);
-                if (close == std::string::npos
-                    || !css_attribute_selector_matches(
-                        node,
-                        pseudo_suffix.substr(cursor + 1U, close - cursor - 1U))) {
-                    return false;
-                }
-                cursor = close + 1U;
-                continue;
-            }
-            if (pseudo_suffix[cursor] != ':') return false;
-            const auto name_start = ++cursor;
-            while (cursor < pseudo_suffix.size()
-                && (std::isalnum(static_cast<unsigned char>(pseudo_suffix[cursor]))
-                    || pseudo_suffix[cursor] == '-')) ++cursor;
-            const auto name = pseudo_suffix.substr(name_start, cursor - name_start);
-            std::string_view argument;
-            if (cursor < pseudo_suffix.size() && pseudo_suffix[cursor] == '(') {
-                const auto argument_start = ++cursor;
-                int depth = 1;
-                while (cursor < pseudo_suffix.size() && depth > 0) {
-                    if (pseudo_suffix[cursor] == '(') ++depth;
-                    else if (pseudo_suffix[cursor] == ')') --depth;
-                    if (depth > 0) ++cursor;
-                }
-                if (depth != 0) return false;
-                argument = pseudo_suffix.substr(argument_start, cursor - argument_start);
-                ++cursor;
-            }
-
+        for (const auto& pseudo : selector.pseudos) {
+            const std::string_view name(pseudo.name);
+            const std::string_view argument(pseudo.argument);
             const auto form_control = node.tag == "button" || node.tag == "input"
                 || node.tag == "select" || node.tag == "textarea"
                 || node.tag == "option" || node.tag == "optgroup" || node.tag == "fieldset";
@@ -2618,6 +2640,17 @@
         return true;
     }
 
+    bool css_compound_selector_matches(
+        const dom_node& node,
+        std::string_view selector,
+        const dom_node* scope_root = nullptr) const
+    {
+        return css_compound_selector_matches(
+            node,
+            compile_css_compound_selector(selector),
+            scope_root);
+    }
+
     struct css_selector_split final {
         std::string_view left;
         std::string_view right;
@@ -2687,10 +2720,11 @@
         const auto parsed = parse_selector_syntax(selector);
         if (!parsed || parsed.selectors.size() != 1U) return {};
         const auto& source = parsed.selectors.front();
-        return {
+        compiled_css_selector result{
             source.compounds,
             source.combinators,
-            source.specificity};
+            source.specificity,
+            {}};
 #else
         std::vector<std::string> reversed_compounds;
         std::vector<char> reversed_combinators;
@@ -2711,8 +2745,13 @@
             reversed_combinators.rbegin(),
             reversed_combinators.rend());
         result.specificity = css_selector_specificity(selector);
-        return result;
 #endif
+        result.compiled_compounds.reserve(result.compounds.size());
+        for (const auto& compound : result.compounds) {
+            result.compiled_compounds.push_back(
+                compile_css_compound_selector(compound));
+        }
+        return result;
     }
 
     static compiled_css_selector_list compile_css_selector_list(
@@ -2724,10 +2763,17 @@
         if (!parsed) return result;
         result.selectors.reserve(parsed.selectors.size());
         for (const auto& source : parsed.selectors) {
-            result.selectors.push_back({
+            compiled_css_selector compiled{
                 source.compounds,
                 source.combinators,
-                source.specificity});
+                source.specificity,
+                {}};
+            compiled.compiled_compounds.reserve(compiled.compounds.size());
+            for (const auto& compound : compiled.compounds) {
+                compiled.compiled_compounds.push_back(
+                    compile_css_compound_selector(compound));
+            }
+            result.selectors.push_back(std::move(compiled));
         }
 #else
         size_t start = 0;
@@ -2769,8 +2815,7 @@
     const compiled_css_selector_list& cached_css_selector_list(
         std::string_view selector) const
     {
-        const auto key = std::string(selector);
-        if (const auto known = compiled_css_selector_lists.find(key);
+        if (const auto known = compiled_css_selector_lists.find(selector);
             known != compiled_css_selector_lists.end()) {
             return known->second;
         }
@@ -2778,6 +2823,7 @@
             >= maximum_compiled_css_selector_lists) {
             compiled_css_selector_lists.clear();
         }
+        auto key = std::string(selector);
         return compiled_css_selector_lists.emplace(
             key,
             compile_css_selector_list(key)).first->second;
@@ -2809,31 +2855,10 @@
         std::string_view selector,
         const dom_node* scope_root = nullptr) const
     {
-        const auto split = split_css_selector(selector);
-        if (!css_compound_selector_matches(node, split.right, scope_root)) return false;
-        if (!split.found || split.left.empty()) return !split.found;
-
-        if (split.combinator == '>') {
-            const auto* parent = document.dom_parent(node);
-            return parent != nullptr
-                && css_selector_matches(*parent, split.left, scope_root);
-        }
-        if (split.combinator == '+') {
-            const auto* sibling = previous_element_sibling(node);
-            return sibling != nullptr && css_selector_matches(*sibling, split.left, scope_root);
-        }
-        if (split.combinator == '~') {
-            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
-                sibling = previous_element_sibling(*sibling)) {
-                if (css_selector_matches(*sibling, split.left, scope_root)) return true;
-            }
-            return false;
-        }
-        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
-            ancestor = document.dom_parent(*ancestor)) {
-            if (css_selector_matches(*ancestor, split.left, scope_root)) return true;
-        }
-        return false;
+        return compiled_css_selector_list_matches(
+            node,
+            cached_css_selector_list(selector),
+            scope_root);
     }
 
     bool compiled_css_selector_matches(
@@ -2843,10 +2868,11 @@
         const dom_node* scope_root = nullptr) const
     {
         if (selector.compounds.empty()
-            || component >= selector.compounds.size()
+            || selector.compiled_compounds.size() != selector.compounds.size()
+            || component >= selector.compiled_compounds.size()
             || !css_compound_selector_matches(
                 node,
-                selector.compounds[component],
+                selector.compiled_compounds[component],
                 scope_root)) {
             return false;
         }

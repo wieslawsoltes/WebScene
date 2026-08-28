@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>URLSearchParams constructor accepts strings, records, and iterables</title>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  try {
+    const record = new URLSearchParams({
+      text: "AAPL",
+      exchange: "",
+      type: "stock and fund"
+    });
+    assert(record.toString() === "text=AAPL&exchange=&type=stock+and+fund",
+      "record members were not serialized in enumeration order");
+
+    const iterable = new URLSearchParams([
+      ["tag", "first"],
+      ["tag", "second"],
+      ["space", "a b"]
+    ]);
+    assert(iterable.getAll("tag").join(",") === "first,second",
+      "iterable duplicate entries were not retained");
+    assert([...iterable].map(pair => pair.join(":"))
+      .join(",") === "tag:first,tag:second,space:a b",
+      "URLSearchParams was not iterable in insertion order");
+
+    const parsed = new URLSearchParams("?q=hello+world&encoded=%7E");
+    assert(parsed.get("q") === "hello world" && parsed.get("encoded") === "~",
+      "string input did not use application/x-www-form-urlencoded decoding");
+    assert(new URLSearchParams(iterable).toString() === iterable.toString(),
+      "constructing from another URLSearchParams did not copy its entries");
+
+    let invalidEntryThrew = false;
+    try { new URLSearchParams([["only-one"]]); }
+    catch (error) { invalidEntryThrew = error instanceof TypeError; }
+    assert(invalidEntryThrew,
+      "an iterable entry without exactly two values did not throw TypeError");
+
+    state.results.push({
+      name: "string, record, and iterable constructor overloads match browser behavior",
+      status: "PASS",
+      message: null,
+      stack: null
+    });
+    state.harness = { status: 0, message: null, stack: null };
+  } catch (error) {
+    state.results.push({
+      name: "string, record, and iterable constructor overloads match browser behavior",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = {
+      status: 1,
+      message: state.results[0].message,
+      stack: state.results[0].stack
+    };
+  }
+  state.complete = true;
+</script>

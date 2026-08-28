@@ -936,6 +936,7 @@ struct dom_node final {
         size_t selection_start{0};
         size_t selection_end{0};
         text_selection_direction selection_direction{text_selection_direction::none};
+        bool selection_explicitly_set{false};
         bool selectedness_initialized{false};
         bool selectedness{false};
         bool selection_explicitly_empty{false};
@@ -1432,6 +1433,7 @@ public:
     const dom_node* dom_parent(const dom_node& node) const noexcept;
     void remove_all_children(dom_node& parent);
     size_t erase_detached_subtree(dom_node& root);
+    size_t erase_detached_subtrees(const std::vector<dom_node*>& roots);
     dom_node* find_by_native_id(uint32_t id) noexcept;
     dom_node* find_by_id(const std::string& id) noexcept;
     std::vector<dom_node*> query_selector_all(dom_node& root, const std::string& selector);
@@ -1536,6 +1538,97 @@ private:
 
         size_t reserved_bytes_{0};
         size_t peak_bytes_{0};
+    };
+
+    // dom_node has one fixed allocation size and stable-address lifetime.
+    // A general-purpose pmr pool still performs a pool/chunk search for every
+    // deallocation on libc++, which made detached-tree sweeping proportional
+    // to a very expensive allocator operation per node. Keep node pages and a
+    // direct free list instead: reclamation becomes O(1), freed slots are
+    // reused, and complete document teardown can still return every page.
+    class node_memory_resource final : public std::pmr::memory_resource {
+    public:
+        explicit node_memory_resource(std::pmr::memory_resource* upstream)
+            : upstream_(upstream)
+        {
+        }
+
+        ~node_memory_resource() override { release(); }
+
+        void release() noexcept
+        {
+            for (auto* allocation : chunks_) {
+                upstream_->deallocate(
+                    allocation,
+                    chunk_bytes,
+                    alignof(dom_node));
+            }
+            chunks_.clear();
+            free_blocks_ = nullptr;
+        }
+
+    private:
+        struct free_block final {
+            free_block* next{nullptr};
+        };
+
+        static constexpr size_t blocks_per_chunk = 64U;
+        static constexpr size_t block_bytes = sizeof(dom_node);
+        static constexpr size_t chunk_bytes = block_bytes * blocks_per_chunk;
+
+        void replenish()
+        {
+            auto* chunk = static_cast<std::byte*>(
+                upstream_->allocate(chunk_bytes, alignof(dom_node)));
+            try {
+                chunks_.push_back(chunk);
+            } catch (...) {
+                upstream_->deallocate(chunk, chunk_bytes, alignof(dom_node));
+                throw;
+            }
+            for (size_t index = 0; index < blocks_per_chunk; ++index) {
+                auto* block = reinterpret_cast<free_block*>(
+                    chunk + index * block_bytes);
+                block->next = free_blocks_;
+                free_blocks_ = block;
+            }
+        }
+
+        void* do_allocate(size_t bytes, size_t alignment) override
+        {
+            if (bytes != block_bytes || alignment > alignof(dom_node)) {
+                return upstream_->allocate(bytes, alignment);
+            }
+            if (free_blocks_ == nullptr) replenish();
+            auto* result = free_blocks_;
+            free_blocks_ = free_blocks_->next;
+            return result;
+        }
+
+        void do_deallocate(
+            void* allocation,
+            size_t bytes,
+            size_t alignment) override
+        {
+            if (allocation == nullptr) return;
+            if (bytes != block_bytes || alignment > alignof(dom_node)) {
+                upstream_->deallocate(allocation, bytes, alignment);
+                return;
+            }
+            auto* block = static_cast<free_block*>(allocation);
+            block->next = free_blocks_;
+            free_blocks_ = block;
+        }
+
+        bool do_is_equal(
+            const std::pmr::memory_resource& other) const noexcept override
+        {
+            return this == &other;
+        }
+
+        std::pmr::memory_resource* upstream_{nullptr};
+        std::vector<void*> chunks_;
+        free_block* free_blocks_{nullptr};
     };
 
     struct node_deleter final {
@@ -1660,17 +1753,15 @@ private:
     bool is_connected(const dom_node& node) const noexcept;
     bool participates_in_animation_frame(
         const dom_node& node) const noexcept;
+    bool intersects_visible_paint_area(
+        const dom_node& node) const noexcept;
 
     // DOM nodes require stable addresses but are frequently created and
     // detached in component workloads. Allocate fixed-size nodes in bounded
     // chunks so freed slots are reused without returning to the process
     // allocator for every mutation. nodes_ is destroyed before node_pool_.
     tracking_memory_resource node_pool_upstream_;
-    std::pmr::unsynchronized_pool_resource node_pool_{
-        std::pmr::pool_options{
-            .max_blocks_per_chunk = 64,
-            .largest_required_pool_block = sizeof(dom_node)},
-        &node_pool_upstream_};
+    node_memory_resource node_pool_{&node_pool_upstream_};
     std::vector<node_pointer> nodes_;
     std::unique_ptr<shadow_dom_storage> shadow_dom_storage_;
     // Native IDs are monotonically assigned and are used on hot event and

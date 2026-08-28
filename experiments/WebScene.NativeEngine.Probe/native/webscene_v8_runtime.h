@@ -190,6 +190,9 @@ public:
         std::string referrer;
         uint32_t mode{WEBSCENE_FETCH_MODE_NONE};
         uint32_t destination{WEBSCENE_REQUEST_DESTINATION_NONE};
+        std::string method{"GET"};
+        std::string body;
+        std::string content_type;
     };
 
     using resource_loader = std::function<bool(
@@ -211,7 +214,8 @@ public:
         resource_loader load_resource = {},
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
-        interop_callback_sink_v3 interop_callback_sink = {});
+        interop_callback_sink_v3 interop_callback_sink = {},
+        std::function<void()> runtime_work_available = {});
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;

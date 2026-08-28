@@ -6,13 +6,15 @@
         std::function<void()> host_request_available_value,
         std::function<void()> interop_callback_available_value,
         v8_dom_runtime::interop_callback_sink_v3
-            interop_callback_sink_value)
+            interop_callback_sink_value,
+        std::function<void()> runtime_work_available_value)
         : document(document_value)
         , viewport_provider(std::move(viewport_provider_value))
         , load_resource_callback(std::move(resource_loader_value))
         , host_request_available(std::move(host_request_available_value))
         , interop_callback_available(std::move(interop_callback_available_value))
         , interop_callback_sink(std::move(interop_callback_sink_value))
+        , runtime_work_available(std::move(runtime_work_available_value))
         , compilation_cache_directory(std::move(compilation_cache_directory_value))
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         , batch_style_recascades(
@@ -77,6 +79,15 @@
             } catch (...) {
             }
         }
+        // Fetch workers only own host-resource data. Join them before V8
+        // persistent promise handles are released below.
+        for (auto& fetch : pending_fetches) {
+            if (!fetch.future.valid()) continue;
+            try {
+                static_cast<void>(fetch.future.get());
+            } catch (...) {
+            }
+        }
         // Stop and join every network worker before releasing persistent V8
         // handles or disposing the isolate. Socket callbacks never touch V8,
         // but they may still be appending to the native delivery queue.
@@ -106,6 +117,7 @@
         pending_programmatic_scroll_events.clear();
         pending_interop_promises.clear();
         pending_callback_promises.clear();
+        pending_fetches.clear();
         interop_handles.clear();
         pending_promise_rejections.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -172,6 +184,7 @@
 #endif
         frame_context.Reset();
         context.Reset();
+        release_external_dom_memory_accounting();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (cpu_profiler != nullptr) {
             cpu_profiler->Dispose();
@@ -830,6 +843,7 @@
             loaded_resource_names.shrink_to_fit();
             pending_frame_hydrations.shrink_to_fit();
             detached_dom_roots.shrink_to_fit();
+            detached_dom_gc_scan_roots.shrink_to_fit();
             pending_promise_rejections.shrink_to_fit();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             if (auto* inspector_state = inspector_state_if_created()) {

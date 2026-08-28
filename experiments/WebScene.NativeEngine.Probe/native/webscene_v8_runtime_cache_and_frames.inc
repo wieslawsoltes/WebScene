@@ -1506,13 +1506,32 @@
                   this._owner = init && typeof init === 'object'
                     && 'href' in init ? init : null;
                   this._pairs = [];
-                  const query = String(
-                    this._owner ? this._owner.search : init || '')
+                  if (!this._owner && init !== null && typeof init === 'object') {
+                    if (typeof init[Symbol.iterator] === 'function') {
+                      for (const entry of init) {
+                        const pair = Array.from(entry);
+                        if (pair.length !== 2) {
+                          throw new TypeError(
+                            'URLSearchParams sequence entries must contain exactly two items');
+                        }
+                        this._pairs.push([String(pair[0]), String(pair[1])]);
+                      }
+                    } else {
+                      for (const name of Object.keys(init)) {
+                        this._pairs.push([String(name), String(init[name])]);
+                      }
+                    }
+                    return;
+                  }
+                  const query = String(this._owner ? this._owner.search : init ?? '')
                     .replace(/^\?/, '');
                   for (const item of query ? query.split('&') : []) {
                     const separator = item.indexOf('=');
-                    const decode = value => decodeURIComponent(
-                      String(value).replace(/\+/g, ' '));
+                    const decode = value => {
+                      value = String(value).replace(/\+/g, ' ');
+                      try { return decodeURIComponent(value); }
+                      catch { return value; }
+                    };
                     this._pairs.push(separator < 0
                       ? [decode(item), '']
                       : [decode(item.slice(0, separator)),
@@ -1538,6 +1557,12 @@
                   const pair = this._pairs.find(entry => entry[0] === name);
                   return pair ? pair[1] : null;
                 }
+                getAll(name) {
+                  name = String(name);
+                  return this._pairs
+                    .filter(entry => entry[0] === name)
+                    .map(entry => entry[1]);
+                }
                 has(name) {
                   name = String(name);
                   return this._pairs.some(entry => entry[0] === name);
@@ -1555,9 +1580,102 @@
                   this._pairs = this._pairs.filter(entry => entry[0] !== name);
                   this._updateOwner();
                 }
+                sort() {
+                  this._pairs = this._pairs
+                    .map((entry, index) => ({ entry, index }))
+                    .sort((left, right) => left.entry[0] < right.entry[0] ? -1
+                      : left.entry[0] > right.entry[0] ? 1
+                      : left.index - right.index)
+                    .map(item => item.entry);
+                  this._updateOwner();
+                }
+                entries() { return this._pairs.map(entry => [...entry])[Symbol.iterator](); }
+                keys() { return this._pairs.map(entry => entry[0])[Symbol.iterator](); }
+                values() { return this._pairs.map(entry => entry[1])[Symbol.iterator](); }
+                forEach(callback, thisArg = undefined) {
+                  for (const [name, value] of this._pairs) {
+                    callback.call(thisArg, value, name, this);
+                  }
+                }
+                [Symbol.iterator]() { return this.entries(); }
+                get size() { return this._pairs.length; }
                 toString() {
+                  const encode = value => encodeURIComponent(String(value))
+                    .replace(/%20/g, '+')
+                    .replace(/[!'()~]/g, character =>
+                      `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
                   return this._pairs.map(([name, value]) =>
-                    `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).join('&');
+                    `${encode(name)}=${encode(value)}`).join('&');
+                }
+              }
+              class WebSceneFormData {
+                constructor(form = undefined) {
+                  __webSceneRecordWebApi(
+                    'FormData.constructor', 'partially-supported',
+                    'ordered string and Blob fields with multipart fetch serialization');
+                  this._entries = [];
+                  if (form !== undefined && form !== null) {
+                    throw new TypeError('Constructing FormData from a form is not yet supported');
+                  }
+                }
+                append(name, value, filename = undefined) {
+                  this._entries.push([
+                    String(name), value instanceof Blob ? value : String(value),
+                    filename === undefined ? undefined : String(filename)
+                  ]);
+                }
+                delete(name) {
+                  name = String(name);
+                  this._entries = this._entries.filter(entry => entry[0] !== name);
+                }
+                get(name) {
+                  name = String(name);
+                  const entry = this._entries.find(item => item[0] === name);
+                  return entry ? entry[1] : null;
+                }
+                getAll(name) {
+                  name = String(name);
+                  return this._entries.filter(item => item[0] === name).map(item => item[1]);
+                }
+                has(name) {
+                  name = String(name);
+                  return this._entries.some(item => item[0] === name);
+                }
+                set(name, value, filename = undefined) {
+                  name = String(name);
+                  const index = this._entries.findIndex(item => item[0] === name);
+                  this.delete(name);
+                  const entry = [
+                    name, value instanceof Blob ? value : String(value),
+                    filename === undefined ? undefined : String(filename)
+                  ];
+                  this._entries.splice(index < 0 ? this._entries.length : index, 0, entry);
+                }
+                entries() { return this._entries.map(entry => [entry[0], entry[1]])[Symbol.iterator](); }
+                keys() { return this._entries.map(entry => entry[0])[Symbol.iterator](); }
+                values() { return this._entries.map(entry => entry[1])[Symbol.iterator](); }
+                forEach(callback, thisArg = undefined) {
+                  for (const [name, value] of this._entries) {
+                    callback.call(thisArg, value, name, this);
+                  }
+                }
+                [Symbol.iterator]() { return this.entries(); }
+                _encode(boundary) {
+                  const escape = value => String(value)
+                    .replace(/\r|\n/g, ' ')
+                    .replace(/"/g, '%22');
+                  let result = '';
+                  for (const [name, value, filename] of this._entries) {
+                    result += `--${boundary}\r\nContent-Disposition: form-data; name="${escape(name)}"`;
+                    if (value instanceof Blob) {
+                      result += `; filename="${escape(filename ?? 'blob')}"\r\n`;
+                      if (value.type) result += `Content-Type: ${value.type}\r\n`;
+                      result += `\r\n${value.toString()}\r\n`;
+                    } else {
+                      result += `\r\n\r\n${value}\r\n`;
+                    }
+                  }
+                  return `${result}--${boundary}--\r\n`;
                 }
               }
               class WebSceneURL {
@@ -1679,6 +1797,7 @@
                 Blob: { value: WebSceneBlob, configurable: true },
                 URL: { value: WebSceneURL, configurable: true },
                 URLSearchParams: { value: WebSceneURLSearchParams, configurable: true },
+                FormData: { value: WebSceneFormData, configurable: true },
                 CSS: {
                   value: {
                     supports() {
@@ -2273,6 +2392,7 @@
         css_focus_rules.clear();
         unindexed_css_rules.clear();
         css_attribute_dependencies.clear();
+        css_descendant_attribute_dependencies.clear();
         css_variables.clear();
         important_css_variables.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)

@@ -379,6 +379,58 @@ void test_rotation_keyframes_use_host_clock_and_wrap_continuously(
             + wrapped_quarter_turn);
 }
 
+void test_clipped_offscreen_keyframes_do_not_keep_host_frame_clock_alive(
+    webscene_engine* engine)
+{
+    resize(engine, 320, 180, 7040U);
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              @keyframes search-spinner { to { transform: rotate(1turn); } }
+              #search-results {
+                position: fixed;
+                left: 20px; top: 20px;
+                width: 280px; height: 120px;
+                overflow: hidden;
+              }
+              #search-spinner {
+                position: absolute;
+                left: 120px; top: 2000px;
+                width: 18px; height: 18px;
+                animation: search-spinner 900ms linear infinite;
+              }
+            </style>
+            <div id="search-results"><div id="search-spinner"></div></div>`;
+          void document.getElementById('search-results').offsetHeight;
+        })()
+    )JS", "clipped-keyframe-search-spinner-setup.js");
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "clipped offscreen search spinner retained host-frame demand");
+
+    execute_and_wait(
+        engine,
+        "document.getElementById('search-spinner').style.top = '40px'; "
+        "void document.getElementById('search-spinner').offsetHeight",
+        "clipped-keyframe-search-spinner-show.js");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "visible search spinner did not resume host-frame demand");
+
+    execute_and_wait(
+        engine,
+        "document.getElementById('search-spinner').style.top = '2000px'; "
+        "void document.getElementById('search-spinner').offsetHeight",
+        "clipped-keyframe-search-spinner-hide-again.js");
+    wait_for_animation_frame_demand(
+        engine,
+        false,
+        "search spinner retained host-frame demand after leaving the clip viewport");
+}
+
 void test_cssom_paint_invalidation_does_not_force_layout(
     webscene_engine* engine)
 {

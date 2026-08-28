@@ -350,6 +350,12 @@
 
         activate_css_cascade(target_context);
         v8::Context::Scope target_scope(target_context);
+        // A queued message and the microtasks it schedules are one browser
+        // task. Data-driven React commits commonly clear many inline style
+        // properties while reconciling a result list; coalesce those style
+        // invalidations until a synchronous style/layout read or the task
+        // boundary instead of recascading the same subtree per property.
+        style_recascade_batch_scope style_batch(*this);
         auto target_global = target_context->Global();
         v8::Local<v8::Value> location_value;
         v8::Local<v8::Value> origin_value;
@@ -426,6 +432,7 @@
             return false;
         }
         perform_microtask_checkpoint();
+        style_batch.finish();
         return true;
     }
 
@@ -504,7 +511,11 @@
 
     bool drain_tasks()
     {
-        collect_detached_dom_if_requested();
+        // Native DOM objects are retained by JavaScript wrappers, so report
+        // their fixed object storage at browser task boundaries. V8 can then
+        // schedule normal incremental/concurrent work from allocation pressure
+        // instead of WebScene manufacturing a low-memory event during input.
+        synchronize_external_dom_memory_accounting();
         // V8's default platform uses foreground tasks to finish background
         // compilation and optimization work. An embedder must service that
         // queue; otherwise hot application code remains on its initial tier.
@@ -514,6 +525,9 @@
         }
         if (!pending_window_messages.empty()) {
             return drain_window_message_task();
+        }
+        if (has_ready_fetch_task()) {
+            return drain_fetch_task();
         }
         if (!pending_programmatic_scroll_events.empty()) {
             return drain_programmatic_scroll_event_task();
@@ -556,7 +570,14 @@
             timers.begin(),
             timers.end(),
             [](const auto& left, const auto& right) { return left.deadline < right.deadline; });
-        if (next == timers.end() || next->deadline > now_time) return true;
+        if (next == timers.end() || next->deadline > now_time) {
+            // Detached DOM reclamation is maintenance work. Run one bounded
+            // slice only after all observable browser task sources have had
+            // priority, so broadening a search cannot delay its input event or
+            // network result task behind a stop-the-world native release.
+            collect_detached_dom_if_requested();
+            return true;
+        }
         auto task = std::move(*next);
         timers.erase(next);
         prefer_timer_task = false;
@@ -1212,6 +1233,10 @@
         bool* default_prevented = nullptr,
         dom_node* submitter = nullptr)
     {
+        // Event listeners and their microtasks form one browser task. A
+        // computed-style or geometry getter calls ensure_layout() and remains
+        // a synchronous style-recalculation barrier within this scope.
+        style_recascade_batch_scope style_batch(*this);
         record_feature(
             "event",
             std::string("type:") + type,
@@ -1616,6 +1641,7 @@
         set_number("eventPhase", 0);
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
         perform_microtask_checkpoint();
+        style_batch.finish();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;
@@ -1942,6 +1968,18 @@
             }
         }
         active_element = next;
+        if (next != nullptr && is_text_control(next)) {
+            ensure_form_value(*next);
+            if (!next->form_control().selection_explicitly_set) {
+                next->mutable_form_control().selection_start =
+                    next->form_control().value.size();
+                next->mutable_form_control().selection_end =
+                    next->form_control().value.size();
+                next->mutable_form_control().selection_direction =
+                    text_selection_direction::none;
+                next->mutable_form_control().selection_explicitly_set = true;
+            }
+        }
         // Focus styles are observable synchronously from focus listeners.
         // Recompute them before dispatching focus/focusin, not only after the
         // event sequence has completed. When `next` is null, the transition to
@@ -2059,10 +2097,25 @@
     {
         auto* target = active_element == nullptr ? &active_root() : active_element;
         if (input.kind == WEBSCENE_INPUT_KEY_UP) {
+            pending_text_input_from_keydown = false;
+            pending_text_input_target_id = 0U;
             return dispatch_input_event_type(input, "keyup", *target);
         }
 
         if (input.kind == WEBSCENE_INPUT_TEXT) {
+            if (pending_text_input_from_keydown) {
+                const auto target_id = pending_text_input_target_id;
+                pending_text_input_from_keydown = false;
+                pending_text_input_target_id = 0U;
+                // Native hosts report the committed character separately from
+                // keydown. Keep it associated with the editing host that owned
+                // the keydown: a chart key handler may focus and seed a search
+                // input, but Chrome does not retarget that same character into
+                // the newly focused field a second time.
+                if (target_id == 0U) return true;
+                target = find_node_by_native_id(active_root(), target_id);
+                if (target == nullptr) return true;
+            }
             if (!is_text_control(target)) return true;
             bool prevented = false;
             if (!dispatch_input_event_type(input, "beforeinput", *target, &prevented)) return false;
@@ -2078,19 +2131,28 @@
             target->mutable_form_control().selection_start = start + text.size();
             target->mutable_form_control().selection_end = target->mutable_form_control().selection_start;
             target->mutable_form_control().selection_direction = text_selection_direction::none;
+            target->mutable_form_control().selection_explicitly_set = true;
             target->mutable_form_control().caret_visible = true;
             caret_blink_epoch_ms = last_animation_frame_timestamp_ms;
             document.mark_dirty();
             return dispatch_input_event_type(input, "input", *target);
         }
 
-        bool prevented = false;
-        if (!dispatch_input_event_type(input, "keydown", *target, &prevented)) return false;
+        pending_text_input_from_keydown = false;
+        pending_text_input_target_id = 0U;
         const auto key_code = static_cast<int>(input.x);
         const auto command_modifier = (input.flags
             & (WEBSCENE_INPUT_MODIFIER_CONTROL
                 | WEBSCENE_INPUT_MODIFIER_ALT
                 | WEBSCENE_INPUT_MODIFIER_META)) != 0U;
+        if (!command_modifier && key_code >= 32 && key_code <= 126) {
+            pending_text_input_from_keydown = true;
+            pending_text_input_target_id = is_text_control(target)
+                ? target->id
+                : 0U;
+        }
+        bool prevented = false;
+        if (!dispatch_input_event_type(input, "keydown", *target, &prevented)) return false;
         const auto emits_legacy_keypress = key_code == 13
             || (!command_modifier && key_code >= 32 && key_code <= 126);
         if (!prevented && emits_legacy_keypress) {
@@ -2217,8 +2279,13 @@
                 target->mutable_form_control().selection_start =
                     target->mutable_form_control().selection_end = start;
                 target->mutable_form_control().selection_direction = text_selection_direction::none;
+                target->mutable_form_control().selection_explicitly_set = true;
                 if (!dispatch_input_event_type(input, "input", *target)) return false;
             }
+        }
+        if (key_code == 37 || key_code == 38 || key_code == 39 || key_code == 40
+            || key_code == 36 || key_code == 35) {
+            target->mutable_form_control().selection_explicitly_set = true;
         }
         target->mutable_form_control().caret_visible = true;
         caret_blink_epoch_ms = last_animation_frame_timestamp_ms;

@@ -366,7 +366,11 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
 
         if (resolved.Scheme is "http" or "https")
         {
-            if (GetReplayArchiveTracked() is { } replayArchive)
+            var method = string.IsNullOrWhiteSpace(request.Method)
+                ? HttpMethod.Get
+                : new HttpMethod(request.Method);
+            var isSafeRead = method == HttpMethod.Get || method == HttpMethod.Head;
+            if (isSafeRead && GetReplayArchiveTracked() is { } replayArchive)
             {
                 try
                 {
@@ -380,19 +384,29 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
             }
 
             WebSceneTextResource resource;
-            if (TryResolveMountedResource(resolved, out var mountedPath))
+            if (isSafeRead && TryResolveMountedResource(resolved, out var mountedPath))
             {
                 resource = LoadFile(mountedPath);
             }
-            else if (TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
+            else if (isSafeRead && TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
             {
                 resource = LoadFile(packagedPath);
             }
             else
             {
-                using var message = new HttpRequestMessage(HttpMethod.Get, resolved);
+                using var message = new HttpRequestMessage(method, resolved);
                 message.Version = HttpVersion.Version20;
                 message.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+                if (request.Body is not null && method != HttpMethod.Get && method != HttpMethod.Head)
+                {
+                    message.Content = new ByteArrayContent(Encoding.UTF8.GetBytes(request.Body));
+                    if (!string.IsNullOrWhiteSpace(request.ContentType))
+                    {
+                        message.Content.Headers.TryAddWithoutValidation(
+                            "Content-Type",
+                            request.ContentType);
+                    }
+                }
                 if (!string.IsNullOrWhiteSpace(request.Context.Origin))
                 {
                     message.Headers.TryAddWithoutValidation("Origin", request.Context.Origin);
@@ -401,12 +415,13 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 {
                     message.Headers.Referrer = referrer;
                 }
-                if (!string.IsNullOrWhiteSpace(request.IfNoneMatch)
+                if (isSafeRead
+                    && !string.IsNullOrWhiteSpace(request.IfNoneMatch)
                     && EntityTagHeaderValue.TryParse(request.IfNoneMatch, out var entityTag))
                 {
                     message.Headers.IfNoneMatch.Add(entityTag);
                 }
-                if (request.IfModifiedSince is { } modifiedSince)
+                if (isSafeRead && request.IfModifiedSince is { } modifiedSince)
                 {
                     message.Headers.IfModifiedSince = modifiedSince;
                 }
@@ -418,7 +433,9 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 var responseEntityTag = response.Headers.ETag?.ToString() ?? request.IfNoneMatch;
                 var responseLastModified = response.Content.Headers.LastModified
                                            ?? request.IfModifiedSince;
-                var cachePolicy = ReadHttpCachePolicy(response, responseLastModified);
+                var cachePolicy = isSafeRead
+                    ? ReadHttpCachePolicy(response, responseLastModified)
+                    : (FreshUntil: (DateTimeOffset?)null, IsCacheable: false);
                 if (response.StatusCode == HttpStatusCode.NotModified)
                 {
                     resource = new WebSceneTextResource(
@@ -436,7 +453,17 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 }
                 else
                 {
-                    response.EnsureSuccessStatusCode();
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(
+                            $"WebScene resource request failed: {(int)response.StatusCode} " +
+                            $"({response.ReasonPhrase}) {method} {resolved}; " +
+                            $"origin={request.Context.Origin ?? "<none>"}; " +
+                            $"referrer={request.Context.Referrer ?? "<none>"}; " +
+                            $"mode={request.Context.Mode}; destination={request.Context.Destination}",
+                            null,
+                            response.StatusCode);
+                    }
                     resource = new WebSceneTextResource(
                         resolved.ToString(),
                         response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
@@ -451,7 +478,10 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                 }
             }
 
-            GetCaptureArchive()?.CaptureText(resolved, request.Kind, request.Context, resource);
+            if (isSafeRead)
+            {
+                GetCaptureArchive()?.CaptureText(resolved, request.Kind, request.Context, resource);
+            }
             return resource;
         }
 
@@ -465,6 +495,9 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
         resource = default;
         if (string.IsNullOrWhiteSpace(request.Specifier)
             || request.Specifier.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(request.Method)
+                && !string.Equals(request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(request.Method, "HEAD", StringComparison.OrdinalIgnoreCase))
             || string.IsNullOrWhiteSpace(ResourceReplayDirectory))
         {
             return false;

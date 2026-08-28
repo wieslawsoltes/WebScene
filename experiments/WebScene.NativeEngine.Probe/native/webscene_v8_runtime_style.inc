@@ -1,3 +1,13 @@
+    static bool has_inline_style_declaration(
+        const dom_node& node,
+        std::string_view name)
+    {
+        const auto canonical_name = canonical_css_property_name(name);
+        const auto& authored = node.authored_style();
+        return authored.declarations.contains(canonical_name)
+            || authored.important_declarations.contains(canonical_name);
+    }
+
     static bool clear_inline_style(dom_node& node, const std::string& name)
     {
         const auto canonical_name = canonical_css_property_name(name);
@@ -492,6 +502,12 @@
         if (name.starts_with("--")) {
             if (!valid_custom_property_name(name)) return;
             if (value.empty()) {
+                if (!has_inline_style_declaration(*node, name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                    ++self->style_recascade_noop_removals;
+#endif
+                    return;
+                }
                 node->style.mutable_custom_properties().values.erase(name);
                 auto& authored = node->mutable_authored_style();
                 authored.declarations.erase(name);
@@ -509,9 +525,16 @@
             return;
         }
         if (value.empty()) {
+            if (!has_inline_style_declaration(*node, name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                ++self->style_recascade_noop_removals;
+#endif
+                return;
+            }
             clear_inline_style(*node, name);
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_connected_subtree(
+                *node, "style.setProperty-clear");
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;
@@ -1243,6 +1266,13 @@
         const auto name = to_utf8(info.GetIsolate(), info[0]);
         if (name.starts_with("--")) {
             if (!valid_custom_property_name(name)) return;
+            if (!has_inline_style_declaration(*node, name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                ++self->style_recascade_noop_removals;
+#endif
+                info.GetReturnValue().Set(js_string(info.GetIsolate(), ""));
+                return;
+            }
             node->style.mutable_custom_properties().values.erase(name);
             auto& authored = node->mutable_authored_style();
             authored.declarations.erase(name);
@@ -1253,9 +1283,17 @@
                 *node, "style", old_value, node->attributes.at("style"));
             return;
         }
+        if (!has_inline_style_declaration(*node, name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+            ++self->style_recascade_noop_removals;
+#endif
+            info.GetReturnValue().Set(js_string(info.GetIsolate(), ""));
+            return;
+        }
         clear_inline_style(*node, name);
         sync_style_attribute(*node);
-        self->recascade_connected_subtree(*node);
+        self->recascade_connected_subtree(
+            *node, "style.removeProperty");
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
     }
@@ -1830,9 +1868,16 @@
 #endif
         self->inventory_css_value_functions(value, "cssom-style");
         if (value.empty()) {
+            if (!has_inline_style_declaration(*node, name)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+                ++self->style_recascade_noop_removals;
+#endif
+                return;
+            }
             clear_inline_style(*node, name);
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_connected_subtree(
+                *node, "style.named-property-clear");
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;

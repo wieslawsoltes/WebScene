@@ -349,8 +349,10 @@ The runtime has experimental controls for:
   1 MiB without disabling JIT;
 - `WEBSCENE_V8_PLATFORM_THREADS`, which bounds the one process-wide V8 worker
   pool;
-- `WEBSCENE_V8_IDLE_TASKS`, which enables platform idle-task support. A scheduler
-  integration is still required before idle work is actively budgeted.
+- platform idle-task support is enabled by default and is budgeted only after
+  observable browser task sources drain. `WEBSCENE_V8_DISABLE_IDLE_TASKS`
+  disables it for controlled comparisons; the earlier
+  `WEBSCENE_V8_IDLE_TASKS` opt-in is no longer required.
 
 Heap limits are safety/GC-frequency controls, not free memory reductions. A
 limit below the chart's live set will increase GC work and can terminate the

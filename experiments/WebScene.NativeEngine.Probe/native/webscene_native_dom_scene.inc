@@ -606,7 +606,12 @@ void native_document::append_scene(
                 (pseudo.foreground_rgba & 0xFFU) != 0U
                     ? with_pseudo_opacity(pseudo.foreground_rgba)
                     : with_pseudo_opacity(resolved_foreground(node)),
-                node.id});
+                node.id,
+                resolved_letter_spacing(node),
+                resolved_word_spacing(node),
+                0,
+                0,
+                0});
         }
     };
     const auto radii = resolve_radii(
@@ -1142,7 +1147,12 @@ void native_document::append_scene(
                 text_width,
                 line_height,
                 with_opacity(resolved_foreground(node)),
-                node.id});
+                node.id,
+                resolved_letter_spacing(node),
+                resolved_word_spacing(node),
+                0,
+                0,
+                0});
         }
         const auto center_x = node.layout.x + node.layout.width
             - padding_right - affordance_width * 0.5F;
@@ -1172,11 +1182,13 @@ void native_document::append_scene(
         const auto text_width = std::max(
             0.0F, node.layout.width - padding_left - padding_right);
         if (!node.form_control().value.empty()) {
+            const auto painted_value = resolved_text_transform(
+                node, node.form_control().value);
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'
                 << resolved_font_family(node) << '\t'
-                << resolved_font_smoothing(node) << '\t' << node.form_control().value;
+                << resolved_font_smoothing(node) << '\t' << painted_value;
             commands.push_back(webscene_scene_command{
                 3U,
                 append_scene_string(resource.str(), strings, string_bytes),
@@ -1185,7 +1197,12 @@ void native_document::append_scene(
                 text_width,
                 line_height,
                 with_opacity(resolved_foreground(node)),
-                node.id});
+                node.id,
+                resolved_letter_spacing(node),
+                resolved_word_spacing(node),
+                0,
+                0,
+                0});
         }
         if (node.form_control().input_focused && node.form_control().caret_visible) {
             const auto caret_index = std::min(
@@ -1227,7 +1244,12 @@ void native_document::append_scene(
                     fragment.width,
                     fragment.height,
                     with_opacity(resolved_foreground(node)),
-                    node.id});
+                    node.id,
+                    resolved_letter_spacing(node),
+                    resolved_word_spacing(node),
+                    0,
+                    0,
+                    0});
             }
         } else {
         const auto padding_left = resolve_length(
@@ -1277,7 +1299,12 @@ void native_document::append_scene(
                 command_width,
                 line_height,
                 with_opacity(resolved_foreground(node)),
-                node.id});
+                node.id,
+                resolved_letter_spacing(node),
+                resolved_word_spacing(node),
+                0,
+                0,
+                0});
         }
         }
     }

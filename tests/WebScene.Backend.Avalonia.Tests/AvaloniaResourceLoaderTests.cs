@@ -68,6 +68,71 @@ public sealed class AvaloniaResourceLoaderTests
     }
 
     [Fact]
+    public async Task MultipartPostPreservesMethodContentTypeAndBody()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var endpoint = (IPEndPoint)listener.LocalEndpoint;
+        var received = new TaskCompletionSource<(string RequestLine, Dictionary<string, string> Headers, string Body)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            await using var stream = client.GetStream();
+            using var reader = new StreamReader(
+                stream,
+                Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false,
+                leaveOpen: true);
+            var requestLine = await reader.ReadLineAsync() ?? string.Empty;
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            while (await reader.ReadLineAsync() is { Length: > 0 } line)
+            {
+                var separator = line.IndexOf(':');
+                if (separator > 0)
+                {
+                    headers[line[..separator]] = line[(separator + 1)..].Trim();
+                }
+            }
+            var length = int.Parse(headers["Content-Length"]);
+            var bodyBuffer = new char[length];
+            var bodyLength = 0;
+            while (bodyLength < bodyBuffer.Length)
+            {
+                var count = await reader.ReadAsync(bodyBuffer.AsMemory(bodyLength));
+                if (count == 0) break;
+                bodyLength += count;
+            }
+            received.SetResult((requestLine, headers, new string(bodyBuffer, 0, bodyLength)));
+            var responseBody = Encoding.UTF8.GetBytes("{\"status\":\"ok\"}");
+            var response = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {responseBody.Length}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(response);
+            await stream.WriteAsync(responseBody);
+        });
+
+        const string body = "--test-boundary\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\nDefault\r\n--test-boundary--\r\n";
+        var loader = new AvaloniaResourceLoader();
+        var resource = loader.LoadText(new WebSceneResourceRequest(
+            $"http://127.0.0.1:{endpoint.Port}/1.1/charts",
+            null,
+            WebSceneResourceKind.Data)
+        {
+            Method = "POST",
+            Body = body,
+            ContentType = "multipart/form-data; boundary=test-boundary"
+        });
+        var request = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await server.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.StartsWith("POST /1.1/charts HTTP/", request.RequestLine, StringComparison.Ordinal);
+        Assert.Equal("multipart/form-data; boundary=test-boundary", request.Headers["Content-Type"]);
+        Assert.Equal(body, request.Body);
+        Assert.Equal("{\"status\":\"ok\"}", resource.Content);
+        Assert.False(resource.IsCacheable);
+    }
+
+    [Fact]
     public async Task HttpCaptureReplaysTextAndBinaryWithoutOriginFallback()
     {
         var fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "Fixtures");

@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Display contents children participate directly in their parent grid</title>
+<style>
+  body { margin: 0; font: 16px/20px Arial, sans-serif; }
+  #scroll { height: 100px; overflow: auto; width: 600px; }
+  #results {
+    align-items: center;
+    display: grid;
+    grid-template-columns: 0fr min-content 1fr min-content min-content;
+    width: 600px;
+  }
+  .result, .header { display: contents; }
+  .overlap { height: 100%; position: relative; width: 0; }
+  .header-cell { height: 40px; }
+  .header-cell:first-child { grid-column-end: 3; }
+  .header-cell:last-child { grid-column-start: span 3; }
+  .cell {
+    box-sizing: border-box;
+    height: 39px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .symbol { width: 56px; }
+  .description { padding-inline: 12px; }
+  .kind { width: 48px; }
+  .exchange { width: 72px; }
+</style>
+<div id="scroll"><div id="results">
+  <div class="header" id="header">
+    <span class="header-cell" id="symbol-header">SYMBOL</span>
+    <span class="header-cell" id="description-header">DESCRIPTION</span>
+  </div>
+  <div class="result" id="row-a">
+    <span class="overlap"></span><span class="cell symbol" id="a-symbol">AAPL</span>
+    <span class="cell description" id="a-description">Apple Inc.</span>
+    <span class="cell kind" id="a-kind">stock</span><span class="cell exchange" id="a-exchange">NASDAQ</span>
+  </div>
+  <div class="result" id="row-b">
+    <span class="overlap"></span><span class="cell symbol" id="b-symbol">AAPL</span>
+    <span class="cell description" id="b-description">Apple Inc. Shs Canadian Depositary Receipt</span>
+    <span class="cell kind" id="b-kind">dr</span><span class="cell exchange" id="b-exchange">TSX</span>
+  </div>
+</div></div>
+<script>
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const rect = id => document.getElementById(id).getBoundingClientRect();
+const close = (left, right) => Math.abs(left - right) <= .01;
+const require = (value, message) => { if (!value) throw new Error(message); };
+const check = (name, assertion) => {
+  const result = { name };
+  try { assertion(); result.status = "PASS"; result.message = null; result.stack = null; }
+  catch (error) { result.status = "FAIL"; result.message = String(error.message || error); result.stack = error.stack || null; }
+  state.results.push(result);
+};
+document.getElementById("scroll").scrollTop = 18;
+
+check("display contents rows do not generate grid item boxes", () => {
+  const header = rect("header"), a = rect("row-a"), b = rect("row-b");
+  require(close(header.width, 0) && close(header.height, 0) &&
+      close(a.width, 0) && close(a.height, 0) && close(b.width, 0) && close(b.height, 0),
+    JSON.stringify({ header, a, b }));
+});
+
+check("a definite grid end line aligns the header with flattened row cells", () => {
+  const symbolHeader = rect("symbol-header"), descriptionHeader = rect("description-header");
+  const symbol = rect("a-symbol"), description = rect("a-description");
+  require(close(symbolHeader.left, symbol.left), JSON.stringify({ symbolHeader, symbol }));
+  require(close(descriptionHeader.left, description.left),
+    JSON.stringify({ descriptionHeader, description }));
+});
+
+check("the row descendants occupy one compact parent-grid row", () => {
+  const a = [rect("a-symbol"), rect("a-description"), rect("a-kind"), rect("a-exchange")];
+  const b = [rect("b-symbol"), rect("b-description"), rect("b-kind"), rect("b-exchange")];
+  require(a.every(cell => close(cell.top, a[0].top) && close(cell.height, 39)), JSON.stringify(a));
+  require(b.every(cell => close(cell.top, b[0].top) && close(cell.height, 39)), JSON.stringify(b));
+  require(close(b[0].top - a[0].top, 39), "row delta=" + (b[0].top - a[0].top));
+  require(document.getElementById("scroll").scrollTop > 0,
+    "fixture did not retain a non-zero scroll offset");
+});
+
+check("all flattened cells remain within the five-track grid", () => {
+  const grid = rect("results"), description = rect("a-description"), exchange = rect("a-exchange");
+  require(close(grid.width, 600) && close(exchange.right, grid.right), JSON.stringify({ grid, exchange }));
+  require(description.width > 300 && exchange.width > 0, JSON.stringify({ description, exchange }));
+});
+
+state.diagnostics.push(JSON.stringify({
+  grid: rect("results"), rowA: rect("row-a"), rowB: rect("row-b"),
+  symbolHeader: rect("symbol-header"), descriptionHeader: rect("description-header"),
+  aSymbol: rect("a-symbol"), aDescription: rect("a-description"), aExchange: rect("a-exchange"),
+  bSymbol: rect("b-symbol"), bDescription: rect("b-description"), bExchange: rect("b-exchange")
+}));
+state.harness = { status: state.results.some(result => result.status !== "PASS") ? 1 : 0, message: null, stack: null };
+state.complete = true;
+</script>

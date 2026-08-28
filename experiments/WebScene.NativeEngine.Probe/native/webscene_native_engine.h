@@ -461,7 +461,8 @@ typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_STYLESHEET = 2,
     // Text-backed SVG image resources used by CSS background-image. Binary
     // image formats require a future byte-resource envelope.
-    WEBSCENE_RESOURCE_IMAGE = 3
+    WEBSCENE_RESOURCE_IMAGE = 3,
+    WEBSCENE_RESOURCE_DATA = 4
 } webscene_resource_kind;
 
 /*
@@ -529,6 +530,40 @@ typedef size_t (*webscene_resource_load_callback_v2)(
     size_t entity_tag_length,
     int64_t last_modified_unix_seconds,
     const webscene_resource_request_context* request_context,
+    char* destination,
+    size_t destination_capacity);
+
+/*
+ * Extended request metadata used by browser-authored fetch requests. The
+ * original v2 callback remains available for binary compatibility; engines
+ * call v3 when supplied and otherwise retain the GET-only v2 contract.
+ */
+typedef struct webscene_resource_request_context_v3 {
+    uint32_t struct_size;
+    uint32_t initiator;
+    const char* origin;
+    size_t origin_length;
+    const char* referrer;
+    size_t referrer_length;
+    uint32_t mode;
+    uint32_t destination;
+    const char* method;
+    size_t method_length;
+    const char* body;
+    size_t body_length;
+    const char* content_type;
+    size_t content_type_length;
+} webscene_resource_request_context_v3;
+
+typedef size_t (*webscene_resource_load_callback_v3)(
+    void* user_data,
+    uint32_t kind,
+    const char* url,
+    size_t url_length,
+    const char* entity_tag,
+    size_t entity_tag_length,
+    int64_t last_modified_unix_seconds,
+    const webscene_resource_request_context_v3* request_context,
     char* destination,
     size_t destination_capacity);
 
@@ -617,6 +652,8 @@ typedef struct webscene_engine_options {
     void* animation_frame_requested_user_data;
     webscene_resource_load_callback_v2 resource_load_callback_v2;
     void* resource_load_v2_user_data;
+    webscene_resource_load_callback_v3 resource_load_callback_v3;
+    void* resource_load_v3_user_data;
 } webscene_engine_options;
 
 enum {

@@ -73,10 +73,43 @@
         bool important{false};
     };
 
+struct compiled_css_pseudo final {
+    std::string name;
+    std::string argument;
+};
+
+struct compiled_css_compound final {
+    std::string tag;
+    std::vector<std::pair<char, std::string>> identities;
+    std::vector<std::string> attributes;
+    std::vector<compiled_css_pseudo> pseudos;
+    bool valid{false};
+    bool pseudo_element{false};
+};
+
+struct transparent_string_hash final {
+    using is_transparent = void;
+
+    size_t operator()(std::string_view value) const noexcept
+    {
+        return std::hash<std::string_view>{}(value);
+    }
+};
+
+struct transparent_string_equal final {
+    using is_transparent = void;
+
+    bool operator()(std::string_view left, std::string_view right) const noexcept
+    {
+        return left == right;
+    }
+};
+
     struct compiled_css_selector final {
         std::vector<std::string> compounds;
         std::vector<char> combinators;
         uint32_t specificity{0};
+        std::vector<compiled_css_compound> compiled_compounds;
     };
 
     struct compiled_css_selector_list final {
@@ -154,6 +187,7 @@
         std::vector<size_t> focus_rules;
         std::vector<size_t> unindexed_rules;
         std::unordered_set<std::string> attribute_dependencies;
+        std::unordered_set<std::string> descendant_attribute_dependencies;
         std::vector<hover_selector_dependency> hover_dependencies;
         std::unordered_map<std::string, std::string> variables;
         std::unordered_set<std::string> important_variables;
@@ -438,6 +472,19 @@
         bool loaded{false};
         bool has_cached{false};
         bool from_fresh_cache{false};
+    };
+
+    struct async_fetch_result final {
+        std::string body;
+        std::string resolved_url;
+        std::string error;
+        bool loaded{false};
+    };
+
+    struct pending_fetch_task final {
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Promise::Resolver> resolver;
+        std::shared_future<async_fetch_result> future;
     };
 
     struct prepared_frame final {

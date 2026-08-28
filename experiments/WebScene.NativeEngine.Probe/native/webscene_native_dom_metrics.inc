@@ -571,6 +571,42 @@ bool native_document::participates_in_animation_frame(
     return true;
 }
 
+bool native_document::intersects_visible_paint_area(
+    const dom_node& node) const noexcept
+{
+    // CSS animation timelines remain authored even while their boxes are
+    // clipped. Only host-frame demand is culled: when layout/scrolling makes a
+    // box visible again, the next sampled host timestamp advances it directly
+    // to the current phase.
+    if (node.layout.width <= 0 || node.layout.height <= 0) return true;
+    auto left = node.layout.x;
+    auto top = node.layout.y;
+    auto right = left + node.layout.width;
+    auto bottom = top + node.layout.height;
+    const auto intersect = [&](float clip_left, float clip_top,
+                               float clip_right, float clip_bottom) {
+        left = std::max(left, clip_left);
+        top = std::max(top, clip_top);
+        right = std::min(right, clip_right);
+        bottom = std::min(bottom, clip_bottom);
+        return right > left && bottom > top;
+    };
+    if (!intersect(0.0F, 0.0F, viewport_width_, viewport_height_)) return false;
+    for (auto* current = composed_parent(node);
+         current != nullptr;
+         current = composed_parent(*current)) {
+        if (!current->style.clip) continue;
+        if (!intersect(
+                current->layout.x,
+                current->layout.y,
+                current->layout.x + current->layout.width,
+                current->layout.y + current->layout.height)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool native_document::dirty() const noexcept
 {
     return dirty_;
