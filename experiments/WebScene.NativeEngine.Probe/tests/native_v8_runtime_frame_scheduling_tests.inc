@@ -382,6 +382,64 @@ void test_cooperative_iframe_hydration_yields_and_isolates_cascade()
 #endif
 }
 
+void test_loaded_iframe_replaces_provisional_layout_root()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "iframe replacement engine creation failed");
+    resize(engine, 640, 360, 7440U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          document.body.style.margin = '0';
+          const frame = document.createElement('iframe');
+          frame.style.display = 'block';
+          frame.style.width = '320px';
+          frame.style.height = '180px';
+          document.body.appendChild(frame);
+          const initialDocument = frame.contentDocument;
+          initialDocument.open();
+          initialDocument.write(
+            '<html><body style="margin:0"><div id="loaded" '
+            + 'style="width:320px;height:180px;background:rgb(1,2,3)"></div>'
+            + '<script>globalThis.__replacementReady=true;<\/script>'
+            + '</body></html>');
+          initialDocument.close();
+          globalThis.__replacementFrame = frame;
+          globalThis.__initialFrameDocument = initialDocument;
+        })()
+    )JS", "iframe-provisional-layout-setup.js");
+
+    auto ready = false;
+    for (auto attempt = 0; attempt < 250; ++attempt) {
+        if (evaluate(
+                engine,
+                "globalThis.__replacementFrame.contentWindow.__replacementReady === true",
+                "iframe-provisional-layout-progress.js") == "true") {
+            ready = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(ready, "replacement iframe did not finish cooperative hydration");
+
+    const auto geometry = evaluate(engine, R"JS((() => {
+      const frame = globalThis.__replacementFrame;
+      const loadedDocument = frame.contentDocument;
+      const frameRect = frame.getBoundingClientRect();
+      const bodyRect = loadedDocument.body.getBoundingClientRect();
+      const loadedRect = loadedDocument.getElementById('loaded').getBoundingClientRect();
+      return {
+        replaced: loadedDocument !== globalThis.__initialFrameDocument,
+        aligned: bodyRect.x === frameRect.x && bodyRect.y === frameRect.y,
+        loaded: [loadedRect.x, loadedRect.y, loadedRect.width, loadedRect.height]
+      };
+    })())JS", "iframe-provisional-layout-result.js");
+    require(
+        geometry == R"JSON({"replaced":true,"aligned":true,"loaded":[0,0,320,180]})JSON",
+        "loaded iframe did not replace the provisional layout root: " + geometry);
+    webscene_engine_destroy(engine);
+}
+
 void test_outer_dynamic_recascade_preserves_iframe_cascade()
 {
     auto* engine = webscene_engine_create(0);

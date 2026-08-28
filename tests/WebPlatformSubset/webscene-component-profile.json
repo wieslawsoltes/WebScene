@@ -909,6 +909,19 @@
   ],
   "candidate": [
     {
+      "path": "contracts/dom-iframe-hydrated-layout-replacement.html",
+      "type": "contract",
+      "capabilities": [
+        "hydrated-document-layout-root-replacement",
+        "iframe-viewport-origin-projection"
+      ],
+      "evidence": [
+        "native-cooperative-hydration-regression",
+        "StackWich-four-chart-retained-raster"
+      ],
+      "reason": "Candidate product-neutral reduction of the blank multi-chart regression. It forces synchronous creation of the initial about:blank document before script-bearing cooperative hydration, then requires the loaded body and a viewport-sized child to begin at the iframe origin instead of being laid out after the provisional document."
+    },
+    {
       "path": "contracts/svg-viewbox-preserve-aspect-ratio.html",
       "type": "reftest",
       "reference": "contracts/svg-viewbox-preserve-aspect-ratio-ref.html",

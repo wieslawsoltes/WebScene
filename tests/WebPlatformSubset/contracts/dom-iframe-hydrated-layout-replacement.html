@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hydrated iframe replaces its initial layout root</title>
+<body>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function finish(error = null) {
+    if (state.complete) return;
+    if (error) {
+      state.results.push({
+        name: "the hydrated document occupies the iframe viewport",
+        status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  }
+
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "display:block;width:320px;height:180px;border:0";
+  document.body.style.margin = "0";
+  document.body.appendChild(frame);
+
+  const initialDocument = frame.contentDocument;
+  window.__webSceneHydratedFrameReady = () => {
+    try {
+      const loadedDocument = frame.contentDocument;
+      const frameRect = frame.getBoundingClientRect();
+      const bodyRect = loadedDocument.body.getBoundingClientRect();
+      const contentRect = loadedDocument.getElementById("loaded").getBoundingClientRect();
+      assert(bodyRect.x === frameRect.x && bodyRect.y === frameRect.y,
+        `hydrated body began at ${bodyRect.x},${bodyRect.y} instead of ` +
+        `${frameRect.x},${frameRect.y}`);
+      assert(contentRect.x === frameRect.x && contentRect.y === frameRect.y,
+        `hydrated content began at ${contentRect.x},${contentRect.y} instead of ` +
+        `${frameRect.x},${frameRect.y}`);
+      assert(contentRect.width === 320 && contentRect.height === 180,
+        `hydrated content was ${contentRect.width}x${contentRect.height}`);
+      state.results.push({
+        name: "the hydrated document occupies the iframe viewport",
+        status: "PASS", message: null, stack: null
+      });
+      state.diagnostics.push(JSON.stringify({
+        frame: [frameRect.x, frameRect.y, frameRect.width, frameRect.height],
+        body: [bodyRect.x, bodyRect.y, bodyRect.width, bodyRect.height],
+        content: [contentRect.x, contentRect.y, contentRect.width, contentRect.height]
+      }));
+      finish();
+    } catch (error) {
+      finish(error);
+    }
+  };
+
+  initialDocument.open();
+  initialDocument.write(
+    "<!doctype html><html><body style='margin:0'>" +
+    "<div id='loaded' style='width:320px;height:180px;background:#010203'></div>" +
+    "<script>parent.__webSceneHydratedFrameReady()<\/script>" +
+    "</body></html>");
+  initialDocument.close();
+  setTimeout(() => finish(new Error("hydrated iframe did not become ready")), 2000);
+</script>
+</body>

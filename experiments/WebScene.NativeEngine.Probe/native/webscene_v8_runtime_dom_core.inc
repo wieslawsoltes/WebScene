@@ -1105,6 +1105,38 @@
         if (stylesheets_changed) recascade_after_stylesheet_change();
     }
 
+    void retire_provisional_frame_document(dom_node& frame)
+    {
+        const auto known_body = provisional_frame_bodies.find(frame.id);
+        if (known_body == provisional_frame_bodies.end()
+            || known_body->second == nullptr) {
+            return;
+        }
+
+        auto* root = known_body->second;
+        while (root->parent != nullptr && root->parent != &frame) {
+            root = root->parent;
+        }
+        if (root->parent != &frame) {
+            provisional_frame_bodies.erase(known_body);
+            return;
+        }
+        // Accessing contentDocument/contentWindow creates the iframe's initial
+        // about:blank document synchronously. Navigation replaces that
+        // document; it must not remain as a rendered sibling in front of the
+        // loaded document. WebScene retains both browsing-context documents in
+        // one native tree so existing JavaScript references stay valid. Retire
+        // the old root from layout and paint while leaving normal iframe
+        // teardown responsible for reclaiming the complete browsing context.
+        root->mutable_authored_style().declarations["display"] = "none";
+        root->style.inline_property_mask |= inline_display;
+        root->style.display = display_mode::none;
+        root->visible = false;
+        static_cast<void>(deactivate_connected_stylesheets(*root, false));
+        provisional_frame_bodies.erase(known_body);
+        document.mark_dirty();
+    }
+
     void register_detached_subtree(dom_node& root)
     {
         if (&root == &document.body() || root.parent != nullptr) return;

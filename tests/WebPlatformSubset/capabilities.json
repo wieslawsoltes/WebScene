@@ -128,10 +128,10 @@
     {
       "family": "iframe-initial-document-lifecycle",
       "required": ["connected source-less iframe synchronous initial about:blank", "contentWindow document and contentDocument identity", "Document defaultView identity", "Window frameElement identity", "document open/write/close body replacement", "stable contentDocument across replacement", "queryable written body content", "hidden-frame computed-style read"],
-      "candidate": [],
+      "candidate": ["hydrated document replaces the initial layout root", "loaded iframe content starts at the iframe viewport origin"],
       "productEvidence": ["jQuery frame-element CSS feature path", "component libraries using hidden same-origin feature-probe frames", "future hosted component iframe composition"],
-      "coverage": ["contracts/dom-iframe-initial-document-write.html", "test_initial_frame_document_write_and_hidden_style", "artifacts/web-platform-iframe-document-chrome-v1-20260723", "artifacts/web-platform-iframe-document-webscene-v5-20260723", "artifacts/ecosystem-consumers-iframe-document-v1-20260723"],
-      "gap": "Chrome and native pass the bounded four-assertion contract, and the originating unchanged jQuery assertion passes the native runner. This claim covers only the synchronous initial same-origin source-less document and plain document.write replacement. Navigated frames, src/srcdoc fetching, nested browsing-context history, sandboxing, origin transitions, cross-origin access control, frame load/error sequencing, parser-executed scripts and styles during document.write, frame teardown under navigation, and arbitrary iframe rendering remain outside this bounded promotion."
+      "coverage": ["contracts/dom-iframe-initial-document-write.html", "contracts/dom-iframe-hydrated-layout-replacement.html", "test_initial_frame_document_write_and_hidden_style", "test_loaded_iframe_replaces_provisional_layout_root", "artifacts/web-platform-iframe-document-chrome-v1-20260723", "artifacts/web-platform-iframe-document-webscene-v5-20260723", "artifacts/ecosystem-consumers-iframe-document-v1-20260723"],
+      "gap": "Chrome and native pass the bounded four-assertion initial-document contract, and the originating unchanged jQuery assertion passes the native runner. Hydrated layout-root replacement is candidate coverage pending all-RID and Chrome evidence. Navigated src/srcdoc fetching, nested browsing-context history, sandboxing, origin transitions, cross-origin access control, complete frame load/error sequencing, frame teardown under repeated navigation, and arbitrary iframe rendering remain outside this bounded promotion."
     },
     {
       "family": "autonomous-custom-elements",

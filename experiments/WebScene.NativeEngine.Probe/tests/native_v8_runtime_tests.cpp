@@ -240,6 +240,10 @@ int main()
             test_cooperative_iframe_hydration_yields_and_isolates_cascade();
             return 0;
         }
+        if (selected == "iframe-replacement-layout") {
+            test_loaded_iframe_replaces_provisional_layout_root();
+            return 0;
+        }
         if (selected == "iframe-dynamic-recascade") {
             test_outer_dynamic_recascade_preserves_iframe_cascade();
             return 0;
@@ -365,6 +369,7 @@ int main()
     test_iframe_preparation_discovers_subresources_during_outer_script();
     test_deferred_frame_script_observes_window_dom_content_loaded();
     test_cooperative_iframe_hydration_yields_and_isolates_cascade();
+    test_loaded_iframe_replaces_provisional_layout_root();
     test_outer_dynamic_recascade_preserves_iframe_cascade();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();

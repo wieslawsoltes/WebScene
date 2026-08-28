@@ -2457,6 +2457,7 @@
         frame_body.style.height = {100, length_unit::percent};
         frame_body.style.background_rgba = 0x131722FFU;
         apply_css_rules(frame_body);
+        retire_provisional_frame_document(frame);
         document.append_child(frame, frame_body);
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
         auto& parsed_root = document.create_node(
