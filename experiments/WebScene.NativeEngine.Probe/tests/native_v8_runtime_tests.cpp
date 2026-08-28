@@ -224,6 +224,10 @@ int main()
             test_tradingview_datafeed_iframe_symbol_search_round_trip();
             return 0;
         }
+        if (selected == "tradingview-save-acknowledgement") {
+            test_tradingview_save_acknowledgement_uses_multipart_post();
+            return 0;
+        }
         if (selected == "iframe-preparation") {
             test_iframe_preparation_discovers_subresources_during_outer_script();
             return 0;

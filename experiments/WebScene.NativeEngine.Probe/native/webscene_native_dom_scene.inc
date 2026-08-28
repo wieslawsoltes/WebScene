@@ -1003,9 +1003,11 @@ void native_document::append_scene(
                 node.style.outline_rgba);
         }
     }
-    const auto clip_contents = node.style.clip
-        && node.layout.width > 0
-        && node.layout.height > 0;
+    // An empty overflow viewport still clips all of its contents. In
+    // particular, components commonly hide retained status text by animating
+    // the containing box to height: 0 while leaving overflow: hidden. Skipping
+    // the clip for that geometry incorrectly paints the retained text.
+    const auto clip_contents = node.style.clip;
     if (clip_contents) {
         // Kinds 12/13 bracket the element's pseudo/content/descendant paint.
         // The box background and border intentionally remain outside its own

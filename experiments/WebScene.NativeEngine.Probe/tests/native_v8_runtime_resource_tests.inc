@@ -471,32 +471,31 @@ void test_tradingview_save_acknowledgement_uses_multipart_post()
     contextual_resource_server server{
         .resources = resource_server{.content = {
             {std::string(page_url), R"HTML(
+                <style>
+                  .stateTitle { display: block; color: rgb(41, 98, 255); }
+                  .stateTitle.hidden { height: 0; overflow: hidden; }
+                </style>
+                <button id="save">Default <span id="dirty" class="stateTitle">Save</span></button>
                 <script>
-                  const frame = document.createElement('iframe');
-                  document.body.appendChild(frame);
-                  frame.contentDocument.open();
-                  frame.contentDocument.write(`<button id="save">Default <span id="dirty">Save</span></button><script>
-                    let saveInProgress = false;
-                    document.getElementById('save').addEventListener('click', async () => {
-                      if (saveInProgress) return;
-                      saveInProgress = true;
-                      const payload = new FormData();
-                      payload.append('name', 'Default');
-                      payload.append('content', '{"layout":1}');
-                      try {
-                        const response = await fetch(
-                          'https://saveload.test/1.1/charts?client=terminal&user=public',
-                          { method: 'POST', body: payload, credentials: 'same-origin' });
-                        const result = await response.json();
-                        if (response.ok && result.status === 'ok') {
-                          document.getElementById('dirty').textContent = '';
-                        }
-                      } finally {
-                        saveInProgress = false;
+                  let saveInProgress = false;
+                  document.getElementById('save').addEventListener('click', async () => {
+                    if (saveInProgress) return;
+                    saveInProgress = true;
+                    const payload = new FormData();
+                    payload.append('name', 'Default');
+                    payload.append('content', '{"layout":1}');
+                    try {
+                      const response = await fetch(
+                        'https://saveload.test/1.1/charts?client=terminal&user=public',
+                        { method: 'POST', body: payload, credentials: 'same-origin' });
+                      const result = await response.json();
+                      if (response.ok && result.status === 'ok') {
+                        document.getElementById('dirty').classList.add('hidden');
                       }
-                    });
-                  <\/script>`);
-                  frame.contentDocument.close();
+                    } finally {
+                      saveInProgress = false;
+                    }
+                  });
                 </script>)HTML"},
             {std::string(save_url), R"JSON({"status":"ok","id":"layout-42"})JSON"}
         }}
@@ -507,28 +506,29 @@ void test_tradingview_save_acknowledgement_uses_multipart_post()
     options.resource_load_v3_user_data = &server;
     auto* engine = webscene_engine_create_with_options(&options);
     require(engine != nullptr, "save acknowledgement engine creation failed");
+    resize(engine, 800, 600, 1U);
     require(
         webscene_engine_load_url(engine, page_url.data(), page_url.size()) != 0U,
         "save acknowledgement fixture navigation failed");
-    auto frame_ready = false;
+    auto document_ready = false;
     for (auto attempt = 0; attempt < 400; ++attempt) {
-        frame_ready = evaluate(
+        document_ready = evaluate(
             engine,
-            "Boolean(document.querySelector('iframe')?.contentDocument?.getElementById('save'))",
-            "tradingview-save-frame-ready.js") == "true";
-        if (frame_ready) break;
+            "Boolean(document.getElementById('save'))",
+            "tradingview-save-document-ready.js") == "true";
+        if (document_ready) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(frame_ready, "TradingView-shaped save iframe did not finish loading");
+    require(document_ready, "TradingView-shaped save document did not finish loading");
     execute_and_wait(
         engine,
-        "document.querySelector('iframe').contentDocument.getElementById('save').click()",
+        "document.getElementById('save').click()",
         "tradingview-save-activation.js");
     for (auto attempt = 0; attempt < 250; ++attempt) {
         if (evaluate(
                 engine,
-                "document.querySelector('iframe').contentDocument.getElementById('dirty').textContent",
-                "tradingview-save-dirty-result.js") == R"("")") {
+                "document.getElementById('dirty').classList.contains('hidden')",
+                "tradingview-save-dirty-result.js") == "true") {
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -545,9 +545,70 @@ void test_tradingview_save_acknowledgement_uses_multipart_post()
     require(
         evaluate(
             engine,
-            "document.querySelector('iframe').contentDocument.getElementById('dirty').textContent",
-            "tradingview-save-final-dirty-result.js") == R"("")",
-        "successful asynchronous save acknowledgement did not clear the dirty label");
+            R"JS((() => {
+              const dirty = document.getElementById('dirty');
+              return [dirty.textContent, dirty.getBoundingClientRect().height,
+                getComputedStyle(dirty).overflow];
+            })())JS",
+            "tradingview-save-final-dirty-result.js") == R"(["Save",0,"hidden"])",
+        "successful asynchronous save acknowledgement did not collapse the dirty label");
+
+    uint64_t prior_scene_revision = 0U;
+    if (const auto* stale = webscene_engine_acquire_latest_scene(engine)) {
+        prior_scene_revision = stale->header.revision;
+        webscene_scene_acknowledge(stale);
+        webscene_scene_release(stale);
+    }
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_retained_save_text = false;
+    auto observed_zero_height_clip = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            if (scene->header.revision > prior_scene_revision
+                && (scene->header.flags & 1U) != 0U) {
+                std::vector<bool> zero_height_clip_stack;
+                for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                    const auto& command = scene->commands[index];
+                    if (command.kind == 12U) {
+                        zero_height_clip_stack.push_back(
+                            std::abs(command.height) < 0.01F);
+                        continue;
+                    }
+                    if (command.kind == 13U) {
+                        if (!zero_height_clip_stack.empty()) {
+                            zero_height_clip_stack.pop_back();
+                        }
+                        continue;
+                    }
+                    if (command.kind != 3U || command.flags >= scene->string_count) {
+                        continue;
+                    }
+                    const auto& descriptor = scene->strings[command.flags];
+                    const std::string_view resource(
+                        scene->string_bytes + descriptor.byte_offset,
+                        descriptor.byte_length);
+                    if (!resource.ends_with("\tSave")) continue;
+                    observed_retained_save_text = true;
+                    observed_zero_height_clip = std::find(
+                        zero_height_clip_stack.begin(),
+                        zero_height_clip_stack.end(),
+                        true) != zero_height_clip_stack.end();
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (observed_retained_save_text) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        observed_retained_save_text,
+        "successful save fixture did not retain its collapsed status text");
+    require(
+        observed_zero_height_clip,
+        "zero-height overflow viewport did not clip retained save status text");
     webscene_engine_destroy(engine);
 }
 

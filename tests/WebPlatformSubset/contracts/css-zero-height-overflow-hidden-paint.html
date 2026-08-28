@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Zero-height overflow viewport clips retained text</title>
+<link rel="match" href="css-zero-height-overflow-hidden-paint-ref.html">
+<style>
+  html, body { margin: 0; background: #111; }
+  #control {
+    box-sizing: border-box;
+    width: 180px;
+    height: 72px;
+    padding: 12px 20px;
+    background: #111;
+    color: #ddd;
+    font: 24px/28px sans-serif;
+  }
+  #status {
+    display: block;
+    height: 0;
+    overflow: hidden;
+    color: #2962ff;
+    font: 16px/20px sans-serif;
+  }
+</style>
+<div id="control">123<span id="status">Save</span></div>

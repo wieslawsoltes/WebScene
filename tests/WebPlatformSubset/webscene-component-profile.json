@@ -16,6 +16,13 @@
       "evidence": ["tradingview-symbol-search-uppercase-input"]
     },
     {
+      "path": "contracts/css-zero-height-overflow-hidden-paint.html",
+      "type": "reftest",
+      "reference": "contracts/css-zero-height-overflow-hidden-paint-ref.html",
+      "capabilities": ["overflow-hidden", "zero-height-paint-clip", "retained-text-clipping"],
+      "evidence": ["hosted-component-saved-state-label"]
+    },
+    {
       "path": "contracts/urlsearchparams-constructor.html",
       "type": "contract",
       "capabilities": ["urlsearchparams-string-constructor", "urlsearchparams-record-constructor", "urlsearchparams-iterable-constructor", "form-url-encoding"],
