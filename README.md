@@ -134,25 +134,14 @@ Build the documentation site locally with `./build-docs.sh`.
 
 ## Packages
 
-The repository produces these .NET packages:
-
-- `WebScene.Core`, `WebScene.Dom`, `WebScene.Css`, and `WebScene.Graphics` for
-  portable contracts and supporting semantics;
-- `WebScene.Backend.Abstractions`, `WebScene.Backend.Avalonia`, and
-  `WebScene.Backend.Uno` for presenter contracts and integrations;
-- `WebScene.JavaScript.Interop` and
-  `WebScene.JavaScript.Interop.Generator` for typed host interop;
-- `WebScene.Sdk` for component manifests, assets, lifecycle, and host-bridge
-  contracts;
-- `WebScene.Sdk.Avalonia` and `WebScene.Sdk.Uno` for framework-native reusable
-  `WebSceneComponentHost` controls; and
-- `WebScene` for the separate Avalonia HTML-inspired authoring layer.
-
-The native engine is supplied by one matching RID package:
-
-- `WebScene.NativeEngine.Runtime.osx-arm64`
-- `WebScene.NativeEngine.Runtime.linux-x64`
-- `WebScene.NativeEngine.Runtime.win-x64`
+| Package family | Published packages |
+| --- | --- |
+| Product and SDK | [![WebScene NuGet](https://img.shields.io/nuget/v/WebScene.svg?label=WebScene&style=flat-square)](https://www.nuget.org/packages/WebScene/)<br>[![WebScene.Sdk NuGet](https://img.shields.io/nuget/v/WebScene.Sdk.svg?label=WebScene.Sdk&style=flat-square)](https://www.nuget.org/packages/WebScene.Sdk/)<br>[![WebScene.Sdk.Avalonia NuGet](https://img.shields.io/nuget/v/WebScene.Sdk.Avalonia.svg?label=WebScene.Sdk.Avalonia&style=flat-square)](https://www.nuget.org/packages/WebScene.Sdk.Avalonia/)<br>[![WebScene.Sdk.Uno NuGet](https://img.shields.io/nuget/v/WebScene.Sdk.Uno.svg?label=WebScene.Sdk.Uno&style=flat-square)](https://www.nuget.org/packages/WebScene.Sdk.Uno/) |
+| Framework backends | [![WebScene.Backend.Abstractions NuGet](https://img.shields.io/nuget/v/WebScene.Backend.Abstractions.svg?label=WebScene.Backend.Abstractions&style=flat-square)](https://www.nuget.org/packages/WebScene.Backend.Abstractions/)<br>[![WebScene.Backend.Avalonia NuGet](https://img.shields.io/nuget/v/WebScene.Backend.Avalonia.svg?label=WebScene.Backend.Avalonia&style=flat-square)](https://www.nuget.org/packages/WebScene.Backend.Avalonia/)<br>[![WebScene.Backend.Uno NuGet](https://img.shields.io/nuget/v/WebScene.Backend.Uno.svg?label=WebScene.Backend.Uno&style=flat-square)](https://www.nuget.org/packages/WebScene.Backend.Uno/) |
+| Runtime foundations | [![WebScene.Core NuGet](https://img.shields.io/nuget/v/WebScene.Core.svg?label=WebScene.Core&style=flat-square)](https://www.nuget.org/packages/WebScene.Core/)<br>[![WebScene.Dom NuGet](https://img.shields.io/nuget/v/WebScene.Dom.svg?label=WebScene.Dom&style=flat-square)](https://www.nuget.org/packages/WebScene.Dom/)<br>[![WebScene.Css NuGet](https://img.shields.io/nuget/v/WebScene.Css.svg?label=WebScene.Css&style=flat-square)](https://www.nuget.org/packages/WebScene.Css/)<br>[![WebScene.Graphics NuGet](https://img.shields.io/nuget/v/WebScene.Graphics.svg?label=WebScene.Graphics&style=flat-square)](https://www.nuget.org/packages/WebScene.Graphics/) |
+| Diagnostics | [![WebScene.Diagnostics.Cdp NuGet](https://img.shields.io/nuget/v/WebScene.Diagnostics.Cdp.svg?label=WebScene.Diagnostics.Cdp&style=flat-square)](https://www.nuget.org/packages/WebScene.Diagnostics.Cdp/) |
+| Interop and tooling | [![WebScene.JavaScript.Interop NuGet](https://img.shields.io/nuget/v/WebScene.JavaScript.Interop.svg?label=WebScene.JavaScript.Interop&style=flat-square)](https://www.nuget.org/packages/WebScene.JavaScript.Interop/)<br>[![WebScene.JavaScript.Interop.Generator NuGet](https://img.shields.io/nuget/v/WebScene.JavaScript.Interop.Generator.svg?label=WebScene.JavaScript.Interop.Generator&style=flat-square)](https://www.nuget.org/packages/WebScene.JavaScript.Interop.Generator/) |
+| Native runtimes | [![WebScene.NativeEngine.Runtime.osx-arm64 NuGet](https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.osx-arm64.svg?label=WebScene.NativeEngine.Runtime.osx-arm64&style=flat-square)](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.osx-arm64/)<br>[![WebScene.NativeEngine.Runtime.linux-x64 NuGet](https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.linux-x64.svg?label=WebScene.NativeEngine.Runtime.linux-x64&style=flat-square)](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.linux-x64/)<br>[![WebScene.NativeEngine.Runtime.win-x64 NuGet](https://img.shields.io/nuget/v/WebScene.NativeEngine.Runtime.win-x64.svg?label=WebScene.NativeEngine.Runtime.win-x64&style=flat-square)](https://www.nuget.org/packages/WebScene.NativeEngine.Runtime.win-x64/) |
 
 Application templates are not currently published. The component host is native-only;
 there is no managed fallback.
