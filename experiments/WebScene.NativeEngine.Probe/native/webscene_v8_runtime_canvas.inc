@@ -23,6 +23,7 @@
         auto* self = current(info.GetIsolate());
         auto* node = canvas_export_node(info);
         if (self == nullptr || node == nullptr) return;
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toDataURL",
@@ -41,6 +42,7 @@
             || !info[0]->IsFunction()) {
             return;
         }
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toBlob",
@@ -176,6 +178,7 @@
         fill_svg_path = 28,
         stroke_svg_path = 29,
         ellipse = 30,
+        draw_svg_image = 31,
         fill_style = 40,
         stroke_style = 41,
         line_width = 42,
@@ -1668,8 +1671,15 @@
             return;
         }
         auto* source = unwrap_node(info[0].As<v8::Object>());
-        if (source == nullptr || source->tag != "canvas") return;
-        if (source == state->node) {
+        if (source == nullptr) return;
+        const auto source_is_canvas = source->tag == "canvas";
+        const auto& source_image = source->replaced_image();
+        const auto source_is_svg_image = source->tag == "img"
+            && source_image.complete
+            && !source_image.markup.empty()
+            && !source_image.view_box.empty();
+        if (!source_is_canvas && !source_is_svg_image) return;
+        if (source_is_canvas && source == state->node) {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             ++state->node->mutable_canvas().self_draw_image_calls;
 #endif
@@ -1680,8 +1690,14 @@
 #endif
 
         const auto context = info.GetIsolate()->GetCurrentContext();
-        const auto source_width = element_dimension(*source, "width", 300);
-        const auto source_height = element_dimension(*source, "height", 150);
+        const auto source_width = element_dimension(
+            *source,
+            "width",
+            source_is_svg_image ? source_image.natural_width : 300);
+        const auto source_height = element_dimension(
+            *source,
+            "height",
+            source_is_svg_image ? source_image.natural_height : 150);
         double source_x = 0;
         double source_y = 0;
         double source_draw_width = source_width;
@@ -1711,6 +1727,17 @@
         if (std::abs(source_draw_width) < 0.001 || std::abs(source_draw_height) < 0.001) return;
 
         canvas_emit_paint_state(info, *state, canvas_paint_draw_image);
+        if (source_is_svg_image) {
+            canvas_append_resource_command(
+                *state->node,
+                canvas_command_kind::draw_svg_image,
+                canvas_intern_string(
+                    *state->node,
+                    source_image.view_box + "\t" + source_image.markup),
+                {source_x, source_y, source_draw_width, source_draw_height,
+                 destination_x, destination_y, destination_width, destination_height});
+            return;
+        }
         canvas_append_resource_command(
             *state->node,
             canvas_command_kind::draw_canvas,

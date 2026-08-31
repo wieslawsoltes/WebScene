@@ -243,6 +243,7 @@
         { "name": "offsetParent", "getter": "get_offset_parent" },
         { "name": "width", "getter": "get_element_width", "setter": "set_element_width" },
         { "name": "height", "getter": "get_element_height", "setter": "set_element_height" },
+        { "name": "hidden", "getter": "get_hidden", "setter": "set_hidden" },
         { "name": "colSpan", "getter": "get_table_cell_span", "setter": "set_table_cell_span" },
         { "name": "rowSpan", "getter": "get_table_cell_span", "setter": "set_table_cell_span" },
         { "name": "cellSpacing", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },

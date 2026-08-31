@@ -1676,6 +1676,9 @@ public static unsafe partial class NativeWebSceneApi
     [DllImport(LibraryName, EntryPoint = "webscene_engine_request_scene_checkpoint")]
     public static extern byte EngineRequestSceneCheckpoint(IntPtr engine);
 
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_release_canvas_export")]
+    internal static extern byte EngineReleaseCanvasExport(IntPtr engine, uint nodeId);
+
     [DllImport(LibraryName, EntryPoint = "webscene_engine_request_low_memory")]
     public static extern byte EngineRequestLowMemory(IntPtr engine);
 

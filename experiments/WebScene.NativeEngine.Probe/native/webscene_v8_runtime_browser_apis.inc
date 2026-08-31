@@ -1758,9 +1758,18 @@
         auto* self = current(info.GetIsolate());
         auto payload = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         std::string download_payload;
+        uint32_t canvas_node_id = 0;
         if (info.Length() > 0 && info[0]->IsObject()) {
             auto local_context = info.GetIsolate()->GetCurrentContext();
             auto object = info[0].As<v8::Object>();
+            v8::Local<v8::Value> canvas_node_id_value;
+            if (object->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "_canvasNodeId"))
+                    .ToLocal(&canvas_node_id_value)
+                && canvas_node_id_value->IsUint32()) {
+                canvas_node_id = canvas_node_id_value.As<v8::Uint32>()->Value();
+            }
             v8::Local<v8::Value> bytes_value;
             if (object->Get(
                     local_context,
@@ -1794,6 +1803,9 @@
         self->object_urls[url] = std::move(payload);
         if (!download_payload.empty()) {
             self->object_url_download_payloads[url] = std::move(download_payload);
+        }
+        if (canvas_node_id != 0) {
+            self->object_url_canvas_node_ids[url] = canvas_node_id;
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), url.c_str()));
     }

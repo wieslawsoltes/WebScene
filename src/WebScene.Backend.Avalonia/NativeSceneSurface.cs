@@ -1315,6 +1315,26 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         return Task.FromResult<byte[]?>(bytes);
     }
 
+    public Task<byte[]?> CaptureCanvasPngAsync(
+        uint nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        if (_customVisual is not null)
+        {
+            var request = new NativeCanvasCaptureRequest(nodeId);
+            _customVisual.SendHandlerMessage(request);
+            return AwaitCanvasCaptureAsync(request, cancellationToken);
+        }
+
+        byte[]? bytes;
+        lock (_rendererGate)
+        {
+            bytes = _renderer.CaptureCanvasPng(nodeId);
+        }
+        return Task.FromResult(bytes);
+    }
+
     public byte[] CaptureRetainedScenePng()
     {
         Dispatcher.UIThread.VerifyAccess();
@@ -1332,6 +1352,23 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private static async Task<byte[]?> AwaitCompositionCaptureAsync(
         NativeSceneCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await request.Completion
+                .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            request.TryCancel();
+            return null;
+        }
+    }
+
+    private static async Task<byte[]?> AwaitCanvasCaptureAsync(
+        NativeCanvasCaptureRequest request,
         CancellationToken cancellationToken)
     {
         try

@@ -1176,6 +1176,9 @@ WEBSCENE_API size_t webscene_engine_copy_canvas_layouts(
  * renderer (for example after compositor/context recreation).
  */
 WEBSCENE_API uint8_t webscene_engine_request_scene_checkpoint(webscene_engine* engine);
+WEBSCENE_API uint8_t webscene_engine_release_canvas_export(
+    webscene_engine* engine,
+    uint32_t node_id);
 WEBSCENE_API const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine);
 /*
  * Enables the bounded ordered consumer lane and acquires its oldest pending

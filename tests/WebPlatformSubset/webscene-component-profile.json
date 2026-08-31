@@ -1008,6 +1008,13 @@
       "reason": "Product-neutral reduction of bounded overflow navigation: consecutive percentage-height flow children resolve against a definite viewport, all contribute to scrollHeight, and the final child can align at the viewport boundary."
     },
     {
+      "path": "contracts/overflow-dynamic-panel-switch.html",
+      "type": "contract",
+      "capabilities": ["dynamic-display-panel-switch", "overflow-extent-recomputation", "nested-flex-scroll-viewport", "replacement-panel-final-content-reachability"],
+      "evidence": ["tradingview-settings-scales-and-lines-panel-switch-reduction"],
+      "reason": "Product-neutral reduction of a tabbed dialog: replacing the visible height:100% panel must discard the hidden panel's extent, recompute scrollHeight from the replacement content, preserve clipping, and keep the fixed footer inside the dialog."
+    },
+    {
       "path": "contracts/document-create-event-init.html",
       "type": "contract",
       "capabilities": ["document-create-event", "event-init-event", "event-identity", "cancelable-dispatch", "event-reinitialization"],
