@@ -368,12 +368,13 @@ intrinsic-size hash/constrain cluster.
 
 The intrinsic-size direct cache is accepted on the current cumulative codebase. A
 256-entry front cache was rejected before packaging because it hit only 4 of 2,248
-lookups per layout (0.18%). The final design stores one generation/available/size slot
-per axis on each stable node and removes the document hash table. Exact 1,013- and
-1,061-node fixtures eliminate 2,248 and 4,376 hash lookups per layout, record 112 and
-620 direct hits, preserve geometry and allocation work, and improve informational p50
-time by 10.26% and 21.38%. The bounded cost is 32 bytes per node, bringing `dom_node`
-from 992 to its guarded 1,024-byte maximum.
+lookups per layout (0.18%). The portable final design removes the document hash table
+and stores one shared generation plus two available/size pairs in a document-owned
+table indexed by stable native node ID. Exact 1,013- and 1,061-node fixtures eliminate
+2,248 and 4,376 hash lookups per layout, record 112 and 620 direct hits, preserve
+geometry and allocation work, and improve informational p50 time by 8.85% and 21.55%.
+The bounded cost is 24 bytes per native ID while `dom_node` remains 992 bytes, restoring
+headroom under the cross-library 1,024-byte limit on Linux.
 
 All 12 benchmark smokes and the complete native, WPT, race, package, and consumer gates
 pass. Two cumulative ABBA blocks against original 1.0.26 measure CPU -15.98% (95% CI
@@ -383,6 +384,12 @@ supported process or cadence regression above 3% exists. Eleven exact reports ma
 decision `accept`. This cumulative comparison proves the roadmap remains beneficial
 with the change; the entire CPU delta is not attributed to the direct cache alone. The
 direct cache is now production default and the old hash table is benchmark control.
+
+A two-block, eight-run product ABBA comparison of the accepted inline-node cache against
+the portable document-owned storage refactor also accepts: CPU -0.18% (95% CI -2.85%
+to +2.57%), RSS +0.14% (-1.08% to +1.40%), and physical footprint +0.79% (-0.25% to
++1.85%). Exact work is equivalent and no supported process or cadence regression above
+3% exists, so this portability fix preserves the accepted cumulative gain.
 
 The 60,138-sample post-acceptance trace corroborates that mechanism across separate
 attribution runs. Intrinsic-key-specific hash leaves fall from 1,309 ms / 2.01% to

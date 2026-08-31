@@ -450,10 +450,19 @@ dom_node& native_document::create_node(dom_node_kind kind, std::string name)
         node->style.display = display_mode::none;
     }
     auto* result = node.get();
-    nodes_.push_back(std::move(node));
     if (native_id_index_.size() < result->id) {
         native_id_index_.resize(result->id, nullptr);
     }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    if (intrinsic_size_direct_cache_ == nullptr) {
+        intrinsic_size_direct_cache_ = std::make_unique<
+            std::vector<intrinsic_size_direct_node_cache>>();
+    }
+    if (intrinsic_size_direct_cache_->size() < result->id) {
+        intrinsic_size_direct_cache_->resize(result->id);
+    }
+#endif
+    nodes_.push_back(std::move(node));
     native_id_index_[result->id - 1U] = result;
     mark_dirty();
     return *result;
@@ -567,6 +576,12 @@ size_t native_document::erase_detached_subtrees(
     for (const auto* node : removed) {
         if (node->id == 0U || node->id > native_id_index_.size()) continue;
         native_id_index_[node->id - 1U] = nullptr;
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+        if (intrinsic_size_direct_cache_ != nullptr
+            && node->id <= intrinsic_size_direct_cache_->size()) {
+            (*intrinsic_size_direct_cache_)[node->id - 1U] = {};
+        }
+#endif
     }
     if (shadow_dom_storage_ != nullptr) {
         for (const auto* node : removed) {
@@ -578,6 +593,11 @@ size_t native_document::erase_detached_subtrees(
     while (!native_id_index_.empty() && native_id_index_.back() == nullptr) {
         native_id_index_.pop_back();
     }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    if (intrinsic_size_direct_cache_ != nullptr) {
+        intrinsic_size_direct_cache_->resize(native_id_index_.size());
+    }
+#endif
     if (nodes_.size() != before) mark_dirty();
     return before - nodes_.size();
 }
@@ -772,6 +792,9 @@ void native_document::clear()
     shadow_dom_storage_.reset();
     nodes_.clear();
     native_id_index_.clear();
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    intrinsic_size_direct_cache_.reset();
+#endif
     // A complete navigation invalidates every node, so no pooled allocation
     // remains live. Return all node chunks to the upstream allocator instead
     // of retaining the previous document's high-water mark.

@@ -1353,13 +1353,14 @@ individual change.
     indexing as the product regression's cause; retain the full rebuild and move to the
     next typed leaf cluster.
 37. Accepted after renewed proof: replace the per-document intrinsic-size pointer/axis
-    hash table with two generation-stamped memo slots on every stable DOM node. A
+    hash table with a direct memo table indexed by stable native node ID. A
     bounded front-cache variant was first rejected locally because only 4 of 2,248
     lookups hit (0.18%). The direct cache eliminates all 2,248 and 4,376 hash lookups
     per layout in the 1,013- and 1,061-node fixtures, records 112 and 620 direct hits,
     preserves geometry checksums and allocation work, and improves informational p50
-    time by 10.26% and 21.38%. The explicit cost is 32 bytes per node (992 to the
-    guarded 1,024-byte maximum). Native 4/4, all 12 benchmark smokes, WPT 123/123
+    time by 8.85% and 21.55%. The portable storage shares one generation across its two
+    axes and costs 24 bytes per native ID while `dom_node` remains 992 bytes, below the
+    cross-library 1,024-byte maximum. Native 4/4, all 12 benchmark smokes, WPT 123/123
     documents and 453/453 subtests, the 12,800-operation race gate, and the zero-warning
     consumer build pass. Two cumulative ABBA blocks against original 1.0.26 measure CPU
     -15.98% (95% CI -23.86% to -7.74%), RSS +0.50% (-0.81% to +1.85%), physical
@@ -1369,7 +1370,11 @@ individual change.
     the old map remains available only as an explicit benchmark control. This current
     cumulative result supersedes the earlier rejected pre-roadmap candidate for the
     present codebase, but does not claim an isolated 15.98% contribution from this one
-    change.
+    change. A separate two-block, eight-run product ABBA comparison against the accepted
+    inline cache measures CPU -0.18% (95% CI -2.85% to +2.57%), RSS +0.14% (-1.08% to
+    +1.40%), and physical footprint +0.79% (-0.25% to +1.85%). Exact work matches and
+    no supported process or cadence regression above 3% exists, accepting the portable
+    storage refactor without revising the cumulative performance claim.
 38. Completed: capture and symbolicate a 60,138-sample post-direct-cache trace.
     Intrinsic-key-specific hash leaves fall from 1,309 ms / 2.01% in the preceding
     separate trace to zero; generic `__constrain_hash` falls from 793 ms to 130 ms,

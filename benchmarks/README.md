@@ -129,10 +129,12 @@ inline and uses the original reserved vector for larger sibling sets.
 
 The paired `webscene_intrinsic_size_direct_cache_control_benchmark` and
 `webscene_intrinsic_size_direct_cache_benchmark` targets compare the retained
-pointer/axis hash map with two memo slots stored directly on each stable DOM node. The
-fixture reports eliminated hash lookups, preserved allocation and geometry work, and
-the explicit per-node footprint change. Product ABBA evidence accepted the direct cache,
-so it is the production default; control builds can restore the hash table with
+pointer/axis hash map with a document-owned memo table indexed by stable native node ID.
+Each entry shares one generation across its two axes, retaining direct O(1) lookup at
+24 bytes per native ID without increasing `dom_node` beyond 992 bytes. The fixture
+reports eliminated hash lookups and preserved allocation, geometry, and node-footprint
+work. Product ABBA evidence accepted the direct cache, so it is the production default;
+control builds can restore the hash table with
 `WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=ON`.
 
 The paired `webscene_intrinsic_row_collector_control_benchmark` and

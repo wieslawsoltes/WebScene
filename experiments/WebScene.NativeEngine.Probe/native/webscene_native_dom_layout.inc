@@ -13,9 +13,8 @@ void native_document::layout(float viewport_width, float viewport_height)
     if (!intrinsic_cache_disabled) {
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
         if (++intrinsic_size_cache_next_generation_ == 0) {
-            for (auto* node : native_id_index_) {
-                if (node == nullptr) continue;
-                for (auto& entry : node->intrinsic_size_direct_cache) {
+            if (intrinsic_size_direct_cache_ != nullptr) {
+                for (auto& entry : *intrinsic_size_direct_cache_) {
                     entry.generation = 0;
                 }
             }
@@ -3220,23 +3219,28 @@ float native_document::intrinsic_size(
         return compute_intrinsic_size(node, horizontal, available);
     }
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
-    auto& direct_cached = node.intrinsic_size_direct_cache[
-        static_cast<size_t>(horizontal)];
-    if (direct_cached.generation == intrinsic_size_cache_generation_
-        && direct_cached.available == available) {
+    auto& direct_node_cached = (*intrinsic_size_direct_cache_)[node.id - 1U];
+    if (direct_node_cached.generation != intrinsic_size_cache_generation_) {
+        direct_node_cached.generation = intrinsic_size_cache_generation_;
+        direct_node_cached.available.fill(
+            std::numeric_limits<float>::quiet_NaN());
+    }
+    const auto axis = static_cast<size_t>(horizontal);
+    if (direct_node_cached.available[axis] == available) {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         ++intrinsic_size_cache_hits_;
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
         ++intrinsic_size_direct_cache_hits_;
 #endif
-        return direct_cached.size;
+        return direct_node_cached.size[axis];
     }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     ++intrinsic_size_cache_misses_;
 #endif
     const auto result = compute_intrinsic_size(node, horizontal, available);
-    direct_cached = {intrinsic_size_cache_generation_, available, result};
+    direct_node_cached.available[axis] = available;
+    direct_node_cached.size[axis] = result;
     return result;
 #else
     if (intrinsic_size_cache_ == nullptr) {

@@ -3,6 +3,7 @@
 #include "webscene_native_engine.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -1021,18 +1022,6 @@ struct dom_node final {
         bool color_animation_start_event_sent{false};
     };
 
-#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
-    struct intrinsic_size_direct_cache_entry final {
-        uint64_t generation{0};
-        float available{0};
-        float size{0};
-    };
-#endif
-
-#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
-    mutable std::array<intrinsic_size_direct_cache_entry, 2U>
-        intrinsic_size_direct_cache{};
-#endif
     uint32_t id{0};
     dom_node_kind kind{dom_node_kind::element};
     std::string tag;
@@ -1752,6 +1741,14 @@ private:
         float size{0};
     };
 
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    struct intrinsic_size_direct_node_cache final {
+        uint64_t generation{0};
+        std::array<float, 2U> available{};
+        std::array<float, 2U> size{};
+    };
+#endif
+
     webscene_text_metrics measure_text(
         std::string_view value,
         const dom_node& node) const;
@@ -1826,6 +1823,14 @@ private:
     // trimmed when possible so short-lived text-node churn does not retain an
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    // Mirror the native-ID index so intrinsic lookup remains direct without
+    // making every DOM node pay a cross-library object-footprint tax. The
+    // shared generation keeps each two-axis entry to 24 bytes instead of the
+    // previous 32-byte pair of per-axis generations.
+    std::unique_ptr<std::vector<intrinsic_size_direct_node_cache>>
+        intrinsic_size_direct_cache_;
+#endif
     dom_node* body_{nullptr};
     float viewport_width_{1};
     float viewport_height_{1};
