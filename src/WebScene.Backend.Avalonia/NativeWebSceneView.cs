@@ -592,7 +592,11 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                 .GetByteArrayAsync(download.RemoteUri)
                 .ConfigureAwait(true);
         }
-        if (bytes is null) return;
+        if (bytes is null || (bytes.Length == 0
+            && string.Equals(
+                download.ContentType,
+                "image/png",
+                StringComparison.OrdinalIgnoreCase))) return;
         var extension = Path.GetExtension(download.SuggestedFileName);
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(
             new FilePickerSaveOptions
@@ -606,6 +610,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
         stream.SetLength(0);
         await stream.WriteAsync(bytes).ConfigureAwait(true);
+        await stream.FlushAsync().ConfigureAwait(true);
     }
 
     private async Task<byte[]?> CaptureCanvasForHostAsync(uint nodeId)

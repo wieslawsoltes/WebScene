@@ -216,12 +216,26 @@ int main()
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
         }
+        if (selected == "canvas-svg-image") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_svg_dom_parser_preserves_fill_rule(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "frame-resource-base-url") {
             test_dynamic_frame_resources_use_each_document_base_url();
             return 0;
         }
         if (selected == "datafeed-symbol-search") {
             test_tradingview_datafeed_iframe_symbol_search_round_trip();
+            return 0;
+        }
+        if (selected == "canvas-blob-url-download") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_pointer_cursor_and_external_anchor_host_handoff(focused_engine);
+            webscene_engine_destroy(focused_engine);
             return 0;
         }
         if (selected == "tradingview-save-acknowledgement") {

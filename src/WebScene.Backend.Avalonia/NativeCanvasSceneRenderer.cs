@@ -192,31 +192,91 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             {
                 InvalidateViewportLayers();
             }
+            // Remove dead layers before resolving replacement dependencies.
             foreach (ref readonly var change in changes)
             {
-                if ((change.Flags & LayerRemove) != 0)
+                if ((change.Flags & LayerRemove) == 0)
                 {
-                    if (s_layers.Remove(change.NodeId, out var removed))
-                    {
-                        s_totalCommandCount -= removed.CommandCount;
-                        removed.Dispose();
-                        layerOrderChanged = true;
-                    }
                     continue;
                 }
-                var replacement = CompileLayer(view, change);
-                var orderChanged = true;
-                if (s_layers.Remove(change.NodeId, out var previous))
+                if (s_layers.Remove(change.NodeId, out var removed))
                 {
-                    orderChanged = previous.ZOrder == replacement.ZOrder
-                        ? !ReplaceOrderedLayer(previous, replacement)
-                        : !RepositionOrderedLayer(previous, replacement);
-                    s_totalCommandCount -= previous.CommandCount;
-                    previous.Dispose();
+                    s_totalCommandCount -= removed.CommandCount;
+                    removed.Dispose();
+                    layerOrderChanged = true;
                 }
-                s_layers[change.NodeId] = replacement;
-                s_totalCommandCount += replacement.CommandCount;
-                layerOrderChanged |= orderChanged;
+            }
+
+            // A canvas display list may draw another canvas that is also new or
+            // replaced in this publication. Compile source layers first even
+            // when DOM/node order places the wrapper before its source. Without
+            // this ordering, the SKPicture permanently records a blank draw.
+            byte[]? rentedStates = null;
+            var compiled = changes.Length <= 128
+                ? stackalloc byte[changes.Length]
+                : (rentedStates = ArrayPool<byte>.Shared.Rent(changes.Length));
+            compiled[..changes.Length].Clear();
+            try
+            {
+                var remaining = 0;
+                for (var index = 0; index < changes.Length; index++)
+                {
+                    if ((changes[index].Flags & LayerRemove) == 0)
+                    {
+                        remaining++;
+                    }
+                    else
+                    {
+                        compiled[index] = 1;
+                    }
+                }
+
+                while (remaining > 0)
+                {
+                    var madeProgress = false;
+                    for (var index = 0; index < changes.Length; index++)
+                    {
+                        if (compiled[index] != 0
+                            || !LayerDependenciesAreCompiled(
+                                view,
+                                changes[index],
+                                changes,
+                                compiled))
+                        {
+                            continue;
+                        }
+                        InstallReplacement(
+                            view,
+                            changes[index],
+                            ref layerOrderChanged);
+                        compiled[index] = 1;
+                        remaining--;
+                        madeProgress = true;
+                    }
+
+                    if (madeProgress) continue;
+
+                    // Canvas self-draws are rejected by the native runtime, but
+                    // tolerate any malformed dependency cycle without hanging.
+                    for (var index = 0; index < changes.Length; index++)
+                    {
+                        if (compiled[index] != 0) continue;
+                        InstallReplacement(
+                            view,
+                            changes[index],
+                            ref layerOrderChanged);
+                        compiled[index] = 1;
+                        remaining--;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                if (rentedStates is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(rentedStates, clearArray: true);
+                }
             }
             if (layerOrderChanged)
             {
@@ -226,6 +286,51 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
 
         return true;
+    }
+
+    private static bool LayerDependenciesAreCompiled(
+        NativeSceneView* view,
+        in NativeCanvasLayer layer,
+        ReadOnlySpan<NativeCanvasLayer> changes,
+        ReadOnlySpan<byte> compiled)
+    {
+        var commands = new ReadOnlySpan<NativeCanvasCommand>(
+            view->CanvasCommands + layer.CommandOffset,
+            checked((int)layer.CommandCount));
+        foreach (ref readonly var command in commands)
+        {
+            if (command.Kind != 27 || command.ResourceId == layer.NodeId) continue;
+            for (var index = 0; index < changes.Length; index++)
+            {
+                if (changes[index].NodeId == command.ResourceId
+                    && (changes[index].Flags & LayerRemove) == 0
+                    && compiled[index] == 0)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private void InstallReplacement(
+        NativeSceneView* view,
+        in NativeCanvasLayer change,
+        ref bool layerOrderChanged)
+    {
+        var replacement = CompileLayer(view, change);
+        var orderChanged = true;
+        if (s_layers.Remove(change.NodeId, out var previous))
+        {
+            orderChanged = previous.ZOrder == replacement.ZOrder
+                ? !ReplaceOrderedLayer(previous, replacement)
+                : !RepositionOrderedLayer(previous, replacement);
+            s_totalCommandCount -= previous.CommandCount;
+            previous.Dispose();
+        }
+        s_layers[change.NodeId] = replacement;
+        s_totalCommandCount += replacement.CommandCount;
+        layerOrderChanged |= orderChanged;
     }
 
     internal bool HasConsistentLayerOrder()
@@ -2335,6 +2440,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 case 24 when hasDrawn:
                 // drawImage(canvas) needs source-bitmap isolation semantics.
                 case 27:
+                // drawImage(SVGImageElement) needs the same crop/composite semantics.
+                case 31:
                     return true;
                 case 53:
                     var composite = StringAt(view, layer, command.ResourceId);
@@ -2347,7 +2454,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         return true;
                     }
                     break;
-                case >= 20 and <= 29 when command.Kind != 24:
+                case >= 20 and <= 31 when command.Kind is not 24 and not 30:
                     hasDrawn = true;
                     break;
             }
@@ -2405,7 +2512,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             for (var index = 0; index < layerCommands.Length; ++index)
             {
                 ref readonly var command = ref layerCommands[index];
-                var resource = command.Kind is 25 or 26 or 28 or 29 or 40 or 41 or 43 or 44
+                var resource = command.Kind is 25 or 26 or 28 or 29 or 31 or 40 or 41 or 43 or 44
                     or 48 or 49 or 50 or 52 or 53 or 54
                     ? StringAt(view, layer, command.ResourceId)
                     : string.Empty;
@@ -2682,6 +2789,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 case 30:
                     AppendEllipse(path, command);
                     break;
+                case 31:
+                    DrawSvgImage(canvas, view, layer, command, state);
+                    hasDrawn = true;
+                    break;
                 case 40: state.FillStyle = StringAt(view, layer, command.ResourceId); break;
                 case 41: state.StrokeStyle = StringAt(view, layer, command.ResourceId); break;
                 case 42: state.LineWidth = command.V0; break;
@@ -2756,6 +2867,75 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         using var paint = CreatePaint(state, true, SKPaintStyle.Fill);
         canvas.DrawPicture(source.Picture, paint);
         canvas.RestoreToCount(save);
+    }
+
+    private void DrawSvgImage(
+        SKCanvas canvas,
+        NativeSceneView* view,
+        in NativeCanvasLayer layer,
+        in NativeCanvasCommand command,
+        in CanvasState state)
+    {
+        if (command.V2 == 0 || command.V3 == 0
+            || command.V6 == 0 || command.V7 == 0)
+        {
+            return;
+        }
+        var resource = StringAt(view, layer, command.ResourceId);
+        var separator = resource.IndexOf('\t');
+        if (separator <= 0 || separator == resource.Length - 1)
+        {
+            return;
+        }
+        var viewBox = ParseSvgNumbers(resource[..separator]);
+        if (viewBox.Length < 4 || viewBox[2] <= 0 || viewBox[3] <= 0)
+        {
+            return;
+        }
+        var markup = resource[(separator + 1)..];
+        if (!s_svgPictures.TryGetValue(markup, out var svg))
+        {
+            var acquired = SharedSvgPictureCache.Acquire(markup);
+            if (acquired is null)
+            {
+                return;
+            }
+            svg = acquired;
+            s_svgPictures.Add(svg.Markup, svg);
+        }
+
+        var destination = new SKRect(
+            (float)command.V4,
+            (float)command.V5,
+            (float)(command.V4 + command.V6),
+            (float)(command.V5 + command.V7));
+        using var paint = CreatePaint(state, true, SKPaintStyle.Fill);
+        var save = canvas.Save();
+        try
+        {
+            canvas.ClipRect(destination);
+            canvas.Translate((float)command.V4, (float)command.V5);
+            canvas.Scale((float)(command.V6 / command.V2), (float)(command.V7 / command.V3));
+            canvas.Translate((float)-command.V0, (float)-command.V1);
+            var layerSave = canvas.SaveLayer(paint);
+            try
+            {
+                DrawSvgPictureInViewport(
+                    canvas,
+                    svg.Picture,
+                    new SKRect(0, 0, viewBox[2], viewBox[3]),
+                    viewBox,
+                    "xMidYMid meet");
+            }
+            finally
+            {
+                canvas.RestoreToCount(layerSave);
+            }
+        }
+        finally
+        {
+            canvas.RestoreToCount(save);
+        }
     }
 
     private void DrawText(

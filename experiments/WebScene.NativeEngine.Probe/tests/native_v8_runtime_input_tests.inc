@@ -1281,23 +1281,27 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
           canvas.height = 180;
           canvas.getContext('2d').fillRect(0, 0, 320, 180);
           globalThis.__screenshotCanvas = canvas;
-          const download = document.createElement('a');
-          download.href = canvas.toDataURL();
-          download.download = 'AAPL_2026-08-25_14-30-01.png';
-          download.click();
+          globalThis.__screenshotDownloadState = 'pending';
+          canvas.toBlob(blob => {
+            const download = document.createElement('a');
+            download.href = URL.createObjectURL(blob);
+            download.download = 'AAPL_2026-08-25_14-30-01.png';
+            download.click();
+            globalThis.__screenshotDownloadState = download.href;
+          }, 'image/png');
           return {
             hasToDataURL: typeof canvas.toDataURL === 'function',
             hasToBlob: typeof canvas.toBlob === 'function',
-            token: download.getAttribute('href')
+            state: globalThis.__screenshotDownloadState
           };
         })()
     )JS", "native-tradingview-canvas-download.js");
     require(
         screenshot_download_state.find(R"("hasToDataURL":true)") != std::string::npos
             && screenshot_download_state.find(R"("hasToBlob":true)") != std::string::npos
-            && screenshot_download_state.find("webscene-canvas-snapshot:")
+            && screenshot_download_state.find("blob:webscene-native/")
                 != std::string::npos,
-        "canvas export methods did not expose the host snapshot token: "
+        "canvas toBlob object URL did not expose the host snapshot token: "
             + screenshot_download_state);
     const auto screenshot_download_request = take_host_request(engine);
     require(
@@ -1306,8 +1310,10 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
                 R"("suggestedFileName":"AAPL_2026-08-25_14-30-01.png")")
                 != std::string::npos
             && screenshot_download_request.find(R"("canvasNodeId":)")
-                != std::string::npos,
-        "TradingView canvas download did not reach the host capture request: "
+                != std::string::npos
+            && screenshot_download_request.find(R"("url":)")
+                == std::string::npos,
+        "TradingView canvas Blob URL download did not preserve its retained canvas identity: "
             + screenshot_download_request);
 
     auto detached_canvas_retained = false;

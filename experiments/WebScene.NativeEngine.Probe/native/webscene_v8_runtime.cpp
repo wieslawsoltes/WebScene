@@ -3792,6 +3792,22 @@ struct v8_dom_runtime::implementation final {
                     "native-binding");
                 return enqueue_host_request(local_context, request);
             }
+            const auto object_url_canvas =
+                object_url_canvas_node_ids.find(authored->second);
+            if (object_url_canvas != object_url_canvas_node_ids.end()) {
+                request->Set(
+                    local_context,
+                    js_string(isolate, "canvasNodeId"),
+                    v8::Integer::NewFromUnsigned(
+                        isolate, object_url_canvas->second)).Check();
+                record_feature(
+                    "canvas",
+                    "HTMLCanvasElement.toBlob",
+                    "partially-supported",
+                    "canvas-backed object URL handoff to the desktop host",
+                    "default-action");
+                return enqueue_host_request(local_context, request);
+            }
             const auto download_payload =
                 object_url_download_payloads.find(authored->second);
             const auto object_url = object_urls.find(authored->second);
