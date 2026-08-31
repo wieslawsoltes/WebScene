@@ -71,6 +71,130 @@
 #include <unistd.h>
 #endif
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> canvas_paint_string_property_probes{0U};
+std::atomic<uint64_t> canvas_paint_utf8_conversions{0U};
+std::atomic<uint64_t> canvas_paint_stack_comparisons{0U};
+std::atomic<uint64_t> canvas_paint_cached_value_hits{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_canvas_paint_state_benchmark_reset_counters(void)
+{
+    canvas_paint_string_property_probes.store(0U, std::memory_order_relaxed);
+    canvas_paint_utf8_conversions.store(0U, std::memory_order_relaxed);
+    canvas_paint_stack_comparisons.store(0U, std::memory_order_relaxed);
+    canvas_paint_cached_value_hits.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_string_property_probes(void)
+{
+    return canvas_paint_string_property_probes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_utf8_conversions(void)
+{
+    return canvas_paint_utf8_conversions.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_stack_comparisons(void)
+{
+    return canvas_paint_stack_comparisons.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_cached_value_hits(void)
+{
+    return canvas_paint_cached_value_hits.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> media_refresh_index_rule_calls{0U};
+std::atomic<uint64_t> media_refresh_root_variable_refreshes{0U};
+std::atomic<uint64_t> media_refresh_class_lookups{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_keys{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_bytes{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_media_refresh_benchmark_reset_counters(void)
+{
+    media_refresh_index_rule_calls.store(0U, std::memory_order_relaxed);
+    media_refresh_root_variable_refreshes.store(0U, std::memory_order_relaxed);
+    media_refresh_class_lookups.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_keys.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_bytes.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_index_rule_calls(void)
+{
+    return media_refresh_index_rule_calls.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_root_variable_refreshes(void)
+{
+    return media_refresh_root_variable_refreshes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_class_lookups(void)
+{
+    return media_refresh_class_lookups.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_keys(void)
+{
+    return media_refresh_owned_class_lookup_keys.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_bytes(void)
+{
+    return media_refresh_owned_class_lookup_bytes.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> selector_sibling_positional_matches{0U};
+std::atomic<uint64_t> selector_sibling_scans{0U};
+std::atomic<uint64_t> selector_sibling_vector_materializations{0U};
+std::atomic<uint64_t> selector_sibling_pointer_copies{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void)
+{
+    selector_sibling_positional_matches.store(0U, std::memory_order_relaxed);
+    selector_sibling_scans.store(0U, std::memory_order_relaxed);
+    selector_sibling_vector_materializations.store(0U, std::memory_order_relaxed);
+    selector_sibling_pointer_copies.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_positional_matches(void)
+{
+    return selector_sibling_positional_matches.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_sibling_scans(void)
+{
+    return selector_sibling_scans.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_vector_materializations(void)
+{
+    return selector_sibling_vector_materializations.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_pointer_copies(void)
+{
+    return selector_sibling_pointer_copies.load(std::memory_order_relaxed);
+}
+#endif
+
 namespace webscene_native {
 namespace {
 

@@ -2897,7 +2897,7 @@
             : std::chrono::steady_clock::time_point{};
 #endif
         std::vector<size_t> candidates = unindexed_css_rules;
-        const auto append_candidates = [&](const auto& index, const std::string& key) {
+        const auto append_candidates = [&](const auto& index, const auto& key) {
             const auto match = index.find(key);
             if (match != index.end()) {
                 candidates.insert(candidates.end(), match->second.begin(), match->second.end());
@@ -2933,9 +2933,23 @@
             while (class_cursor < classes.size()
                 && !std::isspace(static_cast<unsigned char>(classes[class_cursor]))) ++class_cursor;
             if (class_cursor > start) {
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+                media_refresh_class_lookups.fetch_add(1U, std::memory_order_relaxed);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+                append_candidates(
+                    css_rules_by_class,
+                    classes.substr(start, class_cursor - start));
+#else
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+                media_refresh_owned_class_lookup_keys.fetch_add(1U, std::memory_order_relaxed);
+                media_refresh_owned_class_lookup_bytes.fetch_add(
+                    class_cursor - start, std::memory_order_relaxed);
+#endif
                 append_candidates(
                     css_rules_by_class,
                     std::string(classes.substr(start, class_cursor - start)));
+#endif
             }
         }
         sort_css_candidates(candidates);
@@ -3912,22 +3926,14 @@
 #endif
     }
 
-    void rebuild_css_rule_indexes_and_root_variables()
+    void rebuild_root_variables()
     {
-        css_rules_by_class.clear();
-        css_rules_by_id.clear();
-        css_rules_by_tag.clear();
-        css_rules_by_attribute.clear();
-        css_rules_by_variable_reference.clear();
-        css_focus_rules.clear();
-        unindexed_css_rules.clear();
-        css_attribute_dependencies.clear();
-        css_descendant_attribute_dependencies.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+        media_refresh_root_variable_refreshes.fetch_add(1U, std::memory_order_relaxed);
+#endif
         css_variables.clear();
         important_css_variables.clear();
-        for (size_t index = 0; index < css_rules.size(); ++index) {
-            index_css_rule(index);
-            const auto& rule = css_rules[index];
+        for (const auto& rule : css_rules) {
             if (!rule.media_matches || rule.shadow_scope_root_id != 0U
                 || (rule.selector() != ":root" && rule.selector() != "html")) continue;
             for (const auto& declaration : rule.declarations()) {
@@ -3939,6 +3945,23 @@
                 else important_css_variables.erase(declaration.name);
             }
         }
+    }
+
+    void rebuild_css_rule_indexes_and_root_variables()
+    {
+        css_rules_by_class.clear();
+        css_rules_by_id.clear();
+        css_rules_by_tag.clear();
+        css_rules_by_attribute.clear();
+        css_rules_by_variable_reference.clear();
+        css_focus_rules.clear();
+        unindexed_css_rules.clear();
+        css_attribute_dependencies.clear();
+        css_descendant_attribute_dependencies.clear();
+        for (size_t index = 0; index < css_rules.size(); ++index) {
+            index_css_rule(index);
+        }
+        rebuild_root_variables();
     }
 
     void recascade_after_stylesheet_change()

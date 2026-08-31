@@ -60,6 +60,32 @@ option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
     "Build the V8-free selected CSS syntax parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
     "Build the native V8 DOM binding lifecycle benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT
+    "Experimentally replace positional-selector sibling vectors with direct scans" OFF)
+option(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS
+    "Expose positional-selector sibling traversal benchmark counters" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_SAVE_BENCHMARK
+    "Build the native V8 canvas save/restore benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL
+    "Retain the pre-optimization canvas save property rereads" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_PAINT_STATE_BENCHMARK
+    "Build the native V8 canvas paint-state string benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT
+    "Experimentally cache V8 canvas paint strings between unchanged draws" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK
+    "Build the native V8 media-query refresh benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT
+    "Experimentally skip selector-index rebuilds during media-only refresh" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT
+    "Experimentally use non-owning class keys for CSS index lookups" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT
+    "Experimentally parse intrinsic SVG viewBox values without a stream" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT
+    "Experimentally replace inline-box std::function recursion with a generic lambda" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL
+    "Retain the pre-optimization intrinsic-size pointer/axis hash table" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_LAYOUT_SCRATCH_BENCHMARK
+    "Build the V8-free flex/layout scratch-allocation benchmark" OFF)
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "html5ever" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
@@ -81,6 +107,26 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
     message(FATAL_ERROR
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR requires "
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8")
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT=1)
 endif()
 
 if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
@@ -287,6 +333,30 @@ set(WEBSCENE_V8_ICU_DATA
     "${WEBSCENE_V8_OUTPUT_ROOT}/icudtl.dat")
 
 if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    if(WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS=1)
+    endif()
     if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
@@ -497,6 +567,12 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             tests/native_v8_runtime_tests.cpp
             native/webscene_native_dom.cpp)
         target_compile_features(webscene_native_engine_tests PRIVATE cxx_std_20)
+        if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+            # The white-box fixture compiles native DOM sources directly, so
+            # keep its dom_node layout identical to the linked engine.
+            target_compile_definitions(webscene_native_engine_tests PRIVATE
+                WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+        endif()
         if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
             target_compile_definitions(webscene_native_engine_tests PRIVATE
                 WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
@@ -516,8 +592,317 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         target_link_libraries(webscene_dom_binding_benchmark PRIVATE
             webscene_native_engine)
     endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_SAVE_BENCHMARK)
+        add_executable(webscene_canvas_save_benchmark
+            benchmarks/canvas_save_benchmark.cpp)
+        target_compile_features(webscene_canvas_save_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_canvas_save_benchmark PRIVATE
+            webscene_native_engine)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_canvas_save_benchmark_smoke
+                COMMAND webscene_canvas_save_benchmark 2 1 0)
+            set_tests_properties(webscene_canvas_save_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "\"propertyReadsPerSave\"")
+        endif()
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_PAINT_STATE_BENCHMARK)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS=1)
+        add_executable(webscene_canvas_paint_state_benchmark
+            benchmarks/canvas_paint_state_benchmark.cpp)
+        target_compile_features(webscene_canvas_paint_state_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_canvas_paint_state_benchmark PRIVATE
+            webscene_native_engine)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_canvas_paint_state_benchmark_smoke
+                COMMAND webscene_canvas_paint_state_benchmark 2 1 0)
+            set_tests_properties(webscene_canvas_paint_state_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "stringPropertyProbes")
+        endif()
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK)
+        add_executable(webscene_media_refresh_benchmark
+            benchmarks/media_refresh_benchmark.cpp)
+        target_compile_features(webscene_media_refresh_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_media_refresh_benchmark PRIVATE
+            webscene_native_engine)
+        add_custom_command(TARGET webscene_media_refresh_benchmark POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_V8_ICU_DATA}"
+                "$<TARGET_FILE_DIR:webscene_media_refresh_benchmark>/icudtl.dat"
+            VERBATIM)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_media_refresh_benchmark_smoke
+                COMMAND webscene_media_refresh_benchmark 2 1 0 8)
+            set_tests_properties(webscene_media_refresh_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "\"rootVariableRefreshes\":2")
+        endif()
+    endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_BUILD_LAYOUT_SCRATCH_BENCHMARK)
+    foreach(layout_benchmark_target IN ITEMS
+        webscene_layout_scratch_control_benchmark
+        webscene_retained_paint_order_control_benchmark
+        webscene_layout_callback_control_benchmark
+        webscene_inline_layout_scratch_control_benchmark
+        webscene_text_measurement_lookup_control_benchmark
+        webscene_text_transform_copy_control_benchmark
+        webscene_font_family_view_control_benchmark
+        webscene_scene_paint_order_control_benchmark
+        webscene_scene_paint_order_benchmark
+        webscene_intrinsic_size_direct_cache_control_benchmark
+        webscene_intrinsic_size_direct_cache_benchmark
+        webscene_intrinsic_row_collector_control_benchmark
+        webscene_intrinsic_row_collector_benchmark
+        webscene_intrinsic_view_box_control_benchmark
+        webscene_intrinsic_view_box_benchmark
+        webscene_intrinsic_size_branch_benchmark
+        webscene_intrinsic_text_fast_path_control_benchmark
+        webscene_intrinsic_text_fast_path_benchmark
+        webscene_intrinsic_item_copy_control_benchmark
+        webscene_intrinsic_item_copy_benchmark
+        webscene_inline_box_bounds_control_benchmark
+        webscene_inline_box_bounds_benchmark
+        webscene_layout_scratch_benchmark)
+        add_executable(${layout_benchmark_target}
+            benchmarks/layout_scratch_benchmark.cpp
+            native/webscene_native_dom.cpp)
+        target_compile_features(${layout_benchmark_target} PRIVATE cxx_std_20)
+        target_include_directories(${layout_benchmark_target} PRIVATE native)
+    endforeach()
+    target_compile_definitions(webscene_layout_scratch_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL=1)
+    target_compile_definitions(webscene_retained_paint_order_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_RETAINED_PAINT_ORDER_CONTROL=1)
+    target_compile_definitions(webscene_layout_callback_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL=1)
+    target_compile_definitions(webscene_inline_layout_scratch_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL=1)
+    target_compile_definitions(webscene_text_measurement_lookup_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_TEXT_MEASUREMENT_LOOKUP_CONTROL=1)
+    target_compile_definitions(webscene_text_transform_copy_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_TEXT_TRANSFORM_COPY_CONTROL=1)
+    target_compile_definitions(webscene_font_family_view_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_FONT_FAMILY_VIEW_CONTROL=1)
+    target_compile_definitions(webscene_scene_paint_order_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL=1)
+    target_compile_definitions(webscene_scene_paint_order_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_BENCHMARK=1)
+    target_compile_definitions(
+        webscene_intrinsic_size_direct_cache_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_size_direct_cache_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_row_collector_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_row_collector_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_view_box_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_STREAM_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_view_box_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT=1)
+    target_compile_definitions(webscene_intrinsic_size_branch_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_text_fast_path_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_text_fast_path_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_item_copy_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_item_copy_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_BENCHMARK=1)
+    target_compile_definitions(webscene_inline_box_bounds_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL=1)
+    target_compile_definitions(webscene_inline_box_bounds_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT=1)
+    if(BUILD_TESTING)
+        add_test(
+            NAME webscene_layout_scratch_benchmark_smoke
+            COMMAND webscene_layout_scratch_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_scratch_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"allocationCountPerLayout\"")
+        add_test(
+            NAME webscene_layout_scratch_control_benchmark_smoke
+            COMMAND webscene_layout_scratch_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_scratch_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-control\"")
+        add_test(
+            NAME webscene_retained_paint_order_control_benchmark_smoke
+            COMMAND webscene_retained_paint_order_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_retained_paint_order_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-cumulative-control\"")
+        add_test(
+            NAME webscene_layout_callback_control_benchmark_smoke
+            COMMAND webscene_layout_callback_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_callback_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-paint-order-control\"")
+        add_test(
+            NAME webscene_inline_layout_scratch_control_benchmark_smoke
+            COMMAND webscene_inline_layout_scratch_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_inline_layout_scratch_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-layout-callback-control\"")
+        add_test(
+            NAME webscene_text_measurement_lookup_control_benchmark_smoke
+            COMMAND webscene_text_measurement_lookup_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_text_measurement_lookup_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-inline-layout-scratch-control\"")
+        add_test(
+            NAME webscene_text_transform_copy_control_benchmark_smoke
+            COMMAND webscene_text_transform_copy_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_text_transform_copy_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-text-measurement-lookup-control\"")
+        add_test(
+            NAME webscene_font_family_view_control_benchmark_smoke
+            COMMAND webscene_font_family_view_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_font_family_view_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-text-transform-none-copy-control\"")
+        add_test(
+            NAME webscene_scene_paint_order_control_benchmark_smoke
+            COMMAND webscene_scene_paint_order_control_benchmark
+                --fixture inline-font-family-v1 --phase scene
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_scene_paint_order_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"scene-paint-order-vector-control\"")
+        add_test(
+            NAME webscene_scene_paint_order_benchmark_smoke
+            COMMAND webscene_scene_paint_order_benchmark
+                --fixture inline-font-family-v1 --phase scene
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_scene_paint_order_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"scene-paint-order-inline-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_size_direct_cache_control_benchmark_smoke
+            COMMAND webscene_intrinsic_size_direct_cache_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_size_direct_cache_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-size-hash-control\"")
+        add_test(
+            NAME webscene_intrinsic_size_direct_cache_benchmark_smoke
+            COMMAND webscene_intrinsic_size_direct_cache_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_size_direct_cache_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"intrinsicDirectCacheHitsPerLayout\"")
+        add_test(
+            NAME webscene_intrinsic_row_collector_control_benchmark_smoke
+            COMMAND webscene_intrinsic_row_collector_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_row_collector_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-row-std-function-control\"")
+        add_test(
+            NAME webscene_intrinsic_row_collector_benchmark_smoke
+            COMMAND webscene_intrinsic_row_collector_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_row_collector_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-row-recursive-lambda-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_view_box_control_benchmark_smoke
+            COMMAND webscene_intrinsic_view_box_control_benchmark
+                --fixture intrinsic-svg-view-box-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_view_box_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-view-box-stream-control\"")
+        add_test(
+            NAME webscene_intrinsic_view_box_benchmark_smoke
+            COMMAND webscene_intrinsic_view_box_benchmark
+                --fixture intrinsic-svg-view-box-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_view_box_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-view-box-direct-parser-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_size_branch_benchmark_smoke
+            COMMAND webscene_intrinsic_size_branch_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_size_branch_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"intrinsicSizeBranchesPerLayout\"")
+        add_test(
+            NAME webscene_intrinsic_text_fast_path_control_benchmark_smoke
+            COMMAND webscene_intrinsic_text_fast_path_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_text_fast_path_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-text-legacy-control\"")
+        add_test(
+            NAME webscene_intrinsic_text_fast_path_benchmark_smoke
+            COMMAND webscene_intrinsic_text_fast_path_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_text_fast_path_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-text-fast-path-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_item_copy_control_benchmark_smoke
+            COMMAND webscene_intrinsic_item_copy_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_item_copy_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-item-copy-control\"")
+        add_test(
+            NAME webscene_intrinsic_item_copy_benchmark_smoke
+            COMMAND webscene_intrinsic_item_copy_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_item_copy_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-item-direct-view-candidate\"")
+        add_test(
+            NAME webscene_inline_box_bounds_control_benchmark_smoke
+            COMMAND webscene_inline_box_bounds_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_inline_box_bounds_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"inline-box-std-function-control\"")
+        add_test(
+            NAME webscene_inline_box_bounds_benchmark_smoke
+            COMMAND webscene_inline_box_bounds_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_inline_box_bounds_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"inline-box-recursive-lambda-candidate\"")
+    endif()
 endif()
 
 if(MSVC)

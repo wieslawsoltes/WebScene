@@ -197,16 +197,15 @@
     uint32_t active_stylesheet_owner_id{0};
     uint32_t active_stylesheet_shadow_scope_root_id{0};
     std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_class;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_id;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_tag;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_attribute;
-    std::unordered_map<std::string, std::vector<size_t>>
-        css_rules_by_variable_reference;
+    css_index_string_map<std::vector<size_t>> css_rules_by_class;
+    css_index_string_map<std::vector<size_t>> css_rules_by_id;
+    css_index_string_map<std::vector<size_t>> css_rules_by_tag;
+    css_index_string_map<std::vector<size_t>> css_rules_by_attribute;
+    css_index_string_map<std::vector<size_t>> css_rules_by_variable_reference;
     std::vector<size_t> css_focus_rules;
     std::vector<size_t> unindexed_css_rules;
-    std::unordered_set<std::string> css_attribute_dependencies;
-    std::unordered_set<std::string> css_descendant_attribute_dependencies;
+    css_index_string_set css_attribute_dependencies;
+    css_index_string_set css_descendant_attribute_dependencies;
     std::vector<hover_selector_dependency> hover_selector_dependencies;
     std::unordered_map<std::string, std::string> css_variables;
     std::unordered_set<std::string> important_css_variables;

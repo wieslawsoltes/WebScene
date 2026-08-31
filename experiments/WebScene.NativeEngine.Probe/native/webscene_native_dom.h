@@ -3,6 +3,7 @@
 #include "webscene_native_engine.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -1357,6 +1358,8 @@ public:
         uint64_t node_object_bytes{0};
         uint64_t node_pool_reserved_bytes{0};
         uint64_t node_pool_peak_bytes{0};
+        uint64_t layout_scratch_reserved_bytes{0};
+        uint64_t layout_scratch_peak_bytes{0};
         uint64_t element_node_count{0};
         uint64_t text_node_count{0};
         uint64_t comment_node_count{0};
@@ -1458,6 +1461,16 @@ public:
     uint64_t intrinsic_size_cache_hits() const noexcept;
     uint64_t intrinsic_size_cache_misses() const noexcept;
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    uint64_t intrinsic_size_direct_cache_hits() const noexcept;
+    uint64_t intrinsic_size_hash_lookups() const noexcept;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    std::array<uint64_t, 17U> intrinsic_size_branch_counts() const noexcept;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    std::array<uint64_t, 4U> intrinsic_view_box_parse_counts() const noexcept;
+#endif
     size_t node_count() const noexcept;
     allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
@@ -1540,6 +1553,11 @@ private:
 
         size_t reserved_bytes_{0};
         size_t peak_bytes_{0};
+    };
+
+    struct layout_scratch_storage final {
+        tracking_memory_resource upstream;
+        std::pmr::unsynchronized_pool_resource pool{&upstream};
     };
 
     // dom_node has one fixed allocation size and stable-address lifetime.
@@ -1657,19 +1675,46 @@ private:
         bool operator==(const text_measurement_key&) const = default;
     };
 
+    struct text_measurement_key_view final {
+        std::string_view text;
+        std::string_view family;
+        float font_size{0};
+        int32_t font_weight{0};
+        float letter_spacing{0};
+        float word_spacing{0};
+    };
+
     struct text_measurement_key_hash final {
-        size_t operator()(const text_measurement_key& value) const noexcept
+        using is_transparent = void;
+
+        template <typename Key>
+        size_t operator()(const Key& value) const noexcept
         {
-            auto result = std::hash<std::string>{}(value.text);
+            auto result = std::hash<std::string_view>{}(value.text);
             const auto mix = [&result](size_t next) {
                 result ^= next + 0x9e3779b9U + (result << 6U) + (result >> 2U);
             };
-            mix(std::hash<std::string>{}(value.family));
+            mix(std::hash<std::string_view>{}(value.family));
             mix(std::hash<float>{}(value.font_size));
             mix(std::hash<int32_t>{}(value.font_weight));
             mix(std::hash<float>{}(value.letter_spacing));
             mix(std::hash<float>{}(value.word_spacing));
             return result;
+        }
+    };
+
+    struct text_measurement_key_equal final {
+        using is_transparent = void;
+
+        template <typename Left, typename Right>
+        bool operator()(const Left& left, const Right& right) const noexcept
+        {
+            return std::string_view(left.text) == std::string_view(right.text)
+                && std::string_view(left.family) == std::string_view(right.family)
+                && left.font_size == right.font_size
+                && left.font_weight == right.font_weight
+                && left.letter_spacing == right.letter_spacing
+                && left.word_spacing == right.word_spacing;
         }
     };
 
@@ -1697,6 +1742,14 @@ private:
         float available{0};
         float size{0};
     };
+
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    struct intrinsic_size_direct_node_cache final {
+        uint64_t generation{0};
+        std::array<float, 2U> available{};
+        std::array<float, 2U> size{};
+    };
+#endif
 
     webscene_text_metrics measure_text(
         std::string_view value,
@@ -1772,6 +1825,14 @@ private:
     // trimmed when possible so short-lived text-node churn does not retain an
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    // Mirror the native-ID index so intrinsic lookup remains direct without
+    // making every DOM node pay a cross-library object-footprint tax. The
+    // shared generation keeps each two-axis entry to 24 bytes instead of the
+    // previous 32-byte pair of per-axis generations.
+    std::unique_ptr<std::vector<intrinsic_size_direct_node_cache>>
+        intrinsic_size_direct_cache_;
+#endif
     dom_node* body_{nullptr};
     uint32_t retained_export_canvas_id_{0};
     float viewport_width_{1};
@@ -1789,16 +1850,28 @@ private:
     mutable std::unordered_map<
         text_measurement_key,
         webscene_text_metrics,
-        text_measurement_key_hash> text_measurement_cache_;
+        text_measurement_key_hash,
+        text_measurement_key_equal> text_measurement_cache_;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
     std::unique_ptr<std::unordered_map<
         intrinsic_size_key,
         intrinsic_size_cache_entry,
         intrinsic_size_key_hash>> intrinsic_size_cache_;
+#endif
+    // Layout containers are short-lived but recur at every resize/animation
+    // pass. Cache their allocator blocks per document so identical passes do
+    // not repeatedly enter the process allocator. The storage is lazy to keep
+    // never-laid-out documents pay-for-use and the document footprint bounded.
+    std::unique_ptr<layout_scratch_storage> layout_scratch_;
     uint64_t intrinsic_size_cache_generation_{0};
     uint64_t intrinsic_size_cache_next_generation_{0};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t intrinsic_size_cache_hits_{0};
     uint64_t intrinsic_size_cache_misses_{0};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    uint64_t intrinsic_size_direct_cache_hits_{0};
+    uint64_t intrinsic_size_hash_lookups_{0};
 #endif
     bool dirty_{true};
     bool globally_dirty_{true};

@@ -18,9 +18,10 @@ thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
+cmake_build_type=Release
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--cmake-build-type Release|RelWithDebInfo] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
 }
 
 while (($# > 0)); do
@@ -37,6 +38,7 @@ while (($# > 0)); do
     --selector-parser) selector_parser="${2:-}"; shift 2 ;;
     --dom-bindings) dom_bindings="${2:-}"; shift 2 ;;
     --v8-snapshot) v8_snapshot="${2:-}"; shift 2 ;;
+    --cmake-build-type) cmake_build_type="${2:-}"; shift 2 ;;
     --upstream-v8) upstream_v8=true; shift ;;
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
@@ -74,6 +76,10 @@ if [[ "$v8_snapshot" != none && "$v8_snapshot" != bootstrap ]]; then
   echo "Unsupported V8 snapshot '$v8_snapshot'; expected none or bootstrap." >&2
   exit 1
 fi
+if [[ "$cmake_build_type" != Release && "$cmake_build_type" != RelWithDebInfo ]]; then
+  echo "Unsupported CMake build type '$cmake_build_type'; expected Release or RelWithDebInfo." >&2
+  exit 1
+fi
 if [[ ( "$css_parser" == cssparser || "$selector_parser" == servo )
     && "$html_parser" != html5ever ]]; then
   echo "Servo CSS components require --html-parser html5ever." >&2
@@ -82,6 +88,9 @@ fi
 
 v8_configuration=Release
 build_variant="-$html_parser-$css_parser-$selector_parser-$dom_bindings-$v8_snapshot"
+if [[ "$cmake_build_type" == RelWithDebInfo ]]; then
+  build_variant+=-symbols
+fi
 thin_lto_cmake=OFF
 partition_alloc_cmake=OFF
 v8_webassembly=true
@@ -287,7 +296,7 @@ build_dir="$repo_root/artifacts/native-engine-runtime-build/$rid$build_variant"
 cmake_args=(
   -S "$repo_root/experiments/WebScene.NativeEngine.Probe"
   -B "$build_dir"
-  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_BUILD_TYPE="$cmake_build_type"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION=ON
@@ -356,14 +365,23 @@ elif [[ "$expected_kernel" == Linux ]]; then
   )
 fi
 cmake "${cmake_args[@]}"
-cmake --build "$build_dir" --config Release --parallel
+cmake --build "$build_dir" --config "$cmake_build_type" --parallel
 cmake -E copy_if_different "$icu_data" "$build_dir/icudtl.dat"
-ctest --test-dir "$build_dir" -C Release --output-on-failure
+ctest --test-dir "$build_dir" -C "$cmake_build_type" --output-on-failure
 
 native_path="$build_dir/$native_name"
 if [[ ! -f "$native_path" ]]; then
   echo "Native engine build did not produce '$native_path'." >&2
   exit 1
+fi
+if [[ "$expected_kernel" == Darwin && "$cmake_build_type" == RelWithDebInfo ]]; then
+  native_dsym_path="$native_path.dSYM"
+  cmake -E remove_directory "$native_dsym_path"
+  dsymutil "$native_path" -o "$native_dsym_path"
+  if [[ ! -d "$native_dsym_path" ]]; then
+    echo "Native engine build did not produce '$native_dsym_path'." >&2
+    exit 1
+  fi
 fi
 snapshot_path="$build_dir/webscene_bootstrap_snapshot.bin"
 snapshot_metadata_path="$build_dir/webscene_bootstrap_snapshot.meta"
@@ -408,6 +426,7 @@ pack_args=(
   "-p:WebSceneNativeEngineSelectorParser=$selector_parser"
   "-p:WebSceneNativeEngineDomBindings=$dom_bindings"
   "-p:WebSceneNativeEngineV8Snapshot=$v8_snapshot"
+  "-p:WebSceneNativeEngineConfiguration=$cmake_build_type"
 )
 if [[ "$v8_snapshot" == bootstrap ]]; then
   pack_args+=(
@@ -485,4 +504,7 @@ for copied_asset in "${copied_assets[@]}"; do
 done
 
 echo "Native runtime: $native_path"
+if [[ -n "${native_dsym_path:-}" ]]; then
+  echo "Native symbols: $native_dsym_path"
+fi
 echo "RID package: $package_path"

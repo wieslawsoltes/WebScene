@@ -14,6 +14,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string_view>
 #include <tuple>
@@ -285,10 +286,31 @@ void update_retained_canvas_paint_phase(
             --retained_canvases_remaining;
         }
     }
-    auto paint_order = document.composed_children(node);
-    if (std::any_of(paint_order.begin(), paint_order.end(), [](const auto* child) {
-        return child->style.z_index != 0;
-    })) {
+    const auto& composed_paint_order = document.composed_children(node);
+#if WEBSCENE_NATIVE_ENGINE_RETAINED_PAINT_ORDER_CONTROL
+    auto paint_order = composed_paint_order;
+    const auto requires_sort = std::any_of(
+        paint_order.begin(),
+        paint_order.end(),
+        [](const auto* child) { return child->style.z_index != 0; });
+#else
+    const auto requires_sort = std::any_of(
+        composed_paint_order.begin(),
+        composed_paint_order.end(),
+        [](const auto* child) { return child->style.z_index != 0; });
+    if (!requires_sort) {
+        for (auto* child : composed_paint_order) {
+            update_retained_canvas_paint_phase(
+                document,
+                *child,
+                retained_canvas_seen,
+                retained_canvases_remaining);
+        }
+        return;
+    }
+    auto paint_order = composed_paint_order;
+#endif
+    if (requires_sort) {
         std::stable_sort(
             paint_order.begin(),
             paint_order.end(),
@@ -829,7 +851,11 @@ float resolved_line_height(const dom_node& node, float font_size)
     return font_size * 1.125F;
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_FONT_FAMILY_VIEW_CONTROL)
 std::string resolved_font_family(const dom_node& node)
+#else
+std::string_view resolved_font_family(const dom_node& node)
+#endif
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (!current->style.textual().font_family.empty()) {
@@ -882,15 +908,19 @@ std::string resolved_text_align(const dom_node& node)
     return "start";
 }
 
-std::string resolved_text_transform(const dom_node& node, std::string value)
+std::string_view resolved_text_transform_name(const dom_node& node)
 {
-    auto transform = std::string{"none"};
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (!current->style.textual().text_transform.empty()) {
-            transform = current->style.textual().text_transform;
-            break;
+            return current->style.textual().text_transform;
         }
     }
+    return "none";
+}
+
+std::string resolved_text_transform(const dom_node& node, std::string value)
+{
+    const auto transform = resolved_text_transform_name(node);
     if (transform == "uppercase") {
         std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
             return static_cast<char>(std::toupper(character));
@@ -969,7 +999,8 @@ bool is_collapsed_select(const dom_node& node)
         || parse_number(authored_size->second, 0) <= 1.0F;
 }
 
-void collect_option_nodes(const dom_node& root, std::vector<const dom_node*>& result)
+template <typename Collection>
+void collect_option_nodes(const dom_node& root, Collection& result)
 {
     for (const auto* child : root.children) {
         if (child == nullptr) continue;
@@ -1049,6 +1080,15 @@ uint32_t append_scene_string(
 }
 
 } // namespace
+
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+thread_local std::array<uint64_t, 17U>
+    intrinsic_size_branch_counts_for_benchmark{};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+thread_local std::array<uint64_t, 4U>
+    intrinsic_view_box_parse_counts_for_benchmark{};
+#endif
 
 display_mode blockified_display(const dom_node& node) noexcept
 {

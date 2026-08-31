@@ -5,8 +5,12 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => {
           const style = document.createElement('style');
           style.textContent = `
+            :root { --responsive-probe: 11px; }
             .dialog { position:fixed; width:100%; min-width:380px; max-width:550px; }
-            @media (max-width:379px) { .dialog { min-width:100%; } }
+            @media (max-width:379px) {
+              :root { --responsive-probe: 17px; }
+              .dialog { min-width:100%; }
+            }
           `;
           document.body.appendChild(style);
           const dialog = document.createElement('div');
@@ -20,11 +24,13 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => ({
           width: __testDialog.getBoundingClientRect().width,
           minWidth: getComputedStyle(__testDialog).getPropertyValue('min-width'),
+          rootVariable: getComputedStyle(document.documentElement)
+            .getPropertyValue('--responsive-probe').trim(),
           narrow: matchMedia('(max-width:379px)').matches,
           wide: matchMedia('(min-width:1020px)').matches
         }))()
     )JS", "native-responsive-positioned-desktop.js");
-    require(desktop == R"({"width":550,"minWidth":"380px","narrow":false,"wide":true})",
+    require(desktop == R"({"width":550,"minWidth":"380px","rootVariable":"11px","narrow":false,"wide":true})",
         "desktop media rules or fixed min/max sizing regressed: " + desktop);
 
     resize(engine, 320, 720, 2);
@@ -32,11 +38,13 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => ({
           width: __testDialog.getBoundingClientRect().width,
           minWidth: getComputedStyle(__testDialog).getPropertyValue('min-width'),
+          rootVariable: getComputedStyle(document.documentElement)
+            .getPropertyValue('--responsive-probe').trim(),
           narrow: matchMedia('(max-width:379px)').matches,
           wide: matchMedia('(min-width:1020px)').matches
         }))()
     )JS", "native-responsive-positioned-narrow.js");
-    if (narrow != R"({"width":320,"minWidth":"100%","narrow":true,"wide":false})") {
+    if (narrow != R"({"width":320,"minWidth":"100%","rootVariable":"17px","narrow":true,"wide":false})") {
         fail("responsive rules did not recascade after resize: " + narrow);
     }
 }

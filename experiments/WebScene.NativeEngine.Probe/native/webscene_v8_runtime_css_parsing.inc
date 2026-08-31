@@ -384,6 +384,9 @@
 
     void index_css_rule(size_t index)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+        media_refresh_index_rule_calls.fetch_add(1U, std::memory_order_relaxed);
+#endif
         const auto& rule = css_rules[index];
         const auto& selector = rule.selector();
         if (selector.find("::selection") != std::string::npos) {
@@ -1261,7 +1264,11 @@
             v8::Context::Scope context_scope(local_context);
             if (!refresh_css_media_matches()) return;
             changed = true;
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT)
+            rebuild_root_variables();
+#else
             rebuild_css_rule_indexes_and_root_variables();
+#endif
             apply_css_rules_subtree(active_root());
         };
         refresh_context(context.Get(isolate));
@@ -2390,19 +2397,76 @@
         const auto is_element = [](const dom_node* candidate) {
             return candidate != nullptr && !candidate->tag.starts_with('#');
         };
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
         std::vector<const dom_node*> element_siblings;
         auto element_siblings_ready = false;
         const auto siblings = [&]() -> const std::vector<const dom_node*>& {
             if (element_siblings_ready) return element_siblings;
             element_siblings_ready = true;
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+            selector_sibling_vector_materializations.fetch_add(
+                1U, std::memory_order_relaxed);
+#endif
             if (node.parent != nullptr) {
                 element_siblings.reserve(node.parent->children.size());
                 for (const auto* child : node.parent->children) {
-                    if (is_element(child)) element_siblings.push_back(child);
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                    selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
+#endif
+                    if (is_element(child)) {
+                        element_siblings.push_back(child);
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                        selector_sibling_pointer_copies.fetch_add(
+                            1U, std::memory_order_relaxed);
+#endif
+                    }
                 }
             }
             return element_siblings;
         };
+#else
+        struct sibling_positions final {
+            size_t count{0U};
+            size_t position{0U};
+            bool node_found{false};
+        };
+        sibling_positions element_positions;
+        sibling_positions same_type_positions;
+        auto element_positions_ready = false;
+        auto same_type_positions_ready = false;
+        const auto element_sibling_summary = [&]() -> const sibling_positions& {
+            if (element_positions_ready) return element_positions;
+            element_positions_ready = true;
+            if (node.parent == nullptr) return element_positions;
+            for (const auto* child : node.parent->children) {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
+#endif
+                if (!is_element(child)) continue;
+                ++element_positions.count;
+                if (child != &node) continue;
+                element_positions.node_found = true;
+                element_positions.position = element_positions.count;
+            }
+            return element_positions;
+        };
+        const auto same_type_sibling_summary = [&]() -> const sibling_positions& {
+            if (same_type_positions_ready) return same_type_positions;
+            same_type_positions_ready = true;
+            if (node.parent == nullptr) return same_type_positions;
+            for (const auto* child : node.parent->children) {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
+#endif
+                if (!is_element(child) || child->tag != node.tag) continue;
+                ++same_type_positions.count;
+                if (child != &node) continue;
+                same_type_positions.node_found = true;
+                same_type_positions.position = same_type_positions.count;
+            }
+            return same_type_positions;
+        };
+#endif
 
         for (const auto& pseudo : selector.pseudos) {
             const std::string_view name(pseudo.name);
@@ -2415,20 +2479,57 @@
             } else if (name == "scope") {
                 if (scope_root == nullptr ? !is_document_root : scope_root != &node) return false;
             } else if (name == "first-child") {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
+#endif
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
                 const auto& values = siblings();
                 const auto position = std::find(values.begin(), values.end(), &node);
                 if (node.parent == nullptr || position != values.begin()) return false;
+#else
+                const auto& values = element_sibling_summary();
+                if (node.parent == nullptr || !values.node_found
+                    || values.position != 1U) return false;
+#endif
             } else if (name == "last-child") {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
+#endif
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
                 const auto& values = siblings();
                 const auto position = std::find(values.begin(), values.end(), &node);
                 if (node.parent == nullptr || position == values.end()
                     || position + 1 != values.end()) return false;
+#else
+                const auto& values = element_sibling_summary();
+                if (node.parent == nullptr || !values.node_found
+                    || values.position != values.count) return false;
+#endif
             } else if (name == "only-child") {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
+#endif
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
                 if (node.parent == nullptr || siblings().size() != 1U) return false;
+#else
+                const auto& values = element_sibling_summary();
+                if (node.parent == nullptr || !values.node_found
+                    || values.count != 1U) return false;
+#endif
             } else if (name == "nth-child" || name == "nth-last-child"
                 || name == "nth-of-type" || name == "nth-last-of-type") {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
+#endif
                 if (node.parent == nullptr) return false;
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
                 auto values = siblings();
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_vector_materializations.fetch_add(
+                    1U, std::memory_order_relaxed);
+                selector_sibling_pointer_copies.fetch_add(
+                    values.size(), std::memory_order_relaxed);
+#endif
                 if (name == "nth-of-type" || name == "nth-last-of-type") {
                     std::erase_if(values, [&](const auto* sibling) {
                         return sibling->tag != node.tag;
@@ -2441,19 +2542,53 @@
                 const auto one_based_position = static_cast<int>(from_end
                     ? std::distance(position, values.end())
                     : std::distance(values.begin(), position) + 1);
+#else
+                const auto of_type = name == "nth-of-type"
+                    || name == "nth-last-of-type";
+                const auto& values = of_type
+                    ? same_type_sibling_summary()
+                    : element_sibling_summary();
+                if (!values.node_found) return false;
+                const auto from_end = name == "nth-last-child"
+                    || name == "nth-last-of-type";
+                const auto one_based_position = static_cast<int>(
+                    from_end ? values.count - values.position + 1U : values.position);
+#endif
                 if (!css_nth_expression_matches(argument, one_based_position)) return false;
             } else if (name == "first-of-type" || name == "last-of-type"
                 || name == "only-of-type") {
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
+#endif
                 if (node.parent == nullptr) return false;
+#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
                 std::vector<const dom_node*> same_type;
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                selector_sibling_vector_materializations.fetch_add(
+                    1U, std::memory_order_relaxed);
+#endif
                 for (const auto* sibling : siblings()) {
-                    if (sibling->tag == node.tag) same_type.push_back(sibling);
+                    if (sibling->tag == node.tag) {
+                        same_type.push_back(sibling);
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+                        selector_sibling_pointer_copies.fetch_add(
+                            1U, std::memory_order_relaxed);
+#endif
+                    }
                 }
                 const auto same_position = std::find(same_type.begin(), same_type.end(), &node);
                 if (name == "first-of-type" && same_position != same_type.begin()) return false;
                 if (name == "last-of-type"
                     && (same_position == same_type.end() || same_position + 1 != same_type.end())) return false;
                 if (name == "only-of-type" && same_type.size() != 1U) return false;
+#else
+                const auto& values = same_type_sibling_summary();
+                if (!values.node_found) return false;
+                if (name == "first-of-type" && values.position != 1U) return false;
+                if (name == "last-of-type"
+                    && values.position != values.count) return false;
+                if (name == "only-of-type" && values.count != 1U) return false;
+#endif
             } else if (name == "empty") {
                 const auto has_text = std::any_of(
                     node.text_content.begin(),
