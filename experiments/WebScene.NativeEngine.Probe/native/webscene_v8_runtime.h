@@ -258,6 +258,7 @@ public:
     bool pump_inspector_task(std::stop_token shutdown_token = {});
     bool has_pending_inspector_tasks() const noexcept;
     bool dispatch_resize();
+    bool deliver_resize_observers();
     bool refresh_media_environment();
     bool set_visible(bool visible);
     bool dispatch_input(const webscene_input_event& event);

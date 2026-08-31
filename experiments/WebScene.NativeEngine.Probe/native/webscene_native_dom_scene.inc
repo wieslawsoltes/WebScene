@@ -456,6 +456,18 @@ void native_document::append_scene(
                 0});
         }
         if (width > 0 && height > 0) {
+            const auto pseudo_foreground =
+                (pseudo.foreground_rgba & 0xFFU) != 0U
+                ? pseudo.foreground_rgba
+                : resolved_foreground(node);
+            const auto border_top_rgba = pseudo.border_top_current_color
+                ? pseudo_foreground : pseudo.border_top_rgba;
+            const auto border_right_rgba = pseudo.border_right_current_color
+                ? pseudo_foreground : pseudo.border_right_rgba;
+            const auto border_bottom_rgba = pseudo.border_bottom_current_color
+                ? pseudo_foreground : pseudo.border_bottom_rgba;
+            const auto border_left_rgba = pseudo.border_left_current_color
+                ? pseudo_foreground : pseudo.border_left_rgba;
             const auto top = std::clamp(
                 resolve_length(node, pseudo.border_top_width, height, 0),
                 0.0F,
@@ -476,9 +488,9 @@ void native_document::append_scene(
                 && std::abs(top - right) < 0.01F
                 && std::abs(top - bottom) < 0.01F
                 && std::abs(top - left) < 0.01F;
-            const auto uniform_color = pseudo.border_top_rgba == pseudo.border_right_rgba
-                && pseudo.border_top_rgba == pseudo.border_bottom_rgba
-                && pseudo.border_top_rgba == pseudo.border_left_rgba;
+            const auto uniform_color = border_top_rgba == border_right_rgba
+                && border_top_rgba == border_bottom_rgba
+                && border_top_rgba == border_left_rgba;
             const auto border_radii = resolve_radii(
                 pseudo.border_top_left_radius,
                 pseudo.border_top_right_radius,
@@ -495,7 +507,7 @@ void native_document::append_scene(
                 width,
                 height);
             if (border_radii.any() && uniform_width && uniform_color
-                && (pseudo.border_top_rgba & 0xFFU) != 0U) {
+                && (border_top_rgba & 0xFFU) != 0U) {
                 const auto inset = top * 0.5F;
                 const auto stroke_x = x + inset;
                 const auto stroke_y = y + inset;
@@ -523,7 +535,7 @@ void native_document::append_scene(
                     stroke_y,
                     stroke_width,
                     stroke_height,
-                    with_pseudo_opacity(pseudo.border_top_rgba),
+                    with_pseudo_opacity(border_top_rgba),
                     node.id,
                     stroke_radii.top_left,
                     stroke_radii.top_right,
@@ -557,10 +569,10 @@ void native_document::append_scene(
                         left,
                         0});
                 };
-                append_pseudo_border_side(1U, pseudo.border_top_rgba);
-                append_pseudo_border_side(2U, pseudo.border_right_rgba);
-                append_pseudo_border_side(4U, pseudo.border_bottom_rgba);
-                append_pseudo_border_side(8U, pseudo.border_left_rgba);
+                append_pseudo_border_side(1U, border_top_rgba);
+                append_pseudo_border_side(2U, border_right_rgba);
+                append_pseudo_border_side(4U, border_bottom_rgba);
+                append_pseudo_border_side(8U, border_left_rgba);
             }
         }
         const auto outline = std::max(
@@ -861,6 +873,15 @@ void native_document::append_scene(
             node.id});
     };
     if (paint_self && node.layout.width > 0 && node.layout.height > 0) {
+        const auto foreground_rgba = resolved_foreground(node);
+        const auto border_top_rgba = node.style.border_top_current_color
+            ? foreground_rgba : node.style.border_top_rgba;
+        const auto border_right_rgba = node.style.border_right_current_color
+            ? foreground_rgba : node.style.border_right_rgba;
+        const auto border_bottom_rgba = node.style.border_bottom_current_color
+            ? foreground_rgba : node.style.border_bottom_rgba;
+        const auto border_left_rgba = node.style.border_left_current_color
+            ? foreground_rgba : node.style.border_left_rgba;
         const auto top = std::clamp(
             resolve_length(node, node.style.border_top_width, node.layout.height, 0),
             0.0F,
@@ -880,9 +901,9 @@ void native_document::append_scene(
         const auto uniform_width = std::abs(top - right) < 0.01F
             && std::abs(top - bottom) < 0.01F
             && std::abs(top - left) < 0.01F;
-        const auto uniform_color = node.style.border_top_rgba == node.style.border_right_rgba
-            && node.style.border_top_rgba == node.style.border_bottom_rgba
-            && node.style.border_top_rgba == node.style.border_left_rgba;
+        const auto uniform_color = border_top_rgba == border_right_rgba
+            && border_top_rgba == border_bottom_rgba
+            && border_top_rgba == border_left_rgba;
         const auto rounded_stroke_width = std::max({top, right, bottom, left});
         const auto compatible_rounded_widths = rounded_stroke_width > 0
             && (top <= 0 || std::abs(top - rounded_stroke_width) < 0.01F)
@@ -939,10 +960,10 @@ void native_document::append_scene(
                     rounded_stroke_width});
             };
             const std::array<uint32_t, 4> colors{
-                node.style.border_top_rgba,
-                node.style.border_right_rgba,
-                node.style.border_bottom_rgba,
-                node.style.border_left_rgba};
+                border_top_rgba,
+                border_right_rgba,
+                border_bottom_rgba,
+                border_left_rgba};
             for (size_t color_index = 0; color_index < colors.size(); ++color_index) {
                 const auto color = colors[color_index];
                 auto already_emitted = false;
@@ -951,10 +972,10 @@ void native_document::append_scene(
                 }
                 if (already_emitted) continue;
                 const auto side_flags =
-                    (top > 0 && node.style.border_top_rgba == color ? border_top_flag : 0U)
-                    | (right > 0 && node.style.border_right_rgba == color ? border_right_flag : 0U)
-                    | (bottom > 0 && node.style.border_bottom_rgba == color ? border_bottom_flag : 0U)
-                    | (left > 0 && node.style.border_left_rgba == color ? border_left_flag : 0U);
+                    (top > 0 && border_top_rgba == color ? border_top_flag : 0U)
+                    | (right > 0 && border_right_rgba == color ? border_right_flag : 0U)
+                    | (bottom > 0 && border_bottom_rgba == color ? border_bottom_flag : 0U)
+                    | (left > 0 && border_left_rgba == color ? border_left_flag : 0U);
                 append_rounded_border(color, side_flags);
             }
         } else {
@@ -963,25 +984,25 @@ void native_document::append_scene(
                 node.layout.y,
                 node.layout.width,
                 top,
-                node.style.border_top_rgba);
+                border_top_rgba);
             append_border_rect(
                 node.layout.x + node.layout.width - right,
                 node.layout.y,
                 right,
                 node.layout.height,
-                node.style.border_right_rgba);
+                border_right_rgba);
             append_border_rect(
                 node.layout.x,
                 node.layout.y + node.layout.height - bottom,
                 node.layout.width,
                 bottom,
-                node.style.border_bottom_rgba);
+                border_bottom_rgba);
             append_border_rect(
                 node.layout.x,
                 node.layout.y,
                 left,
                 node.layout.height,
-                node.style.border_left_rgba);
+                border_left_rgba);
         }
     }
     if (paint_self && node.layout.width > 0 && node.layout.height > 0

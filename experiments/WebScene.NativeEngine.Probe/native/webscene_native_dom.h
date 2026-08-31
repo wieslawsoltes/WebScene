@@ -387,6 +387,10 @@ struct node_style final {
         uint32_t border_bottom_rgba{0};
         uint32_t outline_rgba{0};
         bool background_current_color{false};
+        bool border_left_current_color{true};
+        bool border_top_current_color{true};
+        bool border_right_current_color{true};
+        bool border_bottom_current_color{true};
         std::string content;
         bool generated{false};
         bool display_none{false};
@@ -503,6 +507,13 @@ struct node_style final {
     uint32_t border_top_rgba{0};
     uint32_t border_right_rgba{0};
     uint32_t border_bottom_rgba{0};
+    // The initial value of every border-*-color longhand is currentColor.
+    // Keep that dependency deferred so declaration order and inherited color
+    // are resolved at paint time rather than collapsed to transparent.
+    bool border_left_current_color{true};
+    bool border_top_current_color{true};
+    bool border_right_current_color{true};
+    bool border_bottom_current_color{true};
     uint32_t outline_rgba{0};
     float box_shadow_offset_x{0};
     float box_shadow_offset_y{0};
@@ -1334,6 +1345,11 @@ struct dom_node final {
     // preventing a connected script from executing again after a reparent.
     script_execution_state script_state{script_execution_state::ready};
     bool visible{true};
+    // Temporary layout nodes created for ::before/::after are principal
+    // generated boxes, not anonymous whitespace text.  Keep that distinction
+    // even when content is empty so authored dimensions can participate in
+    // flex/grid sizing.
+    bool generated_pseudo_box{false};
 };
 
 display_mode blockified_display(const dom_node& node) noexcept;

@@ -3185,14 +3185,26 @@ void native_document::layout_children(dom_node& parent)
     // the freshly computed extent in the same layout pass; clamping only at
     // the start used the previous extent and left a stale, apparently endless
     // offset until another unrelated relayout occurred.
+    const auto laid_out_scroll_left = parent.scroll_left;
+    const auto laid_out_scroll_top = parent.scroll_top;
     parent.scroll_left = std::clamp(
-        parent.scroll_left,
+        laid_out_scroll_left,
         0.0F,
         std::max(0.0F, parent.scroll_content_width - content.width));
     parent.scroll_top = std::clamp(
-        parent.scroll_top,
+        laid_out_scroll_top,
         0.0F,
         std::max(0.0F, parent.scroll_content_height - content.height));
+    if (std::abs(parent.scroll_left - laid_out_scroll_left) > 0.01F
+        || std::abs(parent.scroll_top - laid_out_scroll_top) > 0.01F) {
+        // Descendants above were positioned using the previous scroll offset.
+        // When React replaces a tall settings panel with a shorter one, the
+        // new range can clamp that offset to zero in this same pass. Re-run
+        // this formatting context with the fresh offset so geometry, hit
+        // testing, and retained scrollbar publication agree immediately.
+        layout_children(parent);
+        return;
+    }
     if (before_item.has_value()) {
         parent.style.mutable_before_pseudo().layout = before_item->layout;
     }

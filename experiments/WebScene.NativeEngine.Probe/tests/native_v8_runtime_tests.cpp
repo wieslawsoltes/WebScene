@@ -153,8 +153,30 @@ int main()
         if (selected == "tradingview-settings-scroll") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
+            execute(focused_engine, "void 0", "focused-settings-scene-bootstrap.js");
+            resize(focused_engine, 800, 734, 1U);
+            wait_for_consumed_inputs(
+                focused_engine, 1U, "focused settings viewport resize was not consumed");
             test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
                 focused_engine);
+            test_tradingview_settings_panel_switch_recomputes_scroll_range(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-property-table-spacing") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_property_table_preserves_control_row_spacing(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-opacity-border") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            execute(focused_engine, "void 0", "focused-opacity-scene-bootstrap.js");
+            test_css_linear_gradient_reaches_the_retained_scene(focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -455,6 +477,7 @@ int main()
     test_single_fractional_grid_track_stays_one_column(engine);
     test_tradingview_symbol_search_display_contents_rows_join_parent_grid(engine);
     test_tradingview_settings_subgrid_keeps_controls_on_their_rows(engine);
+    test_tradingview_property_table_preserves_control_row_spacing(engine);
     test_footer_grid_direction_and_focus_within_state(engine);
     test_active_chart_generated_border_tracks_active_class(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);

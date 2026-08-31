@@ -122,6 +122,7 @@ dom_node make_pseudo_layout_node(
     result.text_content = pseudo.content;
     result.parent = const_cast<dom_node*>(&originating);
     result.visible = originating.visible && pseudo_generates_box(pseudo);
+    result.generated_pseudo_box = true;
     result.style.width = pseudo.width;
     result.style.height = pseudo.height;
     result.style.left = pseudo.left;
@@ -975,6 +976,7 @@ bool resolved_collapses_whitespace(const dom_node& node)
 bool is_collapsible_whitespace_text(const dom_node& node)
 {
     return node.tag == "#text"
+        && !node.generated_pseudo_box
         && resolved_collapses_whitespace(node)
         && !has_visible_text(node.text_content);
 }

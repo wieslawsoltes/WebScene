@@ -1010,9 +1010,16 @@
     {
       "path": "contracts/overflow-dynamic-panel-switch.html",
       "type": "contract",
-      "capabilities": ["dynamic-display-panel-switch", "overflow-extent-recomputation", "nested-flex-scroll-viewport", "replacement-panel-final-content-reachability"],
+      "capabilities": ["dom-subtree-panel-replacement", "overflow-extent-recomputation", "scroll-offset-clamp-layout-consistency", "nested-flex-scroll-viewport", "flex-row-gap", "cssom-inline-declaration-removal", "synchronous-cssom-geometry-flush", "resize-observer-post-layout-delivery", "resize-observer-layout-loop"],
       "evidence": ["tradingview-settings-scales-and-lines-panel-switch-reduction"],
-      "reason": "Product-neutral reduction of a tabbed dialog: replacing the visible height:100% panel must discard the hidden panel's extent, recompute scrollHeight from the replacement content, preserve clipping, and keep the fixed footer inside the dialog."
+      "reason": "Product-neutral reduction of a React-style tabbed dialog: repeated tall/short subtree replacement must clamp both scrollTop and descendant geometry in the same frame, recompute scrollHeight, preserve the authored row gap, keep the fixed footer inside the dialog, synchronously invalidate geometry when CSSOM removes an authored height before a clear-measure-restore pass, and deliver ResizeObserver after dynamic layout for observer-managed caps."
+    },
+    {
+      "path": "contracts/generated-content-flex-strut.html",
+      "type": "contract",
+      "capabilities": ["empty-generated-content-box", "generated-flex-item", "authored-cross-size", "grid-row-intrinsic-sizing"],
+      "evidence": ["tradingview-settings-property-table-row-spacing-reduction"],
+      "reason": "Product-neutral reduction of a CSS property table: an empty ::before pseudo-element remains a principal flex item, so its authored cross size establishes the control wrapper and implicit grid row cadence."
     },
     {
       "path": "contracts/document-create-event-init.html",

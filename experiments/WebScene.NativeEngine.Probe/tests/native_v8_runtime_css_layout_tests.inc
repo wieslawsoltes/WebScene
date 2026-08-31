@@ -1397,6 +1397,56 @@ void test_tradingview_settings_subgrid_keeps_controls_on_their_rows(
         "TradingView settings subgrid stacked its checkbox/select row: " + result);
 }
 
+void test_tradingview_property_table_preserves_control_row_spacing(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #content {
+                box-sizing: border-box;
+                display: inline-grid;
+                grid-template-columns: auto 1fr;
+                max-width: 550px;
+                padding: 16px 20px;
+                width: 100%;
+              }
+              .cell { align-items: center; display: flex; min-width: 0; }
+              .inner { align-items: center; display: flex; padding: 8px 0; }
+              .first .inner { display: block; padding-inline-end: 20px; }
+              .wrap { align-items: center; display: flex; max-width: 100%; }
+              .wrap:before { content: ""; flex: none; height: 34px; width: 0; }
+              .control { box-sizing: border-box; display: block; height: 18px; width: 100px; }
+            </style>
+            <div id="content">
+              <div class="cell first"><div class="inner">Title</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="title">Name</button></div></div></div>
+              <div class="cell first"><div class="inner">Open market status</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="market">Visible</button></div></div></div>
+              <div class="cell first"><div class="inner">Chart values</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="values">Values</button></div></div></div>
+            </div>`;
+          const top = id => document.getElementById(id).getBoundingClientRect().top;
+          const wrap = document.querySelector('.wrap');
+          return {
+            titleTop: top('title'),
+            marketTop: top('market'),
+            valuesTop: top('values'),
+            firstDelta: top('market') - top('title'),
+            secondDelta: top('values') - top('market'),
+            contentHeight: document.getElementById('content').getBoundingClientRect().height,
+            wrapHeight: wrap.getBoundingClientRect().height
+          };
+        })()
+    )JS", "native-tradingview-property-table-row-spacing.js");
+    require(
+        result == R"JSON({"titleTop":32,"marketTop":82,"valuesTop":132,"firstDelta":50,"secondDelta":50,"contentHeight":182,"wrapHeight":34})JSON",
+        "TradingView property-table controls lost their padded grid row spacing: "
+            + result);
+}
+
 void test_footer_grid_direction_and_focus_within_state(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(

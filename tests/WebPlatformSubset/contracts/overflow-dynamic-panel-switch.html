@@ -1,38 +1,29 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Switching overflow panels recomputes the active scroll range</title>
+<title>Replacing overflow panels recomputes the active scroll range</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; }
-  #dialog { display: flex; flex-direction: column; width: 718px; height: 734px; overflow: hidden; }
+  #dialog { display: flex; flex-direction: column; width: 718px; overflow: hidden; }
   #header { flex: 0 0 68px; }
   #frame { display: flex; flex: 1 1 auto; min-height: 0; }
   #nav { flex: 0 0 119px; }
   #settings { flex: 1 1 auto; min-height: 0; overflow: auto; }
-  .panel { height: 100%; }
-  .panel[hidden] { display: none; }
-  #canvas-content { height: 760px; }
-  #scales-content { height: 954px; }
+  .panel { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+  .row { flex: 0 0 40px; height: 40px; }
   #footer { flex: 0 0 67px; }
 </style>
-<div id="dialog">
+<div id="dialog" style="height: 734px">
   <div id="header"></div>
   <div id="frame">
     <div id="nav"></div>
-    <div id="settings">
-      <div id="canvas" class="panel"><div id="canvas-content"></div></div>
-      <div id="scales" class="panel" hidden><div id="scales-content"></div></div>
-    </div>
+    <div id="settings"><div id="initial" style="height:954px"></div></div>
   </div>
   <div id="footer"></div>
 </div>
 <script>
   const state = window.__webSceneWptState = {
-    complete: false,
-    harness: null,
-    results: [],
-    errors: [],
-    diagnostics: []
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
   };
 
   function record(name, condition, detail) {
@@ -47,52 +38,125 @@
 
   (async () => {
     const settings = document.getElementById("settings");
-    const canvas = document.getElementById("canvas");
-    const scales = document.getElementById("scales");
     const footer = document.getElementById("footer");
+    const makePanel = (id, rowCount) => {
+      const panel = document.createElement("div");
+      panel.id = id;
+      panel.className = "panel";
+      for (let index = 0; index < rowCount; ++index) {
+        const row = document.createElement("div");
+        row.className = "row";
+        panel.appendChild(row);
+      }
+      return panel;
+    };
+    const tall = makePanel("scales", 14);
+    const short = makePanel("symbol", 2);
 
     record(
       "the initial panel establishes an internal overflow range",
-      scales.hidden === true && scales.hasAttribute("hidden")
-        && settings.clientHeight === 599 && settings.scrollHeight === 760,
-      `hidden reflected=${scales.hidden}/${scales.hasAttribute("hidden")}, initial viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
-    );
-
-    canvas.hidden = true;
-    scales.hidden = false;
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    record(
-      "switching panels replaces the stale scroll extent",
-      canvas.hidden === true && canvas.hasAttribute("hidden")
-        && scales.hidden === false && !scales.hasAttribute("hidden")
-        && canvas.offsetHeight === 0 && scales.offsetHeight === 599
-        && settings.clientHeight === 599 && settings.scrollHeight === 954,
-      `reflected=${canvas.hidden}/${canvas.hasAttribute("hidden")}:${scales.hidden}/${scales.hasAttribute("hidden")}, hidden=${canvas.offsetHeight}, active=${scales.offsetHeight}, viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+      settings.clientHeight === 599 && settings.scrollHeight === 954,
+      `initial viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
     );
 
     settings.scrollTop = 355;
+    settings.replaceChildren(tall);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    record(
+      "replacing a scrolled panel clamps geometry to the new range",
+      settings.clientHeight === 599 && settings.scrollHeight === 820
+        && settings.scrollTop === 221
+        && Math.abs(tall.firstElementChild.getBoundingClientRect().top + 153) < 0.01,
+      `viewport/extent/offset=${settings.clientHeight}/${settings.scrollHeight}/${settings.scrollTop}, firstTop=${tall.firstElementChild.getBoundingClientRect().top}`
+    );
+
+    settings.replaceChildren(short);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    record(
+      "a short replacement clears the obsolete visual scroll offset",
+      settings.clientHeight === 599 && settings.scrollHeight === 599
+        && settings.scrollTop === 0
+        && Math.abs(short.firstElementChild.getBoundingClientRect().top - 68) < 0.01,
+      `viewport/extent/offset=${settings.clientHeight}/${settings.scrollHeight}/${settings.scrollTop}, firstTop=${short.firstElementChild.getBoundingClientRect().top}`
+    );
+
+    settings.replaceChildren(tall);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const settingsRect = settings.getBoundingClientRect();
-    const finalRect = document.getElementById("scales-content").getBoundingClientRect();
+    const firstRect = tall.firstElementChild.getBoundingClientRect();
+    const secondRect = tall.children[1].getBoundingClientRect();
     const footerRect = footer.getBoundingClientRect();
     record(
-      "the replacement panel remains clipped and its final content is reachable",
-      settings.scrollTop === 355
-        && Math.abs(finalRect.bottom - settingsRect.bottom) < 0.01
+      "repeated replacement restores the scrollbar and authored row gap",
+      settings.scrollTop === 0 && settings.scrollHeight === 820
+        && Math.abs(secondRect.top - firstRect.top - 60) < 0.01
         && footerRect.top === 667 && footerRect.bottom === 734,
-      `scrollTop=${settings.scrollTop}, contentBottom=${finalRect.bottom}, viewportBottom=${settingsRect.bottom}, footer=${footerRect.top}/${footerRect.bottom}`
+      `scrollTop=${settings.scrollTop}, extent=${settings.scrollHeight}, rowDelta=${secondRect.top - firstRect.top}, viewportBottom=${settingsRect.bottom}, footer=${footerRect.top}/${footerRect.bottom}`
     );
+
+    const dialog = document.getElementById("dialog");
+    const measureAfterClearingHeight = clearHeight => {
+      dialog.style.height = "734px";
+      clearHeight();
+      const naturalHeight = dialog.getBoundingClientRect().height;
+      dialog.style.height = naturalHeight > 734 ? "734px" : "";
+      return {
+        naturalHeight,
+        authoredHeight: dialog.style.height,
+        dialogHeight: dialog.getBoundingClientRect().height,
+        clientHeight: settings.clientHeight,
+        scrollHeight: settings.scrollHeight
+      };
+    };
+    const adaptiveMeasurements = [
+      measureAfterClearingHeight(() => { dialog.style.height = ""; }),
+      measureAfterClearingHeight(() => dialog.style.setProperty("height", "")),
+      measureAfterClearingHeight(() => dialog.style.removeProperty("height"))
+    ];
+    record(
+      "CSSOM height removal flushes natural dialog geometry before restoring the cap",
+      adaptiveMeasurements.every(measurement =>
+        measurement.naturalHeight === 820
+          && measurement.authoredHeight === "734px"
+          && measurement.dialogHeight === 734
+          && measurement.clientHeight === 599
+          && measurement.scrollHeight === 820),
+      `measurements=${JSON.stringify(adaptiveMeasurements)}`
+    );
+
+    const resizeDeliveries = [];
+    const resizeObserver = new ResizeObserver(entries => {
+      resizeDeliveries.push(entries[0].contentRect.height);
+      dialog.style.height = "734px";
+    });
+    resizeObserver.observe(tall);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    dialog.style.height = "auto";
+    tall.appendChild(Object.assign(document.createElement("div"), { className: "row" }));
+    tall.appendChild(Object.assign(document.createElement("div"), { className: "row" }));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    record(
+      "post-layout ResizeObserver delivery restores the dialog viewport cap",
+      resizeDeliveries.length >= 2
+        && resizeDeliveries.at(-1) === 940
+        && dialog.style.height === "734px"
+        && dialog.clientHeight === 734
+        && settings.clientHeight === 599
+        && settings.scrollHeight === 940,
+      `deliveries=${resizeDeliveries.join(",")}, dialog=${dialog.clientHeight}, viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+    );
+    resizeObserver.disconnect();
 
     state.diagnostics = [JSON.stringify({
       clientHeight: settings.clientHeight,
       scrollHeight: settings.scrollHeight,
       scrollTop: settings.scrollTop,
-      hiddenPanelHeight: canvas.offsetHeight,
-      activePanelHeight: scales.offsetHeight,
-      contentBottom: finalRect.bottom,
+      rowDelta: secondRect.top - firstRect.top,
       viewportBottom: settingsRect.bottom,
       footerTop: footerRect.top,
-      footerBottom: footerRect.bottom
+      footerBottom: footerRect.bottom,
+      adaptiveMeasurements,
+      resizeDeliveries
     })];
     const failure = state.results.find(result => result.status !== "PASS");
     state.harness = failure

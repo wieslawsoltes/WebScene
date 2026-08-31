@@ -1413,13 +1413,30 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
         (() => {
           document.body.innerHTML = `<style>
             body { margin: 0; }
-            #swatch {
+            #opacity-slider {
               width: 40px;
-              height: 24px;
-              border: 1px solid rgb(120, 130, 140);
+              height: 10px;
+              color: rgb(41, 98, 255);
+              background-image: linear-gradient(135deg, #707070 50%, #121212 50%);
+              background-size: 8px 8px;
+              border-radius: 5px;
+            }
+            #swatch {
+              box-sizing: border-box;
+              width: 100%;
+              height: 100%;
+              color: inherit;
+              border: 1px solid;
               border-radius: 4px;
             }
-          </style><div id="swatch"></div>`;
+            #transparent-border {
+              width: 4px;
+              height: 4px;
+              color: rgb(41, 98, 255);
+              border: 1px solid transparent;
+            }
+          </style><div id="opacity-slider"><div id="swatch"></div></div>
+            <div id="transparent-border"></div>`;
           // TradingView's opacity control writes this exact named CSSOM
           // property on its gradient child rather than using a stylesheet.
           swatch.style.backgroundImage =
@@ -1431,12 +1448,24 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
             "native-linear-gradient-cssom.js")
             .find("linear-gradient") != std::string::npos,
         "an inline backgroundImage linear-gradient did not survive the CSS cascade");
+    const auto border_colors = evaluate(engine, R"JS(
+            ({
+              inheritedColor: getComputedStyle(swatch).color,
+              implicitBorder: getComputedStyle(swatch).borderTopColor,
+              explicitTransparent:
+                getComputedStyle(document.getElementById('transparent-border'))
+                  .borderTopColor
+            })
+        )JS", "tradingview-opacity-current-color.js");
+    require(
+        border_colors
+            == R"JSON({"inheritedColor":"rgb(41, 98, 255)","implicitBorder":"rgb(41, 98, 255)","explicitTransparent":"rgba(0, 0, 0, 0)"})JSON",
+        "border: 1px solid did not retain its deferred currentColor initial value: "
+            + border_colors);
 
     execute(engine, R"JS(
         swatch.style.backgroundImage =
-          'linear-gradient(90deg, transparent, #112233), '
-          + 'linear-gradient(135deg, #707070 50%, #121212 50%)';
-        swatch.style.backgroundSize = 'auto, 8px 8px';
+          'linear-gradient(90deg, transparent, #112233)';
     )JS", "native-linear-gradient-mutation.js");
 
     webscene_engine_request_scene_checkpoint(engine);
@@ -1456,14 +1485,12 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
                     descriptor.byte_length);
                 observed_resource = resource;
                 found = command.node_id != 0U
-                    && std::abs(command.width - 42.0F) < 0.1F
-                    && std::abs(command.height - 26.0F) < 0.1F
+                    && std::abs(command.width - 40.0F) < 0.1F
+                    && std::abs(command.height - 10.0F) < 0.1F
                     && resource.find("linear-gradient") != std::string::npos
                     && resource.find("transparent") != std::string::npos
                     && resource.find("#112233") != std::string::npos
-                    && resource.find("#707070") != std::string::npos
-                    && resource.starts_with("webscene-bg-v2\t")
-                    && resource.ends_with("\tauto, 8px 8px");
+                    && resource.starts_with("webscene-bg-v2\t");
                 if (found) swatch_node_id = command.node_id;
             }
             for (uint32_t index = 0;
@@ -1472,7 +1499,7 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
                 const auto& command = scene->commands[index];
                 if ((command.kind == 8U || command.kind == 11U)
                     && command.node_id == swatch_node_id
-                    && command.rgba == 0x78828CFFU
+                    && command.rgba == 0x2962FFFFU
                     && std::abs(command.stroke_width - 1.0F) < 0.01F) {
                     found_border = true;
                     break;

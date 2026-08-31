@@ -578,6 +578,10 @@
             border_style.border_top_rgba = pseudo.border_top_rgba;
             border_style.border_right_rgba = pseudo.border_right_rgba;
             border_style.border_bottom_rgba = pseudo.border_bottom_rgba;
+            border_style.border_left_current_color = pseudo.border_left_current_color;
+            border_style.border_top_current_color = pseudo.border_top_current_color;
+            border_style.border_right_current_color = pseudo.border_right_current_color;
+            border_style.border_bottom_current_color = pseudo.border_bottom_current_color;
             if (apply_border_declaration(border_style, name, value)) {
                 pseudo.border_left_width = border_style.border_left_width;
                 pseudo.border_top_width = border_style.border_top_width;
@@ -587,6 +591,10 @@
                 pseudo.border_top_rgba = border_style.border_top_rgba;
                 pseudo.border_right_rgba = border_style.border_right_rgba;
                 pseudo.border_bottom_rgba = border_style.border_bottom_rgba;
+                pseudo.border_left_current_color = border_style.border_left_current_color;
+                pseudo.border_top_current_color = border_style.border_top_current_color;
+                pseudo.border_right_current_color = border_style.border_right_current_color;
+                pseudo.border_bottom_current_color = border_style.border_bottom_current_color;
             } else {
                 decision.classification = "unsupported";
             }
@@ -1000,10 +1008,14 @@
             }
             return false;
         };
-        const auto parse_side = [&](css_length& width, uint32_t& color) {
+        const auto parse_side = [&] (
+            css_length& width,
+            uint32_t& color,
+            bool& current_color) {
+            current_color = true;
+            color = 0;
             if (value.empty() || value == "none") {
                 width = {};
-                color = 0;
                 return;
             }
             auto remaining = value;
@@ -1014,6 +1026,7 @@
                 if (color_end != std::string::npos) {
                     color = native_document::parse_color(
                         remaining.substr(color_start, color_end - color_start + 1U));
+                    current_color = false;
                     remaining.erase(color_start, color_end - color_start + 1U);
                 }
             }
@@ -1029,6 +1042,7 @@
                     if (parsed != 0U || token == "transparent"
                         || lower_html_name(token) == "currentcolor") {
                         color = parsed;
+                        current_color = lower_html_name(token) == "currentcolor";
                     }
                 }
             }
@@ -1056,28 +1070,40 @@
             style.border_right_rgba = parse_color(right);
             style.border_bottom_rgba = parse_color(bottom);
             style.border_left_rgba = parse_color(left);
+            style.border_top_current_color = lower_html_name(top) == "currentcolor";
+            style.border_right_current_color = lower_html_name(right) == "currentcolor";
+            style.border_bottom_current_color = lower_html_name(bottom) == "currentcolor";
+            style.border_left_current_color = lower_html_name(left) == "currentcolor";
         };
         if (name == "border") {
-            parse_side(style.border_top_width, style.border_top_rgba);
-            parse_side(style.border_right_width, style.border_right_rgba);
-            parse_side(style.border_bottom_width, style.border_bottom_rgba);
-            parse_side(style.border_left_width, style.border_left_rgba);
+            parse_side(style.border_top_width, style.border_top_rgba,
+                style.border_top_current_color);
+            parse_side(style.border_right_width, style.border_right_rgba,
+                style.border_right_current_color);
+            parse_side(style.border_bottom_width, style.border_bottom_rgba,
+                style.border_bottom_current_color);
+            parse_side(style.border_left_width, style.border_left_rgba,
+                style.border_left_current_color);
             return true;
         }
         if (name == "border-top") {
-            parse_side(style.border_top_width, style.border_top_rgba);
+            parse_side(style.border_top_width, style.border_top_rgba,
+                style.border_top_current_color);
             return true;
         }
         if (name == "border-right") {
-            parse_side(style.border_right_width, style.border_right_rgba);
+            parse_side(style.border_right_width, style.border_right_rgba,
+                style.border_right_current_color);
             return true;
         }
         if (name == "border-bottom") {
-            parse_side(style.border_bottom_width, style.border_bottom_rgba);
+            parse_side(style.border_bottom_width, style.border_bottom_rgba,
+                style.border_bottom_current_color);
             return true;
         }
         if (name == "border-left") {
-            parse_side(style.border_left_width, style.border_left_rgba);
+            parse_side(style.border_left_width, style.border_left_rgba,
+                style.border_left_current_color);
             return true;
         }
         if (name == "border-width") {
@@ -1097,6 +1123,10 @@
                 style.border_right_rgba = 0;
                 style.border_bottom_rgba = 0;
                 style.border_left_rgba = 0;
+                style.border_top_current_color = true;
+                style.border_right_current_color = true;
+                style.border_bottom_current_color = true;
+                style.border_left_current_color = true;
             } else if (value.find("rgb(") != std::string::npos
                 || value.find("rgba(") != std::string::npos) {
                 const auto color = native_document::parse_color(value);
@@ -1104,6 +1134,10 @@
                 style.border_right_rgba = color;
                 style.border_bottom_rgba = color;
                 style.border_left_rgba = color;
+                style.border_top_current_color = false;
+                style.border_right_current_color = false;
+                style.border_bottom_current_color = false;
+                style.border_left_current_color = false;
             } else {
                 assign_colors(split_transition_tokens(value));
             }
@@ -1130,15 +1164,24 @@
             || set_width("border-left-width", style.border_left_width)) {
             return true;
         }
-        const auto set_color = [&](std::string_view candidate, uint32_t& color) {
+        const auto set_color = [&] (
+            std::string_view candidate,
+            uint32_t& color,
+            bool& current_color) {
             if (name != candidate) return false;
             color = value.empty() ? 0 : parse_color(value);
+            current_color = value.empty()
+                || lower_html_name(value) == "currentcolor";
             return true;
         };
-        return set_color("border-top-color", style.border_top_rgba)
-            || set_color("border-right-color", style.border_right_rgba)
-            || set_color("border-bottom-color", style.border_bottom_rgba)
-            || set_color("border-left-color", style.border_left_rgba);
+        return set_color("border-top-color", style.border_top_rgba,
+                style.border_top_current_color)
+            || set_color("border-right-color", style.border_right_rgba,
+                style.border_right_current_color)
+            || set_color("border-bottom-color", style.border_bottom_rgba,
+                style.border_bottom_current_color)
+            || set_color("border-left-color", style.border_left_rgba,
+                style.border_left_current_color);
     }
 
     static bool is_css_time(std::string_view value)
@@ -1727,6 +1770,10 @@
                 reset.border_top_rgba = previous.border_top_rgba;
                 reset.border_right_rgba = previous.border_right_rgba;
                 reset.border_bottom_rgba = previous.border_bottom_rgba;
+                reset.border_left_current_color = previous.border_left_current_color;
+                reset.border_top_current_color = previous.border_top_current_color;
+                reset.border_right_current_color = previous.border_right_current_color;
+                reset.border_bottom_current_color = previous.border_bottom_current_color;
             }
             if (has_inline({"outline", "outline-width", "outline-color"})) {
                 reset.outline_width = previous.outline_width;
@@ -1793,11 +1840,16 @@
             return;
         }
         const auto parse_declared_color = [&](const std::string& color_value) {
-            return lower_html_name(color_value) == "currentcolor"
-                ? node.style.foreground_rgba
-                : native_document::parse_color(color_value);
+            return native_document::parse_color(color_value);
         };
-        const auto parse_border = [&](css_length& width, uint32_t& color) {
+        const auto parse_border = [&] (
+            css_length& width,
+            uint32_t& color,
+            bool& current_color) {
+            // A border shorthand resets its omitted color longhand to the
+            // initial currentColor value. Keep that dependency deferred.
+            color = 0;
+            current_color = true;
             auto remaining = value;
             auto color_start = remaining.find("rgba(");
             if (color_start == std::string::npos) color_start = remaining.find("rgb(");
@@ -1806,6 +1858,7 @@
                 if (color_end != std::string::npos) {
                     color = native_document::parse_color(
                         remaining.substr(color_start, color_end - color_start + 1U));
+                    current_color = false;
                     remaining.erase(color_start, color_end - color_start + 1U);
                 }
             }
@@ -1826,7 +1879,10 @@
                 } else {
                     const auto parsed = parse_declared_color(token);
                     if (parsed != 0U || token == "transparent"
-                        || lower_html_name(token) == "currentcolor") color = parsed;
+                        || lower_html_name(token) == "currentcolor") {
+                        color = parsed;
+                        current_color = lower_html_name(token) == "currentcolor";
+                    }
                 }
             }
         };
@@ -1842,6 +1898,11 @@
                     node.style.border_right_rgba = single;
                     node.style.border_bottom_rgba = single;
                     node.style.border_left_rgba = single;
+                    const auto current = lower_html_name(value) == "currentcolor";
+                    node.style.border_top_current_color = current;
+                    node.style.border_right_current_color = current;
+                    node.style.border_bottom_current_color = current;
+                    node.style.border_left_current_color = current;
                     return;
                 }
             }
@@ -1859,6 +1920,14 @@
                 node.style.border_right_rgba = parse_declared_color(right);
                 node.style.border_bottom_rgba = parse_declared_color(bottom);
                 node.style.border_left_rgba = parse_declared_color(left);
+                node.style.border_top_current_color =
+                    lower_html_name(top) == "currentcolor";
+                node.style.border_right_current_color =
+                    lower_html_name(right) == "currentcolor";
+                node.style.border_bottom_current_color =
+                    lower_html_name(bottom) == "currentcolor";
+                node.style.border_left_current_color =
+                    lower_html_name(left) == "currentcolor";
             } else {
                 node.style.border_top_width = native_document::parse_length(top);
                 node.style.border_right_width = native_document::parse_length(right);
@@ -1948,30 +2017,42 @@
             && is_inline(inline_border)) {
             return;
         } else if (name == "border") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
             return;
         } else if (name == "border-top" || name == "border-block-start") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
             return;
         } else if (name == "border-right" || name == "border-inline-end") {
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
             return;
         } else if (name == "border-bottom" || name == "border-block-end") {
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
             return;
         } else if (name == "border-left" || name == "border-inline-start") {
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
             return;
         } else if (name == "border-inline") {
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
             return;
         } else if (name == "border-block") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
             return;
         } else if (name == "border-color") {
             parse_four_border_values(true);
@@ -1982,7 +2063,11 @@
         } else if (name == "outline") {
             node.style.outline_width = {};
             node.style.outline_rgba = 0;
-            parse_border(node.style.outline_width, node.style.outline_rgba);
+            auto ignored_current_color = false;
+            parse_border(
+                node.style.outline_width,
+                node.style.outline_rgba,
+                ignored_current_color);
             return;
         } else if (name == "outline-width") {
             node.style.outline_width = native_document::parse_length(value);
@@ -1999,26 +2084,42 @@
         } else if (name == "border-top-color"
             || name == "border-block-start-color") {
             node.style.border_top_rgba = parse_declared_color(value);
+            node.style.border_top_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-right-color"
             || name == "border-inline-end-color") {
             node.style.border_right_rgba = parse_declared_color(value);
+            node.style.border_right_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-bottom-color"
             || name == "border-block-end-color") {
             node.style.border_bottom_rgba = parse_declared_color(value);
+            node.style.border_bottom_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-left-color"
             || name == "border-inline-start-color") {
             node.style.border_left_rgba = parse_declared_color(value);
+            node.style.border_left_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-inline-color") {
             node.style.border_left_rgba = parse_declared_color(value);
             node.style.border_right_rgba = node.style.border_left_rgba;
+            node.style.border_left_current_color =
+                lower_html_name(value) == "currentcolor";
+            node.style.border_right_current_color =
+                node.style.border_left_current_color;
             return;
         } else if (name == "border-block-color") {
             node.style.border_top_rgba = parse_declared_color(value);
             node.style.border_bottom_rgba = node.style.border_top_rgba;
+            node.style.border_top_current_color =
+                lower_html_name(value) == "currentcolor";
+            node.style.border_bottom_current_color =
+                node.style.border_top_current_color;
             return;
         } else if (name == "border-top-width"
             || name == "border-block-start-width") {
@@ -2768,6 +2869,10 @@
             node.style.border_top_rgba = 0;
             node.style.border_right_rgba = 0;
             node.style.border_bottom_rgba = 0;
+            node.style.border_left_current_color = true;
+            node.style.border_top_current_color = true;
+            node.style.border_right_current_color = true;
+            node.style.border_bottom_current_color = true;
         }
         node.style.outline_width = {};
         node.style.outline_rgba = 0;

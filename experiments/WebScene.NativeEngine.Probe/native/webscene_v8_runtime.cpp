@@ -4381,6 +4381,20 @@ bool v8_dom_runtime::dispatch_resize()
         && impl_->promote_pending_promise_error();
 }
 
+bool v8_dom_runtime::deliver_resize_observers()
+{
+    if (impl_->isolate == nullptr) return true;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->frame_context.IsEmpty()
+        ? impl_->context.Get(impl_->isolate)
+        : impl_->frame_context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    return impl_->deliver_resize_observer_checkpoint()
+        && impl_->promote_pending_promise_error();
+}
+
 bool v8_dom_runtime::refresh_media_environment()
 {
     return impl_->refresh_media_environment()

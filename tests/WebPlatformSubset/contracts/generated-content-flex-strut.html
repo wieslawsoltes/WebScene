@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Empty generated flex items contribute their authored cross size</title>
+<style>
+  body { margin: 0; }
+  #table {
+    box-sizing: border-box;
+    display: inline-grid;
+    grid-template-columns: auto 1fr;
+    max-width: 550px;
+    padding: 16px 20px;
+    width: 100%;
+  }
+  .cell { align-items: center; display: flex; min-width: 0; }
+  .inner { align-items: center; display: flex; padding: 8px 0; }
+  .label .inner { display: block; padding-inline-end: 20px; }
+  .wrap { align-items: center; display: flex; max-width: 100%; }
+  .wrap::before { content: ""; flex: none; height: 34px; width: 0; }
+  .control { box-sizing: border-box; display: block; height: 18px; width: 100px; }
+</style>
+<div id="table">
+  <div class="cell label"><div class="inner">Title</div></div>
+  <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="title">Name</button></div></div></div>
+  <div class="cell label"><div class="inner">Open market status</div></div>
+  <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="market">Visible</button></div></div></div>
+  <div class="cell label"><div class="inner">Chart values</div></div>
+  <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="values">Values</button></div></div></div>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  const result = { name: "empty generated flex struts retain authored cross size" };
+  try {
+    const top = id => document.getElementById(id).getBoundingClientRect().top;
+    const wrap = document.querySelector(".wrap").getBoundingClientRect();
+    const table = document.getElementById("table").getBoundingClientRect();
+    const geometry = {
+      titleTop: top("title"),
+      firstDelta: top("market") - top("title"),
+      secondDelta: top("values") - top("market"),
+      wrapHeight: wrap.height,
+      tableHeight: table.height
+    };
+    const expected = {
+      titleTop: 32,
+      firstDelta: 50,
+      secondDelta: 50,
+      wrapHeight: 34,
+      tableHeight: 182
+    };
+    const failures = Object.keys(expected).filter(
+      key => Math.abs(geometry[key] - expected[key]) > .01
+    );
+    if (failures.length) {
+      throw new Error(failures.map(
+        key => `${key}: expected ${expected[key]}, got ${geometry[key]}`
+      ).join("; "));
+    }
+    state.diagnostics = [JSON.stringify(geometry)];
+    result.status = "PASS";
+    result.message = null;
+    result.stack = null;
+    state.harness = { status: 0, message: null, stack: null };
+  } catch (error) {
+    result.status = "FAIL";
+    result.message = String(error && error.message || error);
+    result.stack = error && error.stack ? String(error.stack) : null;
+    state.harness = { status: 1, message: result.message, stack: result.stack };
+  }
+  state.results.push(result);
+  state.complete = true;
+</script>

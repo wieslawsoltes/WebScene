@@ -1169,7 +1169,61 @@ void test_tradingview_settings_panel_switch_recomputes_scroll_range(
         result == R"JSON({"before":{"clientHeight":599,"scrollHeight":760},"after":{"clientHeight":599,"scrollHeight":954,"scrollTop":355,"maximum":355,"canvasHeight":0,"scalesHeight":599,"contentBottom":667,"viewportBottom":667,"footerInside":true}})JSON",
         "switching from Canvas to Scales retained stale overflow geometry: " + result);
 
+    // TradingView replaces the tab-content subtree when switching panels.
+    // Exercise the production-shaped column groups and their gaps through
+    // repeated tall/short/tall replacements so a stale scroll range cannot
+    // make the reduction pass accidentally.
+    const auto replacement_result = evaluate(engine, R"JS(
+        (() => {
+          const settings = document.getElementById('settings');
+          const makePanel = (name, rows) => {
+            const panel = document.createElement('div');
+            panel.id = name;
+            panel.style.cssText =
+              'display:flex;flex-direction:column;gap:20px;width:100%';
+            for (let index = 0; index < rows; ++index) {
+              const row = document.createElement('div');
+              row.style.cssText = 'height:40px;flex:0 0 40px';
+              panel.appendChild(row);
+            }
+            return panel;
+          };
+          const installPanel = (panel) => {
+            settings.replaceChildren(panel);
+            return {
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight,
+              firstTop: panel.firstElementChild.getBoundingClientRect().top,
+              secondTop: panel.children[1].getBoundingClientRect().top
+            };
+          };
+          const tallPanel = makePanel('scales-replacement', 14);
+          const shortPanel = makePanel('symbol-replacement', 2);
+          const canvas = installPanel(tallPanel);
+          const symbol = installPanel(shortPanel);
+          const scales = installPanel(tallPanel);
+          const trading = installPanel(shortPanel);
+          const finalScales = installPanel(tallPanel);
+          settings.scrollTop = 999;
+          globalThis.__switchedSettingsScroller = settings;
+          return {
+            canvas,
+            symbol,
+            scales,
+            trading,
+            finalScales,
+            finalScrollTop: settings.scrollTop,
+            finalMaximum: settings.scrollHeight - settings.clientHeight
+          };
+        })()
+    )JS", "tradingview-settings-react-panel-replacement.js");
+    require(
+        replacement_result == R"JSON({"canvas":{"clientHeight":599,"scrollHeight":820,"firstTop":-153,"secondTop":-93},"symbol":{"clientHeight":599,"scrollHeight":599,"firstTop":68,"secondTop":128},"scales":{"clientHeight":599,"scrollHeight":820,"firstTop":68,"secondTop":128},"trading":{"clientHeight":599,"scrollHeight":599,"firstTop":68,"secondTop":128},"finalScales":{"clientHeight":599,"scrollHeight":820,"firstTop":68,"secondTop":128},"finalScrollTop":221,"finalMaximum":221})JSON",
+        "replacing TradingView settings content lost its flex gaps or scroll range: "
+            + replacement_result);
+
     webscene_engine_request_scene_checkpoint(engine);
+    animation_frame_and_wait(engine, 16.0, 9200U);
     auto observed_switched_scroller = false;
     auto observed_switched_scrollbar = false;
     for (auto attempt = 0; attempt < 100 && !observed_switched_scrollbar; ++attempt) {
@@ -1216,14 +1270,143 @@ void test_tradingview_settings_panel_switch_recomputes_scroll_range(
     const auto scrolled = evaluate(engine, R"JS(
         (() => ({
           scrollTop: __switchedSettingsScroller.scrollTop,
-          childTop: document.getElementById('scales-content')
+          childTop: __switchedSettingsScroller.firstElementChild
             .getBoundingClientRect().top
         }))()
     )JS", "tradingview-settings-panel-switch-wheel.js");
     require(
-        scrolled == R"JSON({"scrollTop":295,"childTop":-227})JSON",
+        scrolled == R"JSON({"scrollTop":161,"childTop":-93})JSON",
         "the newly visible settings panel did not respond to wheel scrolling: "
             + scrolled);
+
+    // TradingView's adaptive-dialog helper synchronously clears the authored
+    // height, measures the natural dialog, and restores the viewport cap. A
+    // CSSOM removal must invalidate layout before getBoundingClientRect(); a
+    // stale capped measurement makes the helper leave the dialog auto-sized
+    // and removes the settings panel's nested scroll range.
+    const auto adaptive_dialog_result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { position:fixed; width:718px; overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0;
+              overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; }
+            #adaptive-panel { flex:0 0 auto; height:954px; }
+            #footer { flex:0 0 67px; }
+          </style>
+          <div id="dialog" style="height:734px"><div id="wrapper">
+            <div id="header"></div><div id="frame"><div id="sidebar"></div>
+              <div id="settings"><div id="adaptive-panel"></div></div>
+            </div><div id="footer"></div></div></div>`;
+          const dialog = document.getElementById('dialog');
+          const settings = document.getElementById('settings');
+          const measureAfter = clearHeight => {
+            dialog.style.height = '734px';
+            clearHeight();
+            const naturalHeight = dialog.getBoundingClientRect().height;
+            dialog.style.height = naturalHeight > 734 ? '734px' : '';
+            return {
+              naturalHeight,
+              authoredHeight: dialog.style.height,
+              dialogHeight: dialog.getBoundingClientRect().height,
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight
+            };
+          };
+          return {
+            namedSetter: measureAfter(() => { dialog.style.height = ''; }),
+            setProperty: measureAfter(() => dialog.style.setProperty('height', '')),
+            removeProperty: measureAfter(() => dialog.style.removeProperty('height'))
+          };
+        })()
+    )JS", "tradingview-settings-adaptive-dialog-measurement.js");
+    require(
+        adaptive_dialog_result
+            == R"JSON({"namedSetter":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954},"setProperty":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954},"removeProperty":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954}})JSON",
+        "clearing an adaptive dialog height reused stale capped geometry: "
+            + adaptive_dialog_result);
+
+    // ResizeObserver delivery after dynamic layout is independently required
+    // for applications that manage a dialog cap from observed content size.
+    evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { position:fixed; width:718px; height:734px;
+              overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0;
+              overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; background:rgb(12,23,34); }
+            #panel { flex:0 0 auto; }
+            #observed-panel-content { height:599px; }
+            #footer { flex:0 0 67px; }
+            #switch-panel { position:fixed; left:0; top:0; z-index:9999;
+              width:40px; height:40px; }
+          </style>
+          <button id="switch-panel">Switch</button>
+          <div id="dialog"><div id="wrapper"><div id="header"></div>
+            <div id="frame"><div id="sidebar"></div><div id="settings">
+              <div id="panel"><div id="observed-panel-content"></div></div>
+            </div></div><div id="footer"></div></div></div>`;
+          const dialog = document.getElementById('dialog');
+          const panel = document.getElementById('observed-panel-content');
+          globalThis.__settingsResizeDeliveries = [];
+          globalThis.__settingsResizeObserver = new ResizeObserver(entries => {
+            __settingsResizeDeliveries.push(entries[0].contentRect.height);
+            dialog.style.height = '734px';
+          });
+          __settingsResizeObserver.observe(panel);
+          globalThis.__resizeManagedDialog = dialog;
+          globalThis.__resizeManagedSettings = document.getElementById('settings');
+          globalThis.__resizeManagedPanel = panel;
+          document.getElementById('switch-panel').addEventListener('click', () => {
+            dialog.style.removeProperty('height');
+            panel.style.height = '800px';
+          });
+          return 'ready';
+        })()
+    )JS", "tradingview-settings-resize-observer-setup.js");
+    animation_frame_and_wait(engine, 16.5, 9203U);
+    const auto consumed_before_switch = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 9204U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 9205U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_switch + 2U,
+        "TradingView settings switch click was not consumed");
+    animation_frame_and_wait(engine, 17.0, 9206U);
+    auto resize_observer_result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        resize_observer_result = evaluate(engine, R"JS(
+            (() => ({
+              deliveries: __settingsResizeDeliveries,
+              authoredHeight: __resizeManagedDialog.style.height,
+              dialogHeight: __resizeManagedDialog.getBoundingClientRect().height,
+              panelHeight: __resizeManagedPanel.getBoundingClientRect().height,
+              clientHeight: __resizeManagedSettings.clientHeight,
+              scrollHeight: __resizeManagedSettings.scrollHeight
+            }))()
+        )JS", "tradingview-settings-resize-observer-result.js");
+        if (resize_observer_result
+            == R"JSON({"deliveries":[599,800],"authoredHeight":"734px","dialogHeight":734,"panelHeight":800,"clientHeight":599,"scrollHeight":800})JSON") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        resize_observer_result
+            == R"JSON({"deliveries":[599,800],"authoredHeight":"734px","dialogHeight":734,"panelHeight":800,"clientHeight":599,"scrollHeight":800})JSON",
+        "post-layout ResizeObserver delivery did not restore the settings dialog cap: "
+            + resize_observer_result);
 }
 
 void test_tradingview_symbol_info_auto_height_has_no_scrollbar(

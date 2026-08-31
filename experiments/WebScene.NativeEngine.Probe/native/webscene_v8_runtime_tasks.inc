@@ -560,10 +560,9 @@
             return drain_connected_resource_task();
         }
         if (resize_observers_pending) {
-            resize_observers_pending = false;
             prefer_frame_hydration_task = true;
             ensure_layout();
-            return dispatch_resize_observers();
+            return deliver_resize_observer_checkpoint();
         }
         const auto now_time = std::chrono::steady_clock::now();
         const auto next = std::min_element(
@@ -986,13 +985,29 @@
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 layout_finished - frame_listeners_finished).count());
 #endif
-        const auto result = dispatch_resize_observers();
+        const auto result = deliver_resize_observer_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         last_resize_observers_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - layout_finished).count());
 #endif
         return result;
+    }
+
+    bool deliver_resize_observer_checkpoint()
+    {
+        // ResizeObserver delivery belongs to the rendering lifecycle after
+        // style/layout and before paint. A callback may change the observed
+        // geometry, so repeat layout and observation until the sizes settle.
+        // This is the bounded equivalent of Blink's resize-observation loop.
+        resize_observers_pending = false;
+        constexpr auto maximum_depth = size_t{10};
+        for (auto depth = size_t{0}; depth < maximum_depth; ++depth) {
+            if (!dispatch_resize_observers()) return false;
+            if (!document.dirty()) return true;
+            ensure_layout();
+        }
+        return true;
     }
 
     bool dispatch_resize_observers()
@@ -1019,6 +1034,7 @@
             auto observer_context = observer->context.Get(isolate);
             auto callback = observer->callback.Get(isolate);
             if (observer_context.IsEmpty() || callback.IsEmpty()) continue;
+            activate_css_cascade(observer_context);
             v8::Context::Scope observer_scope(observer_context);
             auto entries = v8::Array::New(isolate, static_cast<int>(changed_nodes.size()));
             for (uint32_t index = 0; index < changed_nodes.size(); ++index) {
