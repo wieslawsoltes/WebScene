@@ -40,6 +40,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private const uint SceneDomReplacement = 2;
     private const uint LayerReplace = 1;
     private const uint LayerRemove = 2;
+    private const uint OffscreenCanvasLayer = 1u << 31;
 
     private readonly Dictionary<uint, RetainedLayer> s_layers = new();
     private readonly List<RetainedLayer> s_orderedLayers = [];
@@ -287,6 +288,31 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
     }
 
+    internal byte[]? CaptureCanvasPng(uint nodeId)
+    {
+        if (!s_layers.TryGetValue(nodeId, out var layer)
+            || layer.BitmapWidth == 0
+            || layer.BitmapHeight == 0
+            || layer.BitmapWidth > 16_384
+            || layer.BitmapHeight > 16_384)
+        {
+            return null;
+        }
+
+        using var bitmap = new SKBitmap(
+            checked((int)layer.BitmapWidth),
+            checked((int)layer.BitmapHeight),
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        canvas.DrawPicture(layer.Picture);
+        canvas.Flush();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded?.ToArray();
+    }
+
     private List<RetainedLayer> ViewportLayers(
         float viewportWidth,
         float viewportHeight)
@@ -302,7 +328,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         s_viewportLayers.EnsureCapacity(s_orderedLayers.Count);
         foreach (var layer in s_orderedLayers)
         {
-            if (layer.Width <= 0 || layer.Height <= 0
+            if (layer.IsOffscreen
+                || layer.Width <= 0 || layer.Height <= 0
                 || layer.BitmapWidth == 0 || layer.BitmapHeight == 0
                 || !IntersectsViewport(
                     layer.X,
@@ -974,11 +1001,16 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 tile.Width = tileWidth;
                 tile.Height = tileHeight;
                 if (!TryParseDomLinearGradient(layer, tile, out var gradient)) continue;
+                ExpandPremultipliedGradientStops(
+                    gradient.Colors,
+                    gradient.Positions,
+                    out var colors,
+                    out var positions);
                 using var shader = SKShader.CreateLinearGradient(
                     gradient.Start,
                     gradient.End,
-                    gradient.Colors,
-                    gradient.Positions,
+                    colors,
+                    positions,
                     SKShaderTileMode.Clamp);
                 using var paint = new SKPaint
                 {
@@ -991,6 +1023,70 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             }
             if (!repeatY) break;
         }
+    }
+
+    private static void ExpandPremultipliedGradientStops(
+        SKColor[] sourceColors,
+        float[] sourcePositions,
+        out SKColor[] colors,
+        out float[] positions)
+    {
+        const int subdivisions = 16;
+        var expandedColors = new List<SKColor>(sourceColors.Length * 2);
+        var expandedPositions = new List<float>(sourcePositions.Length * 2);
+        expandedColors.Add(sourceColors[0]);
+        expandedPositions.Add(sourcePositions[0]);
+        for (var index = 0; index < sourceColors.Length - 1; index++)
+        {
+            var from = sourceColors[index];
+            var to = sourceColors[index + 1];
+            var fromPosition = sourcePositions[index];
+            var toPosition = sourcePositions[index + 1];
+            var steps = from.Alpha == to.Alpha || toPosition <= fromPosition
+                ? 1
+                : subdivisions;
+            for (var step = 1; step <= steps; step++)
+            {
+                var amount = step / (float)steps;
+                var alpha = Lerp(from.Alpha / 255f, to.Alpha / 255f, amount);
+                var red = PremultipliedChannel(from.Red, from.Alpha, to.Red, to.Alpha,
+                    amount, alpha);
+                var green = PremultipliedChannel(from.Green, from.Alpha, to.Green, to.Alpha,
+                    amount, alpha);
+                var blue = PremultipliedChannel(from.Blue, from.Alpha, to.Blue, to.Alpha,
+                    amount, alpha);
+                expandedColors.Add(new SKColor(
+                    red,
+                    green,
+                    blue,
+                    ToByte(alpha * 255f)));
+                expandedPositions.Add(Lerp(fromPosition, toPosition, amount));
+            }
+        }
+        colors = expandedColors.ToArray();
+        positions = expandedPositions.ToArray();
+
+        static float Lerp(float from, float to, float amount)
+            => from + (to - from) * amount;
+
+        static byte PremultipliedChannel(
+            byte fromChannel,
+            byte fromAlpha,
+            byte toChannel,
+            byte toAlpha,
+            float amount,
+            float alpha)
+        {
+            if (alpha <= 0.00001f) return 0;
+            var premultiplied = Lerp(
+                fromChannel / 255f * (fromAlpha / 255f),
+                toChannel / 255f * (toAlpha / 255f),
+                amount);
+            return ToByte(premultiplied / alpha * 255f);
+        }
+
+        static byte ToByte(float value)
+            => (byte)Math.Clamp((int)MathF.Round(value), 0, 255);
     }
 
     private static void ResolveDomBackgroundSize(
@@ -2209,7 +2305,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return new RetainedLayer(
             layer.NodeId,
             layer.Generation,
-            layer.Reserved,
+            layer.Reserved & ~OffscreenCanvasLayer,
+            (layer.Reserved & OffscreenCanvasLayer) != 0,
             layer.X,
             layer.Y,
             layer.Width,
@@ -3251,6 +3348,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         uint NodeId,
         ulong Generation,
         uint ZOrder,
+        bool IsOffscreen,
         float X,
         float Y,
         float Width,

@@ -174,6 +174,14 @@
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            const auto canvas_export_release_id =
+                pending_canvas_export_release_id_.exchange(
+                    0U,
+                    std::memory_order_acq_rel);
+            if (canvas_export_release_id != 0U) {
+                changed = document_.release_canvas_export(canvas_export_release_id)
+                    || changed;
+            }
             const auto starting_scene_generation =
                 document_.scene_generation();
             const auto starting_component_ready =

@@ -1450,6 +1450,8 @@ public:
         std::vector<webscene_canvas_command>& canvas_commands,
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes) const;
+    void retain_canvas_for_export(dom_node& node) noexcept;
+    bool release_canvas_export(uint32_t node_id) noexcept;
 
     uint64_t layout_passes() const noexcept;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -1771,6 +1773,7 @@ private:
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
     dom_node* body_{nullptr};
+    uint32_t retained_export_canvas_id_{0};
     float viewport_width_{1};
     float viewport_height_{1};
     uint32_t next_node_id_{1};

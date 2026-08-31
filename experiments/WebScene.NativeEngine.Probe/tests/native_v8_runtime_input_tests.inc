@@ -1280,7 +1280,6 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
           canvas.width = 320;
           canvas.height = 180;
           canvas.getContext('2d').fillRect(0, 0, 320, 180);
-          document.body.appendChild(canvas);
           globalThis.__screenshotCanvas = canvas;
           const download = document.createElement('a');
           download.href = canvas.toDataURL();
@@ -1310,6 +1309,31 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
                 != std::string::npos,
         "TradingView canvas download did not reach the host capture request: "
             + screenshot_download_request);
+
+    auto detached_canvas_retained = false;
+    webscene_engine_request_scene_checkpoint(engine);
+    for (auto attempt = 0; attempt < 100 && !detached_canvas_retained; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.canvas_layer_count; ++index) {
+                const auto& layer = scene->canvas_layers[index];
+                if (layer.bitmap_width == 320U
+                    && layer.bitmap_height == 180U
+                    && (layer.reserved & (1U << 31U)) != 0U) {
+                    detached_canvas_retained = true;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!detached_canvas_retained) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        detached_canvas_retained,
+        "detached screenshot canvas was not retained for node-scoped export");
 
     execute(engine, R"JS(
         (() => {
@@ -1347,6 +1371,34 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
                 != std::string::npos,
         "TradingView canvas copy did not reach the typed host clipboard request: "
             + screenshot_clipboard_request);
+
+    const auto screenshot_node_id = static_cast<uint32_t>(std::stoul(evaluate(
+        engine,
+        "globalThis.__screenshotCanvas.__websceneNativeNodeId",
+        "native-screenshot-export-node-id.js")));
+    require(
+        webscene_engine_release_canvas_export(engine, screenshot_node_id) != 0U,
+        "the host could not release the retained screenshot canvas");
+    execute(engine, "true", "native-screenshot-export-release-barrier.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    auto released = false;
+    for (auto attempt = 0; attempt < 100 && !released; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            released = true;
+            for (uint32_t index = 0; index < scene->header.canvas_layer_count; ++index) {
+                if (scene->canvas_layers[index].node_id == screenshot_node_id) {
+                    released = false;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!released) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(released,
+        "the exported screenshot canvas remained in later retained scenes");
 }
 
 void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine)
@@ -1358,6 +1410,7 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
             #swatch {
               width: 40px;
               height: 24px;
+              border: 1px solid rgb(120, 130, 140);
               border-radius: 4px;
             }
           </style><div id="swatch"></div>`;
@@ -1382,10 +1435,12 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
 
     webscene_engine_request_scene_checkpoint(engine);
     auto found = false;
+    auto found_border = false;
     auto observed_resource = std::string{};
-    for (auto attempt = 0; attempt < 100 && !found; ++attempt) {
+    for (auto attempt = 0; attempt < 100 && (!found || !found_border); ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
+            auto swatch_node_id = 0U;
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 if (command.kind != 21U || command.flags >= scene->string_count) continue;
@@ -1395,21 +1450,38 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
                     descriptor.byte_length);
                 observed_resource = resource;
                 found = command.node_id != 0U
-                    && std::abs(command.width - 40.0F) < 0.1F
-                    && std::abs(command.height - 24.0F) < 0.1F
+                    && std::abs(command.width - 42.0F) < 0.1F
+                    && std::abs(command.height - 26.0F) < 0.1F
                     && resource.find("linear-gradient") != std::string::npos
                     && resource.find("transparent") != std::string::npos
                     && resource.find("#112233") != std::string::npos
                     && resource.find("#707070") != std::string::npos
                     && resource.starts_with("webscene-bg-v2\t")
                     && resource.ends_with("\tauto, 8px 8px");
+                if (found) swatch_node_id = command.node_id;
+            }
+            for (uint32_t index = 0;
+                swatch_node_id != 0U && index < scene->header.command_count;
+                ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 8U || command.kind == 11U)
+                    && command.node_id == swatch_node_id
+                    && command.rgba == 0x78828CFFU
+                    && std::abs(command.stroke_width - 1.0F) < 0.01F) {
+                    found_border = true;
+                    break;
+                }
             }
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
         }
-        if (!found) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        if (!found || !found_border) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
     }
     require(found,
         "a mutated inline backgroundImage linear-gradient was not published "
-        "as a retained gradient command: " + observed_resource);
+            "as a retained gradient command: " + observed_resource);
+    require(found_border,
+        "the rounded opacity swatch border did not remain above its layered gradient");
 }

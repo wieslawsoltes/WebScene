@@ -77,21 +77,54 @@ void native_document::build_canvas_display_lists(
     std::vector<webscene_scene_string>& strings,
     std::vector<char>& string_bytes) const
 {
+    constexpr uint32_t offscreen_canvas_layer = 1U << 31U;
     layers.clear();
     canvas_commands.clear();
     strings.clear();
     string_bytes.clear();
 
+    std::unordered_set<uint32_t> retained_canvas_ids;
+    for (const auto& node : nodes_) {
+        if (node->tag != "canvas" || node->canvas().commands.empty()) continue;
+        if ((is_connected(*node)
+                && node->visible
+                && display_tree_allows_render(*this, *node))
+            || node->id == retained_export_canvas_id_) {
+            retained_canvas_ids.insert(node->id);
+        }
+    }
+    // An exported canvas can be a composition of otherwise detached source
+    // canvases. Retain the complete drawImage(canvas) dependency graph.
+    auto added_dependency = true;
+    while (added_dependency) {
+        added_dependency = false;
+        for (const auto& node : nodes_) {
+            if (!retained_canvas_ids.contains(node->id)) continue;
+            for (const auto& command : node->canvas().commands) {
+                if (command.kind == 27U
+                    && retained_canvas_ids.insert(command.resource_id).second) {
+                    added_dependency = true;
+                }
+            }
+        }
+    }
+
     uint32_t z_order = 0;
     for (const auto& node : nodes_) {
         const auto& canvas = node->canvas();
         if (node->tag != "canvas"
-            || !is_connected(*node)
-            || !node->visible
-            || !display_tree_allows_render(*this, *node)
-            || canvas.commands.empty()) {
+            || canvas.commands.empty()
+            || !retained_canvas_ids.contains(node->id)) {
             continue;
         }
+
+        // Browser canvas bitmaps exist independently of DOM attachment and CSS
+        // visibility. TradingView composes screenshots in a detached canvas and
+        // then exports it. Retain those display lists as non-viewport layers so
+        // drawImage(canvas) and host-side canvas export can still resolve them.
+        const auto offscreen = !is_connected(*node)
+            || !node->visible
+            || !display_tree_allows_render(*this, *node);
 
         const auto width = node->attributes.find("width");
         const auto height = node->attributes.find("height");
@@ -111,16 +144,16 @@ void native_document::build_canvas_display_lists(
 
         layers.push_back(webscene_canvas_layer{
             node->id,
-            z_order++,
+            0U,
             command_offset,
             static_cast<uint32_t>(canvas.commands.size()),
             string_offset,
             static_cast<uint32_t>(canvas.strings.size()),
-            0U,
-            node->layout.x,
-            node->layout.y,
-            node->layout.width,
-            node->layout.height,
+            z_order++ | (offscreen ? offscreen_canvas_layer : 0U),
+            offscreen ? 0.0F : node->layout.x,
+            offscreen ? 0.0F : node->layout.y,
+            offscreen ? 0.0F : node->layout.width,
+            offscreen ? 0.0F : node->layout.height,
             static_cast<uint32_t>(std::max(
                 0.0F,
                 width == node->attributes.end() ? 300.0F : parse_number(width->second, 300.0F))),
@@ -129,6 +162,21 @@ void native_document::build_canvas_display_lists(
                 height == node->attributes.end() ? 150.0F : parse_number(height->second, 150.0F))),
             canvas.generation});
     }
+}
+
+void native_document::retain_canvas_for_export(dom_node& node) noexcept
+{
+    if (node.tag != "canvas") return;
+    retained_export_canvas_id_ = node.id;
+    mark_scene_changed();
+}
+
+bool native_document::release_canvas_export(uint32_t node_id) noexcept
+{
+    if (node_id == 0U || retained_export_canvas_id_ != node_id) return false;
+    retained_export_canvas_id_ = 0U;
+    mark_scene_changed();
+    return true;
 }
 
 void native_document::append_scene(

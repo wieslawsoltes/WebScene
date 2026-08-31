@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Switching overflow panels recomputes the active scroll range</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  #dialog { display: flex; flex-direction: column; width: 718px; height: 734px; overflow: hidden; }
+  #header { flex: 0 0 68px; }
+  #frame { display: flex; flex: 1 1 auto; min-height: 0; }
+  #nav { flex: 0 0 119px; }
+  #settings { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .panel { height: 100%; }
+  .panel[hidden] { display: none; }
+  #canvas-content { height: 760px; }
+  #scales-content { height: 954px; }
+  #footer { flex: 0 0 67px; }
+</style>
+<div id="dialog">
+  <div id="header"></div>
+  <div id="frame">
+    <div id="nav"></div>
+    <div id="settings">
+      <div id="canvas" class="panel"><div id="canvas-content"></div></div>
+      <div id="scales" class="panel" hidden><div id="scales-content"></div></div>
+    </div>
+  </div>
+  <div id="footer"></div>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  (async () => {
+    const settings = document.getElementById("settings");
+    const canvas = document.getElementById("canvas");
+    const scales = document.getElementById("scales");
+    const footer = document.getElementById("footer");
+
+    record(
+      "the initial panel establishes an internal overflow range",
+      scales.hidden === true && scales.hasAttribute("hidden")
+        && settings.clientHeight === 599 && settings.scrollHeight === 760,
+      `hidden reflected=${scales.hidden}/${scales.hasAttribute("hidden")}, initial viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+    );
+
+    canvas.hidden = true;
+    scales.hidden = false;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    record(
+      "switching panels replaces the stale scroll extent",
+      canvas.hidden === true && canvas.hasAttribute("hidden")
+        && scales.hidden === false && !scales.hasAttribute("hidden")
+        && canvas.offsetHeight === 0 && scales.offsetHeight === 599
+        && settings.clientHeight === 599 && settings.scrollHeight === 954,
+      `reflected=${canvas.hidden}/${canvas.hasAttribute("hidden")}:${scales.hidden}/${scales.hasAttribute("hidden")}, hidden=${canvas.offsetHeight}, active=${scales.offsetHeight}, viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+    );
+
+    settings.scrollTop = 355;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const settingsRect = settings.getBoundingClientRect();
+    const finalRect = document.getElementById("scales-content").getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    record(
+      "the replacement panel remains clipped and its final content is reachable",
+      settings.scrollTop === 355
+        && Math.abs(finalRect.bottom - settingsRect.bottom) < 0.01
+        && footerRect.top === 667 && footerRect.bottom === 734,
+      `scrollTop=${settings.scrollTop}, contentBottom=${finalRect.bottom}, viewportBottom=${settingsRect.bottom}, footer=${footerRect.top}/${footerRect.bottom}`
+    );
+
+    state.diagnostics = [JSON.stringify({
+      clientHeight: settings.clientHeight,
+      scrollHeight: settings.scrollHeight,
+      scrollTop: settings.scrollTop,
+      hiddenPanelHeight: canvas.offsetHeight,
+      activePanelHeight: scales.offsetHeight,
+      contentBottom: finalRect.bottom,
+      viewportBottom: settingsRect.bottom,
+      footerTop: footerRect.top,
+      footerBottom: footerRect.bottom
+    })];
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  })().catch(error => {
+    state.results.push({
+      name: "dynamic overflow panel lifecycle",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = { status: 1, message: state.results.at(-1).message, stack: state.results.at(-1).stack };
+    state.complete = true;
+  });
+</script>

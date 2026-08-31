@@ -23,6 +23,7 @@
         auto* self = current(info.GetIsolate());
         auto* node = canvas_export_node(info);
         if (self == nullptr || node == nullptr) return;
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toDataURL",
@@ -41,6 +42,7 @@
             || !info[0]->IsFunction()) {
             return;
         }
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toBlob",

@@ -735,6 +735,7 @@ dom_node* native_document::hit_test_node(
 
 void native_document::clear()
 {
+    retained_export_canvas_id_ = 0U;
     shadow_dom_storage_.reset();
     nodes_.clear();
     native_id_index_.clear();

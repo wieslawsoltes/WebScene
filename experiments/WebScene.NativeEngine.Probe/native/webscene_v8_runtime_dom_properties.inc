@@ -1724,6 +1724,24 @@
         set_boolean_attribute(value, info, "readonly");
     }
 
+    static void get_hidden(
+        v8::Local<v8::Name>,
+        const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(v8::Boolean::New(
+            info.GetIsolate(), node->attributes.contains("hidden")));
+    }
+
+    static void set_hidden(
+        v8::Local<v8::Name>,
+        v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        set_boolean_attribute(value, info, "hidden");
+    }
+
     static void collect_descendants_by_tag(
         dom_node& root,
         std::string_view tag,

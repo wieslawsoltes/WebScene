@@ -253,6 +253,8 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetParent"), get_offset_parent);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "width"), get_element_width, set_element_width);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "height"), get_element_height, set_element_height);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "hidden"), get_hidden, set_hidden);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "colSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "rowSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(

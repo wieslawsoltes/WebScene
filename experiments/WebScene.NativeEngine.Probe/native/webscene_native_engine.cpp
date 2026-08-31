@@ -550,6 +550,7 @@ private:
 #endif
     std::atomic<uint32_t> current_cursor_{WEBSCENE_CURSOR_DEFAULT};
     std::atomic<bool> checkpoint_requested_{false};
+    std::atomic<uint32_t> pending_canvas_export_release_id_{0U};
     mutable std::mutex iframe_html_mutex_;
     std::string iframe_html_;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -1151,6 +1152,13 @@ size_t webscene_engine_copy_canvas_layouts(
 uint8_t webscene_engine_request_scene_checkpoint(webscene_engine* engine)
 {
     return engine != nullptr && engine->request_scene_checkpoint() ? 1U : 0U;
+}
+
+uint8_t webscene_engine_release_canvas_export(
+    webscene_engine* engine,
+    uint32_t node_id)
+{
+    return engine != nullptr && engine->release_canvas_export(node_id) ? 1U : 0U;
 }
 
 uint8_t webscene_engine_request_low_memory(webscene_engine* engine)

@@ -549,9 +549,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             var clipboardBytes = clipboardWrite.Bytes;
             if (clipboardBytes is null && clipboardWrite.CanvasNodeId is not null)
             {
-                clipboardBytes = await _surface
-                    .CaptureRetainedScenePngAsync()
-                    .ConfigureAwait(true);
+                clipboardBytes = await CaptureCanvasForHostAsync(
+                    clipboardWrite.CanvasNodeId.Value).ConfigureAwait(true);
             }
             if (clipboardBytes is null || topLevel.Clipboard is null) return;
             if (string.Equals(
@@ -584,9 +583,8 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         var bytes = download.Bytes;
         if (bytes is null && download.CanvasNodeId is not null)
         {
-            bytes = await _surface
-                .CaptureRetainedScenePngAsync()
-                .ConfigureAwait(true);
+            bytes = await CaptureCanvasForHostAsync(
+                download.CanvasNodeId.Value).ConfigureAwait(true);
         }
         if (bytes is null && download.RemoteUri is not null)
         {
@@ -608,6 +606,35 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
         stream.SetLength(0);
         await stream.WriteAsync(bytes).ConfigureAwait(true);
+    }
+
+    private async Task<byte[]?> CaptureCanvasForHostAsync(uint nodeId)
+    {
+        // Canvas export is requested from the JavaScript task that also
+        // publishes the detached composition canvas. The host notification
+        // and compositor scene wake are independent UI messages, so allow the
+        // scene lane to apply that publication before treating the node as
+        // absent.
+        try
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var bytes = await _surface.CaptureCanvasPngAsync(nodeId)
+                    .ConfigureAwait(true);
+                if (bytes is not null) return bytes;
+                _surface.RequestRender();
+                await Task.Delay(16).ConfigureAwait(true);
+            }
+            return null;
+        }
+        finally
+        {
+            var engine = Volatile.Read(ref _engine);
+            if (engine != IntPtr.Zero)
+            {
+                NativeWebSceneApi.EngineReleaseCanvasExport(engine, nodeId);
+            }
+        }
     }
 
     public async Task UnloadAsync()

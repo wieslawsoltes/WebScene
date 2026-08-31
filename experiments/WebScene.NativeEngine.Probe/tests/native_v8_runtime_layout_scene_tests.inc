@@ -1108,6 +1108,124 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
         "TradingView settings pane did not scroll its nested viewport: " + scrolled);
 }
 
+void test_tradingview_settings_panel_switch_recomputes_scroll_range(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { width:718px; height:734px; overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; background:rgb(11,22,33); }
+            .panel { height:100%; overflow:visible; }
+            .panel[hidden] { display:none; }
+            #canvas-content { height:760px; }
+            #scales-content { height:954px; background:rgb(220,1,2); }
+            #footer { flex:0 0 67px; }
+          </style>
+          <div id="dialog"><div id="wrapper"><div id="header"></div>
+            <div id="frame"><div id="sidebar"></div><div id="settings">
+              <div id="canvas" class="panel"><div id="canvas-content"></div></div>
+              <div id="scales" class="panel" hidden><div id="scales-content"></div></div>
+            </div></div><div id="footer"></div></div></div>`;
+          const settings = document.getElementById('settings');
+          const canvas = document.getElementById('canvas');
+          const scales = document.getElementById('scales');
+          const before = {
+            clientHeight: settings.clientHeight,
+            scrollHeight: settings.scrollHeight
+          };
+          settings.scrollTop = 999;
+          canvas.hidden = true;
+          scales.hidden = false;
+          const maximum = settings.scrollHeight - settings.clientHeight;
+          settings.scrollTop = 999;
+          globalThis.__switchedSettingsScroller = settings;
+          return {
+            before,
+            after: {
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight,
+              scrollTop: settings.scrollTop,
+              maximum,
+              canvasHeight: canvas.getBoundingClientRect().height,
+              scalesHeight: scales.getBoundingClientRect().height,
+              contentBottom: document.getElementById('scales-content')
+                .getBoundingClientRect().bottom,
+              viewportBottom: settings.getBoundingClientRect().bottom,
+              footerInside: document.getElementById('footer')
+                .getBoundingClientRect().bottom <= document.getElementById('dialog')
+                  .getBoundingClientRect().bottom
+            }
+          };
+        })()
+    )JS", "tradingview-settings-panel-switch-overflow.js");
+    require(
+        result == R"JSON({"before":{"clientHeight":599,"scrollHeight":760},"after":{"clientHeight":599,"scrollHeight":954,"scrollTop":355,"maximum":355,"canvasHeight":0,"scalesHeight":599,"contentBottom":667,"viewportBottom":667,"footerInside":true}})JSON",
+        "switching from Canvas to Scales retained stale overflow geometry: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_switched_scroller = false;
+    auto observed_switched_scrollbar = false;
+    for (auto attempt = 0; attempt < 100 && !observed_switched_scrollbar; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            auto scroller_node_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x0B1621FFU) {
+                    scroller_node_id = command.node_id;
+                    observed_switched_scroller = true;
+                    break;
+                }
+            }
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.node_id == scroller_node_id
+                    && command.kind == 10U
+                    && command.rgba == 0xA0A0A0D0U) {
+                    observed_switched_scrollbar = true;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_switched_scrollbar) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        observed_switched_scroller,
+        "the switched TradingView settings scroller was absent from the scene");
+    require(
+        observed_switched_scrollbar,
+        "the switched TradingView settings scroller did not publish a scrollbar");
+
+    const auto consumed_before_wheel = consumed_input_count(engine);
+    wheel_input(engine, 400, 200, -60, 9202U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_wheel + 1,
+        "switched TradingView settings wheel input was not consumed");
+    const auto scrolled = evaluate(engine, R"JS(
+        (() => ({
+          scrollTop: __switchedSettingsScroller.scrollTop,
+          childTop: document.getElementById('scales-content')
+            .getBoundingClientRect().top
+        }))()
+    )JS", "tradingview-settings-panel-switch-wheel.js");
+    require(
+        scrolled == R"JSON({"scrollTop":295,"childTop":-227})JSON",
+        "the newly visible settings panel did not respond to wheel scrolling: "
+            + scrolled);
+}
+
 void test_tradingview_symbol_info_auto_height_has_no_scrollbar(
     webscene_engine* engine)
 {
