@@ -1438,14 +1438,33 @@ void native_document::append_scene(
         int z_index{};
         size_t source_order{};
     };
-    std::vector<local_paint_entry> paint_order;
     const auto& children = composed_children(node);
-    paint_order.reserve(
-        children.size()
+    const auto paint_entry_count = children.size()
         + (before_paints_after_content ? 1U : 0U)
-        + (!after_paints_behind_content ? 1U : 0U));
+        + (!after_paints_behind_content ? 1U : 0U);
+#if defined(WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL)
+    std::vector<local_paint_entry> paint_order;
+    paint_order.reserve(paint_entry_count);
+    const auto append_paint_entry = [&](local_paint_entry entry) {
+        paint_order.push_back(entry);
+    };
+#else
+    constexpr size_t inline_paint_capacity = 8U;
+    std::array<local_paint_entry, inline_paint_capacity> inline_paint_order{};
+    std::vector<local_paint_entry> spill_paint_order;
+    const auto uses_inline_paint_order = paint_entry_count <= inline_paint_capacity;
+    auto inline_paint_count = size_t{0U};
+    if (!uses_inline_paint_order) spill_paint_order.reserve(paint_entry_count);
+    const auto append_paint_entry = [&](local_paint_entry entry) {
+        if (uses_inline_paint_order) {
+            inline_paint_order[inline_paint_count++] = entry;
+        } else {
+            spill_paint_order.push_back(entry);
+        }
+    };
+#endif
     if (before_paints_after_content) {
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             nullptr,
             &node.style.before_pseudo(),
             node.style.before_pseudo().z_index,
@@ -1453,28 +1472,35 @@ void native_document::append_scene(
     }
     for (size_t index = 0; index < children.size(); ++index) {
         const auto* child = children[index];
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             child,
             nullptr,
             child->paint_z_index,
             index + 1U});
     }
     if (!after_paints_behind_content) {
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             nullptr,
             &node.style.after_pseudo(),
             node.style.after_pseudo().z_index,
             children.size() + 1U});
     }
+#if defined(WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL)
+    auto ordered_paint = std::span<local_paint_entry>(paint_order);
+#else
+    auto ordered_paint = uses_inline_paint_order
+        ? std::span<local_paint_entry>(inline_paint_order.data(), inline_paint_count)
+        : std::span<local_paint_entry>(spill_paint_order);
+#endif
     std::stable_sort(
-        paint_order.begin(),
-        paint_order.end(),
+        ordered_paint.begin(),
+        ordered_paint.end(),
         [](const auto& left, const auto& right) {
             return left.z_index < right.z_index
                 || (left.z_index == right.z_index
                     && left.source_order < right.source_order);
         });
-    for (const auto& entry : paint_order) {
+    for (const auto& entry : ordered_paint) {
         if (entry.child != nullptr) {
             if (defer_fixed_descendants
                 && entry.child->style.position == position_mode::fixed) {

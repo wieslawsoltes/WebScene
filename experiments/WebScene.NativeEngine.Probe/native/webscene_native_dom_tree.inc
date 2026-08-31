@@ -11,6 +11,17 @@ webscene_text_metrics native_document::measure_text(
     std::string_view value,
     const dom_node& node) const
 {
+#if !defined(WEBSCENE_NATIVE_ENGINE_TEXT_TRANSFORM_COPY_CONTROL)
+    if (resolved_text_transform_name(node) == "none") {
+        return measure_text(
+            value,
+            resolved_font_family(node),
+            resolved_font_size(node),
+            resolved_font_weight(node),
+            resolved_letter_spacing(node),
+            resolved_word_spacing(node));
+    }
+#endif
     const auto transformed = resolved_text_transform(node, std::string(value));
     return measure_text(
         transformed,
@@ -29,14 +40,25 @@ webscene_text_metrics native_document::measure_text(
     float letter_spacing,
     float word_spacing) const
 {
-    text_measurement_key key{
+#if defined(WEBSCENE_NATIVE_ENGINE_TEXT_MEASUREMENT_LOOKUP_CONTROL)
+    text_measurement_key lookup_key{
         std::string(value),
         std::string(family),
         font_size,
         font_weight,
         letter_spacing,
         word_spacing};
-    if (const auto cached = text_measurement_cache_.find(key);
+    if (const auto cached = text_measurement_cache_.find(lookup_key);
+#else
+    const text_measurement_key_view lookup_key{
+        value,
+        family,
+        font_size,
+        font_weight,
+        letter_spacing,
+        word_spacing};
+    if (const auto cached = text_measurement_cache_.find(lookup_key);
+#endif
         cached != text_measurement_cache_.end()) {
         return cached->second;
     }
@@ -90,7 +112,19 @@ webscene_text_metrics native_document::measure_text(
             measured = metrics;
         }
     }
-    text_measurement_cache_.emplace(std::move(key), measured);
+#if defined(WEBSCENE_NATIVE_ENGINE_TEXT_MEASUREMENT_LOOKUP_CONTROL)
+    text_measurement_cache_.emplace(std::move(lookup_key), measured);
+#else
+    text_measurement_cache_.emplace(
+        text_measurement_key{
+            std::string(value),
+            std::string(family),
+            font_size,
+            font_weight,
+            letter_spacing,
+            word_spacing},
+        measured);
+#endif
     return measured;
 }
 

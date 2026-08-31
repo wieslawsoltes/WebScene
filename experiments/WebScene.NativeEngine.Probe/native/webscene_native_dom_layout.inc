@@ -1,5 +1,8 @@
 void native_document::layout(float viewport_width, float viewport_height)
 {
+    if (layout_scratch_ == nullptr) {
+        layout_scratch_ = std::make_unique<layout_scratch_storage>();
+    }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     const auto intrinsic_cache_disabled =
         std::getenv("WEBSCENE_DISABLE_INTRINSIC_SIZE_CACHE") != nullptr;
@@ -8,6 +11,17 @@ void native_document::layout(float viewport_width, float viewport_height)
 #endif
     intrinsic_size_cache_generation_ = 0;
     if (!intrinsic_cache_disabled) {
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+        if (++intrinsic_size_cache_next_generation_ == 0) {
+            for (auto* node : native_id_index_) {
+                if (node == nullptr) continue;
+                for (auto& entry : node->intrinsic_size_direct_cache) {
+                    entry.generation = 0;
+                }
+            }
+            ++intrinsic_size_cache_next_generation_;
+        }
+#else
         if (intrinsic_size_cache_ == nullptr) {
             intrinsic_size_cache_ = std::make_unique<std::unordered_map<
                 intrinsic_size_key,
@@ -25,6 +39,7 @@ void native_document::layout(float viewport_width, float viewport_height)
             intrinsic_size_cache_->clear();
             ++intrinsic_size_cache_next_generation_;
         }
+#endif
         intrinsic_size_cache_generation_ = intrinsic_size_cache_next_generation_;
     }
     if (shadow_dom_storage_ != nullptr) {
@@ -81,12 +96,59 @@ void native_document::layout(float viewport_width, float viewport_height)
         *body_,
         retained_canvas_seen,
         retained_canvases_remaining);
+    // The pool normally retains only the high-water scratch blocks needed by
+    // repeated layout. Bound pathological one-off documents so a transient
+    // giant flex tree cannot become permanent per-context memory.
+    constexpr size_t maximum_retained_layout_scratch_bytes = 1024U * 1024U;
+    if (layout_scratch_->upstream.reserved_bytes()
+        > maximum_retained_layout_scratch_bytes) {
+        layout_scratch_->pool.release();
+    }
     intrinsic_size_cache_generation_ = 0;
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
     active_animation_demand_cache_valid_ = false;
     out_of_flow_geometry_dirty_roots_.clear();
+}
+
+static bool parse_intrinsic_view_box(
+    const std::string& value,
+    float& width,
+    float& height)
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[0];
+#endif
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_STREAM_CONTROL)
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[1];
+#endif
+    std::istringstream values(value);
+    float x = 0;
+    float y = 0;
+    const auto parsed = static_cast<bool>(values >> x >> y >> width >> height);
+#else
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[2];
+#endif
+    const auto* current = value.c_str();
+    float components[4]{};
+    for (auto& component : components) {
+        char* end = nullptr;
+        component = std::strtof(current, &end);
+        if (end == current) return false;
+        current = end;
+    }
+    width = components[2];
+    height = components[3];
+    constexpr auto parsed = true;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    if (parsed) ++intrinsic_view_box_parse_counts_for_benchmark[3];
+#endif
+    return parsed;
 }
 
 void native_document::layout_children(dom_node& parent)
@@ -1054,14 +1116,26 @@ void native_document::layout_children(dom_node& parent)
                     || is_inline_level(child->style.display);
             });
     if (inline_formatting_context) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
         std::vector<dom_node*> text_runs;
+#else
+        std::pmr::vector<dom_node*> text_runs{&layout_scratch_->pool};
+#endif
         std::deque<dom_node> generated_whitespace_runs;
         struct positioned_inline_item final {
             dom_node* node;
             size_t preceding_text_runs;
         };
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
         std::vector<positioned_inline_item> positioned_items;
+#else
+        std::pmr::vector<positioned_inline_item> positioned_items{&layout_scratch_->pool};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
         std::function<bool(dom_node&)> collect_runs = [&](dom_node& node) {
+#else
+        const auto collect_runs = [&](const auto& self, dom_node& node) -> bool {
+#endif
             node.text_layout_fragments.clear();
             node.visible = parent.visible && node.style.display != display_mode::none;
             if (!node.visible) return true;
@@ -1131,14 +1205,22 @@ void native_document::layout_children(dom_node& parent)
                     && !is_inline_level(child->style.display)) {
                     return false;
                 }
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
                 if (!collect_runs(*child)) return false;
+#else
+                if (!self(self, *child)) return false;
+#endif
             }
             if (!append_generated_whitespace(node.style.after_pseudo())) return false;
             return true;
         };
         auto supported = true;
         for (auto* child : composed_children(parent)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
             if (!collect_runs(*child)) {
+#else
+            if (!collect_runs(collect_runs, *child)) {
+#endif
                 supported = false;
                 break;
             }
@@ -1149,7 +1231,13 @@ void native_document::layout_children(dom_node& parent)
             auto current_line_height = 0.0F;
             auto pending_space = false;
             dom_node* pending_space_run = nullptr;
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
             std::vector<layout_rect> static_anchors(text_runs.size() + 1U);
+#else
+            std::pmr::vector<layout_rect> static_anchors(
+                text_runs.size() + 1U,
+                &layout_scratch_->pool);
+#endif
             static_anchors[0] = {
                 content.x,
                 content.y,
@@ -1263,7 +1351,11 @@ void native_document::layout_children(dom_node& parent)
                     float right{0};
                     float offset{0};
                 };
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
                 std::vector<flattened_line_alignment> lines;
+#else
+                std::pmr::vector<flattened_line_alignment> lines{&layout_scratch_->pool};
+#endif
                 for (const auto* run : text_runs) {
                     for (const auto& fragment : run->text_layout_fragments) {
                         auto line = std::find_if(
@@ -1320,8 +1412,14 @@ void native_document::layout_children(dom_node& parent)
                     generated.text_layout_fragments.end());
             }
 
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
             std::function<bool(dom_node&, layout_rect&)> update_inline_box =
                 [&](dom_node& node, layout_rect& bounds) {
+#else
+            const auto update_inline_box =
+                [&](const auto& self, dom_node& node, layout_rect& bounds) -> bool {
+#endif
                     auto has_bounds = false;
                     const auto include = [&](const layout_rect& item) {
                         if (!has_bounds) {
@@ -1341,7 +1439,12 @@ void native_document::layout_children(dom_node& parent)
                     }
                     for (auto* child : composed_children(node)) {
                         layout_rect child_bounds{};
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
                         if (update_inline_box(*child, child_bounds)) include(child_bounds);
+#else
+                        if (self(self, *child, child_bounds)) include(child_bounds);
+#endif
                     }
                     node.layout = has_bounds
                         ? bounds
@@ -1350,7 +1453,12 @@ void native_document::layout_children(dom_node& parent)
                 };
             for (auto* child : composed_children(parent)) {
                 layout_rect child_bounds{};
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
                 update_inline_box(*child, child_bounds);
+#else
+                update_inline_box(update_inline_box, *child, child_bounds);
+#endif
             }
 
             for (const auto& item : positioned_items) {
@@ -1957,7 +2065,7 @@ void native_document::layout_children(dom_node& parent)
                     && !is_inline_level(descendant->style.display);
             });
     };
-    std::vector<dom_node*> layout_items;
+    std::pmr::vector<dom_node*> layout_items{&layout_scratch_->pool};
     layout_items.reserve(composed_children(parent).size() + 3U);
     if (has_inside_marker) {
         marker_item.emplace(make_list_marker_layout_node(parent, marker_text));
@@ -2003,7 +2111,8 @@ void native_document::layout_children(dom_node& parent)
         });
     const auto horizontal = (flex_container && parent.style.direction == flex_direction::row)
         || inline_flow;
-    std::vector<dom_node*> ordered_children = layout_items;
+    std::pmr::vector<dom_node*> ordered_children{&layout_scratch_->pool};
+    ordered_children = layout_items;
     if (flex_container && parent.style.flex_reverse) {
         std::reverse(ordered_children.begin(), ordered_children.end());
     }
@@ -2059,7 +2168,8 @@ void native_document::layout_children(dom_node& parent)
     float fixed = 0;
     float grow = 0;
     size_t automatic_main_margin_count = 0U;
-    std::unordered_map<const dom_node*, float> flex_base_main_sizes;
+    std::pmr::unordered_map<const dom_node*, float> flex_base_main_sizes{
+        &layout_scratch_->pool};
     const auto flow_count = static_cast<size_t>(std::count_if(
         ordered_children.begin(),
         ordered_children.end(),
@@ -2131,11 +2241,17 @@ void native_document::layout_children(dom_node& parent)
     }
 
     struct flex_line final {
-        std::vector<const dom_node*> items;
+        explicit flex_line(std::pmr::memory_resource* memory)
+            : items(memory)
+        {
+        }
+
+        std::pmr::vector<const dom_node*> items;
         float outer_main_size{0};
     };
-    std::vector<flex_line> wrapped_flex_lines;
-    std::unordered_map<const dom_node*, size_t> wrapped_flex_line_indices;
+    std::pmr::vector<flex_line> wrapped_flex_lines{&layout_scratch_->pool};
+    std::pmr::unordered_map<const dom_node*, size_t> wrapped_flex_line_indices{
+        &layout_scratch_->pool};
     if (flex_container && horizontal && parent.style.flex_wrap) {
         for (const auto* child : ordered_children) {
             if (!participates_in_flow(child)) continue;
@@ -2144,7 +2260,9 @@ void native_document::layout_children(dom_node& parent)
             const auto margins = resolve_length(
                     *child, child->style.margin_left, main_available, 0)
                 + resolve_length(*child, child->style.margin_right, main_available, 0);
-            if (wrapped_flex_lines.empty()) wrapped_flex_lines.emplace_back();
+            if (wrapped_flex_lines.empty()) {
+                wrapped_flex_lines.emplace_back(&layout_scratch_->pool);
+            }
             auto* line = &wrapped_flex_lines.back();
             const auto candidate = line->outer_main_size
                 + (line->items.empty() ? 0.0F : main_gap)
@@ -2152,7 +2270,7 @@ void native_document::layout_children(dom_node& parent)
             // An oversized item still establishes a line of its own and is
             // flexed after collection. It must not create an empty first line.
             if (!line->items.empty() && candidate > main_available + 0.01F) {
-                wrapped_flex_lines.emplace_back();
+                wrapped_flex_lines.emplace_back(&layout_scratch_->pool);
                 line = &wrapped_flex_lines.back();
             }
             if (!line->items.empty()) line->outer_main_size += main_gap;
@@ -2166,7 +2284,8 @@ void native_document::layout_children(dom_node& parent)
     const auto remaining = std::max(0.0F, main_available - fixed);
     const auto overflow = flex_container && !parent.style.flex_wrap
         ? std::max(0.0F, fixed - main_available) : 0.0F;
-    std::unordered_map<const dom_node*, float> flex_shrunk_main_sizes;
+    std::pmr::unordered_map<const dom_node*, float> flex_shrunk_main_sizes{
+        &layout_scratch_->pool};
     const auto contains_replaced_content = [&](const auto& self,
                                                 const dom_node& candidate) -> bool {
         if (candidate.tag == "svg" || candidate.tag == "img"
@@ -2181,7 +2300,7 @@ void native_document::layout_children(dom_node& parent)
                 return descendant != nullptr && self(self, *descendant);
             });
     };
-    const auto resolve_flex_shrink = [&](const std::vector<const dom_node*>& line_items,
+    const auto resolve_flex_shrink = [&](const auto& line_items,
                                          float line_overflow) {
         if (line_overflow <= 0.001F) return;
         struct shrink_item final {
@@ -2192,7 +2311,7 @@ void native_document::layout_children(dom_node& parent)
             float weight;
             bool frozen;
         };
-        std::vector<shrink_item> items;
+        std::pmr::vector<shrink_item> items{&layout_scratch_->pool};
         for (const auto* child : line_items) {
             const auto known = flex_base_main_sizes.find(child);
             const auto base = known == flex_base_main_sizes.end() ? 0.0F : known->second;
@@ -2261,7 +2380,7 @@ void native_document::layout_children(dom_node& parent)
         }
     };
     if (overflow > 0) {
-        std::vector<const dom_node*> line_items;
+        std::pmr::vector<const dom_node*> line_items{&layout_scratch_->pool};
         for (const auto* child : ordered_children) {
             if (participates_in_flow(child)) line_items.push_back(child);
         }
@@ -3097,12 +3216,36 @@ float native_document::intrinsic_size(
     const auto stable_node = node.id != 0U
         && node.id <= native_id_index_.size()
         && native_id_index_[node.id - 1U] == &node;
-    if (intrinsic_size_cache_ == nullptr
-        || intrinsic_size_cache_generation_ == 0
-        || !stable_node) {
+    if (intrinsic_size_cache_generation_ == 0 || !stable_node) {
+        return compute_intrinsic_size(node, horizontal, available);
+    }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    auto& direct_cached = node.intrinsic_size_direct_cache[
+        static_cast<size_t>(horizontal)];
+    if (direct_cached.generation == intrinsic_size_cache_generation_
+        && direct_cached.available == available) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++intrinsic_size_cache_hits_;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+        ++intrinsic_size_direct_cache_hits_;
+#endif
+        return direct_cached.size;
+    }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    ++intrinsic_size_cache_misses_;
+#endif
+    const auto result = compute_intrinsic_size(node, horizontal, available);
+    direct_cached = {intrinsic_size_cache_generation_, available, result};
+    return result;
+#else
+    if (intrinsic_size_cache_ == nullptr) {
         return compute_intrinsic_size(node, horizontal, available);
     }
     const intrinsic_size_key key{&node, horizontal};
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    ++intrinsic_size_hash_lookups_;
+#endif
     if (const auto cached = intrinsic_size_cache_->find(key);
         cached != intrinsic_size_cache_->end()
         && cached->second.generation == intrinsic_size_cache_generation_
@@ -3123,6 +3266,7 @@ float native_document::intrinsic_size(
             available,
             result});
     return result;
+#endif
 }
 
 float native_document::compute_intrinsic_size(
@@ -3130,6 +3274,9 @@ float native_document::compute_intrinsic_size(
     bool horizontal,
     float available)
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    ++intrinsic_size_branch_counts_for_benchmark[0];
+#endif
     const auto padding = horizontal
         ? resolve_length(node, node.style.padding_left, available, 0)
             + resolve_length(node, node.style.padding_right, available, 0)
@@ -3163,6 +3310,22 @@ float native_document::compute_intrinsic_size(
         }
         return std::max(0.0F, size);
     };
+    const auto text_or_empty_leaf_size = [&]() {
+        if (!has_visible_text(node.text_content)) {
+            const auto measured = horizontal && is_collapsible_whitespace_text(node)
+                ? measure_text_width(" ", node)
+                : 0;
+            return constrain(padding + measured);
+        }
+        const auto font_size = resolved_font_size(node);
+        return constrain(padding + (horizontal
+            ? measure_text_width(
+                collapsed_text(
+                    node,
+                    resolved_text_transform(node, node.text_content)),
+                node)
+            : resolved_line_height(node, font_size)));
+    };
     // A percentage size is indefinite while shrink-to-fitting an auto-sized
     // ancestor. Resolving it against the viewport makes fixed popups with
     // descendants such as `width: 100%` or `height: 100%` measure as the whole
@@ -3174,13 +3337,29 @@ float native_document::compute_intrinsic_size(
         || authored.unit == length_unit::rem
         || authored.unit == length_unit::viewport_width
         || authored.unit == length_unit::viewport_height)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[1];
+#endif
         return constrain(resolve_length(node, authored, available, 0)
             + (node.style.border_box ? 0.0F : padding));
     }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_CONTROL)
+    if (node.kind == dom_node_kind::text) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[6];
+        ++intrinsic_size_branch_counts_for_benchmark[10];
+        ++intrinsic_size_branch_counts_for_benchmark[11];
+#endif
+        return text_or_empty_leaf_size();
+    }
+#endif
     if ((is_table_container(node.style.display)
             && has_table_row_descendant(*this, node))
         || is_table_row_group(node.style.display)
         || node.style.display == display_mode::table_row) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[2];
+#endif
         std::vector<float> authored_column_widths;
         if (is_table_container(node.style.display)) {
             const auto collect_column_widths = [&](const auto& self,
@@ -3206,7 +3385,12 @@ float native_document::compute_intrinsic_size(
             };
             collect_column_widths(collect_column_widths, node);
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
         std::vector<const dom_node*> rows;
+#else
+        std::pmr::vector<const dom_node*> rows{&layout_scratch_->pool};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_CONTROL)
         std::function<void(const dom_node&)> collect_rows = [&](const dom_node& current) {
             for (const auto* child : composed_children(current)) {
                 if (child->style.display == display_mode::table_row) rows.push_back(child);
@@ -3215,6 +3399,23 @@ float native_document::compute_intrinsic_size(
         };
         if (node.style.display == display_mode::table_row) rows.push_back(&node);
         else collect_rows(node);
+#else
+        const auto collect_rows = [&](const auto& self,
+                                      const dom_node& current) -> void {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+            ++intrinsic_size_branch_counts_for_benchmark[9];
+#endif
+            for (const auto* child : composed_children(current)) {
+                if (child->style.display == display_mode::table_row) {
+                    rows.push_back(child);
+                } else if (is_table_row_group(child->style.display)) {
+                    self(self, *child);
+                }
+            }
+        };
+        if (node.style.display == display_mode::table_row) rows.push_back(&node);
+        else collect_rows(collect_rows, node);
+#endif
         if (horizontal) {
             size_t count = 0;
             for (const auto* row : rows) {
@@ -3295,12 +3496,19 @@ float native_document::compute_intrinsic_size(
         return constrain(height + padding);
     }
     if (is_collapsed_select(node)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[3];
+#endif
         const auto font_size = resolved_font_size(node);
         if (!horizontal) {
             return constrain(resolved_line_height(node, font_size) + padding);
         }
         auto widest_label = 0.0F;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
         std::vector<const dom_node*> options;
+#else
+        std::pmr::vector<const dom_node*> options{&layout_scratch_->pool};
+#endif
         collect_option_nodes(node, options);
         for (const auto* option : options) {
             widest_label = std::max(
@@ -3312,6 +3520,9 @@ float native_document::compute_intrinsic_size(
         return constrain(widest_label + font_size * 1.75F + padding);
     }
     if (node.tag == "input") {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[4];
+#endif
         auto type = std::string{"text"};
         if (const auto value = node.attributes.find("type"); value != node.attributes.end()) {
             type = value->second;
@@ -3351,6 +3562,9 @@ float native_document::compute_intrinsic_size(
         return constrain(columns * measure_text_width("0", node) + padding);
     }
     if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas") {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[5];
+#endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
         if (attribute != node.attributes.end()) {
             const auto intrinsic = parse_number(attribute->second, 0);
@@ -3359,12 +3573,9 @@ float native_document::compute_intrinsic_size(
         if (node.tag == "svg") {
             const auto view_box = node.attributes.find("viewBox");
             if (view_box != node.attributes.end()) {
-                std::istringstream values(view_box->second);
-                float x = 0;
-                float y = 0;
                 float width = 0;
                 float height = 0;
-                if (values >> x >> y >> width >> height) {
+                if (parse_intrinsic_view_box(view_box->second, width, height)) {
                     const auto intrinsic = horizontal ? width : height;
                     if (intrinsic > 0) return constrain(intrinsic + padding);
                 }
@@ -3377,24 +3588,16 @@ float native_document::compute_intrinsic_size(
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(node, true) == "inside";
     if (composed_children(node).empty() && !has_before && !has_after && !has_inside_marker) {
-        if (!has_visible_text(node.text_content)) {
-            const auto measured = horizontal && is_collapsible_whitespace_text(node)
-                ? measure_text_width(" ", node)
-                : 0;
-            // Empty auto-sized boxes still contribute their padding and border
-            // to their intrinsic border-box size. This matters in particular
-            // for non-stretch flex items, whose empty content box may be zero
-            // while their visible border box is not.
-            return constrain(padding + measured);
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[6];
+        if (node.kind == dom_node_kind::text) {
+            ++intrinsic_size_branch_counts_for_benchmark[10];
         }
-        const auto font_size = resolved_font_size(node);
-        return constrain(padding + (horizontal
-            ? measure_text_width(
-                collapsed_text(
-                    node,
-                    resolved_text_transform(node, node.text_content)),
-                node)
-            : resolved_line_height(node, font_size)));
+#endif
+        // Empty auto-sized boxes still contribute their padding and border to
+        // their intrinsic border-box size. The shared helper also preserves
+        // collapsed-whitespace and transformed-text measurement semantics.
+        return text_or_empty_leaf_size();
     }
 
     const auto& node_grid = node.style.grid();
@@ -3402,6 +3605,9 @@ float native_document::compute_intrinsic_size(
         && !node_grid.auto_columns.empty();
     if (is_grid_container(node.style.display)
         && (node_grid.two_columns || intrinsic_implicit_column_grid)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[7];
+#endif
         const auto& grid = node.style.grid();
         auto effective_columns = grid.template_columns;
         if (effective_columns.empty() && intrinsic_implicit_column_grid) {
@@ -3567,25 +3773,14 @@ float native_document::compute_intrinsic_size(
             : total_height));
     }
 
-    std::optional<dom_node> marker_item;
-    std::optional<dom_node> before_item;
-    std::optional<dom_node> after_item;
-    std::vector<const dom_node*> intrinsic_items;
-    intrinsic_items.reserve(composed_children(node).size() + 3U);
-    if (has_inside_marker) {
-        marker_item.emplace(make_list_marker_layout_node(node, marker_text));
-        intrinsic_items.push_back(&*marker_item);
-    }
-    if (has_before) {
-        before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
-        intrinsic_items.push_back(&*before_item);
-    }
-    intrinsic_items.insert(intrinsic_items.end(), composed_children(node).begin(), composed_children(node).end());
-    if (has_after) {
-        after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
-        intrinsic_items.push_back(&*after_item);
-    }
-
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    ++intrinsic_size_branch_counts_for_benchmark[8];
+    const auto synthetic_intrinsic_items = static_cast<uint64_t>(has_inside_marker)
+        + static_cast<uint64_t>(has_before)
+        + static_cast<uint64_t>(has_after);
+    ++intrinsic_size_branch_counts_for_benchmark[
+        synthetic_intrinsic_items == 0U ? 12U : 13U];
+#endif
     const auto flex_container = is_flex_container(node.style.display);
     const auto inline_item_contains_block_box = [&](const dom_node* child) {
         if (child == nullptr || child->style.display != display_mode::inline_flow) return false;
@@ -3598,43 +3793,86 @@ float native_document::compute_intrinsic_size(
                     && !is_inline_level(descendant->style.display);
             });
     };
-    const auto inline_flow = !flex_container && std::all_of(
-        intrinsic_items.begin(),
-        intrinsic_items.end(),
-        [&](const dom_node* child) {
-            return child->style.display == display_mode::none
+    const auto measure_intrinsic_items = [&](const auto& intrinsic_items) {
+        const auto inline_flow = !flex_container && std::all_of(
+            intrinsic_items.begin(),
+            intrinsic_items.end(),
+            [&](const dom_node* child) {
+                return child->style.display == display_mode::none
+                    || is_out_of_flow(child->style.position)
+                    || (is_inline_level(child->style.display)
+                        && !inline_item_contains_block_box(child));
+            });
+        const auto children_horizontal =
+            (flex_container && node.style.direction == flex_direction::row)
+            || inline_flow;
+        float result = 0;
+        size_t accumulated_children = 0U;
+        for (const auto* child : intrinsic_items) {
+            if (child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
-                || (is_inline_level(child->style.display)
-                    && !inline_item_contains_block_box(child));
-        });
-    const auto children_horizontal = (flex_container && node.style.direction == flex_direction::row)
-        || inline_flow;
-    float result = 0;
-    size_t accumulated_children = 0U;
-    for (const auto* child : intrinsic_items) {
-        if (child->style.display == display_mode::none
-            || is_out_of_flow(child->style.position)
-            || (flex_container && is_collapsible_whitespace_text(*child))) continue;
-        const auto child_size = intrinsic_size(*child, horizontal, available);
-        const auto child_margin = horizontal
-            ? resolve_length(*child, child->style.margin_left, available, 0)
-                + resolve_length(*child, child->style.margin_right, available, 0)
-            : resolve_length(*child, child->style.margin_top, available, 0)
-                + resolve_length(*child, child->style.margin_bottom, available, 0);
-        const auto accumulates = horizontal == children_horizontal;
-        if (accumulates && flex_container && accumulated_children > 0U) {
-            result += resolve_length(
-                node,
-                horizontal ? node.style.column_gap : node.style.row_gap,
-                available,
-                0);
+                || (flex_container && is_collapsible_whitespace_text(*child))) continue;
+            const auto child_size = intrinsic_size(*child, horizontal, available);
+            const auto child_margin = horizontal
+                ? resolve_length(*child, child->style.margin_left, available, 0)
+                    + resolve_length(*child, child->style.margin_right, available, 0)
+                : resolve_length(*child, child->style.margin_top, available, 0)
+                    + resolve_length(*child, child->style.margin_bottom, available, 0);
+            const auto accumulates = horizontal == children_horizontal;
+            if (accumulates && flex_container && accumulated_children > 0U) {
+                result += resolve_length(
+                    node,
+                    horizontal ? node.style.column_gap : node.style.row_gap,
+                    available,
+                    0);
+            }
+            result = accumulates
+                ? result + child_size + child_margin
+                : std::max(result, child_size + child_margin);
+            ++accumulated_children;
         }
-        result = accumulates
-            ? result + child_size + child_margin
-            : std::max(result, child_size + child_margin);
-        ++accumulated_children;
+        return constrain(result + padding);
+    };
+
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_CONTROL)
+    if (!has_inside_marker && !has_before && !has_after) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[15];
+        intrinsic_size_branch_counts_for_benchmark[16] += composed_children(node).size();
+#endif
+        return measure_intrinsic_items(composed_children(node));
     }
-    return constrain(result + padding);
+#endif
+
+    std::optional<dom_node> marker_item;
+    std::optional<dom_node> before_item;
+    std::optional<dom_node> after_item;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
+    std::vector<const dom_node*> intrinsic_items;
+#else
+    std::pmr::vector<const dom_node*> intrinsic_items{&layout_scratch_->pool};
+#endif
+    intrinsic_items.reserve(composed_children(node).size() + 3U);
+    if (has_inside_marker) {
+        marker_item.emplace(make_list_marker_layout_node(node, marker_text));
+        intrinsic_items.push_back(&*marker_item);
+    }
+    if (has_before) {
+        before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
+        intrinsic_items.push_back(&*before_item);
+    }
+    intrinsic_items.insert(
+        intrinsic_items.end(),
+        composed_children(node).begin(),
+        composed_children(node).end());
+    if (has_after) {
+        after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
+        intrinsic_items.push_back(&*after_item);
+    }
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    intrinsic_size_branch_counts_for_benchmark[14] += intrinsic_items.size();
+#endif
+    return measure_intrinsic_items(intrinsic_items);
 }
 
 void native_document::layout_child(

@@ -290,6 +290,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "positional-selector-siblings") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_positional_selector_sibling_semantics(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "tradingview-symbol-search-grid") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -527,6 +534,7 @@ int main()
     test_component_library_dom_discovery_primitives(engine);
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
+    test_positional_selector_sibling_semantics(engine);
     test_dropdown_runtime_primitives(engine);
     test_collapsed_single_select_native_activation(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);

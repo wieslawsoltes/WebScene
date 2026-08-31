@@ -834,7 +834,11 @@
             activate_css_cascade(css_context);
             v8::Context::Scope css_context_scope(css_context);
             if (!refresh_css_media_matches()) return;
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT)
+            rebuild_root_variables();
+#else
             rebuild_css_rule_indexes_and_root_variables();
+#endif
             apply_css_rules_subtree(active_root());
         };
         refresh_context_styles(context.Get(isolate));

@@ -105,6 +105,18 @@ struct transparent_string_equal final {
     }
 };
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+template<typename Value>
+using css_index_string_map = std::unordered_map<
+    std::string, Value, transparent_string_hash, transparent_string_equal>;
+using css_index_string_set = std::unordered_set<
+    std::string, transparent_string_hash, transparent_string_equal>;
+#else
+template<typename Value>
+using css_index_string_map = std::unordered_map<std::string, Value>;
+using css_index_string_set = std::unordered_set<std::string>;
+#endif
+
     struct compiled_css_selector final {
         std::vector<std::string> compounds;
         std::vector<char> combinators;
@@ -178,16 +190,15 @@ struct transparent_string_equal final {
         uint32_t stylesheet_owner_id{0};
         uint32_t stylesheet_shadow_scope_root_id{0};
         std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_class;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_id;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_tag;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_attribute;
-        std::unordered_map<std::string, std::vector<size_t>>
-            rules_by_variable_reference;
+        css_index_string_map<std::vector<size_t>> rules_by_class;
+        css_index_string_map<std::vector<size_t>> rules_by_id;
+        css_index_string_map<std::vector<size_t>> rules_by_tag;
+        css_index_string_map<std::vector<size_t>> rules_by_attribute;
+        css_index_string_map<std::vector<size_t>> rules_by_variable_reference;
         std::vector<size_t> focus_rules;
         std::vector<size_t> unindexed_rules;
-        std::unordered_set<std::string> attribute_dependencies;
-        std::unordered_set<std::string> descendant_attribute_dependencies;
+        css_index_string_set attribute_dependencies;
+        css_index_string_set descendant_attribute_dependencies;
         std::vector<hover_selector_dependency> hover_dependencies;
         std::unordered_map<std::string, std::string> variables;
         std::unordered_set<std::string> important_variables;
@@ -286,6 +297,9 @@ struct transparent_string_equal final {
         std::vector<double> line_dash;
         bool has_clip{false};
         canvas_snapshot emitted_paint_state;
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+        std::array<v8::Global<v8::String>, 10U> emitted_paint_state_string_values;
+#endif
         bool has_emitted_paint_state{false};
     };
 

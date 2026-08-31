@@ -947,6 +947,28 @@ WEBSCENE_API uint32_t webscene_engine_get_abi_version(void);
  * respective bits are present.
  */
 WEBSCENE_API uint32_t webscene_engine_get_build_features(void);
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_media_refresh_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_index_rule_calls(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_root_variable_refreshes(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_class_lookups(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_owned_class_lookup_keys(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_owned_class_lookup_bytes(void);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_positional_matches(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_sibling_scans(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_vector_materializations(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_pointer_copies(void);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_canvas_paint_state_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_string_property_probes(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_utf8_conversions(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_stack_comparisons(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_cached_value_hits(void);
+#endif
 WEBSCENE_API uint8_t webscene_engine_prewarm(void);
 WEBSCENE_API webscene_engine* webscene_engine_create(uint32_t simulated_chart_command_count);
 WEBSCENE_API webscene_engine* webscene_engine_create_with_options(const webscene_engine_options* options);
