@@ -185,26 +185,60 @@
         return current_cursor_.load(std::memory_order_acquire);
     }
 
+    static bool advance_observed_timestamp(
+        std::atomic<uint64_t>& destination,
+        uint64_t timestamp_microseconds) noexcept
+    {
+        auto observed = destination.load(std::memory_order_relaxed);
+        while (timestamp_microseconds > observed) {
+            if (destination.compare_exchange_weak(
+                    observed,
+                    timestamp_microseconds,
+                    std::memory_order_release,
+                    std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void observe_host_timeline(double timestamp_ms) noexcept
+    {
+        if (!std::isfinite(timestamp_ms) || timestamp_ms < 0) return;
+        const auto timestamp_microseconds = static_cast<uint64_t>(
+            timestamp_ms * 1000.0);
+        static_cast<void>(advance_observed_timestamp(
+            observed_host_timestamp_microseconds_,
+            timestamp_microseconds));
+    }
+
     void observe_compositor_frame(double timestamp_ms) noexcept
     {
         if (!std::isfinite(timestamp_ms) || timestamp_ms < 0) return;
         const auto timestamp_microseconds = static_cast<uint64_t>(
             timestamp_ms * 1000.0);
-        auto observed = observed_compositor_timestamp_microseconds_.load(
-            std::memory_order_relaxed);
-        while (timestamp_microseconds > observed
-            && !observed_compositor_timestamp_microseconds_.compare_exchange_weak(
-                observed,
-                timestamp_microseconds,
-                std::memory_order_release,
-                std::memory_order_relaxed)) {
+        static_cast<void>(advance_observed_timestamp(
+            observed_host_timestamp_microseconds_,
+            timestamp_microseconds));
+        if (advance_observed_timestamp(
+                observed_compositor_timestamp_microseconds_,
+                timestamp_microseconds)
+            && frame_paced_pointer_pending_.load(std::memory_order_acquire)) {
+            // A deferred continuous pointer sample is released at the next
+            // actual display boundary even when the page has no RAF demand.
+            signal_worker();
         }
     }
 
     uint8_t animation_frame_demand() const noexcept
     {
-        return host_animation_frame_requested_.load(
+        const auto host_demand = host_animation_frame_requested_.load(
             std::memory_order_acquire);
+        return static_cast<uint8_t>(
+            host_demand
+            | (frame_paced_pointer_pending_.load(std::memory_order_acquire)
+                    ? uint8_t{4U}
+                    : uint8_t{0U}));
     }
 
     bool execute_script(

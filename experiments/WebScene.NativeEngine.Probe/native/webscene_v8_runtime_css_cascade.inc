@@ -27,7 +27,8 @@
         const auto last = value.find_last_not_of(" \t\r\n");
         value = value.substr(first, last - first + 1U);
         const auto lower = lower_html_name(std::string(value));
-        if (lower == "transparent" || lower == "currentcolor") return true;
+        if (lower == "transparent" || lower == "currentcolor"
+            || lower.starts_with("hsl(") || lower.starts_with("hsla(")) return true;
         if (value.front() != '#'
             || (value.size() != 4U && value.size() != 5U
                 && value.size() != 7U && value.size() != 9U)) {
@@ -703,11 +704,46 @@
             pseudo.outline_width = native_document::parse_length(value);
         } else if (name == "outline-color") {
             pseudo.outline_rgba = native_document::parse_color(value);
+        } else if (name == "background-image") {
+            pseudo.background_image.image_value = value;
+            pseudo.background_image.image_markup.clear();
+            pseudo.background_image.image_view_box.clear();
+            if (value != "none" && !lower_html_name(value).starts_with("linear-gradient(")) {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "single linear-gradient layer";
+            }
+        } else if (name == "background-repeat") {
+            pseudo.background_image.repeat = value;
+        } else if (name == "background-position") {
+            pseudo.background_image.position_value = value;
+        } else if (name == "background-size") {
+            pseudo.background_image.size_value = value;
         } else if (name == "background" || name == "background-color") {
             pseudo.background_current_color = value == "currentcolor" || value == "currentColor";
             pseudo.background_rgba = pseudo.background_current_color
                 ? 0U
                 : native_document::parse_color(value);
+            if (name == "background") {
+                const auto lower = lower_html_name(value);
+                const auto gradient_start = lower.find("linear-gradient(");
+                if (gradient_start == std::string::npos) {
+                    pseudo.background_image.image_value = "none";
+                } else {
+                    auto depth = 0;
+                    auto gradient_end = value.size();
+                    for (auto index = gradient_start; index < value.size(); ++index) {
+                        if (value[index] == '(') ++depth;
+                        else if (value[index] == ')' && --depth == 0) {
+                            gradient_end = index + 1U;
+                            break;
+                        }
+                    }
+                    pseudo.background_image.image_value = value.substr(
+                        gradient_start, gradient_end - gradient_start);
+                }
+                pseudo.background_image.image_markup.clear();
+                pseudo.background_image.image_view_box.clear();
+            }
         } else if (name == "opacity") {
             pseudo.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
         } else if (name == "color") {
@@ -1311,7 +1347,12 @@
         const auto resolve = [&](std::string_view property) {
             node_style::transition_timing result;
             for (size_t index = 0; index < properties.size(); ++index) {
-                const auto candidate = lower_html_name(trim_css(properties[index]));
+                auto candidate = lower_html_name(trim_css(properties[index]));
+                // Transition matching uses the canonical physical property.
+                // A logical inset declaration and its physical alias address
+                // the same computed value (CSS Logical Properties §4.1).
+                if (candidate == "inset-inline-start") candidate = "left";
+                else if (candidate == "inset-block-start") candidate = "top";
                 if (candidate != property && candidate != "all") continue;
                 if (!durations.empty()) {
                     result.duration_ms = std::max(
@@ -1328,6 +1369,8 @@
             return result;
         };
         animations.transform_transition = resolve("transform");
+        animations.left_transition = resolve("left");
+        animations.top_transition = resolve("top");
         animations.opacity_transition = resolve("opacity");
         animations.color_transition = resolve("color");
     }

@@ -752,7 +752,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     }
 
     private void ObserveHostTimeline()
-        => NativeWebSceneApi.EngineObserveCompositorFrame(
+        => NativeWebSceneApi.EngineObserveHostTimeline(
             _engine,
             Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
 

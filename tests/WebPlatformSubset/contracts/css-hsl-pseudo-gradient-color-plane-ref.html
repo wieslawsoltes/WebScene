@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Reference for generated color plane</title>
+<style>
+  html, body { margin: 0; background: #202124; }
+  .plane {
+    position: absolute;
+    left: 40px;
+    top: 40px;
+    width: 200px;
+    height: 184px;
+    overflow: hidden;
+    background-color: rgb(255, 0, 0);
+  }
+  .layer {
+    position: absolute;
+    inset: 0;
+  }
+  .saturation { background-image: linear-gradient(90deg, #fff, #fff0); }
+  .value { background-image: linear-gradient(0deg, #000, #0000); }
+</style>
+<div class="plane"><div class="layer saturation"></div><div class="layer value"></div></div>

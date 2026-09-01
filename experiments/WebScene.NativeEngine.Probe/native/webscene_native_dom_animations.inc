@@ -98,6 +98,103 @@ void native_document::update_style_animations(dom_node& node)
         }
     }
 
+    const auto update_inset_transition = [&] (
+        const char* property_name,
+        css_length target,
+        const node_style::transition_timing& timing,
+        css_length& painted,
+        css_length& from,
+        css_length& animation_target,
+        float& duration_ms,
+        float& delay_ms,
+        float& x1,
+        float& y1,
+        float& x2,
+        float& y2,
+        double& started_ms,
+        bool& initialized,
+        bool& active,
+        bool& start_event_sent) {
+        if (!initialized) {
+            initialized = true;
+            painted = target;
+            animation_target = target;
+            return;
+        }
+        if (length_equal(target, animation_target)) return;
+        if (active) {
+            transition_events_.push_back({
+                node.id,
+                "transitioncancel",
+                property_name,
+                std::clamp(
+                    static_cast<float>(animation_frame_timestamp_ms_
+                        - started_ms - delay_ms),
+                    0.0F,
+                    duration_ms) / 1000.0F});
+        }
+        animation_target = target;
+        const auto interpolable = painted.unit != length_unit::automatic
+            && target.unit != length_unit::automatic;
+        if (timing.duration_ms <= 0 || !interpolable) {
+            painted = target;
+            active = false;
+            return;
+        }
+        from = painted;
+        duration_ms = timing.duration_ms;
+        delay_ms = timing.delay_ms;
+        x1 = timing.x1;
+        y1 = timing.y1;
+        x2 = timing.x2;
+        y2 = timing.y2;
+        started_ms = animation_frame_timestamp_ms_;
+        active = true;
+        start_event_sent = delay_ms <= 0;
+        transition_events_.push_back({node.id, "transitionrun", property_name, 0});
+        if (start_event_sent) {
+            transition_events_.push_back({
+                node.id,
+                "transitionstart",
+                property_name,
+                std::min(-delay_ms, duration_ms) / 1000.0F});
+        }
+    };
+    update_inset_transition(
+        "left",
+        node.style.left,
+        node.style.animations().left_transition,
+        animation.painted_left,
+        animation.left_animation_from,
+        animation.left_animation_target,
+        animation.left_animation_duration_ms,
+        animation.left_animation_delay_ms,
+        animation.left_animation_x1,
+        animation.left_animation_y1,
+        animation.left_animation_x2,
+        animation.left_animation_y2,
+        animation.left_animation_started_ms,
+        animation.left_animation_initialized,
+        animation.left_animation_active,
+        animation.left_animation_start_event_sent);
+    update_inset_transition(
+        "top",
+        node.style.top,
+        node.style.animations().top_transition,
+        animation.painted_top,
+        animation.top_animation_from,
+        animation.top_animation_target,
+        animation.top_animation_duration_ms,
+        animation.top_animation_delay_ms,
+        animation.top_animation_x1,
+        animation.top_animation_y1,
+        animation.top_animation_x2,
+        animation.top_animation_y2,
+        animation.top_animation_started_ms,
+        animation.top_animation_initialized,
+        animation.top_animation_active,
+        animation.top_animation_start_event_sent);
+
     if (animation.opacity_keyframe_animation_signature
         != node.style.animations().opacity_keyframe_animation_signature) {
         animation.opacity_keyframe_animation_signature =
@@ -307,6 +404,11 @@ bool native_document::advance_animations() noexcept
         }
         return progress >= 1.0F ? target : from;
     };
+    const auto length_equal = [](css_length left, css_length right) {
+        return left.unit == right.unit
+            && std::abs(left.value - right.value) < 0.001F
+            && std::abs(left.pixel_offset - right.pixel_offset) < 0.001F;
+    };
     auto advanced = false;
     auto layout_changed = false;
     for (auto& owner : nodes_) {
@@ -323,6 +425,76 @@ bool native_document::advance_animations() noexcept
         }
         auto& animation = *animation_pointer;
         const auto keyframe_paint_visible = intersects_visible_paint_area(node);
+        const auto advance_inset_transition = [&] (
+            const char* property_name,
+            css_length& painted,
+            const css_length& from,
+            const css_length& target,
+            float duration_ms,
+            float delay_ms,
+            float x1,
+            float y1,
+            float x2,
+            float y2,
+            double started_ms,
+            bool& active,
+            bool& start_event_sent) {
+            if (!active) return false;
+            const auto previous = painted;
+            const auto elapsed_ms = static_cast<float>(
+                animation_frame_timestamp_ms_ - started_ms - delay_ms);
+            if (elapsed_ms >= 0 && !start_event_sent) {
+                start_event_sent = true;
+                transition_events_.push_back({
+                    node.id, "transitionstart", property_name, 0});
+            }
+            const auto progress = std::clamp(
+                elapsed_ms / std::max(0.001F, duration_ms),
+                0.0F,
+                1.0F);
+            const auto eased = timing_value(progress, x1, y1, x2, y2);
+            painted = interpolate_length(from, target, eased);
+            if (progress >= 1.0F) {
+                painted = target;
+                active = false;
+                transition_events_.push_back({
+                    node.id,
+                    "transitionend",
+                    property_name,
+                    duration_ms / 1000.0F});
+            }
+            return !length_equal(previous, painted);
+        };
+        const auto left_changed = advance_inset_transition(
+            "left",
+            animation.painted_left,
+            animation.left_animation_from,
+            animation.left_animation_target,
+            animation.left_animation_duration_ms,
+            animation.left_animation_delay_ms,
+            animation.left_animation_x1,
+            animation.left_animation_y1,
+            animation.left_animation_x2,
+            animation.left_animation_y2,
+            animation.left_animation_started_ms,
+            animation.left_animation_active,
+            animation.left_animation_start_event_sent);
+        const auto top_changed = advance_inset_transition(
+            "top",
+            animation.painted_top,
+            animation.top_animation_from,
+            animation.top_animation_target,
+            animation.top_animation_duration_ms,
+            animation.top_animation_delay_ms,
+            animation.top_animation_x1,
+            animation.top_animation_y1,
+            animation.top_animation_x2,
+            animation.top_animation_y2,
+            animation.top_animation_started_ms,
+            animation.top_animation_active,
+            animation.top_animation_start_event_sent);
+        layout_changed = layout_changed || left_changed || top_changed;
+        advanced = advanced || left_changed || top_changed;
         if (animation.transform_animation_active) {
             const auto previous_translate_x = animation.painted_transform_translate_x;
             const auto previous_translate_y = animation.painted_transform_translate_y;
@@ -593,6 +765,8 @@ bool native_document::has_active_animations() const noexcept
             return false;
         }
         const auto transition_active = animation->transform_animation_active
+            || animation->left_animation_active
+            || animation->top_animation_active
             || animation->opacity_animation_active
             || animation->color_animation_active;
         const auto keyframe_active = animation->opacity_keyframe_animation_active

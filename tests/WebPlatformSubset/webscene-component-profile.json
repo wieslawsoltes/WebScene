@@ -76,6 +76,14 @@
       "reason": "Exact-pixel reduction of an opaque colour layer covering an identically sized rounded opacity base. The result must match a single rounded colour surface without an antialiased halo from the covered ancestor."
     },
     {
+      "path": "contracts/css-hsl-pseudo-gradient-color-plane.html",
+      "type": "reftest",
+      "reference": "contracts/css-hsl-pseudo-gradient-color-plane-ref.html",
+      "capabilities": ["hsl-functional-color", "generated-pseudo-background-image", "linear-gradient-alpha-composition"],
+      "evidence": ["hosted-component-custom-colour-picker-saturation-value-plane"],
+      "reason": "Exact-pixel reduction of the custom colour picker's blank saturation/value plane. It requires the authored HSL hue to paint beneath independently retained ::before white-to-transparent and ::after black-to-transparent gradient layers; replacing pseudos with ordinary child layers in the reference prevents both paths from sharing the missing generated-background implementation."
+    },
+    {
       "path": "contracts/segmented-transform-origin.html",
       "type": "contract",
       "capabilities": ["transform-origin-keywords", "transform-origin-used-value", "independent-transform-cascade", "nested-scale-composition"],
@@ -102,6 +110,13 @@
       "capabilities": ["transition-longhands", "opacity-interpolation", "color-interpolation", "transition-delay", "transition-events", "transition-cancellation", "transition-reversal", "temporal-paint"],
       "evidence": ["product-neutral-hover-and-control-paint-motion"],
       "reason": "Required product-neutral temporal gate for automatically discoverable paint transitions; it samples forward and reversed intermediate frames and requires run/start/cancel/end event evidence without naming a product control."
+    },
+    {
+      "path": "contracts/logical-inset-transition-cadence.html",
+      "type": "contract",
+      "capabilities": ["logical-inset-transition", "left-transition", "top-transition", "percentage-inset-interpolation", "dense-intermediate-geometry", "host-frame-clock"],
+      "evidence": ["product-neutral-throttled-position-indicator-motion"],
+      "reason": "Required product-neutral cadence gate for a positioned indicator whose sparse JavaScript targets are smoothed by a logical inset and top transition. It requires multiple monotonic intermediate client-geometry samples before the final target."
     },
     {
       "path": "contracts/rotation-transition-cadence.html",

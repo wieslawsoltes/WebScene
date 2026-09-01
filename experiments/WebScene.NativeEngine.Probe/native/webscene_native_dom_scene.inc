@@ -421,25 +421,25 @@ void native_document::append_scene(
                 ? pseudo.foreground_rgba
                 : resolved_foreground(node)
             : pseudo.background_rgba;
+        const auto pseudo_radii = resolve_radii(
+            pseudo.border_top_left_radius,
+            pseudo.border_top_right_radius,
+            pseudo.border_bottom_right_radius,
+            pseudo.border_bottom_left_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
+            width,
+            height);
         if ((pseudo_background & 0xFFU) != 0U && width > 0 && height > 0) {
-            const auto radii = resolve_radii(
-                pseudo.border_top_left_radius,
-                pseudo.border_top_right_radius,
-                pseudo.border_bottom_right_radius,
-                pseudo.border_bottom_left_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
-                width,
-                height);
-            append_ellipse_metadata(radii, x, y, width, height);
+            append_ellipse_metadata(pseudo_radii, x, y, width, height);
             commands.push_back(webscene_scene_command{
-                radii.any()
+                pseudo_radii.any()
                     ? pseudo_paints_in_foreground ? 10U : 7U
                     : pseudo_paints_in_foreground ? 9U : 1U,
                 0U,
@@ -449,10 +449,44 @@ void native_document::append_scene(
                 height,
                 with_pseudo_opacity(pseudo_background),
                 node.id,
-                radii.top_left,
-                radii.top_right,
-                radii.bottom_right,
-                radii.bottom_left,
+                pseudo_radii.top_left,
+                pseudo_radii.top_right,
+                pseudo_radii.bottom_right,
+                pseudo_radii.bottom_left,
+                0});
+        }
+        auto pseudo_background_image_lower = pseudo.background_image.image_value;
+        std::transform(
+            pseudo_background_image_lower.begin(),
+            pseudo_background_image_lower.end(),
+            pseudo_background_image_lower.begin(),
+            [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+        if (pseudo_background_image_lower.starts_with("linear-gradient(")
+            && width > 0 && height > 0) {
+            auto gradient_resource = std::string{"webscene-bg-v2\t"};
+            gradient_resource += pseudo.background_image.image_value;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.repeat;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.position_value;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.size_value;
+            append_ellipse_metadata(pseudo_radii, x, y, width, height);
+            commands.push_back(webscene_scene_command{
+                pseudo_paints_in_foreground ? 22U : 21U,
+                append_scene_string(gradient_resource, strings, string_bytes),
+                x,
+                y,
+                width,
+                height,
+                0U,
+                node.id,
+                pseudo_radii.top_left,
+                pseudo_radii.top_right,
+                pseudo_radii.bottom_right,
+                pseudo_radii.bottom_left,
                 0});
         }
         if (width > 0 && height > 0) {

@@ -3974,6 +3974,39 @@ void native_document::layout_child(
     // element occupies in its parent's flow. Percentage translations resolve
     // against the transformed element's own border box.
     const auto* animation = child.animation_runtime();
+    // Positional inset transitions likewise interpolate the positioned box
+    // without changing its flow allocation. Layout has already placed the box
+    // at the authored target inset, so apply only the animated delta here.
+    if (animation != nullptr && child.style.position != position_mode::normal) {
+        if (animation->left_animation_initialized
+            && animation->painted_left.unit != length_unit::automatic
+            && child.style.left.unit != length_unit::automatic) {
+            assigned.x += resolve_length(
+                    child,
+                    animation->painted_left,
+                    containing_block.width,
+                    0)
+                - resolve_length(
+                    child,
+                    child.style.left,
+                    containing_block.width,
+                    0);
+        }
+        if (animation->top_animation_initialized
+            && animation->painted_top.unit != length_unit::automatic
+            && child.style.top.unit != length_unit::automatic) {
+            assigned.y += resolve_length(
+                    child,
+                    animation->painted_top,
+                    containing_block.height,
+                    0)
+                - resolve_length(
+                    child,
+                    child.style.top,
+                    containing_block.height,
+                    0);
+        }
+    }
     const auto painted_translate_x =
         animation != nullptr && animation->transform_animation_initialized
         ? animation->painted_transform_translate_x

@@ -626,10 +626,11 @@ typedef void (*webscene_host_request_available_callback)(void* user_data);
 typedef void (*webscene_interop_callback_available_callback)(void* user_data);
 
 /*
- * Edge notification emitted when the engine's host animation-frame demand
- * transitions from idle to active. The callback runs on the engine worker and
- * must only wake a compositor; demand is still queried through
- * webscene_engine_requires_animation_frame and released by a frame input.
+ * Edge notification emitted when the engine's host animation-frame or
+ * frame-aligned pointer-input demand transitions from idle to active. The
+ * callback runs on the engine worker and must only wake a compositor; demand
+ * is still queried through webscene_engine_requires_animation_frame and
+ * released by a compositor observation/frame input.
  */
 typedef void (*webscene_animation_frame_requested_callback)(void* user_data);
 
@@ -1018,6 +1019,14 @@ WEBSCENE_API uint8_t webscene_engine_set_preferred_color_scheme(
     uint32_t preferred_color_scheme);
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 WEBSCENE_API uint32_t webscene_engine_get_cursor(const webscene_engine* engine);
+/*
+ * Advances the document clock at a host input boundary without declaring a
+ * rendering opportunity. This keeps idle transitions current while allowing
+ * continuous pointer input to remain paced by real compositor boundaries.
+ */
+WEBSCENE_API void webscene_engine_observe_host_timeline(
+    webscene_engine* engine,
+    double timestamp_ms);
 /*
  * Observes an inexpensive host compositor boundary without releasing V8 RAF
  * callbacks or requesting a scene. This keeps the CSS document timeline

@@ -155,20 +155,22 @@
             pending_paired_resize_publication;
         std::optional<std::chrono::steady_clock::time_point>
             hidden_low_memory_deadline;
-        uint32_t drag_moves_to_preserve = 0;
+        std::optional<webscene_input_event> frame_paced_pointer_move;
+        uint64_t frame_paced_pointer_move_count = 0;
+        uint64_t frame_paced_pointer_observed_after_frame = 0;
         while (!token.stop_requested()) {
             // Avalonia observes every compositor boundary even while no V8 RAF
             // or CSS animation is active. Import that clock without treating
             // the observation as input or waking this worker; a later input or
             // script mutation can then start its transition on the current
             // document timeline rather than a stale demanded-frame timestamp.
-            const auto observed_compositor_timestamp_microseconds =
-                observed_compositor_timestamp_microseconds_.load(
+            const auto observed_host_timestamp_microseconds =
+                observed_host_timestamp_microseconds_.load(
                     std::memory_order_acquire);
-            if (observed_compositor_timestamp_microseconds != 0U) {
+            if (observed_host_timestamp_microseconds != 0U) {
                 document_.signal_animation_frame(
                     static_cast<double>(
-                        observed_compositor_timestamp_microseconds) / 1000.0);
+                        observed_host_timestamp_microseconds) / 1000.0);
             }
             webscene_input_event event{};
             bool changed = checkpoint_requested_.exchange(
@@ -323,11 +325,59 @@
 
             const auto input_batch_started = std::chrono::steady_clock::now();
             uint32_t applied_input_groups = 0;
+            const auto apply_frame_paced_pointer_move = [&] {
+                const auto pointer_move = *frame_paced_pointer_move;
+                const auto pointer_move_count = frame_paced_pointer_move_count;
+                frame_paced_pointer_move.reset();
+                frame_paced_pointer_move_count = 0;
+                frame_paced_pointer_observed_after_frame = 0;
+                frame_paced_pointer_pending_.store(
+                    false,
+                    std::memory_order_release);
+                apply(pointer_move);
+                applied_pointer_move_inputs_.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                if (pointer_move_count > 1) {
+                    coalesced_pointer_move_inputs_.fetch_add(
+                        pointer_move_count - 1,
+                        std::memory_order_relaxed);
+                }
+                consumed_inputs_.fetch_add(
+                    pointer_move_count,
+                    std::memory_order_relaxed);
+                changed = true;
+            };
+            const auto retain_frame_paced_pointer_move = [&] {
+                if (!frame_paced_pointer_pending_.exchange(
+                        true,
+                        std::memory_order_acq_rel)
+                    && host_animation_frame_requested_.load(
+                            std::memory_order_acquire) == 0U
+                    && animation_frame_requested_callback_ != nullptr) {
+                    // Chromium queues ordinary mousemove input for the next
+                    // BeginMainFrame. Wake an otherwise-idle host compositor so
+                    // the same rule does not strand pointer input on fallback
+                    // renderers that only request frames on demand.
+                    animation_frame_requested_callback_(
+                        animation_frame_requested_user_data_);
+                }
+            };
             while (applied_input_groups < 8U) {
                 // Yield as soon as another live-resize update arrives. The next
                 // worker iteration applies it before consuming more pointer input.
                 if (resize_pending_.load(std::memory_order_acquire)) {
                     break;
+                }
+                auto compositor_timestamp_microseconds =
+                    observed_compositor_timestamp_microseconds_.load(
+                        std::memory_order_acquire);
+                if (frame_paced_pointer_move.has_value()
+                    && compositor_timestamp_microseconds
+                        > frame_paced_pointer_observed_after_frame) {
+                    apply_frame_paced_pointer_move();
+                    ++applied_input_groups;
+                    continue;
                 }
                 if (deferred_input.has_value()) {
                     event = *deferred_input;
@@ -336,14 +386,44 @@
                     break;
                 }
 
-                const auto pressed_pointer_move = event.kind == WEBSCENE_INPUT_POINTER_MOVE
-                    && (event.flags & 1U) != 0U;
-                const auto threshold_drag_move = pressed_pointer_move
-                    && drag_moves_to_preserve != 0U;
+                compositor_timestamp_microseconds =
+                    observed_compositor_timestamp_microseconds_.load(
+                        std::memory_order_acquire);
+                if (frame_paced_pointer_move.has_value()) {
+                    const auto compatible_pointer_move =
+                        event.kind == WEBSCENE_INPUT_POINTER_MOVE
+                        && event.flags == frame_paced_pointer_move->flags
+                        && compositor_timestamp_microseconds
+                            <= frame_paced_pointer_observed_after_frame;
+                    if (compatible_pointer_move) {
+                        frame_paced_pointer_move = event;
+                        ++frame_paced_pointer_move_count;
+                        continue;
+                    }
+
+                    // A button/key/wheel event is an ordering barrier. Deliver
+                    // the latest preceding movement before that discrete input,
+                    // even when both arrived within one display interval.
+                    deferred_input = event;
+                    apply_frame_paced_pointer_move();
+                    ++applied_input_groups;
+                    continue;
+                }
+
+                const auto frame_paced_pointer =
+                    event.kind == WEBSCENE_INPUT_POINTER_MOVE
+                    && compositor_timestamp_microseconds != 0U;
+                if (frame_paced_pointer) {
+                    frame_paced_pointer_move = event;
+                    frame_paced_pointer_move_count = 1;
+                    frame_paced_pointer_observed_after_frame =
+                        compositor_timestamp_microseconds;
+                    retain_frame_paced_pointer_move();
+                    continue;
+                }
                 const auto may_coalesce = event.kind == WEBSCENE_INPUT_FRAME
                     || event.kind == WEBSCENE_INPUT_WHEEL
-                    || (event.kind == WEBSCENE_INPUT_POINTER_MOVE
-                        && (!pressed_pointer_move || drag_moves_to_preserve == 0U));
+                    || event.kind == WEBSCENE_INPUT_POINTER_MOVE;
                 if (may_coalesce) {
                     // Continuous device input commonly arrives as alternating
                     // wheel, hover-move, and display-frame records. Coalescing
@@ -510,16 +590,6 @@
                 }
 
                 apply(event);
-                if (event.kind == WEBSCENE_INPUT_POINTER_DOWN) {
-                    // Gesture recognizers commonly use the first two pressed moves
-                    // to cross the drag threshold. Yield between them, then
-                    // make any accumulated moves latest-position-wins.
-                    drag_moves_to_preserve = 2U;
-                } else if (pressed_pointer_move && drag_moves_to_preserve != 0U) {
-                    --drag_moves_to_preserve;
-                } else if (event.kind == WEBSCENE_INPUT_POINTER_UP) {
-                    drag_moves_to_preserve = 0U;
-                }
                 consumed_inputs_.fetch_add(1, std::memory_order_relaxed);
                 if (event.kind == WEBSCENE_INPUT_POINTER_MOVE) {
                     applied_pointer_move_inputs_.fetch_add(1, std::memory_order_relaxed);
@@ -531,10 +601,26 @@
                 // idle display frames should not force scene publication.
                 changed = changed || event.kind != WEBSCENE_INPUT_FRAME || document_.dirty();
                 ++applied_input_groups;
-                if (threshold_drag_move
-                    || std::chrono::steady_clock::now() - input_batch_started
+                if (std::chrono::steady_clock::now() - input_batch_started
                     >= std::chrono::milliseconds(4)) {
                     break;
+                }
+            }
+
+            if (frame_paced_pointer_move.has_value()) {
+                auto has_script_barrier = false;
+                {
+                    std::lock_guard lock(script_mutex_);
+                    has_script_barrier = !script_work_.empty();
+                }
+                if (has_script_barrier) {
+                    // Synchronous host script/evaluation work snapshots the
+                    // number of inputs accepted before it was queued. Treat it
+                    // like Chromium's non-rAF task barrier: dispatch the newest
+                    // preceding mousemove first so the host operation observes
+                    // ordered DOM state without waiting forever on an idle
+                    // compositor.
+                    apply_frame_paced_pointer_move();
                 }
             }
 

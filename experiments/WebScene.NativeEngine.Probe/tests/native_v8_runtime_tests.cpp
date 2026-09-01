@@ -359,6 +359,18 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "raf-aligned-mouse-moves") {
+            test_mouse_moves_are_raf_aligned_at_compositor_cadence();
+            return 0;
+        }
+        if (selected == "logical-inset-transition") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_logical_inset_transition_smooths_throttled_pointer_updates(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "fragment-replacement-script-lifecycle") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -410,6 +422,7 @@ int main()
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
+    test_mouse_moves_are_raf_aligned_at_compositor_cadence();
     test_controlled_switch_native_activation_matches_browser_semantics();
     test_tradingview_switch_repeated_transitions_publish_dense_scenes();
     test_loaded_document_keeps_html_and_body_cascade_distinct();
@@ -495,6 +508,7 @@ int main()
     test_calc_percent_with_pixel_offset(engine);
     test_calc_viewport_units_with_pixel_offsets_bound_fixed_boxes(engine);
     test_current_color_and_color_mix_reach_element_and_pseudo_paint(engine);
+    test_hsl_and_pseudo_gradients_reach_color_plane_paint(engine);
     test_adjacent_inline_spans_wrap_through_generated_whitespace(engine);
     test_flex_basis_reserves_fixed_track(engine);
     test_flex_icon_metadata_card_and_title_geometry(engine);
@@ -653,6 +667,7 @@ int main()
     test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(engine);
     test_rotation_keyframes_use_host_clock_and_wrap_continuously(engine);
     test_clipped_offscreen_keyframes_do_not_keep_host_frame_clock_alive(engine);
+    test_logical_inset_transition_smooths_throttled_pointer_updates(engine);
     webscene_engine_destroy(engine);
     test_binary_interop_result_outlives_engine();
     return 0;

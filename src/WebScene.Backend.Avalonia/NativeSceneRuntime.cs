@@ -1346,6 +1346,13 @@ public static unsafe partial class NativeWebSceneApi
 
     [DllImport(
         LibraryName,
+        EntryPoint = "webscene_engine_observe_host_timeline")]
+    internal static extern void EngineObserveHostTimeline(
+        IntPtr engine,
+        double timestampMilliseconds);
+
+    [DllImport(
+        LibraryName,
         EntryPoint = "webscene_engine_observe_compositor_frame")]
     internal static extern void EngineObserveCompositorFrame(
         IntPtr engine,

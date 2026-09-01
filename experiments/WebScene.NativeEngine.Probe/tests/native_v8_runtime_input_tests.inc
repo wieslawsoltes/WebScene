@@ -1098,6 +1098,130 @@ void test_pressed_drag_moves_remain_dispatchable_after_threshold()
     webscene_engine_destroy(engine);
 }
 
+void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "rAF-aligned mouse engine creation failed");
+    resize(engine, 640, 360, 1U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const target = document.createElement('div');
+          target.style.width = '640px';
+          target.style.height = '360px';
+          globalThis.__pacedPointerMoves = [];
+          globalThis.__pacedMouseMoves = [];
+          globalThis.__pacedOrder = [];
+          target.addEventListener('pointermove', event => {
+            __pacedPointerMoves.push(event.clientX);
+            __pacedOrder.push(`move:${event.clientX}`);
+          });
+          target.addEventListener('mousemove', event => {
+            __pacedMouseMoves.push(event.clientX);
+          });
+          target.addEventListener('pointerup', event => {
+            __pacedOrder.push(`up:${event.clientX}`);
+          });
+          document.body.appendChild(target);
+        })()
+    )JS", "native-frame-paced-drag-setup.js");
+    require(
+        evaluate(engine, "document.body.firstElementChild.offsetWidth",
+            "native-frame-paced-drag-ready.js") == "640",
+        "frame-paced drag fixture did not complete layout");
+
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    webscene_engine_observe_compositor_frame(engine, 1000.0);
+    pointer_move(engine, 20, 20, 2U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    webscene_engine_observe_host_timeline(engine, 1004.0);
+    pointer_move(engine, 30, 20, 3U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        consumed_input_count(engine) == before.consumed_inputs,
+        "host-time observation released mousemove without a compositor frame");
+    require(
+        webscene_engine_requires_animation_frame(engine) != 0U,
+        "queued mousemove did not request an otherwise-idle compositor frame");
+
+    // Chromium rAF-aligns mousemove regardless of button state. Two device
+    // samples that arrive during one display interval become one event at the
+    // newest position on the next BeginMainFrame.
+    webscene_engine_observe_compositor_frame(engine, 1008.333);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 2U,
+        "next compositor frame did not release the latest hover sample");
+    require(
+        evaluate(engine, R"JS(({
+          pointer: __pacedPointerMoves,
+          mouse: __pacedMouseMoves,
+          order: __pacedOrder
+        }))JS", "native-frame-paced-drag-first-frame.js")
+            == R"JSON({"pointer":[30],"mouse":[30],"order":["move:30"]})JSON",
+        "spaced hover movements were not reduced to the latest frame sample");
+
+    // A high-refresh compositor still receives one newest crosshair position
+    // on every boundary. This protects smooth 120 Hz chart interaction while
+    // avoiding redundant JavaScript work at the higher device sampling rate.
+    pointer_move(engine, 40, 20, 4U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        consumed_input_count(engine) == before.consumed_inputs + 2U,
+        "mousemove dispatched between compositor boundaries");
+    webscene_engine_observe_compositor_frame(engine, 1016.666);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 3U,
+        "120 Hz compositor boundary did not release the next crosshair sample");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__pacedPointerMoves",
+            "native-frame-paced-hover-second-frame.js") == "[30,40]",
+        "crosshair movement did not advance at compositor cadence");
+
+    // Pointer-up is a strict ordering barrier. It must flush the last pending
+    // position before dispatching the release, without waiting for a frame.
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 40, 20, 5U, true);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 4U,
+        "pointer-down ordering barrier was not consumed");
+    pointer_move(engine, 50, 20, 6U, true);
+    pointer_move(engine, 60, 20, 7U, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 60, 20, 8U, false);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 7U,
+        "pointer-up did not flush the final paced drag position");
+    const auto result = evaluate(
+        engine,
+        R"JS(({
+          pointer: __pacedPointerMoves,
+          mouse: __pacedMouseMoves,
+          order: __pacedOrder
+        }))JS",
+        "native-frame-paced-drag-release.js");
+    require(
+        result
+            == R"JSON({"pointer":[30,40,60],"mouse":[30,40,60],"order":["move:30","move:40","move:60","up:60"]})JSON",
+        "paced drag lost its final position or crossed the pointer-up barrier: "
+            + result);
+
+    webscene_engine_metrics after{};
+    webscene_engine_get_metrics(engine, &after);
+    require(
+        after.applied_pointer_move_inputs
+                - before.applied_pointer_move_inputs == 3U
+            && after.coalesced_pointer_move_inputs
+                - before.coalesced_pointer_move_inputs == 2U,
+        "rAF-aligned mouse metrics did not report coalesced device samples");
+    webscene_engine_destroy(engine);
+}
+
 void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engine)
 {
     execute(engine, R"JS(

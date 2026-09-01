@@ -2139,6 +2139,84 @@ void test_current_color_and_color_mix_reach_element_and_pseudo_paint(
     require(observed_mix, "color-mix custom property did not reach pseudo-element paint");
 }
 
+void test_hsl_and_pseudo_gradients_reach_color_plane_paint(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              #plane {
+                position: relative;
+                width: 200px;
+                height: 184px;
+                overflow: hidden;
+                background-color: hsl(0, 100%, 50%);
+              }
+              #plane::before, #plane::after {
+                content: "";
+                display: block;
+                position: absolute;
+                inset: 0;
+              }
+              #plane::before { background-image: linear-gradient(90deg, #fff, #fff0); }
+              #plane::after { background-image: linear-gradient(0deg, #000, #0000); }
+            </style>
+            <div id="plane"></div>`;
+          const plane = document.getElementById('plane');
+          const rect = plane.getBoundingClientRect();
+          return {
+            color: getComputedStyle(plane).backgroundColor,
+            width: rect.width,
+            height: rect.height
+          };
+        })()
+    )JS", "native-hsl-pseudo-gradient-color-plane.js");
+    require(
+        result == R"JSON({"color":"rgb(255, 0, 0)","width":200,"height":184})JSON",
+        "HSL base color or color-plane geometry did not resolve: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_base = false;
+    auto observed_horizontal = false;
+    auto observed_vertical = false;
+    for (auto attempt = 0;
+        attempt < 100 && (!observed_base || !observed_horizontal || !observed_vertical);
+        ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine); scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0xFF0000FFU
+                    && std::abs(command.width - 200.0F) < 0.01F
+                    && std::abs(command.height - 184.0F) < 0.01F) {
+                    observed_base = true;
+                }
+                if ((command.kind == 21U || command.kind == 22U)
+                    && command.flags < scene->string_count) {
+                    const auto& descriptor = scene->strings[command.flags];
+                    const auto resource = std::string(
+                        scene->string_bytes + descriptor.byte_offset,
+                        descriptor.byte_length);
+                    observed_horizontal = observed_horizontal
+                        || resource.find("linear-gradient(90deg, #fff, #fff0)")
+                            != std::string::npos;
+                    observed_vertical = observed_vertical
+                        || resource.find("linear-gradient(0deg, #000, #0000)")
+                            != std::string::npos;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_base || !observed_horizontal || !observed_vertical) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(observed_base, "HSL base color did not reach retained scene paint");
+    require(observed_horizontal, "::before horizontal gradient did not reach retained scene paint");
+    require(observed_vertical, "::after vertical gradient did not reach retained scene paint");
+}
+
 void test_adjacent_inline_spans_wrap_through_generated_whitespace(
     webscene_engine* engine)
 {
@@ -3567,6 +3645,10 @@ void test_class_list_is_same_live_object(webscene_engine* engine)
 
 void test_bounded_css_named_color_palette()
 {
+    require(webscene_native::native_document::parse_color("hsl(0, 100%, 50%)") == 0xFF0000FFU,
+        "hsl() did not resolve the TradingView color-plane base hue");
+    require(webscene_native::native_document::parse_color("hsl(0.5turn 100% 50% / 25%)") == 0x00FFFF40U,
+        "modern hsl() hue and alpha syntax did not resolve");
     require(webscene_native::native_document::parse_color("silver") == 0xC0C0C0FFU,
         "CSS silver did not resolve to its standard RGBA value");
     require(webscene_native::native_document::parse_color("maroon") == 0x800000FFU,

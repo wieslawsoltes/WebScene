@@ -16,7 +16,9 @@ public static class CssColorParser
         var normalized = value?.Trim() ?? string.Empty;
         var isHex = normalized.StartsWith('#');
         var isFunctional = normalized.StartsWith("rgb(", StringComparison.OrdinalIgnoreCase)
-                           || normalized.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase);
+                           || normalized.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase)
+                           || normalized.StartsWith("hsl(", StringComparison.OrdinalIgnoreCase)
+                           || normalized.StartsWith("hsla(", StringComparison.OrdinalIgnoreCase);
         if ((!isHex && !isFunctional)
             || !TryParseColor(normalized, out var color))
         {
@@ -30,15 +32,9 @@ public static class CssColorParser
         }
 
         var alpha = color.A / 255d;
-        if (isFunctional
-            && normalized.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase))
+        if (isFunctional && TryGetAuthoredFunctionalAlpha(normalized, out var authoredAlpha))
         {
-            var parts = normalized[(normalized.IndexOf('(') + 1)..^1]
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 4 && TryAlphaValue(parts[3], out var authoredAlpha))
-            {
-                alpha = authoredAlpha;
-            }
+            alpha = authoredAlpha;
         }
 
         alpha = Math.Round(alpha, 3);
@@ -48,7 +44,7 @@ public static class CssColorParser
     }
 
     /// <summary>
-    /// Parses CSS hex colors, the supported comma-separated rgb()/rgba() forms,
+    /// Parses CSS hex colors, rgb()/rgba(), hsl()/hsla(),
     /// and the bounded CSS named colors used by the component profile.
     /// </summary>
     public static bool TryParseColor(string? value, out WebSceneColor color)
@@ -59,7 +55,7 @@ public static class CssColorParser
                || TryParseNamedColor(normalized, out color);
     }
 
-    /// <summary>Parses the comma-separated rgb()/rgba() forms used by the supported component profile.</summary>
+    /// <summary>Parses the functional rgb()/rgba() and hsl()/hsla() forms used by the supported component profile.</summary>
     public static bool TryParseFunctionalColor(string? value, out WebSceneColor color)
     {
         color = default;
@@ -71,6 +67,11 @@ public static class CssColorParser
         }
 
         var function = normalized[..open].Trim().ToLowerInvariant();
+        if (function is "hsl" or "hsla")
+        {
+            return TryParseHsl(normalized[(open + 1)..^1], out color);
+        }
+
         if (function is not ("rgb" or "rgba"))
         {
             return false;
@@ -98,6 +99,115 @@ public static class CssColorParser
 
         color = new WebSceneColor(alpha, red, green, blue);
         return true;
+    }
+
+    private static bool TryParseHsl(string arguments, out WebSceneColor color)
+    {
+        color = default;
+        var parts = arguments
+            .Replace(',', ' ')
+            .Replace("/", " / ", StringComparison.Ordinal)
+            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var slash = Array.IndexOf(parts, "/");
+        if ((slash >= 0 && (slash != 3 || parts.Length != 5))
+            || (slash < 0 && parts.Length is not (3 or 4)))
+        {
+            return false;
+        }
+
+        if (!TryHue(parts[0], out var hue)
+            || !TryPercentage(parts[1], out var saturation)
+            || !TryPercentage(parts[2], out var lightness))
+        {
+            return false;
+        }
+
+        var alpha = byte.MaxValue;
+        var alphaIndex = slash >= 0 ? 4 : parts.Length == 4 ? 3 : -1;
+        if (alphaIndex >= 0 && !TryAlpha(parts[alphaIndex], out alpha))
+        {
+            return false;
+        }
+
+        var chroma = (1d - Math.Abs(2d * lightness - 1d)) * saturation;
+        var sector = hue * 6d;
+        var secondary = chroma * (1d - Math.Abs(sector % 2d - 1d));
+        var (red, green, blue) = sector switch
+        {
+            < 1d => (chroma, secondary, 0d),
+            < 2d => (secondary, chroma, 0d),
+            < 3d => (0d, chroma, secondary),
+            < 4d => (0d, secondary, chroma),
+            < 5d => (secondary, 0d, chroma),
+            _ => (chroma, 0d, secondary)
+        };
+        var match = lightness - chroma / 2d;
+        color = new WebSceneColor(
+            alpha,
+            (byte)Math.Round((red + match) * byte.MaxValue),
+            (byte)Math.Round((green + match) * byte.MaxValue),
+            (byte)Math.Round((blue + match) * byte.MaxValue));
+        return true;
+    }
+
+    private static bool TryHue(string text, out double turns)
+    {
+        turns = 0;
+        var unit = text.EndsWith("turn", StringComparison.OrdinalIgnoreCase) ? "turn"
+            : text.EndsWith("grad", StringComparison.OrdinalIgnoreCase) ? "grad"
+            : text.EndsWith("rad", StringComparison.OrdinalIgnoreCase) ? "rad"
+            : text.EndsWith("deg", StringComparison.OrdinalIgnoreCase) ? "deg"
+            : string.Empty;
+        var numberText = unit.Length == 0 ? text : text[..^unit.Length];
+        if (!double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+            || !double.IsFinite(number))
+        {
+            return false;
+        }
+
+        turns = unit switch
+        {
+            "turn" => number,
+            "grad" => number / 400d,
+            "rad" => number / (2d * Math.PI),
+            _ => number / 360d
+        };
+        turns = ((turns % 1d) + 1d) % 1d;
+        return true;
+    }
+
+    private static bool TryPercentage(string text, out double normalized)
+    {
+        normalized = 0;
+        if (!text.EndsWith('%')
+            || !double.TryParse(text[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+            || !double.IsFinite(number))
+        {
+            return false;
+        }
+
+        normalized = Math.Clamp(number / 100d, 0d, 1d);
+        return true;
+    }
+
+    private static bool TryGetAuthoredFunctionalAlpha(string value, out double alpha)
+    {
+        alpha = 1d;
+        var open = value.IndexOf('(');
+        if (open < 0 || !value.EndsWith(')'))
+        {
+            return false;
+        }
+
+        var arguments = value[(open + 1)..^1];
+        var slash = arguments.LastIndexOf('/');
+        if (slash >= 0)
+        {
+            return TryAlphaValue(arguments[(slash + 1)..].Trim(), out alpha);
+        }
+
+        var commaParts = arguments.Split(',', StringSplitOptions.TrimEntries);
+        return commaParts.Length == 4 && TryAlphaValue(commaParts[3], out alpha);
     }
 
     private static bool TryParseHexColor(string value, out WebSceneColor color)

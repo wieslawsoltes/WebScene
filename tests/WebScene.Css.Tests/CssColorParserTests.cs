@@ -16,6 +16,17 @@ public sealed class CssColorParserTests
     }
 
     [Theory]
+    [InlineData("hsl(0, 100%, 50%)", 255, 255, 0, 0)]
+    [InlineData("hsl(120 100% 25%)", 255, 0, 128, 0)]
+    [InlineData("hsl(0.5turn 100% 50% / 25%)", 64, 0, 255, 255)]
+    [InlineData("hsla(-90deg, 100%, 50%, .5)", 128, 128, 0, 255)]
+    public void ParsesHslFunctionalColors(string css, byte a, byte r, byte g, byte b)
+    {
+        Assert.True(CssColorParser.TryParseFunctionalColor(css, out var color));
+        Assert.Equal(new WebSceneColor(a, r, g, b), color);
+    }
+
+    [Theory]
     [InlineData("#b8b8b833", 0x33, 0xb8, 0xb8, 0xb8)]
     [InlineData("#63636326", 0x26, 0x63, 0x63, 0x63)]
     [InlineData("#0f08", 0x88, 0x00, 0xff, 0x00)]
@@ -37,7 +48,8 @@ public sealed class CssColorParserTests
 
     [Theory]
     [InlineData(null)]
-    [InlineData("hsl(0, 0%, 0%)")]
+    [InlineData("hsl(0, 0, 0)")]
+    [InlineData("hsl(nope, 0%, 0%)")]
     [InlineData("rgb(1, 2)")]
     [InlineData("rgba(1, 2, 3, nope)")]
     public void RejectsUnsupportedOrMalformedColors(string? css)
@@ -48,6 +60,8 @@ public sealed class CssColorParserTests
     [InlineData("#0f08", "rgba(0, 255, 0, 0.533)")]
     [InlineData("rgb(1,2,3)", "rgb(1, 2, 3)")]
     [InlineData("rgba(1,2,3,.5)", "rgba(1, 2, 3, 0.5)")]
+    [InlineData("hsl(0, 100%, 50%)", "rgb(255, 0, 0)")]
+    [InlineData("hsl(180 100% 50% / 25%)", "rgba(0, 255, 255, 0.25)")]
     public void SerializesAuthoredColorsUsingBrowserCssomForm(string css, string expected)
     {
         Assert.True(CssColorParser.TrySerializeSpecifiedColor(css, out var serialized));
