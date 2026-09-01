@@ -17,6 +17,28 @@
             && left.pixel_offset == right.pixel_offset;
     }
 
+    static bool is_explicit_css_color_token(
+        std::string_view value,
+        uint32_t parsed) noexcept
+    {
+        if (parsed != 0U) return true;
+        const auto first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) return false;
+        const auto last = value.find_last_not_of(" \t\r\n");
+        value = value.substr(first, last - first + 1U);
+        const auto lower = lower_html_name(std::string(value));
+        if (lower == "transparent" || lower == "currentcolor") return true;
+        if (value.front() != '#'
+            || (value.size() != 4U && value.size() != 5U
+                && value.size() != 7U && value.size() != 9U)) {
+            return false;
+        }
+        return std::all_of(
+            value.begin() + 1,
+            value.end(),
+            [](unsigned char character) { return std::isxdigit(character) != 0; });
+    }
+
     static bool pseudo_layout_equal(
         const node_style::pseudo_element& left,
         const node_style::pseudo_element& right) noexcept
@@ -563,6 +585,44 @@
             pseudo.margin_top = native_document::parse_length(value);
         } else if (name == "margin-bottom" || name == "margin-block-end") {
             pseudo.margin_bottom = native_document::parse_length(value);
+        } else if (name == "padding") {
+            std::vector<css_length> values;
+            std::istringstream stream(value);
+            for (std::string token; stream >> token;) {
+                values.push_back(native_document::parse_length(token));
+            }
+            if (!values.empty()) {
+                pseudo.padding_top = values[0];
+                pseudo.padding_right = values.size() > 1 ? values[1] : values[0];
+                pseudo.padding_bottom = values.size() > 2 ? values[2] : values[0];
+                pseudo.padding_left = values.size() > 3 ? values[3]
+                    : values.size() > 1 ? values[1] : values[0];
+            }
+        } else if (name == "padding-inline" || name == "padding-block") {
+            std::istringstream stream(value);
+            std::string first;
+            std::string second;
+            stream >> first >> second;
+            if (!first.empty()) {
+                const auto start = native_document::parse_length(first);
+                const auto end = second.empty()
+                    ? start : native_document::parse_length(second);
+                if (name == "padding-inline") {
+                    pseudo.padding_left = start;
+                    pseudo.padding_right = end;
+                } else {
+                    pseudo.padding_top = start;
+                    pseudo.padding_bottom = end;
+                }
+            }
+        } else if (name == "padding-left" || name == "padding-inline-start") {
+            pseudo.padding_left = native_document::parse_length(value);
+        } else if (name == "padding-right" || name == "padding-inline-end") {
+            pseudo.padding_right = native_document::parse_length(value);
+        } else if (name == "padding-top" || name == "padding-block-start") {
+            pseudo.padding_top = native_document::parse_length(value);
+        } else if (name == "padding-bottom" || name == "padding-block-end") {
+            pseudo.padding_bottom = native_document::parse_length(value);
         } else if (name == "box-sizing") {
             pseudo.border_box = value == "border-box";
         } else if (canonical_css_property_name(name).starts_with("border")
@@ -1039,8 +1099,7 @@
                     && token != "solid" && token != "dashed" && token != "dotted"
                     && token != "double" && token != "hidden") {
                     const auto parsed = parse_color(token);
-                    if (parsed != 0U || token == "transparent"
-                        || lower_html_name(token) == "currentcolor") {
+                    if (is_explicit_css_color_token(token, parsed)) {
                         color = parsed;
                         current_color = lower_html_name(token) == "currentcolor";
                     }
@@ -1878,8 +1937,7 @@
                     width = native_document::parse_length(token);
                 } else {
                     const auto parsed = parse_declared_color(token);
-                    if (parsed != 0U || token == "transparent"
-                        || lower_html_name(token) == "currentcolor") {
+                    if (is_explicit_css_color_token(token, parsed)) {
                         color = parsed;
                         current_color = lower_html_name(token) == "currentcolor";
                     }
@@ -2588,8 +2646,7 @@
                 node.style.background_current_color =
                     lower_html_name(value) == "currentcolor";
                 const auto parsed = parse_declared_color(value);
-                if (name == "background" || parsed != 0U || value == "transparent"
-                    || lower_html_name(value) == "currentcolor") {
+                if (name == "background" || is_explicit_css_color_token(value, parsed)) {
                     node.style.background_rgba = parsed;
                 }
             }
@@ -2645,7 +2702,9 @@
             node.style.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
         } else if (name == "color" && !is_inline(inline_color)) {
             const auto parsed = native_document::parse_color(value);
-            if (parsed != 0U || value == "transparent") node.style.foreground_rgba = parsed;
+            if (is_explicit_css_color_token(value, parsed)) {
+                node.style.foreground_rgba = parsed;
+            }
         } else if (name == "fill" && !is_inline(inline_svg_fill)) {
             node.style.mutable_textual().svg_fill =
                 value == "inherit" || value == "unset"

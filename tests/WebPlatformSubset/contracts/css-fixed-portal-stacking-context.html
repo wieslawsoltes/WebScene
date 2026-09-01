@@ -1,0 +1,203 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Nested fixed portal descendants remain in their ancestor stacking context</title>
+<style>
+  html, body { margin: 0; width: 420px; height: 300px; }
+  #dialog {
+    position: fixed;
+    z-index: 150;
+    left: 20px;
+    top: 20px;
+    width: 260px;
+    height: 240px;
+    background: rgb(63, 31, 31);
+  }
+  #portal {
+    position: fixed;
+    z-index: 150;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+  }
+  #portal-anchor {
+    position: fixed;
+    z-index: 0;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+  }
+  #palette {
+    position: fixed;
+    z-index: 100;
+    left: 180px;
+    top: 70px;
+    box-sizing: content-box;
+    width: 224px;
+    height: 180px;
+    padding: 6px 12px;
+    background: rgb(31, 31, 31);
+  }
+  #swatches {
+    display: flex;
+  }
+  .swatch {
+    all: unset;
+    position: relative;
+    width: 15px;
+    height: 15px;
+    margin: 3px;
+    border: 1px solid white;
+    border-radius: 2px;
+    flex: 0 0 15px;
+    color: white;
+    background-color: currentColor;
+  }
+  .swatch::after {
+    border: 2px solid #0000;
+    border-radius: 6px;
+    box-sizing: initial;
+    content: "";
+    height: 100%;
+    left: -5px;
+    padding: 3px;
+    position: absolute;
+    top: -5px;
+    width: 100%;
+  }
+  #auto-palette {
+    position: fixed;
+    left: -300px;
+    top: 0;
+    box-sizing: border-box;
+    width: 248px;
+  }
+  #auto-scroll { height: 100%; overflow-y: auto; }
+  #auto-box { padding: 6px 12px; }
+  #auto-content { height: 180px; }
+  #transparent-border {
+    position: fixed;
+    left: -400px;
+    width: 10px;
+    height: 10px;
+    color: white;
+    border: 2px solid #0000;
+  }
+  #positioned-border-box {
+    position: fixed;
+    left: -500px;
+    width: 15px;
+    height: 15px;
+    border: 1px solid white;
+  }
+  #content-box-ring {
+    position: absolute;
+    left: -5px;
+    top: -5px;
+    box-sizing: content-box;
+    width: 100%;
+    height: 100%;
+    padding: 3px;
+    border: 2px solid white;
+  }
+</style>
+<body>
+<div id="dialog"></div>
+<div id="portal"><span><div id="portal-anchor">
+  <div id="palette"><div id="swatches">
+    <button id="swatch" class="swatch"></button>
+    <button id="next-swatch" class="swatch"></button>
+  </div></div>
+</div></span></div>
+<div id="auto-palette"><div id="auto-scroll"><div id="auto-box">
+  <div id="auto-content"></div>
+</div></div></div>
+<div id="transparent-border"></div>
+<div id="positioned-border-box"><div id="content-box-ring"></div></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function test(name, body) {
+    try {
+      body();
+      state.results.push({ name, status: "PASS", message: null, stack: null });
+    } catch (error) {
+      state.results.push({
+        name, status: "FAIL",
+        message: String(error && error.message || error),
+        stack: error && error.stack ? String(error.stack) : null
+      });
+    }
+  }
+
+  test("a later equal-level portal context paints and hits above the dialog", () => {
+    const hit = document.elementFromPoint(200, 90);
+    assert(hit === document.getElementById("swatch") ||
+      hit === document.getElementById("palette"),
+      `the overlap hit ${hit && hit.id || "nothing"}`);
+  });
+
+  test("the nested palette retains its authored content-box geometry", () => {
+    const palette = document.getElementById("palette");
+    assert(palette.offsetWidth === 248 && palette.offsetHeight === 192,
+      `the palette measured ${palette.offsetWidth}x${palette.offsetHeight}`);
+    assert(palette.scrollWidth === palette.clientWidth &&
+      palette.scrollHeight === palette.clientHeight,
+      `the palette unexpectedly scrolls: ${palette.clientWidth}x${palette.clientHeight} / ` +
+      `${palette.scrollWidth}x${palette.scrollHeight}`);
+  });
+
+  test("an all-unset colour swatch keeps a solid currentColor background", () => {
+    const swatch = document.getElementById("swatch");
+    const style = getComputedStyle(swatch);
+    assert(style.backgroundColor === "rgb(255, 255, 255)",
+      `the swatch background became ${style.backgroundColor}`);
+    assert(swatch.offsetWidth === 17 && swatch.offsetHeight === 17,
+      `the swatch measured ${swatch.offsetWidth}x${swatch.offsetHeight}`);
+    const next = document.getElementById("next-swatch");
+    assert(next.offsetLeft - swatch.offsetLeft === 23,
+      `the flex swatches advanced ${next.offsetLeft - swatch.offsetLeft}px`);
+    const transparentBorder = getComputedStyle(document.getElementById("transparent-border"));
+    assert(transparentBorder.borderTopColor === "rgba(0, 0, 0, 0)",
+      `the transparent focus ring became ${transparentBorder.borderTopColor}`);
+  });
+
+  test("an absolute content-box ring is centered around its positioned border-box ancestor", () => {
+    const box = document.getElementById("positioned-border-box").getBoundingClientRect();
+    const ring = document.getElementById("content-box-ring").getBoundingClientRect();
+    assert(ring.width === 25 && ring.height === 25,
+      `the ring measured ${ring.width}x${ring.height}`);
+    assert(ring.left === box.left - 4 && ring.top === box.top - 4,
+      `the ring started at ${ring.left},${ring.top} around ${box.left},${box.top}`);
+    assert(ring.right === box.right + 4 && ring.bottom === box.bottom + 4,
+      `the ring ended at ${ring.right},${ring.bottom} around ${box.right},${box.bottom}`);
+  });
+
+  test("an auto-height fixed palette follows late content through a percentage scroll wrapper", () => {
+    const palette = document.getElementById("auto-palette");
+    const scroll = document.getElementById("auto-scroll");
+    assert(palette.offsetHeight === 192 && scroll.scrollHeight === 192,
+      `the initial palette measured ${palette.offsetHeight}/${scroll.scrollHeight}`);
+    const lateControls = document.createElement("div");
+    lateControls.style.height = "138px";
+    document.getElementById("auto-box").appendChild(lateControls);
+    assert(palette.offsetHeight === 330,
+      `the grown palette remained ${palette.offsetHeight}px tall`);
+    assert(scroll.clientHeight === 330 && scroll.scrollHeight === 330,
+      `the grown palette scrolls: ${scroll.clientHeight}/${scroll.scrollHeight}`);
+  });
+
+  const failure = state.results.find(result => result.status !== "PASS");
+  state.harness = failure
+    ? { status: 1, message: failure.message, stack: failure.stack }
+    : { status: 0, message: null, stack: null };
+  state.complete = true;
+</script>
+</body>

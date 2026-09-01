@@ -521,6 +521,12 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
             {
+                if (BackgroundPaintIsFullyOccludedByLaterRoundedFill(
+                    commands,
+                    commandIndex))
+                {
+                    continue;
+                }
                 ref readonly var command = ref commands[commandIndex];
                 switch (command.Kind)
                 {
@@ -780,6 +786,49 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             new(bottomRight, verticalBottomRight),
             new(bottomLeft, verticalBottomLeft));
     }
+
+    internal static bool BackgroundPaintIsFullyOccludedByLaterRoundedFill(
+        ReadOnlySpan<SceneCommand> commands,
+        int commandIndex)
+    {
+        ref readonly var covered = ref commands[commandIndex];
+        var plane = BackgroundPaintPlane(covered.Kind);
+        if (plane == 0)
+        {
+            return false;
+        }
+
+        var coveringIndex = commandIndex + 1;
+        while (coveringIndex < commands.Length)
+        {
+            if (commands[coveringIndex].Kind == 32)
+            {
+                coveringIndex++;
+                continue;
+            }
+
+            ref readonly var covering = ref commands[coveringIndex];
+            if (BackgroundPaintPlane(covering.Kind) != plane
+                || covering.X != covered.X
+                || covering.Y != covered.Y
+                || covering.Width != covered.Width
+                || covering.Height != covered.Height
+                || ResolveDomCornerRadii(commands, coveringIndex)
+                    != ResolveDomCornerRadii(commands, commandIndex))
+            {
+                return false;
+            }
+            if (covering.Kind is 7 or 10 && (covering.Rgba & 0xff) == 0xff)
+            {
+                return true;
+            }
+            coveringIndex++;
+        }
+        return false;
+    }
+
+    private static int BackgroundPaintPlane(uint kind)
+        => kind == 7 ? 1 : kind is 6 or 10 ? 2 : 0;
 
     private static void DrawDomRoundedRect(
         SKCanvas canvas,

@@ -354,6 +354,10 @@ struct node_style final {
         css_length top{};
         css_length right{};
         css_length bottom{};
+        css_length padding_left{};
+        css_length padding_top{};
+        css_length padding_right{};
+        css_length padding_bottom{};
         css_length margin_left{};
         css_length margin_top{};
         css_length margin_right{};

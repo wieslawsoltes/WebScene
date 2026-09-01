@@ -10,7 +10,7 @@ void native_document::build_scene(
     append_scene(*body_, commands, strings, string_bytes, false, true);
     std::vector<dom_node*> fixed;
     for (auto* child : composed_children(*body_)) {
-        collect_fixed_positioned_nodes(*this, *child, fixed);
+        collect_outermost_fixed_positioned_nodes(*this, *child, fixed);
     }
     std::stable_sort(
         fixed.begin(),
@@ -38,7 +38,7 @@ void native_document::build_scene(
             strings,
             string_bytes,
             inherited_visibility_hidden,
-            true);
+            false);
     }
 }
 

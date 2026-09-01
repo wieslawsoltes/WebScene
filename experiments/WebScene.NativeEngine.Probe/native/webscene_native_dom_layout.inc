@@ -951,8 +951,10 @@ void native_document::layout_children(dom_node& parent)
         parent.scroll_content_height = std::max(content.height, improper_height);
         return;
     }
-    const auto outer_authored_size = [&](const dom_node& node, bool horizontal_axis, float available) {
-        const auto authored = horizontal_axis ? node.style.width : node.style.height;
+    const auto outer_specified_size = [&](const dom_node& node,
+                                          bool horizontal_axis,
+                                          const css_length& authored,
+                                          float available) {
         const auto intrinsic_keyword = authored.unit == length_unit::max_content
                 || authored.unit == length_unit::min_content
                 || authored.unit == length_unit::fit_content;
@@ -973,6 +975,15 @@ void native_document::layout_children(dom_node& parent)
             else size += box_edges;
         }
         return size;
+    };
+    const auto outer_authored_size = [&](const dom_node& node,
+                                         bool horizontal_axis,
+                                         float available) {
+        return outer_specified_size(
+            node,
+            horizontal_axis,
+            horizontal_axis ? node.style.width : node.style.height,
+            available);
     };
     const auto layout_positioned_grid_child = [&](dom_node& child) {
         auto* containing_node = body_;
@@ -1476,7 +1487,37 @@ void native_document::layout_children(dom_node& parent)
                         }
                     }
                 }
-                const auto& containing = containing_node->layout;
+                auto containing = containing_node->layout;
+                if (child.style.position == position_mode::absolute) {
+                    const auto border_left = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_left_width,
+                        containing.width,
+                        0);
+                    const auto border_right = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_right_width,
+                        containing.width,
+                        0);
+                    const auto border_top = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_top_width,
+                        containing.height,
+                        0);
+                    const auto border_bottom = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_bottom_width,
+                        containing.height,
+                        0);
+                    containing.x += border_left;
+                    containing.y += border_top;
+                    containing.width = std::max(
+                        0.0F,
+                        containing.width - border_left - border_right);
+                    containing.height = std::max(
+                        0.0F,
+                        containing.height - border_top - border_bottom);
+                }
                 const auto has_left = is_specified(child.style.left);
                 const auto has_top = is_specified(child.style.top);
                 const auto has_right = is_specified(child.style.right);
@@ -1506,12 +1547,14 @@ void native_document::layout_children(dom_node& parent)
                 assigned.width = is_specified(child.style.width)
                     ? outer_authored_size(child, true, containing.width)
                     : has_left && has_right
-                        ? std::max(0.0F, containing.width - left - right)
+                        ? std::max(0.0F, containing.width - left - right
+                            - margin_left - margin_right)
                         : intrinsic_size(child, true, containing.width);
                 assigned.height = is_specified(child.style.height)
                     ? outer_authored_size(child, false, containing.height)
                     : has_top && has_bottom
-                        ? std::max(0.0F, containing.height - top - bottom)
+                        ? std::max(0.0F, containing.height - top - bottom
+                            - margin_top - margin_bottom)
                         : intrinsic_size(child, false, containing.height);
                 // Inline formatting collects out-of-flow descendants into a
                 // deferred positioned pass. They retain the same min/max used
@@ -2212,9 +2255,7 @@ void native_document::layout_children(dom_node& parent)
             const auto basis = constrain_size(
                 *child,
                 horizontal,
-                flex_main.unit == authored_main.unit && flex_main.value == authored_main.value
-                    ? outer_authored_size(*child, horizontal, main_available)
-                    : resolve_length(*child, flex_main, main_available, 0),
+                outer_specified_size(*child, horizontal, flex_main, main_available),
                 main_available);
             flex_base_main_sizes.emplace(child, basis);
             fixed += basis;
@@ -2576,7 +2617,37 @@ void native_document::layout_children(dom_node& parent)
                     }
                 }
             }
-            const auto& containing = containing_node->layout;
+            auto containing = containing_node->layout;
+            if (child->style.position == position_mode::absolute) {
+                const auto border_left = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_left_width,
+                    containing.width,
+                    0);
+                const auto border_right = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_right_width,
+                    containing.width,
+                    0);
+                const auto border_top = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_top_width,
+                    containing.height,
+                    0);
+                const auto border_bottom = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_bottom_width,
+                    containing.height,
+                    0);
+                // The containing block of an absolutely positioned descendant
+                // is the padding box of its nearest positioned ancestor.
+                containing.x += border_left;
+                containing.y += border_top;
+                containing.width = std::max(
+                    0.0F, containing.width - border_left - border_right);
+                containing.height = std::max(
+                    0.0F, containing.height - border_top - border_bottom);
+            }
             layout_rect assigned{};
             const auto has_left = is_specified(child->style.left);
             const auto has_top = is_specified(child->style.top);
@@ -2619,12 +2690,14 @@ void native_document::layout_children(dom_node& parent)
             assigned.width = is_specified(child->style.width)
                 ? outer_authored_size(*child, true, containing.width)
                 : has_left && has_right
-                    ? std::max(0.0F, containing.width - left - right)
+                    ? std::max(0.0F, containing.width - left - right
+                        - margin_left - margin_right)
                     : intrinsic_width;
             assigned.height = is_specified(child->style.height)
                 ? outer_authored_size(*child, false, containing.height)
                 : has_top && has_bottom
-                    ? std::max(0.0F, containing.height - top - bottom)
+                    ? std::max(0.0F, containing.height - top - bottom
+                        - margin_top - margin_bottom)
                     : intrinsic_height;
             // Absolutely/fixed positioned boxes still participate in the CSS
             // min/max size constraints. Dialogs commonly combine
@@ -2726,7 +2799,7 @@ void native_document::layout_children(dom_node& parent)
             const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto width = flex_container && is_specified(child->style.flex_basis)
-                ? resolve_length(*child, child->style.flex_basis, content.width, 0)
+                ? outer_specified_size(*child, true, child->style.flex_basis, content.width)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
@@ -4031,13 +4104,27 @@ void native_document::layout_child(
                     child.scroll_content_height - child.scroll_viewport_height));
         }
 
-        // A one-track auto-sized grid takes its max-content contribution from
-        // the content inside transparent/scroll wrappers. Those wrappers can
-        // initially resolve percentage heights against the first intrinsic
-        // estimate, so considering only direct child boxes leaves the grid at
-        // that stale estimate and clips later inline reflow. Include in-flow
-        // descendants, then perform one definitive layout at the expanded size.
-        if (is_grid_container(child.style.display) && !child.style.grid().two_columns) {
+        // An auto-sized box can contain a 100%-high transparent/scroll wrapper.
+        // The percentage is indefinite while sizing that ancestor, so content
+        // deeper than the wrapper still contributes to the ancestor's automatic
+        // height. React portals commonly force an early measurement and append
+        // the remainder of a menu afterwards; retaining the provisional wrapper
+        // height leaves the fixed menu clipped with a phantom scrollbar. A
+        // one-track auto grid has the same max-content requirement. Include
+        // in-flow descendants, then reflow once at the expanded size.
+        const auto has_percentage_height_child = std::any_of(
+            composed_children(child).begin(),
+            composed_children(child).end(),
+            [](const dom_node* descendant) {
+                return descendant != nullptr
+                    && descendant->style.display != display_mode::none
+                    && !is_out_of_flow(descendant->style.position)
+                    && !is_flex_container(descendant->style.display)
+                    && !is_grid_container(descendant->style.display)
+                    && descendant->style.height.unit == length_unit::percent;
+            });
+        if ((is_grid_container(child.style.display) && !child.style.grid().two_columns)
+            || has_percentage_height_child) {
             std::function<float(const dom_node&)> deepest_flow_bottom =
                 [&](const dom_node& node) {
                     auto bottom = node.layout.y;

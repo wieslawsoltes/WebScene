@@ -53,6 +53,29 @@
       "evidence": ["hosted-component-settings-dialog", "hosted-component-save-layout-dialog", "hosted-component-go-to-date-dialog", "hosted-component-go-to-time-popup"]
     },
     {
+      "path": "contracts/css-fixed-portal-stacking-context.html",
+      "type": "contract",
+      "capabilities": ["fixed-stacking-context-hierarchy", "equal-z-index-source-order", "nested-fixed-portal-hit-testing", "portal-content-box-geometry", "solid-currentcolor-swatch"],
+      "evidence": ["hosted-component-settings-colour-palette"],
+      "reason": "Product-neutral reduction of a fixed portal mounted after an equal-z dialog. The descendant's local z-index remains scoped to its portal ancestor; it must not be flattened beneath the dialog. Geometry and currentColor assertions independently retain the palette size and solid swatch surface."
+    },
+    {
+      "path": "contracts/css-absolute-padding-box-origin.html",
+      "type": "reftest",
+      "reference": "contracts/css-absolute-padding-box-origin-ref.html",
+      "capabilities": ["absolute-padding-box-origin", "absolute-inset-stretch-negative-margin", "inline-formatting-positioned-descendant", "coincident-focus-border-alignment"],
+      "evidence": ["hosted-component-large-colour-control-focus-border"],
+      "reason": "Exact-pixel reduction of TradingView's inset-zero, auto-sized absolute focus box with negative margins inside a bordered inline control. The negative margins must enlarge the stretched border box from 32px to 34px so it shares the control's origin and far edges; a fixed-size fixture does not cover the product bug."
+    },
+    {
+      "path": "contracts/css-rounded-opaque-descendant-occlusion.html",
+      "type": "reftest",
+      "reference": "contracts/css-rounded-opaque-descendant-occlusion-ref.html",
+      "capabilities": ["rounded-opaque-descendant-occlusion", "coincident-rounded-background-compositing"],
+      "evidence": ["hosted-component-colour-control-opacity-swatch"],
+      "reason": "Exact-pixel reduction of an opaque colour layer covering an identically sized rounded opacity base. The result must match a single rounded colour surface without an antialiased halo from the covered ancestor."
+    },
+    {
       "path": "contracts/segmented-transform-origin.html",
       "type": "contract",
       "capabilities": ["transform-origin-keywords", "transform-origin-used-value", "independent-transform-cascade", "nested-scale-composition"],

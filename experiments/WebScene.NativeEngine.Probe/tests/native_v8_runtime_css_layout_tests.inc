@@ -1765,6 +1765,175 @@ void test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(
         "the popup-owned tooltip was retained behind the popup surface");
 }
 
+void test_fixed_portal_descendant_stays_in_ancestor_stacking_context(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin:0; width:420px; height:300px; }
+              #settings { position:fixed; z-index:150; left:20px; top:20px;
+                width:260px; height:240px; background:rgb(63,31,31); }
+              #portal { position:fixed; z-index:150; left:0; top:0;
+                width:0; height:0; }
+              #portal-anchor { position:fixed; z-index:0; left:0; top:0;
+                width:0; height:0; }
+              #palette { position:fixed; z-index:100; left:180px; top:70px;
+                box-sizing:border-box; width:248px;
+                background:rgb(31,31,31); }
+              #scroll { height:100%; overflow-x:hidden; overflow-y:auto; }
+              #menu-box { padding:6px 12px; }
+              #menu-content { height:180px; }
+              #swatches { display:flex; flex-wrap:wrap; margin:0 -3px 6px; }
+              .swatch { all:unset; background-color:currentColor;
+                border:1px solid; border-radius:2px; flex:0 0 15px;
+                height:15px; margin:3px; position:relative; width:15px; }
+              .swatch::after { border:2px solid #0000; border-radius:6px;
+                box-sizing:initial; content:""; height:100%; left:-5px;
+                padding:3px; position:absolute; top:-5px; width:100%; }
+              .swatch.selected::after { border-color:rgb(17,34,51); }
+            </style>
+            <div id="settings"></div>
+            <div id="portal"><span><div id="portal-anchor">
+              <div id="palette"><div id="scroll"><div id="menu-box">
+                <div id="menu-content"><div id="swatches"></div></div>
+              </div></div></div>
+            </div></span></div>`;
+          const colours = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b',
+            '#4caf50', '#089981', '#00bcd4', '#2962ff', '#673ab7', '#e91e63'];
+          const swatches = document.getElementById('swatches');
+          for (let row = 0; row < 8; ++row) {
+            for (const colour of colours) {
+              const swatch = document.createElement('button');
+              swatch.className = 'swatch';
+              swatch.style.color = colour;
+              swatches.appendChild(swatch);
+            }
+          }
+          swatches.firstElementChild.classList.add('selected');
+        })()
+    )JS", "native-fixed-portal-stacking-setup.js");
+
+    require(
+        evaluate(engine,
+            "[document.getElementById('palette').offsetHeight, "
+            "document.getElementById('scroll').scrollHeight]",
+            "native-fixed-portal-initial-size.js") == "[192,192]",
+        "the initial fixed palette fixture did not establish its measured height");
+    const auto fixture = evaluate(engine, R"JS(
+        (() => {
+          const palette = document.getElementById('palette');
+          const swatches = [...document.querySelectorAll('.swatch')];
+          const lateControls = document.createElement('div');
+          lateControls.style.height = '138px';
+          document.getElementById('menu-box').appendChild(lateControls);
+          return {
+            hit: document.elementFromPoint(200, 90)?.id ||
+              document.elementFromPoint(200, 90)?.className || null,
+            palette: [palette.offsetWidth, palette.offsetHeight,
+              palette.clientHeight, palette.scrollHeight],
+            scroll: (() => { const node = document.getElementById('scroll');
+              return [node.clientHeight, node.scrollHeight]; })(),
+            swatches: swatches.length,
+            first: (() => { const style = getComputedStyle(swatches[0]); return [
+              swatches[0].offsetWidth, swatches[0].offsetHeight,
+              style.backgroundColor,
+              style.borderTopWidth, style.borderRightWidth,
+              style.borderBottomWidth, style.borderLeftWidth,
+              style.borderTopLeftRadius]; })()
+          };
+        })()
+    )JS", "native-fixed-portal-stacking-geometry.js");
+    require(
+        fixture == R"json({"hit":"swatch selected","palette":[248,330,330,330],"scroll":[330,330],"swatches":80,"first":[17,17,"rgb(255, 255, 255)","1px","1px","1px","1px","2px"]})json",
+        "a nested fixed palette escaped its ancestor stacking context or lost swatch geometry: "
+            + fixture);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto settings_index = -1;
+    auto palette_index = -1;
+    auto white_swatch_index = -1;
+    auto white_swatch_border_index = -1;
+    uint32_t white_swatch_node_id = 0U;
+    webscene_scene_command white_swatch_background{};
+    webscene_scene_command white_swatch_border{};
+    webscene_scene_command selected_ring_border{};
+    for (auto attempt = 0; attempt < 100 && white_swatch_index < 0; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U)
+                    && command.rgba == 0x3F1F1FFFU) {
+                    settings_index = static_cast<int>(index);
+                }
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U)
+                    && command.rgba == 0x1F1F1FFFU) {
+                    palette_index = static_cast<int>(index);
+                }
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U
+                        || command.kind == 10U)
+                    && command.rgba == 0xFFFFFFFFU
+                    && white_swatch_index < 0
+                    && command.width >= 13.0F && command.width <= 17.0F
+                    && command.height >= 15.0F && command.height <= 17.0F) {
+                    white_swatch_index = static_cast<int>(index);
+                    white_swatch_node_id = command.node_id;
+                    white_swatch_background = command;
+                }
+                if ((command.kind == 8U || command.kind == 11U)
+                    && white_swatch_node_id != 0U
+                    && command.node_id == white_swatch_node_id
+                    && command.rgba == 0xFFFFFFFFU) {
+                    white_swatch_border_index = static_cast<int>(index);
+                    white_swatch_border = command;
+                }
+                if ((command.kind == 8U || command.kind == 11U)
+                    && command.rgba == 0x112233FFU) {
+                    selected_ring_border = command;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (white_swatch_index < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        settings_index >= 0 && palette_index > settings_index
+            && white_swatch_index > palette_index,
+        "the nested fixed palette or its solid swatches painted behind the settings dialog: settings="
+            + std::to_string(settings_index) + " palette="
+            + std::to_string(palette_index) + " swatch="
+            + std::to_string(white_swatch_index));
+    require(
+        white_swatch_border_index > white_swatch_index
+            && std::abs(white_swatch_border.x - white_swatch_background.x - 0.5F) < 0.01F
+            && std::abs(white_swatch_border.y - white_swatch_background.y - 0.5F) < 0.01F
+            && std::abs(white_swatch_border.width - white_swatch_background.width + 1.0F) < 0.01F
+            && std::abs(white_swatch_border.height - white_swatch_background.height + 1.0F) < 0.01F
+            && std::abs(white_swatch_border.stroke_width - 1.0F) < 0.01F,
+        "the rounded swatch fill and border did not share one border-box geometry");
+    require(
+        selected_ring_border.node_id == white_swatch_node_id
+            && std::abs(selected_ring_border.x - white_swatch_background.x + 3.0F) < 0.01F
+            && std::abs(selected_ring_border.y - white_swatch_background.y + 3.0F) < 0.01F
+            && std::abs(selected_ring_border.width - 23.0F) < 0.01F
+            && std::abs(selected_ring_border.height - 23.0F) < 0.01F
+            && std::abs(selected_ring_border.stroke_width - 2.0F) < 0.01F,
+        "the selected pseudo-element ring was not centered four pixels outside the swatch border box: swatch="
+            + std::to_string(white_swatch_background.x) + ","
+            + std::to_string(white_swatch_background.y) + ","
+            + std::to_string(white_swatch_background.width) + ","
+            + std::to_string(white_swatch_background.height) + " ring="
+            + std::to_string(selected_ring_border.x) + ","
+            + std::to_string(selected_ring_border.y) + ","
+            + std::to_string(selected_ring_border.width) + ","
+            + std::to_string(selected_ring_border.height));
+}
+
 void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -2100,6 +2269,54 @@ void test_absolute_flex_child_uses_container_static_position(
     require(
         result == "[0,0,18,18]",
         "an absolute flex child used the cursor after preceding flow items as its static position: "
+            + result);
+}
+
+void test_absolute_inset_stretch_accounts_for_negative_margins(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .shell { display: inline-block; }
+              #control {
+                position: relative;
+                display: inline-flex;
+                box-sizing: border-box;
+                width: 34px;
+                height: 34px;
+                border: 1px solid #2962ff;
+                border-radius: 6px;
+              }
+              #shadow {
+                position: absolute;
+                inset: 0;
+                box-sizing: content-box;
+                margin: -1px;
+                border: 2px solid #2962ff;
+                border-radius: 6px;
+              }
+            </style>
+            <span class="shell"><button><span><div id="control">
+              <span id="shadow"></span>
+            </div></span></button></span>`;
+          const control = document.getElementById('control').getBoundingClientRect();
+          const shadow = document.getElementById('shadow').getBoundingClientRect();
+          return [
+            shadow.x - control.x,
+            shadow.y - control.y,
+            shadow.width,
+            shadow.height,
+            control.right - shadow.right,
+            control.bottom - shadow.bottom
+          ];
+        })()
+    )JS", "native-absolute-inset-stretch-negative-margin.js");
+    require(
+        result == "[0,0,34,34,0,0]",
+        "an inset-stretched absolute control child did not account for negative margins: "
             + result);
 }
 

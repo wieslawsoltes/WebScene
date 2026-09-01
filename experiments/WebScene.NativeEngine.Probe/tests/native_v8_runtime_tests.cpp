@@ -180,6 +180,17 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "fixed-portal-stacking") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            resize(focused_engine, 420, 300, 1U);
+            wait_for_consumed_inputs(
+                focused_engine, 1U, "focused portal viewport resize was not consumed");
+            test_fixed_portal_descendant_stays_in_ancestor_stacking_context(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "absolute-virtual-row-scroll") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -488,6 +499,7 @@ int main()
     test_flex_basis_reserves_fixed_track(engine);
     test_flex_icon_metadata_card_and_title_geometry(engine);
     test_absolute_flex_child_uses_container_static_position(engine);
+    test_absolute_inset_stretch_accounts_for_negative_margins(engine);
     test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
     test_floats_share_a_bounded_formatting_line(engine);
@@ -503,6 +515,7 @@ int main()
     test_css_linear_gradient_reaches_the_retained_scene(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(engine);
+    test_fixed_portal_descendant_stays_in_ancestor_stacking_context(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_translate_calc_arguments_preserve_nested_functions(engine);
     test_zero_depth_translate3d_positions_fixed_coach_mark(engine);

@@ -129,6 +129,10 @@ dom_node make_pseudo_layout_node(
     result.style.top = pseudo.top;
     result.style.right = pseudo.right;
     result.style.bottom = pseudo.bottom;
+    result.style.padding_left = pseudo.padding_left;
+    result.style.padding_top = pseudo.padding_top;
+    result.style.padding_right = pseudo.padding_right;
+    result.style.padding_bottom = pseudo.padding_bottom;
     result.style.margin_left = pseudo.margin_left;
     result.style.margin_top = pseudo.margin_top;
     result.style.margin_right = pseudo.margin_right;
@@ -246,6 +250,20 @@ void collect_fixed_positioned_nodes(
     }
     for (auto* child : document.composed_children(node)) {
         collect_fixed_positioned_nodes(document, *child, result);
+    }
+}
+
+void collect_outermost_fixed_positioned_nodes(
+    const native_document& document,
+    dom_node& node,
+    std::vector<dom_node*>& result)
+{
+    if (node.style.position == position_mode::fixed) {
+        result.push_back(&node);
+        return;
+    }
+    for (auto* child : document.composed_children(node)) {
+        collect_outermost_fixed_positioned_nodes(document, *child, result);
     }
 }
 
