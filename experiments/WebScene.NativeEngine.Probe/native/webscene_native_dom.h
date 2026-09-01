@@ -490,13 +490,6 @@ struct node_style final {
     float transform_scale_y{1};
     float transform_rotate_degrees{0};
     bool transform_specified{false};
-    // Unlike transform_specified, an authored `transform: none` does not
-    // establish a stacking context. Track that distinction without changing
-    // computed-style and transition semantics.
-    bool transform_stacking_context{false};
-    // layout/paint containment establishes an atomic stacking context. Keep
-    // this hot because paint-order and hit-testing consult it every frame.
-    bool contain_stacking_context{false};
     // Retain whether transform-origin won the cascade independently from its
     // computed value. The initial 50% 50% value is otherwise indistinguishable
     // from an explicitly authored origin when detecting CSS compositions.
@@ -751,6 +744,13 @@ struct node_style final {
     bool flex_reverse : 1 {false};
     bool align_self_specified : 1 {false};
     bool border_box : 1 {false};
+    // Unlike transform_specified, an authored `transform: none` does not
+    // establish a stacking context. Keep these hot flags in the existing
+    // packed style state so compatibility does not increase every DOM node's
+    // cross-library footprint.
+    bool transform_stacking_context : 1 {false};
+    // layout/paint containment establishes an atomic stacking context.
+    bool contain_stacking_context : 1 {false};
     // Margin parsing passes these four flags by reference, so unlike the other
     // hot boolean style state they remain addressable scalar values.
     bool margin_left_auto{false};
