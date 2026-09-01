@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Go To dialog recomputes narrow geometry without phantom overflow</title>
+<title>Go To dialog recomputes narrow geometry and preserves fixed input tracks</title>
 <script src="/resources/testharness.js"></script>
 <script src="/resources/testharnessreport.js"></script>
 <script src="/resources/testdriver.js"></script>
@@ -8,27 +8,70 @@
 <script src="/resources/testdriver-vendor.js"></script>
 <style>
   html, body { margin:0; }
-  #dialog { box-sizing:border-box; width:520px; height:260px; padding:20px; overflow:auto; }
-  #dialog.compact { width:320px; height:220px; padding:16px; overflow:hidden; }
+  .dialog-base {
+    max-width:380px;
+    min-width:280px;
+    position:fixed;
+    top:20px;
+    width:100%;
+  }
+  .dialog-variant {
+    display:block;
+    max-width:550px;
+    min-width:380px;
+    width:auto;
+  }
+  .dialog-wrapper { min-width:302px; }
+  .dialog-content { display:flex; flex-direction:column; }
+  .fullscreen {
+    bottom:0;
+    max-width:100%;
+    min-width:100%;
+    top:0;
+    width:100%;
+  }
   .row { height:44px; }
+  #input-row {
+    box-sizing:content-box;
+    column-gap:12px;
+    display:grid;
+    grid-template-columns:150px 100px;
+    height:34px;
+    padding:0 20px;
+  }
+  #date, #time { height:34px; min-width:0; }
 </style>
-<section id="dialog"><div class="row">Date</div><div class="row">Time</div><div class="row">Timezone</div></section>
+<section id="dialog" class="dialog-base dialog-variant dialog-wrapper">
+  <div class="dialog-content">
+    <div id="input-row"><input id="date"><input id="time"></div>
+    <div class="row">Timezone</div>
+  </div>
+</section>
 <script>
   promise_test(async () => {
     const dialog = document.getElementById("dialog");
-    const query = matchMedia("(max-width: 500px)");
-    const synchronize = event => dialog.classList.toggle("compact", event.matches);
+    const query = matchMedia("(max-width: 431px)");
+    const synchronize = event => dialog.classList.toggle("fullscreen", event.matches);
     synchronize(query);
     query.addEventListener("change", synchronize);
 
-    assert_equals(dialog.getBoundingClientRect().width, 520,
-      "wide dialog starts at desktop width");
-    await test_driver.set_viewport(dialog, 420, 300);
+    await test_driver.set_viewport(dialog, 610, 720);
+    assert_equals(dialog.getBoundingClientRect().width, 302,
+      "auto-width dialog shrink-wraps to Chrome's desktop minimum");
+    assert_equals(document.getElementById("input-row").getBoundingClientRect().width, 302,
+      "desktop input row follows the shrink-wrapped dialog");
+    await test_driver.set_viewport(dialog, 431, 720);
     const bounds = dialog.getBoundingClientRect();
-    assert_equals(bounds.width, 320, "narrow dialog adopts compact width");
+    assert_equals(bounds.width, 431, "fullscreen dialog adopts compact viewport width");
     assert_less_than_equal(bounds.right, innerWidth,
       "narrow dialog fits inside the viewport");
-    assert_equals(dialog.scrollHeight, dialog.clientHeight,
-      "compact content does not create a phantom scrollbar");
+    const row = document.getElementById("input-row").getBoundingClientRect();
+    const date = document.getElementById("date").getBoundingClientRect();
+    const time = document.getElementById("time").getBoundingClientRect();
+    assert_equals(date.width, 150, "date input keeps Chrome's first fixed track");
+    assert_equals(time.width, 100, "time input keeps Chrome's second fixed track");
+    assert_equals(time.left - date.right, 12, "the input tracks keep their authored gap");
+    assert_equals(row.right - time.right, 149,
+      "unused compact width remains after the fixed time track");
   }, "Go To dialog adopts compact geometry after a live breakpoint crossing");
 </script>

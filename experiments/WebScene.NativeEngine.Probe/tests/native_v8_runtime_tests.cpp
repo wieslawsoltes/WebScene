@@ -139,6 +139,14 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "compact-go-to-grid") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "scrollbar-style-drag") {
             auto* focused_engine = webscene_engine_create(64);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -510,6 +518,7 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
+    test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(engine);
     test_responsive_unset_restores_auto_inset(engine);
     test_preferred_color_scheme_updates_css_and_match_media(engine);

@@ -49,6 +49,92 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
     }
 }
 
+void test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(
+    webscene_engine* engine)
+{
+    resize(engine, 610, 720, 4U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .dialog-base {
+                max-width: 380px;
+                min-width: 280px;
+                position: fixed;
+                top: 20px;
+                width: 100%;
+              }
+              .dialog-variant {
+                display: block;
+                max-width: 550px;
+                min-width: 380px;
+                width: auto;
+              }
+              .dialog-wrapper { min-width: 302px; }
+              .dialog-content { display: flex; flex-direction: column; }
+              .fullscreen {
+                bottom: 0;
+                max-width: 100%;
+                min-width: 100%;
+                top: 0;
+                width: 100%;
+              }
+              #input-row {
+                box-sizing: content-box;
+                column-gap: 12px;
+                display: grid;
+                grid-template-columns: 150px 100px;
+                height: 34px;
+                padding: 0 20px;
+              }
+              #date, #time { height: 34px; min-width: 0; }
+            </style>
+            <section id="dialog" class="dialog-base dialog-variant dialog-wrapper">
+              <div class="dialog-content">
+                <div id="input-row"><input id="date"><input id="time"></div>
+              </div>
+            </section>`;
+          const dialog = document.getElementById('dialog');
+          const query = matchMedia('(max-width: 431px)');
+          const synchronize = event => dialog.classList.toggle(
+            'fullscreen', event.matches);
+          synchronize(query);
+          query.addEventListener('change', synchronize);
+        })()
+    )JS", "native-go-to-production-sizing-setup.js");
+    const auto snapshot = [&](std::string_view source) {
+        return evaluate(engine, R"JS(
+        (() => {
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const dialog = rect('dialog');
+          const row = rect('input-row');
+          const date = rect('date');
+          const time = rect('time');
+          return {
+            viewport: innerWidth,
+            dialog: [dialog.left, dialog.top, dialog.width],
+            row: [row.left, row.width, row.right],
+            date: [date.left, date.width, date.right],
+            time: [time.left, time.width, time.right],
+            gap: time.left - date.right,
+            trailing: row.right - time.right
+          };
+        })()
+    )JS", std::string(source));
+    };
+    const auto wide = snapshot("native-go-to-production-sizing-wide.js");
+    require(
+        wide == R"JSON({"viewport":610,"dialog":[0,20,302],"row":[0,302,302],"date":[20,150,170],"time":[182,100,282],"gap":12,"trailing":20})JSON",
+        "Go To dialog did not shrink-to-fit its production auto width: " + wide);
+
+    resize(engine, 431, 720, 5U);
+    const auto compact = snapshot("native-go-to-production-sizing-compact.js");
+    require(
+        compact == R"JSON({"viewport":431,"dialog":[0,0,431],"row":[0,431,431],"date":[20,150,170],"time":[182,100,282],"gap":12,"trailing":149})JSON",
+        "fullscreen Go To dialog lost its fixed tracks or trailing space: " + compact);
+}
+
 void test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
     webscene_engine* engine)
 {

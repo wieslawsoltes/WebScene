@@ -1895,7 +1895,26 @@ void native_document::layout_children(dom_node& parent)
                         fractional_space * track.fraction / fractional_weight);
                 }
             } else if (committed_width < content.width && !column_widths.empty()) {
-                column_widths.back() += content.width - committed_width;
+                // `justify-content: normal` stretches auto grid tracks, not
+                // fixed tracks. Donating all free space to the final column
+                // changed TradingView's compact `150px 100px` Go To input
+                // grid into `150px 228px`, eliminating the trailing space
+                // that Chrome retains after the time field.
+                std::vector<size_t> stretchable_columns;
+                for (size_t column = 0; column < column_widths.size(); ++column) {
+                    if (column >= effective_columns.size()
+                        || effective_columns[column].kind
+                            == grid_track::sizing::automatic) {
+                        stretchable_columns.push_back(column);
+                    }
+                }
+                if (!stretchable_columns.empty()) {
+                    const auto extra = (content.width - committed_width)
+                        / static_cast<float>(stretchable_columns.size());
+                    for (const auto column : stretchable_columns) {
+                        column_widths[column] += extra;
+                    }
+                }
             }
         }
 
@@ -4077,18 +4096,54 @@ float native_document::compute_intrinsic_size(
             }
         }
         std::vector<float> columns(column_count, 0.0F);
+        for (size_t column = 0; column < effective_columns.size(); ++column) {
+            const auto& track = effective_columns[column];
+            if (track.kind == node_style::grid_data::track::sizing::fixed) {
+                columns[column] = resolve_length(
+                    node, track.maximum, available, 0);
+            } else if (track.kind == node_style::grid_data::track::sizing::minmax) {
+                columns[column] = resolve_length(
+                    node, track.minimum, available, 0);
+            }
+        }
         std::vector<float> rows(std::max<size_t>(occupied.size(), grid.template_rows.size()), 0.0F);
         for (const auto& item : items) {
-            const auto child_width = intrinsic_size(*item.node, true, available)
+            const auto single_track = item.column_span == 1U
+                && item.column < effective_columns.size()
+                ? &effective_columns[item.column] : nullptr;
+            const auto child_width = (single_track != nullptr
+                    && single_track->kind
+                        == node_style::grid_data::track::sizing::min_content
+                ? min_content_inline_size(*item.node, available)
+                : intrinsic_size(*item.node, true, available))
                 + resolve_length(*item.node, item.node->style.margin_left, available, 0)
                 + resolve_length(*item.node, item.node->style.margin_right, available, 0);
             const auto child_height = intrinsic_size(*item.node, false, available)
                 + resolve_length(*item.node, item.node->style.margin_top, available, 0)
                 + resolve_length(*item.node, item.node->style.margin_bottom, available, 0);
-            const auto width_share = child_width / static_cast<float>(item.column_span);
+            auto committed_width = 0.0F;
+            std::vector<size_t> growable_columns;
             for (size_t column = item.column;
                  column < item.column + item.column_span;
-                 ++column) columns[column] = std::max(columns[column], width_share);
+                 ++column) {
+                committed_width += columns[column];
+                const auto fixed = column < effective_columns.size()
+                    && effective_columns[column].kind
+                        == node_style::grid_data::track::sizing::fixed;
+                if (!fixed) growable_columns.push_back(column);
+            }
+            if (item.column_span > 1U) {
+                committed_width += resolve_length(
+                        node, node.style.column_gap, available, 0)
+                    * static_cast<float>(item.column_span - 1U);
+            }
+            if (!growable_columns.empty() && child_width > committed_width) {
+                const auto extra = (child_width - committed_width)
+                    / static_cast<float>(growable_columns.size());
+                for (const auto column : growable_columns) {
+                    columns[column] += extra;
+                }
+            }
             const auto height_share = child_height / static_cast<float>(item.row_span);
             for (size_t row = item.row; row < item.row + item.row_span; ++row) {
                 rows[row] = std::max(rows[row], height_share);
