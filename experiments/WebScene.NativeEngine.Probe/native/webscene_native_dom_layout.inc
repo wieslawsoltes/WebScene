@@ -1902,6 +1902,19 @@ void native_document::layout_children(dom_node& parent)
         const auto row_count = std::max<size_t>(
             occupied.size(), parent_grid.template_rows.size());
         std::vector<float> row_heights(row_count, 0.0F);
+        const auto contains_wrapping_flex = [&](const auto& self,
+                                                const dom_node& node) -> bool {
+            if (is_flex_container(node.style.display) && node.style.flex_wrap) {
+                return true;
+            }
+            for (const auto* descendant : composed_children(node)) {
+                if (descendant == nullptr
+                    || descendant->style.display == display_mode::none
+                    || is_out_of_flow(descendant->style.position)) continue;
+                if (self(self, *descendant)) return true;
+            }
+            return false;
+        };
         auto fractional_row_weight = 0.0F;
         for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
             const auto& track = parent_grid.template_rows[row];
@@ -1964,7 +1977,15 @@ void native_document::layout_children(dom_node& parent)
                     item_width - margin_left - margin_right);
                 const auto wraps_at_used_width = intrinsic_size(
                     *item.node, true, item_width) > used_item_width + 0.01F;
-                if (!wraps_at_used_width) {
+                // max-width can cap a wrapping flex descendant's reported
+                // intrinsic inline contribution at the track width even when
+                // its children form multiple lines. Canvas settings use this
+                // exact composition for dropdown-plus-color rows. Detect the
+                // wrapping formatting context itself so its used block size
+                // still participates in row sizing.
+                const auto has_wrapping_flex = !wraps_at_used_width
+                    && contains_wrapping_flex(contains_wrapping_flex, *item.node);
+                if (!wraps_at_used_width && !has_wrapping_flex) {
                     row_heights[item.row] = std::max(
                         row_heights[item.row], authored + margins);
                     continue;
@@ -1984,11 +2005,37 @@ void native_document::layout_children(dom_node& parent)
                     parent.layout,
                     {0, 0, used_item_width, 0},
                     false);
+                // Cross-axis alignment against the zero-height provisional
+                // box can place an oversized child above its parent's top.
+                // scrollHeight only retains the positive overflow edge, so
+                // use the complete in-flow vertical range as the item's
+                // max-content block contribution. Once the row receives that
+                // size, the normal arrange pass centers the child without
+                // overflow. This is the shape used by compact Canvas rows:
+                // an align-items:center cell containing a two-line flex wrap.
+                const auto in_flow_vertical_bounds = [&](const auto& self,
+                                                         const dom_node& node)
+                    -> std::pair<float, float> {
+                    auto top = node.layout.y;
+                    auto bottom = node.layout.y + node.layout.height;
+                    for (const auto* descendant : composed_children(node)) {
+                        if (descendant == nullptr || !descendant->visible
+                            || is_out_of_flow(descendant->style.position)) continue;
+                        const auto bounds = self(self, *descendant);
+                        top = std::min(top, bounds.first);
+                        bottom = std::max(bottom, bounds.second);
+                    }
+                    return {top, bottom};
+                };
+                const auto flow_bounds = in_flow_vertical_bounds(
+                    in_flow_vertical_bounds, *item.node);
                 authored = std::max(
                     authored,
                     std::max(
                         item.node->layout.height,
-                        item.node->scroll_content_height));
+                        std::max(
+                            item.node->scroll_content_height,
+                            flow_bounds.second - flow_bounds.first)));
             }
             row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
         }
@@ -3068,6 +3115,41 @@ void native_document::layout_children(dom_node& parent)
             parent.layout,
             positioned,
             assigned_height_is_definite);
+        if (flex_container && horizontal && !parent.style.flex_wrap) {
+            const auto alignment = child->style.align_self_specified
+                ? child->style.align_self : parent.style.align_items;
+            if ((alignment == align_mode::center || alignment == align_mode::end)
+                && std::abs(child->layout.height - positioned.height) > 0.01F) {
+                // An auto-height flex item can grow while it is being laid
+                // out (most notably when a descendant flex row wraps). Cross
+                // alignment must use that final outer cross size. Centering
+                // the provisional intrinsic height and retaining that offset
+                // makes the grown item overflow into the next grid row.
+                const auto margin_top = resolve_length(
+                    *child, child->style.margin_top, content.height, 0);
+                const auto margin_bottom = resolve_length(
+                    *child, child->style.margin_bottom, content.height, 0);
+                const auto definite_cross_size = parent.used_height_is_definite
+                    || is_specified(parent.style.height);
+                const auto available_cross_size = definite_cross_size
+                    ? content.height
+                    : child->layout.height + margin_top + margin_bottom;
+                const auto aligned_y = alignment == align_mode::center
+                    ? content.y + margin_top
+                        + (available_cross_size - margin_top - margin_bottom
+                            - child->layout.height) * 0.5F
+                    : content.y + available_cross_size
+                        - margin_bottom - child->layout.height;
+                const auto relative_offset = positioned.y - assigned.y;
+                assigned.y = aligned_y;
+                positioned.y = aligned_y + relative_offset;
+                layout_child(
+                    *child,
+                    parent.layout,
+                    positioned,
+                    assigned_height_is_definite);
+            }
+        }
         // The retained native viewport owns scrolling while a loaded document
         // exposes HTML and BODY structural boxes beneath it. Those boxes remain
         // viewport-sized, but descendants can establish a larger scrollable

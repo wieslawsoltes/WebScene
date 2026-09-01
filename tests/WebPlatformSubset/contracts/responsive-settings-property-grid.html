@@ -31,7 +31,7 @@
     padding-inline-end:20px;
   }
   .control { box-sizing:border-box; height:34px; width:150px; }
-  .control-wrap { display:flex; flex-wrap:wrap; gap:8px; }
+  .control-wrap { display:flex; flex-wrap:wrap; gap:8px; max-width:100%; }
   .swatch { box-sizing:border-box; height:34px; width:75px; }
   @media (max-width:379px) {
     #content { grid-template-columns:1fr min-content; }
@@ -47,6 +47,8 @@
   <div class="cell"><div class="inner"><button class="control">Auto</button></div></div>
   <div class="cell first"><div class="inner" id="wide-label">Symbol</div></div>
   <div class="cell" id="symbol-control-cell"><div class="inner"><div class="control-wrap" id="control-wrap"><button class="control"></button><div class="swatch" id="swatch"></div></div></div></div>
+  <div class="cell first"><div class="inner" id="after-label">Crosshair</div></div>
+  <div class="cell"><div class="inner"><div class="swatch"></div></div></div>
 </main>
 <script>
   promise_test(async () => {
@@ -63,6 +65,7 @@
     const symbolControlCell = rect("symbol-control-cell");
     const controlWrap = rect("control-wrap");
     const swatch = rect("swatch");
+    const after = rect("after-label");
     assert_greater_than(first.height, 36,
       "the narrow first track wraps the longest label");
     assert_less_than_equal(first.bottom, second.top + 0.01,
@@ -79,7 +82,11 @@
       "the multi-control group wraps inside the compact min-content track");
     assert_greater_than(swatch.top, controlWrap.top + 33,
       "the secondary color control moves to the next flex line");
-    assert_greater_than_equal(content.getBoundingClientRect().bottom, wide.bottom - 0.01,
+    assert_greater_than(symbolControlCell.height, 90,
+      "the compact grid row grows to contain both wrapped control lines");
+    assert_less_than_equal(controlWrap.bottom, after.top + 0.01,
+      "the wrapped control group does not paint into the following property row");
+    assert_greater_than_equal(content.getBoundingClientRect().bottom, after.bottom - 0.01,
       "the compact property grid contains its final row");
   }, "compact 1fr/min-content settings rows use post-track wrapped block contributions");
 </script>

@@ -1592,7 +1592,7 @@ void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
                 padding-inline-end: 20px;
               }
               .control { box-sizing: border-box; height: 34px; width: 150px; }
-              .control-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+              .control-wrap { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
               .swatch { box-sizing: border-box; height: 34px; width: 75px; }
             </style>
             <div id="content">
@@ -1604,6 +1604,8 @@ void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
               <div class="cell"><div class="inner"><button class="control">Auto</button></div></div>
               <div class="cell first"><div class="inner" id="wide-label">Symbol</div></div>
               <div class="cell" id="symbol-control-cell"><div class="inner"><div class="control-wrap" id="control-wrap"><button class="control"></button><div class="swatch" id="swatch"></div></div></div></div>
+              <div class="cell first"><div class="inner" id="after-label">Crosshair</div></div>
+              <div class="cell"><div class="inner"><div class="swatch"></div></div></div>
             </div>`;
           const rect = id => document.getElementById(id).getBoundingClientRect();
           const first = rect('first-label');
@@ -1614,6 +1616,7 @@ void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
           const symbolControlCell = rect('symbol-control-cell');
           const controlWrap = rect('control-wrap');
           const swatch = rect('swatch');
+          const after = rect('after-label');
           return {
             labelsDoNotOverlap: first.bottom <= second.top + 0.01
               && second.bottom <= third.top + 0.01
@@ -1621,13 +1624,21 @@ void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
             firstWrapped: first.height > 36,
             compactTracks: first.width > 120 && symbolControlCell.width <= 151,
             controlsWrap: controlWrap.height > 70 && swatch.top > controlWrap.top + 33,
-            contentContainsRows: content.bottom >= wide.bottom - 0.01,
+            wrappedControlGrowsRow: symbolControlCell.height > 90
+              && controlWrap.bottom <= after.top + 0.01,
+            contentContainsRows: content.bottom >= after.bottom - 0.01,
             geometry: {
               content: [content.width, content.height],
               first: [first.left, first.top, first.width, first.height],
               second: [second.left, second.top, second.width, second.height],
               third: [third.left, third.top, third.width, third.height],
-              wide: [wide.left, wide.top, wide.width, wide.height]
+              wide: [wide.left, wide.top, wide.width, wide.height],
+              symbolControlCell: [symbolControlCell.left, symbolControlCell.top,
+                symbolControlCell.width, symbolControlCell.height],
+              controlWrap: [controlWrap.left, controlWrap.top,
+                controlWrap.width, controlWrap.height],
+              swatch: [swatch.left, swatch.top, swatch.width, swatch.height],
+              after: [after.left, after.top, after.width, after.height]
             }
           };
         })()
@@ -1637,6 +1648,7 @@ void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
             && result.find(R"JSON("firstWrapped":true)JSON") != std::string::npos
             && result.find(R"JSON("compactTracks":true)JSON") != std::string::npos
             && result.find(R"JSON("controlsWrap":true)JSON") != std::string::npos
+            && result.find(R"JSON("wrappedControlGrowsRow":true)JSON") != std::string::npos
             && result.find(R"JSON("contentContainsRows":true)JSON") != std::string::npos,
         "TradingView compact property-table grid rows did not grow with wrapped labels: "
             + result);
