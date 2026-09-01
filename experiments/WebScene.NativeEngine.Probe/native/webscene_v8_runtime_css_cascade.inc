@@ -1,13 +1,66 @@
-    static void apply_scrollbar_css_declaration(
-        node_style& style,
+    void apply_scrollbar_css_declaration(
+        dom_node& node,
+        int pseudo_kind,
         const css_declaration& declaration)
     {
-        if (declaration.name != "display"
-            || (style.scrollbar_visibility_important && !declaration.important)) {
+        auto& style = node.style;
+        const auto contains_variable = declaration.value.find("var(") != std::string::npos;
+        auto resolved_value = std::string{};
+        const auto& value = contains_variable
+            ? (resolved_value = resolve_css_value(node, declaration.value))
+            : declaration.value;
+        if (value.empty() && contains_variable) return;
+        const auto lower = lower_html_name(trim_css(value));
+        auto& scrollbar = style.mutable_scrollbar();
+        if (pseudo_kind == 3) {
+            if (declaration.name == "display") {
+                if (style.scrollbar_visibility_important && !declaration.important) return;
+                style.scrollbar_hidden = lower == "none";
+                style.scrollbar_visibility_important = declaration.important;
+            } else if (declaration.name == "width") {
+                const auto length = native_document::parse_length(value);
+                if (length.unit == length_unit::pixels) {
+                    scrollbar.width = std::max(0.0F, length.value);
+                    scrollbar.overlay_inset = 0;
+                }
+            } else if (declaration.name == "height") {
+                const auto length = native_document::parse_length(value);
+                if (length.unit == length_unit::pixels) {
+                    scrollbar.height = std::max(0.0F, length.value);
+                    scrollbar.overlay_inset = 0;
+                }
+            }
             return;
         }
-        style.scrollbar_hidden = trim_css(declaration.value) == "none";
-        style.scrollbar_visibility_important = declaration.important;
+        if (pseudo_kind == 4) {
+            if (declaration.name == "background" || declaration.name == "background-color") {
+                scrollbar.thumb_rgba = lower == "initial" ? 0U
+                    : native_document::parse_color(value);
+            } else if (declaration.name == "border-radius") {
+                scrollbar.thumb_radius = std::max(
+                    0.0F, native_document::parse_length(value).value);
+            } else if (declaration.name == "border" || declaration.name == "border-width") {
+                std::istringstream stream(value);
+                for (std::string token; stream >> token;) {
+                    if (!token.empty() && (std::isdigit(static_cast<unsigned char>(token.front()))
+                            || token.front() == '.')) {
+                        scrollbar.thumb_border_width = std::max(
+                            0.0F, native_document::parse_length(token).value);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        if (pseudo_kind == 5) {
+            if (declaration.name == "background" || declaration.name == "background-color") {
+                scrollbar.track_rgba = lower == "initial" ? 0U
+                    : native_document::parse_color(value);
+            } else if (declaration.name == "border-radius") {
+                scrollbar.track_radius = std::max(
+                    0.0F, native_document::parse_length(value).value);
+            }
+        }
     }
 
     static bool layout_length_equal(css_length left, css_length right) noexcept
@@ -1731,6 +1784,11 @@
             if (is_inline(inline_bottom)) reset.bottom = previous.bottom;
             if (is_inline(inline_display)) reset.display = previous.display;
             if (is_inline(inline_position)) reset.position = previous.position;
+            if (is_inline(inline_contain)) {
+                reset.contain_stacking_context = previous.contain_stacking_context;
+                reset.mutable_textual().contain_value =
+                    previous.textual().contain_value;
+            }
             if (is_inline(inline_padding)) {
                 reset.padding_left = previous.padding_left;
                 reset.padding_top = previous.padding_top;
@@ -1797,6 +1855,8 @@
                 reset.transform_scale_y = previous.transform_scale_y;
                 reset.transform_rotate_degrees = previous.transform_rotate_degrees;
                 reset.transform_specified = previous.transform_specified;
+                reset.transform_stacking_context =
+                    previous.transform_stacking_context;
             }
             if (is_inline(inline_transform_origin)) {
                 reset.transform_origin_x = previous.transform_origin_x;
@@ -2062,6 +2122,8 @@
                     node.style.transform_scale_y,
                     node.style.transform_rotate_degrees);
                 node.style.transform_specified = true;
+                node.style.transform_stacking_context =
+                    lower_html_name(value) != "none";
             }
             return;
         } else if (name == "transform-origin") {
@@ -2735,6 +2797,20 @@
                 node.style.overflow_y = parse_overflow_mode(value);
             }
             refresh_overflow_state(node.style);
+        } else if (name == "contain" && !is_inline(inline_contain)) {
+            auto contain = lower_html_name(value);
+            if (contain == "inherit" && node.parent != nullptr) {
+                contain = node.parent->style.textual().contain_value;
+            }
+            if (contain == "initial" || contain == "unset" || contain == "revert"
+                || contain.empty()) {
+                contain = "none";
+            }
+            node.style.mutable_textual().contain_value = contain;
+            node.style.contain_stacking_context = contain == "content"
+                || contain == "strict"
+                || (" " + contain + " ").find(" layout ") != std::string::npos
+                || (" " + contain + " ").find(" paint ") != std::string::npos;
         } else if (name == "visibility" && !is_inline(inline_visibility)) {
             node.style.visibility_specified = value != "inherit" && value != "unset";
             node.style.visibility_hidden = value == "hidden" || value == "collapse";
@@ -2920,6 +2996,7 @@
         node.style.important_property_mask = 0;
         node.style.scrollbar_hidden = false;
         node.style.scrollbar_visibility_important = false;
+        node.style.reset_scrollbar_style();
         if ((node.style.inline_property_mask & inline_position) == 0U) {
             node.style.position = position_mode::normal;
         }
@@ -2992,11 +3069,16 @@
             node.style.transform_scale_y = 1;
             node.style.transform_rotate_degrees = 0;
             node.style.transform_specified = false;
+            node.style.transform_stacking_context = false;
         }
         if ((node.style.inline_property_mask & inline_transform_origin) == 0U) {
             node.style.transform_origin_x = {50, length_unit::percent};
             node.style.transform_origin_y = {50, length_unit::percent};
             node.style.transform_origin_specified = false;
+        }
+        if ((node.style.inline_property_mask & inline_contain) == 0U) {
+            node.style.contain_stacking_context = false;
+            node.style.mutable_textual().contain_value = "none";
         }
         node.style.clear_animations();
         if ((node.style.inline_property_mask & inline_flex_direction) == 0U) {
@@ -3265,9 +3347,9 @@
         // declarations so `::before { background:var(--active-bg) }` resolves
         // the state variable authored on the active element.
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
+            if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
+                    apply_scrollbar_css_declaration(node, pseudo_kind, declaration);
                 }
                 continue;
             }
@@ -3466,9 +3548,9 @@
         }
         recompute_inline_font_relative_metrics(node);
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
+            if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
+                    apply_scrollbar_css_declaration(node, pseudo_kind, declaration);
                 }
                 continue;
             }

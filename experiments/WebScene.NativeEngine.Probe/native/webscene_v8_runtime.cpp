@@ -631,7 +631,7 @@ struct v8_dom_runtime::implementation final {
         const char* properties[] = {
             "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
             "left", "top", "right", "bottom", "inset", "insetInlineStart", "insetInlineEnd",
-            "display", "position", "cssFloat", "flexDirection", "flexFlow",
+            "display", "position", "contain", "cssFloat", "flexDirection", "flexFlow",
             "flexGrow", "flexShrink", "flexBasis", "flexWrap",
             "alignItems", "alignSelf", "justifyContent", "gap", "rowGap", "columnGap",
             "padding", "paddingInline", "paddingBlock",

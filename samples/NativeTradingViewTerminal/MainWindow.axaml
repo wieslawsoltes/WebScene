@@ -5,8 +5,8 @@
     xmlns:native="clr-namespace:WebScene.Backends.Avalonia.Native;assembly=WebScene.Backend.Avalonia"
     Width="1440"
     Height="900"
-    MinWidth="960"
-    MinHeight="640"
+    MinWidth="360"
+    MinHeight="480"
     Background="#101216"
     Title="WebScene · Native TradingView Terminal">
   <Grid RowDefinitions="Auto,*,Auto">

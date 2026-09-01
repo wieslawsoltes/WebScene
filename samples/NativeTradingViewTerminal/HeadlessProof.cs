@@ -57,6 +57,15 @@ internal static class HeadlessProof
             File.WriteAllText(
                 Path.Combine(output, "first-iframe.html"),
                 view.FirstIframeHtml);
+            if (arguments.Contains("--toolbar-overflow-proof", StringComparer.Ordinal))
+            {
+                return CaptureToolbarOverflowEvidence(
+                    view,
+                    window,
+                    output,
+                    width,
+                    height);
+            }
             InstallPointerCertification(view);
             var surface = (NativeSceneSurface)view.Content!;
             surface.SubmitAvaloniaPointerMove(700, 350);
@@ -335,6 +344,159 @@ internal static class HeadlessProof
             throw new InvalidOperationException(
                 "TradingView chart frame was unavailable for pointer certification.");
         }
+    }
+
+    private static int CaptureToolbarOverflowEvidence(
+        NativeWebSceneView view,
+        Window window,
+        string output,
+        int width,
+        int height)
+    {
+        var surface = (NativeSceneSurface)view.Content!;
+        var before = CaptureToolbarOverflowState(view);
+        surface.SubmitAvaloniaPointerMove(width / 2f, 20);
+        PumpFrames(view, window, TimeSpan.FromMilliseconds(500));
+        var after = CaptureToolbarOverflowState(view);
+        surface.SubmitPointerButton(
+            kind: 2,
+            x: width - 12,
+            y: 19,
+            button: 0,
+            pressed: true);
+        PumpFrames(view, window, TimeSpan.FromMilliseconds(50));
+        surface.SubmitPointerButton(
+            kind: 3,
+            x: width - 12,
+            y: 19,
+            button: 0,
+            pressed: false);
+        PumpFrames(view, window, TimeSpan.FromMilliseconds(500));
+        var afterClick = CaptureToolbarOverflowState(view);
+        File.WriteAllText(
+            Path.Combine(output, "toolbar-overflow-before.json"),
+            before);
+        File.WriteAllText(
+            Path.Combine(output, "toolbar-overflow-after.json"),
+            after);
+        File.WriteAllText(
+            Path.Combine(output, "toolbar-overflow-after-click.json"),
+            afterClick);
+        SaveNativeFrame(
+            surface,
+            Path.Combine(output, "toolbar-overflow-after.png"),
+            width,
+            height);
+        using var serializedEvidence = JsonDocument.Parse(afterClick);
+        var evidenceJson = serializedEvidence.RootElement.ValueKind
+            == JsonValueKind.String
+                ? serializedEvidence.RootElement.GetString() ?? "{}"
+                : afterClick;
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        var root = evidence.RootElement;
+        if (root.TryGetProperty("error", out var error))
+        {
+            throw new InvalidOperationException(
+                $"TradingView toolbar certification failed: {error.GetString()}");
+        }
+
+        var chartWidth = root.GetProperty("chartWidth").GetDouble();
+        var wrapper = root.GetProperty("wrapper");
+        var wrapperWidth = wrapper.GetProperty("clientWidth").GetDouble();
+        var scrollWidth = wrapper.GetProperty("scrollWidth").GetDouble();
+        var scrollLeft = wrapper.GetProperty("scrollLeft").GetDouble();
+        var contentWidth = root.GetProperty("contentWidth").GetDouble();
+        var rightArrow = root.GetProperty("rightArrow");
+        var rightClass = rightArrow.GetProperty("className").GetString() ?? "";
+        var rightX = rightArrow.GetProperty("x").GetDouble();
+        var rightWidth = rightArrow.GetProperty("width").GetDouble();
+        if (scrollWidth <= wrapperWidth + 1
+            || contentWidth <= wrapperWidth + 1
+            || !rightClass.Contains("isVisible-", StringComparison.Ordinal)
+            || rightX < -0.5
+            || rightX + rightWidth > chartWidth + 0.5
+            || scrollLeft <= 1)
+        {
+            throw new InvalidOperationException(
+                "TradingView toolbar overflow navigation was not exposed after hover. "
+                + $"chart={chartWidth:F1}, wrapper={wrapperWidth:F1}, "
+                + $"scroll={scrollWidth:F1}, content={contentWidth:F1}, "
+                + $"scrollLeft={scrollLeft:F1}, "
+                + $"right=({rightX:F1},{rightWidth:F1},'{rightClass}').");
+        }
+
+        Console.WriteLine(
+            "TradingView toolbar overflow certified: "
+            + $"wrapper={wrapperWidth:F1}, scroll={scrollWidth:F1}, "
+            + $"content={contentWidth:F1}, scrollLeft={scrollLeft:F1}, "
+            + $"right-arrow-x={rightX:F1}.");
+        return 0;
+    }
+
+    private static string CaptureToolbarOverflowState(NativeWebSceneView view)
+    {
+        var evaluation = view.EvaluateTextAsync("""
+            (() => {
+              const chart = Array.from(document.querySelectorAll('iframe'))
+                .map(frame => frame.contentWindow)
+                .find(candidate =>
+                  candidate?.document?.querySelectorAll('canvas').length >= 8);
+              if (!chart) return JSON.stringify({ error: 'chart-frame-missing' });
+              const doc = chart.document;
+              const elements = Array.from(doc.querySelectorAll('*'));
+              const wrapper = elements.find(element => {
+                const className = String(element.className || '');
+                const rect = element.getBoundingClientRect();
+                return className.includes('scrollWrap-')
+                  && rect.y >= -1
+                  && rect.y < 50
+                  && rect.width > 0
+                  && rect.width <= chart.innerWidth + 1
+                  && element.scrollWidth > element.clientWidth + 1;
+              });
+              if (!wrapper) return JSON.stringify({ error: 'overflow-wrapper-missing' });
+              const content = Array.from(wrapper.children).find(element =>
+                String(element.className || '').includes('content-'));
+              const rightArrow = elements.find(element => {
+                const className = String(element.className || '');
+                const rect = element.getBoundingClientRect();
+                return className.includes('scrollRight-')
+                  && rect.height > 0
+                  && rect.y >= -1
+                  && rect.y < 50;
+              });
+              const leftArrow = elements.find(element => {
+                const className = String(element.className || '');
+                const rect = element.getBoundingClientRect();
+                return className.includes('scrollLeft-')
+                  && rect.height > 0
+                  && rect.y >= -1
+                  && rect.y < 50;
+              });
+              const arrow = element => {
+                if (!element) return null;
+                const rect = element.getBoundingClientRect();
+                return {
+                  className: String(element.className || ''),
+                  x: rect.x,
+                  width: rect.width
+                };
+              };
+              return JSON.stringify({
+                chartWidth: chart.innerWidth,
+                wrapper: {
+                  clientWidth: wrapper.clientWidth,
+                  scrollWidth: wrapper.scrollWidth,
+                  scrollLeft: wrapper.scrollLeft
+                },
+                contentWidth: content?.getBoundingClientRect().width ?? 0,
+                leftArrow: arrow(leftArrow),
+                rightArrow: arrow(rightArrow)
+              });
+            })()
+            """);
+        PumpUntil(evaluation, TimeSpan.FromSeconds(10));
+        return evaluation.GetAwaiter().GetResult();
     }
 
     private static string WaitForWebSocketEvidence(

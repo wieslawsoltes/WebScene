@@ -330,9 +330,16 @@ void native_document::layout_children(dom_node& parent)
                 table_width = std::max(table_width, candidate);
             }
         }
-        if (is_specified(parent.style.width)) table_width = content.width;
+        // CSS table width is a minimum, not a hard clamp. A display:table
+        // wrapper with width:100% must still expand to the minimum width of
+        // its anonymous row. TradingView measures that wrapper to decide
+        // whether its narrow header toolbar needs overflow navigation.
+        if (is_specified(parent.style.width)) {
+            table_width = std::max(table_width, content.width);
+        }
         table_width = std::max(0.0F, table_width);
-        if (!is_specified(parent.style.width) && table_width > 0.0F) {
+        if (table_width > content.width + 0.01F
+            || (!is_specified(parent.style.width) && table_width > 0.0F)) {
             parent.layout.width = table_width + border_left + border_right
                 + padding_left + padding_right;
         }
@@ -958,10 +965,13 @@ void native_document::layout_children(dom_node& parent)
         const auto intrinsic_keyword = authored.unit == length_unit::max_content
                 || authored.unit == length_unit::min_content
                 || authored.unit == length_unit::fit_content;
-        auto size = intrinsic_keyword
+        const auto stretch = authored.unit == length_unit::stretch;
+        auto size = stretch
+            ? available
+            : intrinsic_keyword
             ? intrinsic_size(node, horizontal_axis, available)
             : resolve_length(node, authored, available, 0);
-        if (!intrinsic_keyword) {
+        if (!intrinsic_keyword && !stretch) {
             const auto box_edges = horizontal_axis
                 ? resolve_length(node, node.style.padding_left, available, 0)
                     + resolve_length(node, node.style.padding_right, available, 0)
@@ -1856,14 +1866,19 @@ void native_document::layout_children(dom_node& parent)
                 const auto authored_track = item.column < effective_columns.size()
                     ? &effective_columns[item.column] : nullptr;
                 if (authored_track != nullptr
-                    && authored_track->kind != grid_track::sizing::automatic) continue;
+                    && authored_track->kind != grid_track::sizing::automatic
+                    && authored_track->kind != grid_track::sizing::min_content) continue;
                 const auto margins = resolve_length(
                         *item.node, item.node->style.margin_left, content.width, 0)
                     + resolve_length(
                         *item.node, item.node->style.margin_right, content.width, 0);
                 column_widths[item.column] = std::max(
                     column_widths[item.column],
-                    intrinsic_size(*item.node, true, content.width) + margins);
+                    (authored_track != nullptr
+                            && authored_track->kind == grid_track::sizing::min_content
+                        ? min_content_inline_size(*item.node, content.width)
+                        : intrinsic_size(*item.node, true, content.width))
+                        + margins);
             }
         }
         const auto total_gap = column_gap * static_cast<float>(column_count - 1U);
@@ -1918,10 +1933,63 @@ void native_document::layout_children(dom_node& parent)
                 item.node->style.height.unit == length_unit::percent
                 && (authored_track == nullptr
                     || authored_track->kind == grid_track::sizing::automatic);
-            const auto authored = is_specified(item.node->style.height)
-                    && !cyclic_percentage_height
+            const auto definite_height = is_specified(item.node->style.height)
+                && !cyclic_percentage_height;
+            auto authored = definite_height
                 ? outer_authored_size(*item.node, false, content.height)
                 : intrinsic_size(*item.node, false, content.height);
+            if (!definite_height) {
+                // Block-axis intrinsic sizing alone only sees an unwrapped
+                // line-height. Grid row sizing, however, happens after the
+                // inline tracks are known and must include the block size of
+                // content wrapped at that used track width. TradingView's
+                // compact property table uses `1fr min-content`: a wide
+                // control track intentionally leaves a narrow label track,
+                // whose multi-line labels must grow their rows rather than
+                // painting through the following rows.
+                const auto item_width = std::accumulate(
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(item.column),
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(
+                                item.column + item.column_span),
+                        0.0F)
+                    + column_gap * static_cast<float>(item.column_span - 1U);
+                const auto margin_left = resolve_length(
+                    *item.node, item.node->style.margin_left, item_width, 0);
+                const auto margin_right = resolve_length(
+                    *item.node, item.node->style.margin_right, item_width, 0);
+                const auto used_item_width = std::max(
+                    0.0F,
+                    item_width - margin_left - margin_right);
+                const auto wraps_at_used_width = intrinsic_size(
+                    *item.node, true, item_width) > used_item_width + 0.01F;
+                if (!wraps_at_used_width) {
+                    row_heights[item.row] = std::max(
+                        row_heights[item.row], authored + margins);
+                    continue;
+                }
+                if (item.node->style.grid().subgrid_columns) {
+                    auto& inherited = item.node->mutable_grid_layout();
+                    inherited.column_widths.assign(
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(item.column),
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(
+                                item.column + item.column_span));
+                    inherited.column_gap = column_gap;
+                }
+                layout_child(
+                    *item.node,
+                    parent.layout,
+                    {0, 0, used_item_width, 0},
+                    false);
+                authored = std::max(
+                    authored,
+                    std::max(
+                        item.node->layout.height,
+                        item.node->scroll_content_height));
+            }
             row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
         }
         const auto total_row_gap = row_count > 0
@@ -3289,6 +3357,96 @@ void native_document::layout_children(dom_node& parent)
     }
 }
 
+float native_document::min_content_inline_size(
+    const dom_node& node,
+    float available)
+{
+    const auto padding = resolve_length(node, node.style.padding_left, available, 0)
+        + resolve_length(node, node.style.padding_right, available, 0)
+        + resolve_length(node, node.style.border_left_width, available, 0)
+        + resolve_length(node, node.style.border_right_width, available, 0);
+    const auto constrain = [&](float size) {
+        const auto box_adjustment = node.style.border_box ? 0.0F : padding;
+        if (is_specified(node.style.max_width)) {
+            size = std::min(
+                size,
+                resolve_length(node, node.style.max_width, available, size)
+                    + box_adjustment);
+        }
+        if (is_specified(node.style.min_width)) {
+            size = std::max(
+                size,
+                resolve_length(node, node.style.min_width, available, 0)
+                    + box_adjustment);
+        }
+        return std::max(0.0F, size);
+    };
+    const auto authored = node.style.width;
+    if (authored.unit == length_unit::pixels
+        || authored.unit == length_unit::em
+        || authored.unit == length_unit::rem
+        || authored.unit == length_unit::viewport_width
+        || authored.unit == length_unit::viewport_height) {
+        return constrain(resolve_length(node, authored, available, 0)
+            + (node.style.border_box ? 0.0F : padding));
+    }
+    if (node.kind == dom_node_kind::text || has_visible_text(node.text_content)) {
+        const auto text = collapsed_text(
+            node,
+            resolved_text_transform(node, node.text_content));
+        if (!resolved_white_space_wraps(node)) {
+            return constrain(padding + measure_text_width(text, node));
+        }
+        auto widest_segment = 0.0F;
+        size_t start = 0U;
+        for (size_t index = 0U; index <= text.size(); ++index) {
+            const auto separator = index == text.size()
+                || std::isspace(static_cast<unsigned char>(text[index]));
+            if (!separator) continue;
+            if (index > start) {
+                widest_segment = std::max(
+                    widest_segment,
+                    measure_text_width(
+                        std::string_view{text}.substr(start, index - start),
+                        node));
+            }
+            start = index + 1U;
+        }
+        return constrain(padding + widest_segment);
+    }
+    if (node.tag == "input" || node.tag == "select" || node.tag == "textarea"
+        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas") {
+        return intrinsic_size(node, true, available);
+    }
+
+    const auto flex = is_flex_container(node.style.display);
+    const auto horizontal_flex = flex && node.style.direction == flex_direction::row;
+    const auto accumulates = horizontal_flex && !node.style.flex_wrap;
+    auto result = 0.0F;
+    size_t contributing_children = 0U;
+    for (const auto* child : composed_children(node)) {
+        if (child == nullptr || child->style.display == display_mode::none
+            || is_out_of_flow(child->style.position)
+            || (flex && is_collapsible_whitespace_text(*child))) continue;
+        const auto contribution = min_content_inline_size(*child, available)
+            + resolve_length(*child, child->style.margin_left, available, 0)
+            + resolve_length(*child, child->style.margin_right, available, 0);
+        if (accumulates) {
+            if (contributing_children > 0U) {
+                result += resolve_length(node, node.style.column_gap, available, 0);
+            }
+            result += contribution;
+        } else {
+            // A wrapping row flex container can place each item on its own
+            // line, so its min-content contribution is the widest item. The
+            // same maximum rule applies to block/column descendants.
+            result = std::max(result, contribution);
+        }
+        ++contributing_children;
+    }
+    return constrain(result + padding);
+}
+
 float native_document::intrinsic_size(
     const dom_node& node,
     bool horizontal,
@@ -3420,6 +3578,9 @@ float native_document::compute_intrinsic_size(
     // descendants such as `width: 100%` or `height: 100%` measure as the whole
     // viewport. Use the descendant content contribution in that case; once the
     // ancestor has a definite box, layout_children resolves the percentage.
+    if (authored.unit == length_unit::stretch) {
+        return constrain(available);
+    }
     if (!(node.style.display == display_mode::table_cell && !horizontal)
         && (authored.unit == length_unit::pixels
         || authored.unit == length_unit::em

@@ -1669,10 +1669,7 @@ void native_document::append_scene(
             0.0F, snapped_content_width - snapped_viewport_width);
         const auto maximum_y = std::max(
             0.0F, snapped_content_height - snapped_viewport_height);
-        constexpr auto rail_rgba = 0x7F7F7F40U;
-        constexpr auto thumb_rgba = 0xA0A0A0D0U;
-        constexpr auto thickness = 6.0F;
-        constexpr auto inset = 2.0F;
+        const auto& scrollbar = node.style.scrollbar();
         constexpr auto minimum_thumb = 18.0F;
         const auto append_overlay_rect = [&](float x, float y, float width, float height,
                                              uint32_t rgba, float radius) {
@@ -1696,10 +1693,14 @@ void native_document::append_scene(
             && node.style.overflow_x == overflow_mode::visible;
         const auto root_viewport_scroll_y = node.parent == nullptr
             && node.style.overflow_y == overflow_mode::visible;
+        const auto vertical_thickness = scrollbar.width;
+        const auto horizontal_thickness = scrollbar.height;
+        const auto inset = scrollbar.overlay_inset;
         if ((node.style.scroll_y_enabled || root_viewport_scroll_y) && maximum_y > 0.01F
-            && viewport_width >= thickness + inset * 2
+            && vertical_thickness > 0
+            && viewport_width >= vertical_thickness + inset * 2
             && viewport_height > 0) {
-            const auto rail_x = viewport_x + viewport_width - thickness - inset;
+            const auto rail_x = viewport_x + viewport_width - vertical_thickness - inset;
             const auto rail_y = viewport_y + inset;
             const auto rail_height = std::max(0.0F, viewport_height - inset * 2);
             const auto thumb_height = std::min(
@@ -1711,16 +1712,20 @@ void native_document::append_scene(
             const auto thumb_travel = std::max(0.0F, rail_height - thumb_height);
             const auto thumb_y = rail_y + thumb_travel
                 * std::clamp(node.scroll_top / maximum_y, 0.0F, 1.0F);
-            append_overlay_rect(
-                rail_x, rail_y, thickness, rail_height, rail_rgba, thickness * 0.5F);
-            append_overlay_rect(
-                rail_x, thumb_y, thickness, thumb_height, thumb_rgba, thickness * 0.5F);
+            append_overlay_rect(rail_x, rail_y, vertical_thickness, rail_height,
+                scrollbar.track_rgba, scrollbar.track_radius);
+            const auto border = std::min(scrollbar.thumb_border_width,
+                std::min(vertical_thickness, thumb_height) * 0.5F);
+            append_overlay_rect(rail_x + border, thumb_y + border,
+                vertical_thickness - border * 2, thumb_height - border * 2,
+                scrollbar.thumb_rgba, std::max(0.0F, scrollbar.thumb_radius - border));
         }
         if ((node.style.scroll_x_enabled || root_viewport_scroll_x) && maximum_x > 0.01F
-            && viewport_height >= thickness + inset * 2
+            && horizontal_thickness > 0
+            && viewport_height >= horizontal_thickness + inset * 2
             && viewport_width > 0) {
             const auto rail_x = viewport_x + inset;
-            const auto rail_y = viewport_y + viewport_height - thickness - inset;
+            const auto rail_y = viewport_y + viewport_height - horizontal_thickness - inset;
             const auto rail_width = std::max(0.0F, viewport_width - inset * 2);
             const auto thumb_width = std::min(
                 rail_width,
@@ -1731,10 +1736,13 @@ void native_document::append_scene(
             const auto thumb_travel = std::max(0.0F, rail_width - thumb_width);
             const auto thumb_x = rail_x + thumb_travel
                 * std::clamp(node.scroll_left / maximum_x, 0.0F, 1.0F);
-            append_overlay_rect(
-                rail_x, rail_y, rail_width, thickness, rail_rgba, thickness * 0.5F);
-            append_overlay_rect(
-                thumb_x, rail_y, thumb_width, thickness, thumb_rgba, thickness * 0.5F);
+            append_overlay_rect(rail_x, rail_y, rail_width, horizontal_thickness,
+                scrollbar.track_rgba, scrollbar.track_radius);
+            const auto border = std::min(scrollbar.thumb_border_width,
+                std::min(horizontal_thickness, thumb_width) * 0.5F);
+            append_overlay_rect(thumb_x + border, rail_y + border,
+                thumb_width - border * 2, horizontal_thickness - border * 2,
+                scrollbar.thumb_rgba, std::max(0.0F, scrollbar.thumb_radius - border));
         }
     }
     if (has_rotate_transform) {

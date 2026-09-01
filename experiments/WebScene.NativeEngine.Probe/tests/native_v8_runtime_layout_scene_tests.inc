@@ -196,6 +196,60 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_authored_scrollbar_style_and_thumb_drag(webscene_engine* engine)
+{
+    resize(engine, 320, 180, 5800U);
+    const auto initial = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html,body { margin:0; }
+            #styled { width:120px; height:80px; overflow:auto; }
+            #styled::-webkit-scrollbar { width:5px; height:5px; }
+            #styled::-webkit-scrollbar-track {
+              background-color:transparent; border-radius:3px;
+            }
+            #styled::-webkit-scrollbar-thumb {
+              background-color:rgb(18,52,86); background-clip:content-box;
+              border:1px solid transparent; border-radius:3px;
+            }
+            #content { height:320px; }
+          </style><div id="styled"><div id="content"></div></div>`;
+          const styled = document.getElementById('styled');
+          globalThis.__styledScrollbar = styled;
+          globalThis.__styledScrollbarEvents = 0;
+          styled.addEventListener('scroll', () => __styledScrollbarEvents++);
+          return {
+            clientHeight:styled.clientHeight,
+            scrollHeight:styled.scrollHeight,
+            scrollTop:styled.scrollTop
+          };
+        })()
+    )JS", "native-authored-scrollbar-setup.js");
+    require(
+        initial == R"JSON({"clientHeight":80,"scrollHeight":320,"scrollTop":0})JSON",
+        "authored scrollbar fixture did not establish its overflow range: " + initial);
+
+    const auto consumed_before_drag = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 117, 10, 5801U, true);
+    pointer_move(engine, 117, 65, 5802U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 117, 65, 5803U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_drag + 3,
+        "authored scrollbar thumb drag inputs were not consumed");
+    const auto dragged = evaluate(engine, R"JS(
+        ({
+          scrollTop:Math.round(__styledScrollbar.scrollTop),
+          scrollEvents:__styledScrollbarEvents
+        })
+    )JS", "native-authored-scrollbar-drag-result.js");
+    require(
+        dragged == R"JSON({"scrollTop":220,"scrollEvents":1})JSON",
+        "dragging the authored scrollbar thumb did not update the finite scroll owner: "
+            + dragged);
+
+}
+
 void test_absolute_virtualized_rows_follow_ancestor_scroll_container(
     webscene_engine* engine)
 {
@@ -453,6 +507,165 @@ void test_toolbar_scroll_chevrons_use_single_rotation(webscene_engine* engine)
     require(
         std::abs(svg_rotation) < 0.1F,
         "toolbar top-chevron inherited its wrapper rotation twice");
+}
+
+void test_table_minimum_width_reaches_toolbar_overflow_navigation(
+    webscene_engine* engine)
+{
+    resize(engine, 320, 160, 5810U);
+    const auto initial = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html,body { margin:0; }
+            #outer { position:relative; width:320px; height:38px; overflow:hidden; }
+            #toolbar { width:320px; height:38px;
+              overflow-x:auto; overflow-y:hidden; contain:content; }
+            #content { display:table; width:100%; height:38px; white-space:nowrap; }
+            #strip { display:flex; position:relative; width:640px; height:38px; }
+            #under { position:absolute; z-index:1; left:296px; top:0;
+              width:24px; height:38px; }
+            #next { position:absolute; right:0; top:0; width:24px; height:38px;
+              transform:translateX(100%); }
+            #outer:hover #next { transform:translateX(0); }
+          </style>
+          <div id="outer"><div id="toolbar"><div id="content"><div id="strip">
+            <button id="under">Under</button></div></div></div>
+            <div id="next"><svg width="24" height="38"><path d="M8 8 L16 19 L8 30"/></svg></div>
+          </div>`;
+          globalThis.__toolbarOverflow = document.getElementById('toolbar');
+          globalThis.__toolbarNextClicks = 0;
+          globalThis.__toolbarUnderClicks = 0;
+          document.getElementById('next').addEventListener('click', () => {
+            __toolbarNextClicks++;
+            __toolbarOverflow.scrollLeft = 240;
+          });
+          document.getElementById('under').addEventListener(
+            'click', () => __toolbarUnderClicks++);
+          const content = document.getElementById('content');
+          const strip = document.getElementById('strip');
+          const next = document.getElementById('next');
+          return {
+            toolbarClientWidth:__toolbarOverflow.clientWidth,
+            toolbarScrollWidth:__toolbarOverflow.scrollWidth,
+            contentWidth:content.getBoundingClientRect().width,
+            contentScrollWidth:content.scrollWidth,
+            stripWidth:strip.getBoundingClientRect().width,
+            contain:getComputedStyle(__toolbarOverflow).getPropertyValue('contain'),
+            nextX:next.getBoundingClientRect().x
+          };
+        })()
+    )JS", "native-toolbar-table-overflow-setup.js");
+    require(
+        initial == R"JSON({"toolbarClientWidth":320,"toolbarScrollWidth":640,"contentWidth":640,"contentScrollWidth":640,"stripWidth":640,"contain":"content","nextX":320})JSON",
+        "display-table minimum width did not establish toolbar overflow: " + initial);
+
+    const auto consumed_before_hover = consumed_input_count(engine);
+    pointer_move(engine, 160, 19, 5811U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_hover + 1,
+        "toolbar hover input was not consumed");
+    const auto hovered = evaluate(engine, R"JS(
+        (() => {
+          const next = document.getElementById('next');
+          const hit = document.elementFromPoint(308, 19);
+          return {
+            nextX:next.getBoundingClientRect().x,
+            hitId:hit?.id || '',
+            hitWithinNext:next.contains(hit)
+          };
+        })()
+    )JS", "native-toolbar-table-overflow-hover.js");
+    require(
+        hovered == R"JSON({"nextX":296,"hitId":"","hitWithinNext":true})JSON",
+        "translated overflow arrow was painted separately from its hit-test box: "
+            + hovered);
+
+    const auto consumed_before_click = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 308, 19, 5812U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 308, 19, 5813U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_click + 2,
+        "toolbar arrow click inputs were not consumed");
+    const auto clicked = evaluate(engine, R"JS(
+        ({
+          nextClicks:__toolbarNextClicks,
+          underClicks:__toolbarUnderClicks,
+          scrollLeft:__toolbarOverflow.scrollLeft
+        })
+    )JS", "native-toolbar-table-overflow-click.js");
+    require(
+        clicked == R"JSON({"nextClicks":1,"underClicks":0,"scrollLeft":240})JSON",
+        "translated overflow arrow did not receive the native click: " + clicked);
+}
+
+void test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(
+    webscene_engine* engine)
+{
+    resize(engine, 420, 300, 5901U);
+    wait_for_consumed_inputs(
+        engine,
+        1U,
+        "compact settings fixture resize was not consumed");
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html, body { margin:0; }
+            #settings { display:flex; flex-direction:column; width:100%; height:300px; }
+            #content { display:flex; flex:1 1 auto; width:100%; min-height:0;
+              overflow:hidden; }
+            #detail { flex:1 1 auto; }
+            #category-host { flex:0 0 auto; padding:0 8px; overflow-x:hidden;
+              overflow-y:auto; }
+            #categories { display:flex; flex-direction:column; width:100%; }
+            .category { display:flex; flex:0 0 auto; box-sizing:border-box;
+              width:100%; height:60px; }
+          </style>
+          <section id="settings"><div id="content">
+            <article id="detail"><button id="back">Back</button><h1>Symbol</h1></article>
+          </div></section>
+          `;
+          const content = document.getElementById('content');
+          const host = document.createElement('nav');
+          host.id = 'category-host';
+          const categories = document.createElement('div');
+          categories.id = 'categories';
+          for (const label of ['Symbol', 'Status line', 'Scales and lines', 'Canvas', 'Trading']) {
+            const row = document.createElement('button');
+            row.className = 'category';
+            row.textContent = label;
+            categories.appendChild(row);
+          }
+          host.appendChild(categories);
+          content.replaceChildren(host);
+          host.style.width = '-webkit-fill-available';
+          host.style.width = 'stretch';
+          const first = categories.firstElementChild;
+          const hostStyle = getComputedStyle(host);
+          const categoriesStyle = getComputedStyle(categories);
+          return {
+            contentWidth:content.getBoundingClientRect().width,
+            hostWidth:host.getBoundingClientRect().width,
+            categoriesWidth:categories.getBoundingClientRect().width,
+            firstWidth:first.getBoundingClientRect().width,
+            hostFlex:[hostStyle.flexGrow, hostStyle.flexShrink, hostStyle.flexBasis],
+            hostPadding:[hostStyle.paddingLeft, hostStyle.paddingRight],
+            categoriesDisplay:categoriesStyle.display,
+            categoriesWidthStyle:categoriesStyle.width,
+            firstStyle:[getComputedStyle(first).display,
+              getComputedStyle(first).width, getComputedStyle(first).height],
+            firstText:first.textContent,
+            firstScroll:[first.scrollWidth, first.scrollHeight],
+            itemCount:categories.children.length,
+            inlineWidth:host.style.width
+          };
+        })()
+    )JS", "native-dynamic-percentage-flex-list.js");
+    require(
+        result == R"JSON({"contentWidth":420,"hostWidth":420,"categoriesWidth":404,"firstWidth":404,"hostFlex":["0","0",""],"hostPadding":["8px","8px"],"categoriesDisplay":"flex","categoriesWidthStyle":"404px","firstStyle":["flex","404px","60px"],"firstText":"Symbol","firstScroll":[404,60],"itemCount":5,"inlineWidth":"stretch"})JSON",
+        "dynamic percentage flex list lost its intrinsic inline contribution: "
+            + result);
 }
 
 void test_root_document_overflow_scrolls_and_paints_overlay(webscene_engine* engine)

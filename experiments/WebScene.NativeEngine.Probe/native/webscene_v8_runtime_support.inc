@@ -376,6 +376,7 @@ enum inline_style_property : uint64_t {
     inline_table_border_model = 1ULL << 53U,
     inline_font_smoothing = 1ULL << 54U,
     inline_background_image = 1ULL << 55U,
+    inline_contain = 1ULL << 56U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };
@@ -1131,9 +1132,14 @@ std::vector<node_style::grid_data::track> parse_simple_grid_tracks(
     const auto parse_track = [&](std::string_view raw) -> std::optional<grid_track> {
         const auto token = trim(raw);
         if (token.empty()) return std::nullopt;
-        if (token == "auto" || token == "min-content" || token == "max-content") {
+        if (token == "auto" || token == "max-content") {
             grid_track track;
             track.kind = grid_track::sizing::automatic;
+            return track;
+        }
+        if (token == "min-content") {
+            grid_track track;
+            track.kind = grid_track::sizing::min_content;
             return track;
         }
         if (const auto fraction = parse_fraction(token); fraction > 0) {
@@ -1634,6 +1640,7 @@ float resolve_connected_css_length(
     case length_unit::max_content:
     case length_unit::min_content:
     case length_unit::fit_content:
+    case length_unit::stretch:
     default:
         return 0.0F;
     }

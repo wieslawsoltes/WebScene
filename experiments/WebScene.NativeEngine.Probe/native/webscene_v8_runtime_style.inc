@@ -82,6 +82,10 @@
         } else if (name == "position") {
             node.style.position = position_mode::normal;
             node.style.inline_property_mask &= ~inline_position;
+        } else if (name == "contain") {
+            node.style.contain_stacking_context = false;
+            node.style.mutable_textual().contain_value = "none";
+            node.style.inline_property_mask &= ~inline_contain;
         } else if (name == "cssFloat" || name == "float") {
             node.style.floating = float_mode::none;
             node.style.inline_property_mask &= ~inline_float;
@@ -172,6 +176,7 @@
             node.style.transform_scale_y = 1;
             node.style.transform_rotate_degrees = 0;
             node.style.transform_specified = false;
+            node.style.transform_stacking_context = false;
             node.style.inline_property_mask &= ~inline_transform;
         } else if (name == "transformOrigin" || name == "transform-origin") {
             node.style.transform_origin_x = {50, length_unit::percent};
@@ -328,6 +333,7 @@
             if (length.unit == length_unit::max_content) return std::string{"max-content"};
             if (length.unit == length_unit::min_content) return std::string{"min-content"};
             if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+            if (length.unit == length_unit::stretch) return std::string{"stretch"};
             if (length.unit == length_unit::percent
                 && std::abs(length.pixel_offset) > 0.000001F) {
                 return std::string{"calc("} + serialize_css_number(length.value) + "% "
@@ -619,6 +625,17 @@
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
             node->style.inline_property_mask |= inline_position;
+        } else if (name == "contain") {
+            const auto contain = lower_html_name(value);
+            node->style.mutable_textual().contain_value =
+                contain == "initial" || contain == "unset" || contain == "revert"
+                ? "none" : contain;
+            const auto& computed = node->style.textual().contain_value;
+            node->style.contain_stacking_context = computed == "content"
+                || computed == "strict"
+                || (" " + computed + " ").find(" layout ") != std::string::npos
+                || (" " + computed + " ").find(" paint ") != std::string::npos;
+            node->style.inline_property_mask |= inline_contain;
         } else if (name == "float" || name == "cssFloat") {
             node->style.floating = value == "left" ? float_mode::left
                 : value == "right" ? float_mode::right
@@ -730,6 +747,8 @@
                 node->style.transform_scale_y,
                 node->style.transform_rotate_degrees);
             node->style.transform_specified = true;
+            node->style.transform_stacking_context =
+                lower_html_name(value) != "none";
             node->style.inline_property_mask |= inline_transform;
         } else if (name == "transform-origin") {
             native_document::parse_transform_origin(
@@ -924,6 +943,7 @@
                 if (length.unit == length_unit::max_content) return std::string{"max-content"};
                 if (length.unit == length_unit::min_content) return std::string{"min-content"};
                 if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+                if (length.unit == length_unit::stretch) return std::string{"stretch"};
                 std::ostringstream stream;
                 if (length.unit == length_unit::percent
                     && std::abs(length.pixel_offset) > 0.000001F) {
@@ -978,6 +998,9 @@
                     : node->style.position == position_mode::fixed ? "fixed"
                     : node->style.position == position_mode::relative ? "relative"
                     : "static";
+            } else if (name == "contain") {
+                value = node->style.textual().contain_value.empty()
+                    ? "none" : node->style.textual().contain_value;
             } else if (name == "float") {
                 value = node->style.floating == float_mode::left ? "left"
                     : node->style.floating == float_mode::right ? "right" : "none";
@@ -1346,6 +1369,7 @@
             if (length.unit == length_unit::max_content) return std::string{"max-content"};
             if (length.unit == length_unit::min_content) return std::string{"min-content"};
             if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+            if (length.unit == length_unit::stretch) return std::string{"stretch"};
             std::ostringstream stream;
             if (length.unit == length_unit::percent
                 && std::abs(length.pixel_offset) > 0.000001F) {
@@ -2088,6 +2112,8 @@
                 node->style.transform_scale_y,
                 node->style.transform_rotate_degrees);
             node->style.transform_specified = true;
+            node->style.transform_stacking_context =
+                lower_html_name(value) != "none";
             node->style.inline_property_mask |= inline_transform;
         } else if (name == "transformOrigin") {
             native_document::parse_transform_origin(

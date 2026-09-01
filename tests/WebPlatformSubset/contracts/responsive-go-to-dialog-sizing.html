@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Go To dialog recomputes narrow geometry without phantom overflow</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  html, body { margin:0; }
+  #dialog { box-sizing:border-box; width:520px; height:260px; padding:20px; overflow:auto; }
+  #dialog.compact { width:320px; height:220px; padding:16px; overflow:hidden; }
+  .row { height:44px; }
+</style>
+<section id="dialog"><div class="row">Date</div><div class="row">Time</div><div class="row">Timezone</div></section>
+<script>
+  promise_test(async () => {
+    const dialog = document.getElementById("dialog");
+    const query = matchMedia("(max-width: 500px)");
+    const synchronize = event => dialog.classList.toggle("compact", event.matches);
+    synchronize(query);
+    query.addEventListener("change", synchronize);
+
+    assert_equals(dialog.getBoundingClientRect().width, 520,
+      "wide dialog starts at desktop width");
+    await test_driver.set_viewport(dialog, 420, 300);
+    const bounds = dialog.getBoundingClientRect();
+    assert_equals(bounds.width, 320, "narrow dialog adopts compact width");
+    assert_less_than_equal(bounds.right, innerWidth,
+      "narrow dialog fits inside the viewport");
+    assert_equals(dialog.scrollHeight, dialog.clientHeight,
+      "compact content does not create a phantom scrollbar");
+  }, "Go To dialog adopts compact geometry after a live breakpoint crossing");
+</script>

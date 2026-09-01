@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Open settings shell follows live compact breakpoint</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  html, body { margin:0; width:100%; height:100%; }
+  #settings { position:fixed; width:560px; height:360px; left:120px; top:100px; }
+  #settings.compact { inset:0; width:auto; height:auto; }
+</style>
+<section id="settings"></section>
+<script>
+  promise_test(async () => {
+    const settings = document.getElementById("settings");
+    const query = matchMedia("(max-width: 500px)");
+    const synchronize = event => settings.classList.toggle("compact", event.matches);
+    synchronize(query);
+    query.addEventListener("change", synchronize);
+
+    const wide = settings.getBoundingClientRect();
+    assert_equals(wide.width, 560, "wide open dialog starts at desktop width");
+    await test_driver.set_viewport(settings, 420, 300);
+    const compact = settings.getBoundingClientRect();
+    assert_true(settings.classList.contains("compact"),
+      "open dialog observes the breakpoint crossing");
+    assert_equals(compact.left, 0, "compact dialog reaches left viewport edge");
+    assert_equals(compact.top, 0, "compact dialog reaches top viewport edge");
+    assert_equals(compact.width, 420, "compact dialog fills viewport width");
+    assert_equals(compact.height, 300, "compact dialog fills viewport height");
+  }, "an already-open settings dialog becomes fullscreen when narrowed");
+</script>

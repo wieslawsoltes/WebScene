@@ -131,6 +131,37 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "media-query-list") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "scrollbar-style-drag") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_authored_scrollbar_style_and_thumb_drag(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "toolbar-overflow-navigation") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_table_minimum_width_reaches_toolbar_overflow_navigation(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "dynamic-percentage-flex-list") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "document-create-event") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -168,6 +199,14 @@ int main()
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
             test_tradingview_property_table_preserves_control_row_spacing(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-compact-property-table") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_compact_property_table_expands_wrapped_grid_rows(
                 focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
@@ -471,6 +510,7 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
+    test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(engine);
     test_responsive_unset_restores_auto_inset(engine);
     test_preferred_color_scheme_updates_css_and_match_media(engine);
     test_resize_listener_receives_window_event(engine);
@@ -502,6 +542,7 @@ int main()
     test_tradingview_symbol_search_display_contents_rows_join_parent_grid(engine);
     test_tradingview_settings_subgrid_keeps_controls_on_their_rows(engine);
     test_tradingview_property_table_preserves_control_row_spacing(engine);
+    test_tradingview_compact_property_table_expands_wrapped_grid_rows(engine);
     test_footer_grid_direction_and_focus_within_state(engine);
     test_active_chart_generated_border_tracks_active_class(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
@@ -548,11 +589,14 @@ int main()
     test_segmented_rounded_borders_share_an_unclipped_join(engine);
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
+    test_authored_scrollbar_style_and_thumb_drag(engine);
     test_absolute_virtualized_rows_follow_ancestor_scroll_container(engine);
     test_rounded_overflow_visual_fixture_geometry(engine);
     test_elliptical_corner_radii_reach_cssom(engine);
     test_row_flex_vertical_scroll_extent_remains_bounded(engine);
     test_toolbar_scroll_chevrons_use_single_rotation(engine);
+    test_table_minimum_width_reaches_toolbar_overflow_navigation(engine);
+    test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);
     test_table_menu_row_cells_stay_horizontal_and_centered(engine);
     test_semantic_table_auto_layout_and_intrinsic_cell_content(engine);

@@ -49,6 +49,121 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
     }
 }
 
+void test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
+    webscene_engine* engine)
+{
+    resize(engine, 800, 600, 8800U);
+    execute(engine, R"JS(
+        (() => {
+          const install = target => {
+            const modern = target.matchMedia('(max-width: 500px)');
+            const legacy = target.matchMedia('(max-width: 500px)');
+            const state = {
+              modern,
+              legacy,
+              modernEvents: [],
+              legacyEvents: []
+            };
+            state.modernListener = event => state.modernEvents.push({
+              matches: event.matches,
+              media: event.media,
+              target: event.target === modern,
+              currentTarget: event.currentTarget === modern
+            });
+            state.legacyListener = event => state.legacyEvents.push({
+              matches: event.matches,
+              media: event.media
+            });
+            modern.addEventListener('change', state.modernListener);
+            legacy.addListener(state.legacyListener);
+            return state;
+          };
+          globalThis.__outerMqlState = install(globalThis);
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(`<html><body><script>
+            (() => {
+              const modern = matchMedia('(max-width: 500px)');
+              const legacy = matchMedia('(max-width: 500px)');
+              const state = globalThis.__frameMqlState = {
+                modern, legacy, modernEvents: [], legacyEvents: []
+              };
+              state.modernListener = event => state.modernEvents.push({
+                matches: event.matches,
+                media: event.media,
+                target: event.target === modern,
+                currentTarget: event.currentTarget === modern
+              });
+              state.legacyListener = event => state.legacyEvents.push({
+                matches: event.matches,
+                media: event.media
+              });
+              modern.addEventListener('change', state.modernListener);
+              legacy.addListener(state.legacyListener);
+            })();
+          <\/script></body></html>`);
+          frameDocument.close();
+          globalThis.__mqlFrame = frame;
+        })()
+    )JS", "native-media-query-list-setup.js");
+
+    const auto snapshot = [&](std::string_view scope) {
+        return evaluate(engine, std::string(R"JS(
+          (() => {
+            const state = )JS") + std::string(scope) + R"JS(;
+            return {
+              modern: state.modern.matches,
+              legacy: state.legacy.matches,
+              modernEvents: state.modernEvents,
+              legacyEvents: state.legacyEvents
+            };
+          })()
+        )JS", "native-media-query-list-state.js");
+    };
+    const auto initial = R"({"modern":false,"legacy":false,"modernEvents":[],"legacyEvents":[]})";
+    require(snapshot("globalThis.__outerMqlState") == initial,
+        "outer MediaQueryList initial state regressed");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == initial,
+        "frame MediaQueryList initial state regressed");
+
+    resize(engine, 420, 300, 8801U);
+    const auto entered = R"JSON({"modern":true,"legacy":true,"modernEvents":[{"matches":true,"media":"(max-width: 500px)","target":true,"currentTarget":true}],"legacyEvents":[{"matches":true,"media":"(max-width: 500px)"}]})JSON";
+    require(snapshot("globalThis.__outerMqlState") == entered,
+        "outer MediaQueryList did not enter the narrow breakpoint exactly once");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == entered,
+        "frame MediaQueryList did not enter the narrow breakpoint exactly once");
+
+    resize(engine, 400, 300, 8802U);
+    require(snapshot("globalThis.__outerMqlState") == entered,
+        "outer MediaQueryList emitted within an unchanged breakpoint");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == entered,
+        "frame MediaQueryList emitted within an unchanged breakpoint");
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const remove = state => {
+            state.modern.removeEventListener('change', state.modernListener);
+            state.legacy.removeListener(state.legacyListener);
+          };
+          remove(globalThis.__outerMqlState);
+          remove(globalThis.__mqlFrame.contentWindow.__frameMqlState);
+        })()
+    )JS", "native-media-query-list-remove.js");
+    resize(engine, 800, 600, 8803U);
+    const auto removed = R"JSON({"modern":false,"legacy":false,"modernEvents":[{"matches":true,"media":"(max-width: 500px)","target":true,"currentTarget":true}],"legacyEvents":[{"matches":true,"media":"(max-width: 500px)"}]})JSON";
+    const auto outer_removed = snapshot("globalThis.__outerMqlState");
+    const auto frame_removed = snapshot(
+        "globalThis.__mqlFrame.contentWindow.__frameMqlState");
+    require(outer_removed == removed,
+        "removed outer MediaQueryList listeners were invoked or matches stayed stale: "
+            + outer_removed);
+    require(frame_removed == removed,
+        "removed frame MediaQueryList listeners were invoked or matches stayed stale: "
+            + frame_removed);
+}
+
 void test_responsive_unset_restores_auto_inset(webscene_engine* engine)
 {
     resize(engine, 500, 687, 3);
@@ -1444,6 +1559,86 @@ void test_tradingview_property_table_preserves_control_row_spacing(
     require(
         result == R"JSON({"titleTop":32,"marketTop":82,"valuesTop":132,"firstDelta":50,"secondDelta":50,"contentHeight":182,"wrapHeight":34})JSON",
         "TradingView property-table controls lost their padded grid row spacing: "
+            + result);
+}
+
+void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #content {
+                box-sizing: border-box;
+                display: inline-grid;
+                grid-template-columns: 1fr min-content;
+                padding: 16px 20px;
+                width: 334px;
+              }
+              .cell { align-items: center; display: flex; min-width: 0; }
+              .cell .inner {
+                align-items: center;
+                display: flex;
+                font: 14px/20px sans-serif;
+                padding: 8px 0;
+              }
+              .cell.first { align-items: flex-start; }
+              .cell.first .inner {
+                display: block;
+                min-width: 0;
+                overflow-wrap: break-word;
+                padding-inline-end: 20px;
+              }
+              .control { box-sizing: border-box; height: 34px; width: 150px; }
+              .control-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+              .swatch { box-sizing: border-box; height: 34px; width: 75px; }
+            </style>
+            <div id="content">
+              <div class="cell first"><div class="inner" id="first-label">Scale modes (A and L)</div></div>
+              <div class="cell"><div class="inner"><button class="control">Visible on mouse over</button></div></div>
+              <div class="cell first"><div class="inner" id="second-label">Lock price to bar ratio</div></div>
+              <div class="cell"><div class="inner"><input class="control"></div></div>
+              <div class="cell first"><div class="inner" id="third-label">Scales placement</div></div>
+              <div class="cell"><div class="inner"><button class="control">Auto</button></div></div>
+              <div class="cell first"><div class="inner" id="wide-label">Symbol</div></div>
+              <div class="cell" id="symbol-control-cell"><div class="inner"><div class="control-wrap" id="control-wrap"><button class="control"></button><div class="swatch" id="swatch"></div></div></div></div>
+            </div>`;
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const first = rect('first-label');
+          const second = rect('second-label');
+          const third = rect('third-label');
+          const wide = rect('wide-label');
+          const content = rect('content');
+          const symbolControlCell = rect('symbol-control-cell');
+          const controlWrap = rect('control-wrap');
+          const swatch = rect('swatch');
+          return {
+            labelsDoNotOverlap: first.bottom <= second.top + 0.01
+              && second.bottom <= third.top + 0.01
+              && third.bottom <= wide.top + 0.01,
+            firstWrapped: first.height > 36,
+            compactTracks: first.width > 120 && symbolControlCell.width <= 151,
+            controlsWrap: controlWrap.height > 70 && swatch.top > controlWrap.top + 33,
+            contentContainsRows: content.bottom >= wide.bottom - 0.01,
+            geometry: {
+              content: [content.width, content.height],
+              first: [first.left, first.top, first.width, first.height],
+              second: [second.left, second.top, second.width, second.height],
+              third: [third.left, third.top, third.width, third.height],
+              wide: [wide.left, wide.top, wide.width, wide.height]
+            }
+          };
+        })()
+    )JS", "native-tradingview-compact-property-table.js");
+    require(
+        result.find(R"JSON("labelsDoNotOverlap":true)JSON") != std::string::npos
+            && result.find(R"JSON("firstWrapped":true)JSON") != std::string::npos
+            && result.find(R"JSON("compactTracks":true)JSON") != std::string::npos
+            && result.find(R"JSON("controlsWrap":true)JSON") != std::string::npos
+            && result.find(R"JSON("contentContainsRows":true)JSON") != std::string::npos,
+        "TradingView compact property-table grid rows did not grow with wrapped labels: "
             + result);
 }
 

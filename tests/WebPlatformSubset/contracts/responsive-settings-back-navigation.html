@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Responsive settings back navigation restores a stretched mobile tab list</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  html, body { margin:0; }
+  #settings { display:flex; flex-direction:column; width:560px; height:360px; }
+  #content {
+    display:flex;
+    flex:1 1 auto;
+    width:100%;
+    min-height:0;
+    overflow:hidden;
+  }
+  #detail { flex:1 1 auto; }
+  #category-host {
+    flex:0 0 auto;
+    padding:0 8px;
+    overflow-x:hidden;
+    overflow-y:auto;
+    width:-webkit-fill-available;
+    width:stretch;
+  }
+  #categories { display:flex; flex-direction:column; width:100%; }
+  .category {
+    display:flex;
+    flex:0 0 auto;
+    box-sizing:border-box;
+    width:100%;
+    height:60px;
+  }
+  @media (max-width:500px) {
+    #settings { width:100%; height:300px; }
+  }
+</style>
+<section id="settings">
+  <div id="content">
+    <article id="detail"><button id="back">Back</button><h1>Symbol</h1></article>
+  </div>
+</section>
+<script>
+  promise_test(async () => {
+    const settings = document.getElementById("settings");
+    const content = document.getElementById("content");
+    document.getElementById("back").addEventListener("click", () => {
+      const host = document.createElement("nav");
+      host.id = "category-host";
+      const categories = document.createElement("div");
+      categories.id = "categories";
+      for (const label of ["Symbol", "Status line", "Scales and lines", "Canvas", "Trading"]) {
+        const row = document.createElement("button");
+        row.className = "category";
+        row.textContent = label;
+        categories.appendChild(row);
+      }
+      host.appendChild(categories);
+      content.replaceChildren(host);
+    });
+
+    await test_driver.set_viewport(settings, 420, 300);
+    assert_true(matchMedia("(max-width:500px)").matches,
+      "settings enters its compact breakpoint before back navigation");
+    document.getElementById("back").click();
+
+    const host = document.getElementById("category-host");
+    const categories = document.getElementById("categories");
+    const first = categories.firstElementChild;
+    assert_equals(categories.children.length, 5,
+      "back navigation retains all category items");
+    assert_greater_than(host.getBoundingClientRect().width, 400,
+      "the dynamically restored category host fills compact settings content");
+    assert_greater_than(categories.getBoundingClientRect().width, 380,
+      "the percentage-sized vertical flex list resolves after its host is sized");
+    assert_greater_than(first.getBoundingClientRect().width, 380,
+      "category rows remain visible rather than collapsing to zero width");
+  }, "compact settings back navigation stretches a dynamically restored percentage flex list");
+</script>

@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MediaQueryList tracks viewport breakpoint crossings</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<body>
+<div id="viewport-target"></div>
+<script>
+  promise_test(async () => {
+    const target = document.getElementById("viewport-target");
+    const query = "(max-width: 500px)";
+    const modern = matchMedia(query);
+    const legacy = matchMedia(query);
+    const modernEvents = [];
+    const legacyEvents = [];
+
+    assert_false(modern.matches, "modern listener starts outside the breakpoint");
+    assert_false(legacy.matches, "legacy listener starts outside the breakpoint");
+    assert_equals(modern.media, query, "MediaQueryList.media retains its query");
+
+    const modernListener = event => modernEvents.push({
+      matches: event.matches,
+      media: event.media,
+      targetMatches: event.target === modern,
+      currentTargetMatches: event.currentTarget === modern
+    });
+    const legacyListener = event => legacyEvents.push({
+      matches: event.matches,
+      media: event.media
+    });
+    modern.addEventListener("change", modernListener);
+    legacy.addListener(legacyListener);
+
+    await test_driver.set_viewport(target, 420, 300);
+    assert_true(modern.matches, "modern matches updates after narrowing");
+    assert_true(legacy.matches, "legacy matches updates after narrowing");
+    assert_equals(modernEvents.length, 1, "one modern breakpoint-entry event");
+    assert_equals(legacyEvents.length, 1, "one legacy breakpoint-entry event");
+    assert_true(modernEvents[0].matches, "modern event exposes entered state");
+    assert_equals(modernEvents[0].media, query, "modern event exposes query");
+    assert_true(modernEvents[0].targetMatches, "modern event target is its list");
+    assert_true(modernEvents[0].currentTargetMatches,
+      "modern event currentTarget is its list");
+
+    await test_driver.set_viewport(target, 400, 300);
+    assert_equals(modernEvents.length, 1,
+      "no modern event within an unchanged breakpoint");
+    assert_equals(legacyEvents.length, 1,
+      "no legacy event within an unchanged breakpoint");
+
+    modern.removeEventListener("change", modernListener);
+    legacy.removeListener(legacyListener);
+    await test_driver.set_viewport(target, 800, 600);
+    assert_false(modern.matches, "modern matches updates after widening");
+    assert_false(legacy.matches, "legacy matches updates after widening");
+    assert_equals(modernEvents.length, 1, "removed modern listener stays silent");
+    assert_equals(legacyEvents.length, 1, "removed legacy listener stays silent");
+  }, "MediaQueryList follows viewport breakpoint crossings");
+</script>
+</body>

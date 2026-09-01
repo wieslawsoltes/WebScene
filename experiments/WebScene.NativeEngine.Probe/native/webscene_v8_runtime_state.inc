@@ -115,6 +115,7 @@
     std::string last_mousemove_ancestry;
 #endif
     std::vector<event_listener_registration> resize_listeners;
+    std::vector<std::unique_ptr<media_query_list_state>> media_query_lists;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
     std::vector<pending_programmatic_scroll_event>
@@ -327,6 +328,12 @@
     uint64_t input_callback_invocation_count{0};
     dom_node* pointer_capture_target{nullptr};
     dom_node* pointer_down_target{nullptr};
+    dom_node* scrollbar_drag_target{nullptr};
+    bool scrollbar_drag_vertical{false};
+    double scrollbar_drag_pointer_origin{0};
+    float scrollbar_drag_scroll_origin{0};
+    float scrollbar_drag_maximum{0};
+    float scrollbar_drag_thumb_travel{0};
     dom_node* hover_target{nullptr};
     uint32_t current_cursor_kind_value{WEBSCENE_CURSOR_DEFAULT};
     dom_node* current_related_target{nullptr};

@@ -32,7 +32,8 @@ enum class length_unit : uint8_t {
     viewport_height_floored,
     max_content,
     min_content,
-    fit_content
+    fit_content,
+    stretch
 };
 
 struct css_length final {
@@ -290,6 +291,7 @@ struct node_style final {
             enum class sizing : uint8_t {
                 fixed,
                 automatic,
+                min_content,
                 fractional,
                 minmax
             };
@@ -488,6 +490,13 @@ struct node_style final {
     float transform_scale_y{1};
     float transform_rotate_degrees{0};
     bool transform_specified{false};
+    // Unlike transform_specified, an authored `transform: none` does not
+    // establish a stacking context. Track that distinction without changing
+    // computed-style and transition semantics.
+    bool transform_stacking_context{false};
+    // layout/paint containment establishes an atomic stacking context. Keep
+    // this hot because paint-order and hit-testing consult it every frame.
+    bool contain_stacking_context{false};
     // Retain whether transform-origin won the cascade independently from its
     // computed value. The initial 50% 50% value is otherwise indistinguishable
     // from an explicitly authored origin when detecting CSS compositions.
@@ -549,6 +558,16 @@ struct node_style final {
     };
 
     struct textual_style_data final {
+        struct scrollbar_style_data final {
+            float width{6};
+            float height{6};
+            float overlay_inset{2};
+            float thumb_border_width{0};
+            float thumb_radius{3};
+            float track_radius{3};
+            uint32_t thumb_rgba{0xA0A0A0D0U};
+            uint32_t track_rgba{0x7F7F7F40U};
+        } scrollbar;
         std::string font_family;
         // Non-standard but widely deployed on macOS. Keep the authored token
         // so inherited text runs can select the browser-compatible glyph
@@ -558,6 +577,7 @@ struct node_style final {
         std::string vertical_align;
         std::string text_transform;
         std::string white_space;
+        std::string contain_value;
         // Authored cursor token. Cursor is inherited, so an empty value means
         // the host projection resolves the nearest declaration or `auto`.
         std::string cursor;
@@ -609,6 +629,24 @@ struct node_style final {
                 std::make_shared<textual_style_data>(*textual_state);
         }
         return *textual_state;
+    }
+
+    const textual_style_data::scrollbar_style_data& scrollbar() const noexcept
+    {
+        static const textual_style_data::scrollbar_style_data defaults;
+        return textual_state == nullptr ? defaults : textual_state->scrollbar;
+    }
+
+    textual_style_data::scrollbar_style_data& mutable_scrollbar()
+    {
+        return mutable_textual().scrollbar;
+    }
+
+    void reset_scrollbar_style()
+    {
+        if (auto* data = mutable_textual_if_present(); data != nullptr) {
+            data->scrollbar = {};
+        }
     }
 
     textual_style_data* mutable_textual_if_present()
@@ -1549,6 +1587,14 @@ public:
         float word_spacing = 0.0F) const;
 
     static css_length parse_length(const std::string& value);
+    float resolve_used_length(
+        const dom_node& context,
+        css_length value,
+        float available,
+        float fallback) const
+    {
+        return resolve_length(context, value, available, fallback);
+    }
     static void parse_transform_translate(
         const std::string& value,
         css_length& translate_x,
@@ -1824,6 +1870,9 @@ private:
     float intrinsic_size(
         const dom_node& node,
         bool horizontal,
+        float available);
+    float min_content_inline_size(
+        const dom_node& node,
         float available);
     float compute_intrinsic_size(
         const dom_node& node,

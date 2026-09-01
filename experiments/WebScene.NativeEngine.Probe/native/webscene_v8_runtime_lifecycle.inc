@@ -112,6 +112,7 @@
         }
         flush_compilation_cache_touches();
         resize_listeners.clear();
+        media_query_lists.clear();
         timers.clear();
         pending_window_messages.clear();
         pending_programmatic_scroll_events.clear();

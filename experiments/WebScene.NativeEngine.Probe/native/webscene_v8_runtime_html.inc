@@ -201,6 +201,7 @@
         }
         if (name == "display") return inline_display;
         if (name == "position") return inline_position;
+        if (name == "contain") return inline_contain;
         if (name == "float" || name == "cssFloat") return inline_float;
         if (name == "z-index" || name == "zIndex") return inline_z_index;
         if (name == "flex-direction" || name == "flexDirection") {

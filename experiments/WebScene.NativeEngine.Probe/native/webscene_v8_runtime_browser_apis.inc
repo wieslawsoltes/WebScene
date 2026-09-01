@@ -1131,6 +1131,109 @@
         info.GetReturnValue().Set(controller);
     }
 
+    static media_query_list_state* media_query_list(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        return info.Data()->IsExternal()
+            ? static_cast<media_query_list_state*>(
+                info.Data().As<v8::External>()->Value(
+                    v8::kExternalPointerTypeTagDefault))
+            : nullptr;
+    }
+
+    static void add_media_query_list_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool legacy)
+    {
+        auto* state = media_query_list(info);
+        if (state == nullptr) return;
+        const auto callback_index = legacy ? 0 : 1;
+        if ((!legacy && (info.Length() < 2
+                || to_utf8(info.GetIsolate(), info[0]) != "change"))
+            || info.Length() <= callback_index
+            || info[callback_index]->IsNullOrUndefined()
+            || !info[callback_index]->IsObject()) {
+            return;
+        }
+        auto isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        const auto requested = info[callback_index];
+        for (const auto& registration : state->listeners) {
+            auto callback = registration.callback.Get(isolate);
+            if (!callback.IsEmpty() && callback->StrictEquals(requested)) return;
+        }
+        auto once = false;
+        if (!legacy && info.Length() > 2 && info[2]->IsObject()) {
+            v8::Local<v8::Value> once_value;
+            if (info[2].As<v8::Object>()->Get(
+                    local_context,
+                    js_string(isolate, "once")).ToLocal(&once_value)) {
+                once = once_value->BooleanValue(isolate);
+            }
+        }
+        auto name = requested->IsFunction()
+            ? to_utf8(isolate, requested.As<v8::Function>()->GetName())
+            : std::string("<object listener>");
+        if (name.empty()) name = "<anonymous>";
+        state->listeners.push_back(event_listener_registration{
+            v8::Global<v8::Value>(isolate, requested),
+            v8::Global<v8::Context>(isolate, local_context),
+            std::move(name),
+            current(isolate)->current_input_sequence,
+            0U,
+            false,
+            once,
+            false,
+            {}});
+    }
+
+    static void media_query_list_add_event_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        add_media_query_list_listener(info, false);
+    }
+
+    static void media_query_list_add_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        add_media_query_list_listener(info, true);
+    }
+
+    static void remove_media_query_list_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool legacy)
+    {
+        auto* state = media_query_list(info);
+        if (state == nullptr) return;
+        const auto callback_index = legacy ? 0 : 1;
+        if ((!legacy && (info.Length() < 2
+                || to_utf8(info.GetIsolate(), info[0]) != "change"))
+            || info.Length() <= callback_index
+            || info[callback_index]->IsNullOrUndefined()) {
+            return;
+        }
+        const auto requested = info[callback_index];
+        for (auto& registration : state->listeners) {
+            auto callback = registration.callback.Get(info.GetIsolate());
+            if (callback.IsEmpty() || !callback->StrictEquals(requested)) continue;
+            registration.callback.Reset();
+            registration.signal.Reset();
+            break;
+        }
+    }
+
+    static void media_query_list_remove_event_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        remove_media_query_list_listener(info, false);
+    }
+
+    static void media_query_list_remove_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        remove_media_query_list_listener(info, true);
+    }
+
     static void match_media(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -1142,20 +1245,59 @@
         self->record_feature(
             "web-api",
             "Window.matchMedia",
-            query_supported ? "partially-supported" : "unsupported",
+            query_supported ? "supported" : "unsupported",
             query_supported
-                ? "snapshot matches without MediaQueryList change-event delivery"
+                ? "live matches with modern and legacy change-event delivery"
                 : "query contains an unsupported media type or condition",
             "web-api-binding");
+        auto state = std::make_unique<media_query_list_state>();
+        state->query = query;
+        state->matches = self->media_query_matches(query);
+        state->context.Reset(isolate, local_context);
+        auto* state_pointer = state.get();
+        auto data = v8::External::New(
+            isolate,
+            state_pointer,
+            v8::kExternalPointerTypeTagDefault);
         result->Set(
             local_context,
             js_string(isolate, "matches"),
-            v8::Boolean::New(isolate, self->media_query_matches(query))).Check();
+            v8::Boolean::New(isolate, state->matches)).Check();
         result->Set(local_context, js_string(isolate, "media"), info.Length() > 0 ? info[0] : v8::Local<v8::Value>(js_string(isolate, ""))).Check();
-        result->Set(local_context, js_string(isolate, "addEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "removeEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "addListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "removeListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "addEventListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_add_event_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "removeEventListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_remove_event_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "addListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_add_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "removeListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_remove_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "onchange"),
+            v8::Null(isolate)).Check();
+        state->wrapper.Reset(isolate, result);
+        self->media_query_lists.push_back(std::move(state));
         info.GetReturnValue().Set(result);
     }
 

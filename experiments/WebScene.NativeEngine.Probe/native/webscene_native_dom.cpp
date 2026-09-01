@@ -187,6 +187,16 @@ struct paint_z_index_update final {
     bool contains_retained_canvas{false};
 };
 
+bool style_establishes_atomic_stacking_context(const dom_node& node) noexcept
+{
+    return node.style.position == position_mode::fixed
+        || (node.style.position != position_mode::normal
+            && !node.style.z_index_auto)
+        || node.style.contain_stacking_context
+        || node.style.opacity < 0.999F
+        || node.style.transform_stacking_context;
+}
+
 paint_z_index_update update_paint_z_index(
     const native_document& document,
     dom_node& node) noexcept
@@ -209,11 +219,7 @@ paint_z_index_update update_paint_z_index(
             contains_retained_canvas || child_update.contains_retained_canvas;
     }
     const auto establishes_atomic_stacking_context =
-        node.style.position == position_mode::fixed
-        || node.style.opacity < 0.999F
-        || node.style.transform_rotate_degrees != 0
-        || node.style.transform_scale_x != 1.0F
-        || node.style.transform_scale_y != 1.0F;
+        style_establishes_atomic_stacking_context(node);
     node.paint_z_index = node.style.z_index != 0
         ? node.style.z_index
         // Relative/absolute positioning with z-index:auto does not establish a
@@ -234,6 +240,14 @@ void collect_positive_stacking_nodes(
 {
     if (node.style.z_index > 0) {
         result.push_back(&node);
+        return;
+    }
+    // A descendant stacking level is scoped to the nearest atomic context.
+    // In particular, contain:layout/paint/content/strict prevents a positive-z
+    // toolbar item from being lifted above a later sibling overlay.
+    if (style_establishes_atomic_stacking_context(node)
+        || node.contains_retained_canvas) {
+        return;
     }
     for (auto* child : document.composed_children(node)) {
         collect_positive_stacking_nodes(document, *child, result);

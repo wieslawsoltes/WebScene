@@ -31,6 +31,9 @@ css_length native_document::parse_length(const std::string& value)
     if (value == "max-content") return {0, length_unit::max_content};
     if (value == "min-content") return {0, length_unit::min_content};
     if (value == "fit-content") return {0, length_unit::fit_content};
+    if (value == "stretch" || value == "-webkit-fill-available") {
+        return {0, length_unit::stretch};
+    }
     if (value.size() > 1 && value.back() == '%') {
         return {parse_number(std::string_view(value).substr(0, value.size() - 1)), length_unit::percent};
     }
@@ -545,6 +548,8 @@ float native_document::resolve_length(css_length value, float available, float f
     case length_unit::min_content:
     case length_unit::fit_content:
         return fallback;
+    case length_unit::stretch:
+        return available;
     case length_unit::automatic:
     default:
         return fallback;

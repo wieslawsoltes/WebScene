@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Compact settings property grid rows contain wrapped labels</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  html, body { margin:0; }
+  #content {
+    box-sizing:border-box;
+    color:#ddd;
+    display:inline-grid;
+    grid-template-columns:auto 1fr;
+    padding:16px 20px;
+    width:100%;
+  }
+  .cell { align-items:center; display:flex; min-width:0; }
+  .cell .inner {
+    align-items:center;
+    display:flex;
+    font:14px/20px sans-serif;
+    padding:8px 0;
+  }
+  .cell.first { align-items:center; display:flex; min-width:0; }
+  .cell.first .inner {
+    display:block;
+    min-width:0;
+    overflow-wrap:break-word;
+    padding-inline-end:20px;
+  }
+  .control { box-sizing:border-box; height:34px; width:150px; }
+  .control-wrap { display:flex; flex-wrap:wrap; gap:8px; }
+  .swatch { box-sizing:border-box; height:34px; width:75px; }
+  @media (max-width:379px) {
+    #content { grid-template-columns:1fr min-content; }
+    .cell.first { align-items:flex-start; }
+  }
+</style>
+<main id="content">
+  <div class="cell first"><div class="inner" id="first-label">Scale modes (A and L)</div></div>
+  <div class="cell"><div class="inner"><button class="control">Visible on mouse over</button></div></div>
+  <div class="cell first"><div class="inner" id="second-label">Lock price to bar ratio</div></div>
+  <div class="cell"><div class="inner"><input class="control"></div></div>
+  <div class="cell first"><div class="inner" id="third-label">Scales placement</div></div>
+  <div class="cell"><div class="inner"><button class="control">Auto</button></div></div>
+  <div class="cell first"><div class="inner" id="wide-label">Symbol</div></div>
+  <div class="cell" id="symbol-control-cell"><div class="inner"><div class="control-wrap" id="control-wrap"><button class="control"></button><div class="swatch" id="swatch"></div></div></div></div>
+</main>
+<script>
+  promise_test(async () => {
+    const content = document.getElementById("content");
+    await test_driver.set_viewport(content, 344, 600);
+    assert_true(matchMedia("(max-width:379px)").matches,
+      "the property table enters its compact track template");
+
+    const rect = id => document.getElementById(id).getBoundingClientRect();
+    const first = rect("first-label");
+    const second = rect("second-label");
+    const third = rect("third-label");
+    const wide = rect("wide-label");
+    const symbolControlCell = rect("symbol-control-cell");
+    const controlWrap = rect("control-wrap");
+    const swatch = rect("swatch");
+    assert_greater_than(first.height, 36,
+      "the narrow first track wraps the longest label");
+    assert_less_than_equal(first.bottom, second.top + 0.01,
+      "the first wrapped label grows its grid row");
+    assert_less_than_equal(second.bottom, third.top + 0.01,
+      "the second wrapped label grows its grid row");
+    assert_less_than_equal(third.bottom, wide.top + 0.01,
+      "later compact labels remain in distinct rows");
+    assert_greater_than(first.width, 130,
+      "the wrapping control group contributes its widest item, not every item on one line");
+    assert_less_than_equal(symbolControlCell.width, 151,
+      "the min-content control track stays at the widest compact control width");
+    assert_greater_than(controlWrap.height, 70,
+      "the multi-control group wraps inside the compact min-content track");
+    assert_greater_than(swatch.top, controlWrap.top + 33,
+      "the secondary color control moves to the next flex line");
+    assert_greater_than_equal(content.getBoundingClientRect().bottom, wide.bottom - 0.01,
+      "the compact property grid contains its final row");
+  }, "compact 1fr/min-content settings rows use post-track wrapped block contributions");
+</script>

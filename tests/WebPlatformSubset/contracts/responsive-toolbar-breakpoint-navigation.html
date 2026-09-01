@@ -1,0 +1,82 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Responsive toolbar overflow navigation follows live breakpoints</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+  html, body { margin: 0; }
+  #outer { position:relative; width:100%; height:48px; overflow:hidden; }
+  #toolbar { width:100%; height:48px; overflow-x:auto; overflow-y:hidden;
+    contain:content; }
+  #content { display:table; width:100%; height:48px; white-space:nowrap; }
+  #strip { display:flex; position:relative; width:720px; height:48px; }
+  .item { flex:none; width:180px; }
+  #under { position:absolute; z-index:1; left:388px; top:0;
+    width:32px; height:48px; }
+  .arrow { position:absolute; top:0; width:32px; height:48px; }
+  #previous { left:0; transform:translateX(-100%); }
+  #next { right:0; transform:translateX(100%); }
+  #outer.compact:hover .arrow { transform:translateX(0); }
+</style>
+<div id="outer"><div id="toolbar">
+  <div id="content"><div id="strip">
+    <span class="item">Chart</span><span class="item">Interval</span>
+    <span class="item">Indicators</span><span class="item">Layout</span>
+    <button id="under">Underlying toolbar item</button>
+  </div></div>
+</div>
+  <button class="arrow" id="previous">Previous</button>
+  <button class="arrow" id="next"><svg width="32" height="48">
+    <path d="M10 10 L22 24 L10 38"></path></svg></button>
+</div>
+<script>
+  promise_test(async () => {
+    const outer = document.getElementById("outer");
+    const toolbar = document.getElementById("toolbar");
+    const content = document.getElementById("content");
+    const next = document.getElementById("next");
+    let nextClicks = 0;
+    let underClicks = 0;
+    next.addEventListener("click", () => {
+      nextClicks++;
+      toolbar.scrollLeft = 240;
+    });
+    document.getElementById("under").addEventListener(
+      "click", () => underClicks++);
+    await test_driver.set_viewport(outer, 800, 600);
+    const query = matchMedia("(max-width: 500px)");
+    const synchronize = event => outer.classList.toggle("compact", event.matches);
+    synchronize(query);
+    query.addEventListener("change", synchronize);
+
+    assert_equals(toolbar.scrollWidth, toolbar.clientWidth,
+      "wide toolbar starts without horizontal overflow");
+    assert_equals(Math.round(next.getBoundingClientRect().x), 800,
+      "wide toolbar starts with its next arrow translated outside");
+    await test_driver.set_viewport(outer, 420, 300);
+    assert_true(outer.classList.contains("compact"),
+      "breakpoint listener updates the toolbar mode after narrowing");
+    assert_equals(Math.round(content.getBoundingClientRect().width), 720,
+      "the display-table wrapper expands to its anonymous row minimum");
+    assert_greater_than(toolbar.scrollWidth, toolbar.clientWidth,
+      "the narrow toolbar exposes its descendant horizontal overflow");
+    await new test_driver.Actions().pointerMove(0, 0, { origin: outer }).send();
+    assert_equals(Math.round(next.getBoundingClientRect().x), 388,
+      "next navigation is translated into the compact viewport on hover");
+    assert_true(next.contains(document.elementFromPoint(404, 24)),
+      "paint containment keeps the translated arrow above positive-z descendants");
+    await test_driver.click(next);
+    assert_equals(nextClicks, 1,
+      "the translated SVG arrow receives the native click");
+    assert_equals(underClicks, 0,
+      "the positive-z toolbar descendant does not steal the arrow click");
+    assert_equals(toolbar.scrollLeft, 240,
+      "the native arrow click advances the compact toolbar");
+    await test_driver.set_viewport(outer, 800, 600);
+    assert_false(outer.classList.contains("compact"),
+      "toolbar returns to wide mode after widening");
+  }, "toolbar table overflow navigation follows live breakpoints and hover");
+</script>

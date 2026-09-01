@@ -41,6 +41,56 @@
       "evidence": ["public-release-list-responsive-layout"]
     },
     {
+      "path": "contracts/media-query-list-dynamic-viewport.html",
+      "type": "testharness",
+      "capabilities": ["live-media-query-list-matches", "media-query-list-change-event", "media-query-list-legacy-listener", "viewport-breakpoint-crossing", "breakpoint-change-idempotence", "media-query-list-listener-removal"],
+      "evidence": ["stackwich-1244-toolbar-overflow-navigation", "stackwich-1246-narrow-settings-back-navigation", "stackwich-1247-settings-fullscreen-resize", "stackwich-1248-go-to-dialog-responsive-sizing"],
+      "reason": "Browser-authorized reduction of TradingView's device breakpoint manager: retained MediaQueryList objects must update their matches snapshots, notify modern and legacy listeners exactly once when a host resize crosses a breakpoint, remain silent within a breakpoint, and stop notifying removed listeners."
+    },
+    {
+      "path": "contracts/responsive-toolbar-breakpoint-navigation.html",
+      "type": "testharness",
+      "capabilities": ["live-toolbar-breakpoint-state", "compact-overflow-navigation", "wide-compact-wide-resize"],
+      "evidence": ["stackwich-1244-toolbar-overflow-navigation"],
+      "reason": "Issue-shaped reduction of the chart toolbar's retained MediaQueryList listener. Narrowing an already-mounted toolbar must expose both overflow navigation controls and widening must restore the desktop state."
+    },
+    {
+      "path": "contracts/responsive-settings-back-navigation.html",
+      "type": "testharness",
+      "capabilities": ["live-settings-breakpoint-state", "compact-master-detail-navigation", "retained-category-content"],
+      "evidence": ["stackwich-1246-narrow-settings-back-navigation"],
+      "reason": "Issue-shaped reduction of compact settings master/detail navigation. After a live breakpoint crossing, Back must reveal the still-populated category list rather than an empty retained panel."
+    },
+    {
+      "path": "contracts/responsive-settings-property-grid.html",
+      "type": "testharness",
+      "capabilities": ["compact-grid-track-switch", "min-content-control-track", "wrapped-grid-row-growth"],
+      "evidence": ["stackwich-1246-compact-settings-property-grid"],
+      "reason": "Issue-shaped reduction of TradingView's compact property table. Once the 1fr/min-content column tracks are known, wrapped labels must contribute their used block size to auto rows instead of painting through following controls."
+    },
+    {
+      "path": "contracts/responsive-settings-fullscreen-resize.html",
+      "type": "testharness",
+      "capabilities": ["live-dialog-breakpoint-state", "fixed-inset-fullscreen", "open-dialog-resize"],
+      "evidence": ["stackwich-1247-settings-fullscreen-resize"],
+      "reason": "Issue-shaped reduction of resizing an already-open desktop dialog below its compact breakpoint. The outer fixed shell, not only its contents, must recompute to the viewport edges."
+    },
+    {
+      "path": "contracts/responsive-go-to-dialog-sizing.html",
+      "type": "testharness",
+      "capabilities": ["live-dialog-breakpoint-state", "compact-dialog-width", "overflow-range-recomputation"],
+      "evidence": ["stackwich-1248-go-to-dialog-responsive-sizing"],
+      "reason": "Issue-shaped reduction of the Go To dialog. A live narrow transition must replace desktop width and overflow state without leaving a phantom scrollbar."
+    },
+    {
+      "path": "contracts/css-webkit-scrollbar-authored-paint.html",
+      "type": "reftest",
+      "reference": "contracts/css-webkit-scrollbar-authored-paint-ref.html",
+      "capabilities": ["webkit-scrollbar-width", "webkit-scrollbar-track-paint", "webkit-scrollbar-thumb-paint", "scrollbar-content-box-border", "scrollbar-radius"],
+      "evidence": ["stackwich-1242-scrollbar-appearance-and-drag"],
+      "reason": "Exact-pixel browser-authorized reduction of TradingView's authored 5px scrollbar with a transparent track and content-box thumb border. Native interaction coverage separately verifies that the painted thumb is a draggable scroll control."
+    },
+    {
       "path": "contracts/computed-style-used-size.html",
       "type": "contract",
       "capabilities": ["computed-style", "inline-style-separation", "intrinsic-width", "min-max-width-precedence"],

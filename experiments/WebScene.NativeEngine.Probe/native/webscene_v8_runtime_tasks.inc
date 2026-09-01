@@ -726,6 +726,97 @@
         return event;
     }
 
+    bool dispatch_media_query_list_changes()
+    {
+        for (auto& state : media_query_lists) {
+            if (state == nullptr) continue;
+            const auto matches = media_query_matches(state->query);
+            if (matches == state->matches) continue;
+            state->matches = matches;
+            auto local_context = state->context.Get(isolate);
+            auto wrapper = state->wrapper.Get(isolate);
+            if (local_context.IsEmpty() || wrapper.IsEmpty()) continue;
+            v8::Context::Scope context_scope(local_context);
+            wrapper->Set(
+                local_context,
+                js_string(isolate, "matches"),
+                v8::Boolean::New(isolate, matches)).Check();
+            auto event = create_event_instance(local_context);
+            event->Set(
+                local_context,
+                js_string(isolate, "type"),
+                js_string(isolate, "change")).Check();
+            event->Set(local_context, js_string(isolate, "target"), wrapper).Check();
+            event->Set(local_context, js_string(isolate, "currentTarget"), wrapper).Check();
+            event->Set(local_context, js_string(isolate, "srcElement"), wrapper).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "matches"),
+                v8::Boolean::New(isolate, matches)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "media"),
+                js_string(isolate, state->query.c_str())).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "bubbles"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "cancelable"),
+                v8::False(isolate)).Check();
+            v8::Local<v8::Value> arguments[] = {event};
+            const auto listener_count = state->listeners.size();
+            for (size_t index = 0; index < listener_count; ++index) {
+                auto& registration = state->listeners[index];
+                auto callback = registration.callback.Get(isolate);
+                if (callback.IsEmpty()) continue;
+                if (registration.once) registration.callback.Reset();
+                v8::TryCatch try_catch(isolate);
+                if (call_event_listener(
+                        isolate,
+                        local_context,
+                        callback,
+                        wrapper,
+                        1,
+                        arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    report_inspector_exception(try_catch, local_context);
+#endif
+                    last_error = describe_exception(try_catch);
+                    return false;
+                }
+            }
+            std::erase_if(
+                state->listeners,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
+            v8::Local<v8::Value> onchange;
+            if (!wrapper->Get(
+                    local_context,
+                    js_string(isolate, "onchange")).ToLocal(&onchange)) {
+                return false;
+            }
+            if (!onchange->IsNullOrUndefined()) {
+                v8::TryCatch try_catch(isolate);
+                if (call_event_listener(
+                        isolate,
+                        local_context,
+                        onchange,
+                        wrapper,
+                        1,
+                        arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    report_inspector_exception(try_catch, local_context);
+#endif
+                    last_error = describe_exception(try_catch);
+                    return false;
+                }
+            }
+            perform_microtask_checkpoint();
+        }
+        return true;
+    }
+
     bool dispatch_resize()
     {
         record_feature(
@@ -848,6 +939,7 @@
             }
         }
         activate_css_cascade(context.Get(isolate));
+        if (!dispatch_media_query_list_changes()) return false;
 
         if (frame_context.IsEmpty()) return true;
         {
@@ -2493,6 +2585,98 @@
         return descendants.empty() ? nullptr : descendants.front();
     }
 
+    struct scrollbar_thumb_hit final {
+        dom_node* target{nullptr};
+        bool vertical{false};
+        float pointer_origin{0};
+        float scroll_origin{0};
+        float maximum{0};
+        float thumb_travel{0};
+    };
+
+    std::optional<scrollbar_thumb_hit> hit_test_scrollbar_thumb(
+        dom_node& hit_target,
+        float x,
+        float y)
+    {
+        constexpr auto minimum_thumb = 18.0F;
+        for (auto* node = &hit_target; node != nullptr; node = node->parent) {
+            if (node->style.scrollbar_hidden
+                || node->layout.width <= 0 || node->layout.height <= 0) continue;
+            const auto border_left = document.resolve_used_length(
+                *node, node->style.border_left_width, node->layout.width, 0);
+            const auto border_right = document.resolve_used_length(
+                *node, node->style.border_right_width, node->layout.width, 0);
+            const auto border_top = document.resolve_used_length(
+                *node, node->style.border_top_width, node->layout.height, 0);
+            const auto border_bottom = document.resolve_used_length(
+                *node, node->style.border_bottom_width, node->layout.height, 0);
+            const auto padding_left = document.resolve_used_length(
+                *node, node->style.padding_left, node->layout.width, 0);
+            const auto padding_right = document.resolve_used_length(
+                *node, node->style.padding_right, node->layout.width, 0);
+            const auto padding_top = document.resolve_used_length(
+                *node, node->style.padding_top, node->layout.height, 0);
+            const auto padding_bottom = document.resolve_used_length(
+                *node, node->style.padding_bottom, node->layout.height, 0);
+            const auto viewport_x = node->layout.x + border_left + padding_left;
+            const auto viewport_y = node->layout.y + border_top + padding_top;
+            const auto viewport_width = std::max(
+                0.0F, node->layout.width - border_left - border_right
+                    - padding_left - padding_right);
+            const auto viewport_height = std::max(
+                0.0F, node->layout.height - border_top - border_bottom
+                    - padding_top - padding_bottom);
+            const auto maximum_x = std::max(
+                0.0F, node->scroll_content_width - node->scroll_viewport_width);
+            const auto maximum_y = std::max(
+                0.0F, node->scroll_content_height - node->scroll_viewport_height);
+            const auto root_scroll_x = node->parent == nullptr
+                && node->style.overflow_x == overflow_mode::visible;
+            const auto root_scroll_y = node->parent == nullptr
+                && node->style.overflow_y == overflow_mode::visible;
+            const auto& scrollbar = node->style.scrollbar();
+            const auto inset = scrollbar.overlay_inset;
+            if ((node->style.scroll_y_enabled || root_scroll_y)
+                && maximum_y > 0.01F && scrollbar.width > 0) {
+                const auto rail_x = viewport_x + viewport_width - scrollbar.width - inset;
+                const auto rail_y = viewport_y + inset;
+                const auto rail_height = std::max(0.0F, viewport_height - inset * 2);
+                const auto thumb_height = std::min(rail_height, std::max(
+                    minimum_thumb,
+                    rail_height * node->scroll_viewport_height
+                        / std::max(node->scroll_viewport_height, node->scroll_content_height)));
+                const auto travel = std::max(0.0F, rail_height - thumb_height);
+                const auto thumb_y = rail_y + travel
+                    * std::clamp(node->scroll_top / maximum_y, 0.0F, 1.0F);
+                if (x >= rail_x && x <= rail_x + scrollbar.width
+                    && y >= thumb_y && y <= thumb_y + thumb_height) {
+                    return scrollbar_thumb_hit{
+                        node, true, y, node->scroll_top, maximum_y, travel};
+                }
+            }
+            if ((node->style.scroll_x_enabled || root_scroll_x)
+                && maximum_x > 0.01F && scrollbar.height > 0) {
+                const auto rail_x = viewport_x + inset;
+                const auto rail_y = viewport_y + viewport_height - scrollbar.height - inset;
+                const auto rail_width = std::max(0.0F, viewport_width - inset * 2);
+                const auto thumb_width = std::min(rail_width, std::max(
+                    minimum_thumb,
+                    rail_width * node->scroll_viewport_width
+                        / std::max(node->scroll_viewport_width, node->scroll_content_width)));
+                const auto travel = std::max(0.0F, rail_width - thumb_width);
+                const auto thumb_x = rail_x + travel
+                    * std::clamp(node->scroll_left / maximum_x, 0.0F, 1.0F);
+                if (x >= thumb_x && x <= thumb_x + thumb_width
+                    && y >= rail_y && y <= rail_y + scrollbar.height) {
+                    return scrollbar_thumb_hit{
+                        node, false, x, node->scroll_left, maximum_x, travel};
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
     bool dispatch_input(const webscene_input_event& input)
     {
         current_input_sequence = input.sequence;
@@ -2522,11 +2706,57 @@
             }
             return true;
         }
+        if (scrollbar_drag_target != nullptr
+            && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                || input.kind == WEBSCENE_INPUT_POINTER_UP)) {
+            if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                && scrollbar_drag_thumb_travel > 0.01F) {
+                const auto pointer = scrollbar_drag_vertical ? input.y : input.x;
+                const auto next = std::clamp(
+                    scrollbar_drag_scroll_origin
+                        + static_cast<float>(pointer - scrollbar_drag_pointer_origin)
+                            * scrollbar_drag_maximum / scrollbar_drag_thumb_travel,
+                    0.0F,
+                    scrollbar_drag_maximum);
+                auto& current = scrollbar_drag_vertical
+                    ? scrollbar_drag_target->scroll_top
+                    : scrollbar_drag_target->scroll_left;
+                if (std::abs(next - current) > 0.01F) {
+                    current = next;
+                    document.mark_dirty();
+                    if (!dispatch_input_event_type(
+                            input, "scroll", *scrollbar_drag_target)) {
+                        last_error = "Native scrollbar scroll dispatch failed: "
+                            + describe_exception(try_catch, local_context);
+                        report_input_exception();
+                        return false;
+                    }
+                }
+            }
+            if (input.kind == WEBSCENE_INPUT_POINTER_UP) {
+                scrollbar_drag_target = nullptr;
+            }
+            return true;
+        }
         auto* hit_target = document.hit_test(
             active_root(),
             static_cast<float>(input.x),
             static_cast<float>(input.y));
         if (hit_target == nullptr) hit_target = &active_root();
+        if (input.kind == WEBSCENE_INPUT_POINTER_DOWN
+            && ((input.flags >> 8U) & 0xffU) <= 1U) {
+            if (const auto hit = hit_test_scrollbar_thumb(
+                    *hit_target, static_cast<float>(input.x), static_cast<float>(input.y));
+                hit.has_value()) {
+                scrollbar_drag_target = hit->target;
+                scrollbar_drag_vertical = hit->vertical;
+                scrollbar_drag_pointer_origin = hit->pointer_origin;
+                scrollbar_drag_scroll_origin = hit->scroll_origin;
+                scrollbar_drag_maximum = hit->maximum;
+                scrollbar_drag_thumb_travel = hit->thumb_travel;
+                return true;
+            }
+        }
         auto* target = pointer_capture_target != nullptr
             && input.kind != WEBSCENE_INPUT_POINTER_DOWN
             ? pointer_capture_target

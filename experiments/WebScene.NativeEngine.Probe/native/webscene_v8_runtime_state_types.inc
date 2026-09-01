@@ -321,6 +321,14 @@ using css_index_string_set = std::unordered_set<std::string>;
         v8::Global<v8::Object> signal;
     };
 
+    struct media_query_list_state final {
+        std::string query;
+        bool matches{false};
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> wrapper;
+        std::vector<event_listener_registration> listeners;
+    };
+
     enum class process_compilation_state : uint8_t {
         producing,
         ready,

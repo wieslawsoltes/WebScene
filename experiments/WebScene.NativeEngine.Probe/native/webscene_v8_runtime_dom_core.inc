@@ -1287,6 +1287,7 @@
         if (nodes.contains(active_element)) active_element = nullptr;
         if (nodes.contains(pointer_capture_target)) pointer_capture_target = nullptr;
         if (nodes.contains(pointer_down_target)) pointer_down_target = nullptr;
+        if (nodes.contains(scrollbar_drag_target)) scrollbar_drag_target = nullptr;
         if (nodes.contains(hover_target)) hover_target = nullptr;
         if (nodes.contains(current_related_target)) current_related_target = nullptr;
         released_detached_dom_nodes += document.erase_detached_subtrees(roots);

@@ -3092,6 +3092,9 @@
         };
         if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
         if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
+        if (const auto kind = split_suffix("::-webkit-scrollbar-thumb", 4); kind != 0) return kind;
+        if (const auto kind = split_suffix("::-webkit-scrollbar-track", 5); kind != 0) return kind;
+        if (const auto kind = split_suffix("::-webkit-scrollbar-corner", 6); kind != 0) return kind;
         if (const auto kind = split_suffix("::-webkit-scrollbar", 3); kind != 0) return kind;
         if (const auto kind = split_suffix(":before", 1); kind != 0) return kind;
         return split_suffix(":after", 2);
