@@ -909,11 +909,39 @@
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
         if (observer == nullptr || node == nullptr) return;
+        auto box = resize_observer_box::content;
+        if (info.Length() > 1 && !info[1]->IsNullOrUndefined()) {
+            if (!info[1]->IsObject()) {
+                info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                    js_string(info.GetIsolate(), "ResizeObserver options must be a dictionary")));
+                return;
+            }
+            v8::Local<v8::Value> value;
+            if (!info[1].As<v8::Object>()->Get(info.GetIsolate()->GetCurrentContext(),
+                    js_string(info.GetIsolate(), "box")).ToLocal(&value)) return;
+            if (!value->IsUndefined()) {
+                v8::Local<v8::String> string;
+                if (!value->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&string)) return;
+                const auto name = to_utf8(info.GetIsolate(), string);
+                if (name == "border-box") box = resize_observer_box::border;
+                else if (name == "device-pixel-content-box") box = resize_observer_box::device_pixel_content;
+                else if (name != "content-box") {
+                    info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                        js_string(info.GetIsolate(), "Invalid ResizeObserver box option")));
+                    return;
+                }
+            }
+        }
         if (std::find(observer->nodes.begin(), observer->nodes.end(), node) == observer->nodes.end()) {
             observer->nodes.push_back(node);
-            observer->delivered_sizes.erase(node->id);
-            current(info.GetIsolate())->resize_observers_pending = true;
+        } else if (observer->observed_boxes.at(node->id) == box) {
+            return;
         }
+        observer->observed_boxes[node->id] = box;
+        // Re-observing with another box replaces the delivery criterion.
+        // Device-pixel changes can occur with no CSS layout-size change.
+        observer->delivered_sizes.erase(node->id);
+        current(info.GetIsolate())->resize_observers_pending = true;
     }
 
     static void resize_observer_unobserve(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -924,6 +952,7 @@
             : nullptr;
         if (observer != nullptr && node != nullptr) {
             std::erase(observer->nodes, node);
+            observer->observed_boxes.erase(node->id);
             observer->delivered_sizes.erase(node->id);
         }
     }
@@ -933,6 +962,7 @@
         auto* observer = resize_observer(info);
         if (observer != nullptr) {
             observer->nodes.clear();
+            observer->observed_boxes.clear();
             observer->delivered_sizes.clear();
         }
     }
@@ -944,7 +974,7 @@
             "web-api",
             "ResizeObserver.constructor",
             "partially-supported",
-            "element content-box size delivery without the complete box-option surface",
+            "content, border, and device-pixel box delivery for unfragmented horizontal layout",
             "web-api-binding");
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto object = info.IsConstructCall() ? info.This() : v8::Object::New(info.GetIsolate());

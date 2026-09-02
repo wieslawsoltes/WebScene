@@ -1244,7 +1244,10 @@
             std::erase_if(observer->nodes, [&](const auto* node) {
                 return nodes.contains(const_cast<dom_node*>(node));
             });
-            for (const auto id : node_ids) observer->delivered_sizes.erase(id);
+            for (const auto id : node_ids) {
+                observer->delivered_sizes.erase(id);
+                observer->observed_boxes.erase(id);
+            }
         }
         std::erase_if(provisional_frame_bodies, [&](const auto& entry) {
             return node_ids.contains(entry.first) || nodes.contains(entry.second);

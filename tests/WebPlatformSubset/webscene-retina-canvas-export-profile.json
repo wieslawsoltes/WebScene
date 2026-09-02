@@ -1,0 +1,18 @@
+{
+  "profile": "webscene-retina-canvas-export-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": { "width": 800, "height": 600, "deviceScaleFactor": 2 },
+  "required": [],
+  "candidate": [
+    {
+      "path": "contracts/resize-observer-device-pixel-canvas-export.html",
+      "type": "contract",
+      "capabilities": ["resize-observer-device-pixel-content-box", "retina-canvas-export", "iframe-device-pixel-observation"],
+      "evidence": ["constrained-chart-copy-mixed-pixel-ratio-reduction"],
+      "reason": "Retina regression: observer-sized live canvases must compose with DPR-sized detached axes without scaling mismatches or footer spill. Also checks distinct box types, re-observation, and integral untransformed physical sizes. Keep candidate until cross-RID validation is complete; the paired native regressions run in the full native suite."
+    }
+  ],
+  "harnessBlocked": [],
+  "excluded": []
+}

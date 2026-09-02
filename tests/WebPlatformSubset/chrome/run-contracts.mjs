@@ -16,6 +16,7 @@ function parseArguments(values) {
   const paths = [];
   let output = null;
   let timeoutSeconds = 20;
+  let deviceScaleFactor = 1;
   for (let index = 0; index < values.length; index++) {
     const name = values[index];
     const value = values[++index];
@@ -23,6 +24,7 @@ function parseArguments(values) {
     if (name === "--path") paths.push(value);
     else if (name === "--output") output = path.resolve(value);
     else if (name === "--timeout-seconds") timeoutSeconds = Number(value);
+    else if (name === "--device-scale-factor") deviceScaleFactor = Number(value);
     else throw new Error(`Unknown argument '${name}'.`);
   }
   if (!paths.length) throw new Error("Pass at least one --path relative to tests/WebPlatformSubset.");
@@ -30,7 +32,10 @@ function parseArguments(values) {
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
     throw new Error("--timeout-seconds must be positive.");
   }
-  return { paths, output, timeoutSeconds };
+  if (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor <= 0) {
+    throw new Error("--device-scale-factor must be positive.");
+  }
+  return { paths, output, timeoutSeconds, deviceScaleFactor };
 }
 
 function chromeIdentity() {
@@ -47,10 +52,13 @@ function chromeIdentity() {
   return { executable, version: version.stdout.trim() };
 }
 
-async function launchChrome(executable) {
+async function launchChrome(executable, deviceScaleFactor) {
   const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "webscene-wpt-chrome-"));
   const child = spawn(executable, [
     "--headless=new",
+    // DeviceMetricsOverride alone changes JS DPR without changing the physical
+    // scale used by ResizeObserver.devicePixelContentBoxSize in Chromium.
+    `--force-device-scale-factor=${deviceScaleFactor}`,
     "--disable-background-networking",
     "--disable-component-update",
     "--disable-default-apps",
@@ -212,7 +220,7 @@ const identity = chromeIdentity();
 const contractServer = await launchContractServer();
 let chrome;
 try {
-  chrome = await launchChrome(identity.executable);
+  chrome = await launchChrome(identity.executable, options.deviceScaleFactor);
 } catch (error) {
   await closeContractServer(contractServer);
   throw error;
@@ -226,6 +234,13 @@ chrome.client.on("Runtime.exceptionThrown", event => {
 });
 const results = [];
 try {
+  await chrome.client.send("Emulation.setDeviceMetricsOverride", {
+    width: 800, height: 600, mobile: false,
+    deviceScaleFactor: options.deviceScaleFactor
+  });
+  await chrome.client.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `globalThis.__webSceneWptExpectedDeviceScaleFactor = ${options.deviceScaleFactor};`
+  });
   for (const relativePath of options.paths) {
     process.stdout.write(`RUN  chrome ${relativePath} ... `);
     const result = await runDocument(
@@ -247,6 +262,7 @@ const artifact = {
   schema: "webscene-wpt-contract-chrome-result-v1",
   engine: "chrome",
   identity: identity.version,
+  viewport: { width: 800, height: 600, deviceScaleFactor: options.deviceScaleFactor },
   origin: contractServer.baseUrl,
   recordedAt: new Date().toISOString(),
   summary: {

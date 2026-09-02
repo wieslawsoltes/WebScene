@@ -104,7 +104,10 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 Kind = 6,
                 Sequence = ++_sequence,
                 X = viewport.Width,
-                Y = viewport.Height
+                Y = viewport.Height,
+                // DOM device-pixel measurements must use the same scale as
+                // screenshot rasterization, including before document scripts.
+                DeltaX = viewport.DeviceScaleFactor
             });
             LoadPreparedDocument(html, upstreamRoot, documentPath);
             _loaded = true;
@@ -308,6 +311,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
 
         Execute($$"""
             globalThis.__webSceneDocumentBasePath = {{JsonSerializer.Serialize(documentDirectory)}};
+            globalThis.__webSceneWptExpectedDeviceScaleFactor = {{JsonSerializer.Serialize(_viewport.DeviceScaleFactor)}};
             const webSceneViewportRoot = document.body;
             const webSceneDocumentElement = document.createElement('html');
             const webSceneHead = document.createElement('head');
@@ -408,7 +412,8 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
             Kind = 6,
             Sequence = ++_sequence,
             X = width,
-            Y = height
+            Y = height,
+            DeltaX = _viewport.DeviceScaleFactor
         });
 
     private void EnqueueText(Rune rune)

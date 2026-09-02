@@ -941,8 +941,9 @@
         activate_css_cascade(context.Get(isolate));
         if (!dispatch_media_query_list_changes()) return false;
 
-        if (frame_context.IsEmpty()) return true;
-        {
+        // The outer document also needs the post-layout observation checkpoint
+        // when no iframe exists (including a scale-only host resize).
+        if (!frame_context.IsEmpty()) {
             auto local_frame_context = frame_context.Get(isolate);
             activate_css_cascade(local_frame_context);
             v8::Context::Scope frame_scope(local_frame_context);
@@ -1102,8 +1103,29 @@
         return true;
     }
 
+    std::pair<double, double> resize_observer_box_size(
+        const dom_node& node, resize_observer_box box, double scale) const
+    {
+        if (has_display_none_ancestor(node)) return {0, 0};
+        if (box == resize_observer_box::border) {
+            return {std::max(0.0F, node.layout.width), std::max(0.0F, node.layout.height)};
+        }
+        const auto content = connected_box_for(node);
+        if (box == resize_observer_box::device_pixel_content) {
+            // Physical content extents are integral, unlike CSS box sizes.
+            // Do not use transformed/client rects or alias the CSS-pixel box:
+            // canvas libraries use this value as the bitmap backing size.
+            return {std::round(content.content_width * scale),
+                std::round(content.content_height * scale)};
+        }
+        return {content.content_width, content.content_height};
+    }
+
     bool dispatch_resize_observers()
     {
+        const auto requested_scale = viewport_provider().device_scale_factor;
+        const auto scale = std::isfinite(requested_scale) && requested_scale > 0
+            ? requested_scale : 1.0;
         std::vector<resize_observer_state*> pending;
         pending.reserve(resize_observers.size());
         for (const auto& observer : resize_observers) {
@@ -1115,7 +1137,8 @@
             changed_nodes.reserve(observer->nodes.size());
             for (auto* node : observer->nodes) {
                 if (node == nullptr) continue;
-                const auto size = std::pair{node->layout.width, node->layout.height};
+                const auto size = resize_observer_box_size(
+                    *node, observer->observed_boxes.at(node->id), scale);
                 const auto previous = observer->delivered_sizes.find(node->id);
                 if (previous == observer->delivered_sizes.end() || previous->second != size) {
                     changed_nodes.push_back(node);
@@ -1132,6 +1155,12 @@
             for (uint32_t index = 0; index < changed_nodes.size(); ++index) {
                 auto* node = changed_nodes[index];
                 if (node == nullptr) continue;
+                const auto content = resize_observer_box_size(*node, resize_observer_box::content, scale);
+                const auto border = resize_observer_box_size(*node, resize_observer_box::border, scale);
+                const auto device_pixels = resize_observer_box_size(*node, resize_observer_box::device_pixel_content, scale);
+                const auto padding_width = connected_box_for(*node).padding_width;
+                const auto x = resolve_connected_css_length(*node, node->style.padding_left, padding_width);
+                const auto y = resolve_connected_css_length(*node, node->style.padding_top, padding_width);
                 auto rect = v8::Object::New(isolate);
                 const auto set = [&](const char* name, double value) {
                     rect->Set(
@@ -1139,27 +1168,27 @@
                         js_string(isolate, name),
                         v8::Number::New(isolate, value)).Check();
                 };
-                set("x", node->layout.x);
-                set("y", node->layout.y);
-                set("width", node->layout.width);
-                set("height", node->layout.height);
-                set("top", node->layout.y);
-                set("left", node->layout.x);
-                set("right", node->layout.x + node->layout.width);
-                set("bottom", node->layout.y + node->layout.height);
+                set("x", x);
+                set("y", y);
+                set("width", content.first);
+                set("height", content.second);
+                set("top", y);
+                set("left", x);
+                set("right", x + content.first);
+                set("bottom", y + content.second);
                 auto entry = v8::Object::New(isolate);
                 entry->Set(observer_context, js_string(isolate, "target"), wrap_node(*node)).Check();
                 entry->Set(observer_context, js_string(isolate, "contentRect"), rect).Check();
-                auto box_size = v8::Object::New(isolate);
-                box_size->Set(
-                    observer_context,
-                    js_string(isolate, "inlineSize"),
-                    v8::Number::New(isolate, node->layout.width)).Check();
-                box_size->Set(
-                    observer_context,
-                    js_string(isolate, "blockSize"),
-                    v8::Number::New(isolate, node->layout.height)).Check();
-                const auto make_box_array = [&] {
+                const auto make_box_array = [&](std::pair<double, double> size) {
+                    auto box_size = v8::Object::New(isolate);
+                    box_size->Set(
+                        observer_context,
+                        js_string(isolate, "inlineSize"),
+                        v8::Number::New(isolate, size.first)).Check();
+                    box_size->Set(
+                        observer_context,
+                        js_string(isolate, "blockSize"),
+                        v8::Number::New(isolate, size.second)).Check();
                     auto values = v8::Array::New(isolate, 1);
                     values->Set(observer_context, 0, box_size).Check();
                     return values;
@@ -1167,15 +1196,15 @@
                 entry->Set(
                     observer_context,
                     js_string(isolate, "contentBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(content)).Check();
                 entry->Set(
                     observer_context,
                     js_string(isolate, "borderBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(border)).Check();
                 entry->Set(
                     observer_context,
                     js_string(isolate, "devicePixelContentBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(device_pixels)).Check();
                 entries->Set(observer_context, index, entry).Check();
             }
             v8::Local<v8::Value> arguments[] = {entries, v8::Undefined(isolate)};

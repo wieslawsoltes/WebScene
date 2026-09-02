@@ -111,6 +111,60 @@ code.
 Input tests enqueue pointer, wheel, keyboard, focus, and resize actions through the
 native input ABI. They must not call presenter internals directly.
 
+## Retina canvas export regression
+
+`contracts/resize-observer-device-pixel-canvas-export.html` is a project-owned
+WPT-style reduction, not an imported upstream WPT. It covers initial and resized
+constrained canvas exports plus same-origin iframe measurements. The pane and time
+axis take their backing sizes from `devicePixelContentBoxSize`; a detached price
+axis uses `devicePixelRatio`. Assertions reject mixed-scale layers, price-axis
+spill into the footer, and incorrect export dimensions. The DOM DPR is checked
+against the runner's requested scale so a nominal 2x run cannot silently test 1x.
+
+The ordinary component profile includes the 1x control as a candidate. Run the
+paired 2x candidate with:
+
+```bash
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --manifest tests/WebPlatformSubset/webscene-retina-canvas-export-profile.json \
+  --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --output artifacts/retina-canvas-export/native-2x
+
+CHROME_BIN=/absolute/path/to/chromium node tests/WebPlatformSubset/chrome/run-contracts.mjs \
+  --path contracts/resize-observer-device-pixel-canvas-export.html \
+  --device-scale-factor 2 --output artifacts/retina-canvas-export/chrome-2x
+```
+
+Repeat the Chrome command with `--device-scale-factor 1` and a fresh output path
+for the control. The browser runner sets the physical process scale as well as
+CDP viewport metrics: changing emulated DPR alone does not exercise the physical
+ResizeObserver box in Chromium. The native adapter likewise sends the manifest
+scale through resize input before any document script, rather than only scaling
+the screenshot renderer.
+
+The native executable has two focused filters:
+`resize-observer-retina-export` and `resize-observer-device-scale`. The latter
+drives real host scale transitions 1x → 2x → 1.5x → 1x without changing CSS size,
+requiring new physical measurements without duplicate content-box notifications.
+Both are registered in the full native suite.
+
+Before the fix, native failed 9 of the original 13 assertions at 2x (including
+a 511x611 export instead of 842x1082), and both focused native tests failed.
+The fixed implementation supplies separate content, border, and rounded physical
+sizes, tracks the selected observation box, and reaches the observation checkpoint
+on outer-document resizes even without an iframe. The expanded contract also
+covers padding/borders, option replacement, unobserve, invalid options, and
+fractional untransformed sizes. Native and Chromium pass 21/21 at both scales;
+the two focused native regressions and the full native suite pass. The real
+constrained chart export was independently checked at 421x541 (1x) and 842x1082
+(2x), without the earlier diagnostic sizing shim. Local evidence is under
+`artifacts/resize-observer-export-fix` and
+`artifacts/export-diagnosis/457-dpr{1,2}-native-fixed`.
+
+Keep the web contract candidate until cross-RID validation is complete. Candidate
+failures are reported in result JSON but do not set the runner's exit code;
+the direct native regressions do exit nonzero.
+
 ## Broad discovery
 
 A broader WPT sweep should write separate non-gating artifacts and expectations. It is

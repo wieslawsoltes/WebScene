@@ -232,11 +232,14 @@ using css_index_string_set = std::unordered_set<std::string>;
         v8::Global<v8::Object> wrapper;
     };
 
+    enum class resize_observer_box { content, border, device_pixel_content };
+
     struct resize_observer_state final {
         v8::Global<v8::Context> context;
         v8::Global<v8::Function> callback;
         std::vector<dom_node*> nodes;
-        std::unordered_map<uint32_t, std::pair<float, float>> delivered_sizes;
+        std::unordered_map<uint32_t, resize_observer_box> observed_boxes;
+        std::unordered_map<uint32_t, std::pair<double, double>> delivered_sizes;
     };
 
     struct session_storage_state final {

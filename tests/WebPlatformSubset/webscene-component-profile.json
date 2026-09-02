@@ -997,6 +997,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/resize-observer-device-pixel-canvas-export.html",
+      "type": "contract",
+      "capabilities": ["resize-observer-device-pixel-content-box", "canvas-export-pixel-scale", "iframe-device-pixel-observation"],
+      "evidence": ["constrained-chart-copy-mixed-pixel-ratio-reduction"],
+      "reason": "The 1x control for the same contract in webscene-retina-canvas-export-profile.json. Observer-sized canvases must agree with DPR-sized export axes before and after a constrained resize. Keep candidate until cross-RID validation of both scales is complete."
+    },
+    {
       "path": "contracts/dom-iframe-hydrated-layout-replacement.html",
       "type": "contract",
       "capabilities": [

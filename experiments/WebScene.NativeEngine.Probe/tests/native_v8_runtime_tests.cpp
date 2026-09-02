@@ -80,6 +80,7 @@ uint8_t measure_baseline_fixture_text(
 #include "native_v8_runtime_canvas_tests.inc"
 #include "native_v8_runtime_frame_scheduling_tests.inc"
 #include "native_v8_runtime_browser_dom_tests.inc"
+#include "native_v8_runtime_resize_observer_tests.inc"
 #include "native_v8_runtime_rendering_metrics_tests.inc"
 #include "native_v8_runtime_websocket_tests.inc"
 int main()
@@ -115,6 +116,18 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "resize-observer-retina-export"
+            || selected == "resize-observer-device-scale") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused observer engine creation failed");
+            if (selected == "resize-observer-retina-export") {
+                test_resize_observer_device_pixel_canvas_export(focused_engine);
+            } else {
+                test_resize_observer_device_scale_only_delivery(focused_engine);
+            }
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "elliptical-corner-radii") {
             test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
             auto* focused_engine = webscene_engine_create(0);
@@ -697,6 +710,8 @@ int main()
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
     test_connected_style_recascade_skips_detached_wrapper_retention(engine);
     test_resize_updates_device_pixel_ratio(engine);
+    test_resize_observer_device_pixel_canvas_export(engine);
+    test_resize_observer_device_scale_only_delivery(engine);
     test_session_storage_in_outer_and_frame_contexts(engine);
     test_window_post_message_is_queued(engine);
     test_window_post_message_coalesces_style_recascade(engine);
