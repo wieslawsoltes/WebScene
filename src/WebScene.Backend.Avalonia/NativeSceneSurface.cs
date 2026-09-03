@@ -64,6 +64,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private int _frameCallbackScheduled;
     private bool _presentationActive = true;
     private bool _pointerDown;
+    private readonly Func<InputEvent, bool> _enqueuePointerInput;
     private int _lastCursorKind = -1;
     private int _compositionProjectionActive;
     private long _compositionUiWakeCount;
@@ -73,10 +74,20 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         IntPtr engine,
         bool useCompositionVisual = false,
         bool submitAnimationFrames = true)
+        : this(engine, useCompositionVisual, submitAnimationFrames, null)
+    {
+    }
+
+    internal NativeSceneSurface(
+        IntPtr engine,
+        bool useCompositionVisual,
+        bool submitAnimationFrames,
+        Func<InputEvent, bool>? enqueuePointerInput)
     {
         _performanceInstrumentation = new NativePerformanceInstrumentation();
         _renderObserver = new NativeSceneRenderObserver(_performanceInstrumentation);
         _engine = engine;
+        _enqueuePointerInput = enqueuePointerInput ?? EnqueueNativePointerInput;
         _useCompositionVisual = useCompositionVisual
             && !string.Equals(
                 Environment.GetEnvironmentVariable(
@@ -90,6 +101,11 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             InputElement.PointerMovedEvent,
             OnPointerMoved,
             RoutingStrategies.Direct | RoutingStrategies.Bubble,
+            handledEventsToo: true);
+        AddHandler(
+            InputElement.PointerExitedEvent,
+            OnPointerExited,
+            RoutingStrategies.Direct,
             handledEventsToo: true);
         AddHandler(
             InputElement.PointerPressedEvent,
@@ -758,7 +774,6 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private void EnqueuePointer(uint kind, PointerEventArgs args)
     {
-        ObserveHostTimeline();
         var point = args.GetCurrentPoint(this);
         var properties = point.Properties;
         var button = properties.PointerUpdateKind switch
@@ -785,7 +800,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         };
         _lastPointerX = input.X;
         _lastPointerY = input.Y;
-        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        var accepted = _enqueuePointerInput(input);
         if (_performanceInstrumentation.IsEnabled)
         {
             Interlocked.Increment(ref _routedInputEvents);
@@ -797,8 +812,18 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         args.Handled = true;
     }
 
+    private bool EnqueueNativePointerInput(InputEvent input)
+    {
+        if (_engine == IntPtr.Zero) return false;
+        ObserveHostTimeline();
+        return NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+    }
+
     private void OnPointerMoved(object? sender, PointerEventArgs args)
         => EnqueuePointer(1, args);
+
+    private void OnPointerExited(object? sender, PointerEventArgs args)
+        => EnqueuePointer(10, args);
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
     {

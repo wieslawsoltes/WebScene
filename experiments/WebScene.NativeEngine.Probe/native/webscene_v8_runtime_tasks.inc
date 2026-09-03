@@ -1489,6 +1489,7 @@
         const auto pointer_input = input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN
             || input.kind == WEBSCENE_INPUT_POINTER_UP
+            || input.kind == WEBSCENE_INPUT_POINTER_LEAVE
             || input.kind == WEBSCENE_INPUT_WHEEL;
         const auto text_input = input.kind == WEBSCENE_INPUT_TEXT;
         event->Set(local_context, js_string(isolate, "altKey"), v8::Boolean::New(
@@ -2724,6 +2725,46 @@
             report_inspector_exception(try_catch, local_context);
 #endif
         };
+        const auto leave_host = [&]() -> bool {
+            // OS/control exits need not have a final mousemove. Clear :hover
+            // before dispatch, with no destination element (relatedTarget=null).
+            // Capture keeps its boundary until release; a host exit is not up
+            // or cancel and must not interrupt a chart/scrollbar drag.
+            if (pointer_capture_target != nullptr || scrollbar_drag_target != nullptr) {
+                return true;
+            }
+            auto* previous = hover_target;
+            hover_target = nullptr;
+            current_related_target = nullptr;
+            current_cursor_kind_value = WEBSCENE_CURSOR_DEFAULT;
+            has_pointer_position = false;
+            current_movement_x = current_movement_y = 0;
+            recascade_hover_transition(previous, nullptr, "host-pointer-exit");
+            if (previous == nullptr) return true;
+            std::vector<dom_node*> exited_nodes;
+            for (auto* node = previous; node != nullptr; node = node->parent) {
+                exited_nodes.push_back(node);
+            }
+            const auto dispatch = [&](const char* type, dom_node& node) {
+                if (dispatch_input_event_type(input, type, node)) return true;
+                last_error = "Native host pointer exit dispatch failed: "
+                    + describe_exception(try_catch, local_context);
+                report_input_exception();
+                return false;
+            };
+            if (!dispatch("pointerout", *previous)) return false;
+            for (auto* node : exited_nodes) {
+                if (!dispatch("pointerleave", *node)) return false;
+            }
+            if (!dispatch("mouseout", *previous)) return false;
+            for (auto* node : exited_nodes) {
+                if (!dispatch("mouseleave", *node)) return false;
+            }
+            return true;
+        };
+        if (input.kind == WEBSCENE_INPUT_POINTER_LEAVE) {
+            return leave_host();
+        }
         if (input.kind == WEBSCENE_INPUT_KEY_DOWN
             || input.kind == WEBSCENE_INPUT_KEY_UP
             || input.kind == WEBSCENE_INPUT_TEXT) {
@@ -2735,6 +2776,9 @@
             }
             return true;
         }
+        const auto viewport = viewport_provider();
+        const auto pointer_outside = input.x < 0 || input.y < 0
+            || input.x >= viewport.width || input.y >= viewport.height;
         if (scrollbar_drag_target != nullptr
             && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
                 || input.kind == WEBSCENE_INPUT_POINTER_UP)) {
@@ -2764,14 +2808,29 @@
             }
             if (input.kind == WEBSCENE_INPUT_POINTER_UP) {
                 scrollbar_drag_target = nullptr;
+                if (pointer_outside) return leave_host();
             }
             return true;
+        }
+        if (pointer_outside && pointer_capture_target == nullptr
+            && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                || input.kind == WEBSCENE_INPUT_POINTER_DOWN
+                || input.kind == WEBSCENE_INPUT_POINTER_UP)) {
+            if (!leave_host()) return false;
+            // Hosts capture the mouse for ordinary document-level drags too,
+            // even when script does not call setPointerCapture. Keep delivering
+            // their move/up stream, without restoring :hover outside the host.
+            if (pointer_down_target == nullptr) return true;
         }
         auto* hit_target = document.hit_test(
             active_root(),
             static_cast<float>(input.x),
             static_cast<float>(input.y));
         if (hit_target == nullptr) hit_target = &active_root();
+        if (pointer_outside) {
+            hit_target = pointer_capture_target != nullptr
+                ? pointer_capture_target : &active_root();
+        }
         if (input.kind == WEBSCENE_INPUT_POINTER_DOWN
             && ((input.flags >> 8U) & 0xffU) <= 1U) {
             if (const auto hit = hit_test_scrollbar_thumb(
@@ -2799,6 +2858,7 @@
         }
         if ((input.kind == WEBSCENE_INPUT_POINTER_MOVE
                 || input.kind == WEBSCENE_INPUT_POINTER_DOWN)
+            && (!pointer_outside || pointer_capture_target != nullptr)
             && hit_target != hover_target) {
             auto* previous_hover_target = hover_target;
             // Browsers update :hover before dispatching the boundary events.
@@ -3177,6 +3237,7 @@
         if (input.kind == WEBSCENE_INPUT_POINTER_UP) {
             pointer_capture_target = nullptr;
             pointer_down_target = nullptr;
+            if (pointer_outside) return leave_host();
         }
         if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN

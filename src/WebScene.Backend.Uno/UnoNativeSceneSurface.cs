@@ -51,6 +51,7 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
         PointerMoved += OnPointerMoved;
+        PointerExited += OnPointerExited;
         PointerPressed += OnPointerPressed;
         PointerReleased += OnPointerReleased;
         PointerCanceled += OnPointerCanceled;
@@ -259,6 +260,11 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
     private void OnPointerMoved(object sender, PointerRoutedEventArgs args)
     {
         EnqueuePointer(1, args);
+    }
+
+    private void OnPointerExited(object sender, PointerRoutedEventArgs args)
+    {
+        EnqueuePointer(10, args);
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)

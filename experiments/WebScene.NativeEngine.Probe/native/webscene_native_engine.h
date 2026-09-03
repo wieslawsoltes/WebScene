@@ -45,7 +45,10 @@ typedef enum webscene_input_kind {
     WEBSCENE_INPUT_KEY_DOWN = 7,
     WEBSCENE_INPUT_KEY_UP = 8,
     // x carries one Unicode scalar value. Hosts enqueue one event per scalar.
-    WEBSCENE_INPUT_TEXT = 9
+    WEBSCENE_INPUT_TEXT = 9,
+    // A discrete host-surface exit, not a mousemove. Coordinates may still be
+    // the last known position inside the surface. Does not cancel capture.
+    WEBSCENE_INPUT_POINTER_LEAVE = 10
 } webscene_input_kind;
 
 typedef enum webscene_cursor_kind {

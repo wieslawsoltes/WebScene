@@ -116,6 +116,10 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "host-pointer-exit") {
+            test_host_pointer_exit_clears_tooltip_without_another_move();
+            return 0;
+        }
         if (selected == "resize-observer-retina-export"
             || selected == "resize-observer-device-scale") {
             auto* focused_engine = webscene_engine_create(0);
@@ -478,6 +482,7 @@ int main()
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
     test_timer_error_handler_preserves_later_tasks();
+    test_host_pointer_exit_clears_tooltip_without_another_move();
     test_concurrent_input_producers_remain_consumable();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();

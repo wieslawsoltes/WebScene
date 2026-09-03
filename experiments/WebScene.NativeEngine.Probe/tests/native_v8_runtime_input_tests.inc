@@ -110,6 +110,111 @@ void animation_frame_and_wait(
         "animation frame was not consumed");
 }
 
+void test_host_pointer_exit_clears_tooltip_without_another_move()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "host-exit engine creation failed");
+    resize(engine, 400, 240, 1U);
+    execute(engine, R"JS(
+        document.body.innerHTML = `<style>
+          body { margin: 0; }
+          #quick { width: 80px; height: 40px; cursor: pointer; color: black; }
+          #quick:hover { color: red; }
+          #tip { display: none; }
+        </style><div id="quick">Quick Search</div><div id="tip">Tooltip</div>`;
+        globalThis.quick = document.getElementById('quick');
+        globalThis.tip = document.getElementById('tip');
+        globalThis.boundaries = [];
+        globalThis.moves = 0;
+        globalThis.ups = 0;
+        quick.addEventListener('mouseenter', () => tip.style.display = 'block');
+        quick.addEventListener('mouseleave', () => tip.style.display = 'none');
+        quick.addEventListener('pointermove', () => moves++);
+        quick.addEventListener('pointerup', () => ups++);
+        for (const type of ['pointerout', 'pointerleave', 'mouseout', 'mouseleave']) {
+          quick.addEventListener(type, e => boundaries.push([
+            type, e.relatedTarget === null, quick.matches(':hover'),
+            e.bubbles, e.shiftKey
+          ]));
+        }
+    )JS", "host-exit-fixture.js");
+    require(evaluate(engine, "quick.offsetWidth", "host-exit-ready.js") == "80",
+        "host-exit fixture did not complete layout");
+    pointer_move(engine, 20, 20, 2U);
+    require(evaluate(engine, "getComputedStyle(tip).display", "host-enter.js") == "\"block\"",
+        "hover did not show the tooltip");
+    const auto exit = [&](uint64_t sequence, uint32_t flags = 0U) {
+        // The host can report only a leave notification, with the last known
+        // position still INSIDE the control (not a fabricated outside move).
+        const webscene_input_event input{WEBSCENE_INPUT_POINTER_LEAVE, flags, sequence, 20, 20, 0, 0};
+        require(webscene_engine_enqueue(engine, &input) != 0, "host exit rejected");
+    };
+    exit(3U, WEBSCENE_INPUT_POINTER_MODIFIER_SHIFT);
+    const auto result = evaluate(engine, R"JS([
+        getComputedStyle(tip).display, getComputedStyle(quick).color, moves, boundaries
+    ])JS", "host-exit-result.js");
+    require(result == R"JSON(["none","rgb(0, 0, 0)",1,[["pointerout",true,false,true,true],["pointerleave",true,false,false,true],["mouseout",true,false,true,true],["mouseleave",true,false,false,true]]])JSON",
+        "host exit must clear hover and tooltip without a move: " + result);
+    require(webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_DEFAULT,
+        "host exit retained the hovered cursor");
+    exit(4U);
+    require(evaluate(engine, "boundaries.length", "duplicate-exit.js") == "4",
+        "duplicate host exits dispatched duplicate boundaries");
+    pointer_move(engine, 20, 20, 5U);
+    require(evaluate(engine, "getComputedStyle(tip).display", "host-reenter.js") == "\"block\"",
+        "reentering at the same point must restore hover/entry events");
+
+    // Exit is a discrete ordering barrier: a pending frame-paced move must not
+    // be applied after the leave and resurrect the tooltip.
+    exit(6U);
+    execute(engine, "boundaries = []; moves = 0;", "host-exit-reset.js");
+    require(evaluate(engine, "moves", "host-exit-reset-ready.js") == "0", "reset not applied");
+    webscene_engine_observe_compositor_frame(engine, 1000.0);
+    pointer_move(engine, 20, 20, 7U);
+    exit(8U);
+    require(evaluate(engine, "[getComputedStyle(tip).display, moves, boundaries.length]",
+        "host-exit-barrier.js") == R"(["none",1,4])",
+        "frame-paced move was not flushed before the host exit");
+
+    // Many chart gestures use document mousemove/up rather than DOM capture.
+    pointer_move(engine, 20, 20, 9U);
+    execute(engine, R"JS(
+        globalThis.dragMoves = 0;
+        globalThis.dragUps = 0;
+        document.addEventListener('mousemove', () => dragMoves++);
+        document.addEventListener('mouseup', () => dragUps++);
+    )JS", "host-exit-document-drag.js");
+    require(evaluate(engine, "dragUps", "host-exit-document-drag-ready.js") == "0",
+        "document drag fixture not ready");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
+    exit(11U, 1U);
+    pointer_move(engine, -20, -20, 12U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 13U, false);
+    require(evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
+        "host-exit-document-drag-result.js") == R"([1,1,"none"])",
+        "host exit interrupted document-level drag movement or release");
+
+    pointer_move(engine, 20, 20, 14U);
+    execute(engine, R"JS(
+        boundaries = [];
+        quick.addEventListener('pointerdown', e => quick.setPointerCapture(e.pointerId));
+    )JS", "host-exit-capture.js");
+    require(evaluate(engine, "boundaries.length", "host-exit-capture-ready.js") == "0", "capture fixture not ready");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 15U, true);
+    exit(16U, 1U);
+    require(evaluate(engine, "[quick.hasPointerCapture(1), boundaries.length]",
+        "host-exit-held.js") == "[true,0]",
+        "host exit cancelled a captured drag or fired premature leave events");
+    pointer_move(engine, -20, -20, 17U, true);
+    require(evaluate(engine, "boundaries.length", "host-exit-drag.js") == "0",
+        "captured movement outside the viewport fired leave events");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 18U, false);
+    require(evaluate(engine, "[ups, quick.hasPointerCapture(1), getComputedStyle(tip).display, boundaries.length]",
+        "host-exit-release.js") == R"([1,false,"none",4])",
+        "release outside must reach the capture target and then clear hover");
+    webscene_engine_destroy(engine);
+}
+
 void test_concurrent_input_producers_remain_consumable()
 {
     auto* engine = webscene_engine_create(0);
