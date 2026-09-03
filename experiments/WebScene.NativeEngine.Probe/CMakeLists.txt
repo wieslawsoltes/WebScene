@@ -993,11 +993,15 @@ if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)
             -fvisibility=hidden
             -fvisibility-inlines-hidden)
         if(APPLE)
+            set_property(TARGET webscene_native_engine APPEND PROPERTY LINK_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.exports")
             target_link_options(webscene_native_engine PRIVATE
                 "LINKER:-dead_strip"
                 "LINKER:-x"
                 "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.exports")
         elseif(UNIX)
+            set_property(TARGET webscene_native_engine APPEND PROPERTY LINK_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.map")
             target_link_options(webscene_native_engine PRIVATE
                 "LINKER:--gc-sections"
                 "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.map"

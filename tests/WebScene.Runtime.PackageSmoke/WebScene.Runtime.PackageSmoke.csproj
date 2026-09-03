@@ -8,6 +8,9 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/NativeAbiContract.cs" Link="NativeAbiContract.cs" />
+    <EmbeddedResource Include="../../experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.h"
+                      LogicalName="WebScene.NativeAbiHeader" />
     <PackageReference Include="WebScene.Backend.Avalonia"
                       Version="$(WebScenePackageVersion)" />
     <PackageReference Include="WebScene.Sdk.Avalonia"

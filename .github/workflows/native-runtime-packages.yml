@@ -37,6 +37,7 @@ on:
     - 'src/WebScene.Diagnostics.Cdp/**'
     - 'tests/WebPlatformSubset/**'
     - 'tests/WebScene.Runtime.PackageSmoke/**'
+    - 'tests/Shared/**'
     - 'tests/WebScene.Uno.PackageSmoke/**'
     - 'third-party/v8-patches/**'
 
