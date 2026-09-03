@@ -74,6 +74,7 @@ uint8_t measure_baseline_fixture_text(
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
+#include "native_v8_runtime_diagnostics_tests.inc"
 #include "native_v8_runtime_css_layout_tests.inc"
 #include "native_v8_runtime_media_query_tests.inc"
 #include "native_v8_runtime_animation_cssom_tests.inc"
@@ -118,6 +119,11 @@ int main()
         filter != nullptr) {
         const auto selected = std::string_view(filter);
         if (selected == "media-query-reentrant") { test_media_query_callback_can_create_more_queries(); return 0; }
+        if (selected == "runtime-diagnostics") {
+            test_runtime_diagnostics();
+            test_runtime_diagnostics_frame_and_failure();
+            return 0;
+        }
         if (selected == "host-pointer-exit") {
             test_host_pointer_exit_clears_tooltip_without_another_move();
             return 0;
@@ -485,6 +491,8 @@ int main()
     test_event_listener_exceptions_do_not_abort_document_load();
     test_timer_error_handler_preserves_later_tasks();
     test_host_pointer_exit_clears_tooltip_without_another_move();
+    test_runtime_diagnostics();
+    test_runtime_diagnostics_frame_and_failure();
     test_media_query_callback_can_create_more_queries();
     test_concurrent_input_producers_remain_consumable();
     test_dom_implementation_create_html_document();

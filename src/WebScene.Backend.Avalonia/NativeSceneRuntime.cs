@@ -224,6 +224,12 @@ public static unsafe partial class NativeWebSceneApi
 {
 
     private const string LibraryName = "webscene_native_engine";
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_configure_diagnostics", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void ConfigureLegacyDiagnostics(IntPtr engine, uint flags, IntPtr callback, IntPtr data);
+
+    /// <summary>Opts a raw engine into the legacy console pull queue. Do not use on an engine owned by a NativeWebSceneView.</summary>
+    public static void SetLegacyConsoleCapture(IntPtr engine, bool enabled)
+        => ConfigureLegacyDiagnostics(engine, enabled ? 4u : 0u, IntPtr.Zero, IntPtr.Zero);
     private static readonly object LibraryPathGate = new();
     private static readonly ConcurrentDictionary<IntPtr, GCHandle> EngineResourceBridges = new();
     private static readonly ResourceLoadCallback ResourceLoad = LoadResource;

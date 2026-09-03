@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 import 'native_bindings.dart';
+import 'runtime_diagnostics.dart';
 
 const int webScenePointerMove = 1;
 const int webScenePointerDown = 2;
@@ -17,10 +18,12 @@ const int webSceneKeyUp = 8;
 const int webSceneText = 9;
 
 final class WebSceneEngine {
-  WebSceneEngine._(this._native, this._bridge, this._handle);
+  WebSceneEngine._(this._native, this._bridge, this._handle, this._library);
 
   final WebSceneNativeApi _native;
   final WebSceneBridgeApi _bridge;
+  final DynamicLibrary _library;
+  NativeRuntimeDiagnostics? _diagnostics;
   Pointer<Void> _handle;
   int _sequence = DateTime.now().microsecondsSinceEpoch;
 
@@ -66,7 +69,7 @@ final class WebSceneEngine {
       if (handle == nullptr) {
         throw StateError(bridge.lastError().toDartString());
       }
-      return WebSceneEngine._(native, bridge, handle);
+      return WebSceneEngine._(native, bridge, handle, runtime);
     } finally {
       calloc.free(runtimePath);
       calloc.free(cachePath);
@@ -211,8 +214,9 @@ final class WebSceneEngine {
       try {
         final copied = callback(_handle, buffer, size);
         if (copied == 0) break;
-        final contentLength =
-            copied > 0 && buffer[copied - 1] == 0 ? copied - 1 : copied;
+        final contentLength = copied > 0 && buffer[copied - 1] == 0
+            ? copied - 1
+            : copied;
         messages.add(utf8.decode(buffer.asTypedList(contentLength)));
       } finally {
         calloc.free(buffer);
@@ -238,6 +242,7 @@ final class WebSceneEngine {
 
   void dispose() {
     if (isDisposed) return;
+    _diagnostics?.dispose();
     final handle = _handle;
     _handle = nullptr;
     _bridge.destroy(handle);
@@ -245,5 +250,16 @@ final class WebSceneEngine {
 
   void _ensureAlive() {
     if (isDisposed) throw StateError('The WebScene engine is disposed.');
+  }
+
+  void configureDiagnostics(
+    int flags,
+    void Function(Map<String, dynamic>) receive, {
+    bool required = false,
+  }) {
+    _ensureAlive();
+    _diagnostics ??= NativeRuntimeDiagnostics(_library, _handle, receive);
+    _diagnostics!.receive = receive;
+    _diagnostics!.configure(flags, required: required);
   }
 }

@@ -1,5 +1,10 @@
 # WebScene.Sdk.Avalonia
 
+Subscribe to `host.View.JavaScriptException` and `host.View.RuntimeFailed` before
+mounting to log page-initiated failures. Console capture remains optional via
+`host.View.ConsoleMessage`. See [Runtime diagnostics](../../docs/runtime-diagnostics.md)
+for production logging, callback threading and opt-in failure UI.
+
 `WebSceneComponentHost` is the reusable native Avalonia host for WebScene
 Component Profile 1 packages. It validates the package, runs compatibility
 preflight, isolates declared assets behind a per-instance virtual origin,

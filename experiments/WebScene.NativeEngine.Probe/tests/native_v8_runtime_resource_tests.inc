@@ -720,6 +720,7 @@ void test_document_start_ordering_storage_and_fail_closed_errors()
         &server};
     auto* engine = webscene_engine_create_with_options(&engine_options);
     require(engine != nullptr, "document-start engine creation failed");
+    webscene_engine_configure_diagnostics(engine, WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE, nullptr, nullptr);
 
     constexpr std::string_view all_frames_source =
         "if (parent === window) {"

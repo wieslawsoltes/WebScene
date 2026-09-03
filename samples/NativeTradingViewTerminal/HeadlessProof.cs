@@ -27,6 +27,7 @@ internal static class HeadlessProof
             StringComparer.Ordinal);
         Directory.CreateDirectory(output);
         var view = new NativeWebSceneView(useCompositionVisual: false);
+        view.CaptureLegacyConsoleMessages = true;
         var window = new Window
         {
             Width = width,

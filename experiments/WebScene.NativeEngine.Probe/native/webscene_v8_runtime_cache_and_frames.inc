@@ -1059,7 +1059,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
-            error = describe_exception(try_catch, local_context);
+            error = describe_reported_exception(try_catch, local_context);
             return false;
         }
         style_recascade_batch_scope style_batch(*this);
@@ -1075,7 +1075,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
-            error = describe_exception(try_catch, local_context);
+            error = describe_reported_exception(try_catch, local_context);
             return false;
         }
         if (checkpoint_microtasks) perform_microtask_checkpoint();
@@ -1101,6 +1101,7 @@
 
     void report_document_start_error(const std::string& error)
     {
+        if (diagnostics == nullptr || !diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE)) return;
         std::lock_guard lock(console_message_mutex);
         constexpr size_t maximum_console_messages = 1024U;
         if (console_messages.size() >= maximum_console_messages) {
@@ -1387,14 +1388,7 @@
 
         install_navigator(isolate, local_context, global);
 
-        auto console = v8::Object::New(isolate);
-        console->Set(local_context, js_string(isolate, "log"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 0)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "warn"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 1)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "error"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 2)).ToLocalChecked()).Check();
-        global->Set(local_context, js_string(isolate, "console"), console).Check();
+        install_console(local_context, global);
 
         auto performance = v8::Object::New(isolate);
         performance->Set(local_context, js_string(isolate, "now"), v8::Function::New(local_context, performance_now).ToLocalChecked()).Check();
@@ -2181,7 +2175,7 @@
                     arguments).IsEmpty()) {
                 frame_last_error_value = std::string("Iframe ") + type
                     + " dispatch failed: "
-                    + describe_exception(try_catch, local_frame_context);
+                    + describe_reported_exception(try_catch, local_frame_context);
                 ++frame_script_error_count;
                 return false;
             }

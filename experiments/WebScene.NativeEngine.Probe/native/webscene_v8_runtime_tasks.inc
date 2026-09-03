@@ -1,6 +1,13 @@
     bool promote_pending_promise_error()
     {
         if (pending_promise_rejections.empty()) return true;
+        if (diagnostics != nullptr) {
+            for (auto& rejection : pending_promise_rejections) {
+                if (rejection.diagnostic.message.empty()) continue;
+                rejection.diagnostic.promise_rejection = true;
+                diagnostics->publish(std::move(rejection.diagnostic));
+            }
+        }
         last_error = std::move(pending_promise_rejections.front().error);
         pending_promise_rejections.clear();
         return false;
@@ -131,7 +138,7 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
-            const auto callback_error = describe_exception(try_catch, task_context);
+            const auto callback_error = describe_reported_exception(try_catch, task_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, task_context);
 #endif
@@ -186,7 +193,7 @@
 #endif
                 active_timer_id = 0;
                 last_error = "Window.onerror handler failed: "
-                    + describe_exception(onerror_try_catch, task_context);
+                    + describe_reported_exception(onerror_try_catch, task_context);
                 return false;
             }
         }
@@ -427,7 +434,7 @@
             report_inspector_exception(try_catch, target_context);
 #endif
             last_error = "Window.postMessage dispatch failed: "
-                + describe_exception(try_catch, target_context);
+                + describe_reported_exception(try_catch, target_context);
             ++frame_script_error_count;
             return false;
         }
@@ -470,7 +477,7 @@
         v8::TryCatch try_catch(isolate);
         if (dispatch_input_event_type(input, "scroll", *target)) return true;
         last_error = "Programmatic scroll dispatch failed: "
-            + describe_exception(try_catch, task_context);
+            + describe_reported_exception(try_catch, task_context);
         return false;
     }
 
@@ -787,7 +794,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     report_inspector_exception(try_catch, local_context);
 #endif
-                    last_error = describe_exception(try_catch);
+                    last_error = describe_reported_exception(try_catch);
                     return false;
                 }
             }
@@ -812,7 +819,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     report_inspector_exception(try_catch, local_context);
 #endif
-                    last_error = describe_exception(try_catch);
+                    last_error = describe_reported_exception(try_catch);
                     return false;
                 }
             }
@@ -904,7 +911,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     report_inspector_exception(try_catch, local_context);
 #endif
-                    last_error = describe_exception(try_catch);
+                    last_error = describe_reported_exception(try_catch);
                     return false;
                 }
             }
@@ -1036,7 +1043,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                         stop_cpu_profile();
 #endif
-                        last_error = describe_exception(try_catch, local_frame_context);
+                        last_error = describe_reported_exception(try_catch, local_frame_context);
                         return false;
                     }
                     ++input_callback_invocation_count;
@@ -1221,7 +1228,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 report_inspector_exception(try_catch, observer_context);
 #endif
-                last_error = describe_exception(try_catch, observer_context);
+                last_error = describe_reported_exception(try_catch, observer_context);
                 return false;
             }
             ++input_callback_invocation_count;
@@ -2752,7 +2759,7 @@
             const auto dispatch = [&](const char* type, dom_node& node) {
                 if (dispatch_input_event_type(input, type, node)) return true;
                 last_error = "Native host pointer exit dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             };
@@ -2774,7 +2781,7 @@
             || input.kind == WEBSCENE_INPUT_TEXT) {
             if (!dispatch_keyboard_or_text(input)) {
                 last_error = "Native keyboard input dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
@@ -2804,7 +2811,7 @@
                     if (!dispatch_input_event_type(
                             input, "scroll", *scrollbar_drag_target)) {
                         last_error = "Native scrollbar scroll dispatch failed: "
-                            + describe_exception(try_catch, local_context);
+                            + describe_reported_exception(try_catch, local_context);
                         report_input_exception();
                         return false;
                     }
@@ -2886,7 +2893,7 @@
                 current_related_target = hit_target;
                 if (!dispatch_input_event_type(input, "pointerout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2895,14 +2902,14 @@
                      exited = exited->parent) {
                     if (!dispatch_input_event_type(input, "pointerleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
-                            + describe_exception(try_catch, local_context);
+                            + describe_reported_exception(try_catch, local_context);
                         report_input_exception();
                         return false;
                     }
                 }
                 if (!dispatch_input_event_type(input, "mouseout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2911,7 +2918,7 @@
                      exited = exited->parent) {
                     if (!dispatch_input_event_type(input, "mouseleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
-                            + describe_exception(try_catch, local_context);
+                            + describe_reported_exception(try_catch, local_context);
                         report_input_exception();
                         return false;
                     }
@@ -2927,28 +2934,28 @@
             std::reverse(entered_nodes.begin(), entered_nodes.end());
             if (!dispatch_input_event_type(input, "pointerover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "pointerenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
             }
             if (!dispatch_input_event_type(input, "mouseover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "mouseenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -3086,7 +3093,7 @@
                     types[index],
                     *target,
                     observe_default ? &event_default_prevented : nullptr)) {
-                last_error = "Native input dispatch failed: " + describe_exception(try_catch, local_context);
+                last_error = "Native input dispatch failed: " + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
@@ -3144,7 +3151,7 @@
                 document.mark_dirty();
                 if (!dispatch_input_event_type(input, "scroll", *scroll_target)) {
                     last_error = "Native scroll dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -3159,14 +3166,14 @@
             if ((focus_target != nullptr || active_element != nullptr)
                 && !set_active_element(focus_target, input)) {
                 last_error = "Native focus dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
         }
         if (context_menu_target != nullptr
             && !dispatch_input_event_type(input, "contextmenu", *context_menu_target)) {
             last_error = "Native contextmenu dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             return false;
         }
         bool click_default_prevented = false;
@@ -3177,7 +3184,7 @@
                     *click_target,
                     &click_default_prevented)) {
                 last_error = "Native click dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
             if (checkable_activation.active) {
@@ -3195,7 +3202,7 @@
         if (auxiliary_click_target != nullptr
             && !dispatch_input_event_type(input, "auxclick", *auxiliary_click_target)) {
             last_error = "Native auxiliary click dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             return false;
         }
         if (activate_label_control_after_click && !click_default_prevented) {
@@ -3216,7 +3223,7 @@
                     *activated_form_control,
                     &control_click_default_prevented)) {
                 last_error = "Native label-control activation failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
             if (label_checkable_activation.active) {
@@ -3234,7 +3241,7 @@
             if (!dispatch_input_event_type(input, "input", *activated_form_control)
                 || !dispatch_input_event_type(input, "change", *activated_form_control)) {
                 last_error = "Native form-control dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
         }

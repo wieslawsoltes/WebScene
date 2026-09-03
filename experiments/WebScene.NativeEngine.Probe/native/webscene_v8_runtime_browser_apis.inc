@@ -1372,7 +1372,7 @@
                 1,
                 arguments).IsEmpty()) {
             last_error = "Document visibilitychange dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             ++frame_script_error_count;
             return false;
         }
@@ -1415,7 +1415,7 @@
             if (dispatcher.As<v8::Function>()->Call(
                     local_context, target, 1, arguments).IsEmpty()) {
                 last_error = "CSS transition-event dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 ++frame_script_error_count;
                 return false;
             }
@@ -1556,7 +1556,7 @@
 
             self->frame_last_error_value = "Uncaught exception in '" + type
                 + "' event listener: "
-                + self->describe_exception(try_catch, local_context);
+                + self->describe_reported_exception(try_catch, local_context);
             ++self->frame_script_error_count;
             {
                 std::lock_guard lock(self->console_message_mutex);
@@ -2205,10 +2205,15 @@
         auto* self = current(info.GetIsolate());
         auto* isolate = info.GetIsolate();
         auto local_context = isolate->GetCurrentContext();
-        const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 2);
-        constexpr std::array<std::string_view, 3> levels{"log", "warn", "error"};
+        const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 6);
+        if (level_index == 6 && info.Length() > 0 && info[0]->BooleanValue(isolate)) return;
+        constexpr std::array<std::string_view, 7> levels{"log", "warn", "error", "info", "debug", "trace", "assert"};
+        const auto capture = self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_CONSOLE);
+        const auto legacy = self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE);
+        bool report_to_inspector = false;
+        bool certification_console = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        const auto report_to_inspector =
+        report_to_inspector =
             self->inspector_instrumentation_active();
         constexpr std::array<v8::Isolate::MessageErrorLevel, 3> inspector_levels{
             v8::Isolate::kMessageLog,
@@ -2219,38 +2224,38 @@
             arguments.reserve(static_cast<size_t>(info.Length()));
         }
 #endif
-        std::ostringstream message;
-        for (int index = 0; index < info.Length(); ++index) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        certification_console = std::getenv("WEBSCENE_PROBE_CONSOLE") != nullptr;
+#endif
+        if (!capture && !legacy && !report_to_inspector && !certification_console) return;
+        runtime_diagnostic record;
+        record.kind = "console";
+        record.level = levels[static_cast<size_t>(level_index)];
+        self->diagnostic_location(record, local_context);
+        if (level_index == 6) record.message = "Assertion failed";
+        for (int index = level_index == 6 ? 1 : 0; index < info.Length() && index < 32; ++index) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             if (report_to_inspector) arguments.push_back(info[index]);
 #endif
-            auto rendered = to_utf8(isolate, info[index]);
-            if (info[index]->IsObject()) {
-                v8::TryCatch try_catch(isolate);
-                v8::Local<v8::Value> stack;
-                if (info[index].As<v8::Object>()
-                        ->Get(local_context, js_string(isolate, "stack"))
-                        .ToLocal(&stack)
-                    && stack->IsString()) {
-                    const auto stack_text = to_utf8(isolate, stack);
-                    if (!stack_text.empty() && stack_text != rendered) {
-                        rendered += "\n" + stack_text;
-                    }
-                }
-            }
-            message << (index == 0 ? "" : " | ") << rendered;
+            auto value = self->diagnostic_value(info[index], record.truncated);
+            if (!record.message.empty()) record.message += " | ";
+            record.message += value.second;
+            record.arguments.push_back(std::move(value));
+            if (record.message.size() > runtime_diagnostics::maximum_text) { record.truncated = true; break; }
         }
+        record.truncated |= info.Length() > 32;
+        if (level_index == 5) self->diagnostic_stack(record, v8::StackTrace::CurrentStackTrace(isolate, 32));
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         if (report_to_inspector) {
             self->report_inspector_console_message(
                 local_context,
-                inspector_levels[static_cast<size_t>(level_index)],
+                inspector_levels[static_cast<size_t>(level_index <= 2 ? level_index : level_index == 6 ? 2 : 0)],
                 arguments);
         }
 #endif
         const auto payload = std::string(levels[static_cast<size_t>(level_index)])
-            + '\n' + message.str();
-        {
+            + '\n' + record.message;
+        if (legacy) {
             std::lock_guard lock(self->console_message_mutex);
             constexpr size_t maximum_console_messages = 1024U;
             if (self->console_messages.size() >= maximum_console_messages) {
@@ -2259,9 +2264,10 @@
             self->console_messages.push_back(payload);
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-        if (std::getenv("WEBSCENE_PROBE_CONSOLE") != nullptr) {
+        if (certification_console) {
             std::cerr << "[V8 console." << levels[static_cast<size_t>(level_index)]
-                << "] " << message.str() << '\n';
+                << "] " << record.message << '\n';
         }
 #endif
+        if (capture) self->diagnostics->publish(std::move(record));
     }

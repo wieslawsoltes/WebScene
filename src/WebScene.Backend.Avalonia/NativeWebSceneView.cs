@@ -15,7 +15,7 @@ namespace WebScene.Backends.Avalonia.Native;
 /// The native engine owns navigation, DOM, JavaScript, CSS, layout, and scene
 /// production; the attached Avalonia surface projects those scenes with Skia.
 /// </summary>
-public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
+public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposable
 {
     private static long s_nextContextId;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
@@ -38,6 +38,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
     {
         _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual);
         Content = _surface;
+        InitializeRuntimeDiagnostics();
         ActualThemeVariantChanged += OnActualThemeVariantChanged;
     }
 
@@ -392,6 +393,9 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
         try
         {
             await UnloadCoreAsync().ConfigureAwait(false);
+            _runtimeDiagnostics.Begin();
+            using var diagnosticCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _runtimeDiagnostics.FailureToken);
             if (!string.IsNullOrWhiteSpace(options.CompilationCacheDirectory))
             {
                 Directory.CreateDirectory(options.CompilationCacheDirectory);
@@ -400,14 +404,14 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             if (lifetime is null)
             {
                 _navigationCancellation =
-                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    CancellationTokenSource.CreateLinkedTokenSource(diagnosticCancellation.Token);
             }
             else
             {
                 var (lifetimeToken, unloadToken) = lifetime.GetNavigationTokens();
                 _navigationCancellation =
                     NativeWebSceneViewLifecycle.CreateNavigationCancellation(
-                        cancellationToken,
+                        diagnosticCancellation.Token,
                         lifetimeToken,
                         unloadToken);
             }
@@ -434,6 +438,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             }
 
             _engine = engine;
+            _runtimeDiagnostics.Attach(engine);
             if (Volatile.Read(ref _performanceMonitoringEnabled) != 0)
             {
                 NativeWebSceneApi.TryEnableRuntimeWorkMetrics(engine);
@@ -450,6 +455,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                         engine,
                         ResolvePreferredColorScheme(ActualThemeVariant));
                     _surface.SetEngine(engine);
+                    Content = _surface;
                 },
                 DispatcherPriority.Send);
 
@@ -478,7 +484,10 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
             {
             }
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
-            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
+            _runtimeDiagnostics.CheckForNativeFailure();
+            if (_runtimeDiagnostics.LastFailure is { } terminalFailure)
+                throw new InvalidOperationException(terminalFailure.Message);
+            if (!_runtimeDiagnostics.HasNativeDiagnostics && afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
                 throw new InvalidOperationException(
                     $"Native WebScene failed to load {options.Source}: " +
@@ -490,10 +499,15 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
                     firstDocumentSceneTimeout ?? TimeSpan.FromSeconds(30),
                     navigationToken)
                 .ConfigureAwait(false);
+            _runtimeDiagnostics.Ready();
         }
-        catch
+        catch (Exception error)
         {
+            if (error is not OperationCanceledException)
+                _runtimeDiagnostics.Fail(error.Message, error.StackTrace, "load", options.Source);
             await UnloadCoreAsync().ConfigureAwait(false);
+            if (error is OperationCanceledException && _runtimeDiagnostics.LastFailure is { } failure)
+                throw new InvalidOperationException(failure.Message, error);
             throw;
         }
         finally
@@ -711,6 +725,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _runtimeDiagnostics.Dispose();
         var lifetime = NativeWebSceneViewLifetimeRegistry.TryGet(this);
         if (lifetime is null) return new ValueTask(UnloadAsync());
         lock (lifetime)
@@ -777,6 +792,7 @@ public sealed class NativeWebSceneView : ContentControl, IAsyncDisposable
 
     private async Task UnloadCoreAsync()
     {
+        _runtimeDiagnostics.Detach();
         _navigationCancellation?.Cancel();
         _navigationCancellation?.Dispose();
         _navigationCancellation = null;

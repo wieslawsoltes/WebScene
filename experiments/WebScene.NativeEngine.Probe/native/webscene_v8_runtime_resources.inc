@@ -651,7 +651,7 @@
                 return true;
             }
             frame_last_error_value = std::string("Connected resource ") + type
-                + " event failed: " + describe_exception(try_catch, local_context);
+                + " event failed: " + describe_reported_exception(try_catch, local_context);
             ++frame_script_error_count;
             return false;
         };

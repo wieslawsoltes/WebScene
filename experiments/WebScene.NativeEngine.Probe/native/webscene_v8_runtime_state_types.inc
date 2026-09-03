@@ -40,6 +40,7 @@
     struct pending_promise_rejection final {
         v8::Global<v8::Promise> promise;
         std::string error;
+        runtime_diagnostic diagnostic;
     };
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)

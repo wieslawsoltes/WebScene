@@ -32,6 +32,13 @@ public sealed partial class MainWindow : Window
             "--monitor-runtime",
             StringComparer.Ordinal);
         InitializeComponent();
+        TerminalHost.JavaScriptException += error =>
+            Console.Error.WriteLine($"[WebScene JavaScript] {error.Message}\n{error.Stack}");
+        TerminalHost.RuntimeFailed += failure =>
+            Console.Error.WriteLine($"[WebScene runtime {failure.Stage}] {failure.Message}\n{failure.Stack}");
+        TerminalHost.ShowRuntimeFailure = true;
+        // Production-style error logging is independent of optional debug console capture.
+        TerminalHost.CaptureLegacyConsoleMessages = _runtimeMonitoringEnabled;
         var textMode = Environment.GetEnvironmentVariable(
             "WEBSCENE_TEXT_POSITIONING")?.Trim().ToLowerInvariant();
         Title += textMode is "harfbuzz" or "legacy" or "off" or "0"

@@ -129,6 +129,7 @@
     std::function<void()> interop_callback_available;
     v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
     std::function<void()> runtime_work_available;
+    runtime_diagnostics* diagnostics{nullptr};
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
@@ -180,7 +181,7 @@
     uint64_t detached_dom_idle_gc_notifications{0U};
 #endif
     std::string last_error;
-    std::vector<pending_promise_rejection> pending_promise_rejections;
+    std::deque<pending_promise_rejection> pending_promise_rejections;
     std::filesystem::path resource_root;
     std::string document_base_address;
     std::string frame_base_address;

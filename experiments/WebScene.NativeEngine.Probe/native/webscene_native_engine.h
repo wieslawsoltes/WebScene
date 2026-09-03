@@ -18,6 +18,24 @@ extern "C" {
 #endif
 
 typedef struct webscene_engine webscene_engine;
+typedef void (*webscene_diagnostic_available_callback)(void* user_data);
+enum {
+    WEBSCENE_DIAGNOSTIC_EXCEPTIONS = 1U,
+    WEBSCENE_DIAGNOSTIC_CONSOLE = 2U,
+    WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE = 4U
+};
+
+/* Additive ABI 3 diagnostics. Callback is a non-blocking signal only; do not
+ * re-enter the engine from it. Passing null unregisters synchronously. */
+WEBSCENE_API void webscene_engine_configure_diagnostics(
+    webscene_engine* engine, uint32_t flags,
+    webscene_diagnostic_available_callback callback, void* user_data);
+/* UTF-8 JSON, including trailing NUL. Null/short buffers do not consume. */
+WEBSCENE_API size_t webscene_engine_take_diagnostic(
+    webscene_engine* engine, char* destination, size_t destination_capacity);
+/* Non-consuming terminal status, independent of ordinary script error counters. */
+WEBSCENE_API size_t webscene_engine_copy_runtime_failure(
+    webscene_engine* engine, char* destination, size_t destination_capacity);
 typedef struct webscene_scene_view webscene_scene_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
 

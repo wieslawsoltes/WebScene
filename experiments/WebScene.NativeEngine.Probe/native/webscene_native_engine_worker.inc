@@ -1,5 +1,33 @@
     void run(std::stop_token token)
     {
+        try { run_core(token); }
+        catch (const std::exception& error) {
+            set_last_error(error.what());
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "runtime";
+            failure.message = error.what();
+            diagnostics_.publish(std::move(failure));
+        }
+        catch (...) {
+            set_last_error("Unknown native runtime failure");
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "runtime";
+            failure.message = "Unknown native runtime failure";
+            diagnostics_.publish(std::move(failure));
+        }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        inspector_runtime_.store(nullptr, std::memory_order_release);
+#endif
+        // V8 cleanup must stay on its owning worker even after a terminal throw.
+        runtime_.reset();
+#endif
+    }
+
+    void run_core(std::stop_token token)
+    {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         runtime_ = std::make_unique<webscene_native::v8_dom_runtime>(
             document_,
@@ -130,11 +158,16 @@
             },
             [this] {
                 wake_.notify_all();
-            });
+            }, &diagnostics_);
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "bootstrap";
+            failure.message = runtime_->last_error();
+            diagnostics_.publish(std::move(failure));
             runtime_.reset();
         } else {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -786,6 +819,12 @@
                         set_last_error(runtime_ == nullptr
                             ? "V8 runtime is unavailable"
                             : runtime_->last_error());
+                        webscene_native::runtime_diagnostic failure;
+                        failure.kind = "failure";
+                        failure.stage = "navigation";
+                        failure.document_url = url->url;
+                        failure.message = runtime_ == nullptr ? "V8 runtime is unavailable" : runtime_->last_error();
+                        diagnostics_.publish(std::move(failure));
                         update_compilation_metrics();
                     }
                     changed = true;

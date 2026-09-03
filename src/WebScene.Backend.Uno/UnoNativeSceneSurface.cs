@@ -544,7 +544,7 @@ internal static class NativeSceneDrawOperation
     public static int SvgCommandCount;
 }
 
-public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
+public sealed partial class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 {
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly UnoNativeSceneSurface _surface = new();
@@ -557,6 +557,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
         Content = _surface;
+        InitializeRuntimeDiagnostics();
     }
 
     public string? Source { get; private set; }
@@ -767,12 +768,15 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         try
         {
             await UnloadCoreAsync();
-            var navigationToken = cancellationToken;
+            _runtimeDiagnostics.Begin();
+            using var diagnosticCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _runtimeDiagnostics.FailureToken);
+            var navigationToken = diagnosticCancellation.Token;
             if (lifetime is not null)
             {
                 lifetime.NavigationCancellation =
                     UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
-                        cancellationToken,
+                        diagnosticCancellation.Token,
                         lifetime.GetLifetimeToken());
                 navigationToken = lifetime.NavigationCancellation.Token;
             }
@@ -802,6 +806,8 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     "The WebScene native engine could not be created.");
             }
             _engine = engine;
+            _runtimeDiagnostics.Attach(engine);
+            Content = _surface;
             _interopCallbackSignal = callbackSignal;
             _interop = new NativeInteropInvoker(engine);
 
@@ -840,7 +846,10 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                 "webscene-uno-document-barrier.js",
                 timeout.Token);
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
-            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
+            _runtimeDiagnostics.CheckForNativeFailure();
+            if (_runtimeDiagnostics.LastFailure is { } terminalFailure)
+                throw new InvalidOperationException(terminalFailure.Message);
+            if (!_runtimeDiagnostics.HasNativeDiagnostics && afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
                 throw new InvalidOperationException(
                     $"Native WebScene failed to load {options.Source}: " +
@@ -859,10 +868,18 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     $"Native WebScene did not construct a document for {options.Source}: " +
                     NativeWebSceneApi.GetLastError(engine));
             }
+            _runtimeDiagnostics.Ready();
         }
-        catch
+        catch (Exception error)
         {
+            if (error is not OperationCanceledException ||
+                (!cancellationToken.IsCancellationRequested &&
+                 lifetime?.NavigationCancellation?.IsCancellationRequested != true &&
+                 lifetime?.LifetimeCancellation.IsCancellationRequested != true))
+                _runtimeDiagnostics.Fail(error.Message, error.StackTrace, "load", options.Source);
             await UnloadCoreAsync();
+            if (error is OperationCanceledException && _runtimeDiagnostics.LastFailure is { } failure)
+                throw new InvalidOperationException(failure.Message, error);
             throw;
         }
         finally
@@ -887,6 +904,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _runtimeDiagnostics.Dispose();
         var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
         if (lifetime is null) return new ValueTask(DisposeWithoutInspectorAsync());
         lock (lifetime)
@@ -926,6 +944,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     private async Task UnloadCoreAsync()
     {
+        _runtimeDiagnostics.Detach();
         if (UnoNativeWebSceneLifetimeRegistry.TryGet(this) is { } lifetime)
         {
             lifetime.NavigationCancellation?.Cancel();

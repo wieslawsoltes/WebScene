@@ -1,4 +1,5 @@
 #include "webscene_v8_runtime.h"
+#include "webscene_runtime_diagnostics.h"
 
 #include "webscene_native_dom.h"
 #include "webscene_native_websocket.h"
@@ -1718,7 +1719,7 @@ struct v8_dom_runtime::implementation final {
                 1,
                 arguments).IsEmpty()) {
             last_error = "WebSocket event dispatch failed: "
-                + describe_exception(try_catch, event_context);
+                + describe_reported_exception(try_catch, event_context);
             if (value.type == native_websocket_transport::event_type::closed) {
                 websocket_bindings.erase(value.socket_id);
                 websocket_transport.release(value.socket_id);
@@ -2782,7 +2783,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -2806,7 +2807,7 @@ struct v8_dom_runtime::implementation final {
             nullptr));
         if (try_catch.HasCaught()) {
             last_error = "TreeWalker bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -3138,14 +3139,7 @@ struct v8_dom_runtime::implementation final {
 
         install_navigator(isolate, local_context, global);
 
-        auto console = v8::Object::New(isolate);
-        console->Set(local_context, js_string(isolate, "log"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 0)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "warn"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 1)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "error"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 2)).ToLocalChecked()).Check();
-        global->Set(local_context, js_string(isolate, "console"), console).Check();
+        install_console(local_context, global);
         install_host_bridge(local_context);
 
         constexpr std::string_view crypto_source = R"JS(
@@ -4100,6 +4094,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_tasks.inc"
 #include "webscene_v8_runtime_resources.inc"
 #include "webscene_v8_runtime_dom_core.inc"
+#include "webscene_v8_runtime_diagnostics.inc"
 #include "webscene_v8_runtime_dom_properties.inc"
 #include "webscene_v8_runtime_canvas.inc"
 #include "webscene_v8_runtime_document.inc"
@@ -4140,17 +4135,11 @@ struct v8_dom_runtime::implementation final {
         }
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
         auto value = message.GetValue();
-        auto error = value.IsEmpty()
-            ? "Unhandled promise rejection"
-            : "Unhandled promise rejection: " + to_utf8(isolate, value);
-        if (!value.IsEmpty() && value->IsObject()) {
-            auto local_context = isolate->GetCurrentContext();
-            v8::Local<v8::Value> stack;
-            if (value.As<v8::Object>()->Get(local_context, js_string(isolate, "stack")).ToLocal(&stack)
-                && stack->IsString()) {
-                error += "\n" + to_utf8(isolate, stack);
-            }
-        }
+        auto rejection = self->exception_diagnostic(value,
+            value.IsEmpty() ? v8::Local<v8::Message>{} : v8::Exception::CreateMessage(isolate, value),
+            isolate->GetCurrentContext());
+        auto error = "Unhandled promise rejection: " + rejection.message;
+        if (!rejection.stack.empty()) error += "\n" + rejection.stack;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         auto local_context = isolate->GetCurrentContext();
         const auto inspector_exception_id = value.IsEmpty()
@@ -4177,9 +4166,16 @@ struct v8_dom_runtime::implementation final {
             }
         }
 #endif
+        if (self->pending_promise_rejections.size() >= runtime_diagnostics::maximum_records) {
+            self->pending_promise_rejections.pop_front();
+            if (self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS))
+                self->diagnostics->note_dropped();
+        }
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
-            std::move(error)});
+            std::move(error),
+            self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS)
+                ? std::move(rejection) : runtime_diagnostic{}});
     }
 
 #include "webscene_v8_runtime_state.inc"
@@ -4193,7 +4189,8 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
     interop_callback_sink_v3 interop_callback_sink,
-    std::function<void()> runtime_work_available)
+    std::function<void()> runtime_work_available,
+    runtime_diagnostics* diagnostics)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -4202,7 +4199,7 @@ v8_dom_runtime::v8_dom_runtime(
           std::move(host_request_available),
           std::move(interop_callback_available),
           std::move(interop_callback_sink),
-          std::move(runtime_work_available)))
+          std::move(runtime_work_available), diagnostics))
 {
 }
 

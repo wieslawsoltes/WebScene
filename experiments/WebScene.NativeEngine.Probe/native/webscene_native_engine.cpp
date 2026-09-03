@@ -1,6 +1,7 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
 #include "webscene_v8_runtime.h"
+#include "webscene_runtime_diagnostics.h"
 
 #include <algorithm>
 #include <array>
@@ -261,6 +262,15 @@ struct webscene_engine final {
 #include "webscene_native_engine_interop_api.inc"
 #include "webscene_native_engine_diagnostics.inc"
 #include "webscene_native_engine_metrics.inc"
+    void configure_diagnostics(uint32_t flags, webscene_diagnostic_available_callback callback, void* data) {
+        diagnostics_.configure(flags, callback, data);
+    }
+    size_t take_diagnostic(char* destination, size_t capacity) {
+        return diagnostics_.take(destination, capacity);
+    }
+    size_t copy_runtime_failure(char* destination, size_t capacity) {
+        return diagnostics_.copy_failure(destination, capacity);
+    }
 private:
 #include "webscene_native_engine_interop_work.inc"
 #include "webscene_native_engine_worker.inc"
@@ -309,6 +319,7 @@ private:
     std::atomic<uint64_t> observed_compositor_timestamp_microseconds_{0U};
     std::atomic<bool> frame_paced_pointer_pending_{false};
     webscene_native::native_document document_;
+    webscene_native::runtime_diagnostics diagnostics_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -1078,6 +1089,23 @@ size_t webscene_engine_take_host_request(
     return engine == nullptr
         ? 0U
         : engine->take_host_request(destination, destination_capacity);
+}
+
+void webscene_engine_configure_diagnostics(
+    webscene_engine* engine, uint32_t flags,
+    webscene_diagnostic_available_callback callback, void* user_data)
+{
+    if (engine) engine->configure_diagnostics(flags, callback, user_data);
+}
+
+size_t webscene_engine_take_diagnostic(webscene_engine* engine, char* destination, size_t capacity)
+{
+    return engine ? engine->take_diagnostic(destination, capacity) : 0;
+}
+
+size_t webscene_engine_copy_runtime_failure(webscene_engine* engine, char* destination, size_t capacity)
+{
+    return engine ? engine->copy_runtime_failure(destination, capacity) : 0;
 }
 
 size_t webscene_engine_take_console_message(

@@ -1,5 +1,10 @@
 # WebScene.Backend.Avalonia
 
+For production exception logging, opt-in console capture and terminal error UI,
+see [Runtime diagnostics](../../docs/runtime-diagnostics.md). Subscribe to
+`JavaScriptException` and `RuntimeFailed` before loading; `ConsoleMessage` is optional.
+Legacy console draining now requires `CaptureLegacyConsoleMessages = true`.
+
 The reference Avalonia presenter for WebScene's native ABI 3 engine. It consumes
 immutable native scene snapshots and owns Skia rendering, text shaping, input
 forwarding, resource loading, frame scheduling, and Avalonia lifecycle integration.

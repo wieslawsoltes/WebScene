@@ -1040,7 +1040,7 @@
         }
         if (try_catch.HasCaught()) {
             last_error = "Custom element subtree reaction failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -1081,7 +1081,7 @@
             arguments));
         if (try_catch.HasCaught()) {
             last_error = "Custom element attribute reaction failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 

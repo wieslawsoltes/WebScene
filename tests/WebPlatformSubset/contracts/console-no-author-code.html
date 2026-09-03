@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Console object snapshots do not execute author code</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script>
+test(() => {
+  let calls = 0;
+  const value = {
+    toString() { calls++; throw new Error('must not stringify objects'); },
+    get stack() { calls++; throw new Error('must not inspect accessors'); },
+    get secret() { calls++; throw new Error('must not inspect accessors'); }
+  };
+  for (const method of ['log', 'info', 'debug', 'warn', 'error', 'trace']) {
+    assert_equals(typeof console[method], 'function', method);
+    console[method](value);
+  }
+  console.assert(false, value);
+  console.assert(true, value);
+  assert_equals(calls, 0);
+}, 'Logging a raw object does not invoke its toString or accessors');
+test(() => {
+  let reached = false;
+  console.error('ordinary console error');
+  reached = true;
+  assert_true(reached);
+}, 'console.error is not a thrown JavaScript exception');
+</script>

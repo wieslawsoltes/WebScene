@@ -215,7 +215,8 @@ public:
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
         interop_callback_sink_v3 interop_callback_sink = {},
-        std::function<void()> runtime_work_available = {});
+        std::function<void()> runtime_work_available = {},
+        class runtime_diagnostics* diagnostics = nullptr);
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;

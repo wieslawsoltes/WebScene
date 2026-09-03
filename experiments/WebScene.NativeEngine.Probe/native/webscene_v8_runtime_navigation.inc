@@ -290,6 +290,7 @@
         if (!execute_document_start_scripts(local_context, false)) return false;
 
         const auto report_document_script_error = [&](const std::string& error) {
+            if (diagnostics == nullptr || !diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE)) return;
             std::lock_guard lock(console_message_mutex);
             constexpr size_t maximum_console_messages = 1024U;
             if (console_messages.size() >= maximum_console_messages) {
@@ -389,7 +390,7 @@
                     arguments).IsEmpty()) {
                 frame_last_error_value = std::string("Document ") + type
                     + " dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 ++frame_script_error_count;
                 report_document_script_error(frame_last_error_value);
                 return false;

@@ -12,18 +12,13 @@ import 'controller.dart';
 import 'webscene_engine.dart';
 import 'runtime_configuration.dart';
 import 'scene_projector.dart';
+import 'runtime_diagnostics.dart';
+export 'runtime_diagnostics.dart' show WebSceneConsoleMessage;
 
 typedef WebSceneHostRequestHandler = FutureOr<void> Function(
   WebSceneController controller,
   Map<String, dynamic> request,
 );
-
-final class WebSceneConsoleMessage {
-  const WebSceneConsoleMessage(this.level, this.message);
-
-  final String level;
-  final String message;
-}
 
 /// A Flutter surface backed by the native WebScene V8/DOM/scene runtime.
 class WebSceneView extends StatefulWidget {
@@ -37,6 +32,11 @@ class WebSceneView extends StatefulWidget {
     this.onConsoleMessage,
     this.onError,
     this.onScenePresented,
+    this.onJavaScriptException,
+    this.onRuntimeFailed,
+    this.showRuntimeFailure = false,
+    this.runtimeFailureBuilder,
+    this.firstSceneTimeout = const Duration(seconds: 30),
     super.key,
   });
 
@@ -49,6 +49,12 @@ class WebSceneView extends StatefulWidget {
   final ValueChanged<WebSceneConsoleMessage>? onConsoleMessage;
   final ValueChanged<Object>? onError;
   final ValueChanged<int>? onScenePresented;
+  final ValueChanged<WebSceneJavaScriptException>? onJavaScriptException;
+  final ValueChanged<WebSceneRuntimeFailure>? onRuntimeFailed;
+  final bool showRuntimeFailure;
+  final Widget Function(BuildContext, WebSceneRuntimeFailure)?
+      runtimeFailureBuilder;
+  final Duration? firstSceneTimeout;
 
   @override
   State<WebSceneView> createState() => _WebSceneViewState();
@@ -65,7 +71,8 @@ class _WebSceneViewState extends State<WebSceneView>
   double _lastScale = 0;
   int _buttons = 0;
   int _generation = 0;
-  int _lastConsoleDrain = 0;
+  Timer? _firstSceneTimer;
+  WebSceneRuntimeFailure? _failure;
   bool _ready = false;
   MouseCursor _cursor = SystemMouseCursors.basic;
 
@@ -84,7 +91,7 @@ class _WebSceneViewState extends State<WebSceneView>
       final engine = _engine;
       final nextController = widget.controller ?? WebSceneController();
       if (engine != null) {
-        nextController.attach(engine);
+        nextController.attach(engine, reportFatal: _reportFatal);
         _controller.detach(engine);
       }
       _controller = nextController;
@@ -98,6 +105,8 @@ class _WebSceneViewState extends State<WebSceneView>
             widget.runtime.compilationCacheDirectory ||
         oldWidget.initializationScripts != widget.initializationScripts) {
       unawaited(_restart());
+    } else if (_engine case final engine?) {
+      _configureDiagnostics(engine, _generation);
     }
   }
 
@@ -112,6 +121,8 @@ class _WebSceneViewState extends State<WebSceneView>
 
   Future<void> _start() async {
     final generation = ++_generation;
+    _failure = null;
+    _controller.setRuntimeState(WebSceneRuntimeState.loading);
     try {
       widget.runtime.validate();
       await Future<void>.delayed(Duration.zero);
@@ -125,7 +136,8 @@ class _WebSceneViewState extends State<WebSceneView>
         return;
       }
       _engine = engine;
-      _controller.attach(engine);
+      _controller.attach(engine, reportFatal: _reportFatal);
+      _configureDiagnostics(engine, generation);
       engine
         ..requestCheckpoint()
         ..load(widget.documentUrl);
@@ -133,13 +145,40 @@ class _WebSceneViewState extends State<WebSceneView>
         engine.executeScript(script.source, script.documentName);
       }
       _ticker = createTicker(_onFrame)..start();
+      if (widget.firstSceneTimeout case final timeout?) {
+        _firstSceneTimer = Timer(timeout, () {
+          if (mounted && generation == _generation && !_ready) {
+            _fail(
+              WebSceneRuntimeFailure(
+                'The first document scene did not arrive in time.',
+                stage: 'first-scene',
+                context: WebSceneDiagnosticContext(
+                  generation: generation,
+                  documentUrl: widget.documentUrl,
+                ),
+              ),
+            );
+          }
+        });
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusNode.requestFocus();
       });
     } catch (error, stack) {
-      _stopEngine();
-      debugPrint('[WebScene] $error\n$stack');
-      widget.onError?.call(error);
+      if (mounted && generation == _generation) {
+        _fail(
+          WebSceneRuntimeFailure(
+            error.toString(),
+            stack: stack.toString(),
+            stage: 'load',
+            context: WebSceneDiagnosticContext(
+              generation: generation,
+              documentUrl: widget.documentUrl,
+            ),
+          ),
+        );
+        _notify(() => widget.onError?.call(error));
+      }
     }
   }
 
@@ -178,9 +217,13 @@ class _WebSceneViewState extends State<WebSceneView>
         }
         repaint = true;
         widget.onScenePresented?.call(result.revision);
+        if (engine != _engine || engine.isDisposed) return;
         if (result.ready && !_ready) {
           _ready = true;
+          _firstSceneTimer?.cancel();
+          _controller.setRuntimeState(WebSceneRuntimeState.ready);
           widget.onReady?.call();
+          if (engine != _engine || engine.isDisposed) return;
         }
       } catch (error, stack) {
         debugPrint('[WebScene scene] $error\n$stack');
@@ -196,19 +239,6 @@ class _WebSceneViewState extends State<WebSceneView>
     if (nextCursor != _cursor) {
       _cursor = nextCursor;
       repaint = true;
-    }
-    if (elapsed.inMilliseconds - _lastConsoleDrain >= 500) {
-      _lastConsoleDrain = elapsed.inMilliseconds;
-      for (final raw in engine.drainConsole()) {
-        final separator = raw.indexOf('\n');
-        final message = separator < 0
-            ? WebSceneConsoleMessage('log', raw)
-            : WebSceneConsoleMessage(
-                raw.substring(0, separator),
-                raw.substring(separator + 1),
-              );
-        widget.onConsoleMessage?.call(message);
-      }
     }
     if (repaint && mounted) setState(() {});
   }
@@ -358,6 +388,7 @@ class _WebSceneViewState extends State<WebSceneView>
 
   void _stopEngine() {
     _generation++;
+    _firstSceneTimer?.cancel();
     _ticker?.dispose();
     _ticker = null;
     final engine = _engine;
@@ -372,38 +403,138 @@ class _WebSceneViewState extends State<WebSceneView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopEngine();
+    _controller.setRuntimeState(WebSceneRuntimeState.disposed);
     _focusNode.dispose();
     _projector.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _onKeyEvent,
-        child: MouseRegion(
-          cursor: _cursor,
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerHover: (event) => _pointer(webScenePointerMove, event),
-            onPointerMove: (event) {
-              _buttons = event.buttons;
-              _pointer(webScenePointerMove, event);
-            },
-            onPointerDown: _onPointerDown,
-            onPointerUp: _onPointerUp,
-            onPointerCancel: _onPointerCancel,
-            onPointerSignal: _onPointerSignal,
-            child: RepaintBoundary(
-              child: CustomPaint(
-                painter: _WebScenePainter(_projector),
-                child: const SizedBox.expand(),
+  Widget build(BuildContext context) =>
+      _failure != null && widget.showRuntimeFailure
+          ? widget.runtimeFailureBuilder?.call(context, _failure!) ??
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(_failure!.message),
+                    ExpansionTile(
+                      title: const Text('Error details'),
+                      children: [SelectableText(_failure!.stack)],
+                    ),
+                  ],
+                ),
+              )
+          : Focus(
+              focusNode: _focusNode,
+              autofocus: true,
+              onKeyEvent: _onKeyEvent,
+              child: MouseRegion(
+                cursor: _cursor,
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerHover: (event) =>
+                      _pointer(webScenePointerMove, event),
+                  onPointerMove: (event) {
+                    _buttons = event.buttons;
+                    _pointer(webScenePointerMove, event);
+                  },
+                  onPointerDown: _onPointerDown,
+                  onPointerUp: _onPointerUp,
+                  onPointerCancel: _onPointerCancel,
+                  onPointerSignal: _onPointerSignal,
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _WebScenePainter(_projector),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            );
+
+  void _configureDiagnostics(WebSceneEngine engine, int generation) {
+    engine.configureDiagnostics(
+      (widget.onJavaScriptException != null ? 1 : 0) |
+          (widget.onConsoleMessage != null ? 2 : 0),
+      (record) {
+        if (!mounted || generation != _generation || engine != _engine) return;
+        final context = WebSceneDiagnosticContext.fromJson(record, generation);
+        switch (record['kind']) {
+          case 'dropped':
+            _controller.recordDiagnosticLoss(record['droppedCount'] as int);
+          case 'exception':
+            final error = WebSceneJavaScriptException(
+              record['message'] as String,
+              stack: record['stack'] as String,
+              isUnhandledPromiseRejection: record['promiseRejection'] as bool,
+              context: context,
+            );
+            _notify(() => widget.onJavaScriptException?.call(error));
+          case 'console':
+            final message = WebSceneConsoleMessage(
+              record['level'] as String,
+              record['message'] as String,
+              stack: record['stack'] as String,
+              context: context,
+              arguments: List.unmodifiable(
+                (record['arguments'] as List).map(
+                  (value) => WebSceneConsoleArgument(
+                    value['type'] as String,
+                    value['value'] as String,
+                  ),
+                ),
+              ),
+            );
+            _notify(() => widget.onConsoleMessage?.call(message));
+          case 'failure':
+            _fail(
+              WebSceneRuntimeFailure(
+                record['message'] as String,
+                stack: record['stack'] as String,
+                stage: record['stage'] as String,
+                context: context,
+              ),
+            );
+        }
+      },
+      required: widget.onRuntimeFailed != null || widget.showRuntimeFailure,
+    );
+  }
+
+  void _notify(VoidCallback callback) {
+    try {
+      callback();
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'WebScene diagnostic subscriber',
+        ),
+      );
+    }
+  }
+
+  void _reportFatal(String message, String stack) => _fail(
+        WebSceneRuntimeFailure(
+          message,
+          stack: stack,
+          context: WebSceneDiagnosticContext(
+            generation: _generation,
+            documentUrl: widget.documentUrl,
           ),
         ),
       );
+  void _fail(WebSceneRuntimeFailure failure) {
+    if (!mounted || _failure != null) return;
+    _failure = failure;
+    _controller.setRuntimeState(WebSceneRuntimeState.failed, failure: failure);
+    _stopEngine();
+    _projector.reset();
+    setState(() {});
+    _notify(() => widget.onRuntimeFailed?.call(failure));
+  }
 }
 
 final class _WebScenePainter extends CustomPainter {

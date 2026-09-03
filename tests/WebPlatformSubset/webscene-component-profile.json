@@ -997,6 +997,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/console-no-author-code.html",
+      "type": "testharness",
+      "capabilities": ["console-methods", "console-safe-object-snapshots"],
+      "evidence": ["runtime-diagnostics-console-disabled-and-safe-capture"],
+      "reason": "Local browser contract for console methods and non-invasive raw object logging. Host telemetry delivery is separately covered by native and backend tests, not WPT. Candidate pending all-RID/browser qualification."
+    },
+    {
       "path": "contracts/resize-observer-device-pixel-canvas-export.html",
       "type": "contract",
       "capabilities": ["resize-observer-device-pixel-content-box", "canvas-export-pixel-scale", "iframe-device-pixel-observation"],
