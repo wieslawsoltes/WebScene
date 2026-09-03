@@ -83,6 +83,13 @@
       "reason": "Issue-shaped reduction of the Go To dialog. A live narrow transition must replace desktop width and overflow state without leaving a phantom scrollbar."
     },
     {
+      "path": "contracts/go-to-tabs-overflow.html",
+      "type": "testharness",
+      "capabilities": ["stylesheet-math-box-shorthands", "indefinite-percentage-height", "phantom-scroll-range"],
+      "evidence": ["stackwich-1248-issuecomment-5511713642"],
+      "reason": "Production-shaped tab strip and calendar reduction: function-valued margins must preserve components and auto-parent percentage heights must not manufacture overflow."
+    },
+    {
       "path": "contracts/css-webkit-scrollbar-authored-paint.html",
       "type": "reftest",
       "reference": "contracts/css-webkit-scrollbar-authored-paint-ref.html",

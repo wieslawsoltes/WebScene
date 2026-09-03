@@ -2892,7 +2892,8 @@ void native_document::layout_children(dom_node& parent)
                     if (scroll_ancestor == containing_node) break;
                 }
             }
-            layout_child(*child, containing, assigned);
+            layout_child(*child, containing, assigned,
+                is_specified(child->style.height) || (has_top && has_bottom));
             continue;
         }
 
@@ -3029,6 +3030,13 @@ void native_document::layout_children(dom_node& parent)
                 ? automatic_margin_share
                 : resolve_length(*child, child->style.margin_bottom, content.height, 0);
             vertical_margin_bottom = margin_bottom;
+            // A definite flex main size makes each item's post-flexing main
+            // size definite (Flexbox 9.8), including items which grew rather
+            // than shrank. Their percentage-height descendants must resolve;
+            // an ordinary auto-sized block's provisional intrinsic size must
+            // not provide the same percentage basis.
+            assigned_height_is_definite = flex_container
+                && parent.used_height_is_definite;
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto height = flex_container && is_specified(child->style.flex_basis)
                 ? resolve_length(*child, child->style.flex_basis, content.height, 0)
@@ -3036,6 +3044,8 @@ void native_document::layout_children(dom_node& parent)
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
                 : is_specified(child->style.height)
+                    && (child->style.height.unit != length_unit::percent
+                        || parent.used_height_is_definite)
                 ? outer_authored_size(*child, false, content.height)
                     + (flex_container && grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow

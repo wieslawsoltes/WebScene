@@ -77,6 +77,7 @@ uint8_t measure_baseline_fixture_text(
 #include "native_v8_runtime_diagnostics_tests.inc"
 #include "native_resource_failure_diagnostics_tests.inc"
 #include "native_v8_runtime_css_layout_tests.inc"
+#include "native_go_to_overflow_tests.inc"
 #include "native_v8_runtime_media_query_tests.inc"
 #include "native_v8_runtime_animation_cssom_tests.inc"
 #include "native_v8_runtime_layout_scene_tests.inc"
@@ -163,6 +164,13 @@ int main()
             require(focused_engine != nullptr, "focused engine creation failed");
             test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
                 focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "go-to-overflow") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_go_to_tab_lines_and_calendar_scroll_ranges(focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -551,6 +559,7 @@ int main()
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
+    test_go_to_tab_lines_and_calendar_scroll_ranges(engine);
     test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(engine);
     test_responsive_unset_restores_auto_inset(engine);
     test_preferred_color_scheme_updates_css_and_match_media(engine);

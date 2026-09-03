@@ -2408,70 +2408,11 @@
         } else if ((name == "padding-bottom" || name == "padding-block-end")
             && !is_inline(inline_padding)) {
             node.style.padding_bottom = native_document::parse_length(value);
-        } else if (name == "margin" && !is_inline(inline_margin)) {
-            std::vector<css_length> values;
-            std::vector<bool> automatic;
-            size_t cursor = 0;
-            while (cursor < value.size()) {
-                while (cursor < value.size()
-                    && std::isspace(static_cast<unsigned char>(value[cursor]))) ++cursor;
-                if (cursor >= value.size()) break;
-                auto end = value.find(' ', cursor);
-                if (end == std::string::npos) end = value.size();
-                const auto token = value.substr(cursor, end - cursor);
-                values.push_back(native_document::parse_length(token));
-                automatic.push_back(token == "auto");
-                cursor = end + 1U;
-            }
-            if (!values.empty()) {
-                node.style.margin_top = values[0];
-                node.style.margin_right = values.size() > 1 ? values[1] : values[0];
-                node.style.margin_bottom = values.size() > 2 ? values[2] : values[0];
-                node.style.margin_left = values.size() > 3 ? values[3]
-                    : values.size() > 1 ? values[1] : values[0];
-                node.style.margin_top_auto = automatic[0];
-                node.style.margin_right_auto = automatic.size() > 1 ? automatic[1] : automatic[0];
-                node.style.margin_bottom_auto = automatic.size() > 2 ? automatic[2] : automatic[0];
-                node.style.margin_left_auto = automatic.size() > 3 ? automatic[3]
-                    : automatic.size() > 1 ? automatic[1] : automatic[0];
-            }
-        } else if ((name == "margin-block" || name == "margin-inline")
-            && !is_inline(inline_margin)) {
-            std::istringstream stream(value);
-            std::string first;
-            std::string second;
-            stream >> first >> second;
-            if (!first.empty()) {
-                const auto start = native_document::parse_length(first);
-                const auto end = native_document::parse_length(second.empty() ? first : second);
-                if (name == "margin-block") {
-                    node.style.margin_top = start;
-                    node.style.margin_bottom = end;
-                    node.style.margin_top_auto = first == "auto";
-                    node.style.margin_bottom_auto = (second.empty() ? first : second) == "auto";
-                } else {
-                    node.style.margin_left = start;
-                    node.style.margin_right = end;
-                    node.style.margin_left_auto = first == "auto";
-                    node.style.margin_right_auto = (second.empty() ? first : second) == "auto";
-                }
-            }
-        } else if ((name == "margin-left" || name == "margin-inline-start")
-            && !is_inline(inline_margin)) {
-            node.style.margin_left = native_document::parse_length(value);
-            node.style.margin_left_auto = value == "auto";
-        } else if ((name == "margin-right" || name == "margin-inline-end")
-            && !is_inline(inline_margin)) {
-            node.style.margin_right = native_document::parse_length(value);
-            node.style.margin_right_auto = value == "auto";
-        } else if ((name == "margin-top" || name == "margin-block-start")
-            && !is_inline(inline_margin)) {
-            node.style.margin_top = native_document::parse_length(value);
-            node.style.margin_top_auto = value == "auto";
-        } else if ((name == "margin-bottom" || name == "margin-block-end")
-            && !is_inline(inline_margin)) {
-            node.style.margin_bottom = native_document::parse_length(value);
-            node.style.margin_bottom_auto = value == "auto";
+        } else if (name.starts_with("margin") && !is_inline(inline_margin)
+            && apply_margin_declaration(node.style, name, value)) {
+            // Share the function-aware component parser with inline CSSOM
+            // updates. Whitespace inside calc()/min()/max() is not a side
+            // separator in a margin shorthand.
         } else if (name == "gap" && !is_inline(inline_gap)) {
             std::istringstream stream(value);
             std::string row;

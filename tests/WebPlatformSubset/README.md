@@ -165,6 +165,48 @@ Keep the web contract candidate until cross-RID validation is complete. Candidat
 failures are reported in result JSON but do not set the runner's exit code;
 the direct native regressions do exit nonzero.
 
+## Go To tab lines and phantom scrolling (#1248)
+
+`contracts/go-to-tabs-overflow.html` is a project-owned WPT-style reduction of
+[the tester's follow-up](https://github.com/SandwichTradingDevOps/StackWich/issues/1248#issuecomment-5511713642).
+The original responsive Go To test covered widths and grid tracks, but did not
+include the production tab wrappers or calendar percentage-height chain.
+
+Two independent causes are covered here:
+
+- Stylesheet margin shorthands must keep nested `calc(max(var(...), ...)*-1)`
+  expressions intact. Splitting on spaces changed the tab margins and produced
+  separated underline layers.
+- Percentage heights in ordinary auto-height parents use intrinsic sizing, not
+  the parent's provisional height. The latter enlarged the calendar from 332px
+  to 382px and created overflow. Definite percentage chains, grown column-flex
+  items, and fixed portals must still provide definite percentage bases.
+
+The direct native filter `go-to-overflow` reads the same fixture, checks repeated
+302 → 431 → 302 width changes, verifies both underline paint layers coincide,
+rejects painted phantom scrollbars, and ensures genuinely constrained content
+can still scroll. It also runs in the full native suite. The web test remains a
+candidate pending cross-RID verification.
+
+```bash
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --selection all --test go-to-tabs-overflow \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --output artifacts/go-to-native
+
+CHROME_BIN=/absolute/path/to/chromium node tests/WebPlatformSubset/chrome/run-contracts.mjs \
+  --path contracts/go-to-tabs-overflow.html --output artifacts/go-to-chrome
+
+dotnet run --project samples/NativeTradingViewTerminal -- --headless-proof \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --width 431 --height 900 --open-overlay go-to --output artifacts/go-to-live
+```
+
+Repeat the live proof at width 858 for the desktop layout. It invokes the actual
+Go To application handler, then uses native pointer input to select Date → Custom
+range → Date, recording screenshots, scroll geometry, and the loaded library's
+path/SHA-256. It does not override the application's layout or hide scrollbars.
+
 ## Broad discovery
 
 A broader WPT sweep should write separate non-gating artifacts and expectations. It is

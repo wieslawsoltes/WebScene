@@ -120,7 +120,10 @@ async function launchContractServer() {
   const server = createServer(async (request, response) => {
     try {
       const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
-      const relativePath = decodeURIComponent(requestUrl.pathname).replace(/^\/+/, "");
+      let relativePath = decodeURIComponent(requestUrl.pathname).replace(/^\/+/, "");
+      // Local WPT-style reductions use the canonical /resources/ URLs. Serve
+      // the same pinned harness used by the native runner, not a second copy.
+      if (relativePath.startsWith("resources/")) relativePath = `upstream/${relativePath}`;
       const resolved = path.resolve(subsetRoot, relativePath);
       if (!resolved.startsWith(`${subsetRoot}${path.sep}`) || !existsSync(resolved)) {
         response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
@@ -134,7 +137,28 @@ async function launchContractServer() {
         "content-type": contentType,
         "cache-control": "no-store"
       });
-      response.end(await readFile(resolved));
+      let content = await readFile(resolved);
+      if (path.extname(resolved).toLowerCase() === ".html") {
+        // Existing custom contracts publish __webSceneWptState themselves.
+        // Adapt standard WPT result callbacks only for documents which load
+        // testharness.js, leaving the actual assertions and harness unchanged.
+        content = content.toString("utf8").replace(
+          /<script\b[^>]*\bsrc=["']\/resources\/testharness\.js["'][^>]*>\s*<\/script>/i,
+          tag => tag + `<script>
+            globalThis.__webSceneWptState = {
+              complete:false, harness:null, results:[], diagnostics:[]
+            };
+            add_result_callback(t => __webSceneWptState.results.push({
+              name:t.name, status:t.status === 0 ? "PASS" : "FAIL",
+              message:t.message, stack:t.stack
+            }));
+            add_completion_callback((tests, status) => {
+              __webSceneWptState.harness = {status:status.status, message:status.message};
+              __webSceneWptState.complete = true;
+            });
+          </script>`);
+      }
+      response.end(content);
     } catch (error) {
       response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
       response.end(String(error && error.message || error));

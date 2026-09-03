@@ -10,7 +10,7 @@ using SkiaSharp;
 
 namespace NativeTradingViewTerminal;
 
-internal static class HeadlessProof
+internal static partial class HeadlessProof
 {
     internal static int Run(string[] arguments)
     {
@@ -48,6 +48,11 @@ internal static class HeadlessProof
                 TimeSpan.FromSeconds(90));
 
             var initialEvidence = WaitForWebSocketEvidence(view, window);
+            if (overlay == "go-to")
+            {
+                return CaptureGoToEvidence(view, window, output, width, height,
+                    paths.NativeLibraryPath);
+            }
             Console.WriteLine($"TradingView initial evidence: {initialEvidence}");
             Console.WriteLine($"TradingView last error: {view.LastError}");
             Console.WriteLine($"TradingView scene diagnostics: {view.SceneDiagnostics}");
