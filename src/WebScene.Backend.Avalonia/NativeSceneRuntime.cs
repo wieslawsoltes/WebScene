@@ -1042,31 +1042,55 @@ public static unsafe partial class NativeWebSceneApi
                     : null
             };
             PreparedResource prepared;
-#if !WEBSCENE_UNO
-            if (loader is AvaloniaResourceLoader avaloniaLoader
-                && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
+            var resourceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
             {
-                if (resourceKind == WebSceneResourceKind.StyleSheet)
+#if !WEBSCENE_UNO
+                if (loader is AvaloniaResourceLoader avaloniaLoader
+                    && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
                 {
-                    RegisterWebFonts(
-                        Encoding.UTF8.GetString(utf8Resource.Content.Span),
-                        address,
-                        avaloniaLoader);
+                    if (resourceKind == WebSceneResourceKind.StyleSheet)
+                    {
+                        RegisterWebFonts(
+                            Encoding.UTF8.GetString(utf8Resource.Content.Span),
+                            address,
+                            avaloniaLoader);
+                    }
+                    prepared = PrepareResource(utf8Resource, entityTag);
                 }
-                prepared = PrepareResource(utf8Resource, entityTag);
+                else
+#endif
+                {
+                    var resource = loader.LoadText(request);
+#if !WEBSCENE_UNO
+                    if (resourceKind == WebSceneResourceKind.StyleSheet
+                        && loader is AvaloniaResourceLoader textAvaloniaLoader)
+                    {
+                        RegisterWebFonts(resource.Content, address, textAvaloniaLoader);
+                    }
+#endif
+                    prepared = PrepareResource(resource, entityTag);
+                }
             }
-            else
-#endif
+            catch (Exception error)
             {
-                var resource = loader.LoadText(request);
-#if !WEBSCENE_UNO
-                if (resourceKind == WebSceneResourceKind.StyleSheet
-                    && loader is AvaloniaResourceLoader textAvaloniaLoader)
+                // Preserve transport metadata across the ABI, not exception text which
+                // frequently contains credentials, query parameters or request bodies.
+                var category = error switch
                 {
-                    RegisterWebFonts(resource.Content, address, textAvaloniaLoader);
-                }
-#endif
-                prepared = PrepareResource(resource, entityTag);
+                    System.Net.Http.HttpRequestException { StatusCode: not null } => "http",
+                    System.Net.Http.HttpRequestException => "network",
+                    TimeoutException or TaskCanceledException => "timeout",
+                    OperationCanceledException => "cancelled",
+                    FileNotFoundException or DirectoryNotFoundException => "not-found",
+                    NotSupportedException => "unsupported",
+                    _ => "loader"
+                };
+                var status = error is System.Net.Http.HttpRequestException { StatusCode: { } code } ? (int)code : 0;
+                prepared = new PreparedResource(false, false, null, null, category,
+                    category.Length, null, default, false, 0,
+                    (nuint)(EnvelopeHeaderSize + category.Length), true, status,
+                    (long)(System.Diagnostics.Stopwatch.GetElapsedTime(resourceStarted).TotalMilliseconds * 1000));
             }
             if (destination == IntPtr.Zero || capacity < prepared.RequiredLength)
             {
@@ -1147,17 +1171,17 @@ public static unsafe partial class NativeWebSceneApi
         {
             var length = checked((int)resource.RequiredLength);
             var bytes = new Span<byte>((void*)destination, length);
-            bytes[0] = resource.NotModified ? (byte)2 : (byte)1;
+            bytes[0] = resource.Failed ? (byte)3 : resource.NotModified ? (byte)2 : (byte)1;
             bytes[1] = resource.IsCacheable ? (byte)1 : (byte)0;
             BinaryPrimitives.WriteUInt32LittleEndian(
                 bytes[2..],
                 checked((uint)resource.ResponseEntityTagLength));
             BinaryPrimitives.WriteInt64LittleEndian(
                 bytes[(2 + sizeof(uint))..],
-                (resource.LastModified ?? requestIfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
+                resource.Failed ? resource.HttpStatus : (resource.LastModified ?? requestIfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
             BinaryPrimitives.WriteInt64LittleEndian(
                 bytes[(2 + sizeof(uint) + sizeof(long))..],
-                resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
+                resource.Failed ? resource.DurationMicroseconds : resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
             Encoding.UTF8.GetBytes(
                 resource.ResponseEntityTag,
                 bytes.Slice(EnvelopeHeaderSize, resource.ResponseEntityTagLength));
@@ -1189,7 +1213,10 @@ public static unsafe partial class NativeWebSceneApi
             ReadOnlyMemory<byte> Utf8Content,
             bool ContentIsUtf8,
             int ContentLength,
-            nuint RequiredLength);
+            nuint RequiredLength,
+            bool Failed = false,
+            int HttpStatus = 0,
+            long DurationMicroseconds = 0);
 
         private sealed record PendingResourceCopy(
             ResourceBridge Owner,

@@ -34,6 +34,7 @@ class WebSceneView extends StatefulWidget {
     this.onScenePresented,
     this.onJavaScriptException,
     this.onRuntimeFailed,
+    this.onResourceFailed,
     this.showRuntimeFailure = false,
     this.runtimeFailureBuilder,
     this.firstSceneTimeout = const Duration(seconds: 30),
@@ -51,6 +52,7 @@ class WebSceneView extends StatefulWidget {
   final ValueChanged<int>? onScenePresented;
   final ValueChanged<WebSceneJavaScriptException>? onJavaScriptException;
   final ValueChanged<WebSceneRuntimeFailure>? onRuntimeFailed;
+  final ValueChanged<WebSceneResourceFailure>? onResourceFailed;
   final bool showRuntimeFailure;
   final Widget Function(BuildContext, WebSceneRuntimeFailure)?
       runtimeFailureBuilder;
@@ -456,11 +458,26 @@ class _WebSceneViewState extends State<WebSceneView>
   void _configureDiagnostics(WebSceneEngine engine, int generation) {
     engine.configureDiagnostics(
       (widget.onJavaScriptException != null ? 1 : 0) |
-          (widget.onConsoleMessage != null ? 2 : 0),
+          (widget.onConsoleMessage != null ? 2 : 0) |
+          (widget.onResourceFailed != null ? 8 : 0),
       (record) {
         if (!mounted || generation != _generation || engine != _engine) return;
         final context = WebSceneDiagnosticContext.fromJson(record, generation);
         switch (record['kind']) {
+          case 'resource-failure':
+            final status = record['httpStatus'] as int? ?? 0;
+            final failure = WebSceneResourceFailure(
+              url: record['url'] as String,
+              method: record['method'] as String,
+              resourceType: record['resourceType'] as String,
+              errorCode: record['errorCode'] as String,
+              message: record['message'] as String,
+              httpStatus: status == 0 ? null : status,
+              duration: Duration(
+                  microseconds: ((record['durationMs'] as num) * 1000).round()),
+              context: context,
+            );
+            _notify(() => widget.onResourceFailed?.call(failure));
           case 'dropped':
             _controller.recordDiagnosticLoss(record['droppedCount'] as int);
           case 'exception':

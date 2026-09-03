@@ -32,12 +32,23 @@ public sealed partial class NativeWebSceneView
         add => _runtimeDiagnostics.RuntimeFailed += value;
         remove => _runtimeDiagnostics.RuntimeFailed -= value;
     }
+    /// <summary>Failed host resource requests, independently of console/JS exception capture.
+    /// Subscriptions should be installed before LoadAsync. Delivered on the diagnostic background dispatcher.</summary>
+    public event Action<WebSceneResourceFailure> ResourceFailed
+    {
+        add => _runtimeDiagnostics.ResourceFailed += value;
+        remove => _runtimeDiagnostics.ResourceFailed -= value;
+    }
     public WebSceneRuntimeState RuntimeState => _runtimeDiagnostics.State;
     public WebSceneRuntimeFailure? LastFailure => _runtimeDiagnostics.LastFailure;
     public long DroppedDiagnosticCount => _runtimeDiagnostics.DroppedCount;
     public bool CaptureConsoleMessages { get => _runtimeDiagnostics.CaptureConsole; set => _runtimeDiagnostics.CaptureConsole = value; }
     /// <summary>Explicit opt-in for the legacy DrainConsoleMessages/TryTakeConsoleMessage pull APIs.</summary>
     public bool CaptureLegacyConsoleMessages { get => _runtimeDiagnostics.LegacyConsole; set => _runtimeDiagnostics.LegacyConsole = value; }
+    /// <summary>Explicitly wait for queued diagnostics before disposing a failed startup.
+    /// Use a bounded cancellation token; do not call from a diagnostic subscriber.</summary>
+    public Task FlushRuntimeDiagnosticsAsync(CancellationToken cancellationToken)
+        => _runtimeDiagnostics.FlushAsync(cancellationToken);
     /// <summary>Opt-in error UI. Ordinary uncaught JS errors do not replace the page.</summary>
     public bool ShowRuntimeFailure { get => _runtimeDiagnostics.Fallback; set => _runtimeDiagnostics.Fallback = value; }
     /// <summary>Optional replacement for the built-in failure UI. Called on the UI thread.</summary>

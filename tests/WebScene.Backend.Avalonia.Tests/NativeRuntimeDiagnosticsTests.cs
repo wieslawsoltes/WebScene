@@ -9,6 +9,95 @@ namespace WebScene.Backend.Avalonia.Tests;
 
 public sealed class NativeRuntimeDiagnosticsTests
 {
+    [Fact]
+    public async Task FlushHasDeadlineAndIncludesReservedTerminalRecord()
+    {
+        using var diagnostics = new NativeRuntimeDiagnostics();
+        using var release = new ManualResetEventSlim();
+        diagnostics.Begin();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        diagnostics.ConsoleMessage += _ => { entered.TrySetResult(); release.Wait(TimeSpan.FromSeconds(5)); };
+        var terminalDelivered = false;
+        diagnostics.RuntimeFailed += _ => terminalDelivered = true;
+        diagnostics.Receive(diagnostics.Generation, Record("console"));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => diagnostics.FlushAsync(deadline.Token));
+            for (var i = 0; i < 300; i++) diagnostics.Receive(diagnostics.Generation, Record("resource-failure", i + 2));
+            diagnostics.Fail("terminal", null, "runtime", null);
+            diagnostics.Detach();
+        }
+        finally { release.Set(); }
+        using var flushDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await diagnostics.FlushAsync(flushDeadline.Token);
+        Assert.True(terminalDelivered);
+    }
+
+    [NativeRuntimeFact]
+    public async Task CaughtHttpFailureReachesHostWithStatusAndRedactedUrlWithoutConsole()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var engine = NativeWebSceneApi.EngineCreate(0, null, new FailingResourceLoader(), _ => { });
+        using var diagnostics = new NativeRuntimeDiagnostics();
+        try
+        {
+            diagnostics.Begin();
+            var received = new TaskCompletionSource<WebSceneResourceFailure>(TaskCreationOptions.RunContinuationsAsynchronously);
+            diagnostics.ResourceFailed += failure => received.TrySetResult(failure);
+            diagnostics.Attach(engine);
+            diagnostics.Ready();
+            Assert.True(NativeWebSceneApi.TryExecuteScript(engine,
+                "fetch('https://resource.test/missing?token=secret#private').catch(()=>{});", "resource-test.js"));
+            var failure = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("https://resource.test/missing", failure.Url);
+            Assert.Equal(503, failure.HttpStatus);
+            Assert.Equal("http", failure.ErrorCode);
+            Assert.Equal("GET", failure.Method);
+            Assert.Equal("data", failure.ResourceType);
+            Assert.True(failure.Duration >= TimeSpan.Zero);
+            Assert.DoesNotContain("secret", JsonSerializer.Serialize(failure));
+            Assert.Equal(WebSceneRuntimeState.Ready, diagnostics.State);
+            Assert.Null(diagnostics.LastFailure);
+        }
+        finally { diagnostics.Dispose(); NativeWebSceneApi.EngineDestroy(engine); }
+    }
+
+    private sealed class FailingResourceLoader : WebScene.Core.IWebSceneResourceLoader
+    {
+        public WebScene.Core.WebSceneTextResource LoadText(in WebScene.Core.WebSceneResourceRequest request)
+            => throw new HttpRequestException("secret", null, System.Net.HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task AcceptedResourceEvidenceSurvivesTerminalCleanupButNotNewGeneration()
+    {
+        using var diagnostics = new NativeRuntimeDiagnostics();
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delivered = new TaskCompletionSource<WebSceneResourceFailure>(TaskCreationOptions.RunContinuationsAsynchronously);
+        diagnostics.Begin();
+        diagnostics.ConsoleMessage += _ => { entered.TrySetResult(); release.Wait(TimeSpan.FromSeconds(5)); };
+        diagnostics.ResourceFailed += value => delivered.TrySetResult(value);
+        diagnostics.Receive(diagnostics.Generation, Record("console"));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            diagnostics.Receive(diagnostics.Generation, Record("resource-failure", 2));
+            diagnostics.Fail("navigation failed", null, "load", null);
+            diagnostics.Detach();
+        }
+        finally { release.Set(); }
+        Assert.Equal(2, (await delivered.Task.WaitAsync(TimeSpan.FromSeconds(5))).Context.Sequence);
+        var old = diagnostics.Generation;
+        diagnostics.Begin();
+        var stale = false;
+        diagnostics.ResourceFailed += _ => stale = true;
+        diagnostics.Receive(old, Record("resource-failure", 3));
+        Assert.False(stale);
+    }
+
     private sealed class NativeRuntimeFactAttribute : FactAttribute
     {
         public NativeRuntimeFactAttribute()

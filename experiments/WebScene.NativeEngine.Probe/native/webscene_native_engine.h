@@ -22,7 +22,8 @@ typedef void (*webscene_diagnostic_available_callback)(void* user_data);
 enum {
     WEBSCENE_DIAGNOSTIC_EXCEPTIONS = 1U,
     WEBSCENE_DIAGNOSTIC_CONSOLE = 2U,
-    WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE = 4U
+    WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE = 4U,
+    WEBSCENE_DIAGNOSTIC_RESOURCE_FAILURES = 8U
 };
 
 /* Additive ABI 3 diagnostics. Callback is a non-blocking signal only; do not
@@ -493,6 +494,14 @@ typedef enum webscene_resource_kind {
  * cacheability/freshness metadata, validators, and UTF-8 content. Returning
  * zero reports a load failure. The URL is already absolute and normalized by
  * WebScene.
+ * Envelope (little endian): uint8 status, uint8 cacheable, uint32 tag length,
+ * int64 last-modified seconds, int64 fresh-until seconds, UTF-8 tag, content.
+ * Status 1 = content, 2 = not modified. Status 3 = failure: tag is a stable
+ * error category (http/network/timeout/cancelled/not-found/unsupported/loader),
+ * first int64 is HTTP status (0 unknown), second is elapsed microseconds.
+ * Failure content must be empty; do not include exception text, credentials or
+ * request bodies. Older engines safely treat status 3 as an ordinary failure.
+ * Returning zero remains supported, with generic loader diagnostics.
  */
 typedef size_t (*webscene_resource_load_callback)(
     void* user_data,

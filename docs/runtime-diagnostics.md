@@ -1,6 +1,6 @@
-# JavaScript exceptions, console messages and runtime failures
+# JavaScript exceptions, resource failures, console messages and runtime failures
 
-The native runtime provides three distinct host notifications. Applications do not
+The native runtime provides four distinct host notifications. Applications do not
 need to initiate a JavaScript call to receive errors from page scripts, child frames,
 event handlers, timers, animation callbacks, observers or unhandled promises.
 
@@ -8,6 +8,7 @@ event handlers, timers, animation callbacks, observers or unhandled promises.
 | --- | --- | --- |
 | `JavaScriptException` | An exception escaped a page callback, or a promise remained unhandled at the runtime checkpoint | Yes |
 | `ConsoleMessage` | An explicitly captured console message, including `console.error` | Yes |
+| `ResourceFailed` | A host resource request failed, even if JavaScript catches it or a cache subsequently recovers it | Usually; a failed main document may also fail navigation |
 | `RuntimeFailed` | Failed runtime bootstrap/navigation, host load timeout, catchable terminal engine failure, or explicit application promotion | No; the host detaches the failed engine |
 
 JavaScript `try/catch` and promises handled before their rejection checkpoint are
@@ -33,6 +34,11 @@ view.RuntimeFailed += failure =>
     logger.LogError("WebScene failed during {Stage}: {Message}\n{Stack}",
         failure.Stage, failure.Message, failure.Stack);
 
+view.ResourceFailed += failure =>
+    logger.LogWarning("Resource {Method} {Url} ({Type}): {Error}, HTTP {Status}, {Elapsed} ms",
+        failure.Method, failure.Url, failure.ResourceType, failure.ErrorCode,
+        failure.HttpStatus, failure.Duration.TotalMilliseconds);
+
 #if DEBUG
 view.ConsoleMessage += message =>
     logger.LogDebug("JS console.{Level}: {Message}", message.Level, message.Message);
@@ -48,6 +54,30 @@ Uncaught exception capture and console capture are independent. Subscribing to
 it unless `CaptureConsoleMessages` remains explicitly enabled. Production
 applications can log exceptions without enabling console messages.
 
+`ResourceFailed` independently enables resource diagnostics and is suitable for
+production subscriptions. It reports host-loader attempts for documents, scripts,
+stylesheets, text-backed images and fetch/XHR data requests. Fields include the
+absolute URL, method, resource type, stable error category, optional HTTP status,
+elapsed time, and the usual generation/sequence/timestamp context. The current
+resource callback does not supply a frame ID; it is zero rather than guessed.
+`Context.DocumentUrl` is the request referrer when available, not necessarily the
+top-level page. URLs strip user information, query strings and fragments; data URL
+payloads are redacted. Request bodies, headers, response bodies and raw transport
+exception messages are not included. Paths can still identify private resources.
+
+This is not an all-network traffic inspector: font registration performed directly
+by the managed presenter, image decoding, WebSocket transport, and requests rejected
+before reaching the host loader are outside this event. A caught JavaScript error
+does not become an uncaught exception just because a resource request failed.
+Cache fallback may recover the request; a resource event alone does not mean the
+chart failed. Chart-ready is application-specific and should be logged by the host
+alongside a startup deadline, rather than inferred from `RuntimeState.Ready`.
+
+Avalonia/Uno loaders send a status-3 failure envelope through the existing resource
+callback ABI. Older/custom callbacks returning zero produce `ErrorCode=loader`
+with unknown HTTP status. Older native engines treat status 3 as a normal resource
+failure; install the matching updated managed and native SDK to receive events.
+
 The .NET records are immutable copied data. `Context` supplies the host load
 generation, native sequence, UTC timestamp, document URL, frame ID, script source,
 one-based line/column and truncation flag. Unavailable locations use zero/empty
@@ -62,6 +92,13 @@ another diagnostic. It is safe to request unloading/disposal from a handler.
 An already running handler cannot be forcibly cancelled; queued old-generation
 messages are suppressed on navigation/disposal. Slow logging cannot block native
 queue draining or fatal-state UI updates.
+
+Accepted diagnostics survive terminal engine cleanup, but not host disposal or a
+new load generation. When capturing a failed startup before disposing the view,
+the host can explicitly `await view.FlushRuntimeDiagnosticsAsync(token)` with a
+short deadline. This waits for queued handlers, not asynchronous work launched by
+them. Never call it from a diagnostic handler or block the UI thread on it. Regular
+rendering, navigation and failure UI updates do not wait for application logging.
 
 `RuntimeState` reports `Unloaded`, `Loading`, `Ready`, `Failed` or `Disposed`.
 `LastFailure` survives engine cleanup and disposal and is cleared by a new load.
@@ -94,6 +131,7 @@ WebSceneView(
   controller: controller,
   onJavaScriptException: (error) => logError(error.message, error.stack),
   onRuntimeFailed: (failure) => logError(failure.message, failure.stack),
+  onResourceFailed: (failure) => logWarning('${failure.method} ${failure.url}: ${failure.errorCode}'),
   // Supply onConsoleMessage only when console logging is wanted.
   showRuntimeFailure: true,
   runtimeFailureBuilder: (context, failure) => Text('Unable to display this page'),

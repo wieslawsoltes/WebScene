@@ -49,6 +49,40 @@
                 if (resource_load_callback_v3_ == nullptr
                     && resource_load_callback_v2_ == nullptr
                     && resource_load_callback_ == nullptr) return false;
+                const auto started = std::chrono::steady_clock::now();
+                const auto failed = [&](const std::string& category, int http_status = 0,
+                                        double duration_ms = -1) {
+                    if (diagnostics_.enabled(WEBSCENE_DIAGNOSTIC_RESOURCE_FAILURES)) {
+                        // Resource diagnostics deliberately exclude credentials, query strings,
+                        // fragments and data payloads. Never copy request headers or bodies.
+                        const auto safe_url = [](std::string value) {
+                            if (value.rfind("data:", 0) == 0) return std::string{"data:[redacted]"};
+                            value.resize(value.find_first_of("?#") == std::string::npos
+                                ? value.size() : value.find_first_of("?#"));
+                            if (const auto scheme = value.find("://"); scheme != std::string::npos) {
+                                const auto end = value.find('/', scheme + 3);
+                                const auto at = value.find('@', scheme + 3);
+                                if (at != std::string::npos && (end == std::string::npos || at < end))
+                                    value.erase(scheme + 3, at - scheme - 2);
+                            }
+                            return value;
+                        };
+                        webscene_native::runtime_diagnostic record;
+                        record.kind = "resource-failure";
+                        record.url = safe_url(url);
+                        record.document_url = safe_url(request_context.referrer);
+                        record.method = request_context.method.empty() ? "GET" : request_context.method;
+                        record.resource_type = kind == 0 ? "document" : kind == 1 ? "script"
+                            : kind == 2 ? "stylesheet" : kind == 3 ? "image" : "data";
+                        record.error_code = category;
+                        record.message = "Resource request failed (" + category + ")";
+                        record.http_status = http_status;
+                        record.duration_ms = duration_ms >= 0 ? duration_ms
+                            : std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                        diagnostics_.publish(std::move(record));
+                    }
+                    return false;
+                };
                 // Most web resources fit in this stack buffer. Supplying it on
                 // the first callback lets managed hosts encode directly into
                 // native-owned memory and avoids a size-probe transition plus
@@ -101,13 +135,13 @@
                 const auto required = invoke(inline_buffer.data(), inline_buffer.size());
                 constexpr size_t envelope_header_size =
                     2U + sizeof(uint32_t) + sizeof(int64_t) + sizeof(int64_t);
-                if (required < envelope_header_size) return false;
+                if (required < envelope_header_size) return failed("loader");
                 std::vector<char> overflow_buffer;
                 auto* buffer = inline_buffer.data();
                 if (required > inline_buffer.size()) {
                     overflow_buffer.resize(required);
                     if (invoke(overflow_buffer.data(), overflow_buffer.size()) != required) {
-                        return false;
+                        return failed("invalid-response");
                     }
                     buffer = overflow_buffer.data();
                 }
@@ -125,8 +159,16 @@
                     &response_fresh_until,
                     buffer + 2U + sizeof(response_tag_length) + sizeof(response_last_modified),
                     sizeof(response_fresh_until));
-                if (status < 1U || status > 2U
-                    || response_tag_length > required - envelope_header_size) return false;
+                if (response_tag_length > required - envelope_header_size) return failed("invalid-response");
+                // Failure envelope (status 3): tag = stable error category,
+                // first int64 = HTTP status (0 unknown), second = elapsed microseconds.
+                // No exception text is transported: it may contain credentials/URLs.
+                if (status == 3U) return failed(
+                    std::string(buffer + envelope_header_size, response_tag_length),
+                    response_last_modified >= 100 && response_last_modified <= 599
+                        ? static_cast<int>(response_last_modified) : 0,
+                    response_fresh_until >= 0 ? response_fresh_until / 1000.0 : -1);
+                if (status < 1U || status > 2U) return failed("invalid-response");
                 response.not_modified = status == 2U;
                 response.cacheable = cacheable;
                 response.last_modified_unix_seconds = response_last_modified;

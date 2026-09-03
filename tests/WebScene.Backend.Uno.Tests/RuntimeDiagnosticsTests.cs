@@ -7,6 +7,23 @@ namespace WebScene.Backend.Uno.Tests;
 public sealed class RuntimeDiagnosticsTests
 {
     [Fact]
+    public async Task ResourceDiagnosticsAreIndependentAndFlushable()
+    {
+        using var diagnostics = new NativeRuntimeDiagnostics();
+        diagnostics.Begin(); diagnostics.Ready();
+        WebSceneResourceFailure? received = null;
+        diagnostics.ResourceFailed += failure => received = failure;
+        diagnostics.Receive(diagnostics.Generation,
+            """{"kind":"resource-failure","url":"https://test/script.js","method":"GET","resourceType":"script","httpStatus":404,"errorCode":"http","durationMs":1.5}""");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await diagnostics.FlushAsync(deadline.Token);
+        Assert.Equal(404, received!.HttpStatus);
+        Assert.Equal(TimeSpan.FromMilliseconds(1.5), received.Duration);
+        Assert.Equal(WebSceneRuntimeState.Ready, diagnostics.State);
+        Assert.False(diagnostics.CaptureConsole);
+    }
+
+    [Fact]
     public async Task UnoUsesOrderedBackgroundFailureDeliveryAndRetainsFailureAfterDetach()
     {
         using var diagnostics = new NativeRuntimeDiagnostics();

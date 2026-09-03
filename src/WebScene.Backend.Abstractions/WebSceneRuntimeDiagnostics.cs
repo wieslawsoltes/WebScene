@@ -21,3 +21,10 @@ public sealed record WebSceneConsoleMessage(
 /// <summary>A terminal failure for one loaded runtime; ordinary uncaught JavaScript exceptions are not terminal.</summary>
 public sealed record WebSceneRuntimeFailure(
     string Message, string? Stack, string Stage, WebSceneDiagnosticContext Context);
+
+/// <summary>A failed host resource request, including failures caught by JavaScript.
+/// A request can subsequently recover (for example from cache); this is not a terminal runtime failure.
+/// URLs exclude user information, query strings and fragments. HTTP status is null when unavailable.</summary>
+public sealed record WebSceneResourceFailure(
+    string Url, string Method, string ResourceType, string ErrorCode,
+    int? HttpStatus, TimeSpan Duration, string Message, WebSceneDiagnosticContext Context);

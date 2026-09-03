@@ -82,6 +82,23 @@ final class WebSceneRuntimeFailure {
   final WebSceneDiagnosticContext context;
 }
 
+/// Failed host resource attempt, not necessarily fatal to the page.
+final class WebSceneResourceFailure {
+  const WebSceneResourceFailure(
+      {required this.url,
+      required this.method,
+      required this.resourceType,
+      required this.errorCode,
+      required this.message,
+      this.httpStatus,
+      this.duration = Duration.zero,
+      this.context = const WebSceneDiagnosticContext()});
+  final String url, method, resourceType, errorCode, message;
+  final int? httpStatus;
+  final Duration duration;
+  final WebSceneDiagnosticContext context;
+}
+
 typedef _Signal = Void Function(Pointer<Void>);
 typedef _ConfigureNative = Void Function(
   Pointer<Void>,

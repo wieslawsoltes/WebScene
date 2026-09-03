@@ -21,6 +21,9 @@ struct runtime_diagnostic final {
     std::string document_url;
     std::string level;
     std::string stage;
+    std::string url, method, resource_type, error_code;
+    int http_status{0};
+    double duration_ms{0};
     uint32_t frame_id{0};
     int line{0};
     int column{0};
@@ -79,8 +82,9 @@ public:
                 record.message.resize(newline);
             }
         }
-        if (!fatal && !enabled(record.kind == "console"
-                ? WEBSCENE_DIAGNOSTIC_CONSOLE : WEBSCENE_DIAGNOSTIC_EXCEPTIONS)) return;
+        if (!fatal && !enabled(record.kind == "console" ? WEBSCENE_DIAGNOSTIC_CONSOLE
+                : record.kind == "resource-failure" ? WEBSCENE_DIAGNOSTIC_RESOURCE_FAILURES
+                : WEBSCENE_DIAGNOSTIC_EXCEPTIONS)) return;
         bool wake;
         {
             std::lock_guard lock(mutex_);
@@ -97,6 +101,12 @@ public:
             field("message", record.message); field("stack", record.stack);
             field("source", record.source); field("documentUrl", record.document_url);
             field("level", record.level); field("stage", record.stage);
+            if (record.kind == "resource-failure") {
+                field("url", record.url); field("method", record.method);
+                field("resourceType", record.resource_type); field("errorCode", record.error_code);
+                json += ",\"httpStatus\":" + std::to_string(record.http_status)
+                    + ",\"durationMs\":" + std::to_string(record.duration_ms);
+            }
             json += ",\"frameId\":" + std::to_string(record.frame_id)
                 + ",\"line\":" + std::to_string(record.line)
                 + ",\"column\":" + std::to_string(record.column)

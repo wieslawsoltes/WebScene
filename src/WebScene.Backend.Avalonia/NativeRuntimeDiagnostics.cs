@@ -23,6 +23,7 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
     private Action<WebSceneJavaScriptException>? _exception;
     private Action<WebSceneConsoleMessage>? _console;
     private Action<WebSceneRuntimeFailure>? _failed;
+    private Action<WebSceneResourceFailure>? _resourceFailed;
     private bool _captureConsole, _legacyConsole, _fallback;
     private volatile bool _acceptRecords;
     private long _generation, _dropped;
@@ -41,7 +42,21 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
     internal bool HasNativeDiagnostics => _session?.IsSupported == true;
     internal void CheckForNativeFailure()
     {
+        _session?.DrainPending();
         if (_session?.CopyFailure() is { } json) Receive(Generation, json);
+    }
+    // Explicit opt-in flush for a host about to dispose a failed startup.
+    // Never used by frame painting or required for fatal UI state transitions.
+    internal async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(State == WebSceneRuntimeState.Disposed, this);
+        _session?.DrainPending();
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _delivery.Writer.WriteAsync((Generation, () => {
+            DeliverReservedFailure();
+            completed.TrySetResult();
+        }), cancellationToken).ConfigureAwait(false);
+        await completed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
     internal bool CaptureConsole { get => _captureConsole; set { lock (_gate) { _captureConsole = value; Configure(); } } }
     internal bool LegacyConsole { get => _legacyConsole; set { lock (_gate) { _legacyConsole = value; Configure(); } } }
@@ -61,7 +76,13 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
         add { lock (_gate) { _failed += value; Configure(); } }
         remove { lock (_gate) { _failed -= value; Configure(); } }
     }
-    private uint Flags => (_exception is null ? 0u : 1u) | (_captureConsole || _console is not null ? 2u : 0u) | (_legacyConsole ? 4u : 0u);
+    internal event Action<WebSceneResourceFailure> ResourceFailed
+    {
+        add { lock (_gate) { _resourceFailed += value; Configure(); } }
+        remove { lock (_gate) { _resourceFailed -= value; Configure(); } }
+    }
+    private uint Flags => (_exception is null ? 0u : 1u) | (_captureConsole || _console is not null ? 2u : 0u) | (_legacyConsole ? 4u : 0u)
+        | (_resourceFailed is null ? 0u : 8u);
     private void Configure() => _session?.Configure(Flags, _fallback || _failed is not null);
 
     internal void Begin()
@@ -88,6 +109,9 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
     internal void Ready() { lock (_gate) if (_state == WebSceneRuntimeState.Loading) _state = WebSceneRuntimeState.Ready; }
     internal void Detach()
     {
+        // Copy pending native evidence before engine destruction. Subscriber calls
+        // still happen only on the background delivery queue.
+        _session?.DrainPending();
         NativeDiagnosticSession? session;
         lock (_gate) {
             session = _session; _session = null;
@@ -135,6 +159,14 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
             DateTimeOffset.FromUnixTimeMilliseconds(Number("timestamp")), Text("documentUrl"),
             (uint)Number("frameId"), Text("source"), (int)Number("line"), (int)Number("column"), Flag("truncated"));
         switch (Text("kind")) {
+            case "resource-failure":
+                var httpStatus = (int)Number("httpStatus");
+                var resource = new WebSceneResourceFailure(Text("url"), Text("method"), Text("resourceType"),
+                    Text("errorCode"), httpStatus > 0 ? httpStatus : null,
+                    TimeSpan.FromMilliseconds(root.TryGetProperty("durationMs", out var duration) ? duration.GetDouble() : 0),
+                    Text("message"), context);
+                Enqueue(generation, () => Invoke(_resourceFailed, resource));
+                break;
             case "failure": Failure(new(Text("message"), Text("stack"), Text("stage"), context)); break;
             case "exception":
                 var error = new WebSceneJavaScriptException(Text("message"), Text("stack"), Flag("promiseRejection"), context);
@@ -151,18 +183,24 @@ internal sealed class NativeRuntimeDiagnostics : IDisposable
     private void Enqueue(long generation, Action action)
     {
         lock (_gate)
-            if (_reservedFailure is not null || !_delivery.Writer.TryWrite((generation, () => { if (_acceptRecords) action(); }))) Interlocked.Increment(ref _dropped);
+            if (_reservedFailure is not null || !_delivery.Writer.TryWrite((generation, () => {
+                // Keep already accepted evidence when terminal failure tears down the engine.
+                // Ordinary unload/reload/disposal still suppresses stale notifications.
+                if (_acceptRecords || State == WebSceneRuntimeState.Failed) action();
+            }))) Interlocked.Increment(ref _dropped);
     }
     private async Task DispatchAsync()
     {
         await foreach (var item in _delivery.Reader.ReadAllAsync().ConfigureAwait(false)) {
             if (item.Generation == Generation && State != WebSceneRuntimeState.Disposed) item.Action();
-            if (!_delivery.Reader.TryPeek(out _)) {
-                (long Generation, Action Action)? failure;
-                lock (_gate) { failure = _reservedFailure; _reservedFailure = null; }
-                if (failure is { } pending && pending.Generation == Generation && State != WebSceneRuntimeState.Disposed) pending.Action();
-            }
+            if (!_delivery.Reader.TryPeek(out _)) DeliverReservedFailure();
         }
+    }
+    private void DeliverReservedFailure()
+    {
+        (long Generation, Action Action)? failure;
+        lock (_gate) { failure = _reservedFailure; _reservedFailure = null; }
+        if (failure is { } pending && pending.Generation == Generation && State != WebSceneRuntimeState.Disposed) pending.Action();
     }
     private static void Invoke<T>(Action<T>? handlers, T record)
     {
@@ -195,6 +233,7 @@ internal sealed class NativeDiagnosticSession : IDisposable
     private readonly SemaphoreSlim _signal = new(0, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly object _nativeGate = new();
+    private readonly object _drainGate = new();
     private readonly IntPtr _engine;
     private readonly long _generation;
     private readonly Action<long, string> _receive;
@@ -243,26 +282,41 @@ internal sealed class NativeDiagnosticSession : IDisposable
         try {
             while (true) {
                 await _signal.WaitAsync(_stop.Token).ConfigureAwait(false);
-                while (true) {
-                    string? json = null;
-                    lock (_nativeGate) {
-                        if (_disposed) return;
-                        var size = TakeNative(_engine, null, 0);
-                        if (size != 0) {
-                            var buffer = new byte[checked((int)size)];
-                            var written = TakeNative(_engine, buffer, size);
-                            // Producers can evict the probed record between calls. Retry a short copy.
-                            if (written > size) continue;
-                            if (written > 0) json = Encoding.UTF8.GetString(buffer, 0, (int)written - 1);
-                        }
-                    }
-                    if (json is null) break;
-                    try { _receive(_generation, json); }
-                    catch (Exception error) { Trace.TraceError("WebScene diagnostic decode failed: {0}", error); }
-                }
+                DrainPending();
             }
         }
         catch (OperationCanceledException) { }
+    }
+    internal void DrainPending()
+    {
+        lock (_drainGate) {
+            // A bounded batch keeps a producer flood from blocking unload.
+            for (var count = 0; count < 1025; ++count) {
+                string? json = null;
+                lock (_nativeGate) {
+                    if (_disposed || !_supported) return;
+                    var size = TakeNative(_engine, null, 0);
+                    if (size != 0) {
+                        var buffer = new byte[checked((int)size)];
+                        var written = TakeNative(_engine, buffer, size);
+                        // Producers can evict the probed record between calls. Retry a short copy.
+                        if (written > size) continue;
+                        if (written > 0) json = Encoding.UTF8.GetString(buffer, 0, (int)written - 1);
+                    }
+                }
+                if (json is null) break;
+                try { _receive(_generation, json); }
+                catch (Exception error) {
+                    try { Trace.TraceError("WebScene diagnostic decode failed: {0}", error); }
+                    catch { /* Application Trace listeners must not stop draining. */ }
+                }
+            }
+            // A bounded drain can leave records; schedule another pass.
+            lock (_nativeGate) {
+                if (!_disposed && _supported && TakeNative(_engine, null, 0) > 0)
+                    try { _signal.Release(); } catch (SemaphoreFullException) { }
+            }
+        }
     }
     public void Dispose()
     {

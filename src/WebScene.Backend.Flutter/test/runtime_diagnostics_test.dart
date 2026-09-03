@@ -8,6 +8,30 @@ import 'package:webscene_flutter/webscene_flutter.dart';
 import 'package:webscene_flutter/src/runtime_diagnostics.dart';
 
 void main() {
+  test(
+      'resource failure retains transport metadata without marking runtime failed',
+      () {
+    const failure = WebSceneResourceFailure(
+        url: 'https://test/script.js',
+        method: 'GET',
+        resourceType: 'script',
+        errorCode: 'http',
+        message: 'Resource request failed (http)',
+        httpStatus: 404,
+        duration: Duration(microseconds: 1500));
+    expect(failure.httpStatus, 404);
+    expect(failure.duration.inMicroseconds, 1500);
+    expect(failure.resourceType, 'script');
+    final widget = WebSceneView(
+        documentUrl: 'https://test/',
+        runtime: const WebSceneRuntimeConfiguration(
+            runtimeLibraryPath: '/test/runtime',
+            bridgeLibraryPath: '/test/bridge'),
+        onResourceFailed: (_) {});
+    expect(widget.onResourceFailed, isNotNull);
+    expect(widget.onConsoleMessage, isNull);
+  });
+
   test('console constructor remains compatible and metadata is copied', () {
     const message = WebSceneConsoleMessage('log', 'hello');
     expect(message.arguments, isEmpty);
