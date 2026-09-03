@@ -1,0 +1,44 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Positioned used heights remain definite across formatting-context paths</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<style>
+html,body { margin:0; }
+.shell { position:relative; width:300px; height:240px; }
+.fill { position:absolute; inset:0; }
+.percent { height:100%; overflow:hidden; }
+.toolbar { height:38px; background:green; }
+#grid { display:grid; grid-template-columns:100px 200px; }
+#auto { height:auto; }
+</style>
+<div class="shell" id="only-positioned"><div class="fill"><div class="percent"><div class="toolbar"></div></div></div></div>
+<div class="shell" id="inline">anchor<span class="fill"><div class="percent"><div class="toolbar"></div></div></span></div>
+<div class="shell" id="block"><div>anchor</div><div class="fill"><div class="percent"><div class="toolbar"></div></div></div></div>
+<div class="shell" id="grid"><div>anchor</div><div class="fill"><div class="percent"><div class="toolbar"></div></div></div></div>
+<div class="shell" id="auto"><div class="percent"><div class="toolbar"></div></div></div>
+<script>
+for (const id of ['only-positioned','inline','block','grid']) {
+  test(()=>{
+    const shell=document.getElementById(id),fill=shell.querySelector('.fill'),percent=shell.querySelector('.percent');
+    assert_equals(fill.getBoundingClientRect().height,240,'inset height');
+    assert_equals(percent.getBoundingClientRect().height,240,'percentage child');
+    shell.style.height='360px';
+    assert_equals(percent.getBoundingClientRect().height,360,'percentage child after resize');
+    shell.style.height='240px';
+    assert_equals(percent.getBoundingClientRect().height,240,'percentage child after restore');
+  },'Absolute inset height provides a definite basis in '+id+' formatting');
+}
+test(()=>{
+  assert_equals(document.querySelector('#auto .percent').getBoundingClientRect().height,38);
+},'Ordinary auto-height blocks still do not create a definite percentage basis');
+test(()=>{
+  const host=document.querySelector('#inline .fill');
+  const frame=document.createElement('iframe');
+  frame.style.cssText='display:block;width:100%;height:100%;border:0';
+  host.replaceChildren(frame);
+  assert_equals(frame.getBoundingClientRect().height,240,'chart iframe height');
+  document.getElementById('inline').style.height='180px';
+  assert_equals(frame.getBoundingClientRect().height,180,'iframe follows the resized positioned viewport');
+},'TradingView-shaped percentage iframe fills an inset-sized host');
+</script>

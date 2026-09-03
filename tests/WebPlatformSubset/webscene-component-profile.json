@@ -1004,6 +1004,21 @@
   ],
   "candidate": [
     {
+      "path": "contracts/positioned-height-percentage-paint.html",
+      "type": "reftest",
+      "reference": "contracts/positioned-height-percentage-paint-ref.html",
+      "capabilities": ["absolute-inset-definite-height", "percentage-height", "overflow-hidden-paint"],
+      "evidence": ["sandwich-tradingview-missing-toolbars-2026-09-03"],
+      "reason": "A percentage-height clip below an inline-context positioned host must not hide its painted descendants."
+    },
+    {
+      "path": "contracts/positioned-height-percentage-descendants.html",
+      "type": "testharness",
+      "capabilities": ["absolute-inset-definite-height", "percentage-height", "formatting-context-parity"],
+      "evidence": ["sandwich-tradingview-missing-toolbars-2026-09-03"],
+      "reason": "An inset-sized chart host must provide a definite height to descendants in inline, block and grid layout paths; preserve auto-height behavior."
+    },
+    {
       "path": "contracts/console-no-author-code.html",
       "type": "testharness",
       "capabilities": ["console-methods", "console-safe-object-snapshots"],

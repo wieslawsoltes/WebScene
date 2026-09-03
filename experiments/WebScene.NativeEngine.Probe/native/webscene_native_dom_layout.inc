@@ -2892,8 +2892,7 @@ void native_document::layout_children(dom_node& parent)
                     if (scroll_ancestor == containing_node) break;
                 }
             }
-            layout_child(*child, containing, assigned,
-                is_specified(child->style.height) || (has_top && has_bottom));
+            layout_child(*child, containing, assigned);
             continue;
         }
 
@@ -4340,6 +4339,13 @@ void native_document::layout_child(
                 && !parent->style.grid().auto_columns.empty()));
     if (!inherits_parent_grid_columns) child.clear_grid_layout();
     child.used_height_is_definite = assigned_height_is_definite
+        // All positioned layout paths (including deferred inline and grid
+        // children) resolve authored/inset heights against their containing
+        // block before arriving here. Preserve that definite used size for
+        // percentage descendants; the DOM parent need not itself be definite.
+        || (is_out_of_flow(child.style.position)
+            && (is_specified(child.style.height)
+                || (is_specified(child.style.top) && is_specified(child.style.bottom))))
         || (is_specified(child.style.height)
             && (child.style.height.unit != length_unit::percent
                 || (parent != nullptr && parent->used_height_is_definite)));
