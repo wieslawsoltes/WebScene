@@ -728,7 +728,11 @@
 
     bool dispatch_media_query_list_changes()
     {
-        for (auto& state : media_query_lists) {
+        // Authored callbacks can call matchMedia and reallocate the owner vector.
+        // Keep only the stable pointee across calls and snapshot the dispatch set.
+        const auto query_count = media_query_lists.size();
+        for (size_t query_index = 0; query_index < query_count; ++query_index) {
+            auto* state = media_query_lists[query_index].get();
             if (state == nullptr) continue;
             const auto matches = media_query_matches(state->query);
             if (matches == state->matches) continue;
