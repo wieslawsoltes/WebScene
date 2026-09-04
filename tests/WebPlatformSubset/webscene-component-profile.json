@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/css-grid-gap-alias-flex.html",
+      "type": "testharness",
+      "capabilities": ["legacy-gap-alias", "flex-gap"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Webflow release headings use legacy grid-column-gap on a flex row."
+    },
+    {
       "path": "contracts/css-margin-longhand-priority.html",
       "type": "testharness",
       "capabilities": ["margin-longhand-cascade", "auto-margin-alignment"],

@@ -1720,14 +1720,15 @@
 #endif
         const auto& name = declaration.name;
         if (name == "-moz-transform" || name == "-webkit-transform"
-            || name == "grid-gap") {
+            || name == "grid-gap" || name == "grid-row-gap" || name == "grid-column-gap") {
             feature_decision alias_decision(
                 *this,
                 "css",
                 "property:" + name,
                 "style-application");
             auto normalized = declaration;
-            normalized.name = name == "grid-gap" ? "gap" : "transform";
+            normalized.name = name.starts_with("grid-")
+                ? canonical_css_property_name(name) : "transform";
             apply_css_declaration(node, normalized, inline_origin);
             return;
         }

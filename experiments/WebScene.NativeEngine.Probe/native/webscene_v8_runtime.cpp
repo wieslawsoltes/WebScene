@@ -635,6 +635,7 @@ struct v8_dom_runtime::implementation final {
             "display", "position", "contain", "cssFloat", "flexDirection", "flexFlow",
             "flexGrow", "flexShrink", "flexBasis", "flexWrap",
             "alignItems", "alignSelf", "justifyContent", "gap", "rowGap", "columnGap",
+            "gridGap", "gridRowGap", "gridColumnGap",
             "padding", "paddingInline", "paddingBlock",
             "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
             "paddingInlineStart", "paddingInlineEnd", "paddingBlockStart", "paddingBlockEnd",

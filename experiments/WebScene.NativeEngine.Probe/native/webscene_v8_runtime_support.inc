@@ -947,6 +947,9 @@ std::string canonical_css_property_name(std::string_view name)
             result.push_back(character);
         }
     }
+    if (result == "grid-gap") return "gap";
+    if (result == "grid-row-gap") return "row-gap";
+    if (result == "grid-column-gap") return "column-gap";
     return result;
 }
 
@@ -990,6 +993,9 @@ std::string serialize_cssom_specified_value(
 
 std::string css_property_idl_name(std::string_view name)
 {
+    if (name == "gridGap" || name == "grid-gap") return "gap";
+    if (name == "gridRowGap" || name == "grid-row-gap") return "rowGap";
+    if (name == "gridColumnGap" || name == "grid-column-gap") return "columnGap";
     if (name == "float") return "cssFloat";
     if (name.find('-') == std::string_view::npos) return std::string(name);
     std::string result;

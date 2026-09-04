@@ -489,7 +489,7 @@
         const std::optional<std::string> old_value = previous == node->attributes.end()
             ? std::nullopt
             : std::optional<std::string>(previous->second);
-        const auto name = to_utf8(info.GetIsolate(), info[0]);
+        const auto name = canonical_css_property_name(to_utf8(info.GetIsolate(), info[0]));
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {
             const auto canonical_name = canonical_css_property_name(name);
