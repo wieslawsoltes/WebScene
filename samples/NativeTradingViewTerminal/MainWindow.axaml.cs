@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using WebScene.Backends.Avalonia;
 using WebScene.Backends.Avalonia.Native;
 using WebScene.Backends.Native;
+using WebScene.Diagnostics.Cdp;
 
 namespace NativeTradingViewTerminal;
 
@@ -15,6 +16,7 @@ public sealed partial class MainWindow : Window
     private readonly bool _runtimeMonitoringEnabled;
     private readonly DispatcherTimer? _diagnosticsTimer;
     private AvaloniaResourceLoader? _resourceLoader;
+    private WebSceneV8InspectorHost? _inspectorHost;
     private string _lastMonitoredError = string.Empty;
     private ulong _lastMonitoredScriptErrors;
     private ulong _lastMonitoredFrameScriptErrors;
@@ -105,6 +107,16 @@ public sealed partial class MainWindow : Window
                     return ValueTask.CompletedTask;
                 });
             StatusText.Text = "TradingView terminal loaded";
+            if (_arguments.Contains("--v8-inspector", StringComparer.Ordinal))
+            {
+                _inspectorHost = new WebSceneV8InspectorHost(
+                    TerminalHost.OpenV8InspectorSession,
+                    () => TerminalHost.Source,
+                    new WebSceneV8InspectorOptions { Enabled = true, Port = 9229 },
+                    title: "TradingView sample");
+                await _inspectorHost.StartAsync();
+                Console.WriteLine($"TradingView Inspector: {_inspectorHost.DiscoveryUri}json/list");
+            }
             if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
             {
                 var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
@@ -427,6 +439,7 @@ public sealed partial class MainWindow : Window
     {
         _diagnosticsTimer?.Stop();
         _resourceLoader?.FlushResourceCapture();
+        if (_inspectorHost is not null) await _inspectorHost.DisposeAsync();
         await TerminalHost.DisposeAsync();
     }
 }

@@ -27,6 +27,8 @@ internal static partial class HeadlessProof
             StringComparer.Ordinal);
         Directory.CreateDirectory(output);
         var view = new NativeWebSceneView(useCompositionVisual: false);
+        var resourceFailures = new List<object>();
+        view.ResourceFailed += failure => resourceFailures.Add(failure);
         view.CaptureLegacyConsoleMessages = true;
         var window = new Window
         {
@@ -47,7 +49,30 @@ internal static partial class HeadlessProof
                     paths.CompilationCacheDirectory),
                 TimeSpan.FromSeconds(90));
 
+            if (arguments.Contains("--document-proof", StringComparer.Ordinal))
+            {
+                PumpFrames(view, window, TimeSpan.FromSeconds(8));
+                SaveNativeFrame((NativeSceneSurface)view.Content!, Path.Combine(output,"document.png"),width,height);
+                File.WriteAllText(Path.Combine(output,"features.json"),view.FeatureUseReport);
+                File.WriteAllText(Path.Combine(output,"console.json"),JsonSerializer.Serialize(view.DrainConsoleMessages()));
+                File.WriteAllText(Path.Combine(output,"resources.json"),JsonSerializer.Serialize(resourceFailures));
+                File.WriteAllText(Path.Combine(output,"fonts.json"),JsonSerializer.Serialize(NativeTextShaping.GetWebTypefaceCacheMetrics()));
+                var documentState=view.EvaluateTextAsync("""
+                    JSON.stringify(Array.from(document.querySelectorAll('html,body,ul,li,p,figure,iframe')).slice(0,100).map(n=>{
+                      const s=getComputedStyle(n),r=n.getBoundingClientRect();
+                      return {tag:n.tagName,cls:n.className,text:n.textContent.slice(0,80),rect:r,
+                        css:Object.fromEntries(['fontFamily','fontSize','lineHeight','paddingLeft','paddingTop','paddingBottom','marginTop','marginBottom','backgroundImage','backgroundSize','color','height','width'].map(k=>[k,s[k]]))};
+                    }))
+                    """);
+                PumpUntil(documentState,TimeSpan.FromSeconds(10));
+                File.WriteAllText(Path.Combine(output,"document-state.json"),documentState.Result);
+                return 0;
+            }
             var initialEvidence = WaitForWebSocketEvidence(view, window);
+            if (arguments.Contains("--preview-lines-proof", StringComparer.Ordinal))
+                return CapturePreviewLinesEvidence(view, window, output, width, height);
+            if (arguments.Contains("--table-view-proof", StringComparer.Ordinal))
+                return CaptureTableViewEvidence(view, window, output, width, height);
             if (overlay == "go-to")
             {
                 return CaptureGoToEvidence(view, window, output, width, height,
