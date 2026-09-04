@@ -15,6 +15,23 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class VariableWebFontTests
 {
     [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    public void InstancingIsEnabledByDefaultWithAnExplicitOptOut(string? value, bool expected)
+        => Assert.Equal(expected, NativeTextShaping.ResolveVariableFontInstancingEnabled(value));
+
+    [Fact]
+    public void DefaultRegistryHonorsTheProcessOptOut()
+    {
+        using var registry = NativeTextShaping.CreateWebTypefaceRegistry();
+        registry.Register("Default policy", FontData());
+        var expected = Environment.GetEnvironmentVariable("WEBSCENE_VARIABLE_FONT_INSTANCING") == "0" ? 400 : 700;
+        Assert.Equal(expected, Weight(NativeTextShaping.ResolveTypeface("Default policy", 700, registry)));
+    }
+
+    [Theory]
     [InlineData("Roboto-Variable.ttf", 400)]
     [InlineData("Roboto-Variable.ttf", 550)]
     [InlineData("Roboto-Variable.ttf", 700)]

@@ -1775,9 +1775,10 @@ public static class NativeTextShaping
         }
     }
 
-    // Opt-in until the packaged-platform and interactive performance gates pass.
+    // Enabled by default; an explicit zero is the diagnostic rollback switch.
     internal static readonly bool VariableFontInstancingEnabled =
-        Environment.GetEnvironmentVariable("WEBSCENE_VARIABLE_FONT_INSTANCING") == "1";
+        ResolveVariableFontInstancingEnabled(Environment.GetEnvironmentVariable("WEBSCENE_VARIABLE_FONT_INSTANCING"));
+    internal static bool ResolveVariableFontInstancingEnabled(string? value) => value != "0";
     internal readonly record struct VariableFontMetrics(long Conversions, long Hits, long Failures, double Milliseconds, int Instances, long Bytes);
     private static long _instanceConversions, _instanceHits, _instanceFailures, _instanceTicks, _instanceBytes;
     private static int _instanceCount;

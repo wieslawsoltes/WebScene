@@ -4,9 +4,10 @@
 
 The cache and layout causes below are fixed in WebScene. Variable Roboto weight
 selection is implemented using the **existing** HarfBuzz and SkiaSharp 2.88.9
-stack, without the experimental dependency upgrade. This remains opt-in until
-cross-platform and interactive performance gates pass; the issue is therefore
-**not yet fully qualified for default-on shipping**. See
+stack, without the experimental dependency upgrade. Instancing is enabled by
+default, with `WEBSCENE_VARIABLE_FONT_INSTANCING=0` as the diagnostic opt-out.
+Cross-platform and interactive performance checks remain outstanding; default-on
+does not mean those shipping checks have passed. See
 [variable font weights](../../docs/variable-font-weights.md) for behavior, limits,
 rollback and qualification status. No page-specific CSS or substitute system
 font is used.

@@ -7,11 +7,12 @@ HarfBuzz dependency. Uno continues using its existing dependency versions and
 shares the instancer and registry source. No public host API or native WebScene
 ABI is added by font instantiation.
 
-**Instancing is currently opt-in pending the shipping gates below.** Start the
-process with `WEBSCENE_VARIABLE_FONT_INSTANCING=1` to qualify it.
-`WEBSCENE_VARIABLE_FONT_INSTANCING=0` (or leaving it unset during qualification)
-retains the previous variable font default-face behavior. Read once at startup;
-restart the process after changing this diagnostic switch.
+**Instancing is enabled by default.** No environment variable is required.
+Set `WEBSCENE_VARIABLE_FONT_INSTANCING=0` to opt out and retain the previous
+variable font default-face behavior. Only an explicit `0` disables instancing;
+`1` or an unset/empty value enables it. Read once at startup; restart the process
+after changing this diagnostic switch. The pending qualification checks below
+remain outstanding; default-on is not a claim that they have passed.
 
 ## Supported behavior
 
@@ -99,7 +100,7 @@ dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- \
   probe variable-font /absolute/path/to/variable-font.ttf
 ```
 
-Before enabling by default, require packaged macOS arm64 / Windows x64 / Linux
+Before a package release, require packaged macOS arm64 / Windows x64 / Linux
 x64 execution, the applicable Uno tests, a same-viewport Chrome release-notes
 comparison, and warmed TradingView crosshair and colour-picker drag comparisons
 against the restored baseline. Require zero new warm conversions, no reproducible
