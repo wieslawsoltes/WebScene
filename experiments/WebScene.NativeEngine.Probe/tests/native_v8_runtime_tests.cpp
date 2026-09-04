@@ -84,6 +84,7 @@ uint8_t measure_baseline_fixture_text(
 #include "native_v8_runtime_layout_scene_tests.inc"
 #include "native_v8_runtime_canvas_tests.inc"
 #include "native_v8_runtime_frame_scheduling_tests.inc"
+#include "native_youtube_embed_tests.inc"
 #include "native_v8_runtime_browser_dom_tests.inc"
 #include "native_v8_runtime_resize_observer_tests.inc"
 #include "native_v8_runtime_rendering_metrics_tests.inc"
@@ -121,6 +122,7 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "youtube-embed") { test_youtube_embed_fallback(); return 0; }
         if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
         if (selected == "resource-failure-diagnostics") { test_resource_failure_diagnostics(); return 0; }
         if (selected == "media-query-reentrant") { test_media_query_callback_can_create_more_queries(); return 0; }
@@ -526,6 +528,7 @@ int main()
     test_deferred_frame_script_observes_window_dom_content_loaded();
     test_cooperative_iframe_hydration_yields_and_isolates_cascade();
     test_loaded_iframe_replaces_provisional_layout_root();
+    test_youtube_embed_fallback();
     test_outer_dynamic_recascade_preserves_iframe_cascade();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();

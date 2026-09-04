@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/youtube-embed-fallback.html",
+      "type": "testharness",
+      "capabilities": ["youtube-embed-fallback", "iframe-layout", "external-navigation"],
+      "evidence": ["stackwich-1296-release-notes"],
+      "reason": "WebScene-specific unsupported-media fallback contract, not standard browser playback conformance. Thumbnail/link must stay inside the authored iframe at compact and expanded sizes."
+    },
+    {
       "path": "contracts/css-variable-font-weight.html",
       "type": "testharness",
       "capabilities": ["web-font-weight", "variable-font-instancing", "woff2-font", "canvas-text-metrics"],

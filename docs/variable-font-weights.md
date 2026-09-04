@@ -89,7 +89,8 @@ these local results are not Windows/Linux package execution evidence.
 
 The refreshed Chrome comparison at 800 × 1100 CSS pixels matched title-row and
 list-row geometry (first heading width differed by 0.12 px). WebScene's blank
-YouTube preview regions are an explicitly separate unsupported feature. The
+YouTube preview regions were outside that font qualification; they now have a
+separate [thumbnail/external-browser fallback](embedded-media-fallback.md). The
 actual release-page Roboto TTF, Roboto Mono TTF and Manrope WOFF2 all instantiated
 at 400/550/700 with the existing native library.
 

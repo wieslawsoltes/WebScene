@@ -442,11 +442,13 @@
                             node.attributes["object-html"] = object_url->second;
                         }
                     }
-                    node.style.width = {100, length_unit::percent};
-                    node.style.height = {100, length_unit::percent};
-                    node.style.background_rgba = 0x131722FFU;
-                    node.style.inline_property_mask |=
-                        inline_width | inline_height | inline_background;
+                    if (!install_embed_fallback(node)) {
+                        node.style.width = {100, length_unit::percent};
+                        node.style.height = {100, length_unit::percent};
+                        node.style.background_rgba = 0x131722FFU;
+                        node.style.inline_property_mask |=
+                            inline_width | inline_height | inline_background;
+                    }
                     if (node.attributes.contains("object-html")) {
                         pending_frame_hydrations.push_back(&node);
                     }
@@ -699,10 +701,12 @@
                     const auto object_url = object_urls.find(source->second);
                     if (object_url != object_urls.end()) node.attributes["object-html"] = object_url->second;
                 }
-                node.style.width = {100, length_unit::percent};
-                node.style.height = {100, length_unit::percent};
-                node.style.background_rgba = 0x131722FFU;
-                node.style.inline_property_mask |= inline_width | inline_height | inline_background;
+                if (!install_embed_fallback(node)) {
+                    node.style.width = {100, length_unit::percent};
+                    node.style.height = {100, length_unit::percent};
+                    node.style.background_rgba = 0x131722FFU;
+                    node.style.inline_property_mask |= inline_width | inline_height | inline_background;
+                }
                 if (node.attributes.contains("object-html")) pending_frame_hydrations.push_back(&node);
             }
 

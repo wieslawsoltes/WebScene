@@ -767,7 +767,29 @@
             }
             auto& image = node.mutable_replaced_image();
             if (!image.complete || image.source != source->second) {
+                const auto advance_thumbnail = [&]() {
+                    const auto marker = node.attributes.find("data-webscene-thumbnail");
+                    if (marker == node.attributes.end() || marker->second != "youtube") return false;
+                    const auto next = webscene::embed_fallback::next_thumbnail(source->second);
+                    if (!next) return false;
+                    source->second = *next;
+                    // hqdefault is a 4:3 image containing a letterboxed 16:9
+                    // poster. Crop its bars inside the existing clipped link.
+                    if (next->ends_with("/hqdefault.jpg")) {
+                        for (const css_declaration declaration : {
+                                css_declaration{"top", "-16.666667%"},
+                                css_declaration{"height", "133.333333%"}}) {
+                            if (store_inline_declaration(node, declaration))
+                                apply_css_declaration(node, declaration, true);
+                        }
+                    }
+                    node.clear_replaced_image();
+                    enqueue_connected_resource_if_needed(node, wrapper, local_context);
+                    document.mark_dirty();
+                    return true;
+                };
                 const auto mark_broken_image = [&]() {
+                    if (advance_thumbnail()) return true;
                     image.source = source->second;
                     image.resolved_source.clear();
                     image.markup.clear();
@@ -822,6 +844,7 @@
                 std::istringstream view_box_stream(view_box);
                 view_box_stream
                     >> view_x >> view_y >> view_width >> view_height;
+                if (view_width < 640 && advance_thumbnail()) return true;
                 image.source = source->second;
                 image.resolved_source = std::move(resolved_source);
                 image.markup = std::move(markup);

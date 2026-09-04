@@ -2380,6 +2380,23 @@
             }
         }
 
+        // Navigation replaces the previous document's layout root. Preserve
+        // existing JS references until the frame is disposed, but never stack
+        // old and new documents vertically inside the same iframe.
+        if (const auto previous = actual_frame_contexts.find(frame.id);
+            previous != actual_frame_contexts.end() && !previous->second.IsEmpty()) {
+            const auto previous_context = previous->second.Get(isolate);
+            auto* previous_root = static_cast<dom_node*>(previous_context->GetAlignedPointerFromEmbedderData(
+                1, v8::kEmbedderDataTypeTagDefault));
+            if (previous_root != nullptr && previous_root->parent == &frame) {
+                previous_root->mutable_authored_style().declarations["display"] = "none";
+                previous_root->style.inline_property_mask |= inline_display;
+                previous_root->style.display = display_mode::none;
+                previous_root->visible = false;
+                static_cast<void>(deactivate_connected_stylesheets(*previous_root, false));
+                cancel_detached_frame_context_tasks(previous_context);
+            }
+        }
         auto& frame_body = document.create_element("body");
         frame_base_addresses[&frame_body] = frame_base_address;
         activate_css_cascade(&frame_body);
@@ -2555,6 +2572,12 @@
             v8::kEmbedderDataTypeTagDefault);
         frame_context.Reset(isolate, local_frame_context);
         install_frame_globals(local_frame_context, frame, frame_body);
+        {
+            // Parser-created images need the same resource task as appended
+            // images, using their own frame's URL and wrapper context.
+            v8::Context::Scope image_context_scope(local_frame_context);
+            enqueue_connected_image_resources_subtree(frame_body, local_frame_context);
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         register_inspector_context(
             local_frame_context,

@@ -644,6 +644,18 @@
         return const_cast<dom_node*>(active_css_cascade_root);
     }
 
+    v8::Local<v8::Context> context_for_node(const dom_node& node)
+    {
+        for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor->tag != "iframe") continue;
+            const auto owner = actual_frame_contexts.find(ancestor->id);
+            if (owner != actual_frame_contexts.end() && !owner->second.IsEmpty()) {
+                return owner->second.Get(isolate);
+            }
+        }
+        return context.Get(isolate);
+    }
+
     dom_node& active_root()
     {
         auto local_context = isolate->GetCurrentContext();
@@ -1764,6 +1776,23 @@
         }
     }
 
+    bool install_embed_fallback(dom_node& node)
+    {
+        if (!webscene::embed_fallback::enabled() || node.attributes.contains("frame-html")
+            || node.attributes.contains("srcdoc")) return false;
+        const auto source = node.attributes.find("src");
+        if (source == node.attributes.end()) return false;
+        const auto resolved = resolve_resource_url(source->second, current_base_address());
+        const auto title = node.attributes.find("title");
+        auto html = webscene::embed_fallback::document(resolved,
+            title == node.attributes.end() ? std::string_view{} : title->second);
+        if (!html) return false;
+        node.attributes["object-html"] = std::move(*html);
+        node.attributes["data-webscene-embed-fallback"] = "youtube";
+        node.attributes["data-webscene-remote-result"] = "loaded";
+        return true;
+    }
+
     void enqueue_iframe_hydration_if_needed(dom_node& node)
     {
         if (!is_connected(node)) return;
@@ -1775,8 +1804,15 @@
             }
             return;
         }
+        // Intercept before either document prefetch or script preparation. A
+        // fallback is an engine-owned document; no player resources are loaded.
+        const auto fallback = install_embed_fallback(node);
         const auto source = node.attributes.find("src");
-        if (source != node.attributes.end()) {
+        if (!fallback && source != node.attributes.end()) {
+            if (node.attributes.erase("data-webscene-embed-fallback") != 0) {
+                node.attributes.erase("object-html");
+                node.attributes.erase("data-webscene-remote-result");
+            }
             const auto object = object_urls.find(source->second);
             if (object != object_urls.end()) {
                 node.attributes["object-html"] = object->second;

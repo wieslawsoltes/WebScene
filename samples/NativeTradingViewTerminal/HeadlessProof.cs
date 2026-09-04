@@ -52,6 +52,8 @@ internal static partial class HeadlessProof
             if (arguments.Contains("--document-proof", StringComparer.Ordinal))
             {
                 PumpFrames(view, window, TimeSpan.FromSeconds(8));
+                if (arguments.Contains("--youtube-proof", StringComparer.Ordinal))
+                    CaptureYoutubeEvidence(view, window, output, width, height);
                 SaveNativeFrame((NativeSceneSurface)view.Content!, Path.Combine(output,"document.png"),width,height);
                 File.WriteAllText(Path.Combine(output,"features.json"),view.FeatureUseReport);
                 File.WriteAllText(Path.Combine(output,"console.json"),JsonSerializer.Serialize(view.DrainConsoleMessages()));

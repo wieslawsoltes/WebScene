@@ -1,5 +1,6 @@
 #include "webscene_v8_runtime.h"
 #include "webscene_runtime_diagnostics.h"
+#include "webscene_embed_fallback.h"
 
 #include "webscene_native_dom.h"
 #include "webscene_native_websocket.h"
@@ -3877,6 +3878,7 @@ struct v8_dom_runtime::implementation final {
         auto* anchor = &target;
         while (anchor != nullptr && anchor->tag != "a") anchor = anchor->parent;
         if (anchor == nullptr) return true;
+        v8::Context::Scope navigation_context_scope(context_for_node(*anchor));
         const auto authored = anchor->attributes.find("href");
         if (authored == anchor->attributes.end() || authored->second.empty()) return true;
         if (anchor->attributes.contains("download")) {
@@ -3965,9 +3967,7 @@ struct v8_dom_runtime::implementation final {
         const auto lower = lower_html_name(resolved);
         if (!lower.starts_with("https://") && !lower.starts_with("http://")) return true;
 
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
+        auto local_context = isolate->GetCurrentContext();
         auto request = v8::Object::New(isolate);
         request->Set(
             local_context,

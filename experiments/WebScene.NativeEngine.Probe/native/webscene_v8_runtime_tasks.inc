@@ -1385,6 +1385,14 @@
         bool* default_prevented = nullptr,
         dom_node* submitter = nullptr)
     {
+        const auto previous_context = isolate->GetCurrentContext();
+        auto local_context = context_for_node(target);
+        v8::Context::Scope event_context_scope(local_context);
+        activate_css_cascade(local_context);
+        const auto restore_cascade = [this, previous_context](void*) {
+            activate_css_cascade(previous_context);
+        };
+        std::unique_ptr<void, decltype(restore_cascade)> cascade_scope(this, restore_cascade);
         // Event listeners and their microtasks form one browser task. A
         // computed-style or geometry getter calls ensure_layout() and remains
         // a synchronous style-recalculation barrier within this scope.
@@ -1400,9 +1408,6 @@
         ++event_dispatch_target_counts[type][target.id];
 #endif
         const auto callback_count_before = input_callback_invocation_count;
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
         auto event = create_event_instance(local_context);
         auto target_wrapper = wrap_node(target);
         const auto set_number = [&](const char* name, double value) {
@@ -2332,6 +2337,12 @@
                 return set_active_element(next, input);
             }
         }
+        if (!prevented && key_code == 13 && target->tag == "a"
+            && target->attributes.contains("href") && is_connected(*target)) {
+            bool click_prevented = false;
+            if (!dispatch_input_event_type(input, "click", *target, &click_prevented)) return false;
+            return click_prevented || queue_external_navigation(*target);
+        }
         if (!prevented && key_code == 13 && target->tag == "input") {
             return perform_implicit_submission(input, *target);
         }
@@ -2724,12 +2735,23 @@
         auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
+        // Hit-test the complete host viewport before choosing a browsing
+        // context. The most recently loaded iframe does not own all input.
+        auto local_context = context.Get(isolate);
+        {
+            v8::Context::Scope layout_context_scope(local_context);
+            activate_css_cascade(local_context);
+            ensure_layout();
+        }
+        const auto keyboard = input.kind == WEBSCENE_INPUT_KEY_DOWN
+            || input.kind == WEBSCENE_INPUT_KEY_UP || input.kind == WEBSCENE_INPUT_TEXT;
+        auto* initial_hit_target = keyboard ? nullptr : document.hit_test(
+            document.body(), static_cast<float>(input.x), static_cast<float>(input.y));
+        auto* input_owner = keyboard ? active_element
+            : pointer_capture_target != nullptr ? pointer_capture_target : initial_hit_target;
+        if (input_owner != nullptr) local_context = context_for_node(*input_owner);
         activate_css_cascade(local_context);
         v8::Context::Scope context_scope(local_context);
-        ensure_layout();
         v8::TryCatch try_catch(isolate);
         const auto report_input_exception = [&] {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -2833,11 +2855,8 @@
             // their move/up stream, without restoring :hover outside the host.
             if (pointer_down_target == nullptr) return true;
         }
-        auto* hit_target = document.hit_test(
-            active_root(),
-            static_cast<float>(input.x),
-            static_cast<float>(input.y));
-        if (hit_target == nullptr) hit_target = &active_root();
+        auto* hit_target = initial_hit_target;
+        if (hit_target == nullptr) hit_target = &document.body();
         if (pointer_outside) {
             hit_target = pointer_capture_target != nullptr
                 ? pointer_capture_target : &active_root();
@@ -2971,7 +2990,7 @@
             // leaving the toolbar opener permanently in its `isOpened` state.
             ensure_layout();
             hit_target = document.hit_test(
-                active_root(),
+                document.body(),
                 static_cast<float>(input.x),
                 static_cast<float>(input.y));
             if (hit_target == nullptr) hit_target = &active_root();
@@ -3121,7 +3140,14 @@
                 const auto maximum_y = std::max(
                     0.0F,
                     scroll_target->scroll_content_height - scroll_target->scroll_viewport_height);
-                const auto* exposed_root = &active_root();
+                // The retained viewport belongs to the outer document, not
+                // whichever iframe context last ran script or loaded. In
+                // particular an overflow:hidden embed must not disable page
+                // scrolling, including wheel input outside the embed.
+                const auto* exposed_root = static_cast<const dom_node*>(
+                    context.Get(isolate)->GetAlignedPointerFromEmbedderData(
+                        1, v8::kEmbedderDataTypeTagDefault));
+                if (exposed_root == nullptr) exposed_root = &document.body();
                 const auto root_viewport_scroll_x = scroll_target == &document.body()
                     && (exposed_root->style.overflow_x == overflow_mode::visible
                         || exposed_root->style.scroll_x_enabled);
@@ -3255,7 +3281,7 @@
             || input.kind == WEBSCENE_INPUT_POINTER_UP) {
             ensure_layout();
             auto* cursor_target = document.hit_test(
-                active_root(),
+                document.body(),
                 static_cast<float>(input.x),
                 static_cast<float>(input.y));
             current_cursor_kind_value = cursor_target == nullptr
