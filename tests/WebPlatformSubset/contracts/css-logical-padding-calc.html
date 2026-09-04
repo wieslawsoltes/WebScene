@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8">
+<title>Logical padding shorthands preserve calc component values</title>
+<link rel="help" href="https://drafts.csswg.org/css-logical/#propdef-padding-inline">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+#host { --gap:calc(var(--adaptive, 1)*20px + var(--fixed, 0)*40px); }
+#item { padding-inline:var(--gap); padding-block:calc(10px + 5px) calc(10px - 3px); }
+#item::before { content:""; display:inline-block; width:0;height:1px; padding-inline:calc(2px + 3px) calc(4px + 3px); }
+#tail{display:inline-block;width:1px;height:1px}
+</style>
+<div id="host"><div id="item"><span id="tail"></span></div></div>
+<script>
+test(()=>{const s=getComputedStyle(item);assert_equals(s.paddingLeft,'20px');assert_equals(s.paddingRight,'20px');assert_equals(s.paddingTop,'15px');assert_equals(s.paddingBottom,'7px');},'Stylesheet logical padding parses whole calc expressions');
+test(()=>{assert_equals(tail.getBoundingClientRect().left-item.getBoundingClientRect().left,32);},'Generated boxes reserve their calculated padding in inline layout');
+test(()=>{host.style.setProperty('--adaptive','0');host.style.setProperty('--fixed','1');assert_equals(getComputedStyle(item).paddingLeft,'40px');},'Inherited variable updates recompute logical padding');
+</script>

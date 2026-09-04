@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8">
+<title>Out-of-range negative sizes do not replace CSS declarations</title>
+<link rel="help" href="https://drafts.csswg.org/css-sizing-3/#preferred-size-properties">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<script>
+for (const property of ['width','height','min-width','min-height','max-width','max-height']) {
+  for (const value of ['-83px','-2em','-10%']) test(()=>{
+    const style=document.createElement('div').style;
+    style.setProperty(property,'100px');
+    style.setProperty(property,value);
+    assert_equals(style.getPropertyValue(property),'100px');
+    const idl=property.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());
+    style[idl]=value;
+    assert_equals(style.getPropertyValue(property),'100px');
+  },property+' rejects '+value+' through both CSSOM setters');
+}
+test(()=>{
+  const s=document.createElement('div').style;
+  s.height='-0px'; assert_true(parseFloat(s.height)===0);
+  s.height='calc(-10px)'; assert_not_equals(s.height,'0px','Math is range-clamped at used-value time');
+  s.marginTop='-83px'; assert_equals(s.marginTop,'-83px','Negative margins remain valid');
+},'Range checks preserve valid zero, math and negative margins');
+</script>

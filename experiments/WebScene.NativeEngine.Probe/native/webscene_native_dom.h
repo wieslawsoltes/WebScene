@@ -78,7 +78,8 @@ enum class position_mode : uint8_t {
     normal,
     relative,
     absolute,
-    fixed
+    fixed,
+    sticky
 };
 
 enum class flex_direction : uint8_t {
@@ -1424,6 +1425,8 @@ struct dom_node final {
 };
 
 display_mode blockified_display(const dom_node& node) noexcept;
+const dom_node& css_document_element(const dom_node& node) noexcept;
+float document_root_font_size(const dom_node& node) noexcept;
 
 class native_document final {
 public:
@@ -1866,6 +1869,8 @@ private:
         float available,
         float fallback) const;
     float resolve_length(css_length value, float available, float fallback) const;
+    float resolve_vertical_padding(const dom_node& node, css_length value,
+        float available, float fallback) const;
     static bool is_specified(css_length value);
     float intrinsic_size(
         const dom_node& node,
@@ -1890,7 +1895,10 @@ private:
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes,
         bool inherited_visibility_hidden,
-        bool defer_fixed_descendants) const;
+        bool defer_fixed_descendants,
+        bool defer_positive_descendants = false,
+        const dom_node* paint_target = nullptr,
+        const node_style::pseudo_element* paint_pseudo_target = nullptr) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,

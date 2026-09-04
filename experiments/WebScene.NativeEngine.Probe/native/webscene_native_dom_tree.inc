@@ -753,6 +753,19 @@ dom_node* native_document::hit_test_node(
     const auto bottom = std::max(transformed_top, transformed_bottom);
     const auto inside = x >= left && y >= top && x <= right && y <= bottom;
     if (inside || !node.style.clip || ignore_own_clip) {
+        if (style_establishes_atomic_stacking_context(node) || node.contains_retained_canvas) {
+            std::vector<dom_node*> elevated;
+            for (auto* child : composed_children(node)) collect_positive_stacking_nodes(*this,*child,elevated);
+            std::stable_sort(elevated.begin(),elevated.end(),[](const auto* a,const auto* b) {
+                return a->style.z_index < b->style.z_index;
+            });
+            for (auto it=elevated.rbegin();it!=elevated.rend();++it) {
+                auto hidden=visibility_hidden;
+                auto pointer_none=pointer_events_none;
+                if (!stacking_ancestors_allow_hit(*this,**it,node,x,y,hidden,pointer_none)) continue;
+                if (auto* hit=hit_test_node(**it,x,y,hidden,pointer_none)) return hit;
+            }
+        }
         // Within a stacking context, larger z-index descendants are painted
         // and hit-tested above later zero-z DOM siblings. Component libraries place
         // its pane legend (including the Volume expander) at z-index:6 while

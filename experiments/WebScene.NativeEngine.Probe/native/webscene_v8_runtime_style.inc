@@ -622,6 +622,7 @@
         } else if (name == "position") {
             node->style.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
             node->style.inline_property_mask |= inline_position;
@@ -996,6 +997,7 @@
             } else if (name == "position") {
                 value = node->style.position == position_mode::absolute ? "absolute"
                     : node->style.position == position_mode::fixed ? "fixed"
+                    : node->style.position == position_mode::sticky ? "sticky"
                     : node->style.position == position_mode::relative ? "relative"
                     : "static";
             } else if (name == "contain") {
@@ -1492,6 +1494,7 @@
         } else if (name == "position") {
             value = node->style.position == position_mode::absolute ? "absolute"
                 : node->style.position == position_mode::fixed ? "fixed"
+                : node->style.position == position_mode::sticky ? "sticky"
                 : node->style.position == position_mode::relative ? "relative"
                 : "static";
         } else if (name == "cssFloat") {
@@ -1998,6 +2001,7 @@
         } else if (name == "position") {
             node->style.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
             node->style.inline_property_mask |= inline_position;

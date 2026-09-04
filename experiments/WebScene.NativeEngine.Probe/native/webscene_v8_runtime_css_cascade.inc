@@ -591,6 +591,7 @@
         } else if (name == "position") {
             pseudo.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
         } else if (name == "z-index") {
@@ -653,11 +654,10 @@
                     : values.size() > 1 ? values[1] : values[0];
             }
         } else if (name == "padding-inline" || name == "padding-block") {
-            std::istringstream stream(value);
-            std::string first;
-            std::string second;
-            stream >> first >> second;
-            if (!first.empty()) {
+            const auto tokens = split_transition_tokens(value);
+            if (!tokens.empty() && tokens.size() <= 2U) {
+                const auto& first = tokens[0];
+                const auto& second = tokens.size() == 2U ? tokens[1] : tokens[0];
                 const auto start = native_document::parse_length(first);
                 const auto end = second.empty()
                     ? start : native_document::parse_length(second);
@@ -2381,21 +2381,7 @@
             }
         } else if ((name == "padding-block" || name == "padding-inline")
             && !is_inline(inline_padding)) {
-            std::istringstream stream(value);
-            std::string first;
-            std::string second;
-            stream >> first >> second;
-            if (!first.empty()) {
-                const auto start = native_document::parse_length(first);
-                const auto end = native_document::parse_length(second.empty() ? first : second);
-                if (name == "padding-block") {
-                    node.style.padding_top = start;
-                    node.style.padding_bottom = end;
-                } else {
-                    node.style.padding_left = start;
-                    node.style.padding_right = end;
-                }
-            }
+            apply_padding_declaration(node.style, name, value);
         } else if ((name == "padding-left" || name == "padding-inline-start")
             && !is_inline(inline_padding)) {
             node.style.padding_left = native_document::parse_length(value);
@@ -2510,6 +2496,7 @@
                 ? node.parent->style.position
                 : value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
         } else if (name == "float" && !is_inline(inline_float)) {

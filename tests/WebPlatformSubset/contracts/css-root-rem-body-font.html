@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8">
+<title>Rem units use the document element, not the body or outer frame</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>body{font-size:14px;margin:0}#box{padding-left:3.5rem;height:1rem;font-size:12px}</style>
+<div id="box"></div>
+<script>
+test(()=>{
+  assert_equals(getComputedStyle(document.documentElement).fontSize,'16px');
+  assert_equals(getComputedStyle(box).paddingLeft,'56px');
+  assert_equals(box.getBoundingClientRect().height,16);
+  document.documentElement.style.fontSize='20px';
+  assert_equals(getComputedStyle(box).paddingLeft,'70px');
+  assert_equals(box.getBoundingClientRect().height,20);
+},'Root initial font and rem sizing are independent of the 14px body');
+</script>

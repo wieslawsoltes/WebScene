@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8">
+<title>Vertical percentage padding uses the containing block width</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>body{margin:0}#host{width:400px;height:600px}#ratio{position:relative;width:60%;height:0;padding-bottom:33.75%}#child{position:absolute;inset:0}</style>
+<div id="host"><div id="ratio"><div id="child"></div></div></div>
+<script>
+test(()=>{
+ assert_equals(ratio.getBoundingClientRect().width,240);
+ assert_equals(ratio.getBoundingClientRect().height,135);
+ assert_equals(child.getBoundingClientRect().height,135);
+ host.style.width='800px';
+ assert_equals(ratio.getBoundingClientRect().height,270);
+ assert_equals(child.getBoundingClientRect().height,270);
+},'A percentage-padding aspect-ratio wrapper and absolute child track inline size');
+</script>

@@ -73,6 +73,7 @@ uint8_t measure_baseline_fixture_text(
 #endif
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
+#include "native_table_cell_copy_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
 #include "native_v8_runtime_diagnostics_tests.inc"
 #include "native_resource_failure_diagnostics_tests.inc"
@@ -120,6 +121,7 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
         if (selected == "resource-failure-diagnostics") { test_resource_failure_diagnostics(); return 0; }
         if (selected == "media-query-reentrant") { test_media_query_callback_can_create_more_queries(); return 0; }
         if (selected == "runtime-diagnostics") {
@@ -684,6 +686,7 @@ int main()
     test_event_listener_options_reach_native_input_and_resize(engine);
     test_listener_added_during_dispatch_waits_for_next_event(engine);
     test_node_filter_tree_walker_focus_navigation(engine);
+    test_table_cell_click_copies_text_to_host();
     test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
     test_document_create_event_and_init_event(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);

@@ -512,11 +512,30 @@ float native_document::resolve_length(
         return value.value * resolved_font_size(context);
     }
     if (value.unit == length_unit::rem) {
-        auto* root = &context;
-        while (root->parent != nullptr) root = root->parent;
-        return value.value * resolved_font_size(*root);
+        return value.value * document_root_font_size(context);
     }
     return resolve_length(value, available, fallback);
+}
+
+float native_document::resolve_vertical_padding(
+    const dom_node& node, css_length value, float available, float fallback) const
+{
+    if (value.unit != length_unit::percent) return resolve_length(node,value,available,fallback);
+    const auto* container = composed_parent(node);
+    const auto positioned = is_out_of_flow(node.style.position);
+    if (positioned) {
+        while (container != nullptr && container->style.position == position_mode::normal
+            && !container->style.transform_stacking_context) container = composed_parent(*container);
+    }
+    auto inline_size = viewport_width_;
+    if (container != nullptr) {
+        inline_size = positioned
+            ? container->layout.width
+                - resolve_length(*container,container->style.border_left_width,container->layout.width,0)
+                - resolve_length(*container,container->style.border_right_width,container->layout.width,0)
+            : container->scroll_viewport_width;
+    }
+    return resolve_length(node,value,std::max(0.0F,inline_size),fallback);
 }
 
 float native_document::resolve_length(css_length value, float available, float fallback) const

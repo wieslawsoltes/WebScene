@@ -185,8 +185,18 @@ void native_document::append_scene(
     std::vector<webscene_scene_string>& strings,
     std::vector<char>& string_bytes,
     bool inherited_visibility_hidden,
-    bool defer_fixed_descendants) const
+    bool defer_fixed_descendants,
+    bool defer_positive_descendants,
+    const dom_node* paint_target,
+    const node_style::pseudo_element* paint_pseudo_target) const
 {
+    const auto elevated_target = paint_target == &node;
+    const auto pseudo_only = elevated_target && paint_pseudo_target != nullptr;
+    if (paint_target == &node) paint_target = nullptr;
+    const auto owns_stacking_scope = paint_target == nullptr && !pseudo_only
+        && (elevated_target || !defer_positive_descendants
+            || style_establishes_atomic_stacking_context(node)
+            || node.contains_retained_canvas);
     const auto* animation = node.animation_runtime();
     const auto opacity = std::clamp(
         animation != nullptr && animation->opacity_animation_initialized
@@ -279,7 +289,7 @@ void native_document::append_scene(
     const auto visibility_hidden = node.style.visibility_specified
         ? node.style.visibility_hidden
         : inherited_visibility_hidden;
-    const auto paint_self = !visibility_hidden;
+    const auto paint_self = !visibility_hidden && paint_target == nullptr && !pseudo_only;
     const auto paint_box_in_foreground = [&] {
         auto fixed_layer = false;
         auto outermost_z_index = 0;
@@ -390,7 +400,8 @@ void native_document::append_scene(
         return (radius_bits << 16U) | width_bits;
     };
     const auto append_pseudo = [&](const node_style::pseudo_element& pseudo) {
-        if (!paint_self || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
+        if ((!paint_self && !(pseudo_only && &pseudo == paint_pseudo_target && !visibility_hidden))
+            || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
         const auto after_retained_canvas = &pseudo == &node.style.after_pseudo()
             && node.contains_retained_canvas
             && !(pseudo.z_index < 0 && pseudo.position != position_mode::normal);
@@ -1361,9 +1372,9 @@ void native_document::append_scene(
             node, node.style.padding_left, node.layout.width, 0);
         const auto padding_right = resolve_length(
             node, node.style.padding_right, node.layout.width, 0);
-        const auto padding_top = resolve_length(
+        const auto padding_top = resolve_vertical_padding(
             node, node.style.padding_top, node.layout.height, 0);
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             node, node.style.padding_bottom, node.layout.height, 0);
         auto x = node.layout.x + padding_left;
         auto y = node.layout.y + padding_top;
@@ -1605,8 +1616,20 @@ void native_document::append_scene(
         });
     for (const auto& entry : ordered_paint) {
         if (entry.child != nullptr) {
+            if (pseudo_only) continue;
             if (defer_fixed_descendants
                 && entry.child->style.position == position_mode::fixed) {
+                continue;
+            }
+            if (paint_target != nullptr) {
+                auto* branch = paint_target;
+                while (branch != nullptr && composed_parent(*branch) != &node) {
+                    branch = composed_parent(*branch);
+                }
+                if (entry.child != branch) continue;
+            } else if (entry.child->style.z_index > 0) {
+                // Emitted by the nearest stacking scope below, without also
+                // repainting the z-index:auto ancestors' own content.
                 continue;
             }
             append_scene(
@@ -1615,9 +1638,49 @@ void native_document::append_scene(
                 strings,
                 string_bytes,
                 visibility_hidden,
-                defer_fixed_descendants);
+                defer_fixed_descendants,
+                true,
+                paint_target,
+                paint_pseudo_target);
         } else if (entry.pseudo != nullptr) {
+            if (!pseudo_only && entry.z_index > 0) continue;
             append_pseudo(*entry.pseudo);
+        }
+    }
+    if (owns_stacking_scope) {
+        std::vector<local_paint_entry> elevated_paint;
+        const auto collect = [&](const auto& self, const dom_node& current) -> void {
+            if (&current != &node) {
+                if (current.style.z_index > 0) {
+                    elevated_paint.push_back({&current,nullptr,current.style.z_index,elevated_paint.size()});
+                    return;
+                }
+                if (style_establishes_atomic_stacking_context(current) || current.contains_retained_canvas) return;
+            }
+            const auto add_pseudo = [&](const node_style::pseudo_element& pseudo) {
+                if (pseudo.generated && !pseudo.display_none && pseudo.z_index > 0) {
+                    elevated_paint.push_back({&current,&pseudo,pseudo.z_index,elevated_paint.size()});
+                }
+            };
+            add_pseudo(current.style.before_pseudo());
+            for (const auto* child : composed_children(current)) self(self,*child);
+            add_pseudo(current.style.after_pseudo());
+        };
+        collect(collect,node);
+        std::stable_sort(elevated_paint.begin(), elevated_paint.end(), [](const auto& a, const auto& b) {
+            return a.z_index < b.z_index;
+        });
+        for (const auto& entry : elevated_paint) {
+            const auto* target = entry.child;
+            if (target == &node) { append_pseudo(*entry.pseudo); continue; }
+            if (defer_fixed_descendants && target->style.position == position_mode::fixed) continue;
+            const auto* branch = target;
+            while (branch != nullptr && composed_parent(*branch) != &node) branch = composed_parent(*branch);
+            if (branch == nullptr) continue;
+            // Walk only this branch. Ancestors retain overflow clips and
+            // visibility inheritance but do not duplicate backgrounds or SVGs.
+            append_scene(*branch, commands, strings, string_bytes,
+                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo);
         }
     }
     if (clip_contents) {
@@ -1642,9 +1705,9 @@ void native_document::append_scene(
             node, node.style.padding_left, node.layout.width, 0);
         const auto padding_right = resolve_length(
             node, node.style.padding_right, node.layout.width, 0);
-        const auto padding_top = resolve_length(
+        const auto padding_top = resolve_vertical_padding(
             node, node.style.padding_top, node.layout.height, 0);
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             node, node.style.padding_bottom, node.layout.height, 0);
         const auto viewport_x = node.layout.x + border_left + padding_left;
         const auto viewport_y = node.layout.y + border_top + padding_top;

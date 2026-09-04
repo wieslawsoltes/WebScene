@@ -278,6 +278,8 @@
       ],
       "methods": [
         { "name": "scrollIntoView", "callback": "element_scroll_into_view", "length": 0 },
+        { "name": "scrollTo", "callback": "element_scroll_to", "length": 0 },
+        { "name": "scroll", "callback": "element_scroll_to", "length": 0 },
         { "name": "getContext", "callback": "canvas_get_context", "length": 1 },
         { "name": "toDataURL", "callback": "canvas_to_data_url", "length": 0 },
         { "name": "toBlob", "callback": "canvas_to_blob", "length": 1 },
@@ -292,6 +294,15 @@
         { "name": "click", "callback": "element_click", "length": 0 },
         { "name": "reset", "callback": "form_reset", "length": 0 }
       ],
+      "constants": []
+    },
+    {
+      "name": "HTMLTableCellElement",
+      "template": "html_table_cell_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [],
+      "methods": [],
       "constants": []
     },
     {

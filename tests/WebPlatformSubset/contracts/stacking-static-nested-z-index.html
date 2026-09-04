@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8">
+<title>Static z-index declarations do not drop nested painted content</title>
+<link rel="help" href="https://www.w3.org/TR/CSS2/visuren.html#z-index">
+<style>body{margin:0}#root{position:relative;width:120px;height:80px}#outer{z-index:8;width:120px;height:80px;background:lime}#inner{z-index:9;width:116px;height:76px;border:2px solid blue;background:lime}</style>
+<div id="root"><div id="outer"><div id="inner"></div></div></div>

@@ -75,6 +75,17 @@ The generated source is committed. Regenerate or verify it with the commands in
 `tools/webidl-v8-bindings/README.md`; CMake intentionally has no Node or network
 dependency.
 
+The generated catalog includes distinct `HTMLTableCellElement` branding for HTML
+`td` and `th` elements, including chart iframe realms. This is interface identity
+support, not a claim of complete table-cell IDL coverage.
+
+`Document.execCommand` exposes the negative-capability path: legacy editing and
+clipboard commands return `false` without changing content or claiming a copy.
+Components can fall back to `navigator.clipboard.write` / `ClipboardItem`, which
+hands the payload to the host. Table View regression coverage checks native pointer
+input through this complete fallback and verifies the host clipboard request in
+both the main document and an iframe without touching the OS clipboard.
+
 V8 release builds default to a bootstrap snapshot. The generated
 `webscene_bootstrap_snapshot.bin` and `webscene_bootstrap_snapshot.meta` files must remain
 beside the native library; the package targets copy all three files together and reject a

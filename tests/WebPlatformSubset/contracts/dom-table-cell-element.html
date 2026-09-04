@@ -1,0 +1,99 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Table cell interface identity and delegated copy selection</title>
+<link rel="help" href="https://html.spec.whatwg.org/multipage/tables.html#htmltablecellelement">
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<table id="table"><tbody><tr><th id="heading">Price</th><td id="value" data-copy-value="123.45"><span id="nested">123.45</span></td><td id="empty"></td></tr></tbody></table>
+<script>
+test(() => {
+  assert_equals(typeof HTMLTableCellElement, 'function');
+  assert_not_equals(HTMLTableCellElement, HTMLElement);
+  assert_equals(Object.getPrototypeOf(HTMLTableCellElement.prototype), HTMLElement.prototype);
+  assert_throws_js(TypeError, () => new HTMLTableCellElement());
+}, 'HTMLTableCellElement has its own non-directly-constructible interface');
+
+for (const tag of ['td', 'th']) {
+  test(() => {
+    const parsed = document.querySelector(tag);
+    const created = document.createElement(tag.toUpperCase());
+    const namespaced = document.createElementNS('http://www.w3.org/1999/xhtml', tag);
+    for (const cell of [parsed, created, namespaced, parsed.cloneNode(true)]) {
+      assert_true(cell instanceof HTMLTableCellElement);
+      assert_true(cell instanceof HTMLElement);
+      assert_equals(Object.getPrototypeOf(cell), HTMLTableCellElement.prototype);
+      assert_equals(cell.constructor, HTMLTableCellElement);
+    }
+  }, tag + ' cells retain their brand through parsing, creation and cloning');
+}
+
+test(() => {
+  for (const tag of ['div', 'span', 'table', 'tr', 'input'])
+    assert_false(document.createElement(tag) instanceof HTMLTableCellElement, tag);
+  assert_false(document.createElementNS('http://www.w3.org/2000/svg', 'td') instanceof HTMLTableCellElement);
+  assert_false(document.createElementNS('urn:custom', 'th') instanceof HTMLTableCellElement);
+}, 'Non-cell elements and foreign-namespace td/th are not table cells');
+
+test(() => {
+  const cell = document.createElement('td');
+  const row = document.createElement('tr');
+  row.appendChild(cell);
+  cell.remove();
+  assert_true(cell instanceof HTMLTableCellElement);
+  row.appendChild(cell);
+  assert_equals(row.firstChild, cell);
+  assert_true(cell instanceof HTMLTableCellElement);
+}, 'Disconnecting and reconnecting a cell preserves wrapper identity and brand');
+
+test(() => {
+  const copied = [];
+  let clickError;
+  const table = document.getElementById('table');
+  const onClick = event => {
+    try {
+      const cell = event.target.closest('td');
+      if (cell instanceof HTMLTableCellElement && cell.dataset.copyValue)
+        copied.push(cell.dataset.copyValue);
+    } catch (error) { clickError = String(error); }
+  };
+  table.addEventListener('click', onClick);
+  document.getElementById('nested').click();
+  document.getElementById('empty').click();
+  document.getElementById('heading').click();
+  table.removeEventListener('click', onClick);
+  assert_equals(clickError, undefined);
+  assert_array_equals(copied, ['123.45']);
+}, 'Delegated nested clicks select only a populated data cell for copying');
+
+promise_test(async () => {
+  const frame = document.createElement('iframe');
+  const ready = new Promise(resolve => {
+    // Run assertions after the child script has unwound. Keep this final test's
+    // frame/callback alive until document teardown (see TABLE_CELL_COPY_COVERAGE).
+    window.__tableCellFrameReady = () => setTimeout(resolve, 0);
+  });
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write('<table><tr><th>Price</th><td data-copy-value="678.90"><span>678.90</span></td></tr></table>' +
+    '<script>try { window.cell = document.querySelector("td");' +
+    'window.cellBranded = cell instanceof HTMLTableCellElement;' +
+    'window.headerBranded = document.querySelector("th") instanceof HTMLTableCellElement;' +
+    'window.copied = []; document.body.addEventListener("click", function(event) {' +
+    'const target = event.target.closest("td");' +
+    'if (target instanceof HTMLTableCellElement && target.dataset.copyValue) copied.push(target.dataset.copyValue);' +
+    '}); document.querySelector("span").click(); } catch (error) { window.failure = String(error); }' +
+    'parent.__tableCellFrameReady();<\/script>');
+  doc.close();
+  await ready;
+  const win = frame.contentWindow;
+  assert_equals(win.failure, undefined);
+  assert_equals(typeof win.HTMLTableCellElement, 'function');
+  assert_not_equals(win.HTMLTableCellElement, HTMLTableCellElement);
+  assert_true(win.cellBranded);
+  assert_true(win.headerBranded);
+  assert_true(win.cell instanceof win.HTMLTableCellElement);
+  assert_false(win.cell instanceof HTMLTableCellElement);
+  assert_equals(win.copied.join(','), '678.90');
+}, 'Iframe realms expose their own cell interface and delegated copy checks');
+</script>

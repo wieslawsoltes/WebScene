@@ -87,6 +87,85 @@ void native_document::layout(float viewport_width, float viewport_height)
     body_->visible = true;
     body_->used_height_is_definite = true;
     layout_children(*body_);
+    // Sticky offsets are visual adjustments to completed normal-flow geometry.
+    // Applying them during row layout uses unfinished table/group dimensions
+    // and can alter the virtualizer's scroll extent. Resolve outer sticky boxes
+    // first so nested header cells inherit the header's vertical displacement.
+    const auto translate = [&](const auto& self, dom_node& node, float dx, float dy) -> void {
+        node.layout.x += dx;
+        node.layout.y += dy;
+        for (auto& fragment : node.text_layout_fragments) { fragment.x += dx; fragment.y += dy; }
+        if (node.style.has_pseudo_elements()) {
+            for (auto* pseudo : {&node.style.mutable_before_pseudo(), &node.style.mutable_after_pseudo()}) {
+                if (pseudo->generated) { pseudo->layout.x += dx; pseudo->layout.y += dy; }
+            }
+        }
+        node.list_marker_layout.x += dx;
+        node.list_marker_layout.y += dy;
+        for (auto* child : composed_children(node)) self(self, *child, dx, dy);
+    };
+    const auto apply_sticky = [&](const auto& self, dom_node& node) -> void {
+        if (!node.visible || node.style.display == display_mode::none) return;
+        if (node.style.position == position_mode::sticky) {
+            auto* parent = composed_parent(node);
+            auto* scrollport = parent;
+            const auto scrolls = [](overflow_mode mode) {
+                return mode == overflow_mode::hidden || mode == overflow_mode::scroll
+                    || mode == overflow_mode::automatic;
+            };
+            while (scrollport != nullptr && !scrolls(scrollport->style.overflow_x)
+                && !scrolls(scrollport->style.overflow_y)) scrollport = composed_parent(*scrollport);
+            // Table rows/groups use the enclosing table as the flow containing
+            // block; the row itself is not the vertical limit of a rowspan cell.
+            if (parent != nullptr && (node.style.display == display_mode::table_cell
+                || node.style.display == display_mode::table_row
+                || is_table_row_group(node.style.display))) {
+                while (parent != nullptr && parent->style.display != display_mode::table
+                    && parent->style.display != display_mode::inline_table) parent = composed_parent(*parent);
+            }
+            if (parent != nullptr) {
+                const auto viewport = scrollport != nullptr ? scrollport->layout
+                    : layout_rect{0, 0, viewport_width_, viewport_height_};
+                const auto axis = [&](bool horizontal) {
+                    const auto start = horizontal ? node.style.left : node.style.top;
+                    const auto end = horizontal ? node.style.right : node.style.bottom;
+                    if (!is_specified(start) && !is_specified(end)) return 0.0F;
+                    const auto position = horizontal ? node.layout.x : node.layout.y;
+                    const auto size = horizontal ? node.layout.width : node.layout.height;
+                    const auto viewport_position = horizontal ? viewport.x : viewport.y;
+                    const auto viewport_size = horizontal ? viewport.width : viewport.height;
+                    const auto before = scrollport == nullptr ? 0.0F : resolve_length(*scrollport,
+                        horizontal ? scrollport->style.border_left_width : scrollport->style.border_top_width,
+                        viewport_size, 0);
+                    const auto after = scrollport == nullptr ? 0.0F : resolve_length(*scrollport,
+                        horizontal ? scrollport->style.border_right_width : scrollport->style.border_bottom_width,
+                        viewport_size, 0);
+                    const auto low = viewport_position + before + resolve_length(node,start,viewport_size,0);
+                    const auto high = std::max(low + size,
+                        viewport_position + viewport_size - after - resolve_length(node,end,viewport_size,0));
+                    auto target = position;
+                    if (is_specified(end)) target = std::min(target,high-size);
+                    if (is_specified(start)) target = std::max(target,low);
+                    const auto parent_position = horizontal ? parent->layout.x : parent->layout.y;
+                    const auto parent_size = horizontal ? parent->layout.width : parent->layout.height;
+                    // A scrolling parent contains the flow in its content space,
+                    // not just the visible scrollport rectangle.
+                    const auto flow_start = parent_position - (parent == scrollport
+                        ? (horizontal ? parent->scroll_left : parent->scroll_top) : 0.0F);
+                    const auto flow_size = parent == scrollport
+                        ? std::max(parent_size,horizontal ? parent->scroll_content_width : parent->scroll_content_height)
+                        : parent_size;
+                    if (target > position) target = std::max(position,std::min(target,flow_start+flow_size-size));
+                    if (target < position) target = std::min(position,std::max(target,flow_start));
+                    return target-position;
+                };
+                const auto dx=axis(true), dy=axis(false);
+                if (dx != 0 || dy != 0) translate(translate,node,dx,dy);
+            }
+        }
+        for (auto* child : composed_children(node)) self(self,*child);
+    };
+    apply_sticky(apply_sticky,*body_);
     update_paint_z_index(*this, *body_);
     auto retained_canvas_seen = false;
     auto retained_canvases_remaining = count_retained_canvases(*this, *body_);
@@ -200,9 +279,9 @@ void native_document::layout_children(dom_node& parent)
         parent, parent.style.padding_left, parent.layout.width, 0);
     const auto padding_right = resolve_length(
         parent, parent.style.padding_right, parent.layout.width, 0);
-    const auto padding_top = resolve_length(
+    const auto padding_top = resolve_vertical_padding(
         parent, parent.style.padding_top, parent.layout.height, 0);
-    const auto padding_bottom = resolve_length(
+    const auto padding_bottom = resolve_vertical_padding(
         parent, parent.style.padding_bottom, parent.layout.height, 0);
     const layout_rect content{
         parent.layout.x + border_left + padding_left,
@@ -678,6 +757,27 @@ void native_document::layout_children(dom_node& parent)
                 }
             }
         }
+        // A row group's authored height is a minimum, including when a
+        // virtualizer temporarily removes all its data rows. Do not discard
+        // that reserved extent merely because another group has header rows.
+        for (auto* group : composed_children(parent)) {
+            if (!is_table_row_group(group->style.display)
+                || !is_specified(group->style.height)) continue;
+            auto group_rows = std::vector<dom_node*>{};
+            auto group_height = 0.0F;
+            for (auto& row : rows) {
+                if (composed_parent(*row.row) != group) continue;
+                group_rows.push_back(row.row);
+                group_height += row.row->table_layout().row_height;
+            }
+            if (group_rows.empty()) continue;
+            group_height += row_spacing * static_cast<float>(group_rows.size() - 1U);
+            const auto minimum = resolve_length(*group, group->style.height, content.height, 0);
+            if (minimum > group_height) {
+                const auto extra = (minimum - group_height) / static_cast<float>(group_rows.size());
+                for (auto* row : group_rows) row->mutable_table_layout().row_height += extra;
+            }
+        }
         for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
             for (const auto& placement : rows[row_index].cells) {
                 auto& cell_table = placement.cell->mutable_table_layout();
@@ -716,6 +816,9 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (row_count > 1U) {
                     height += row_spacing * static_cast<float>(row_count - 1U);
+                }
+                if (is_specified(child->style.height)) {
+                    height = std::max(height, resolve_length(*child, child->style.height, content.height, 0));
                 }
             } else {
                 height = intrinsic_size(*child, false, content.height);
@@ -977,8 +1080,8 @@ void native_document::layout_children(dom_node& parent)
                     + resolve_length(node, node.style.padding_right, available, 0)
                     + resolve_length(node, node.style.border_left_width, available, 0)
                     + resolve_length(node, node.style.border_right_width, available, 0)
-                : resolve_length(node, node.style.padding_top, available, 0)
-                    + resolve_length(node, node.style.padding_bottom, available, 0)
+                : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+                    + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
                     + resolve_length(node, node.style.border_top_width, available, 0)
                     + resolve_length(node, node.style.border_bottom_width, available, 0);
             if (node.style.border_box) size = std::max(size, box_edges);
@@ -1082,8 +1185,8 @@ void native_document::layout_children(dom_node& parent)
                         + resolve_length(child, child.style.padding_right, available, 0)
                         + resolve_length(child, child.style.border_left_width, available, 0)
                         + resolve_length(child, child.style.border_right_width, available, 0)
-                    : resolve_length(child, child.style.padding_top, available, 0)
-                        + resolve_length(child, child.style.padding_bottom, available, 0)
+                    : resolve_vertical_padding(child, child.style.padding_top, available, 0)
+                        + resolve_vertical_padding(child, child.style.padding_bottom, available, 0)
                         + resolve_length(child, child.style.border_top_width, available, 0)
                         + resolve_length(child, child.style.border_bottom_width, available, 0);
             if (is_specified(maximum)) {
@@ -1584,8 +1687,8 @@ void native_document::layout_children(dom_node& parent)
                                 + resolve_length(child, child.style.padding_right, available, 0)
                                 + resolve_length(child, child.style.border_left_width, available, 0)
                                 + resolve_length(child, child.style.border_right_width, available, 0)
-                            : resolve_length(child, child.style.padding_top, available, 0)
-                                + resolve_length(child, child.style.padding_bottom, available, 0)
+                            : resolve_vertical_padding(child, child.style.padding_top, available, 0)
+                                + resolve_vertical_padding(child, child.style.padding_bottom, available, 0)
                                 + resolve_length(child, child.style.border_top_width, available, 0)
                                 + resolve_length(child, child.style.border_bottom_width, available, 0);
                     if (is_specified(maximum)) {
@@ -2325,8 +2428,8 @@ void native_document::layout_children(dom_node& parent)
                 + resolve_length(node, node.style.padding_right, available, 0)
                 + resolve_length(node, node.style.border_left_width, available, 0)
                 + resolve_length(node, node.style.border_right_width, available, 0)
-            : resolve_length(node, node.style.padding_top, available, 0)
-                + resolve_length(node, node.style.padding_bottom, available, 0)
+            : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+                + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
                 + resolve_length(node, node.style.border_top_width, available, 0)
                 + resolve_length(node, node.style.border_bottom_width, available, 0);
         if (is_specified(maximum)) {
@@ -2879,17 +2982,13 @@ void native_document::layout_children(dom_node& parent)
                         + (horizontal ? 0.0F : flex_static_main_offset)
                         + margin_top);
             if (child->style.position != position_mode::fixed) {
-                // A virtualized absolute row is commonly nested below a static
-                // spacer while its containing block is the positioned scroll
-                // viewport. Its visual position follows every scroller between
-                // that DOM parent and the containing block, not just its direct
-                // parent's (usually zero) scroll offset.
-                for (auto* scroll_ancestor = &parent;
-                    scroll_ancestor != nullptr;
-                    scroll_ancestor = composed_parent(*scroll_ancestor)) {
-                    assigned.x -= scroll_ancestor->scroll_left;
-                    assigned.y -= scroll_ancestor->scroll_top;
-                    if (scroll_ancestor == containing_node) break;
+                // The containing block's rectangle already follows its own
+                // ancestors. Only its content scroll offset remains to apply.
+                // Static scrollers between the element and that containing
+                // block do not scroll an absolute overlay anchored outside them.
+                if (containing_node != nullptr) {
+                    assigned.x -= containing_node->scroll_left;
+                    assigned.y -= containing_node->scroll_top;
                 }
             }
             layout_child(*child, containing, assigned);
@@ -3242,6 +3341,18 @@ void native_document::layout_children(dom_node& parent)
         }
         for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
     };
+    if (parent.style.display == display_mode::table_cell) {
+        auto alignment = parent.style.textual().vertical_align;
+        if (alignment.empty() && (parent.tag == "td" || parent.tag == "th")) alignment = "middle";
+        if (alignment == "middle" || alignment == "bottom") {
+            const auto used = std::max(0.0F, maximum_flow_bottom - content.y);
+            const auto free_space = std::max(0.0F, content.height - used);
+            const auto offset = alignment == "middle" ? free_space * 0.5F : free_space;
+            for (auto* child : ordered_children) {
+                if (participates_in_flow(child) && child->visible) shift_subtree_y(shift_subtree_y,*child,offset);
+            }
+        }
+    }
     if (flex_container && horizontal && !parent.style.flex_wrap) {
         std::function<std::optional<float>(const dom_node&)> first_text_baseline =
             [&](const dom_node& node) -> std::optional<float> {
@@ -3639,8 +3750,8 @@ float native_document::compute_intrinsic_size(
             + resolve_length(node, node.style.padding_right, available, 0)
             + resolve_length(node, node.style.border_left_width, available, 0)
             + resolve_length(node, node.style.border_right_width, available, 0)
-        : resolve_length(node, node.style.padding_top, available, 0)
-            + resolve_length(node, node.style.padding_bottom, available, 0)
+        : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+            + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
             + resolve_length(node, node.style.border_top_width, available, 0)
             + resolve_length(node, node.style.border_bottom_width, available, 0);
     const auto authored = horizontal ? node.style.width : node.style.height;
@@ -3691,7 +3802,8 @@ float native_document::compute_intrinsic_size(
     if (authored.unit == length_unit::stretch) {
         return constrain(available);
     }
-    if (!(node.style.display == display_mode::table_cell && !horizontal)
+    if (!((node.style.display == display_mode::table_cell
+            || is_table_row_group(node.style.display)) && !horizontal)
         && (authored.unit == length_unit::pixels
         || authored.unit == length_unit::em
         || authored.unit == length_unit::rem
@@ -3830,17 +3942,26 @@ float native_document::compute_intrinsic_size(
                 std::accumulate(columns.begin(), columns.end(), 0.0F)
                     + table_spacing + padding);
         }
-        auto height = 0.0F;
-        for (const auto* row : rows) {
-            auto row_height = is_specified(row->style.height)
-                ? resolve_length(*row, row->style.height, available, 0) : 0.0F;
-            for (const auto* cell : composed_children(*row)) {
-                if (cell->style.display == display_mode::table_cell) {
-                    row_height = std::max(row_height, intrinsic_size(*cell, false, available));
+        const auto group_height = [&](const auto& self, const dom_node& group) -> float {
+            auto height = 0.0F;
+            if (group.style.display == display_mode::table_row) {
+                for (const auto* cell : composed_children(group)) {
+                    if (cell->style.display == display_mode::table_cell) {
+                        height = std::max(height, intrinsic_size(*cell, false, available));
+                    }
+                }
+            } else {
+                for (const auto* child : composed_children(group)) {
+                    if (child->style.display == display_mode::table_row
+                        || is_table_row_group(child->style.display)) height += self(self, *child);
                 }
             }
-            height += row_height;
-        }
+            if (is_specified(group.style.height)) {
+                height = std::max(height, resolve_length(group, group.style.height, available, 0));
+            }
+            return height;
+        };
+        auto height = group_height(group_height, node);
         if (is_table_container(node.style.display)
             && !rows.empty()
             && !node.style.table().border_collapsed) {
@@ -4395,7 +4516,7 @@ void native_document::layout_child(
                         child.layout.height,
                         0));
         }
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             child,
             child.style.padding_bottom,
             child.layout.height,
@@ -4425,12 +4546,12 @@ void native_document::layout_child(
                 child.style.border_bottom_width,
                 child.layout.height,
                 0);
-            const auto final_padding_top = resolve_length(
+            const auto final_padding_top = resolve_vertical_padding(
                 child,
                 child.style.padding_top,
                 child.layout.height,
                 0);
-            const auto final_padding_bottom = resolve_length(
+            const auto final_padding_bottom = resolve_vertical_padding(
                 child,
                 child.style.padding_bottom,
                 child.layout.height,

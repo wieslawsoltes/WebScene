@@ -1591,7 +1591,8 @@
                     "unsupported",
                     "container conditions are not evaluated",
                     "stylesheet-parser");
-                parse_css_rules(css, open + 1U, close, inherited_media, stylesheet_address);
+                // Unsupported conditional rules must be ignored, not flattened
+                // into the unconditional cascade (which enables every breakpoint).
             } else if (!prelude.empty() && prelude.front() != '@') {
                 auto declarations = parse_css_declarations(
                     std::string_view(css).substr(open + 1U, close - open - 1U));
@@ -1803,6 +1804,7 @@
                         "css", "at-rule:@container", "unsupported",
                         "container conditions are not evaluated",
                         "stylesheet-parser");
+                    current.children_active = false;
                 } else {
                     owner_.record_feature(
                         "css", "at-rule:@" + name, "unsupported", {},

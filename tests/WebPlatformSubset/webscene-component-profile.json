@@ -8,6 +8,11 @@
     "deviceScaleFactor": 1
   },
   "required": [
+    { "path":"contracts/element-scroll-to-options.html", "type":"testharness", "capabilities":["element-scroll-to","element-scroll-alias","scroll-events"], "evidence":["stackwich-1291-back-to-top"] },
+    { "path":"contracts/css-container-rule-not-unconditional.html", "type":"testharness", "capabilities":["conditional-rule-isolation"], "evidence":["table-view-side-gap"] },
+    { "path":"contracts/css-logical-padding-calc.html", "type":"testharness", "capabilities":["logical-padding-calc"], "evidence":["table-view-title-alignment"] },
+    { "path":"contracts/css-sticky-table-header.html", "type":"testharness", "capabilities":["sticky-table-header","sticky-table-column"], "evidence":["table-view-date-header"] },
+    { "path":"contracts/stacking-static-nested-z-index.html", "type":"visual", "capabilities":["static-z-index-paint"], "evidence":["table-view-missing-date-borders"], "visualChecks":[{"color":"#0000ff","minimumPixels":700,"description":"The nested static box retains its blue border."}] },
     {
       "path": "contracts/css-form-control-text-transform.html",
       "type": "reftest",
@@ -1003,6 +1008,74 @@
     }
   ],
   "candidate": [
+    {
+      "path": "contracts/scroll-static-absolute-containing-block.html",
+      "type": "testharness",
+      "capabilities": ["absolute-containing-block-scroll-offset", "static-overflow-descendant-overlay"],
+      "evidence": ["stackwich-1291-table-scroll-to-top"],
+      "reason": "An absolute overlay must not move with a static scrolling ancestor below its containing block. Candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-root-rem-body-font.html",
+      "type": "testharness",
+      "capabilities": ["document-root-font", "root-relative-lengths"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Release-note list indent and page padding use rem, independent of body font size."
+    },
+    {
+      "path": "contracts/css-percentage-vertical-padding-aspect-ratio.html",
+      "type": "testharness",
+      "capabilities": ["percentage-padding-inline-basis", "absolute-aspect-ratio-wrapper"],
+      "evidence": ["stackwich-1296-release-notes"],
+      "reason": "Embedded preview wrappers reserve height using percentage padding even without video playback support."
+    },
+    {
+      "path": "contracts/stacking-positive-descendant-hit-test.html",
+      "type": "testharness",
+      "capabilities": ["stacking-hit-test-order", "positive-descendant-clipping"],
+      "evidence": ["stackwich-1293"],
+      "reason": "Verify interaction ownership alongside the visual stacking regression."
+    },
+    {
+      "path": "contracts/stacking-positive-descendant-not-ancestor.html",
+      "type": "visual",
+      "capabilities": ["positive-stacking-descendant-scope", "retained-canvas-dom-overlay"],
+      "evidence": ["stackwich-1293-table-view-probe"],
+      "visualChecks": [
+        {"color":"#ff0000","maximumPixels":0,"description":"The later overlay covers the sidebar SVG, despite its positive-z sibling."},
+        {"color":"#0000ff","minimumPixels":400,"maximumPixels":400,"description":"Only the elevated descendant is raised; its ancestor overflow clip is preserved."},
+        {"color":"#00ff00","minimumPixels":23600,"description":"The later overlay remains above normal sidebar and chart content."}
+      ],
+      "reason": "A positive-z child must not lift the whole z-index:auto sidebar above a later Table View overlay."
+    },
+    {
+      "path": "contracts/cssom-negative-size-assignment.html",
+      "type": "testharness",
+      "capabilities": ["cssom-size-range-validation"],
+      "evidence": ["stackwich-1290-live-probe", "chromium-oracle"],
+      "reason": "Negative virtualizer body heights must be ignored without replacing the last valid inline size."
+    },
+    {
+      "path": "contracts/scroll-max-height-virtual-table.html",
+      "type": "testharness",
+      "capabilities": ["max-height-scroll-preservation", "virtual-table-row-replacement"],
+      "evidence": ["stackwich-1290-blank-table-at-scroll-end"],
+      "reason": "Replacing the rendered table window must preserve scroll position while spacer rows retain its total extent. Candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/dom-unsupported-editing-command.html",
+      "type": "testharness",
+      "capabilities": ["legacy-editing-command-negative-capability", "document-operation-arguments"],
+      "evidence": ["stackwich-1289-table-view-copy"],
+      "reason": "Unsupported commands must report false so component clipboard helpers can take their modern fallback. This does not claim legacy editing or clipboard command support. Keep candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/dom-table-cell-element.html",
+      "type": "testharness",
+      "capabilities": ["table-cell-interface", "element-interface-branding", "iframe-dom-constructors", "delegated-cell-click"],
+      "evidence": ["stackwich-1289-table-view-copy"],
+      "reason": "Table View's delegated click handler requires real td/th interface branding in the chart iframe. Native input-to-clipboard handoff has separate host regression coverage. Candidate until cross-RID qualification."
+    },
     {
       "path": "contracts/positioned-height-percentage-paint.html",
       "type": "reftest",

@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8">
+<title>Element scrollTo supports virtualizer animation steps</title>
+<link rel="help" href="https://drafts.csswg.org/cssom-view/#dom-element-scrollto">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>#box{width:100px;height:100px;overflow:auto}#content{width:400px;height:800px}</style>
+<div id="box"><div id="content"></div></div>
+<script>
+test(()=>{box.scrollTo(40,300);assert_equals(box.scrollLeft,40);assert_equals(box.scrollTop,300);box.scrollTo({top:120,behavior:'instant'});assert_equals(box.scrollLeft,40);assert_equals(box.scrollTop,120);},'Object form preserves unspecified axes after numeric scrolling');
+test(()=>{box.scrollTo({top:99999,left:-1});assert_equals(box.scrollLeft,0);assert_equals(box.scrollTop,box.scrollHeight-box.clientHeight);box.scroll({top:0});assert_equals(box.scrollTop,0);},'Scroll aliases clamp offsets and return to the top');
+test(()=>{box.scrollTo({top:NaN,left:Infinity});assert_equals(box.scrollTop,0);assert_equals(box.scrollLeft,0);},'Non-finite scroll coordinates normalize to zero');
+promise_test(async()=>{let events=0;box.addEventListener('scroll',()=>events++);box.scrollTo({top:200});await new Promise(resolve=>setTimeout(resolve,80));assert_greater_than(events,0);},'Programmatic scrolling notifies the virtualizer');
+</script>

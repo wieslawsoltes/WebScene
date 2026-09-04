@@ -709,8 +709,10 @@ display_mode default_display_for_node(const dom_node& node)
 
 float inherited_font_size(const dom_node& node)
 {
+    if (node.tag == "html") return 16.0F;
     for (auto* parent = node.parent; parent != nullptr; parent = parent->parent) {
         if (parent->style.font_size >= 0) return parent->style.font_size;
+        if (parent->tag == "html") return 16.0F;
     }
     return 14.0F;
 }
@@ -767,9 +769,7 @@ float resolved_declared_font_size(const dom_node& node, const std::string& value
         return std::max(0.0F, parsed.value * inherited_font_size(node));
     }
     if (parsed.unit == length_unit::rem) {
-        auto* root = &node;
-        while (root->parent != nullptr) root = root->parent;
-        const auto root_size = root->style.font_size >= 0 ? root->style.font_size : 14.0F;
+        const auto root_size = node.tag == "html" ? 16.0F : document_root_font_size(node);
         return std::max(0.0F, parsed.value * root_size);
     }
     if (parsed.unit == length_unit::percent) {
@@ -793,9 +793,7 @@ float resolved_declared_line_height(
         return std::max(0.0F, parsed.value * font_size);
     }
     if (parsed.unit == length_unit::rem) {
-        auto* root = &node;
-        while (root->parent != nullptr) root = root->parent;
-        const auto root_size = root->style.font_size >= 0 ? root->style.font_size : 14.0F;
+        const auto root_size = document_root_font_size(node);
         return std::max(0.0F, parsed.value * root_size);
     }
     if (parsed.unit == length_unit::percent) {
@@ -1034,6 +1032,21 @@ bool valid_cssom_declaration_value(std::string_view property_name, std::string_v
         return normalized_value == "static" || normalized_value == "relative"
             || normalized_value == "absolute" || normalized_value == "fixed"
             || normalized_value == "sticky" || normalized_value == "-webkit-sticky";
+    }
+
+    if (canonical_name == "width" || canonical_name == "height"
+        || canonical_name == "min-width" || canonical_name == "min-height"
+        || canonical_name == "max-width" || canonical_name == "max-height"
+        || canonical_name == "inline-size" || canonical_name == "block-size"
+        || canonical_name == "min-inline-size" || canonical_name == "min-block-size"
+        || canonical_name == "max-inline-size" || canonical_name == "max-block-size") {
+        // Plain negative sizes are invalid declarations, not zero-sized boxes.
+        // Ignoring the write preserves the previous value during transient
+        // virtualizer updates. Math functions above are valid at parse time
+        // and instead have their range enforced when resolving the used value.
+        char* end = nullptr;
+        const auto number = std::strtod(normalized_value.c_str(), &end);
+        if (end != normalized_value.c_str() && number < 0) return false;
     }
 
     if (canonical_name == "font-size") {
@@ -1605,8 +1618,7 @@ float resolve_connected_css_length(
     while (root->parent != nullptr) root = root->parent;
     const auto font_size = context.style.font_size >= 0
         ? context.style.font_size : inherited_font_size(context);
-    const auto root_font_size = root->style.font_size >= 0
-        ? root->style.font_size : 14.0F;
+    const auto root_font_size = document_root_font_size(context);
     switch (length.unit) {
     case length_unit::pixels:
         return length.value;

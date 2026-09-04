@@ -190,6 +190,7 @@ struct paint_z_index_update final {
 bool style_establishes_atomic_stacking_context(const dom_node& node) noexcept
 {
     return node.style.position == position_mode::fixed
+        || node.style.position == position_mode::sticky
         || (node.style.position != position_mode::normal
             && !node.style.z_index_auto)
         || node.style.contain_stacking_context
@@ -201,7 +202,6 @@ paint_z_index_update update_paint_z_index(
     const native_document& document,
     dom_node& node) noexcept
 {
-    auto descendant_z_index = 0;
     // Canvas paint order is structural. A width/height reset clears its
     // display list before the application redraws, but it does not move the
     // element or an authored ::after overlay to a different CSS paint phase.
@@ -212,23 +212,13 @@ paint_z_index_update update_paint_z_index(
         && node.style.display != display_mode::none;
     for (auto* child : document.composed_children(node)) {
         const auto child_update = update_paint_z_index(document, *child);
-        descendant_z_index = std::max(
-            descendant_z_index,
-            child_update.z_index);
         contains_retained_canvas =
             contains_retained_canvas || child_update.contains_retained_canvas;
     }
-    const auto establishes_atomic_stacking_context =
-        style_establishes_atomic_stacking_context(node);
-    node.paint_z_index = node.style.z_index != 0
-        ? node.style.z_index
-        // Relative/absolute positioning with z-index:auto does not establish a
-        // stacking context. Portal wrappers commonly use that shape, so their
-        // positioned tooltip descendants still participate in the ancestor
-        // context. Fixed/transform/opacity contexts and retained canvases remain
-        // atomic composition boundaries.
-        : !establishes_atomic_stacking_context && !contains_retained_canvas
-            ? descendant_z_index : 0;
+    // A positive descendant participates in the enclosing stacking context,
+    // but does not elevate the backgrounds/text of its z-index:auto ancestors.
+    // Scene traversal emits those descendants separately with their clip chain.
+    node.paint_z_index = node.style.z_index;
     node.contains_retained_canvas = contains_retained_canvas;
     return {node.paint_z_index, contains_retained_canvas};
 }
@@ -868,6 +858,7 @@ float resolved_font_size(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (current->style.font_size >= 0) return current->style.font_size;
+        if (current->tag == "html") return 16.0F;
     }
     return 14.0F;
 }
@@ -1114,6 +1105,21 @@ uint32_t append_scene_string(
 }
 
 } // namespace
+
+const dom_node& css_document_element(const dom_node& node) noexcept
+{
+    auto* root = &node;
+    while (root->parent != nullptr && root->tag != "html"
+        && root->parent->tag != "iframe") root = root->parent;
+    return *root;
+}
+
+float document_root_font_size(const dom_node& node) noexcept
+{
+    const auto& root = css_document_element(node);
+    return root.style.font_size >= 0 ? root.style.font_size
+        : root.tag == "html" ? 16.0F : 14.0F;
+}
 
 #if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
 thread_local std::array<uint64_t, 17U>

@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8">
+<title>A positive stacking descendant does not elevate its normal ancestor content</title>
+<link rel="help" href="https://www.w3.org/TR/CSS2/zindex.html">
+<style>
+body{margin:0}#root{position:relative;width:200px;height:120px}
+#sidebar{position:absolute;left:0;top:0;width:80px;height:120px;overflow:hidden}
+#elevated{position:absolute;z-index:10;left:60px;top:10px;width:50px;height:20px;background:blue}
+#chart{position:absolute;left:80px;top:0}canvas{width:120px;height:120px}
+#overlay{position:absolute;inset:0;background:lime}
+</style>
+<div id="root">
+ <div id="sidebar"><svg width="80" height="120"><path fill="red" d="M0 0H80V120H0Z"/></svg><div id="elevated"></div></div>
+ <div id="chart"><canvas width="120" height="120"></canvas></div>
+ <div id="overlay"></div>
+</div>
+<script>document.querySelector('canvas').getContext('2d').fillRect(0,0,120,120);</script>

@@ -1238,6 +1238,51 @@
         self->enqueue_programmatic_scroll_event(*node);
     }
 
+    static void element_scroll_to(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        self->ensure_layout();
+        auto* node = unwrap_node(info.This());
+        if (node == nullptr) return;
+        if (node->tag == "html" && node->parent == &self->document.body()) node = &self->document.body();
+        auto left = static_cast<double>(node->scroll_left);
+        auto top = static_cast<double>(node->scroll_top);
+        const auto context = info.GetIsolate()->GetCurrentContext();
+        const auto number = [&](v8::Local<v8::Value> value, double& result) {
+            if (!value->NumberValue(context).To(&result)) return false;
+            if (!std::isfinite(result)) result = 0;
+            return true;
+        };
+        if (info.Length() > 0 && info[0]->IsObject()) {
+            const auto options = info[0].As<v8::Object>();
+            v8::Local<v8::Value> value;
+            if (!options->Get(context,js_string(info.GetIsolate(),"behavior")).ToLocal(&value)) return;
+            if (!value->IsUndefined()) {
+                const auto behavior = to_utf8(info.GetIsolate(),value);
+                if (behavior != "auto" && behavior != "instant" && behavior != "smooth") {
+                    info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                        js_string(info.GetIsolate(),"Invalid ScrollBehavior")));
+                    return;
+                }
+            }
+            if (!options->Get(context,js_string(info.GetIsolate(),"left")).ToLocal(&value)) return;
+            if (!value->IsUndefined() && !number(value,left)) return;
+            if (!options->Get(context,js_string(info.GetIsolate(),"top")).ToLocal(&value)) return;
+            if (!value->IsUndefined() && !number(value,top)) return;
+        } else if (info.Length() >= 2) {
+            if (!number(info[0],left) || !number(info[1],top)) return;
+        }
+        const auto maximum_left=std::max(0.0F,node->scroll_content_width-node->scroll_viewport_width);
+        const auto maximum_top=std::max(0.0F,node->scroll_content_height-node->scroll_viewport_height);
+        const auto next_left=static_cast<float>(std::clamp(left,0.0,static_cast<double>(maximum_left)));
+        const auto next_top=static_cast<float>(std::clamp(top,0.0,static_cast<double>(maximum_top)));
+        if (next_left == node->scroll_left && next_top == node->scroll_top) return;
+        node->scroll_left=next_left;
+        node->scroll_top=next_top;
+        self->document.mark_dirty();
+        self->enqueue_programmatic_scroll_event(*node);
+    }
+
     static void element_scroll_into_view(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());

@@ -1455,6 +1455,8 @@
                         ? html_script_element_template.Get(isolate)
                     : node.tag == "style"
                         ? html_style_element_template.Get(isolate)
+                    : node.tag == "td" || node.tag == "th"
+                        ? html_table_cell_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
                 : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
@@ -4175,6 +4177,47 @@
     static void document_has_focus(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+    }
+
+    static void document_exec_command(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* isolate = info.GetIsolate();
+        auto* self = current(isolate);
+        bool document_receiver = self != nullptr && self->is_document_object(info.This());
+        if (self != nullptr && !document_receiver) {
+            for (const auto& [_, value] : self->detached_documents) {
+                if (!value.IsEmpty() && info.This()->StrictEquals(value.Get(isolate))) {
+                    document_receiver = true;
+                    break;
+                }
+            }
+        }
+        if (!document_receiver || info.Length() == 0) {
+            isolate->ThrowException(v8::Exception::TypeError(js_string(isolate,
+                "Document.execCommand requires a Document receiver and a command argument")));
+            return;
+        }
+        const auto context = isolate->GetCurrentContext();
+        v8::Local<v8::String> command;
+        if (!info[0]->ToString(context).ToLocal(&command)) return;
+        if (info.Length() > 2 && !info[2]->IsUndefined()) {
+            v8::Local<v8::String> value;
+            if (!info[2]->ToString(context).ToLocal(&value)) return;
+        }
+        auto* root = unwrap_node(info.This());
+        if (root != nullptr && (root->xml_mode || root->tag == "#document-root")) {
+            throw_dom_exception(info, "execCommand is only supported on HTML documents",
+                "InvalidStateError");
+            return;
+        }
+        // This component runtime has no legacy editing command executor. The
+        // command algorithm returns false for unsupported/disabled commands;
+        // never claim a successful copy or dispatch an event without executing
+        // it. Clipboard helpers can then use the implemented async clipboard API.
+        self->record_feature("web-api", "Document.execCommand", "unsupported",
+            "legacy editing commands return false; use navigator.clipboard for copying",
+            "web-api-binding");
+        info.GetReturnValue().Set(false);
     }
 
     static void return_empty_string(const v8::FunctionCallbackInfo<v8::Value>& info)

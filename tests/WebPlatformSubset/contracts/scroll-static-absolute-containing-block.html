@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8">
+<title>Absolute overlays ignore scrolling below their containing block</title>
+<link rel="help" href="https://www.w3.org/TR/CSS2/visufx.html#overflow-clipping">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+body{margin:0}.host{position:relative;width:200px;height:150px;margin-bottom:20px}
+.scroller{height:100%;overflow:auto}.tall{height:1000px}
+.overlay{position:absolute;bottom:10px;right:10px;width:20px;height:20px;background:green}
+#inside .scroller{position:relative}
+</style>
+<div id="outside" class="host"><div class="scroller"><div class="tall"></div><div class="overlay"></div></div></div>
+<div id="inside" class="host"><div class="scroller"><div class="tall"></div><div class="overlay"></div></div></div>
+<script>
+for(const id of ['outside','inside'])test(()=>{
+  const host=document.getElementById(id),scroller=host.querySelector('.scroller'),overlay=host.querySelector('.overlay');
+  const start=overlay.getBoundingClientRect().top;
+  scroller.scrollTop=300;
+  assert_equals(scroller.scrollTop,300);
+  assert_equals(overlay.getBoundingClientRect().top,start-(id==='inside'?300:0));
+  scroller.scrollTop=0;
+  assert_equals(overlay.getBoundingClientRect().top,start);
+},'Absolute overlay with containing block '+id+' the scroller follows only that containing block');
+</script>
