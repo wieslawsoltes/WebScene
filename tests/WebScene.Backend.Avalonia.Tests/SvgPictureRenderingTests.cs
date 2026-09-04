@@ -104,6 +104,26 @@ public sealed class SvgPictureRenderingTests
         Assert.Equal(firstDarkSquare, bitmap.GetPixel(20, 20));
     }
 
+    [Theory]
+    [InlineData("#9de640", 157, 230, 64)]
+    [InlineData("#d19afc", 209, 154, 252)]
+    public void ReleaseNoteSvgBackgroundPreservesExactSrgbFill(string fill, byte red, byte green, byte blue)
+    {
+        var markup = $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"48\" height=\"20\"><rect width=\"48\" height=\"20\" fill=\"{fill}\"/></svg>";
+        var resource = "webscene-bg-svg-v1\t0 0 48 20\tno-repeat\t0% 0%\t48px\t" + markup;
+        using var bitmap = new SKBitmap(80, 28, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        var background = new SKColor(11, 24, 26);
+        canvas.Clear(background);
+        new NativeCanvasSceneRenderer().DrawDomSvgBackgroundForTest(canvas, resource,
+            new SceneCommand { Width = 80, Height = 28 });
+        canvas.Flush();
+        for (var y = 1; y < 19; y++)
+            for (var x = 1; x < 47; x++)
+                Assert.Equal(new SKColor(red, green, blue), bitmap.GetPixel(x, y));
+        Assert.Equal(background, bitmap.GetPixel(60, 10));
+    }
+
     private static SKBitmap RenderLayoutIcon(SKPicture picture, float[] viewBox)
     {
         var bitmap = new SKBitmap(29, 27);
