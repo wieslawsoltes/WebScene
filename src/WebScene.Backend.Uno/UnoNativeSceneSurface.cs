@@ -1163,7 +1163,9 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 inner: null,
                 response.StatusCode);
         }
-        var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var content = request.Kind == WebSceneResourceKind.Image
+            ? NativeImageResource.ToMarkup(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
+            : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return new WebSceneTextResource(address, content, address, null)
         {
             EntityTag = responseEntityTag,

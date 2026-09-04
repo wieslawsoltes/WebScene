@@ -466,7 +466,9 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                     }
                     resource = new WebSceneTextResource(
                         resolved.ToString(),
-                        response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
+                        request.Kind == WebSceneResourceKind.Image
+                            ? Native.NativeImageResource.ToMarkup(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
+                            : response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
                         resolved.ToString(),
                         null)
                     {

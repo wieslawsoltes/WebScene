@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Include="../WebScene.Backend.Avalonia.Tests/VariableWebFontTests.cs" Link="VariableWebFontTests.cs" />
+    <Compile Include="../WebScene.Backend.Avalonia.Tests/NativeImageResourceTests.cs" Link="NativeImageResourceTests.cs" />
     <None Include="../Fonts/Roboto/*" Link="Fonts/Roboto/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Uno\WebScene.Backend.Uno.csproj" />
   </ItemGroup>
