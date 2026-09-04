@@ -10,6 +10,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+// Do not import legacy winsock.h: callers also use IXWebSocket/winsock2.h.
 #include <windows.h>
 #endif
 
