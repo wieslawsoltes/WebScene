@@ -23,6 +23,7 @@ RUN apt-get update \
         clang \
         cmake \
         curl \
+        fonts-dejavu-core \
         gdb \
         gcc-12 \
         g++-12 \

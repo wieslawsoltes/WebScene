@@ -1502,6 +1502,8 @@ public:
         webscene_text_measure_callback text_measure_callback = nullptr,
         void* text_measure_user_data = nullptr);
 
+    void invalidate_font_measurements() { text_measurement_cache_.clear(); }
+
     dom_node& body() noexcept;
     const dom_node& body() const noexcept;
     dom_node& create_element(std::string tag);

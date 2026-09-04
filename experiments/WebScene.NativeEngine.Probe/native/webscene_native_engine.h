@@ -664,6 +664,14 @@ typedef void (*webscene_interop_callback_available_callback)(void* user_data);
  */
 typedef void (*webscene_animation_frame_requested_callback)(void* user_data);
 
+/* Observes stylesheet consumption, including native cache hits and inline CSS.
+ * Runs synchronously on the runtime worker before styling/layout. Buffers are
+ * borrowed for the callback only. Hosts may register fonts but must not reenter
+ * this engine. The callback must not throw across the ABI. */
+typedef void (*webscene_stylesheet_consumed_callback)(
+    void* user_data, const char* address, size_t address_length,
+    const char* css, size_t css_length);
+
 typedef struct webscene_engine_options {
     uint32_t struct_size;
     uint32_t simulated_chart_command_count;
@@ -685,6 +693,8 @@ typedef struct webscene_engine_options {
     void* resource_load_v2_user_data;
     webscene_resource_load_callback_v3 resource_load_callback_v3;
     void* resource_load_v3_user_data;
+    webscene_stylesheet_consumed_callback stylesheet_consumed_callback;
+    void* stylesheet_consumed_user_data;
 } webscene_engine_options;
 
 enum {

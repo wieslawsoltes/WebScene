@@ -238,6 +238,9 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly IntPtr ResourceLoadV2Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
     private static readonly ResourceLoadCallbackV3 ResourceLoadV3 = LoadResourceV3;
+    private static readonly StylesheetConsumedCallback StylesheetConsumed = NotifyStylesheetConsumed;
+    private static readonly IntPtr StylesheetConsumedAddress =
+        Marshal.GetFunctionPointerForDelegate(StylesheetConsumed);
     private static readonly IntPtr ResourceLoadV3Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV3);
     private static readonly ScenePublishedCallback ScenePublished = NotifyScenePublished;
@@ -361,7 +364,9 @@ public static unsafe partial class NativeWebSceneApi
                     ResourceLoadCallbackV2 = ResourceLoadV2Address,
                     ResourceLoadV2UserData = GCHandle.ToIntPtr(bridgeHandle),
                     ResourceLoadCallbackV3 = ResourceLoadV3Address,
-                    ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle)
+                    ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle),
+                    StylesheetConsumedCallback = StylesheetConsumedAddress,
+                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -582,6 +587,27 @@ public static unsafe partial class NativeWebSceneApi
         in NativeResourceRequestContextV3 requestContext,
         IntPtr destination,
         nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void StylesheetConsumedCallback(
+        IntPtr userData, IntPtr address, nuint addressLength, IntPtr css, nuint cssLength);
+
+    private static void NotifyStylesheetConsumed(
+        IntPtr userData, IntPtr address, nuint addressLength, IntPtr css, nuint cssLength)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.ConsumeStylesheet(
+                Marshal.PtrToStringUTF8(address, checked((int)addressLength)) ?? string.Empty,
+                Marshal.PtrToStringUTF8(css, checked((int)cssLength)) ?? string.Empty);
+        }
+        catch (Exception error)
+        {
+            // A reverse-P/Invoke boundary must never propagate a managed exception.
+            Console.Error.WriteLine($"[WebScene stylesheet consumption] {error}");
+        }
+    }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void ScenePublishedCallback(
@@ -1049,26 +1075,12 @@ public static unsafe partial class NativeWebSceneApi
                 if (loader is AvaloniaResourceLoader avaloniaLoader
                     && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
                 {
-                    if (resourceKind == WebSceneResourceKind.StyleSheet)
-                    {
-                        RegisterWebFonts(
-                            Encoding.UTF8.GetString(utf8Resource.Content.Span),
-                            address,
-                            avaloniaLoader);
-                    }
                     prepared = PrepareResource(utf8Resource, entityTag);
                 }
                 else
 #endif
                 {
                     var resource = loader.LoadText(request);
-#if !WEBSCENE_UNO
-                    if (resourceKind == WebSceneResourceKind.StyleSheet
-                        && loader is AvaloniaResourceLoader textAvaloniaLoader)
-                    {
-                        RegisterWebFonts(resource.Content, address, textAvaloniaLoader);
-                    }
-#endif
                     prepared = PrepareResource(resource, entityTag);
                 }
             }
@@ -1251,6 +1263,14 @@ public static unsafe partial class NativeWebSceneApi
                     && string.Equals(ContentType, contentType, StringComparison.Ordinal)
                     && string.Equals(Address, address, StringComparison.Ordinal)
                     && string.Equals(EntityTag, entityTag, StringComparison.Ordinal);
+        }
+
+        internal void ConsumeStylesheet(string address, string css)
+        {
+#if !WEBSCENE_UNO
+            if (loader is AvaloniaResourceLoader avaloniaLoader)
+                RegisterWebFonts(css, address, avaloniaLoader);
+#endif
         }
 
 #if !WEBSCENE_UNO

@@ -237,6 +237,7 @@
     static constexpr uint64_t minimum_mapped_cache_body_bytes = 64U * 1024U;
     static constexpr size_t maximum_persistent_cache_entries = 1024U;
     static constexpr uint64_t maximum_persistent_cache_bytes = 512U * 1024U * 1024U;
+    std::function<void(const std::string&, const std::string&)> stylesheet_consumer;
     static constexpr uint64_t maximum_resource_cache_entry_bytes = 64U * 1024U * 1024U;
     static constexpr uint32_t maximum_resource_entity_tag_bytes = 4096U;
     static constexpr size_t maximum_resource_cache_entries = 2048U;

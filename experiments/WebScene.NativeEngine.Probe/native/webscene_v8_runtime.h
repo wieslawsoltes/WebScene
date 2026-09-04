@@ -228,6 +228,7 @@ public:
         const std::string& url,
         std::vector<document_start_script> document_start_scripts = {});
     void set_resource_root(std::string resource_root);
+    void set_stylesheet_consumer(std::function<void(const std::string&, const std::string&)> consumer);
     bool evaluate_interop_v3(
         const std::string& source,
         const std::string& document_name,

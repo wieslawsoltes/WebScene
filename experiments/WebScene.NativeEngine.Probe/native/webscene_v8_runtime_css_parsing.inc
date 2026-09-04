@@ -1919,6 +1919,13 @@
         uint32_t stylesheet_owner_id = 0,
         uint32_t shadow_scope_root_id = 0)
     {
+        // Font registration belongs to document consumption, not transport:
+        // cached, imported, inline and dynamically added sheets all come here.
+        if (stylesheet_consumer) stylesheet_consumer(stylesheet_address, css);
+        // A newly registered face can change metrics without changing the CSS
+        // family/weight cache key (including dynamically inserted font rules).
+        if (copy_ascii_lower(css).find("@font-face") != std::string::npos)
+            document.invalidate_font_measurements();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         binding_callback_timer timer(profile_startup ? &startup_css_parse : nullptr);
 #endif

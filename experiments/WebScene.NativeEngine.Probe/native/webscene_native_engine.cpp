@@ -286,6 +286,8 @@ private:
     void* resource_load_v2_user_data_{nullptr};
     webscene_resource_load_callback_v3 resource_load_callback_v3_{nullptr};
     void* resource_load_v3_user_data_{nullptr};
+    webscene_stylesheet_consumed_callback stylesheet_consumed_callback_{nullptr};
+    void* stylesheet_consumed_user_data_{nullptr};
     webscene_scene_published_callback scene_published_callback_{nullptr};
     void* scene_published_user_data_{nullptr};
     webscene_host_request_available_callback
@@ -756,6 +758,8 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 webscene_engine_options,
                 resource_load_callback_v3);
         const auto has_resource_callback_v3 =
+            options->struct_size >= offsetof(webscene_engine_options, stylesheet_consumed_callback);
+        const auto has_stylesheet_consumed_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -787,7 +791,9 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_animation_frame_requested_callback
                 ? options->animation_frame_requested_user_data
-                : nullptr);
+                : nullptr,
+            has_stylesheet_consumed_callback ? options->stylesheet_consumed_callback : nullptr,
+            has_stylesheet_consumed_callback ? options->stylesheet_consumed_user_data : nullptr);
     } catch (...) {
         return nullptr;
     }

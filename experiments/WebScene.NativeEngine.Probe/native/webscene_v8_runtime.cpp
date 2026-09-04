@@ -4189,6 +4189,12 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_state.inc"
 };
 
+void v8_dom_runtime::set_stylesheet_consumer(
+    std::function<void(const std::string&, const std::string&)> consumer)
+{
+    impl_->stylesheet_consumer = std::move(consumer);
+}
+
 v8_dom_runtime::v8_dom_runtime(
     native_document& document,
     std::function<viewport_metrics()> viewport_provider,

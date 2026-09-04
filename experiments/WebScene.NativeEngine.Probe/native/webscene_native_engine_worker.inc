@@ -203,6 +203,12 @@
             }, &diagnostics_);
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
+        if (stylesheet_consumed_callback_ != nullptr) {
+            runtime_->set_stylesheet_consumer([this](const std::string& address, const std::string& css) {
+                stylesheet_consumed_callback_(stylesheet_consumed_user_data_,
+                    address.data(), address.size(), css.data(), css.size());
+            });
+        }
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
             webscene_native::runtime_diagnostic failure;

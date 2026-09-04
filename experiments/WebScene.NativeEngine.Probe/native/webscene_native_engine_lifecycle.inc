@@ -19,7 +19,9 @@
         void* interop_callback_available_user_data = nullptr,
         webscene_animation_frame_requested_callback
             animation_frame_requested_callback = nullptr,
-        void* animation_frame_requested_user_data = nullptr)
+        void* animation_frame_requested_user_data = nullptr,
+        webscene_stylesheet_consumed_callback stylesheet_consumed_callback = nullptr,
+        void* stylesheet_consumed_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -32,6 +34,8 @@
         , resource_load_v2_user_data_(resource_load_v2_user_data)
         , resource_load_callback_v3_(resource_load_callback_v3)
         , resource_load_v3_user_data_(resource_load_v3_user_data)
+        , stylesheet_consumed_callback_(stylesheet_consumed_callback)
+        , stylesheet_consumed_user_data_(stylesheet_consumed_user_data)
         , scene_published_callback_(scene_published_callback)
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)

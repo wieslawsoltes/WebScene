@@ -65,8 +65,9 @@ The native runtime now supplies:
   preserving layout-box semantics for SVG and non-inline elements.
 - Browser-compatible textarea Enter defaults with `beforeinput` and `input`
   events whose `inputType` is `insertLineBreak`.
-- Downloadable `@font-face` registration in the native Avalonia resource
-  bridge, including relative and data-URI sources, with the resulting
+- Downloadable `@font-face` registration on native stylesheet consumption,
+  including native resource-cache hits and inline stylesheets. The Avalonia
+  bridge resolves relative and data-URI sources, with the resulting
   typefaces shared by native measurement and retained-scene painting.
 - Standard Node constants inherited by live element and text wrappers.
 - Finite window scroll offsets and their legacy aliases in outer and frame
