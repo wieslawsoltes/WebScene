@@ -43,6 +43,7 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextShaping.cs" Link="NativeTextShaping.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeVariableFontInstancer.cs" Link="NativeVariableFontInstancer.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeWebFontDecoder.cs" Link="NativeWebFontDecoder.cs" />
+    <None Include="..\WebScene.Backend.Avalonia\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextRunPositioning.cs" Link="NativeTextRunPositioning.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\WindowsDirectWriteRunPositioner.cs" Link="WindowsDirectWriteRunPositioner.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropCallbacks.cs" Link="NativeInteropCallbacks.cs" />
