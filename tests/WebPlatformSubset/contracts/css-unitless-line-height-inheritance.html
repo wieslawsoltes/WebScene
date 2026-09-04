@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8">
+<title>Unitless line-height remains a multiplier through cascade and inheritance</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+body { margin:0 }
+.base { font-size:20px; line-height:1.5 }
+.small { font-size:14px }
+#child { font-size:12px }
+</style>
+<div id="cascade" class="base small">Release notes</div>
+<div id="parent" class="base"><div id="child">List item</div></div>
+<div id="large" style="font-size:10px;line-height:5">Large multiplier</div>
+<style>.relative{font-size:20px;line-height:1.5em}.relative.small{font-size:14px}</style>
+<div id="relative" class="relative small"><span id="relativeChild" style="font-size:10px">Relative length</span></div>
+<script>
+test(()=>{
+ assert_equals(getComputedStyle(cascade).lineHeight,'21px');
+ assert_equals(cascade.getBoundingClientRect().height,21);
+ cascade.style.fontSize='18px';
+ assert_equals(getComputedStyle(cascade).lineHeight,'27px');
+ assert_equals(cascade.getBoundingClientRect().height,27);
+},'Unitless line-height uses the final font size, including later changes');
+test(()=>{
+ assert_equals(getComputedStyle(child).lineHeight,'18px');
+ child.style.fontSize='16px';
+ assert_equals(getComputedStyle(child).lineHeight,'24px');
+},'An inherited number is multiplied by the child font size');
+test(()=>{
+ assert_equals(getComputedStyle(large).lineHeight,'50px');
+ large.style.lineHeight='2px';
+ assert_equals(getComputedStyle(large).lineHeight,'2px');
+},'Numbers greater than four are multipliers, but small lengths are not');
+test(()=>{
+ assert_equals(getComputedStyle(relative).lineHeight,'21px');
+ assert_equals(getComputedStyle(relativeChild).lineHeight,'21px');
+ relative.style.fontSize='18px';
+ assert_equals(getComputedStyle(relative).lineHeight,'27px');
+ assert_equals(getComputedStyle(relativeChild).lineHeight,'27px');
+},'An em line-height uses the final declaring font size and inherits as a length');
+</script>

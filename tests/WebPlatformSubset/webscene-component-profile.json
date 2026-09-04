@@ -8,6 +8,13 @@
     "deviceScaleFactor": 1
   },
   "required": [
+    {
+      "path": "contracts/css-unitless-line-height-inheritance.html",
+      "type": "testharness",
+      "capabilities": ["unitless-line-height", "inherited-font-metrics"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Release-note headings override font-size after a unitless line-height declaration."
+    },
     { "path":"contracts/element-scroll-to-options.html", "type":"testharness", "capabilities":["element-scroll-to","element-scroll-alias","scroll-events"], "evidence":["stackwich-1291-back-to-top"] },
     { "path":"contracts/css-container-rule-not-unconditional.html", "type":"testharness", "capabilities":["conditional-rule-isolation"], "evidence":["table-view-side-gap"] },
     { "path":"contracts/css-logical-padding-calc.html", "type":"testharness", "capabilities":["logical-padding-calc"], "evidence":["table-view-title-alignment"] },

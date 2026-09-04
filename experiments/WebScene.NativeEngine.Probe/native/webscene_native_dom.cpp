@@ -866,6 +866,8 @@ float resolved_font_size(const dom_node& node)
 float resolved_line_height(const dom_node& node, float font_size)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (current->style.line_height <= -3.0F)
+            return (-3.0F - current->style.line_height) * font_size;
         if (current->style.line_height == -2.0F) return font_size * 1.125F;
         if (current->style.line_height >= 0) return current->style.line_height;
     }

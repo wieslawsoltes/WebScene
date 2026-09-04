@@ -1661,6 +1661,38 @@
         }
     }
 
+    void recompute_cascaded_line_height(dom_node& node, const std::vector<const css_rule*>& rules)
+    {
+        // Relative lengths compute against the final font-size, irrespective
+        // of declaration order. Unlike a number, an em/% value then inherits
+        // as a length. Include font shorthands because they reset line-height.
+        std::optional<std::string> winning_value;
+        bool winning_important = false;
+        const auto consider = [&](const css_declaration& declaration) {
+            if (declaration.name != "line-height" && declaration.name != "font") return;
+            if (winning_important && !declaration.important) return;
+            auto value = resolve_css_value(node, declaration.value);
+            if (value.empty()) return;
+            if (declaration.name == "font") {
+                if (value == "inherit" || value == "unset") value = "inherit";
+                else if (const auto font = parse_font_shorthand(node, value); font.has_value())
+                    value = font->line_height_token;
+                else return;
+            }
+            winning_value = std::move(value);
+            winning_important = declaration.important;
+        };
+        for (const auto* rule : rules)
+            for (const auto& declaration : rule->declarations()) consider(declaration);
+        for (const auto& [name, value] : node.authored_style().declarations)
+            consider({name, value, node.authored_style().important_declarations.contains(name)});
+        if (winning_value.has_value()) {
+            const auto font_size = node.style.font_size >= 0
+                ? node.style.font_size : inherited_font_size(node);
+            node.style.line_height = resolved_declared_line_height(node, *winning_value, font_size);
+        }
+    }
+
     void apply_css_declaration(dom_node& node, const css_declaration& declaration)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -3269,6 +3301,7 @@
         // Inline relative line-height is authored at a higher origin, but its
         // computed pixel value depends on the winning font-size. Re-resolve it
         // only after stylesheet declarations have completed their cascade.
+        recompute_cascaded_line_height(node, matched_rules);
         recompute_inline_font_relative_metrics(node);
         // Pseudo-elements inherit the originating element's completed
         // computed style. Apply them only after its custom and ordinary
@@ -3474,6 +3507,7 @@
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
+        recompute_cascaded_line_height(node, matched_rules);
         recompute_inline_font_relative_metrics(node);
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
             if (pseudo_kind >= 3 && pseudo_kind <= 6) {

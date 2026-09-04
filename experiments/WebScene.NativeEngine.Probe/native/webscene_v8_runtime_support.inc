@@ -805,14 +805,17 @@ float resolved_declared_line_height(
         value.begin(),
         value.end(),
         [](unsigned char character) { return std::isalpha(character) || character == '%'; });
-    return !has_explicit_unit && parsed_value <= 4.0F
-        ? parsed_value * font_size
+    // Preserve a <number> until used-value resolution. It inherits as a
+    // multiplier, not as the declaring element's pixel line-height.
+    return !has_explicit_unit
+        ? -3.0F - parsed_value
         : parsed_value;
 }
 
 struct parsed_font_shorthand final {
     float font_size{14.0F};
     float line_height{-2.0F};
+    std::string line_height_token{"normal"};
     int32_t font_weight{400};
     std::string font_family;
     bool complete{true};
@@ -896,6 +899,7 @@ std::optional<parsed_font_shorthand> parse_font_shorthand(
         if (family_index < tokens.size()) line_height_token = tokens[family_index++];
     }
     if (!line_height_token.empty()) {
+        result.line_height_token = line_height_token;
         result.line_height = resolved_declared_line_height(
             node,
             line_height_token,

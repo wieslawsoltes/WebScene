@@ -386,6 +386,7 @@ struct node_style final {
         align_mode align_self{align_mode::stretch};
         int32_t z_index{0};
         float font_size{-1};
+        // -1: inherit, -2: normal, <= -3: unitless multiplier encoded as -3 - n.
         float line_height{-1};
         float opacity{1};
         uint32_t background_rgba{0};
@@ -534,6 +535,7 @@ struct node_style final {
     // Negative means unspecified/inherited. Zero is a valid CSS value and is
     // used by visually hidden accessibility content.
     float font_size{-1};
+    // -1: inherit, -2: normal, <= -3: unitless multiplier encoded as -3 - n.
     float line_height{-1};
     int32_t font_weight{0};
     float letter_spacing{0};

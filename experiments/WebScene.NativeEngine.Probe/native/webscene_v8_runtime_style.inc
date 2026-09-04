@@ -877,6 +877,11 @@
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
+        if (canonical_name == "font-size" || canonical_name == "font") {
+            self->recascade_connected_subtree(*node, "font-metrics");
+            self->document.mark_dirty();
+            return;
+        }
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);
@@ -1255,7 +1260,11 @@
                     ancestor = ancestor->parent) {
                     line_height = ancestor->style.line_height;
                 }
-                if (line_height == -2.0F) {
+                if (line_height <= -3.0F) {
+                    value = serialize_css_number(
+                        (-3.0F - line_height) * (node->style.font_size >= 0
+                            ? node->style.font_size : inherited_font_size(*node))) + "px";
+                } else if (line_height == -2.0F) {
                     value = "normal";
                 } else if (line_height < 0) {
                     const auto font_size = node->style.font_size >= 0
@@ -1835,7 +1844,11 @@
                 ancestor = ancestor->parent) {
                 line_height = ancestor->style.line_height;
             }
-            if (line_height == -2.0F) {
+            if (line_height <= -3.0F) {
+                value = serialize_css_number(
+                    (-3.0F - line_height) * (node->style.font_size >= 0
+                        ? node->style.font_size : inherited_font_size(*node))) + "px";
+            } else if (line_height == -2.0F) {
                 value = "normal";
             } else if (line_height < 0) {
                 const auto font_size = node->style.font_size >= 0
@@ -2266,6 +2279,11 @@
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
+        if (canonical_name == "font-size" || canonical_name == "font") {
+            self->recascade_connected_subtree(*node, "font-metrics");
+            self->document.mark_dirty();
+            return;
+        }
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);
