@@ -14,17 +14,19 @@ public sealed class NativeWebFontCacheCollection;
 [Collection("Native web-font cache")]
 public sealed class NativeWebFontCacheTests
 {
-    private sealed class NativeRuntimeFactAttribute : FactAttribute
+    private sealed class NativeRuntimeTheoryAttribute : TheoryAttribute
     {
-        public NativeRuntimeFactAttribute()
+        public NativeRuntimeTheoryAttribute()
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")))
                 Skip = "Set WEBSCENE_TEST_NATIVE_LIBRARY to exercise native stylesheet caching.";
         }
     }
 
-    [NativeRuntimeFact]
-    public async Task CachedAndInlineStylesheetsRegisterFontsInEveryDocument()
+    [NativeRuntimeTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedAndInlineStylesheetsRegisterFontsInEveryDocument(bool variable)
     {
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
         var cache = Directory.CreateTempSubdirectory("webscene-webfont-test-").FullName;
@@ -37,7 +39,7 @@ public sealed class NativeWebFontCacheTests
         listener.Prefixes.Add(origin);
         listener.Start();
         using var stop = new CancellationTokenSource();
-        var font = ReadPlatformFont();
+        var font = variable ? VariableWebFontTests.FontData() : ReadPlatformFont();
         var stylesheetRequests = 0;
         var fontRequests = 0;
         var server = Task.Run(async () =>
@@ -59,7 +61,7 @@ public sealed class NativeWebFontCacheTests
                 {
                     Interlocked.Increment(ref stylesheetRequests);
                     context.Response.ContentType = "text/css";
-                    bytes = Encoding.UTF8.GetBytes("@font-face{font-family:CachedFace;src:url('font.ttf')} body{font-family:CachedFace}");
+                    bytes = Encoding.UTF8.GetBytes("@font-face{font-family:CachedFace;src:url('font.ttf');font-weight:100 900} body{font-family:CachedFace}");
                 }
                 else
                 {
@@ -89,6 +91,16 @@ public sealed class NativeWebFontCacheTests
                     Assert.True(registry.Contains("InlineFace"), $"Inline font missing on pass {pass}");
                     Assert.True(registry.TryResolve("CachedFace", out var face));
                     Assert.False(string.IsNullOrEmpty(face.FamilyName));
+                    if (variable && NativeTextShaping.VariableFontInstancingEnabled)
+                    {
+                        Assert.True(registry.TryResolve("CachedFace", 700, out var bold));
+                        Assert.Equal(700, bold.FontWeight);
+                        Assert.Null(NativeVariableFontInstancer.ReadWeightAxis(bold));
+                        var conversions = NativeTextShaping.GetVariableFontMetrics().Conversions;
+                        Assert.True(registry.TryResolve("CachedFace", 700, out var cachedBold));
+                        Assert.Same(bold, cachedBold);
+                        Assert.Equal(conversions, NativeTextShaping.GetVariableFontMetrics().Conversions);
+                    }
                     if (pass == 1) Assert.True(NativeWebSceneApi.GetResourceCacheMetrics(engine).Hits > 0);
                 }
                 finally { NativeWebSceneApi.EngineDestroy(engine); }

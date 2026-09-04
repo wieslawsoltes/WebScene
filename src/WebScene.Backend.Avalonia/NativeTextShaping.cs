@@ -105,54 +105,110 @@ public static class NativeTextShaping
     internal sealed class WebTypefaceRegistry : IDisposable
     {
         private readonly object _gate = new();
-        private readonly ConcurrentDictionary<string, WebTypefaceLease> _typefaces =
-            new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, FaceRegistration[]> _typefaces = new(StringComparer.OrdinalIgnoreCase);
+        private readonly bool _instantiate = VariableFontInstancingEnabled;
+        private int _references = 1;
+        private bool _ownerDisposed;
         private volatile bool _disposed;
+        internal WebTypefaceRegistry(bool? instantiate = null) => _instantiate = instantiate ?? VariableFontInstancingEnabled;
 
-        internal bool Register(string family, ReadOnlySpan<byte> data)
+        internal bool Register(string family, ReadOnlySpan<byte> data, int? minimumWeight = null, int? maximumWeight = null, SKFontStyleSlant? slant = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(family);
             if (data.IsEmpty) return false;
-
             var normalizedFamily = family.Trim().Trim('"', '\'');
             lock (_gate)
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                if (_typefaces.ContainsKey(normalizedFamily)) return true;
+                ObjectDisposedException.ThrowIf(_ownerDisposed, this);
                 var lease = AcquireWebTypeface(data);
                 if (lease is null) return false;
-                if (_typefaces.TryAdd(normalizedFamily, lease)) return true;
-                lease.Dispose();
+                var min = Math.Clamp(minimumWeight ?? (int)(lease.Shared.Axis?.Minimum ?? lease.Typeface.FontWeight), 1, 1000);
+                var max = Math.Clamp(maximumWeight ?? (int)(lease.Shared.Axis?.Maximum ?? lease.Typeface.FontWeight), min, 1000);
+                var faceSlant = slant ?? lease.Typeface.FontSlant;
+                _typefaces.TryGetValue(normalizedFamily, out var existing);
+                existing ??= [];
+                if (existing.Any(item => ReferenceEquals(item.Lease.Shared, lease.Shared) && item.Minimum == min && item.Maximum == max && item.Slant == faceSlant))
+                {
+                    lease.Dispose();
+                    return true;
+                }
+                _typefaces[normalizedFamily] = [.. existing, new(lease, min, max, faceSlant)];
                 return true;
             }
         }
 
-        internal bool TryResolve(string family, out SKTypeface typeface)
+        internal bool TryResolve(string family, out SKTypeface typeface) => TryResolve(family, 400, out typeface);
+        internal bool TryResolve(string family, int weight, out SKTypeface typeface)
+            => TryResolve(family, weight, SKFontStyleSlant.Upright, out typeface);
+        internal bool TryResolve(string family, int weight, SKFontStyleSlant slant, out SKTypeface typeface)
         {
-            if (!_disposed && _typefaces.TryGetValue(family, out var lease))
+            if (!_disposed && _typefaces.TryGetValue(family, out var faces))
             {
-                typeface = lease.Typeface;
+                weight = Math.Clamp(weight, 1, 1000);
+                var selected = faces[0];
+                var best = int.MaxValue;
+                foreach (var face in faces)
+                {
+                    var candidate = Math.Clamp(weight, face.Minimum, face.Maximum);
+                    var rank = WeightRank(weight, candidate) + (face.Slant == slant ? 0 : 10000);
+                    // Later declarations win ties, as for overlapping @font-face rules.
+                    if (rank <= best) { selected = face; best = rank; }
+                }
+                typeface = _instantiate
+                    ? selected.Lease.Shared.Resolve(Math.Clamp(weight, selected.Minimum, selected.Maximum))
+                    : selected.Lease.Typeface;
                 return true;
             }
             typeface = null!;
             return false;
         }
 
-        internal bool Contains(string family)
-            => !_disposed && _typefaces.ContainsKey(family);
+        internal static int WeightRank(int requested, int candidate)
+        {
+            if (requested == candidate) return 0;
+            if (requested is >= 400 and <= 500)
+                return candidate >= requested && candidate <= 500 ? candidate - requested
+                    : candidate < requested ? 1000 + requested - candidate : 2000 + candidate - 500;
+            return requested < 400
+                ? candidate < requested ? requested - candidate : 1000 + candidate - requested
+                : candidate > requested ? candidate - requested : 1000 + requested - candidate;
+        }
 
+        internal bool Contains(string family) => !_disposed && _typefaces.ContainsKey(family);
+        internal IDisposable Retain()
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                _references++;
+                return new RegistryReference(this);
+            }
+        }
+        private void Release()
+        {
+            lock (_gate)
+            {
+                if (--_references != 0) return;
+                _disposed = true;
+                foreach (var faces in _typefaces.Values)
+                    foreach (var face in faces) face.Lease.Dispose();
+                _typefaces.Clear();
+            }
+        }
         public void Dispose()
         {
             lock (_gate)
             {
-                if (_disposed) return;
-                _disposed = true;
-                foreach (var lease in _typefaces.Values)
-                {
-                    lease.Dispose();
-                }
-                _typefaces.Clear();
+                if (_ownerDisposed) return;
+                _ownerDisposed = true;
+                Release();
             }
+        }
+        private sealed record FaceRegistration(WebTypefaceLease Lease, int Minimum, int Maximum, SKFontStyleSlant Slant);
+        private sealed class RegistryReference(WebTypefaceRegistry registry) : IDisposable
+        {
+            private WebTypefaceRegistry? _registry = registry;
+            public void Dispose() => Interlocked.Exchange(ref _registry, null)?.Release();
         }
     }
 
@@ -162,7 +218,7 @@ public static class NativeTextShaping
         long Hits,
         long Misses);
 
-    internal static WebTypefaceRegistry CreateWebTypefaceRegistry() => new();
+    internal static WebTypefaceRegistry CreateWebTypefaceRegistry(bool? instantiate = null) => new(instantiate);
 
     public static WebTypefaceCacheMetrics GetWebTypefaceCacheMetrics()
     {
@@ -219,7 +275,7 @@ public static class NativeTextShaping
                      ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var family = rawFamily.Trim('"', '\'');
-            if (registry?.TryResolve(family, out var scopedTypeface) == true)
+            if (registry?.TryResolve(family, fontWeight, slant, out var scopedTypeface) == true)
             {
                 return scopedTypeface;
             }
@@ -1694,17 +1750,16 @@ public static class NativeTextShaping
             {
                 cached.ReferenceCount++;
                 Interlocked.Increment(ref _webTypefaceCacheHits);
-                return new WebTypefaceLease(contentHash, cached.Typeface);
+                return new WebTypefaceLease(contentHash, cached);
             }
 
             using var fontData = SKData.CreateCopy(data);
             var typeface = SKTypeface.FromData(fontData);
             if (typeface is null) return null;
-            WebTypefaceCache.Add(
-                contentHash,
-                new SharedWebTypeface(typeface));
+            var shared = new SharedWebTypeface(typeface);
+            WebTypefaceCache.Add(contentHash, shared);
             Interlocked.Increment(ref _webTypefaceCacheMisses);
-            return new WebTypefaceLease(contentHash, typeface);
+            return new WebTypefaceLease(contentHash, shared);
         }
     }
 
@@ -1716,22 +1771,109 @@ public static class NativeTextShaping
             cached.ReferenceCount--;
             if (cached.ReferenceCount > 0) return;
             WebTypefaceCache.Remove(contentHash);
-            cached.Typeface.Dispose();
+            cached.Dispose();
         }
     }
 
-    private sealed class SharedWebTypeface(SKTypeface typeface)
+    // Opt-in until the packaged-platform and interactive performance gates pass.
+    internal static readonly bool VariableFontInstancingEnabled =
+        Environment.GetEnvironmentVariable("WEBSCENE_VARIABLE_FONT_INSTANCING") == "1";
+    internal readonly record struct VariableFontMetrics(long Conversions, long Hits, long Failures, double Milliseconds, int Instances, long Bytes);
+    private static long _instanceConversions, _instanceHits, _instanceFailures, _instanceTicks, _instanceBytes;
+    private static int _instanceCount;
+    internal static VariableFontMetrics GetVariableFontMetrics()
+    {
+        lock (WebTypefaceCacheGate)
+            return new(_instanceConversions, Interlocked.Read(ref _instanceHits), _instanceFailures,
+                _instanceTicks * 1000d / Stopwatch.Frequency, _instanceCount, _instanceBytes);
+    }
+    internal static (int PerFont, int Total, long Bytes) InstanceLimits = (64, 256, 64L * 1024 * 1024);
+    internal static Func<SKTypeface, float, byte[]> InstanceFactory = NativeVariableFontInstancer.Instantiate;
+
+    private sealed class SharedWebTypeface(SKTypeface typeface) : IDisposable
     {
         internal SKTypeface Typeface { get; } = typeface;
+        internal NativeVariableFontInstancer.WeightAxis? Axis { get; } = NativeVariableFontInstancer.ReadWeightAxis(typeface);
         internal int ReferenceCount { get; set; } = 1;
+        private readonly ConcurrentDictionary<float, SKTypeface> _variants = new();
+        private readonly List<SKTypeface> _ownedVariants = [];
+        private long _bytes;
+        private bool _saturated;
+        private bool _unavailable;
+        internal SKTypeface Resolve(int weight)
+        {
+            if (Axis is not { } axis) return Typeface;
+            var coordinate = Math.Clamp(weight, axis.Minimum, axis.Maximum);
+            if (_variants.TryGetValue(coordinate, out var found))
+            {
+                Interlocked.Increment(ref _instanceHits);
+                return found;
+            }
+            lock (WebTypefaceCacheGate)
+            {
+                if (_variants.TryGetValue(coordinate, out found)) return found;
+                if (_saturated || _unavailable) return Typeface;
+                var start = Stopwatch.GetTimestamp();
+                try
+                {
+                    if (_ownedVariants.Count >= InstanceLimits.PerFont || _instanceCount >= InstanceLimits.Total
+                        || _instanceBytes >= InstanceLimits.Bytes)
+                    {
+                        _saturated = true;
+                        throw new InvalidOperationException("Variable-font instance cache limit reached.");
+                    }
+                    _instanceConversions++;
+                    var bytes = InstanceFactory(Typeface, coordinate);
+                    if (_instanceBytes + bytes.Length > InstanceLimits.Bytes)
+                    {
+                        _saturated = true;
+                        throw new InvalidOperationException("Variable-font instance byte limit reached.");
+                    }
+                    using var data = SKData.CreateCopy(bytes);
+                    var result = SKTypeface.FromData(data)
+                        ?? throw new InvalidOperationException("Skia could not load the instantiated font.");
+                    if (result.GetTableSize(0x66766172) != 0 || result.GlyphCount != Typeface.GlyphCount)
+                    {
+                        result.Dispose();
+                        throw new InvalidOperationException("Font instantiation did not preserve a complete static face.");
+                    }
+                    _ownedVariants.Add(result);
+                    _bytes += bytes.Length;
+                    _instanceBytes += bytes.Length;
+                    _instanceCount++;
+                    _variants[coordinate] = result;
+                    return result;
+                }
+                catch (Exception error)
+                {
+                    if (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+                        _unavailable = true;
+                    _instanceFailures++;
+                    _variants[coordinate] = Typeface;
+                    Console.Error.WriteLine($"[WebScene font instancing] {Typeface.FamilyName} wght={coordinate}: {error.Message}");
+                    return Typeface;
+                }
+                finally { _instanceTicks += Stopwatch.GetTimestamp() - start; }
+            }
+        }
+        public void Dispose()
+        {
+            foreach (var variant in _ownedVariants) variant.Dispose();
+            _instanceCount -= _ownedVariants.Count;
+            _instanceBytes -= _bytes;
+            _ownedVariants.Clear();
+            _variants.Clear();
+            Typeface.Dispose();
+        }
     }
 
     private sealed class WebTypefaceLease(
         string contentHash,
-        SKTypeface typeface) : IDisposable
+        SharedWebTypeface shared) : IDisposable
     {
         private string? _contentHash = contentHash;
-        internal SKTypeface Typeface { get; } = typeface;
+        internal SharedWebTypeface Shared { get; } = shared;
+        internal SKTypeface Typeface => Shared.Typeface;
 
         public void Dispose()
         {

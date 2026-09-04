@@ -494,7 +494,8 @@ internal sealed partial class WptSubsetRunner
             _manifest.Viewport,
             _upstreamRoot,
             documentPath,
-            html);
+            html,
+            Path.GetDirectoryName(TestDocumentPath(documentPath)));
     }
 
     private string PrepareTestHarnessDocument(string html, string path)

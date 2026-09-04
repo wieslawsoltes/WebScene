@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8">
+<title>Variable-font weight selection agrees with static instances</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+@font-face { font-family: Variable; src: url('../../Fonts/Roboto/Roboto-Variable.ttf'); font-weight: 100 900; }
+@font-face { font-family: Compressed; src: url('../../Fonts/Roboto/Roboto-Variable.woff2'); font-weight: 100 900; }
+@font-face { font-family: Static; src: url('../../Fonts/Roboto/Roboto-400.ttf'); font-weight: 400; }
+@font-face { font-family: Static; src: url('../../Fonts/Roboto/Roboto-550.ttf'); font-weight: 550; }
+@font-face { font-family: Static; src: url('../../Fonts/Roboto/Roboto-700.ttf'); font-weight: 700; }
+.probe { display: inline-block; font-size: 28px; white-space: nowrap; }
+#variable { font-family: Variable; } #reference { font-family: Static; } #compressed { font-family: Compressed; }
+</style>
+<div><span class="probe" id="variable">Release Notes: Version 2.2.2</span></div>
+<div><span class="probe" id="reference">Release Notes: Version 2.2.2</span></div>
+<div><span class="probe" id="compressed">Release Notes: Version 2.2.2</span></div>
+<div><span class="probe" id="late" style="font-family:Late;font-weight:700">Release Notes: Version 2.2.2</span></div>
+<script>
+const text = 'Release Notes: Version 2.2.2';
+promise_test(async () => {
+  if (document.fonts) await document.fonts.ready;
+  for (const weight of [400, 550, 700, 400]) {
+    variable.style.fontWeight = reference.style.fontWeight = compressed.style.fontWeight = String(weight);
+    const expected = reference.getBoundingClientRect().width;
+    assert_approx_equals(variable.getBoundingClientRect().width, expected, 0.5, 'TTF weight ' + weight);
+    assert_approx_equals(compressed.getBoundingClientRect().width, expected, 0.5, 'WOFF2 weight ' + weight);
+  }
+}, 'DOM variable font and WOFF2 match independent static fonts through weight changes');
+promise_test(async () => {
+  if (document.fonts) await document.fonts.ready;
+  const context = document.createElement('canvas').getContext('2d');
+  const width = (family, weight) => { context.font = weight + ' 28px ' + family; return context.measureText(text).width; };
+  for (const weight of [400, 550, 700, 400])
+    assert_approx_equals(width('Variable', weight), width('Static', weight), 0.5, 'Canvas weight ' + weight);
+  assert_greater_than(width('Variable', 700), width('Variable', 400));
+}, 'Canvas measures the selected face, including separate static weights sharing a family');
+promise_test(async () => {
+  if (document.fonts) await document.fonts.ready;
+  reference.style.fontWeight = '450';
+  const matched = reference.getBoundingClientRect().width;
+  reference.style.fontWeight = '400';
+  assert_equals(matched, reference.getBoundingClientRect().width);
+}, 'CSS 400–500 matching searches downward before weights above 500');
+promise_test(async () => {
+  const element = document.getElementById('late');
+  element.getBoundingClientRect(); // Populate the family/weight measurement cache before registration.
+  const style = document.createElement('style');
+  style.textContent = "@font-face{font-family:Late;src:url('../../Fonts/Roboto/Roboto-700.ttf');font-weight:700}";
+  document.head.appendChild(style);
+  element.getBoundingClientRect();
+  if (document.fonts) await document.fonts.ready;
+  reference.style.fontWeight = '700';
+  assert_approx_equals(element.getBoundingClientRect().width, reference.getBoundingClientRect().width, 0.5);
+}, 'Late font registration invalidates previously measured fallback text');
+</script>

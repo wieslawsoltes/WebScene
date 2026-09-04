@@ -50,6 +50,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
         new(StringComparer.Ordinal);
     private NativeTextShaping.WebTypefaceRegistry? _webTypefaces;
+    private IDisposable? _webTypefaceReference;
     private float _presenterDeviceScaleFactor = 1f;
 
     internal float PresenterDeviceScaleFactor => _presenterDeviceScaleFactor;
@@ -67,7 +68,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
     internal void SetWebTypefaceRegistry(
         NativeTextShaping.WebTypefaceRegistry? registry)
-        => _webTypefaces = registry;
+    {
+        if (ReferenceEquals(_webTypefaces, registry)) return;
+        Reset();
+        _webTypefaces = registry;
+    }
 
     internal bool SetPresenterDeviceScaleFactor(double deviceScaleFactor)
     {
@@ -177,6 +182,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
         if (shouldApply)
         {
+            _webTypefaceReference ??= _webTypefaces?.Retain();
             if ((header.Flags & SceneDomReplacement) != 0)
             {
                 var compiledDom = CompileDom(view);
@@ -3159,7 +3165,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                      StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var family = rawFamily.Trim('"', '\'');
-            if (_webTypefaces?.TryResolve(family, out var webTypeface) == true)
+            if (_webTypefaces?.TryResolve(family, parsed.Weight, parsed.Slant, out var webTypeface) == true)
             {
                 paint.Typeface = webTypeface;
                 paint.TextSize = parsed.Size;
@@ -3464,6 +3470,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         s_strings.Clear();
         s_revision = 0;
         s_totalCommandCount = 0;
+        _webTypefaceReference?.Dispose();
+        _webTypefaceReference = null;
     }
 
     private void RebuildLayerOrder()

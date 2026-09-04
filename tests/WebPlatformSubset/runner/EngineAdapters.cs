@@ -10,6 +10,7 @@ using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
 using WebScene.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia;
 using BackendNativeSceneView = WebScene.Backends.Avalonia.Native.NativeSceneView;
 
 namespace WebScene.WebPlatformSubset.Runner;
@@ -63,13 +64,15 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
     private double _frameTimestampMs;
     private bool _loaded;
     private bool _disposed;
+    private readonly bool _managedFontEngine;
 
     internal NativeWptEngineEnvironment(
         RunnerOptions options,
         ViewportSettings viewport,
         string upstreamRoot,
         string documentPath,
-        string html)
+        string html,
+        string? fontBaseDirectory = null)
     {
         _viewport = viewport;
         _renderer = new NativeSceneSnapshotRenderer(viewport.DeviceScaleFactor);
@@ -85,7 +88,17 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         }
 
         NativeApi.Configure(libraryPath);
-        _engine = NativeApi.Create(options.NativeCacheDirectory);
+        _managedFontEngine = html.Contains("@font-face", StringComparison.OrdinalIgnoreCase);
+        if (_managedFontEngine)
+        {
+            // Font contracts must exercise the product stylesheet-consumption,
+            // registration and measurement path, not a separate harness font map.
+            NativeWebSceneApi.ConfigureLibraryPath(libraryPath);
+            _engine = NativeWebSceneApi.EngineCreate(0, options.NativeCacheDirectory,
+                new AvaloniaResourceLoader { ScriptBaseDirectory = fontBaseDirectory ?? upstreamRoot }, _ => { });
+            _renderer.SetWebTypefaceRegistry(NativeWebSceneApi.GetWebTypefaceRegistry(_engine));
+        }
+        else _engine = NativeApi.Create(options.NativeCacheDirectory);
         if (_engine == IntPtr.Zero)
         {
             throw new InvalidOperationException("The native WebScene engine could not be created.");
@@ -263,7 +276,11 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         _disposed = true;
         _renderer.Dispose();
         _interop.Dispose();
-        if (_engine != IntPtr.Zero) NativeApi.EngineDestroy(_engine);
+        if (_engine != IntPtr.Zero)
+        {
+            if (_managedFontEngine) NativeWebSceneApi.EngineDestroy(_engine);
+            else NativeApi.EngineDestroy(_engine);
+        }
     }
 
     private void LoadPreparedDocument(string html, string upstreamRoot, string documentPath)
@@ -552,6 +569,9 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
 
     internal NativeSceneSnapshotRenderer(double deviceScaleFactor)
         => _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
+
+    internal void SetWebTypefaceRegistry(NativeTextShaping.WebTypefaceRegistry? registry)
+        => _renderer.SetWebTypefaceRegistry(registry);
 
     internal void Apply(NativeSceneView* view)
     {

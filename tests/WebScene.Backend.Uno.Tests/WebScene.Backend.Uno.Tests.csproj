@@ -4,9 +4,13 @@
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);WEBSCENE_UNO</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../WebScene.Backend.Avalonia.Tests/VariableWebFontTests.cs" Link="VariableWebFontTests.cs" />
+    <None Include="../Fonts/Roboto/*" Link="Fonts/Roboto/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Uno\WebScene.Backend.Uno.csproj" />
   </ItemGroup>
 

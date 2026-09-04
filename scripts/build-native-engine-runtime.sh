@@ -451,13 +451,19 @@ cmake -E make_directory "$package_smoke_dir"
 (cd "$package_smoke_dir" && cmake -E tar xf "$package_path")
 package_native_path="$package_smoke_dir/runtimes/$rid/native/$native_name"
 
-dotnet run \
+WEBSCENE_VARIABLE_FONT_INSTANCING=1 dotnet run \
   --project "$repo_root/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj" \
   -c Release -- \
   --selection required \
   --native-library "$package_native_path" \
   --native-cache-directory "$build_dir/code-cache" \
   --output "$build_dir/wpt-results"
+
+WEBSCENE_TEST_NATIVE_LIBRARY="$package_native_path" \
+  WEBSCENE_VARIABLE_FONT_INSTANCING=1 \
+  dotnet test "$repo_root/tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj" \
+    -c Release -f net10.0 \
+    --filter 'FullyQualifiedName~NativeWebFontCacheTests|FullyQualifiedName~VariableWebFontTests|FullyQualifiedName~SvgPictureRenderingTests'
 
 WEBSCENE_NATIVE_ENGINE_PATH="$package_native_path" \
   dotnet run \

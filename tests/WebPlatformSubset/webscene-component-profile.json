@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/css-variable-font-weight.html",
+      "type": "testharness",
+      "capabilities": ["web-font-weight", "variable-font-instancing", "woff2-font", "canvas-text-metrics"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Actual variable outlines and advances must agree with independent static font weights. Run qualification with WEBSCENE_VARIABLE_FONT_INSTANCING=1 until shipping gates pass."
+    },
+    {
       "path": "contracts/css-adjacent-block-margin-collapse.html",
       "type": "testharness",
       "capabilities": ["adjacent-block-margin-collapse", "flex-noncollapsing-margins"],

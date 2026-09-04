@@ -40,6 +40,7 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeRuntimeDiagnostics.cs" Link="NativeRuntimeDiagnostics.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneView.Diagnostics.cs" Link="NativeWebSceneView.Diagnostics.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextShaping.cs" Link="NativeTextShaping.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeVariableFontInstancer.cs" Link="NativeVariableFontInstancer.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextRunPositioning.cs" Link="NativeTextRunPositioning.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\WindowsDirectWriteRunPositioner.cs" Link="WindowsDirectWriteRunPositioner.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropCallbacks.cs" Link="NativeInteropCallbacks.cs" />

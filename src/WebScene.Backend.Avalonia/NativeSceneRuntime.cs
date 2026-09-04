@@ -1284,13 +1284,20 @@ public static unsafe partial class NativeWebSceneApi
                 var family = CssDeclarationValue(rule, "font-family")
                     ?.Trim().Trim('"', '\'');
                 var source = FirstCssUrl(CssDeclarationValue(rule, "src"));
+                var (minimumWeight, maximumWeight) = ParseFontFaceWeight(CssDeclarationValue(rule, "font-weight"));
+                var slant = CssDeclarationValue(rule, "font-style")?.Trim().ToLowerInvariant() switch
+                {
+                    "italic" => SKFontStyleSlant.Italic,
+                    "oblique" => SKFontStyleSlant.Oblique,
+                    _ => SKFontStyleSlant.Upright
+                };
                 if (string.IsNullOrWhiteSpace(family)
                     || string.IsNullOrWhiteSpace(source))
                 {
                     continue;
                 }
 
-                var sourceKey = $"{family}\u001f{stylesheetAddress}\u001f{source}";
+                var sourceKey = $"{family}\u001f{stylesheetAddress}\u001f{source}\u001f{minimumWeight}\u001f{maximumWeight}\u001f{slant}";
                 if (!_registeredFontSources.TryAdd(sourceKey, 0)) continue;
                 try
                 {
@@ -1298,7 +1305,7 @@ public static unsafe partial class NativeWebSceneApi
                         .LoadBytesAsync(source, stylesheetAddress, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
-                    if (!WebTypefaces.Register(family, resource.Content))
+                    if (!WebTypefaces.Register(family, resource.Content, minimumWeight, maximumWeight, slant))
                     {
                         Console.Error.WriteLine(
                             $"[WebScene native web font] '{resource.DisplayName}' is not a supported font.");
@@ -1311,6 +1318,16 @@ public static unsafe partial class NativeWebSceneApi
                         + $"'{stylesheetAddress}': {error.Message}");
                 }
             }
+        }
+
+        internal static (int Minimum, int Maximum) ParseFontFaceWeight(string? value)
+        {
+            if (string.Equals(value?.Trim(), "bold", StringComparison.OrdinalIgnoreCase)) return (700, 700);
+            var tokens = value?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries) ?? [];
+            if (tokens.Length is < 1 or > 2 || !int.TryParse(tokens[0], out var min) || min is < 1 or > 1000)
+                return (400, 400);
+            if (tokens.Length == 1) return (min, min);
+            return int.TryParse(tokens[1], out var max) && max >= min && max <= 1000 ? (min, max) : (400, 400);
         }
 
         private static IEnumerable<string> CssFontFaceRules(string css)
