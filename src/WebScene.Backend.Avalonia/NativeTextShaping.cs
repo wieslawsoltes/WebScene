@@ -237,8 +237,7 @@ public static class NativeTextShaping
         ArgumentException.ThrowIfNullOrWhiteSpace(family);
         if (data.IsEmpty) return false;
 
-        using var fontData = SKData.CreateCopy(data);
-        var typeface = SKTypeface.FromData(fontData);
+        var typeface = DecodeWebTypeface(data);
         if (typeface is null) return false;
 
         var normalizedFamily = family.Trim().Trim('"', '\'');
@@ -1753,14 +1752,24 @@ public static class NativeTextShaping
                 return new WebTypefaceLease(contentHash, cached);
             }
 
-            using var fontData = SKData.CreateCopy(data);
-            var typeface = SKTypeface.FromData(fontData);
+            var typeface = DecodeWebTypeface(data);
             if (typeface is null) return null;
             var shared = new SharedWebTypeface(typeface);
             WebTypefaceCache.Add(contentHash, shared);
             Interlocked.Increment(ref _webTypefaceCacheMisses);
             return new WebTypefaceLease(contentHash, shared);
         }
+    }
+
+    private static SKTypeface? DecodeWebTypeface(ReadOnlySpan<byte> data)
+    {
+        try
+        {
+            using var fontData = SKData.CreateCopy(NativeWebFontDecoder.IsCompressed(data)
+                ? NativeWebFontDecoder.Decode(data) : data);
+            return SKTypeface.FromData(fontData);
+        }
+        catch (System.IO.InvalidDataException) { return null; }
     }
 
     private static void ReleaseWebTypeface(string contentHash)

@@ -15,6 +15,74 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class VariableWebFontTests
 {
     [Theory]
+    [InlineData("Roboto-Variable.woff2")]
+    [InlineData("Roboto-Variable-null.woff2")]
+    [InlineData("Roboto-Variable-hmtx.woff2")]
+    [InlineData("Roboto-Variable.woff")]
+    public void Woff2DecodingPreservesVariableAndShapingTables(string file)
+    {
+        var encoded = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", file));
+        using var originalData = SKData.CreateCopy(FontData());
+        using var original = SKTypeface.FromData(originalData);
+        using var decodedData = SKData.CreateCopy(NativeWebFontDecoder.Decode(encoded));
+        using var decoded = SKTypeface.FromData(decodedData);
+        Assert.NotNull(decoded);
+        Assert.Equal(original.GlyphCount, decoded.GlyphCount);
+        foreach (var tag in new uint[] { 0x66766172, 0x67766172, 0x48564152, 0x47535542, 0x47504f53, 0x636d6170 })
+            Assert.Equal(original.GetTableData(tag), decoded.GetTableData(tag));
+        using var originalFont = new SKFont(original, 20);
+        using var decodedFont = new SKFont(decoded, 20);
+        for (ushort glyph = 0; glyph < original.GlyphCount; glyph++)
+        {
+            using var expected = originalFont.GetGlyphPath(glyph);
+            using var actual = decodedFont.GetGlyphPath(glyph);
+            Assert.Equal(expected?.Points, actual?.Points);
+            Assert.Equal(expected?.VerbCount, actual?.VerbCount);
+        }
+        Assert.Equal(original.GetTableData(0x686d7478), decoded.GetTableData(0x686d7478));
+    }
+
+    [Fact]
+    public void Woff2DecoderRejectsTruncationAndOversizedExpansion()
+    {
+        var encoded = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", "Roboto-Variable.woff2"));
+        foreach (var length in new[] { 0, 4, 47, 48, encoded.Length - 1 })
+            Assert.Throws<InvalidDataException>(() => NativeWebFontDecoder.Decode(encoded.AsSpan(0, length)));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(encoded.AsSpan(16), uint.MaxValue);
+        Assert.Throws<InvalidDataException>(() => NativeWebFontDecoder.Decode(encoded));
+    }
+
+    [Fact]
+    public void CorruptWebFontContainersFailRegistrationWithoutEscapingExceptions()
+    {
+        foreach (var file in new[] { "Roboto-Variable.woff2", "Roboto-Variable.woff" })
+        {
+            var source = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", file));
+            foreach (var offset in new[] { 8, 12, 16 }) // File length, table count, expanded size.
+            {
+                var damaged = (byte[])source.Clone();
+                damaged.AsSpan(offset, 4).Fill(255);
+                using var registry = NativeTextShaping.CreateWebTypefaceRegistry(true);
+                Assert.False(registry.Register("Broken", damaged));
+            }
+        }
+    }
+
+    [Fact]
+    public void DamagedWoff2PayloadsRemainBoundedAndReportInvalidData()
+    {
+        var source = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", "Roboto-Variable.woff2"));
+        var random = new Random(1298);
+        for (var i = 0; i < 64; i++)
+        {
+            var damaged = (byte[])source.Clone();
+            damaged[random.Next(48, damaged.Length)] ^= (byte)(1 << random.Next(8));
+            try { Assert.InRange(NativeWebFontDecoder.Decode(damaged).Length, 1, 64 * 1024 * 1024); }
+            catch (InvalidDataException) { /* Well-formed mutations may still decode; malformed ones must fail safely. */ }
+        }
+    }
+
+    [Theory]
     [InlineData(null, true)]
     [InlineData("", true)]
     [InlineData("1", true)]
@@ -38,10 +106,14 @@ public sealed class VariableWebFontTests
     [InlineData("Roboto-Variable.woff2", 400)]
     [InlineData("Roboto-Variable.woff2", 550)]
     [InlineData("Roboto-Variable.woff2", 700)]
+    [InlineData("Roboto-Variable-null.woff2", 550)]
+    [InlineData("Roboto-Variable-hmtx.woff2", 550)]
+    [InlineData("Roboto-Variable.woff", 550)]
     public void OutlinesAndMetricsMatchIndependentFontToolsInstances(string file, int weight)
     {
         using var registry = NativeTextShaping.CreateWebTypefaceRegistry(true);
-        registry.Register("Variable", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", file)));
+        Assert.True(registry.Register("Variable", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", file))),
+            $"Could not decode/register {file} on {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
         var actual = NativeTextShaping.ResolveTypeface("Variable", weight, registry);
         using var data = SKData.CreateCopy(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fonts", "Roboto", $"Roboto-{weight}.ttf")));
         using var reference = SKTypeface.FromData(data);
@@ -246,7 +318,10 @@ public sealed class VariableWebFontTests
         using var resultData = SKData.CreateCopy(bytes);
         using var result = SKTypeface.FromData(resultData);
         Assert.NotNull(result);
-        Assert.Equal(weight, result.FontWeight);
+        // DirectWrite/Skia's style classification can map nonstandard weights
+        // (550) differently. Assert the actual instantiated OS/2 weight, just
+        // as the independent outline/advance/raster comparisons above do.
+        Assert.Equal(weight, Weight(result));
         Assert.Null(NativeVariableFontInstancer.ReadWeightAxis(result));
         Assert.Equal(source.GlyphCount, result.GlyphCount);
         Assert.Equal(source.GetTableSize(0x47535542) > 0, result.GetTableSize(0x47535542) > 0); // GSUB

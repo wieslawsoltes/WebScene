@@ -45,7 +45,7 @@ internal static unsafe class NativeVariableFontInstancer
             input = hb_subset_input_create_or_fail();
             if (face == IntPtr.Zero || input == IntPtr.Zero)
                 throw new InvalidOperationException("Could not allocate font instancing input.");
-            // Skia supplies decoded SFNT tables, including for WOFF/WOFF2 input.
+            // The registry decodes WOFF/WOFF2 before handing SFNT data to Skia.
             // A face builder also preserves the full table directory for HarfBuzz.
             foreach (var tag in source.GetTableTags())
             {

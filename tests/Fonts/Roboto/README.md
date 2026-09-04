@@ -15,6 +15,7 @@ fonttools varLib.instancer Roboto-Variable.ttf wght=400 wdth=100 --output Roboto
 fonttools varLib.instancer Roboto-Variable.ttf wght=550 wdth=100 --output Roboto-550.ttf
 fonttools varLib.instancer Roboto-Variable.ttf wght=700 wdth=100 --output Roboto-700.ttf
 fonttools ttLib.woff2 compress Roboto-Variable.ttf -o Roboto-Variable.woff2
+python generate-web-font-fixtures.py # WOFF, null-transform WOFF2 and hmtx-transform WOFF2
 ```
 
 These files are test assets, not application fonts or a runtime dependency on

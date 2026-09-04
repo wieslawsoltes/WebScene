@@ -26,8 +26,18 @@ conversion.
 The first uncached weight is synchronously instantiated by the HarfBuzz subset
 functions already in the shipped native library. This is **not text subsetting**:
 all glyph IDs, shaping features, metrics, hinting and necessary tables are kept.
-Skia supplies decoded tables, so both SFNT/TTF and WOFF/WOFF2 inputs use the same
-path. The resulting static font is loaded by the existing Skia renderer.
+WebScene decodes WOFF/WOFF2 containers to SFNT before registering them with
+Skia: the existing Windows/Linux Skia builds cannot consistently decode WOFF2
+themselves. The shared managed decoder uses .NET's existing Brotli/zlib APIs,
+preserves all tables and glyphs, and reconstructs glyf/loca and hmtx transforms.
+SFNT/TTF input and system fonts are unchanged. The resulting static font is
+loaded by the existing Skia renderer.
+
+Container decoding happens once per live source-byte cache entry, not per
+weight or frame. Input, expanded table payloads and reconstructed font output
+are each limited to 64 MiB; table count is limited to 256. Malformed containers,
+unknown transform versions and WOFF2 font collections fail registration and
+use the normal font fallback. This adds no package dependency or native ABI.
 
 DOM layout/drawing and canvas measurement/drawing use the same registry and
 instance. Font registration invalidates native text measurements; render-pass
