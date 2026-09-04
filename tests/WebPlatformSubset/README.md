@@ -4,6 +4,10 @@ This directory contains WebScene's native-only compatibility profile. It is a bo
 set of browser contracts for trusted, packaged UI components—not a claim of full Web
 Platform Test conformance.
 
+For the release-note styling causes, required contracts, native font-cache tests,
+and variable-font weight qualification gates, see
+[release notes coverage](RELEASE_NOTES_COVERAGE.md).
+
 The profile manifest is `webscene-component-profile.json`. Every entry has one state:
 
 - `required` — reviewed release-gating behavior;

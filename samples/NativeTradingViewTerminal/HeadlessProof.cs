@@ -58,10 +58,10 @@ internal static partial class HeadlessProof
                 File.WriteAllText(Path.Combine(output,"resources.json"),JsonSerializer.Serialize(resourceFailures));
                 File.WriteAllText(Path.Combine(output,"fonts.json"),JsonSerializer.Serialize(NativeTextShaping.GetWebTypefaceCacheMetrics()));
                 var documentState=view.EvaluateTextAsync("""
-                    JSON.stringify(Array.from(document.querySelectorAll('html,body,ul,li,p,figure,iframe')).slice(0,100).map(n=>{
+                    JSON.stringify(Array.from(document.querySelectorAll('html,body,h2,.releases_step-version,.release-notes_title-row,ul,li,p,figure,iframe')).slice(0,100).map(n=>{
                       const s=getComputedStyle(n),r=n.getBoundingClientRect();
                       return {tag:n.tagName,cls:n.className,text:n.textContent.slice(0,80),rect:r,
-                        css:Object.fromEntries(['fontFamily','fontSize','lineHeight','paddingLeft','paddingTop','paddingBottom','marginTop','marginBottom','backgroundImage','backgroundSize','color','height','width'].map(k=>[k,s[k]]))};
+                        css:Object.fromEntries(['fontFamily','fontSize','fontWeight','lineHeight','gap','columnGap','paddingLeft','paddingTop','paddingBottom','marginLeft','marginRight','marginTop','marginBottom','backgroundImage','backgroundSize','color','height','width'].map(k=>[k,s[k]]))};
                     }))
                     """);
                 PumpUntil(documentState,TimeSpan.FromSeconds(10));

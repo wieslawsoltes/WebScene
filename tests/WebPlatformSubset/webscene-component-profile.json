@@ -43,6 +43,20 @@
       "evidence": ["stackwich-1298-release-notes"],
       "reason": "Release-note headings override font-size after a unitless line-height declaration."
     },
+    {
+      "path": "contracts/css-root-rem-body-font.html",
+      "type": "testharness",
+      "capabilities": ["document-root-font", "root-relative-lengths"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Release-note list indent and page padding use rem, independent of body font size."
+    },
+    {
+      "path": "contracts/css-percentage-vertical-padding-aspect-ratio.html",
+      "type": "testharness",
+      "capabilities": ["percentage-padding-inline-basis", "absolute-aspect-ratio-wrapper"],
+      "evidence": ["stackwich-1296-release-notes"],
+      "reason": "Embedded preview wrappers reserve height using percentage padding even without video playback support."
+    },
     { "path":"contracts/element-scroll-to-options.html", "type":"testharness", "capabilities":["element-scroll-to","element-scroll-alias","scroll-events"], "evidence":["stackwich-1291-back-to-top"] },
     { "path":"contracts/css-container-rule-not-unconditional.html", "type":"testharness", "capabilities":["conditional-rule-isolation"], "evidence":["table-view-side-gap"] },
     { "path":"contracts/css-logical-padding-calc.html", "type":"testharness", "capabilities":["logical-padding-calc"], "evidence":["table-view-title-alignment"] },
@@ -1049,20 +1063,6 @@
       "capabilities": ["absolute-containing-block-scroll-offset", "static-overflow-descendant-overlay"],
       "evidence": ["stackwich-1291-table-scroll-to-top"],
       "reason": "An absolute overlay must not move with a static scrolling ancestor below its containing block. Candidate pending cross-RID qualification."
-    },
-    {
-      "path": "contracts/css-root-rem-body-font.html",
-      "type": "testharness",
-      "capabilities": ["document-root-font", "root-relative-lengths"],
-      "evidence": ["stackwich-1298-release-notes"],
-      "reason": "Release-note list indent and page padding use rem, independent of body font size."
-    },
-    {
-      "path": "contracts/css-percentage-vertical-padding-aspect-ratio.html",
-      "type": "testharness",
-      "capabilities": ["percentage-padding-inline-basis", "absolute-aspect-ratio-wrapper"],
-      "evidence": ["stackwich-1296-release-notes"],
-      "reason": "Embedded preview wrappers reserve height using percentage padding even without video playback support."
     },
     {
       "path": "contracts/stacking-positive-descendant-hit-test.html",
