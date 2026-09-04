@@ -6,6 +6,13 @@
 #include <string>
 #include <string_view>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace webscene::embed_fallback {
 
 // Intentionally a small provider allow-list, not a general URL redirector.
@@ -40,8 +47,16 @@ inline std::optional<std::string> youtube_video_id(std::string_view url)
 
 inline bool enabled()
 {
+#if defined(_WIN32)
+    // The V8 DLL uses /MT: its private CRT environment can be stale when a
+    // managed host (or another CRT) changes the process environment.
+    char value[2]{};
+    return GetEnvironmentVariableA("WEBSCENE_YOUTUBE_EMBED_FALLBACK", value, sizeof(value)) != 1
+        || value[0] != '0';
+#else
     const auto* value = std::getenv("WEBSCENE_YOUTUBE_EMBED_FALLBACK");
     return value == nullptr || std::string_view(value) != "0";
+#endif
 }
 
 // A finite chain also handles YouTube's successful HTTP responses containing

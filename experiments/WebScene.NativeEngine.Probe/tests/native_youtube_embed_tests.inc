@@ -1,5 +1,3 @@
-#include "webscene_embed_fallback.h"
-
 // Product fallback contracts, not browser/YouTube playback conformance tests.
 void test_youtube_embed_fallback()
 {
@@ -159,7 +157,7 @@ void test_youtube_embed_fallback()
     const auto* previous_value = std::getenv("WEBSCENE_YOUTUBE_EMBED_FALLBACK");
     const auto previous = previous_value ? std::optional<std::string>(previous_value) : std::nullopt;
 #if defined(_WIN32)
-    _putenv_s("WEBSCENE_YOUTUBE_EMBED_FALLBACK", "0");
+    SetEnvironmentVariableA("WEBSCENE_YOUTUBE_EMBED_FALLBACK", "0");
 #else
     setenv("WEBSCENE_YOUTUBE_EMBED_FALLBACK", "0", 1);
 #endif
@@ -170,7 +168,7 @@ void test_youtube_embed_fallback()
         "host opt-out did not retain normal remote iframe loading");
     webscene_engine_destroy(engine);
 #if defined(_WIN32)
-    _putenv_s("WEBSCENE_YOUTUBE_EMBED_FALLBACK", previous ? previous->c_str() : "");
+    SetEnvironmentVariableA("WEBSCENE_YOUTUBE_EMBED_FALLBACK", previous ? previous->c_str() : nullptr);
 #else
     if (previous) setenv("WEBSCENE_YOUTUBE_EMBED_FALLBACK", previous->c_str(), 1);
     else unsetenv("WEBSCENE_YOUTUBE_EMBED_FALLBACK");

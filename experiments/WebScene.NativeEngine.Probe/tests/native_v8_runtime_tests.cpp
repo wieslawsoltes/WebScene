@@ -1,5 +1,6 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
+#include "webscene_embed_fallback.h"
 
 #include <ixwebsocket/IXGetFreePort.h>
 #include <ixwebsocket/IXNetSystem.h>
