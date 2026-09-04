@@ -414,7 +414,7 @@
                         inventory_css_value_functions(
                             declaration.value, "inline-style-parser");
                         if (!store_inline_declaration(node, declaration)) continue;
-                        apply_css_declaration(node, declaration);
+                        apply_css_declaration(node, declaration, true);
                         inline_property_mask |= inline_style_mask(declaration.name);
                     }
                     node.style.inline_property_mask |= inline_property_mask;
@@ -687,7 +687,7 @@
                 for (const auto& declaration : parse_css_declarations(style->second, true)) {
                     inventory_css_value_functions(declaration.value, "inline-style-parser");
                     if (!store_inline_declaration(node, declaration)) continue;
-                    apply_css_declaration(node, declaration);
+                    apply_css_declaration(node, declaration, true);
                     inline_property_mask |= inline_style_mask(declaration.name);
                 }
                 node.style.inline_property_mask |= inline_property_mask;

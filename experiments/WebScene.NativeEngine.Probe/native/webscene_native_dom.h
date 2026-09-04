@@ -739,6 +739,7 @@ struct node_style final {
     bool scroll_y_enabled : 1 {false};
     bool scrollbar_hidden : 1 {false};
     bool scrollbar_visibility_important : 1 {false};
+    uint8_t important_margin_sides : 4 {0};
     bool visibility_hidden : 1 {false};
     bool visibility_specified : 1 {false};
     bool pointer_events_none : 1 {false};

@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/css-margin-longhand-priority.html",
+      "type": "testharness",
+      "capabilities": ["margin-longhand-cascade", "auto-margin-alignment"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Important bottom margin on the last rich-text child must preserve horizontal centering."
+    },
+    {
       "path": "contracts/css-unitless-line-height-inheritance.html",
       "type": "testharness",
       "capabilities": ["unitless-line-height", "inherited-font-metrics"],

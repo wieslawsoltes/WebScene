@@ -468,7 +468,7 @@
         uint64_t inline_property_mask = 0U;
         for (const auto& declaration : parse_css_declarations(value, true)) {
             if (!store_inline_declaration(*node, declaration)) continue;
-            self->apply_css_declaration(*node, declaration);
+            self->apply_css_declaration(*node, declaration, true);
             inline_property_mask |= inline_style_mask(declaration.name);
         }
         node->style.inline_property_mask |= inline_property_mask;
@@ -502,7 +502,8 @@
 #endif
         const auto property_mask = inline_style_mask(name);
         const auto has_important_rule =
-            (node->style.important_property_mask & property_mask) != 0U;
+            (node->style.important_property_mask & property_mask) != 0U
+            || (node->style.important_margin_sides & margin_sides(name)) != 0U;
         const auto value = to_utf8(info.GetIsolate(), info[1]);
         self->inventory_css_value_functions(value, "cssom-style");
         if (name.starts_with("--")) {
@@ -1913,7 +1914,8 @@
         }
         const auto property_mask = inline_style_mask(name);
         const auto has_important_rule =
-            (node->style.important_property_mask & property_mask) != 0U;
+            (node->style.important_property_mask & property_mask) != 0U
+            || (node->style.important_margin_sides & margin_sides(name)) != 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {

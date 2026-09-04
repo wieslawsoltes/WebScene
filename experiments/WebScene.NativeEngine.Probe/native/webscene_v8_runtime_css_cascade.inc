@@ -964,13 +964,31 @@
         return result;
     }
 
+    static uint8_t margin_sides(std::string_view raw_name)
+    {
+        const auto name = canonical_css_property_name(raw_name);
+        if (name == "margin") return 15U;
+        if (name == "margin-inline") return 5U;
+        if (name == "margin-block") return 10U;
+        if (name == "margin-left" || name == "margin-inline-start") return 1U;
+        if (name == "margin-top" || name == "margin-block-start") return 2U;
+        if (name == "margin-right" || name == "margin-inline-end") return 4U;
+        if (name == "margin-bottom" || name == "margin-block-end") return 8U;
+        return 0U;
+    }
+
     static bool apply_margin_declaration(
         node_style& style,
         std::string_view raw_name,
-        const std::string& value)
+        const std::string& value,
+        uint8_t allowed_sides = 15U)
     {
         const auto name = canonical_css_property_name(raw_name);
         const auto assign = [&](css_length& length, bool& automatic, const std::string& token) {
+            const auto side = &length == &style.margin_left ? 1U
+                : &length == &style.margin_top ? 2U
+                : &length == &style.margin_right ? 4U : 8U;
+            if ((allowed_sides & side) == 0U) return;
             length = native_document::parse_length(token);
             automatic = lower_html_name(trim_css(token)) == "auto";
         };
@@ -1693,7 +1711,7 @@
         }
     }
 
-    void apply_css_declaration(dom_node& node, const css_declaration& declaration)
+    void apply_css_declaration(dom_node& node, const css_declaration& declaration, bool inline_origin = false)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_css) {
@@ -1710,7 +1728,7 @@
                 "style-application");
             auto normalized = declaration;
             normalized.name = name == "grid-gap" ? "gap" : "transform";
-            apply_css_declaration(node, normalized);
+            apply_css_declaration(node, normalized, inline_origin);
             return;
         }
         if (name.starts_with("--")) {
@@ -1766,6 +1784,23 @@
         if (contains_variable && is_paint_property(name)) {
             record_composition("css-custom-property-to-paint", node.id);
         }
+        if (const auto sides = margin_sides(name); sides != 0U) {
+            // The coarse inline_margin bit is an invalidation category, not
+            // a cascade priority shared by all four longhands.
+            uint8_t protected_sides = declaration.important
+                ? 0U : node.style.important_margin_sides;
+            for (const auto& [authored_name, authored_value] : node.authored_style().declarations) {
+                if (inline_origin) continue;
+                if (!declaration.important
+                    || node.authored_style().important_declarations.contains(authored_name)) {
+                    protected_sides |= margin_sides(authored_name);
+                }
+            }
+            const auto allowed = static_cast<uint8_t>(sides & ~protected_sides);
+            apply_margin_declaration(node.style, name, value, allowed);
+            if (declaration.important && !inline_origin) node.style.important_margin_sides |= allowed;
+            return;
+        }
         const auto property_mask = inline_style_mask(name);
         if (declaration.important && property_mask != 0U) {
             node.style.important_property_mask |= property_mask;
@@ -1795,6 +1830,7 @@
             reset.display = default_display_for_node(node);
             reset.inline_property_mask = previous.inline_property_mask;
             reset.important_property_mask = previous.important_property_mask;
+            reset.important_margin_sides = previous.important_margin_sides;
             reset.move_custom_properties_from(previous);
             reset.move_pseudo_elements_from(previous);
 
@@ -2954,6 +2990,7 @@
         }
         const auto previous_style = node.style;
         node.style.important_property_mask = 0;
+        node.style.important_margin_sides = 0;
         node.style.scrollbar_hidden = false;
         node.style.scrollbar_visibility_important = false;
         node.style.reset_scrollbar_style();
@@ -2989,7 +3026,7 @@
             node.style.padding_right = {};
             node.style.padding_bottom = {};
         }
-        if ((node.style.inline_property_mask & inline_margin) == 0U) {
+        {
             node.style.margin_left = {};
             node.style.margin_top = {};
             node.style.margin_right = {};
@@ -2998,6 +3035,16 @@
             node.style.margin_top_auto = false;
             node.style.margin_right_auto = false;
             node.style.margin_bottom_auto = false;
+            // Rebuild from authored inline values, not a previous computed
+            // value that may have been replaced by an important stylesheet.
+            for (const auto important : {false, true}) {
+                for (const auto& [name, value] : node.authored_style().declarations) {
+                    if (margin_sides(name) != 0U
+                        && node.authored_style().important_declarations.contains(name) == important) {
+                        apply_margin_declaration(node.style, name, resolve_css_value(node, value));
+                    }
+                }
+            }
         }
         if ((node.style.inline_property_mask & inline_border) == 0U) {
             node.style.border_left_width = {};
@@ -3274,7 +3321,7 @@
             apply_css_declaration(
                 node,
                 {name, value,
-                    node.authored_style().important_declarations.contains(name)});
+                    node.authored_style().important_declarations.contains(name)}, true);
             node.style.inline_property_mask = retained_inline_mask;
         }
         // Inline transition declarations are stored separately from the hot
@@ -3803,7 +3850,7 @@
             apply_css_declaration(
                 node,
                 {name, value,
-                    node.authored_style().important_declarations.contains(name)});
+                    node.authored_style().important_declarations.contains(name)}, true);
             node.style.inline_property_mask = retained_inline_mask;
         }
         document.mark_dirty();
