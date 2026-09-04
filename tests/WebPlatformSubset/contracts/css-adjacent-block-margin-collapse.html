@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8">
+<title>Adjacent block margins collapse but flex item margins do not</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>body{margin:0}.container{display:flow-root;width:400px}.a{height:28px;margin:0 0 10px}.b{height:30px;margin:32px 0 0}#negative .a{margin-bottom:-10px}#negative .b{margin-top:-20px}#mixed .a{margin-bottom:-10px}#flex{display:flex;flex-direction:column}</style>
+<div id="normal" class="container"><div class="a"></div><div class="b"></div></div>
+<div id="negative" class="container"><div class="a"></div><div class="b"></div></div>
+<div id="mixed" class="container"><div class="a"></div><div class="b"></div></div>
+<div id="flex" class="container"><div class="a"></div><div class="b"></div></div>
+<script>
+function gap(id){const n=document.getElementById(id);return n.children[1].getBoundingClientRect().top-n.children[0].getBoundingClientRect().bottom}
+test(()=>assert_equals(gap('normal'),32),'Release-note list and preview use the larger adjacent positive margin');
+test(()=>assert_equals(gap('negative'),-20),'Adjacent negative margins use the most negative margin');
+test(()=>assert_equals(gap('mixed'),22),'Mixed-sign adjacent margins combine positive and negative extrema');
+test(()=>assert_equals(gap('flex'),42),'Flex item margins remain additive');
+</script>

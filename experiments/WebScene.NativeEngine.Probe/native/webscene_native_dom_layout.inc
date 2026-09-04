@@ -2737,6 +2737,7 @@ void native_document::layout_children(dom_node& parent)
     auto right_float_edge = content.x + content.width;
     auto has_float_band = false;
     auto maximum_float_bottom = content.y;
+    std::optional<float> preceding_block_bottom_margin;
     for (auto* child : ordered_children) {
         // Out-of-flow generated boxes can have empty content while still
         // painting a background or border. They are not anonymous flex
@@ -3127,6 +3128,16 @@ void native_document::layout_children(dom_node& parent)
             const auto margin_bottom = child->style.margin_bottom_auto
                 ? automatic_margin_share
                 : resolve_length(*child, child->style.margin_bottom, content.height, 0);
+            const auto adjoining_block = !flex_container && !inline_flow
+                && child->kind == dom_node_kind::element
+                && (child->style.display == display_mode::block
+                    || child->style.display == display_mode::list_item);
+            if (adjoining_block && preceding_block_bottom_margin.has_value() && !has_float_band) {
+                const auto previous = *preceding_block_bottom_margin;
+                const auto collapsed = std::max({0.0F, previous, margin_top})
+                    + std::min({0.0F, previous, margin_top});
+                cursor += collapsed - previous - margin_top;
+            }
             vertical_margin_bottom = margin_bottom;
             // A definite flex main size makes each item's post-flexing main
             // size definite (Flexbox 9.8), including items which grew rather
@@ -3318,6 +3329,16 @@ void native_document::layout_children(dom_node& parent)
                 + child->layout.height
                 + vertical_margin_bottom
                 + justify_gap;
+        }
+        // This is adjacent nonempty sibling collapse only. Parent/child and
+        // self-collapsing empty-block chains require their own adjoining set.
+        if (!flex_container && !inline_flow && child->kind == dom_node_kind::element
+            && child->layout.height > 0
+            && (child->style.display == display_mode::block
+                || child->style.display == display_mode::list_item)) {
+            preceding_block_bottom_margin = vertical_margin_bottom;
+        } else {
+            preceding_block_bottom_margin.reset();
         }
         ++placed_flow_count;
     }

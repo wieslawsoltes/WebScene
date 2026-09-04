@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/css-adjacent-block-margin-collapse.html",
+      "type": "testharness",
+      "capabilities": ["adjacent-block-margin-collapse", "flex-noncollapsing-margins"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Rich-text list bottom margin and the following preview top margin adjoin."
+    },
+    {
       "path": "contracts/css-grid-gap-alias-flex.html",
       "type": "testharness",
       "capabilities": ["legacy-gap-alias", "flex-gap"],
