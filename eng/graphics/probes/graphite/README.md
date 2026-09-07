@@ -471,3 +471,21 @@ completion; the async producer closure retains the shared-image component.
 
 Only macOS IOSurface use is hardware-tested here. This is a native reusable
 component, not yet a scene-import ABI or a claim that Windows/Linux interop passes.
+
+### IOSurface storage behind versioned leases
+
+Native iosurface_canvas_images now places IOSurface allocations behind the
+existing owned_image_pool contract, with three slots, padded-byte budgeting,
+generation-aware consumer lookup and owner-thread allocation. Consumers can
+resolve a borrowed typed IOSurface owner after canvas/scene ownership ends.
+The interface does not imply producer readiness or consumer GPU completion.
+
+The macOS native CTest passed two differently sized generations retained after
+canvas-owner disposal, a fourth allocation refused while three producer slots
+are occupied, and zero busy slots after cancellation. These are native storage
+and lease checks, not GPU fence tests. The pool currently returns backpressure
+when the selected slot cannot fit the budget; eviction of other idle cached
+slots remains future pressure-policy work.
+
+This pool is the native storage component for the upcoming scene import hook.
+It has not yet replaced the probe's source pool or been wired into V8 canvases.
