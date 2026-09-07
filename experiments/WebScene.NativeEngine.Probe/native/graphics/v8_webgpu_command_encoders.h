@@ -1,6 +1,8 @@
 #pragma once
 #include "v8_webgpu_command_buffers.h"
 #include "v8_webgpu_object_descriptor.h"
+#include "v8_webgpu_render_pass_descriptor.h"
+#include "v8_webgpu_render_passes.h"
 namespace webscene::graphics {
 struct v8_webgpu_command_encoders_traits {
     using native_type=wgpu::CommandEncoder;static constexpr const char* name="GPUCommandEncoder";
@@ -10,6 +12,25 @@ struct v8_webgpu_command_encoders_traits {
 class v8_webgpu_command_encoders:public v8_webgpu_labeled_resources<v8_webgpu_command_encoders_traits> {
     using base=v8_webgpu_labeled_resources<v8_webgpu_command_encoders_traits>;
     v8_webgpu_command_buffers commands_;
+    v8_webgpu_render_passes passes_;
+    static void begin_render_pass(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        try {
+            webgpu_render_pass_descriptor descriptor;
+            if(!read_webgpu_render_pass_descriptor(isolate,context,info[0],descriptor))return;
+            if(!descriptor.valid_shapes()){fail(isolate,"GPUColor sequence must have four elements");return;}
+            auto* item=receiver(info);if(!item)return;auto* registry=static_cast<v8_webgpu_command_encoders*>(item->registry);
+            resource_handle<wgpu::RenderPassEncoder> pass;
+            descriptor.with_native([&](const auto& native){item->service->with_device(item->device,[&](auto& owned){pass=owned.begin_render_pass(item->resource,native);});});
+            v8::Local<v8::Object> wrapper;
+            try {
+                if(!registry->passes_.wrap(context,*item->service,item->device,pass,info.This(),descriptor.label).ToLocal(&wrapper)) {
+                    item->service->with_device(item->device,[&](auto& owned){owned.release_render_pass(pass);});fail(isolate,"Render pass wrapper capacity exhausted");return;
+                }
+            }catch(...){item->service->with_device(item->device,[&](auto& owned){owned.release_render_pass(pass);});throw;}
+            info.GetReturnValue().Set(wrapper);
+        }catch(const std::exception&){fail(isolate,"Render pass creation failed");}
+    }
     static void finish(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
         try {
@@ -30,7 +51,8 @@ class v8_webgpu_command_encoders:public v8_webgpu_labeled_resources<v8_webgpu_co
     }
 public:
     v8_webgpu_command_encoders(v8::Isolate* isolate,v8::Local<v8::Context> context,size_t capacity=1024,size_t command_capacity=1024)
-        :base(isolate,context,capacity),commands_(isolate,context,command_capacity) {
+        :base(isolate,context,capacity),commands_(isolate,context,command_capacity),passes_(isolate,context,capacity) {
+        if(!prototype_.Get(isolate)->Set(context,v8::String::NewFromUtf8Literal(isolate,"beginRenderPass"),v8::Function::New(context,begin_render_pass,{},1).ToLocalChecked()).FromMaybe(false))throw std::runtime_error("Render pass method initialization failed");
         if(!prototype_.Get(isolate)->Set(context,v8::String::NewFromUtf8Literal(isolate,"finish"),v8::Function::New(context,finish,{},0).ToLocalChecked()).FromMaybe(false))
             throw std::runtime_error("Command encoder prototype initialization failed");
     }

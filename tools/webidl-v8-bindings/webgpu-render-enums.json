@@ -232,5 +232,13 @@
     "all": "All",
     "stencil-only": "StencilOnly",
     "depth-only": "DepthOnly"
+  },
+  "LoadOp": {
+    "load": "Load",
+    "clear": "Clear"
+  },
+  "StoreOp": {
+    "store": "Store",
+    "discard": "Discard"
   }
 }

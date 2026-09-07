@@ -1080,3 +1080,28 @@ brands, labels and defaults, rejects invalid dictionaries/receivers, and verifie
 a throwing finish label getter leaves the encoder usable for a valid finish.
 Runtime CTest passes. These are empty command buffers: JavaScript render-pass
 recording, queue submission and canvas presentation remain pending.
+
+
+### Internal JavaScript render-pass recording
+
+Command encoders now expose beginRenderPass; render-pass wrappers expose
+setPipeline, draw and end. Descriptors convert nullable color attachments,
+texture-or-view references, clear colors, optional depth/stencil state and draw
+limits. Texture shorthand resolves to an implicit native view after conversion.
+GPUColor shape validation happens after dictionary conversion, before native pass
+creation. Draw arguments use GPUSize32 conversion and recheck ownership after
+coercion. Native recording-state validation remains Dawn's responsibility.
+
+Query-set wrappers remain unexposed, so supplied query objects are rejected
+rather than ignored. Occlusion/timestamp support, indexed/indirect draws,
+vertex/index buffers, bind groups and the rest of the render-pass API remain
+required. Explicit depth-slice sentinel values stay invalid when translated to
+Dawn; full native error-scope qualification remains part of conformance work.
+
+The macOS runtime test now creates a texture, shader and pipeline in JavaScript,
+records a triangle pass, ends it and finishes a command buffer. It checks invalid
+clear shapes leave the encoder usable, invalid draw/interface calls reject, and
+labels/brands persist. Descriptor tests cover color conversion, dictionary order,
+nullable attachments, native storage and atomic failure. Runtime and generator
+checks pass. The recorded command buffer is not submitted in this test: queue
+submission, pixel verification and ordinary canvas presentation remain pending.

@@ -28,6 +28,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_programmable_stage.h"
 #include "graphics_v8_webgpu_render_state.h"
 #include "graphics_v8_webgpu_texture_descriptor.h"
+#include "graphics_v8_webgpu_render_pass_descriptor.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -687,6 +688,18 @@ int main() {
                          for(const call of [()=>adapterDeviceProbe.createTexture(),()=>adapterDeviceProbe.createTexture({size:[],format:'rgba8unorm',usage:16}),()=>texture.createView.call({}),()=>texture.destroy.call({})]) {
                              let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid texture call');
                          }
+                         const shader=adapterDeviceProbe.createShaderModule({code:'@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));return vec4f(p[i],0,1);} @fragment fn fs()->@location(0) vec4f {return vec4f(1,0,0,1);}'});
+                         const pipeline=adapterDeviceProbe.createRenderPipeline({layout:'auto',vertex:{module:shader,entryPoint:'vs'},fragment:{module:shader,entryPoint:'fs',targets:[{format:'rgba8unorm'}]}});
+                         const drawEncoder=adapterDeviceProbe.createCommandEncoder();
+                         let shapeRejected=false;try{drawEncoder.beginRenderPass({colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:[0,0]}]})}catch(e){shapeRejected=e instanceof TypeError}if(!shapeRejected)throw new Error('clear color shape');
+                         const pass=drawEncoder.beginRenderPass({label:'triangle pass',colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:[0,0,0,1]}]});
+                         if(Object.prototype.toString.call(pass)!=='[object GPURenderPassEncoder]'||pass.label!=='triangle pass')throw new Error('render pass wrapper');
+                         for(const call of [()=>pass.draw(),()=>pass.draw(-1),()=>pass.draw(1n),()=>pass.setPipeline({}),()=>pass.end.call({})]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid pass call');
+                         }
+                         pass.setPipeline(pipeline);pass.draw(3);pass.end();
+                         const drawCommands=drawEncoder.finish({label:'triangle commands'});
+                         if(drawCommands.label!=='triangle commands')throw new Error('recorded draw commands');
                          texture.destroy();texture.destroy();
                          if(texture.width!==4||texture.label!=='updated texture'||view.label!=='updated view')throw new Error('destroyed texture metadata');}
 
@@ -958,6 +971,7 @@ int main() {
                     test_v8_webgpu_shader_descriptor(isolate,context);
                 test_v8_webgpu_render_state(isolate,context);
                 test_v8_webgpu_texture_descriptor(isolate,context);
+                test_v8_webgpu_render_pass_descriptor(isolate,context);
                     v8::Local<v8::Promise> promise;
                     webgpu_adapter_options options;
                     adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,

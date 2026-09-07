@@ -269,4 +269,16 @@ template<> struct webgpu_enum_names<wgpu::TextureAspect> {
         {"depth-only",wgpu::TextureAspect::DepthOnly},
     }};
 };
+template<> struct webgpu_enum_names<wgpu::LoadOp> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::LoadOp>,2> values{{
+        {"load",wgpu::LoadOp::Load},
+        {"clear",wgpu::LoadOp::Clear},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::StoreOp> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::StoreOp>,2> values{{
+        {"store",wgpu::StoreOp::Store},
+        {"discard",wgpu::StoreOp::Discard},
+    }};
+};
 } // namespace webscene::graphics
