@@ -242,3 +242,17 @@ wrong-receiver-before-coercion, and reentrant Destroy during ToString assertions
 Labels remain readable after buffer destruction. Full registry teardown during
 coercion is guarded by reacquisition but is not yet independently exercised; public
 GPUDevice/createBuffer wiring and mapping APIs remain outstanding.
+
+### Buffer wrapper garbage collection qualification
+
+The macOS V8 fixture now retains a buffer through a global JavaScript reference,
+drops that reference, and explicitly triggers collection. Native live-buffer
+counts remain unchanged during GC and reach zero only after the engine pumps its
+release channel. The one-slot wrapper registry rejects overflow without taking
+ownership, then successfully reuses the collected slot. Registry teardown with a
+new live wrapper followed by device retirement also drains its delayed release
+without stale-handle failure. The rebuilt V8 runtime CTest passes.
+
+This closes the previously untested GC-release path for the internal buffer
+registry. It does not prove mapped ArrayBuffer lifetime/detachment, in-flight GPU
+submission behavior for JavaScript buffers, or full navigation integration.

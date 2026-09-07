@@ -265,6 +265,8 @@ int main() {
             resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
+            std::unique_ptr<v8_webgpu_buffers> gc_buffers;
+            resource_handle<dawn_device> gc_buffer_device;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
                 if (record.operation==104) {
                     auto* isolate=v8::Isolate::GetCurrent();
@@ -313,9 +315,18 @@ int main() {
                     )JS"),"Buffer label behavior failed");
                     buffer_registry.reset();
                     require(run("let stale=false;try{bufferProbe.destroy()}catch(e){stale=e instanceof TypeError}if(!stale)throw new Error('stale buffer realm');delete globalThis.bufferProbe;"),"Buffer wrapper teardown left native access");
-                    // Teardown releases through the service queue; native device
-                    // retirement also makes a delayed wrapper release harmless.
-                    adapter_service->destroy_device(device_handle);
+                    gc_buffer_device=device_handle;
+                    gc_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,1);
+                    adapter_service->with_device(device_handle,[&](auto& device) {
+                        wgpu::BufferDescriptor descriptor{};
+                        descriptor.size=32; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        auto collectible=device.create_buffer(descriptor);
+                        auto gc_object=gc_buffers->wrap(context,*adapter_service,device_handle,collectible).ToLocalChecked();
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gcBufferProbe"),gc_object).FromMaybe(false),"Collectible buffer wrapper failed");
+                        auto overflow=device.create_buffer(descriptor);
+                        require(gc_buffers->wrap(context,*adapter_service,device_handle,overflow).IsEmpty(),"Buffer wrapper registry was not bounded");
+                        device.release_buffer(overflow); // Failed wrap did not take ownership.
+                    });
                     buffer_wrappers_tested=true;
                     return;
                 }
@@ -432,6 +443,16 @@ int main() {
                     require(!wrappers->attach(v8::Object::New(isolate),release),"weak wrapper capacity was not bounded");
                 }
                 if (record.operation==2) {
+                    adapter_service->with_device(gc_buffer_device,[&](auto& device) {
+                        require(device.live_buffers()==0,"Collected buffer native handle survived engine drain");
+                        wgpu::BufferDescriptor descriptor{};
+                        descriptor.size=16; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        auto replacement=device.create_buffer(descriptor);
+                        require(!gc_buffers->wrap(context,*adapter_service,gc_buffer_device,replacement).IsEmpty(),"Collected buffer wrapper slot was not reusable");
+                    });
+                    gc_buffers.reset();
+                    adapter_service->destroy_device(gc_buffer_device);
+
                     graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
                     auto reachable=v8::Object::New(isolate);
                     require(wrappers->attach(reachable,release),"weak wrapper slot was not reusable");
@@ -478,11 +499,21 @@ int main() {
             adapter_service->destroy_adapter(discovered_adapter);
             adapter_request.reset(); cancelled_adapter.reset();
             for (auto& request:failed_wrappers) request.reset();
+            require(runtime.execute("delete globalThis.gcBufferProbe;", "buffer-drop-reference"),"Buffer reference removal failed");
+            size_t buffers_before_gc=0;
+            adapter_service->with_device(gc_buffer_device,[&](auto& device) { buffers_before_gc=device.live_buffers(); });
+            require(buffers_before_gc>=1,"Collectible buffer disappeared before GC");
             runtime.notify_low_memory();
+            adapter_service->with_device(gc_buffer_device,[&](auto& device) {
+                require(device.live_buffers()==buffers_before_gc,"GC performed native buffer release inline");
+            });
             require(weak_releases==0,"GC callback executed a native graphics release");
             require(runtime.has_pending_tasks(),"GC did not enqueue release work");
             require(runtime.pump_task(),"GC release task failed");
             require(weak_releases==1 && releases->occupied()==0,"weak wrapper release did not drain");
+            adapter_service->with_device(gc_buffer_device,[&](auto& device) {
+                require(device.live_buffers()==0,"GC buffer release did not drain");
+            });
             require(runtime.execute("if(gpuDone!==1 || rafDone!==0) throw new Error('completion or RAF scheduling failed');","graphics-check"),"promise continuation failed without RAF");
             require(runtime.execute("globalThis.gpuDone=0; new Promise(r=>globalThis.gpuResolve=r).then(()=>globalThis.gpuDone=1);","graphics-second-setup"),"second promise setup failed");
             delivered=false;
