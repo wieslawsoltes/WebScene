@@ -1759,3 +1759,23 @@ a supplementary Unicode character before the error verifies that the captured
 byte and UTF-16 offsets differ correctly. The runtime suite passes. This avoids
 reimplementing source mapping in WebScene; V8 delivery must use the UTF-16 fields
 and must not silently substitute byte offsets if the extension is unavailable.
+
+### Asynchronous getCompilationInfo delivery (2026-09-08)
+
+GPUShaderModule.getCompilationInfo now returns a fresh promise, retains its
+shader during the request, copies Dawn diagnostics in a native-only callback,
+and settles through the existing completion mailbox on the runtime thread.
+Requests are bounded; teardown cancels their mailbox owner and rejects pending
+promises. Results expose diagnostic text/type and UTF-16 source positions with
+a frozen messages array. Tests cover valid and invalid WGSL, concurrent requests,
+fresh promises, receiver rejection, and delivery through ordinary task pumping;
+the runtime suite passes.
+
+Full WebIDL object branding/prototype placement, specified failure exception
+types, exhaustive allocation failure and teardown-race tests remain required.
+These result objects currently use read-only own properties, not the final
+GPUCompilationInfo/GPUCompilationMessage interface prototypes. This is functional
+delivery, not a full conformance claim.
+
+The unchanged Kestrel check still exits 1, now with "GPUBufferUsage is not defined".
+Its shader diagnostic step completes and initialization advances to buffer setup.

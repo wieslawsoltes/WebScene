@@ -214,6 +214,27 @@ void test_runtime_webgpu_installation() {
         if(!propagated)throw new Error('scope conversion exception lost');
     )JS","push-error-scope"),"GPU pushErrorScope binding failed");
 
+    require(runtime.execute(R"JS(
+        (async()=>{
+            const valid=installedDevice.createShaderModule({code:'@compute @workgroup_size(1) fn main() {}'});
+            if(valid.getCompilationInfo.length!==0)throw new Error('compilation info arity');
+            const first=valid.getCompilationInfo(),second=valid.getCompilationInfo();
+            if(first===second)throw new Error('compilation promises reused');
+            if((await first).messages.length||(await second).messages.length)throw new Error('valid shader diagnostics');
+            let wrong=false;try{await valid.getCompilationInfo.call({})}catch(e){wrong=e instanceof TypeError}
+            if(!wrong)throw new Error('compilation receiver accepted');
+            const invalid=installedDevice.createShaderModule({code:'/* 😀 */ this is invalid WGSL'});
+            const info=await invalid.getCompilationInfo();
+            if(!Object.isFrozen(info.messages)||!info.messages.some(m=>m.type==='error'&&m.message.length&&m.offset>0))
+                throw new Error('invalid shader diagnostics absent');
+            const node=document.createElement('div');node.id='compilation-ready';document.body.appendChild(node);
+        })();
+    )JS","compilation-info"),"Compilation info request script failed");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!document.find_by_id("compilation-ready")&&std::chrono::steady_clock::now()<deadline) {
+        require(runtime.pump_task(),"Compilation info completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("compilation-ready")!=nullptr,"Compilation info promises did not settle");
     require(runtime.execute("globalThis.pressureTexture=installedDevice.createTexture({size:[1,1],format:'rgba8unorm',usage:16});globalThis.livePressureView=pressureTexture.createView();","view-pressure-setup"),"View pressure setup failed");
     for(unsigned i=0;i<300;++i)
         require(runtime.execute("pressureTexture.createView();","view-pressure"),"Unreachable texture views exhausted release tickets");

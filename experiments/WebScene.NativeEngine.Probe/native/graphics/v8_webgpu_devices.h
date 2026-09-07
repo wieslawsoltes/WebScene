@@ -324,7 +324,7 @@ public:
     }
     bool complete(completion_record record) {
         check_scope();
-        for (auto& item:entries_) if (item && item->buffers->complete(record)) return true;
+        for (auto& item:entries_) if (item && (item->buffers->complete(record)||item->shaders->complete(record))) return true;
         return false;
     }
 private:
