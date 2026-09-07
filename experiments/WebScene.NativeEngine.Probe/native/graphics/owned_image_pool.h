@@ -94,6 +94,9 @@ public:
             if (!state_) throw std::invalid_argument("moved image producer");
             state_->pool.cancel_write(token_,notify_capacity); state_.reset();
         }
+        bool belongs_to(const image_provider_lifetime* provider) const noexcept {
+            return state_ && state_->provider.get()==provider;
+        }
         uint32_t slot() const {
             if (!state_) throw std::invalid_argument("moved image producer");
             return token_.slot;

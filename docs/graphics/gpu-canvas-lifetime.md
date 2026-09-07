@@ -453,3 +453,20 @@ exceed budget, without generating a wake. After releasing that image, the larger
 frame succeeds by reclaiming idle cache storage, with one new texture and resident
 logical color bytes equal to the requested frame. Pool and Dawn CTests pass in
 0.71 seconds. Driver heap residency remains outside these logical byte counters.
+
+## Dawn submission ownership
+
+`dawn_canvas_images::submit` accepts a frame from that allocator and a recorded
+command buffer. It allocates callback ownership, starts the producer and reserves
+the published lease before submitting. Ticket backpressure cancels the unsubmitted
+frame quietly. Dawn's spontaneous queue-completion callback owns the frame until
+completion, retires the producer, records success/failure atomically and optionally
+signals the engine wake sink. Command validation still belongs to device error
+scopes; queue completion is not a substitute for those errors.
+
+The exact-pixel producer/consumer test now uses this helper. Additional hardware
+checks reject a foreign allocator without consuming its frame, exhaust publication
+tickets without leaving a producer busy or generating a retry wake, and reclaim
+the successful frame after completion. Focused Dawn CTest passes in 0.47 seconds.
+Browser promise/error delivery, lost-device publication policy and cross-backend
+presenter synchronization remain to be integrated.

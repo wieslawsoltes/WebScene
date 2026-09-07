@@ -7,16 +7,17 @@ void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device&
     auto pool=std::make_unique<dawn_canvas_images>(device,64*64*4);
     auto frame=pool->acquire(image_metadata{300,0,1,1,400,1,64,64});
     auto queue=device.GetQueue();
-    frame->producer.begin();
     auto encoder=device.CreateCommandEncoder();
     wgpu::RenderPassColorAttachment color{};
     color.view=frame->texture.CreateView(); color.loadOp=wgpu::LoadOp::Clear;
     color.storeOp=wgpu::StoreOp::Store; color.clearValue={0.25,0.5,0.75,1};
     wgpu::RenderPassDescriptor pass{}; pass.colorAttachmentCount=1; pass.colorAttachments=&color;
     auto render=encoder.BeginRenderPass(&pass); render.End();
-    auto producer_commands=encoder.Finish(); queue.Submit(1,&producer_commands);
-    auto scene=frame->producer.publish();
-    auto consumer=scene->begin_consumer();
+    auto producer_commands=encoder.Finish();
+    auto submitted=pool->submit(std::move(*frame),producer_commands); frame.reset();
+    if (!submitted) throw std::runtime_error("canvas submission unexpectedly saturated");
+    auto producer_status=submitted->status;
+    auto consumer=submitted->image.begin_consumer();
     // Submit to the same queue before processing any completion. Queue order,
     // rather than a CPU wait or a pixel upload, makes producer writes visible.
     auto source_texture=dawn_canvas_images::resolve(*consumer,device);
@@ -31,21 +32,22 @@ void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device&
     wgpu::Extent3D extent{64,64,1};
     copy.CopyTextureToBuffer(&source,&destination,&extent);
     auto consumer_commands=copy.Finish(); queue.Submit(1,&consumer_commands);
-    scene.reset(); pool.reset();
+    submitted.reset(); pool.reset();
     bool completed=false,queue_success=false,mapped=false,map_success=false;
     queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
         [&](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
-            frame->producer.complete(); frame.reset(); consumer->complete(); consumer.reset();
+            consumer->complete(); consumer.reset();
             queue_success=status==wgpu::QueueWorkDoneStatus::Success; completed=true;
         });
     readback.MapAsync(wgpu::MapMode::Read,0,64*256,wgpu::CallbackMode::AllowProcessEvents,
         [&](wgpu::MapAsyncStatus status,wgpu::StringView) { map_success=status==wgpu::MapAsyncStatus::Success; mapped=true; });
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
-    while ((!completed || !mapped) && std::chrono::steady_clock::now()<deadline) {
+    while ((!completed || !mapped || producer_status->load()==dawn_canvas_images::submission_status::pending) && std::chrono::steady_clock::now()<deadline) {
         service.instance().ProcessEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    if (!completed || !mapped || !queue_success || !map_success)
+    if (!completed || !mapped || !queue_success || !map_success
+        || producer_status->load()!=dawn_canvas_images::submission_status::success)
         throw std::runtime_error("GPU image consumer completion failed");
     const auto* pixels=static_cast<const uint8_t*>(readback.GetConstMappedRange(0,64*256));
     if (!pixels) throw std::runtime_error("GPU image diagnostic mapping failed");
@@ -119,6 +121,28 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,
     auto replacement=tight.acquire(large);
     require(replacement && tight.created_images()==4 && tight.resident_bytes()==96*96*4);
     replacement.reset(); require(tight.busy_images()==0);
+    dawn_canvas_images admission(device,2*64*64*4,1,capacity_signal);
+    auto first=admission.acquire(small);
+    auto empty_commands=device.CreateCommandEncoder().Finish();
+    auto accepted=admission.submit(std::move(*first),empty_commands); first.reset();
+    require(accepted.has_value());
+    auto refused=admission.acquire(small);
+    require(refused.has_value());
+    bool foreign_submission=false;
+    try { images.submit(std::move(*refused),empty_commands); }
+    catch (const std::invalid_argument&) { foreign_submission=true; }
+    require(foreign_submission); // Rejection must preserve the caller's frame.
+    capacity_signal->wait_for(std::chrono::milliseconds(0),[] { return false; });
+    require(!admission.submit(std::move(*refused),empty_commands)); refused.reset();
+    require(admission.busy_images()==1);
+    require(!capacity_signal->wait_for(std::chrono::milliseconds(0),[] { return false; }));
+    const auto accepted_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    while (accepted->status->load()==dawn_canvas_images::submission_status::pending
+        && std::chrono::steady_clock::now()<accepted_deadline) {
+        service.instance().ProcessEvents(); std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(accepted->status->load()==dawn_canvas_images::submission_status::success);
+    accepted.reset(); require(admission.busy_images()==0);
     auto detached=std::make_unique<dawn_canvas_images>(device,64*64*4);
     auto frame=detached->acquire(image_metadata{101,0,1,1,200,3,64,64});
     const auto native_identity=frame->texture.Get();

@@ -27,6 +27,39 @@ public:
         wgpu::Texture texture;
         image_metadata metadata;
     };
+    enum class submission_status { pending,success,failed };
+    struct submitted_frame {
+        owned_image_pool::retained image;
+        std::shared_ptr<std::atomic<submission_status>> status;
+    };
+    // Submit only command buffers recorded for this frame/device. Device error
+    // scopes still report command validation separately from queue completion.
+    std::optional<submitted_frame> submit(frame&& input,const wgpu::CommandBuffer& commands,
+        std::shared_ptr<completion_wake> completion={}) {
+        check_thread();
+        if (!commands || !input.producer.belongs_to(storage_.get()))
+            throw std::invalid_argument("foreign canvas producer or missing commands");
+        auto status=std::make_shared<std::atomic<submission_status>>(submission_status::pending);
+        auto pending=std::make_shared<frame>(std::move(input));
+        pending->producer.begin();
+        auto image=pending->producer.publish();
+        if (!image) {
+            // No GPU work has been submitted. Return admission backpressure
+            // without leaving a producer outstanding or waking our own retry.
+            pending->producer.complete(); pending->producer.cancel(false);
+            return {};
+        }
+        auto queue=storage_->device.GetQueue();
+        queue.Submit(1,&commands);
+        queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+            [pending,status,completion](wgpu::QueueWorkDoneStatus result,wgpu::StringView) {
+                pending->producer.complete();
+                status->store(result==wgpu::QueueWorkDoneStatus::Success
+                    ? submission_status::success : submission_status::failed,std::memory_order_release);
+                if (completion) completion->signal();
+            });
+        return submitted_frame{std::move(*image),std::move(status)};
+    }
     dawn_canvas_images(wgpu::Device device,uint64_t byte_limit,size_t tickets=128,std::shared_ptr<completion_wake> wake={})
         :storage_(std::make_shared<storage>(std::move(device))),pool_(storage_,tickets,std::move(wake)),byte_limit_(byte_limit) {
         if (!storage_->device || !byte_limit) throw std::invalid_argument("Dawn image storage requires device and budget");
