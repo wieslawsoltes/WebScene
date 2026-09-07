@@ -1,5 +1,5 @@
 #pragma once
-#include "dawn_shared_image.h"
+#include "dawn_iosurface_canvas_texture.h"
 #include "iosurface_canvas_images.h"
 #include <functional>
 #if defined(__APPLE__)
@@ -102,16 +102,12 @@ public:
             }
         } scope(device);
         auto pending=std::make_shared<iosurface_canvas_images::frame>(std::move(frame));
-        auto surface=pending->color->borrowed_handle();
-        std::shared_ptr<void> owner(const_cast<void*>(CFRetain(surface)),[](void* p) { CFRelease(p); });
-        wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=surface;
-        wgpu::SharedTextureMemoryDescriptor import{}; import.nextInChain=&io;
         wgpu::TextureDescriptor texture{};
         texture.dimension=wgpu::TextureDimension::e2D;
         texture.size={pending->metadata.width,pending->metadata.height,1};
         texture.format=wgpu::TextureFormat::BGRA8Unorm;
         texture.usage=wgpu::TextureUsage::RenderAttachment;
-        auto shared=dawn_shared_image::import(device,import,texture,std::move(owner));
+        auto shared=import_dawn_iosurface_canvas_texture(*pending,device,texture);
         if (!shared) return {};
         wgpu::SharedTextureMemoryBeginAccessDescriptor access{};
         access.initialized=false; // Recorder must initialize every presented pixel.

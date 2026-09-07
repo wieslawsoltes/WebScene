@@ -1280,3 +1280,20 @@ Ganesh window pixel probe still reports 32 frames, one import, completed GPU
 retirement, zero explicit transport copies and four diagnostic readbacks.
 Evidence: `evidence/ganesh-host/submitted-frame-discard.json`. This establishes
 native discard behavior; the JavaScript canvas host is not connected to it yet.
+
+### Reusable IOSurface canvas texture import
+
+`import_dawn_iosurface_canvas_texture` provides the native acquisition operation
+for the upcoming canvas host. It imports the reserved pool frame using the
+caller's texture descriptor, rejects mismatched bitmap dimensions/base format,
+and retains the IOSurface independently through the shared-image owner. It does
+not allocate another pixel store, copy pixels or submit commands. BeginAccess
+and completion-based retirement remain explicit caller responsibilities.
+
+Both the native recording helper and application-submission fixture now use this
+operation. The macOS fixture verifies descriptor mismatch rejection, requested
+usage and allocation identity, then exercises presentation and discard. The
+Ganesh window pixel test passes with 32 frames, one import, zero explicit
+transport copies and four diagnostic readbacks. This importer currently targets
+the negotiated BGRA8 pool; it does not establish RGBA16/HDR support or connect
+ordinary JavaScript canvas acquisition by itself.

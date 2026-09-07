@@ -77,13 +77,16 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         invalid_wake->count.load()!=1 || rejected.busy_images()!=0) return {};
     auto ready_wake=std::make_shared<counted_wake>();
     wgpu::Texture expired_texture;
-    auto surface=frame.color->borrowed_handle();
-    std::shared_ptr<void> owner(const_cast<void*>(CFRetain(surface)),[](void* value){CFRelease(value);});
-    wgpu::SharedTextureMemoryIOSurfaceDescriptor io{};io.ioSurface=surface;
-    wgpu::SharedTextureMemoryDescriptor import{};import.nextInChain=&io;
     wgpu::TextureDescriptor description{};description.dimension=wgpu::TextureDimension::e2D;
     description.size={frame.metadata.width,frame.metadata.height,1};description.format=wgpu::TextureFormat::BGRA8Unorm;description.usage=wgpu::TextureUsage::RenderAttachment;
-    auto shared=dawn_shared_image::import(*device,import,description,std::move(owner));
+    auto mismatch=description;mismatch.size.width++;
+    bool mismatch_rejected=false;
+    try{import_dawn_iosurface_canvas_texture(frame,*device,mismatch);}
+    catch(const std::invalid_argument&){mismatch_rejected=true;}
+    if(!mismatch_rejected)return {};
+    auto shared=import_dawn_iosurface_canvas_texture(frame,*device,description);
+    if(shared&&(shared->texture().GetUsage()!=description.usage||
+        !shared->matches(*device,frame.color->borrowed_handle())))return {};
     wgpu::SharedTextureMemoryBeginAccessDescriptor access{};access.initialized=false;
     if(!shared||!shared->begin(access))return {};
     expired_texture=shared->texture();
@@ -122,10 +125,7 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     for(bool submit_work:{false,true}) {
     auto discarded_frame=rejected.acquire(frame.metadata);
     if(!discarded_frame)return {};
-    auto discarded_surface=discarded_frame->color->borrowed_handle();
-    std::shared_ptr<void> discarded_owner(const_cast<void*>(CFRetain(discarded_surface)),[](void* value){CFRelease(value);});
-    io.ioSurface=discarded_surface;
-    auto discarded_shared=dawn_shared_image::import(*device,import,description,std::move(discarded_owner));
+    auto discarded_shared=import_dawn_iosurface_canvas_texture(*discarded_frame,*device,description);
     if(!discarded_shared||!discarded_shared->begin(access))return {};
     if(submit_work) {
         auto discard_encoder=device->CreateCommandEncoder();
