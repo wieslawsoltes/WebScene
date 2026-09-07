@@ -403,6 +403,20 @@ extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_hos
 extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_canvas_busy() {
     return hostRuntime.canvasPool ? static_cast<unsigned>(hostRuntime.canvasPool->busy_images()) : 0;
 }
+// Only quiescent teardown is allowed; never drop references to outstanding work.
+extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_shutdown() {
+    if (!CGLGetCurrentContext() || hostDestinationTexture || pendingProducer || host_blit.fence ||
+        (hostRuntime.canvasPool && hostRuntime.canvasPool->busy_images())) return 1;
+    // Moving the entire runtime keeps callback storage alive through device release.
+    try {
+        DawnRuntime fresh; // Allocate replacement callback state before changing ownership.
+        DawnRuntime retiring=std::move(hostRuntime);
+        hostRuntime=std::move(fresh);
+        retiring.graphite.reset();
+        hostFrameSerial=0;
+        return 0;
+    } catch (...) { return 1; }
+}
 // Explicit diagnostic readback, never called by normal presentation.
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_verify_marker(unsigned texture,unsigned serial) {
     if (!CGLGetCurrentContext() || pendingProducer || host_blit.fence) return 1;

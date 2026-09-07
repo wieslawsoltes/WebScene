@@ -400,3 +400,24 @@ This removes source-pool recreation from this serialized diagnostic workload.
 Recorders, command/recording objects and CGL imports remain per-submission.
 It does not qualify production scheduling, resize of the host target, memory
 pressure, device loss or actual browser APIs.
+
+### Quiescent teardown and reinitialization (2026-09-07)
+
+The private host API now has explicit shutdown. It rejects an absent CGL context,
+an active entry point, pending producer/GL work or busy canvas leases. Quiescent
+shutdown moves the whole runtime into a retiring owner, keeping error callback
+storage alive through native device release, and destroys Graphite before the
+remaining native resources. Replacement callback storage is allocated before
+ownership changes; exceptions return failure through the C ABI.
+
+The managed probe requires shutdown rejection immediately after every accepted
+submission. After update 32 it tears down the native runtime; update 33 initializes
+a fresh one. Final detach is followed by another native shutdown while the CGL
+context remains valid. The JSON allocation counters describe the last runtime
+cycle, identified by nativeCounterScope; they are not lifetime totals.
+
+Apple M4 runs passed with 64 updates and nativeShutdownsCompleted=2, both with
+64 optional marker checks and with zero diagnostic marker checks. The second
+cycle reused two source textures and one output with one device/context.
+This qualifies orderly quiescent teardown in the diagnostic; forced device loss,
+failed drain and application shutdown during outstanding work remain unqualified.

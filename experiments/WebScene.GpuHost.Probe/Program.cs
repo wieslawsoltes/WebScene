@@ -24,6 +24,8 @@ internal static class Program
     internal static extern uint GraphiteCanvasAllocations();
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_canvas_busy")]
     internal static extern uint GraphiteCanvasBusy();
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_shutdown")]
+    internal static extern int ShutdownGraphite();
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -51,6 +53,8 @@ internal sealed class ProbeApp : Application
                     bool visualCommitCompleted = false;
                     int graphiteSubmissionsCompleted = 0;
                     int hostUpdatesCompleted = 0;
+                    int nativeShutdownsCompleted = 0;
+                    uint canvasTextureAllocations=0, outputTextureAllocations=0, graphiteContextInitializations=0, dawnDeviceInitializations=0;
                     int diagnosticMarkersVerified = 0;
                     bool verifyMarkers = Environment.GetCommandLineArgs().Contains("--verify-markers");
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
@@ -91,6 +95,8 @@ internal sealed class ProbeApp : Application
                                         throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
                                     if (Program.RenderGraphite((uint)texture.TextureId,(uint)submission+1) == 0)
                                         throw new InvalidOperationException("Overlapping host submission was accepted");
+                                    if (Program.ShutdownGraphite() == 0)
+                                        throw new InvalidOperationException("Shutdown accepted outstanding native work");
                                 }
                                 var deadline = DateTime.UtcNow.AddSeconds(30);
                                 while (true) {
@@ -123,6 +129,14 @@ internal sealed class ProbeApp : Application
                                 await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
                                 hostUpdatesCompleted++;
                                 await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                                if (submission == 31) {
+                                    using (glContext.EnsureCurrent()) {
+                                        if (Program.ShutdownGraphite() != 0 || Program.GraphiteInitializations() != 0 ||
+                                            Program.GraphiteCanvasAllocations() != 0 || Program.GraphiteOutputAllocations() != 0)
+                                            throw new InvalidOperationException("Quiescent native shutdown failed");
+                                    }
+                                    nativeShutdownsCompleted++;
+                                }
                               }
                               if (Program.GraphiteInitializations() != 1)
                                   throw new InvalidOperationException("Dawn device was recreated between submissions");
@@ -151,6 +165,17 @@ internal sealed class ProbeApp : Application
                             ElementComposition.SetElementChildVisual(window, null);
                             await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
                             surfaceVisual.Surface = null;
+                            if (graphiteSource) {
+                                canvasTextureAllocations=Program.GraphiteCanvasAllocations();
+                                outputTextureAllocations=Program.GraphiteOutputAllocations();
+                                graphiteContextInitializations=Program.GraphiteContextInitializations();
+                                dawnDeviceInitializations=Program.GraphiteInitializations();
+                                using (glContext.EnsureCurrent()) {
+                                    if (Program.ShutdownGraphite() != 0)
+                                        throw new InvalidOperationException("Final native shutdown refused outstanding work");
+                                }
+                                nativeShutdownsCompleted++;
+                            }
                         }
                     }
                     Console.WriteLine(JsonSerializer.Serialize(new
@@ -168,10 +193,12 @@ internal sealed class ProbeApp : Application
                         graphiteSubmissionsCompleted,
                         hostUpdatesCompleted,
                         diagnosticMarkersVerified,
-                        canvasTextureAllocations = graphiteSource ? Program.GraphiteCanvasAllocations() : 0,
-                        outputTextureAllocations = graphiteSource ? Program.GraphiteOutputAllocations() : 0,
-                        graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
-                        dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
+                        nativeShutdownsCompleted,
+                        nativeCounterScope = "last-runtime-cycle",
+                        canvasTextureAllocations,
+                        outputTextureAllocations,
+                        graphiteContextInitializations,
+                        dawnDeviceInitializations,
                         sharedTextureUpdateCompleted,
                         visualCommitCompleted,
                         presentationVerified = false
