@@ -199,7 +199,7 @@
                 return enqueue_callback_v3(std::move(callback));
             },
             [this] {
-                wake_.notify_all();
+                signal_worker();
             }, &diagnostics_);
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
@@ -1147,7 +1147,7 @@
             }
 #endif
 
-            // Producers notify wake_ for immediate dispatch. Retain one display
+            // Producers signal worker_wake_ for immediate dispatch. Retain one display
             // interval as a safety watchdog for V8/platform task sources that
             // do not yet expose a notification edge.
             auto idle_wait = std::chrono::milliseconds(16);
@@ -1156,23 +1156,20 @@
                 idle_wait = runtime_->recommended_idle_wait(idle_wait);
             }
 #endif
-            std::unique_lock lock(wake_mutex_);
             const auto collect_runtime_work_metrics =
                 runtime_work_metrics_enabled_.load(std::memory_order_relaxed);
             if (collect_runtime_work_metrics) {
                 worker_waits_.fetch_add(1, std::memory_order_relaxed);
             }
-            const auto signalled = wake_.wait_for(
-                lock,
+            const auto signalled = worker_wake_.wait_for(
                 idle_wait,
                 [this, &token, &deferred_input] {
-                // Every script-queue producer latches wake_pending_ after it
+                // Every script-queue producer latches the wake event after it
                 // enqueues work. Do not inspect script_work_ while holding the
                 // wake mutex: producers can signal while holding script_mutex_,
                 // and taking the locks in the opposite order deadlocks shared
                 // isolate startup.
-                return wake_pending_
-                    || token.stop_requested()
+                return token.stop_requested()
                     || deferred_input.has_value()
                     || !inputs_.empty()
                     || resize_pending_.load(std::memory_order_acquire)
@@ -1186,7 +1183,6 @@
             } else if (collect_runtime_work_metrics) {
                 worker_timeout_wakes_.fetch_add(1, std::memory_order_relaxed);
             }
-            wake_pending_ = false;
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)

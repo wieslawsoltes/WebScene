@@ -2,6 +2,7 @@
 #include "webscene_native_dom.h"
 #include "webscene_v8_runtime.h"
 #include "webscene_runtime_diagnostics.h"
+#include "graphics/engine_wake.h"
 
 #include <algorithm>
 #include <array>
@@ -359,9 +360,13 @@ private:
     std::atomic<uint64_t> next_interop_operation_id_{1U};
     std::shared_ptr<const scene> latest_{};
     std::atomic<bool> ordered_scene_consumer_{false};
-    std::condition_variable wake_;
-    std::mutex wake_mutex_;
-    bool wake_pending_{false};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    std::shared_ptr<webscene::graphics::engine_wake> graphics_wake_{
+        std::make_shared<webscene::graphics::engine_wake>()};
+    webscene::graphics::engine_wake& worker_wake_{*graphics_wake_};
+#else
+    webscene::graphics::engine_wake worker_wake_;
+#endif
     uint64_t next_revision_{1};
     uint64_t last_input_sequence_{0};
     double viewport_width_{1000};

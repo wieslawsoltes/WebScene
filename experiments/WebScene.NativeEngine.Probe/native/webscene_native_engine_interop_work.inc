@@ -183,15 +183,7 @@
 
     void signal_worker() noexcept
     {
-        {
-            // This is an auto-reset event, not an unlatched condition-variable
-            // edge. Mutating the predicate under the wait mutex closes the
-            // producer's check-to-sleep race while still coalescing any number
-            // of signals into one immediate worker wake.
-            std::lock_guard lock(wake_mutex_);
-            wake_pending_ = true;
-        }
-        wake_.notify_one();
+        worker_wake_.signal();
     }
 
     bool take_latest_resize(
