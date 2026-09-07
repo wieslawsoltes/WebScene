@@ -97,7 +97,9 @@ public:
         for (const auto& item : entries_)
             if (item.value && item.last_submission > completed_) std::terminate();
     }
-    resource_handle<T> insert(resource_owner owner, std::unique_ptr<T> value)
+    // Validate before transferring ownership. In particular a wrong-thread
+    // call must leave the caller's pointer intact for release on its owner.
+    resource_handle<T> insert(resource_owner owner, std::unique_ptr<T>&& value)
     {
         check_thread();
         if (!value || owner != owner_)

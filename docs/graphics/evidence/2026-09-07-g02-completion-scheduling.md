@@ -270,3 +270,20 @@ WebGPU/WebGL bindings must own a registry, attach each resource wrapper before
 exposure and dispose the registry in its isolate scope. Those browser API wrapper
 classes are not introduced here. The explicit low-memory call is test stimulus,
 not a new production GC policy.
+
+## Failed resource insertion preserves ownership
+
+Resource-table insertion now accepts an rvalue reference and transfers the
+unique pointer only after thread/owner/capacity validation succeeds. A rejected
+wrong-thread call previously destroyed its by-value argument during unwinding,
+which could release a thread-confined native object on the wrong thread. Tests
+now retain a named pointer across wrong-thread, wrong-owner and full-table
+failures and verify successful insertion transfers it exactly once. The resource
+test passed under AddressSanitizer and UndefinedBehaviorSanitizer.
+
+The full local CTest run passed 12 of 13 tests, including every graphics test.
+The existing native-engine DOM activation case failed with:
+`duplicate activation was not coalesced while save was pending: {"activations":0,"requests":0,"pending":false,"label":"Save"}`.
+An isolated rerun of webscene_native_engine_tests passed in 11.16 seconds.
+This is an unresolved intermittent test failure, not a clean full-suite pass or
+proof that its cause is unrelated. No test expectation was weakened.

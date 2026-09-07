@@ -17,7 +17,18 @@ int main() {
     resource_owner a{new_owner_token(), new_owner_token(), new_owner_token()};
     auto b = a; b.device = new_owner_token();
     resource_table<tracked> table(2, a), foreign(2, b);
-    auto first = table.insert(a, std::make_unique<tracked>(live));
+    auto retained=std::make_unique<tracked>(live);
+    bool insertion_rejected=false;
+    std::thread bad_insert([&] {
+        try { table.insert(a,std::move(retained)); }
+        catch (const std::logic_error&) { insertion_rejected=true; }
+    });
+    bad_insert.join();
+    require(insertion_rejected && retained && live==1);
+    rejects([&] { table.insert(b,std::move(retained)); });
+    require(retained && live==1);
+    auto first = table.insert(a,std::move(retained));
+    require(!retained && live==1);
     rejects([&] { table.get(first, b); });
     auto wrong_context = a; wrong_context.context = new_owner_token();
     rejects([&] { table.get(first, wrong_context); });
@@ -32,6 +43,10 @@ int main() {
     rejects([&] { table.insert(b, std::make_unique<tracked>(live)); });
     auto second = table.insert(a, std::make_unique<tracked>(live));
     rejects([&] { table.insert(a, std::make_unique<tracked>(live)); });
+    auto overflow=std::make_unique<tracked>(live);
+    rejects([&] { table.insert(a,std::move(overflow)); });
+    require(overflow && live==3);
+    overflow.reset();
     table.complete(1); require(live == 2);
     table.complete(2); require(live == 1 && table.deferred_count() == 0);
     auto reused = table.insert(a, std::make_unique<tracked>(live));
