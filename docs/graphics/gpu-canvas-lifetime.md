@@ -517,3 +517,17 @@ layout. The focused Metal hardware test passes in 0.48 seconds.
 This proves old/new image content remains distinct while the old consumer lease
 is outstanding. It does not guarantee physical overlap of GPU execution, and the
 diagnostic copies remain test-only rather than a presentation implementation.
+
+## Managed retained-image ownership
+
+`NativeGpuImageLeaseV3` owns CPU image references with SafeHandle. Scene acquisition
+and image retention allocate their managed owner before entering native code,
+clean up on failure, and use SafeHandle P/Invoke parameters to protect source
+handles during native access. Describe uses the versioned metadata structure.
+Finalization releases retention only; GPU completion remains explicit.
+
+The three managed interop tests pass on .NET 8 and .NET 10, including new invalid
+image-index and disposed-scene checks. Uno builds without warnings/errors.
+Positive managed GPU-image acquisition/retention is not exercised yet because
+the managed fixture currently produces CPU scenes; native GPU image lifetime
+fixtures do not substitute for that missing integration coverage.

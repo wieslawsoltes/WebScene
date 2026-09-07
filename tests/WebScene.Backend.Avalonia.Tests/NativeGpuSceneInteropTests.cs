@@ -90,6 +90,9 @@ public sealed class NativeGpuSceneInteropTests
             Assert.Equal(NativeSceneAcquireStatus.Success, status);
             Assert.NotNull(lease);
             Assert.Equal(0U, lease.ImageCount);
+            Assert.Equal(NativeSceneAcquireStatus.InvalidArgument,
+                NativeGpuImageLeaseV3.Acquire(lease, 0, out var absentImage));
+            Assert.Null(absentImage);
             Assert.True(lease.Acknowledge());
             NativeWebSceneApi.EngineDestroy(engine); engine = IntPtr.Zero;
             lease.WithView(view =>
@@ -101,6 +104,7 @@ public sealed class NativeGpuSceneInteropTests
             });
             lease.Dispose(); // Idempotent: never double-release the native lease.
             Assert.Throws<ObjectDisposedException>(() => lease.WithView(_ => { }));
+            Assert.Throws<ObjectDisposedException>(() => NativeGpuImageLeaseV3.Acquire(lease, 0, out _));
         }
         finally
         {

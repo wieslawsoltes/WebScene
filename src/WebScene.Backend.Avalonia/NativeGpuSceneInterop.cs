@@ -141,3 +141,76 @@ public static unsafe partial class NativeWebSceneApi
     [DllImport(LibraryName, EntryPoint = "webscene_scene_gpu_image_count_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern uint SceneGpuImageCountV3(NativeSceneLeaseV3 scene);
 }
+
+internal sealed class NativeGpuImageLeaseV3 : SafeHandle
+{
+    private NativeGpuImageLeaseV3() : base(IntPtr.Zero, ownsHandle: true) { }
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    internal static NativeSceneAcquireStatus Acquire(NativeSceneLeaseV3 scene, uint index,
+        out NativeGpuImageLeaseV3? image)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        image = null;
+        var candidate = new NativeGpuImageLeaseV3();
+        try
+        {
+            var status = NativeWebSceneApi.SceneRetainGpuImageV3(scene, index, out var pointer);
+            return Adopt(candidate, status, pointer, out image);
+        }
+        catch { candidate.Dispose(); throw; }
+    }
+
+    internal NativeSceneAcquireStatus Retain(out NativeGpuImageLeaseV3? retained)
+    {
+        retained = null;
+        var candidate = new NativeGpuImageLeaseV3();
+        try
+        {
+            var status = NativeWebSceneApi.GpuImageRetainV3(this, out var pointer);
+            return Adopt(candidate, status, pointer, out retained);
+        }
+        catch { candidate.Dispose(); throw; }
+    }
+
+    private static NativeSceneAcquireStatus Adopt(NativeGpuImageLeaseV3 candidate,
+        NativeSceneAcquireStatus status, IntPtr pointer, out NativeGpuImageLeaseV3? image)
+    {
+        image = null;
+        candidate.SetHandle(pointer);
+        if (status != NativeSceneAcquireStatus.Success)
+        {
+            candidate.Dispose();
+            return status;
+        }
+        if (candidate.IsInvalid) throw new InvalidOperationException("Native retain returned an empty successful lease.");
+        image = candidate;
+        return status;
+    }
+
+    internal NativeGpuImageInfoV3 Describe()
+    {
+        var info = NativeGpuImageInfoV3.Empty;
+        if (NativeWebSceneApi.GpuImageDescribeV3(this, ref info) == 0)
+            throw new InvalidOperationException("Native image metadata is unavailable.");
+        return info;
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeWebSceneApi.GpuImageReleaseV3(handle);
+        return true;
+    }
+}
+
+public static unsafe partial class NativeWebSceneApi
+{
+    [DllImport(LibraryName, EntryPoint = "webscene_scene_retain_gpu_image_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeSceneAcquireStatus SceneRetainGpuImageV3(NativeSceneLeaseV3 scene, uint index, out IntPtr image);
+    [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_retain_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeSceneAcquireStatus GpuImageRetainV3(NativeGpuImageLeaseV3 image, out IntPtr retained);
+    [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_describe_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern byte GpuImageDescribeV3(NativeGpuImageLeaseV3 image, ref NativeGpuImageInfoV3 info);
+    [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_begin_consumer_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeSceneAcquireStatus GpuImageBeginConsumerV3(NativeGpuImageLeaseV3 image, out IntPtr consumer);
+}
